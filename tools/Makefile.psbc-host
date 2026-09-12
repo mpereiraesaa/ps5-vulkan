@@ -72,6 +72,7 @@ UTIL_OBJS := $(patsubst %.c,%.host.o,$(filter %.c,$(UTIL_SRCS))) \
 UTIL_FORMAT_SRCS := $(wildcard src/util/format/*.c)
 UTIL_FORMAT_OBJS := $(UTIL_FORMAT_SRCS:.c=.host.o)
 COMPILER_COMMON_OBJS := $(COMPILER_COMMON_SRCS:.c=.host.o)
+BLAKE3_SRCS := $(filter-out src/util/blake3/blake3_neon.c,$(BLAKE3_SRCS))
 BLAKE3_OBJS := $(BLAKE3_SRCS:.c=.host.o)
 C11_THREADS_OBJS := $(C11_THREADS_SRCS:.c=.host.o)
 VK_RUNTIME_OBJS := $(VK_RUNTIME_SRCS:.c=.host.o)
