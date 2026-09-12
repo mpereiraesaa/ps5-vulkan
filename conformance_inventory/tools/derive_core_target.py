@@ -579,6 +579,40 @@ COMMAND_AREAS = [
 ]
 
 
+EXT_RULE_RE = re.compile(r"^(?P<exts>.+?)\s*,?\s*if the (?P<feature>[A-Za-z0-9_]+) feature is supported\.?$")
+
+
+def parse_extension_rule(text: str) -> dict:
+    """Give the residual rules a taxonomy instead of leaving them as prose.
+
+    Two shapes occur in the pinned section: "extension X (or core version), if
+    feature Y is supported" (an extension requirement triggered by a feature),
+    and the 1.4 queue-family / host-image-copy either-or rule.
+    """
+    match = EXT_RULE_RE.match(text.strip())
+    if match:
+        raw = match.group("exts").replace(" extension", "").replace("the ", "")
+        extensions = [name.strip() for name in re.split(r",|\bor\b", raw) if name.strip()]
+        return {
+            "kind": "extension-required-by-feature",
+            "extensions": extensions,
+            "trigger": {"kind": "feature", "name": match.group("feature")},
+            "requirement": {"kind": "any-of", "extensions": extensions},
+            "text": text.strip(),
+            "explanation": "One of these extensions (or the named core version) must be supported when %s is supported" % match.group("feature"),
+        }
+    if "hostImageCopy" in text:
+        return {
+            "kind": "either-or",
+            "options": ["hostImageCopy feature supported", "an additional transfer-capable queue family reported"],
+            "requirement": {"kind": "any-of", "features": ["hostImageCopy"]},
+            "trigger": {"kind": "graphics-queue-without-extra-transfer-queue"},
+            "text": text.strip(),
+            "explanation": "A graphics-only queue configuration must provide either host image copy or an extra transfer-capable queue family",
+        }
+    return {"kind": "unclassified", "text": text.strip(), "explanation": ""}
+
+
 def classify_commands(commands: list[str]) -> dict:
     """Group the resolved core command surface into differentiable contracts."""
     contracts: dict[str, list[str]] = {name: [] for name, _ in COMMAND_AREAS}
@@ -762,7 +796,7 @@ def main(argv: list[str] | None = None) -> int:
             ],
             "conditional_on_optional_extension": conditional_on_optional_extension,
             "at_least_one_groups": at_least_one,
-            "extension_rules_not_core_classification": features["unclassified"],
+            "extension_rules": [parse_extension_rule(text) for text in features["unclassified"]],
         },
         "api_surface": surface,
         "limits": {

@@ -24,10 +24,10 @@ Python standard library once the optional caches have been generated.
 | --- | --- |
 | `sources.json` | Pinned Khronos and consumer sources: tag, tag object, commit, retrieval date, license, artifact hashes, and cross-source compatibility rules. |
 | `schema.json` | JSON Schema 2020-12 contract for the data documents. |
-| `requirements.json` | 113 requirement rows with stable project IDs, classification, applicability, anchors, feature/limit/format/command/extension references, CTS join and evidence fields. |
+| `requirements.json` | 136 requirement rows with stable project IDs, classification, applicability, anchors, feature/limit/format/command/extension references, CTS join and evidence fields. |
 | `spec_coverage.json` | Completeness ledger: every core chapter and appendix of the pinned specification with a review state and the requirement rows derived from it. |
 | `cts_manifest.json` | Identity of the pinned CTS `vk-default` mustpass listing: group files, sizes, SHA-256, Git blob ids and case counts. |
-| `core_target.json` | The declared target: cumulative core feature requirements and API surface derived from the pinned specification and registry. |
+| `core_target.json` | The declared target: cumulative core feature requirements, dependency-resolved API surface, required limits, mandatory format tables and command contracts, all derived from pinned sources. |
 | `roadmap_comparison.json` | Khronos roadmap profile sets, recorded as a comparison only. |
 | `baseline_surface.json` | Entry points actually present in the baseline implementation, with dispatch scope and whether the public header declares them. |
 | `consumers.json` | Independent requirement overlays for ParaLLEl-RDP and DXVK, joined to core rows by id. |
@@ -137,6 +137,37 @@ them, separated wherever the condition, the implementation area or the covering
 tests differ (per-version mandatory, per-version conditional, the
 optional-extension trigger table, the core API surface, and the 1.4 host-image-copy
 either/or rule).
+
+## Core requirement tables
+
+Three core families are carried as machine-readable tables inside
+`core_target.json`, each with an explicit resolution rule, and each represented
+by requirement rows so that a table cannot exist without a tracked obligation:
+
+* **Limits** (`limits.rows`): the specification's *Required Limits* table resolved
+  per limit and limit type, 434 rows. Values keep their version tags, and
+  `required_for_core_1_4` only ever uses the `{core}` and `{limit1_4}` values;
+  roadmap-only values (`{limit2022}`, `{limit2024}`, `{limit2026}`) are recorded
+  separately in `roadmap_only_values`. 24 limits are raised in 1.4 and each is
+  referenced by a requirement row.
+* **Formats** (`formats.tables`): the mandatory format support tables as
+  format x required-feature-bit rows: 10 tables covering 179 formats, each table
+  represented by a row.
+* **Command contracts** (`command_contracts.contracts`): the resolved core
+  command surface grouped into 12 differentiable API areas (instance/device,
+  memory, buffers, images, samplers, descriptors, pipelines and shaders, command
+  buffers, recording, synchronization, queries, other), with one requirement row
+  per area instead of a single "all commands" row.
+* **Extension rules** (`mandatory_feature_bits.extension_rules`): the residual
+  rules from the Feature Requirements section now carry a taxonomy -
+  `extension-required-by-feature` (20) and `either-or` (1, the 1.4
+  host-image-copy / transfer-queue rule) - instead of being unclassified prose.
+
+`validate.py` enforces (`T011`-`T016`) that each table declares its resolution
+rule, that every 1.4-raised limit and every mandatory format is referenced by a
+requirement row, that every contract is covered by a row and contains only
+commands from the resolved core surface, and that no extension rule stays
+unclassified.
 
 ## Requirement rows
 
@@ -302,9 +333,11 @@ claim, and incurs no fee or legal agreement.
   baseline public surface shows which entry points exist, and nothing more.
 * CTS mappings are traceability, not coverage: most mapped rows are
   representative-case or family-level, each with an explicit gap note.
-* The decomposed core rows are still index rows: they carry complete obligation
-  sets and point at `core_target.json` for per-bit triggers, and they do not by
-  themselves constitute per-capability test evidence.
+* The core rows are still index rows: they carry complete obligation sets and
+  point at `core_target.json` for per-bit triggers, per-limit values and
+  per-format feature bits, and they do not by themselves constitute
+  per-capability test evidence. Per-command and per-format detail is expected to
+  be attached as each contract is audited.
 * 12 rows are conditional on a capability or extension being supported; the
   exact trigger text is carried per row and per bit in `core_target.json`.
 * Three rows are optional because core does not require them: sparse resources,
@@ -328,3 +361,8 @@ reasoning stays auditable:
 3. CTS mappings were given an explicit coverage-quality label and a per-row gap
    note, because several mappings are close references rather than complete
    coverage of the requirement.
+4. The core surface was corrected to a transitive walk of the registry
+   `depends` chain (the compute surface had been dropped), "at least one of"
+   obligations were kept as single disjunctive obligations instead of being
+   expanded, and the limits, format and command-contract tables were added with
+   rows per differentiable contract.

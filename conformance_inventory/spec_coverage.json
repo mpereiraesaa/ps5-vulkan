@@ -28,6 +28,7 @@
       "path": "chapters/initialization.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-106",
         "VK14-INSTANCE-001",
         "VK14-INSTANCE-002",
         "VK14-INSTANCE-004",
@@ -61,7 +62,6 @@
         "VK14-CORE-006",
         "VK14-CORE-008",
         "VK14-CORE-009",
-        "VK14-CORE-011",
         "VK14-PROMOTED-001",
         "VK14-PROMOTED-002",
         "VK14-PROMOTED-003",
@@ -70,13 +70,15 @@
         "VK14-PROMOTED-006",
         "VK14-PROMOTED-007",
         "VK14-PROMOTED-008",
-        "VK14-CORE-010"
+        "VK14-CORE-010",
+        "VK14-CORE-141"
       ]
     },
     {
       "path": "chapters/limits.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-120",
         "VK14-FORMATS-003",
         "VK14-QUERIES-003"
       ]
@@ -85,6 +87,16 @@
       "path": "chapters/formats.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-131",
+        "VK14-CORE-132",
+        "VK14-CORE-133",
+        "VK14-CORE-134",
+        "VK14-CORE-135",
+        "VK14-CORE-136",
+        "VK14-CORE-137",
+        "VK14-CORE-138",
+        "VK14-CORE-139",
+        "VK14-CORE-140",
         "VK14-FORMATS-001",
         "VK14-FORMATS-002",
         "VK14-FORMATS-005",
@@ -97,6 +109,8 @@
       "path": "chapters/resources.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-101",
+        "VK14-CORE-105",
         "VK14-RESOURCES-001",
         "VK14-RESOURCES-002",
         "VK14-RESOURCES-004",
@@ -110,6 +124,7 @@
       "path": "chapters/memory.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-107",
         "VK14-RESOURCES-005",
         "VK14-RESOURCES-006",
         "VK14-RESOURCES-007"
@@ -126,6 +141,7 @@
       "path": "chapters/samplers.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-111",
         "VK14-DESCRIPTORS-007"
       ]
     },
@@ -133,6 +149,7 @@
       "path": "chapters/descriptorsets.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-104",
         "VK14-DESCRIPTORS-001",
         "VK14-DESCRIPTORS-002",
         "VK14-DESCRIPTORS-003",
@@ -169,6 +186,7 @@
       "path": "chapters/pipelines.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-109",
         "VK14-PIPELINES-001",
         "VK14-PIPELINES-002",
         "VK14-PIPELINES-003",
@@ -202,7 +220,8 @@
         "VK14-COMMANDS-001",
         "VK14-COMMANDS-002",
         "VK14-COMMANDS-003",
-        "VK14-COMMANDS-005"
+        "VK14-COMMANDS-005",
+        "VK14-CORE-102"
       ]
     },
     {
@@ -210,7 +229,8 @@
       "review_state": "reviewed",
       "rows": [
         "VK14-COMMANDS-004",
-        "VK14-COMMANDS-008"
+        "VK14-COMMANDS-008",
+        "VK14-CORE-103"
       ]
     },
     {
@@ -224,7 +244,8 @@
       "path": "chapters/copies.adoc",
       "review_state": "reviewed",
       "rows": [
-        "VK14-COMMANDS-007"
+        "VK14-COMMANDS-007",
+        "VK14-CORE-108"
       ]
     },
     {
@@ -238,6 +259,7 @@
       "path": "chapters/synchronization.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-112",
         "VK14-SYNC-001",
         "VK14-SYNC-002",
         "VK14-SYNC-003",
@@ -251,6 +273,7 @@
       "path": "chapters/queries.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-110",
         "VK14-QUERIES-001",
         "VK14-QUERIES-002"
       ]

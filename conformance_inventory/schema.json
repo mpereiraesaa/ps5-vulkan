@@ -978,7 +978,10 @@
         "schema_version",
         "target",
         "mandatory_feature_bits",
-        "api_surface"
+        "api_surface",
+        "limits",
+        "formats",
+        "command_contracts"
       ],
       "properties": {
         "schema_version": {
@@ -1096,11 +1099,206 @@
               "items": {
                 "type": "object"
               }
+            },
+            "extension_rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "text"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "extension-required-by-feature",
+                      "either-or"
+                    ]
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "extensions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "trigger": {
+                    "type": "object"
+                  },
+                  "requirement": {
+                    "type": "object"
+                  },
+                  "explanation": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         },
         "api_surface": {
           "type": "object"
+        },
+        "limits": {
+          "type": "object",
+          "required": [
+            "resolution_rule",
+            "rows"
+          ],
+          "properties": {
+            "source_anchor": {
+              "type": "string"
+            },
+            "resolution_rule": {
+              "type": "string"
+            },
+            "raised_in_1_4": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "limit",
+                  "limit_type",
+                  "values"
+                ],
+                "properties": {
+                  "limit": {
+                    "type": "string"
+                  },
+                  "limit_type": {
+                    "type": "string"
+                  },
+                  "required_for_core_1_4": {
+                    "type": [
+                      "integer",
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "value",
+                        "tags"
+                      ],
+                      "properties": {
+                        "value": {
+                          "type": "string"
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "roadmap_only_values": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "formats": {
+          "type": "object",
+          "required": [
+            "resolution_rule",
+            "tables"
+          ],
+          "properties": {
+            "resolution_rule": {
+              "type": "string"
+            },
+            "source_anchors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tables": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "anchor",
+                  "columns",
+                  "rows"
+                ],
+                "properties": {
+                  "anchor": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "format",
+                        "required_feature_bits"
+                      ],
+                      "properties": {
+                        "format": {
+                          "type": "string"
+                        },
+                        "required_feature_bits": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "command_contracts": {
+          "type": "object",
+          "required": [
+            "resolution_rule",
+            "contracts"
+          ],
+          "properties": {
+            "resolution_rule": {
+              "type": "string"
+            },
+            "contracts": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       }
     },

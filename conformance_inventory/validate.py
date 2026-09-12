@@ -563,6 +563,65 @@ def validate_target(bundle: Bundle, sources: dict, rows: list[dict], problems: l
     }
 
 
+def validate_core_tables(bundle: Bundle, rows: list[dict], problems: list[Problem]) -> dict:
+    """Check the limits, formats and command-contract tables against the rows.
+
+    The tables are the machine-readable form of three core requirement families;
+    these checks make sure each table is actually represented by requirement
+    rows, so a table cannot exist without a tracked obligation.
+    """
+    target = bundle.target or {}
+    limits = target.get("limits") or {}
+    formats = target.get("formats") or {}
+    contracts = (target.get("command_contracts") or {}).get("contracts") or {}
+    rule_list = (target.get("mandatory_feature_bits") or {}).get("extension_rules") or []
+    stats = {"limit_rows": 0, "limits_raised_in_1_4": 0, "format_tables": 0, "format_rows": 0, "contracts": 0, "extension_rules": 0}
+
+    for section, key in ((limits, "limits"), (formats, "formats"), (target.get("command_contracts") or {}, "command_contracts")):
+        if not section.get("resolution_rule"):
+            problems.append(Problem("error", "T011", "core_target.json", "%s section has no resolution_rule" % key))
+
+    limit_names = {row["limit"] for row in limits.get("rows", [])}
+    stats["limit_rows"] = len(limit_names)
+    stats["limits_raised_in_1_4"] = len(limits.get("raised_in_1_4", []))
+    row_limits = {entry.split()[0] for row in rows for entry in (row.get("limits") or []) if entry}
+    for name in limits.get("raised_in_1_4", []):
+        if name not in row_limits:
+            problems.append(Problem("error", "T013", "core_target.json", "1.4-raised limit %r is not referenced by any requirement row" % name))
+
+    tables = formats.get("tables", [])
+    stats["format_tables"] = len(tables)
+    stats["format_rows"] = sum(len(table.get("rows", [])) for table in tables)
+    row_formats = {name for row in rows for name in (row.get("formats") or [])}
+    for table in tables:
+        for entry in table.get("rows", []):
+            if entry["format"] not in row_formats:
+                problems.append(Problem("error", "T014", table.get("anchor"), "mandatory format %r is not referenced by any requirement row" % entry["format"]))
+                break
+
+    stats["contracts"] = len(contracts)
+    for area, commands in contracts.items():
+        if not commands:
+            problems.append(Problem("error", "T015", area, "command contract has no commands"))
+            continue
+        resolved = set((target.get("api_surface", {}).get("surface_by_profile", {}).get("graphics_resolved", {}) or {}).get("commands", []))
+        unknown = sorted(set(commands) - resolved)
+        if unknown:
+            problems.append(Problem("error", "T015", area, "contract names commands outside the resolved core surface: %s" % unknown[:5]))
+        if not any(set(row.get("commands") or []) & set(commands) for row in rows):
+            problems.append(Problem("error", "T015", area, "no requirement row covers the %r contract" % area))
+
+    stats["extension_rules"] = len(rule_list)
+    for rule in rule_list:
+        if rule.get("kind") == "unclassified":
+            problems.append(Problem("error", "T016", "core_target.json", "extension rule without a taxonomy: %r" % rule.get("text", "")[:80]))
+        if rule.get("kind") == "extension-required-by-feature" and not rule.get("trigger"):
+            problems.append(Problem("error", "T016", "core_target.json", "extension rule without its trigger: %r" % rule.get("text", "")[:80]))
+    if not any(row.get("extensions") for row in rows) and rule_list:
+        problems.append(Problem("error", "T016", "core_target.json", "extension rules are not referenced by any requirement row"))
+    return stats
+
+
 def validate_baseline_surface(bundle: Bundle, rows: list[dict], problems: list[Problem]) -> dict:
     surface = bundle.surface
     if surface is None:
@@ -677,11 +736,12 @@ def validate(bundle: Bundle) -> tuple[list[Problem], dict]:
     cts_stats = validate_cts_mapping(bundle, rows, problems)
     quality_stats = validate_cts_coverage_quality(rows, problems)
     target_stats = validate_target(bundle, sources, rows, problems)
+    table_stats = validate_core_tables(bundle, rows, problems)
     surface_stats = validate_baseline_surface(bundle, rows, problems)
     validate_anchors(bundle, rows, problems)
     consumer_stats = validate_consumers(bundle, sources, row_ids, problems)
 
-    report = build_report(bundle, rows, cts_stats, quality_stats, target_stats, surface_stats, consumer_stats, problems)
+    report = build_report(bundle, rows, cts_stats, quality_stats, target_stats, table_stats, surface_stats, consumer_stats, problems)
     return problems, report
 
 
@@ -691,6 +751,7 @@ def build_report(
     cts_stats: dict,
     quality_stats: dict,
     target_stats: dict,
+    table_stats: dict,
     surface_stats: dict,
     consumer_stats: dict,
     problems: list[Problem],
@@ -748,6 +809,7 @@ def build_report(
             "unmapped_requirement_ids": sorted(unmapped_rows),
         },
         "target": target_stats,
+        "core_tables": table_stats,
         "baseline_surface": surface_stats,
         "consumers": consumer_stats,
         "spec_coverage": {
@@ -806,6 +868,19 @@ def render_text(report: dict) -> str:
                 "  roadmap comparison (not the classification basis, %s): %s with %s feature bits and %s extensions"
                 % (comparison.get("status"), comparison.get("reference_profile"), comparison.get("feature_bits"), comparison.get("extensions"))
             )
+    tables = report.get("core_tables") or {}
+    if tables:
+        lines.append(
+            "  core tables: %s limits (%s raised in 1.4), %s format tables (%s format rows), %s command contracts, %s classified extension rules"
+            % (
+                tables.get("limit_rows"),
+                tables.get("limits_raised_in_1_4"),
+                tables.get("format_tables"),
+                tables.get("format_rows"),
+                tables.get("contracts"),
+                tables.get("extension_rules"),
+            )
+        )
     surface = report.get("baseline_surface") or {}
     if surface:
         lines.append("")

@@ -581,6 +581,150 @@
       "review_notes": "Recorded as an explicit either/or because a serial single-queue design must resolve it one way or the other."
     },
     {
+      "id": "VK14-CORE-106",
+      "category": "instance_device",
+      "summary": "Core command contract: instance-device (37 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/initialization.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "initialization",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkCreateDevice",
+        "vkCreateInstance",
+        "vkDestroyDevice",
+        "vkDestroyInstance",
+        "vkEnumerateInstanceExtensionProperties",
+        "vkEnumerateInstanceLayerProperties",
+        "vkEnumerateInstanceVersion",
+        "vkEnumeratePhysicalDeviceGroups",
+        "vkEnumeratePhysicalDevices",
+        "vkGetDeviceBufferMemoryRequirements",
+        "vkGetDeviceGroupPeerMemoryFeatures",
+        "vkGetDeviceImageMemoryRequirements",
+        "vkGetDeviceImageSparseMemoryRequirements",
+        "vkGetDeviceImageSubresourceLayout",
+        "vkGetDeviceMemoryCommitment",
+        "vkGetDeviceMemoryOpaqueCaptureAddress",
+        "vkGetDeviceProcAddr",
+        "vkGetDeviceQueue",
+        "vkGetDeviceQueue2",
+        "vkGetPhysicalDeviceExternalBufferProperties",
+        "vkGetPhysicalDeviceExternalFenceProperties",
+        "vkGetPhysicalDeviceExternalSemaphoreProperties",
+        "vkGetPhysicalDeviceFeatures",
+        "vkGetPhysicalDeviceFeatures2",
+        "vkGetPhysicalDeviceFormatProperties",
+        "vkGetPhysicalDeviceFormatProperties2",
+        "vkGetPhysicalDeviceImageFormatProperties",
+        "vkGetPhysicalDeviceImageFormatProperties2",
+        "vkGetPhysicalDeviceMemoryProperties",
+        "vkGetPhysicalDeviceMemoryProperties2",
+        "vkGetPhysicalDeviceProperties",
+        "vkGetPhysicalDeviceProperties2",
+        "vkGetPhysicalDeviceQueueFamilyProperties",
+        "vkGetPhysicalDeviceQueueFamilyProperties2",
+        "vkGetPhysicalDeviceSparseImageFormatProperties",
+        "vkGetPhysicalDeviceSparseImageFormatProperties2",
+        "vkGetPhysicalDeviceToolProperties"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/info.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkCreateDevice",
+          "vkCreateInstance",
+          "vkDestroyDevice",
+          "vkDestroyInstance",
+          "vkEnumerateInstanceExtensionProperties",
+          "vkEnumerateInstanceLayerProperties",
+          "vkEnumeratePhysicalDevices",
+          "vkGetDeviceProcAddr",
+          "vkGetDeviceQueue",
+          "vkGetPhysicalDeviceFeatures",
+          "vkGetPhysicalDeviceFormatProperties",
+          "vkGetPhysicalDeviceImageFormatProperties",
+          "vkGetPhysicalDeviceMemoryProperties",
+          "vkGetPhysicalDeviceProperties",
+          "vkGetPhysicalDeviceQueueFamilyProperties"
+        ],
+        "absent_entry_points": [
+          "vkEnumerateInstanceVersion",
+          "vkEnumeratePhysicalDeviceGroups",
+          "vkGetDeviceBufferMemoryRequirements",
+          "vkGetDeviceGroupPeerMemoryFeatures",
+          "vkGetDeviceImageMemoryRequirements",
+          "vkGetDeviceImageSparseMemoryRequirements",
+          "vkGetDeviceImageSubresourceLayout",
+          "vkGetDeviceMemoryCommitment",
+          "vkGetDeviceMemoryOpaqueCaptureAddress",
+          "vkGetDeviceQueue2",
+          "vkGetPhysicalDeviceExternalBufferProperties",
+          "vkGetPhysicalDeviceExternalFenceProperties",
+          "vkGetPhysicalDeviceExternalSemaphoreProperties",
+          "vkGetPhysicalDeviceFeatures2",
+          "vkGetPhysicalDeviceFormatProperties2",
+          "vkGetPhysicalDeviceImageFormatProperties2",
+          "vkGetPhysicalDeviceMemoryProperties2",
+          "vkGetPhysicalDeviceProperties2",
+          "vkGetPhysicalDeviceQueueFamilyProperties2",
+          "vkGetPhysicalDeviceSparseImageFormatProperties",
+          "vkGetPhysicalDeviceSparseImageFormatProperties2",
+          "vkGetPhysicalDeviceToolProperties"
+        ],
+        "refs": [
+          "src/vk_device.c",
+          "src/vk_dispatch.c"
+        ],
+        "note": "Baseline surface: 15 of 37 named entry points exist and are dispatched; 11 are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
+    },
+    {
       "id": "VK14-INSTANCE-001",
       "category": "instance_device",
       "core_introduction": "1.0",
@@ -1551,6 +1695,900 @@
       "classification_basis": "project-conditional"
     },
     {
+      "id": "VK14-CORE-120",
+      "category": "formats_limits",
+      "summary": "Required limits table: 434 limits resolved per limit and limit type, of which 24 are raised in Vulkan 1.4.",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/limits.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "limits",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [
+        "core_target.json limits.rows (name, limit_type, required_for_core_1_4, roadmap_only_values)"
+      ],
+      "formats": [],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/info.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "Info cases check a subset of limit minimums; behavioural limits are checked by their own feature groups. Per-limit rows are the machine-readable table in core_target.json.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Roadmap-only values ({limit2022}, {limit2024}, {limit2026}) are recorded separately and never applied to the core target."
+    },
+    {
+      "id": "VK14-CORE-131",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: Sub-Byte Components (12 formats, 21 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_UNDEFINED",
+        "VK_FORMAT_R4G4_UNORM_PACK8",
+        "VK_FORMAT_R4G4B4A4_UNORM_PACK16",
+        "VK_FORMAT_B4G4R4A4_UNORM_PACK16",
+        "VK_FORMAT_R5G6B5_UNORM_PACK16",
+        "VK_FORMAT_B5G6R5_UNORM_PACK16",
+        "VK_FORMAT_R5G5B5A1_UNORM_PACK16",
+        "VK_FORMAT_B5G5R5A1_UNORM_PACK16",
+        "VK_FORMAT_A1R5G5B5_UNORM_PACK16",
+        "VK_FORMAT_A1B5G5R5_UNORM_PACK16",
+        "VK_FORMAT_A4R4G4B4_UNORM_PACK16",
+        "VK_FORMAT_A4B4G4R4_UNORM_PACK16"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-132",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: 1-3 Byte-Sized Components (29 formats, 66 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_R8_UNORM",
+        "VK_FORMAT_R8_SNORM",
+        "VK_FORMAT_R8_USCALED",
+        "VK_FORMAT_R8_SSCALED",
+        "VK_FORMAT_R8_UINT",
+        "VK_FORMAT_R8_SINT",
+        "VK_FORMAT_R8_SRGB",
+        "VK_FORMAT_R8G8_UNORM",
+        "VK_FORMAT_R8G8_SNORM",
+        "VK_FORMAT_R8G8_USCALED",
+        "VK_FORMAT_R8G8_SSCALED",
+        "VK_FORMAT_R8G8_UINT",
+        "VK_FORMAT_R8G8_SINT",
+        "VK_FORMAT_R8G8_SRGB",
+        "VK_FORMAT_R8G8B8_UNORM",
+        "VK_FORMAT_R8G8B8_SNORM",
+        "VK_FORMAT_R8G8B8_USCALED",
+        "VK_FORMAT_R8G8B8_SSCALED",
+        "VK_FORMAT_R8G8B8_UINT",
+        "VK_FORMAT_R8G8B8_SINT",
+        "VK_FORMAT_R8G8B8_SRGB",
+        "VK_FORMAT_B8G8R8_UNORM",
+        "VK_FORMAT_B8G8R8_SNORM",
+        "VK_FORMAT_B8G8R8_USCALED",
+        "VK_FORMAT_B8G8R8_SSCALED",
+        "VK_FORMAT_B8G8R8_UINT",
+        "VK_FORMAT_B8G8R8_SINT",
+        "VK_FORMAT_B8G8R8_SRGB",
+        "VK_FORMAT_A8_UNORM"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-133",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: 4 Byte-Sized Components (21 formats, 92 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_R8G8B8A8_UNORM",
+        "VK_FORMAT_R8G8B8A8_SNORM",
+        "VK_FORMAT_R8G8B8A8_USCALED",
+        "VK_FORMAT_R8G8B8A8_SSCALED",
+        "VK_FORMAT_R8G8B8A8_UINT",
+        "VK_FORMAT_R8G8B8A8_SINT",
+        "VK_FORMAT_R8G8B8A8_SRGB",
+        "VK_FORMAT_B8G8R8A8_UNORM",
+        "VK_FORMAT_B8G8R8A8_SNORM",
+        "VK_FORMAT_B8G8R8A8_USCALED",
+        "VK_FORMAT_B8G8R8A8_SSCALED",
+        "VK_FORMAT_B8G8R8A8_UINT",
+        "VK_FORMAT_B8G8R8A8_SINT",
+        "VK_FORMAT_B8G8R8A8_SRGB",
+        "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
+        "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
+        "VK_FORMAT_A8B8G8R8_USCALED_PACK32",
+        "VK_FORMAT_A8B8G8R8_SSCALED_PACK32",
+        "VK_FORMAT_A8B8G8R8_UINT_PACK32",
+        "VK_FORMAT_A8B8G8R8_SINT_PACK32",
+        "VK_FORMAT_A8B8G8R8_SRGB_PACK32"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-134",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: 10-, 12-, and 14-Bit Components (30 formats, 17 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_A2R10G10B10_UNORM_PACK32",
+        "VK_FORMAT_A2R10G10B10_SNORM_PACK32",
+        "VK_FORMAT_A2R10G10B10_USCALED_PACK32",
+        "VK_FORMAT_A2R10G10B10_SSCALED_PACK32",
+        "VK_FORMAT_A2R10G10B10_UINT_PACK32",
+        "VK_FORMAT_A2R10G10B10_SINT_PACK32",
+        "VK_FORMAT_A2B10G10R10_UNORM_PACK32",
+        "VK_FORMAT_A2B10G10R10_SNORM_PACK32",
+        "VK_FORMAT_A2B10G10R10_USCALED_PACK32",
+        "VK_FORMAT_A2B10G10R10_SSCALED_PACK32",
+        "VK_FORMAT_A2B10G10R10_UINT_PACK32",
+        "VK_FORMAT_A2B10G10R10_SINT_PACK32",
+        "VK_FORMAT_R10X6_UNORM_PACK16",
+        "VK_FORMAT_R10X6G10X6_UNORM_2PACK16",
+        "VK_FORMAT_R12X4_UNORM_PACK16",
+        "VK_FORMAT_R12X4G12X4_UNORM_2PACK16",
+        "VK_FORMAT_R10X6_UINT_PACK16_ARM",
+        "VK_FORMAT_R10X6G10X6_UINT_2PACK16_ARM",
+        "VK_FORMAT_R10X6G10X6B10X6A10X6_UINT_4PACK16_ARM",
+        "VK_FORMAT_R12X4_UINT_PACK16_ARM",
+        "VK_FORMAT_R12X4G12X4_UINT_2PACK16_ARM",
+        "VK_FORMAT_R12X4G12X4B12X4A12X4_UINT_4PACK16_ARM",
+        "VK_FORMAT_R14X2_UINT_PACK16_ARM",
+        "VK_FORMAT_R14X2G14X2_UINT_2PACK16_ARM",
+        "VK_FORMAT_R14X2G14X2B14X2A14X2_UINT_4PACK16_ARM",
+        "VK_FORMAT_R14X2_UNORM_PACK16_ARM",
+        "VK_FORMAT_R14X2G14X2_UNORM_2PACK16_ARM",
+        "VK_FORMAT_R14X2G14X2B14X2A14X2_UNORM_4PACK16_ARM",
+        "VK_FORMAT_G14X2_B14X2R14X2_2PLANE_420_UNORM_3PACK16_ARM",
+        "VK_FORMAT_G14X2_B14X2R14X2_2PLANE_422_UNORM_3PACK16_ARM"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-135",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: 16-bit Components (28 formats, 102 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_R16_UNORM",
+        "VK_FORMAT_R16_SNORM",
+        "VK_FORMAT_R16_USCALED",
+        "VK_FORMAT_R16_SSCALED",
+        "VK_FORMAT_R16_UINT",
+        "VK_FORMAT_R16_SINT",
+        "VK_FORMAT_R16_SFLOAT",
+        "VK_FORMAT_R16G16_UNORM",
+        "VK_FORMAT_R16G16_SNORM",
+        "VK_FORMAT_R16G16_USCALED",
+        "VK_FORMAT_R16G16_SSCALED",
+        "VK_FORMAT_R16G16_UINT",
+        "VK_FORMAT_R16G16_SINT",
+        "VK_FORMAT_R16G16_SFLOAT",
+        "VK_FORMAT_R16G16B16_UNORM",
+        "VK_FORMAT_R16G16B16_SNORM",
+        "VK_FORMAT_R16G16B16_USCALED",
+        "VK_FORMAT_R16G16B16_SSCALED",
+        "VK_FORMAT_R16G16B16_UINT",
+        "VK_FORMAT_R16G16B16_SINT",
+        "VK_FORMAT_R16G16B16_SFLOAT",
+        "VK_FORMAT_R16G16B16A16_UNORM",
+        "VK_FORMAT_R16G16B16A16_SNORM",
+        "VK_FORMAT_R16G16B16A16_USCALED",
+        "VK_FORMAT_R16G16B16A16_SSCALED",
+        "VK_FORMAT_R16G16B16A16_UINT",
+        "VK_FORMAT_R16G16B16A16_SINT",
+        "VK_FORMAT_R16G16B16A16_SFLOAT"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-136",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: 32-bit Components (12 formats, 80 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_R32_UINT",
+        "VK_FORMAT_R32_SINT",
+        "VK_FORMAT_R32_SFLOAT",
+        "VK_FORMAT_R32G32_UINT",
+        "VK_FORMAT_R32G32_SINT",
+        "VK_FORMAT_R32G32_SFLOAT",
+        "VK_FORMAT_R32G32B32_UINT",
+        "VK_FORMAT_R32G32B32_SINT",
+        "VK_FORMAT_R32G32B32_SFLOAT",
+        "VK_FORMAT_R32G32B32A32_UINT",
+        "VK_FORMAT_R32G32B32A32_SINT",
+        "VK_FORMAT_R32G32B32A32_SFLOAT"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-137",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: 64-bit/uneven Components (14 formats, 9 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_R64_UINT",
+        "VK_FORMAT_R64_SINT",
+        "VK_FORMAT_R64_SFLOAT",
+        "VK_FORMAT_R64G64_UINT",
+        "VK_FORMAT_R64G64_SINT",
+        "VK_FORMAT_R64G64_SFLOAT",
+        "VK_FORMAT_R64G64B64_UINT",
+        "VK_FORMAT_R64G64B64_SINT",
+        "VK_FORMAT_R64G64B64_SFLOAT",
+        "VK_FORMAT_R64G64B64A64_UINT",
+        "VK_FORMAT_R64G64B64A64_SINT",
+        "VK_FORMAT_R64G64B64A64_SFLOAT",
+        "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
+        "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-138",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: Depth/Stencil With `VkImageType` ename:VK_IMAGE_TYPE_2D (7 formats, 9 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_D16_UNORM",
+        "VK_FORMAT_X8_D24_UNORM_PACK32",
+        "VK_FORMAT_D32_SFLOAT",
+        "VK_FORMAT_S8_UINT",
+        "VK_FORMAT_D16_UNORM_S8_UINT",
+        "VK_FORMAT_D24_UNORM_S8_UINT",
+        "VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-139",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: BC Compressed Formats With `VkImageType` ename:VK_IMAGE_TYPE_2D and ename:VK_IMAGE_TYPE_3D (16 formats, 48 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_BC1_RGB_UNORM_BLOCK",
+        "VK_FORMAT_BC1_RGB_SRGB_BLOCK",
+        "VK_FORMAT_BC1_RGBA_UNORM_BLOCK",
+        "VK_FORMAT_BC1_RGBA_SRGB_BLOCK",
+        "VK_FORMAT_BC2_UNORM_BLOCK",
+        "VK_FORMAT_BC2_SRGB_BLOCK",
+        "VK_FORMAT_BC3_UNORM_BLOCK",
+        "VK_FORMAT_BC3_SRGB_BLOCK",
+        "VK_FORMAT_BC4_UNORM_BLOCK",
+        "VK_FORMAT_BC4_SNORM_BLOCK",
+        "VK_FORMAT_BC5_UNORM_BLOCK",
+        "VK_FORMAT_BC5_SNORM_BLOCK",
+        "VK_FORMAT_BC6H_UFLOAT_BLOCK",
+        "VK_FORMAT_BC6H_SFLOAT_BLOCK",
+        "VK_FORMAT_BC7_UNORM_BLOCK",
+        "VK_FORMAT_BC7_SRGB_BLOCK"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
+      "id": "VK14-CORE-140",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: ETC2 and EAC Compressed Formats With `VkImageType` ename:VK_IMAGE_TYPE_2D (10 formats, 30 required feature-bit combinations).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK",
+        "VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK",
+        "VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK",
+        "VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK",
+        "VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK",
+        "VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK",
+        "VK_FORMAT_EAC_R11_UNORM_BLOCK",
+        "VK_FORMAT_EAC_R11_SNORM_BLOCK",
+        "VK_FORMAT_EAC_R11G11_UNORM_BLOCK",
+        "VK_FORMAT_EAC_R11G11_SNORM_BLOCK"
+      ],
+      "commands": [],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+    },
+    {
       "id": "VK14-FORMATS-001",
       "category": "formats_limits",
       "core_introduction": "1.0",
@@ -1766,7 +2804,7 @@
       "id": "VK14-FORMATS-004",
       "category": "formats_limits",
       "core_introduction": "1.4",
-      "summary": "Support the limits raised in 1.4 (image dimensions, array layers, uniform buffer range, push constants size, descriptor counts, workgroup invocations, viewport/framebuffer size and others).",
+      "summary": "Support the 24 limits raised in 1.4, with values resolved from the pinned required-limits table (core and 1.4 tags only).",
       "applicability": {
         "core": "core-mandatory",
         "target": "required",
@@ -1778,43 +2816,34 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "versions-1.4-updated-limits",
-        "note": "Enumerates every raised limit."
+        "note": "Values generated from the pinned limits table; roadmap-tagged values are excluded."
       },
       "features": [],
       "limits": [
-        "maxImageDimension1D>=8192",
-        "maxImageDimension2D>=8192",
-        "maxImageDimension3D>=512",
-        "maxImageDimensionCube>=8192",
-        "maxImageArrayLayers>=2048",
-        "maxUniformBufferRange>=65536",
-        "maxPushConstantsSize>=256",
-        "bufferImageGranularity<=4096",
-        "maxBoundDescriptorSets>=7",
-        "maxPerStageDescriptorUniformBuffers>=15",
-        "maxPerStageResources>=200",
-        "maxDescriptorSetUniformBuffers>=90",
-        "maxDescriptorSetStorageBuffers>=96",
-        "maxDescriptorSetStorageImages>=144",
-        "maxFragmentCombinedOutputResources>=16",
-        "maxComputeWorkGroupInvocations>=256",
-        "maxComputeWorkGroupSize>=(256,256,64)",
-        "subTexelPrecisionBits>=8",
-        "mipmapPrecisionBits>=6",
-        "maxSamplerLodBias>=14",
-        "maxViewportDimensions>=(7680,7680)",
-        "viewportBoundsRange>=(-15360,15359)",
-        "maxFramebufferWidth>=7680",
-        "maxFramebufferHeight>=7680",
-        "maxColorAttachments>=8",
-        "pointSizeRange>=(1.0,256.0-granularity)",
-        "pointSizeGranularity<=0.125",
-        "lineWidthGranularity<=0.5",
-        "maxPushDescriptors>=32",
-        "shaderSignedZeroInfNanPreserveFloat16=true",
-        "shaderSignedZeroInfNanPreserveFloat32=true",
-        "timestampComputeAndGraphics=true",
-        "standardSampleLocations=true"
+        "bufferImageGranularity <= 4096",
+        "lineWidthGranularity <= 5",
+        "maxBoundDescriptorSets >= 7",
+        "maxColorAttachments >= 8",
+        "maxComputeWorkGroupInvocations >= 256",
+        "maxDescriptorSetStorageBuffers >= 96",
+        "maxDescriptorSetStorageImages >= 144",
+        "maxDescriptorSetUniformBuffers >= 90",
+        "maxFragmentCombinedOutputResources >= 16",
+        "maxFramebufferHeight >= 7680",
+        "maxFramebufferWidth >= 7680",
+        "maxImageArrayLayers >= 2048",
+        "maxImageDimension1D >= 8192",
+        "maxImageDimension2D >= 8192",
+        "maxImageDimension3D >= 512",
+        "maxImageDimensionCube >= 8192",
+        "maxPerStageDescriptorUniformBuffers >= 15",
+        "maxPerStageResources >= 200",
+        "maxPushConstantsSize >= 256",
+        "maxSamplerLodBias >= 14",
+        "maxUniformBufferRange >= 65536",
+        "mipmapPrecisionBits >= 6",
+        "pointSizeGranularity <= 6",
+        "subTexelPrecisionBits >= 8"
       ],
       "formats": [],
       "commands": [],
@@ -2250,6 +3279,265 @@
       "manual_review": true,
       "review_notes": null,
       "classification_basis": "core-cumulative-required"
+    },
+    {
+      "id": "VK14-CORE-101",
+      "category": "resources_memory",
+      "summary": "Core command contract: buffers (8 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/resources.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "resources-buffers",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkBindBufferMemory",
+        "vkBindBufferMemory2",
+        "vkCreateBuffer",
+        "vkCreateBufferView",
+        "vkDestroyBuffer",
+        "vkDestroyBufferView",
+        "vkGetBufferMemoryRequirements",
+        "vkGetBufferMemoryRequirements2"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/memory.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkBindBufferMemory",
+          "vkCreateBuffer",
+          "vkDestroyBuffer",
+          "vkGetBufferMemoryRequirements"
+        ],
+        "absent_entry_points": [
+          "vkBindBufferMemory2",
+          "vkCreateBufferView",
+          "vkDestroyBufferView",
+          "vkGetBufferMemoryRequirements2"
+        ],
+        "refs": [
+          "src/vk_memory.c"
+        ],
+        "note": "Baseline surface: 4 of 8 named entry points exist and are dispatched; 4 are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
+    },
+    {
+      "id": "VK14-CORE-105",
+      "category": "resources_memory",
+      "summary": "Core command contract: images (10 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/resources.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "resources-image-views",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkBindImageMemory",
+        "vkBindImageMemory2",
+        "vkCreateImage",
+        "vkCreateImageView",
+        "vkDestroyImage",
+        "vkDestroyImageView",
+        "vkGetImageMemoryRequirements",
+        "vkGetImageMemoryRequirements2",
+        "vkGetImageSubresourceLayout",
+        "vkGetImageSubresourceLayout2"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/subresource-layout.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkBindImageMemory",
+          "vkCreateImage",
+          "vkCreateImageView",
+          "vkDestroyImage",
+          "vkDestroyImageView",
+          "vkGetImageMemoryRequirements"
+        ],
+        "absent_entry_points": [
+          "vkBindImageMemory2",
+          "vkGetImageMemoryRequirements2",
+          "vkGetImageSubresourceLayout",
+          "vkGetImageSubresourceLayout2"
+        ],
+        "refs": [
+          "src/vk_image_view.c",
+          "src/vk_memory.c"
+        ],
+        "note": "Baseline surface: 6 of 10 named entry points exist and are dispatched but none are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
+    },
+    {
+      "id": "VK14-CORE-107",
+      "category": "resources_memory",
+      "summary": "Core command contract: memory (8 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/memory.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "memory-allocation",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkAllocateMemory",
+        "vkFlushMappedMemoryRanges",
+        "vkFreeMemory",
+        "vkInvalidateMappedMemoryRanges",
+        "vkMapMemory",
+        "vkMapMemory2",
+        "vkUnmapMemory",
+        "vkUnmapMemory2"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/memory.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkAllocateMemory",
+          "vkFlushMappedMemoryRanges",
+          "vkFreeMemory",
+          "vkInvalidateMappedMemoryRanges",
+          "vkMapMemory",
+          "vkUnmapMemory"
+        ],
+        "absent_entry_points": [
+          "vkMapMemory2",
+          "vkUnmapMemory2"
+        ],
+        "refs": [
+          "src/vk_memory.c"
+        ],
+        "note": "Baseline surface: 6 of 8 named entry points exist and are dispatched; 6 are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
     },
     {
       "id": "VK14-RESOURCES-001",
@@ -3255,6 +4543,178 @@
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
       "review_notes": "Trigger text per bit is exactly as stated in the specification; it is not flattened away."
+    },
+    {
+      "id": "VK14-CORE-104",
+      "category": "descriptors",
+      "summary": "Core command contract: descriptors (13 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/descriptorsets.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "descriptors-setlayout",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkAllocateDescriptorSets",
+        "vkCreateDescriptorPool",
+        "vkCreateDescriptorSetLayout",
+        "vkCreateDescriptorUpdateTemplate",
+        "vkCreatePipelineLayout",
+        "vkDestroyDescriptorPool",
+        "vkDestroyDescriptorSetLayout",
+        "vkDestroyDescriptorUpdateTemplate",
+        "vkDestroyPipelineLayout",
+        "vkFreeDescriptorSets",
+        "vkResetDescriptorPool",
+        "vkUpdateDescriptorSetWithTemplate",
+        "vkUpdateDescriptorSets"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/ubo.txt",
+          "vk-default/ssbo.txt",
+          "vk-default/api.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkAllocateDescriptorSets",
+          "vkCreateDescriptorPool",
+          "vkCreateDescriptorSetLayout",
+          "vkCreatePipelineLayout",
+          "vkDestroyDescriptorPool",
+          "vkDestroyDescriptorSetLayout",
+          "vkDestroyPipelineLayout",
+          "vkFreeDescriptorSets",
+          "vkResetDescriptorPool",
+          "vkUpdateDescriptorSets"
+        ],
+        "absent_entry_points": [
+          "vkCreateDescriptorUpdateTemplate",
+          "vkDestroyDescriptorUpdateTemplate",
+          "vkUpdateDescriptorSetWithTemplate"
+        ],
+        "refs": [
+          "src/vk_descriptor.c"
+        ],
+        "note": "Baseline surface: 10 of 13 named entry points exist and are dispatched; 9 are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
+    },
+    {
+      "id": "VK14-CORE-111",
+      "category": "descriptors",
+      "summary": "Core command contract: samplers (4 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/samplers.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "samplers",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkCreateSampler",
+        "vkCreateSamplerYcbcrConversion",
+        "vkDestroySampler",
+        "vkDestroySamplerYcbcrConversion"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/image/sample-texture.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkCreateSampler",
+          "vkDestroySampler"
+        ],
+        "absent_entry_points": [
+          "vkCreateSamplerYcbcrConversion",
+          "vkDestroySamplerYcbcrConversion"
+        ],
+        "refs": [
+          "src/vk_sampler.c"
+        ],
+        "note": "Baseline surface: 2 of 4 named entry points exist and are dispatched but none are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
     },
     {
       "id": "VK14-DESCRIPTORS-001",
@@ -4517,6 +5977,90 @@
       "manual_review": true,
       "review_notes": "Required by DXVK; see consumers.json.",
       "classification_basis": "core-conditional"
+    },
+    {
+      "id": "VK14-CORE-109",
+      "category": "pipelines",
+      "summary": "Core command contract: pipelines-and-shaders (7 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/pipelines.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "pipelines",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkCreateComputePipelines",
+        "vkCreateGraphicsPipelines",
+        "vkCreatePipelineCache",
+        "vkCreateShaderModule",
+        "vkDestroyPipeline",
+        "vkDestroyPipelineCache",
+        "vkDestroyShaderModule"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/pipeline/monolithic/monolithic.txt",
+          "vk-default/spirv-assembly.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkCreateComputePipelines",
+          "vkCreateGraphicsPipelines",
+          "vkCreateShaderModule",
+          "vkDestroyPipeline",
+          "vkDestroyShaderModule"
+        ],
+        "absent_entry_points": [
+          "vkCreatePipelineCache",
+          "vkDestroyPipelineCache"
+        ],
+        "refs": [
+          "src/vk_graphics_pipeline.c",
+          "src/vk_pipeline.c"
+        ],
+        "note": "Baseline surface: 5 of 7 named entry points exist and are dispatched; 4 are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
     },
     {
       "id": "VK14-PIPELINES-001",
@@ -6503,10 +8047,10 @@
       "classification_basis": "core-cumulative-required"
     },
     {
-      "id": "VK14-CORE-011",
+      "id": "VK14-CORE-102",
       "category": "commands_transfers",
-      "summary": "Cumulative core API surface required of a graphics implementation: the commands and types required by the base and graphics core versions 1.0 through 1.4.",
-      "core_introduction": "1.4",
+      "summary": "Core command contract: command-buffers (8 resolved core commands).",
+      "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
         "target": "required",
@@ -6516,198 +8060,24 @@
       "classification": "mandatory",
       "classification_basis": "core-cumulative-required",
       "condition": null,
-      "coverage_chapter": "chapters/features.adoc",
+      "coverage_chapter": "chapters/commandbuffers.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "features-requirements",
-        "note": "Cumulative core requirement, derived from the pinned specification section and cross-checked against vk.xml."
+        "anchor": "commandbuffers-pools",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
       },
       "features": [],
       "limits": [],
       "formats": [],
       "commands": [
         "vkAllocateCommandBuffers",
-        "vkAllocateMemory",
         "vkBeginCommandBuffer",
-        "vkBindBufferMemory",
-        "vkBindBufferMemory2",
-        "vkBindImageMemory",
-        "vkBindImageMemory2",
-        "vkCmdBeginQuery",
-        "vkCmdBeginRenderPass",
-        "vkCmdBeginRenderPass2",
-        "vkCmdBeginRendering",
-        "vkCmdBindIndexBuffer",
-        "vkCmdBindIndexBuffer2",
-        "vkCmdBindVertexBuffers",
-        "vkCmdBindVertexBuffers2",
-        "vkCmdBlitImage",
-        "vkCmdBlitImage2",
-        "vkCmdClearAttachments",
-        "vkCmdClearDepthStencilImage",
-        "vkCmdCopyBuffer",
-        "vkCmdCopyBuffer2",
-        "vkCmdCopyBufferToImage",
-        "vkCmdCopyBufferToImage2",
-        "vkCmdCopyImage",
-        "vkCmdCopyImage2",
-        "vkCmdCopyImageToBuffer",
-        "vkCmdCopyImageToBuffer2",
-        "vkCmdCopyQueryPoolResults",
-        "vkCmdDraw",
-        "vkCmdDrawIndexed",
-        "vkCmdDrawIndexedIndirect",
-        "vkCmdDrawIndexedIndirectCount",
-        "vkCmdDrawIndirect",
-        "vkCmdDrawIndirectCount",
-        "vkCmdEndQuery",
-        "vkCmdEndRenderPass",
-        "vkCmdEndRenderPass2",
-        "vkCmdEndRendering",
-        "vkCmdExecuteCommands",
-        "vkCmdFillBuffer",
-        "vkCmdNextSubpass",
-        "vkCmdNextSubpass2",
-        "vkCmdPipelineBarrier",
-        "vkCmdPipelineBarrier2",
-        "vkCmdResetQueryPool",
-        "vkCmdResolveImage",
-        "vkCmdResolveImage2",
-        "vkCmdSetBlendConstants",
-        "vkCmdSetCullMode",
-        "vkCmdSetDepthBias",
-        "vkCmdSetDepthBiasEnable",
-        "vkCmdSetDepthBounds",
-        "vkCmdSetDepthBoundsTestEnable",
-        "vkCmdSetDepthCompareOp",
-        "vkCmdSetDepthTestEnable",
-        "vkCmdSetDepthWriteEnable",
-        "vkCmdSetDeviceMask",
-        "vkCmdSetFrontFace",
-        "vkCmdSetLineStipple",
-        "vkCmdSetLineWidth",
-        "vkCmdSetPrimitiveRestartEnable",
-        "vkCmdSetPrimitiveTopology",
-        "vkCmdSetRasterizerDiscardEnable",
-        "vkCmdSetRenderingAttachmentLocations",
-        "vkCmdSetRenderingInputAttachmentIndices",
-        "vkCmdSetScissor",
-        "vkCmdSetScissorWithCount",
-        "vkCmdSetStencilCompareMask",
-        "vkCmdSetStencilOp",
-        "vkCmdSetStencilReference",
-        "vkCmdSetStencilTestEnable",
-        "vkCmdSetStencilWriteMask",
-        "vkCmdSetViewport",
-        "vkCmdSetViewportWithCount",
-        "vkCmdUpdateBuffer",
-        "vkCmdWriteTimestamp",
-        "vkCmdWriteTimestamp2",
-        "vkCopyImageToImage",
-        "vkCopyImageToMemory",
-        "vkCopyMemoryToImage",
-        "vkCreateBuffer",
         "vkCreateCommandPool",
-        "vkCreateDevice",
-        "vkCreateFence",
-        "vkCreateFramebuffer",
-        "vkCreateGraphicsPipelines",
-        "vkCreateImage",
-        "vkCreateImageView",
-        "vkCreateInstance",
-        "vkCreatePrivateDataSlot",
-        "vkCreateQueryPool",
-        "vkCreateRenderPass",
-        "vkCreateRenderPass2",
-        "vkCreateSemaphore",
-        "vkDestroyBuffer",
         "vkDestroyCommandPool",
-        "vkDestroyDevice",
-        "vkDestroyFence",
-        "vkDestroyFramebuffer",
-        "vkDestroyImage",
-        "vkDestroyImageView",
-        "vkDestroyInstance",
-        "vkDestroyPrivateDataSlot",
-        "vkDestroyQueryPool",
-        "vkDestroyRenderPass",
-        "vkDestroySemaphore",
-        "vkDeviceWaitIdle",
         "vkEndCommandBuffer",
-        "vkEnumerateDeviceExtensionProperties",
-        "vkEnumerateDeviceLayerProperties",
-        "vkEnumerateInstanceExtensionProperties",
-        "vkEnumerateInstanceLayerProperties",
-        "vkEnumerateInstanceVersion",
-        "vkEnumeratePhysicalDeviceGroups",
-        "vkEnumeratePhysicalDevices",
-        "vkFlushMappedMemoryRanges",
         "vkFreeCommandBuffers",
-        "vkFreeMemory",
-        "vkGetBufferDeviceAddress",
-        "vkGetBufferMemoryRequirements",
-        "vkGetBufferMemoryRequirements2",
-        "vkGetBufferOpaqueCaptureAddress",
-        "vkGetDeviceBufferMemoryRequirements",
-        "vkGetDeviceGroupPeerMemoryFeatures",
-        "vkGetDeviceImageMemoryRequirements",
-        "vkGetDeviceImageSparseMemoryRequirements",
-        "vkGetDeviceImageSubresourceLayout",
-        "vkGetDeviceMemoryCommitment",
-        "vkGetDeviceMemoryOpaqueCaptureAddress",
-        "vkGetDeviceProcAddr",
-        "vkGetDeviceQueue",
-        "vkGetDeviceQueue2",
-        "vkGetFenceStatus",
-        "vkGetImageMemoryRequirements",
-        "vkGetImageMemoryRequirements2",
-        "vkGetImageSparseMemoryRequirements",
-        "vkGetImageSparseMemoryRequirements2",
-        "vkGetImageSubresourceLayout",
-        "vkGetImageSubresourceLayout2",
-        "vkGetInstanceProcAddr",
-        "vkGetPhysicalDeviceExternalBufferProperties",
-        "vkGetPhysicalDeviceExternalFenceProperties",
-        "vkGetPhysicalDeviceExternalSemaphoreProperties",
-        "vkGetPhysicalDeviceFeatures",
-        "vkGetPhysicalDeviceFeatures2",
-        "vkGetPhysicalDeviceFormatProperties",
-        "vkGetPhysicalDeviceFormatProperties2",
-        "vkGetPhysicalDeviceImageFormatProperties",
-        "vkGetPhysicalDeviceImageFormatProperties2",
-        "vkGetPhysicalDeviceMemoryProperties",
-        "vkGetPhysicalDeviceMemoryProperties2",
-        "vkGetPhysicalDeviceProperties",
-        "vkGetPhysicalDeviceProperties2",
-        "vkGetPhysicalDeviceQueueFamilyProperties",
-        "vkGetPhysicalDeviceQueueFamilyProperties2",
-        "vkGetPhysicalDeviceSparseImageFormatProperties",
-        "vkGetPhysicalDeviceSparseImageFormatProperties2",
-        "vkGetPhysicalDeviceToolProperties",
-        "vkGetPrivateData",
-        "vkGetQueryPoolResults",
-        "vkGetRenderAreaGranularity",
-        "vkGetRenderingAreaGranularity",
-        "vkGetSemaphoreCounterValue",
-        "vkInvalidateMappedMemoryRanges",
-        "vkMapMemory",
-        "vkMapMemory2",
-        "vkQueueBindSparse",
-        "vkQueueSubmit",
-        "vkQueueSubmit2",
-        "vkQueueWaitIdle",
         "vkResetCommandBuffer",
-        "vkResetCommandPool",
-        "vkResetFences",
-        "vkResetQueryPool",
-        "vkSetPrivateData",
-        "vkSignalSemaphore",
-        "vkTransitionImageLayout",
-        "vkTrimCommandPool",
-        "vkUnmapMemory",
-        "vkUnmapMemory2",
-        "vkWaitForFences",
-        "vkWaitSemaphores"
+        "vkResetCommandPool"
       ],
       "extensions": [],
       "cts": {
@@ -6718,200 +8088,27 @@
         ],
         "cases": [],
         "coverage_quality": "family-level",
-        "coverage_note": "The api.* groups exercise creation, recording, submission and lifetime of core objects; the command list is an index, not per-command evidence.",
-        "note": "Obligation set derived from the pinned core requirement list."
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
       },
       "implementation_state": "not-audited",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
           "vkAllocateCommandBuffers",
-          "vkAllocateMemory",
           "vkBeginCommandBuffer",
-          "vkBindBufferMemory",
-          "vkBindImageMemory",
-          "vkCmdBeginRenderPass",
-          "vkCmdBindIndexBuffer",
-          "vkCmdBindVertexBuffers",
-          "vkCmdCopyBufferToImage",
-          "vkCmdDraw",
-          "vkCmdDrawIndexed",
-          "vkCmdEndRenderPass",
-          "vkCmdPipelineBarrier",
-          "vkCreateBuffer",
           "vkCreateCommandPool",
-          "vkCreateDevice",
-          "vkCreateFence",
-          "vkCreateFramebuffer",
-          "vkCreateGraphicsPipelines",
-          "vkCreateImage",
-          "vkCreateImageView",
-          "vkCreateInstance",
-          "vkCreateRenderPass",
-          "vkDestroyBuffer",
           "vkDestroyCommandPool",
-          "vkDestroyDevice",
-          "vkDestroyFence",
-          "vkDestroyFramebuffer",
-          "vkDestroyImage",
-          "vkDestroyImageView",
-          "vkDestroyInstance",
-          "vkDestroyRenderPass",
-          "vkDeviceWaitIdle",
           "vkEndCommandBuffer",
-          "vkEnumerateDeviceExtensionProperties",
-          "vkEnumerateInstanceExtensionProperties",
-          "vkEnumerateInstanceLayerProperties",
-          "vkEnumeratePhysicalDevices",
-          "vkFlushMappedMemoryRanges",
           "vkFreeCommandBuffers",
-          "vkFreeMemory",
-          "vkGetBufferMemoryRequirements",
-          "vkGetDeviceProcAddr",
-          "vkGetDeviceQueue",
-          "vkGetFenceStatus",
-          "vkGetImageMemoryRequirements",
-          "vkGetInstanceProcAddr",
-          "vkGetPhysicalDeviceFeatures",
-          "vkGetPhysicalDeviceFormatProperties",
-          "vkGetPhysicalDeviceImageFormatProperties",
-          "vkGetPhysicalDeviceMemoryProperties",
-          "vkGetPhysicalDeviceProperties",
-          "vkGetPhysicalDeviceQueueFamilyProperties",
-          "vkInvalidateMappedMemoryRanges",
-          "vkMapMemory",
-          "vkQueueSubmit",
-          "vkQueueWaitIdle",
           "vkResetCommandBuffer",
-          "vkResetCommandPool",
-          "vkResetFences",
-          "vkUnmapMemory",
-          "vkWaitForFences"
+          "vkResetCommandPool"
         ],
-        "absent_entry_points": [
-          "vkBindBufferMemory2",
-          "vkBindImageMemory2",
-          "vkCmdBeginQuery",
-          "vkCmdBeginRenderPass2",
-          "vkCmdBeginRendering",
-          "vkCmdBindIndexBuffer2",
-          "vkCmdBindVertexBuffers2",
-          "vkCmdBlitImage",
-          "vkCmdBlitImage2",
-          "vkCmdClearAttachments",
-          "vkCmdClearDepthStencilImage",
-          "vkCmdCopyBuffer",
-          "vkCmdCopyBuffer2",
-          "vkCmdCopyBufferToImage2",
-          "vkCmdCopyImage",
-          "vkCmdCopyImage2",
-          "vkCmdCopyImageToBuffer",
-          "vkCmdCopyImageToBuffer2",
-          "vkCmdCopyQueryPoolResults",
-          "vkCmdDrawIndexedIndirect",
-          "vkCmdDrawIndexedIndirectCount",
-          "vkCmdDrawIndirect",
-          "vkCmdDrawIndirectCount",
-          "vkCmdEndQuery",
-          "vkCmdEndRenderPass2",
-          "vkCmdEndRendering",
-          "vkCmdExecuteCommands",
-          "vkCmdFillBuffer",
-          "vkCmdNextSubpass",
-          "vkCmdNextSubpass2",
-          "vkCmdPipelineBarrier2",
-          "vkCmdResetQueryPool",
-          "vkCmdResolveImage",
-          "vkCmdResolveImage2",
-          "vkCmdSetBlendConstants",
-          "vkCmdSetCullMode",
-          "vkCmdSetDepthBias",
-          "vkCmdSetDepthBiasEnable",
-          "vkCmdSetDepthBounds",
-          "vkCmdSetDepthBoundsTestEnable",
-          "vkCmdSetDepthCompareOp",
-          "vkCmdSetDepthTestEnable",
-          "vkCmdSetDepthWriteEnable",
-          "vkCmdSetDeviceMask",
-          "vkCmdSetFrontFace",
-          "vkCmdSetLineStipple",
-          "vkCmdSetLineWidth",
-          "vkCmdSetPrimitiveRestartEnable",
-          "vkCmdSetPrimitiveTopology",
-          "vkCmdSetRasterizerDiscardEnable",
-          "vkCmdSetRenderingAttachmentLocations",
-          "vkCmdSetRenderingInputAttachmentIndices",
-          "vkCmdSetScissor",
-          "vkCmdSetScissorWithCount",
-          "vkCmdSetStencilCompareMask",
-          "vkCmdSetStencilOp",
-          "vkCmdSetStencilReference",
-          "vkCmdSetStencilTestEnable",
-          "vkCmdSetStencilWriteMask",
-          "vkCmdSetViewport",
-          "vkCmdSetViewportWithCount",
-          "vkCmdUpdateBuffer",
-          "vkCmdWriteTimestamp",
-          "vkCmdWriteTimestamp2",
-          "vkCopyImageToImage",
-          "vkCopyImageToMemory",
-          "vkCopyMemoryToImage",
-          "vkCreatePrivateDataSlot",
-          "vkCreateQueryPool",
-          "vkCreateRenderPass2",
-          "vkCreateSemaphore",
-          "vkDestroyPrivateDataSlot",
-          "vkDestroyQueryPool",
-          "vkDestroySemaphore",
-          "vkEnumerateDeviceLayerProperties",
-          "vkEnumerateInstanceVersion",
-          "vkEnumeratePhysicalDeviceGroups",
-          "vkGetBufferDeviceAddress",
-          "vkGetBufferMemoryRequirements2",
-          "vkGetBufferOpaqueCaptureAddress",
-          "vkGetDeviceBufferMemoryRequirements",
-          "vkGetDeviceGroupPeerMemoryFeatures",
-          "vkGetDeviceImageMemoryRequirements",
-          "vkGetDeviceImageSparseMemoryRequirements",
-          "vkGetDeviceImageSubresourceLayout",
-          "vkGetDeviceMemoryCommitment",
-          "vkGetDeviceMemoryOpaqueCaptureAddress",
-          "vkGetDeviceQueue2",
-          "vkGetImageMemoryRequirements2",
-          "vkGetImageSparseMemoryRequirements",
-          "vkGetImageSparseMemoryRequirements2",
-          "vkGetImageSubresourceLayout",
-          "vkGetImageSubresourceLayout2",
-          "vkGetPhysicalDeviceExternalBufferProperties",
-          "vkGetPhysicalDeviceExternalFenceProperties",
-          "vkGetPhysicalDeviceExternalSemaphoreProperties",
-          "vkGetPhysicalDeviceFeatures2",
-          "vkGetPhysicalDeviceFormatProperties2",
-          "vkGetPhysicalDeviceImageFormatProperties2",
-          "vkGetPhysicalDeviceMemoryProperties2",
-          "vkGetPhysicalDeviceProperties2",
-          "vkGetPhysicalDeviceQueueFamilyProperties2",
-          "vkGetPhysicalDeviceSparseImageFormatProperties",
-          "vkGetPhysicalDeviceSparseImageFormatProperties2",
-          "vkGetPhysicalDeviceToolProperties",
-          "vkGetPrivateData",
-          "vkGetQueryPoolResults",
-          "vkGetRenderAreaGranularity",
-          "vkGetRenderingAreaGranularity",
-          "vkGetSemaphoreCounterValue",
-          "vkMapMemory2",
-          "vkQueueBindSparse",
-          "vkQueueSubmit2",
-          "vkResetQueryPool",
-          "vkSetPrivateData",
-          "vkSignalSemaphore",
-          "vkTransitionImageLayout",
-          "vkTrimCommandPool",
-          "vkUnmapMemory2",
-          "vkWaitSemaphores"
+        "absent_entry_points": [],
+        "refs": [
+          "src/vk_command.c"
         ],
-        "refs": [],
-        "note": "Baseline surface: 62 of 182 named entry points exist and are dispatched; 38 are declared in the public header."
+        "note": "Baseline surface: 8 of 8 named entry points exist and are dispatched; 8 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6930,7 +8127,489 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Command list derived from vk.xml VK_BASE_VERSION_1_x and VK_GRAPHICS_VERSION_1_x; type list is in core_target.json."
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
+    },
+    {
+      "id": "VK14-CORE-103",
+      "category": "commands_transfers",
+      "summary": "Core command contract: command-recording (89 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/drawing.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "drawing",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkCmdBeginQuery",
+        "vkCmdBeginRenderPass",
+        "vkCmdBeginRenderPass2",
+        "vkCmdBeginRendering",
+        "vkCmdBindDescriptorSets",
+        "vkCmdBindDescriptorSets2",
+        "vkCmdBindIndexBuffer",
+        "vkCmdBindIndexBuffer2",
+        "vkCmdBindPipeline",
+        "vkCmdBindVertexBuffers",
+        "vkCmdBindVertexBuffers2",
+        "vkCmdBlitImage",
+        "vkCmdBlitImage2",
+        "vkCmdClearAttachments",
+        "vkCmdClearColorImage",
+        "vkCmdClearDepthStencilImage",
+        "vkCmdCopyBuffer",
+        "vkCmdCopyBuffer2",
+        "vkCmdCopyBufferToImage",
+        "vkCmdCopyBufferToImage2",
+        "vkCmdCopyImage",
+        "vkCmdCopyImage2",
+        "vkCmdCopyImageToBuffer",
+        "vkCmdCopyImageToBuffer2",
+        "vkCmdCopyQueryPoolResults",
+        "vkCmdDispatch",
+        "vkCmdDispatchBase",
+        "vkCmdDispatchIndirect",
+        "vkCmdDraw",
+        "vkCmdDrawIndexed",
+        "vkCmdDrawIndexedIndirect",
+        "vkCmdDrawIndexedIndirectCount",
+        "vkCmdDrawIndirect",
+        "vkCmdDrawIndirectCount",
+        "vkCmdEndQuery",
+        "vkCmdEndRenderPass",
+        "vkCmdEndRenderPass2",
+        "vkCmdEndRendering",
+        "vkCmdExecuteCommands",
+        "vkCmdFillBuffer",
+        "vkCmdNextSubpass",
+        "vkCmdNextSubpass2",
+        "vkCmdPipelineBarrier",
+        "vkCmdPipelineBarrier2",
+        "vkCmdPushConstants",
+        "vkCmdPushConstants2",
+        "vkCmdPushDescriptorSet",
+        "vkCmdPushDescriptorSet2",
+        "vkCmdPushDescriptorSetWithTemplate",
+        "vkCmdPushDescriptorSetWithTemplate2",
+        "vkCmdResetEvent",
+        "vkCmdResetEvent2",
+        "vkCmdResetQueryPool",
+        "vkCmdResolveImage",
+        "vkCmdResolveImage2",
+        "vkCmdSetBlendConstants",
+        "vkCmdSetCullMode",
+        "vkCmdSetDepthBias",
+        "vkCmdSetDepthBiasEnable",
+        "vkCmdSetDepthBounds",
+        "vkCmdSetDepthBoundsTestEnable",
+        "vkCmdSetDepthCompareOp",
+        "vkCmdSetDepthTestEnable",
+        "vkCmdSetDepthWriteEnable",
+        "vkCmdSetDeviceMask",
+        "vkCmdSetEvent",
+        "vkCmdSetEvent2",
+        "vkCmdSetFrontFace",
+        "vkCmdSetLineStipple",
+        "vkCmdSetLineWidth",
+        "vkCmdSetPrimitiveRestartEnable",
+        "vkCmdSetPrimitiveTopology",
+        "vkCmdSetRasterizerDiscardEnable",
+        "vkCmdSetRenderingAttachmentLocations",
+        "vkCmdSetRenderingInputAttachmentIndices",
+        "vkCmdSetScissor",
+        "vkCmdSetScissorWithCount",
+        "vkCmdSetStencilCompareMask",
+        "vkCmdSetStencilOp",
+        "vkCmdSetStencilReference",
+        "vkCmdSetStencilTestEnable",
+        "vkCmdSetStencilWriteMask",
+        "vkCmdSetViewport",
+        "vkCmdSetViewportWithCount",
+        "vkCmdUpdateBuffer",
+        "vkCmdWaitEvents",
+        "vkCmdWaitEvents2",
+        "vkCmdWriteTimestamp",
+        "vkCmdWriteTimestamp2"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/draw.txt",
+          "vk-default/compute.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkCmdBeginRenderPass",
+          "vkCmdBindDescriptorSets",
+          "vkCmdBindIndexBuffer",
+          "vkCmdBindPipeline",
+          "vkCmdBindVertexBuffers",
+          "vkCmdCopyBufferToImage",
+          "vkCmdDispatch",
+          "vkCmdDraw",
+          "vkCmdDrawIndexed",
+          "vkCmdEndRenderPass",
+          "vkCmdPipelineBarrier"
+        ],
+        "absent_entry_points": [
+          "vkCmdBeginQuery",
+          "vkCmdBeginRenderPass2",
+          "vkCmdBeginRendering",
+          "vkCmdBindDescriptorSets2",
+          "vkCmdBindIndexBuffer2",
+          "vkCmdBindVertexBuffers2",
+          "vkCmdBlitImage",
+          "vkCmdBlitImage2",
+          "vkCmdClearAttachments",
+          "vkCmdClearColorImage",
+          "vkCmdClearDepthStencilImage",
+          "vkCmdCopyBuffer",
+          "vkCmdCopyBuffer2",
+          "vkCmdCopyBufferToImage2",
+          "vkCmdCopyImage",
+          "vkCmdCopyImage2",
+          "vkCmdCopyImageToBuffer",
+          "vkCmdCopyImageToBuffer2",
+          "vkCmdCopyQueryPoolResults",
+          "vkCmdDispatchBase",
+          "vkCmdDispatchIndirect",
+          "vkCmdDrawIndexedIndirect",
+          "vkCmdDrawIndexedIndirectCount",
+          "vkCmdDrawIndirect",
+          "vkCmdDrawIndirectCount",
+          "vkCmdEndQuery",
+          "vkCmdEndRenderPass2",
+          "vkCmdEndRendering",
+          "vkCmdExecuteCommands",
+          "vkCmdFillBuffer",
+          "vkCmdNextSubpass",
+          "vkCmdNextSubpass2",
+          "vkCmdPipelineBarrier2",
+          "vkCmdPushConstants",
+          "vkCmdPushConstants2",
+          "vkCmdPushDescriptorSet",
+          "vkCmdPushDescriptorSet2",
+          "vkCmdPushDescriptorSetWithTemplate",
+          "vkCmdPushDescriptorSetWithTemplate2",
+          "vkCmdResetEvent",
+          "vkCmdResetEvent2",
+          "vkCmdResetQueryPool",
+          "vkCmdResolveImage",
+          "vkCmdResolveImage2",
+          "vkCmdSetBlendConstants",
+          "vkCmdSetCullMode",
+          "vkCmdSetDepthBias",
+          "vkCmdSetDepthBiasEnable",
+          "vkCmdSetDepthBounds",
+          "vkCmdSetDepthBoundsTestEnable",
+          "vkCmdSetDepthCompareOp",
+          "vkCmdSetDepthTestEnable",
+          "vkCmdSetDepthWriteEnable",
+          "vkCmdSetDeviceMask",
+          "vkCmdSetEvent",
+          "vkCmdSetEvent2",
+          "vkCmdSetFrontFace",
+          "vkCmdSetLineStipple",
+          "vkCmdSetLineWidth",
+          "vkCmdSetPrimitiveRestartEnable",
+          "vkCmdSetPrimitiveTopology",
+          "vkCmdSetRasterizerDiscardEnable",
+          "vkCmdSetRenderingAttachmentLocations",
+          "vkCmdSetRenderingInputAttachmentIndices",
+          "vkCmdSetScissor",
+          "vkCmdSetScissorWithCount",
+          "vkCmdSetStencilCompareMask",
+          "vkCmdSetStencilOp",
+          "vkCmdSetStencilReference",
+          "vkCmdSetStencilTestEnable",
+          "vkCmdSetStencilWriteMask",
+          "vkCmdSetViewport",
+          "vkCmdSetViewportWithCount",
+          "vkCmdUpdateBuffer",
+          "vkCmdWaitEvents",
+          "vkCmdWaitEvents2",
+          "vkCmdWriteTimestamp",
+          "vkCmdWriteTimestamp2"
+        ],
+        "refs": [
+          "src/vk_command.c",
+          "src/vk_transfer.c"
+        ],
+        "note": "Baseline surface: 11 of 89 named entry points exist and are dispatched; 4 are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
+    },
+    {
+      "id": "VK14-CORE-108",
+      "category": "commands_transfers",
+      "summary": "Core command contract: other (32 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/copies.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "copies",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkCopyImageToImage",
+        "vkCopyImageToMemory",
+        "vkCopyMemoryToImage",
+        "vkCreateFramebuffer",
+        "vkCreatePrivateDataSlot",
+        "vkCreateRenderPass",
+        "vkCreateRenderPass2",
+        "vkDestroyFramebuffer",
+        "vkDestroyPrivateDataSlot",
+        "vkDestroyRenderPass",
+        "vkEnumerateDeviceExtensionProperties",
+        "vkEnumerateDeviceLayerProperties",
+        "vkGetBufferDeviceAddress",
+        "vkGetBufferOpaqueCaptureAddress",
+        "vkGetDescriptorSetLayoutSupport",
+        "vkGetEventStatus",
+        "vkGetImageSparseMemoryRequirements",
+        "vkGetImageSparseMemoryRequirements2",
+        "vkGetInstanceProcAddr",
+        "vkGetPipelineCacheData",
+        "vkGetPrivateData",
+        "vkGetRenderAreaGranularity",
+        "vkGetRenderingAreaGranularity",
+        "vkGetSemaphoreCounterValue",
+        "vkMergePipelineCaches",
+        "vkQueueBindSparse",
+        "vkResetQueryPool",
+        "vkSetPrivateData",
+        "vkSignalSemaphore",
+        "vkTransitionImageLayout",
+        "vkTrimCommandPool",
+        "vkWaitSemaphores"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkCreateFramebuffer",
+          "vkCreateRenderPass",
+          "vkDestroyFramebuffer",
+          "vkDestroyRenderPass",
+          "vkEnumerateDeviceExtensionProperties",
+          "vkGetInstanceProcAddr"
+        ],
+        "absent_entry_points": [
+          "vkCopyImageToImage",
+          "vkCopyImageToMemory",
+          "vkCopyMemoryToImage",
+          "vkCreatePrivateDataSlot",
+          "vkCreateRenderPass2",
+          "vkDestroyPrivateDataSlot",
+          "vkEnumerateDeviceLayerProperties",
+          "vkGetBufferDeviceAddress",
+          "vkGetBufferOpaqueCaptureAddress",
+          "vkGetDescriptorSetLayoutSupport",
+          "vkGetEventStatus",
+          "vkGetImageSparseMemoryRequirements",
+          "vkGetImageSparseMemoryRequirements2",
+          "vkGetPipelineCacheData",
+          "vkGetPrivateData",
+          "vkGetRenderAreaGranularity",
+          "vkGetRenderingAreaGranularity",
+          "vkGetSemaphoreCounterValue",
+          "vkMergePipelineCaches",
+          "vkQueueBindSparse",
+          "vkResetQueryPool",
+          "vkSetPrivateData",
+          "vkSignalSemaphore",
+          "vkTransitionImageLayout",
+          "vkTrimCommandPool",
+          "vkWaitSemaphores"
+        ],
+        "refs": [
+          "src/vk_device.c",
+          "src/vk_dispatch.c",
+          "src/vk_framebuffer.c",
+          "src/vk_render_pass.c"
+        ],
+        "note": "Baseline surface: 6 of 32 named entry points exist and are dispatched but none are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
+    },
+    {
+      "id": "VK14-CORE-112",
+      "category": "synchronization",
+      "summary": "Core command contract: synchronization (15 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/synchronization.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "synchronization-fences",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkCreateEvent",
+        "vkCreateFence",
+        "vkCreateSemaphore",
+        "vkDestroyEvent",
+        "vkDestroyFence",
+        "vkDestroySemaphore",
+        "vkDeviceWaitIdle",
+        "vkGetFenceStatus",
+        "vkQueueSubmit",
+        "vkQueueSubmit2",
+        "vkQueueWaitIdle",
+        "vkResetEvent",
+        "vkResetFences",
+        "vkSetEvent",
+        "vkWaitForFences"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/synchronization.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "symbol-present",
+        "entry_points": [
+          "vkCreateFence",
+          "vkDestroyFence",
+          "vkDeviceWaitIdle",
+          "vkGetFenceStatus",
+          "vkQueueSubmit",
+          "vkQueueWaitIdle",
+          "vkResetFences",
+          "vkWaitForFences"
+        ],
+        "absent_entry_points": [
+          "vkCreateEvent",
+          "vkCreateSemaphore",
+          "vkDestroyEvent",
+          "vkDestroySemaphore",
+          "vkQueueSubmit2",
+          "vkResetEvent",
+          "vkSetEvent"
+        ],
+        "refs": [
+          "src/vk_fence.c",
+          "src/vk_queue.c"
+        ],
+        "note": "Baseline surface: 8 of 15 named entry points exist and are dispatched; 8 are declared in the public header."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
     },
     {
       "id": "VK14-SYNC-001",
@@ -7604,6 +9283,77 @@
       "consumer_demand": [
         "dxvk"
       ]
+    },
+    {
+      "id": "VK14-CORE-110",
+      "category": "queries",
+      "summary": "Core command contract: queries (3 resolved core commands).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/queries.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "queries-pools",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [
+        "vkCreateQueryPool",
+        "vkDestroyQueryPool",
+        "vkGetQueryPoolResults"
+      ],
+      "extensions": [],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/query-pool.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named CTS groups exercise this contract through their own creation, use and destruction paths; the command list is an index, not per-command evidence.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [
+          "vkCreateQueryPool",
+          "vkDestroyQueryPool",
+          "vkGetQueryPoolResults"
+        ],
+        "refs": [],
+        "note": "Baseline surface: none of the 3 named entry points exist at the baseline."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "One of twelve differentiated command contracts that replace the earlier single 'all commands' row."
     },
     {
       "id": "VK14-QUERIES-001",
@@ -9114,6 +10864,88 @@
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
       "review_notes": "This row is an index for the machine-readable trigger table in core_target.json, not evidence of coverage."
+    },
+    {
+      "id": "VK14-CORE-141",
+      "category": "extensions",
+      "summary": "Extension requirements triggered by a supported feature: 21 rules (20 extension-triggered, 1 either-or). These are indexed here so they are no longer unclassified prose.",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "extension-optional",
+        "target": "conditional",
+        "target_condition": "the named triggering feature is supported (per-rule trigger in core_target.json)",
+        "note": ""
+      },
+      "classification": "conditional",
+      "classification_basis": "core-conditional",
+      "condition": "the named triggering feature is supported (per-rule trigger in core_target.json)",
+      "coverage_chapter": "chapters/features.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "versions-1.4-new-features",
+        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [],
+      "commands": [],
+      "extensions": [
+        "VK_EXT_blend_operation_advanced",
+        "VK_EXT_conservative_rasterization",
+        "VK_EXT_depth_clip_control",
+        "VK_EXT_line_rasterization",
+        "VK_EXT_provoking_vertex",
+        "VK_EXT_sample_locations",
+        "VK_EXT_transform_feedback",
+        "VK_KHR_fragment_shading_rate",
+        "VK_KHR_line_rasterization",
+        "VK_NV_clip_space_w_scaling",
+        "VK_NV_coverage_reduction_mode",
+        "VK_NV_fragment_coverage_to_color",
+        "VK_NV_framebuffer_mixed_samples",
+        "VK_NV_representative_fragment_test",
+        "VK_NV_shading_rate_image",
+        "VK_NV_viewport_swizzle",
+        "Vulkan 1.4"
+      ],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/dynamic-state.txt",
+          "vk-default/info.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The named groups exercise extended dynamic state and extension advertisement; the rule table is the machine-readable index.",
+        "note": "Obligation set derived from the pinned core requirement table."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "none",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [],
+        "note": "Baseline surface: this row is a table obligation with no single entry point."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Taxonomy: extension-required-by-feature (20) and either-or (1, the 1.4 host-image-copy / transfer-queue rule)."
     },
     {
       "id": "VK14-EXTENSIONS-001",

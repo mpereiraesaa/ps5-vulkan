@@ -166,6 +166,7 @@ def base_core_target(**overrides) -> dict:
             },
         },
         "mandatory_feature_bits": {
+            "extension_rules": [],
             "registry_by_version": {"1.2": ["timelineSemaphore", "storageBuffer8BitAccess"]},
             "cumulative": ["timelineSemaphore", "storageBuffer8BitAccess"],
             "specification_by_version": {},
@@ -175,7 +176,11 @@ def base_core_target(**overrides) -> dict:
             "at_least_one_groups": [{"features": ["hostImageCopy"], "text": "either host image copy or an extra transfer queue"}],
             "extension_rules_not_core_classification": [],
         },
-        "api_surface": {"surface_by_profile": {"graphics_including_base": {"commands_total": 2, "types_total": 3}}},
+        "api_surface": {"surface_by_profile": {"graphics_including_base": {"commands_total": 2, "types_total": 3},
+                         "graphics_resolved": {"commands": ["vkCreateInstance", "vkCreateImage"], "types": [], "roots": []}}},
+        "limits": {"resolution_rule": "core and 1_4 tags only", "rows": [], "raised_in_1_4": []},
+        "formats": {"resolution_rule": "format x required feature bits", "tables": []},
+        "command_contracts": {"resolution_rule": "resolved surface grouped by area", "contracts": {}},
         "roadmap_comparison": {"file": "roadmap_comparison.json", "note": "comparison only"},
     }
     target.update(overrides)
@@ -768,6 +773,56 @@ class CheckedInInventoryTests(unittest.TestCase):
         rows = [row for table in tables for row in table["rows"]]
         self.assertGreater(len(rows), 100)
         self.assertTrue(all("required_feature_bits" in row for row in rows))
+
+    def test_core_tables_are_represented_by_rows(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        rows = bundle.requirements["requirements"]
+        target = bundle.target
+        row_limits = {entry.split()[0] for row in rows for entry in (row.get("limits") or [])}
+        for name in target["limits"]["raised_in_1_4"]:
+            self.assertIn(name, row_limits)
+        row_formats = {name for row in rows for name in (row.get("formats") or [])}
+        for table in target["formats"]["tables"]:
+            for entry in table["rows"]:
+                self.assertIn(entry["format"], row_formats)
+        for area, commands in target["command_contracts"]["contracts"].items():
+            self.assertTrue(any(set(row.get("commands") or []) & set(commands) for row in rows), area)
+
+    def test_table_checks_fire_when_rows_are_missing(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        stripped = copy.deepcopy(bundle.requirements)
+        for row in stripped["requirements"]:
+            row["limits"] = []
+            row["formats"] = []
+            row["commands"] = []
+        problems, _ = validate.validate(validate.Bundle(
+            sources=bundle.sources, requirements=stripped, coverage=bundle.coverage,
+            consumers=bundle.consumers, manifest=bundle.manifest, target=bundle.target,
+            roadmap=bundle.roadmap, surface=bundle.surface))
+        codes = errors(problems)
+        self.assertIn("T013", codes)
+        self.assertIn("T014", codes)
+        self.assertIn("T015", codes)
+
+    def test_extension_rule_taxonomy_is_required(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        target = copy.deepcopy(bundle.target)
+        target["mandatory_feature_bits"]["extension_rules"].append({"kind": "unclassified", "text": "example"})
+        problems, _ = validate.validate(validate.Bundle(
+            sources=bundle.sources, requirements=bundle.requirements, coverage=bundle.coverage,
+            consumers=bundle.consumers, manifest=bundle.manifest, target=target,
+            roadmap=bundle.roadmap, surface=bundle.surface))
+        self.assertIn("T016", errors(problems))
+
+    def test_table_sections_need_a_resolution_rule(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        target = copy.deepcopy(bundle.target)
+        target["limits"].pop("resolution_rule")
+        problems, _ = validate.validate(validate.Bundle(
+            sources=bundle.sources, requirements=bundle.requirements, coverage=bundle.coverage,
+            consumers=bundle.consumers, manifest=bundle.manifest, target=target,
+            roadmap=bundle.roadmap, surface=bundle.surface))
+        self.assertIn("T011", errors(problems))
 
     def test_wsi_is_not_a_core_requirement(self):
         bundle = validate.Bundle.load(INVENTORY_DIR)

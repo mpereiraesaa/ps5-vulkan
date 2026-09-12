@@ -18015,28 +18015,391 @@
       "vulkanMemoryModel",
       "vulkanMemoryModelDeviceScope"
     ],
-    "extension_rules_not_core_classification": [
-      "VK_KHR_fragment_shading_rate if the primitiveFragmentShadingRateMeshShader feature is supported.",
-      "VK_EXT_transform_feedback , if the extendedDynamicState3RasterizationStream feature is supported.",
-      "VK_EXT_conservative_rasterization extension, if the extendedDynamicState3ConservativeRasterizationMode feature is supported.",
-      "VK_EXT_conservative_rasterization extension, if the extendedDynamicState3ExtraPrimitiveOverestimationSize feature is supported.",
-      "VK_EXT_sample_locations extension, if the extendedDynamicState3SampleLocationsEnable feature is supported.",
-      "VK_EXT_blend_operation_advanced extension, if the extendedDynamicState3ColorBlendAdvanced feature is supported.",
-      "VK_EXT_provoking_vertex , if the extendedDynamicState3ProvokingVertexMode feature is supported.",
-      "Vulkan 1.4 or the VK_KHR_line_rasterization extension or the VK_EXT_line_rasterization extension, if the extendedDynamicState3LineRasterizationMode feature is supported.",
-      "VK_KHR_line_rasterization or VK_EXT_line_rasterization extension, if the extendedDynamicState3LineStippleEnable feature is supported.",
-      "VK_EXT_depth_clip_control , if the extendedDynamicState3DepthClipNegativeOneToOne feature is supported.",
-      "VK_NV_clip_space_w_scaling extension, if the extendedDynamicState3ViewportWScalingEnable feature is supported.",
-      "VK_NV_viewport_swizzle extension, if the extendedDynamicState3ViewportSwizzle feature is supported.",
-      "VK_NV_fragment_coverage_to_color extension, if the extendedDynamicState3CoverageToColorEnable feature is supported.",
-      "VK_NV_fragment_coverage_to_color extension, if the extendedDynamicState3CoverageToColorLocation feature is supported.",
-      "VK_NV_framebuffer_mixed_samples extension, if the extendedDynamicState3CoverageModulationMode feature is supported.",
-      "VK_NV_framebuffer_mixed_samples extension, if the extendedDynamicState3CoverageModulationTableEnable feature is supported.",
-      "VK_NV_framebuffer_mixed_samples extension, if the extendedDynamicState3CoverageModulationTable feature is supported.",
-      "VK_NV_coverage_reduction_mode , if the extendedDynamicState3CoverageReductionMode feature is supported.",
-      "VK_NV_representative_fragment_test , if the extendedDynamicState3RepresentativeFragmentTestEnable feature is supported.",
-      "VK_NV_shading_rate_image , if the extendedDynamicState3ShadingRateImageEnable feature is supported.",
-      "If Vulkan 1.4 is supported, at least one queue family is reported by vkGetPhysicalDeviceQueueFamilyProperties that includes the VK_QUEUE_GRAPHICS_BIT flag, and no additional queue families are reported that support the VK_QUEUE_TRANSFER_BIT flag, the hostImageCopy feature must be supported."
+    "extension_rules": [
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when primitiveFragmentShadingRateMeshShader is supported",
+        "extensions": [
+          "VK_KHR_fragment_shading_rate"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_KHR_fragment_shading_rate"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_KHR_fragment_shading_rate if the primitiveFragmentShadingRateMeshShader feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "primitiveFragmentShadingRateMeshShader"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3RasterizationStream is supported",
+        "extensions": [
+          "VK_EXT_transform_feedback"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_EXT_transform_feedback"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_EXT_transform_feedback , if the extendedDynamicState3RasterizationStream feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3RasterizationStream"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3ConservativeRasterizationMode is supported",
+        "extensions": [
+          "VK_EXT_conservative_rasterization"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_EXT_conservative_rasterization"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_EXT_conservative_rasterization extension, if the extendedDynamicState3ConservativeRasterizationMode feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3ConservativeRasterizationMode"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3ExtraPrimitiveOverestimationSize is supported",
+        "extensions": [
+          "VK_EXT_conservative_rasterization"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_EXT_conservative_rasterization"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_EXT_conservative_rasterization extension, if the extendedDynamicState3ExtraPrimitiveOverestimationSize feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3ExtraPrimitiveOverestimationSize"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3SampleLocationsEnable is supported",
+        "extensions": [
+          "VK_EXT_sample_locations"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_EXT_sample_locations"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_EXT_sample_locations extension, if the extendedDynamicState3SampleLocationsEnable feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3SampleLocationsEnable"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3ColorBlendAdvanced is supported",
+        "extensions": [
+          "VK_EXT_blend_operation_advanced"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_EXT_blend_operation_advanced"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_EXT_blend_operation_advanced extension, if the extendedDynamicState3ColorBlendAdvanced feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3ColorBlendAdvanced"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3ProvokingVertexMode is supported",
+        "extensions": [
+          "VK_EXT_provoking_vertex"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_EXT_provoking_vertex"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_EXT_provoking_vertex , if the extendedDynamicState3ProvokingVertexMode feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3ProvokingVertexMode"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3LineRasterizationMode is supported",
+        "extensions": [
+          "Vulkan 1.4",
+          "VK_KHR_line_rasterization",
+          "VK_EXT_line_rasterization"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "Vulkan 1.4",
+            "VK_KHR_line_rasterization",
+            "VK_EXT_line_rasterization"
+          ],
+          "kind": "any-of"
+        },
+        "text": "Vulkan 1.4 or the VK_KHR_line_rasterization extension or the VK_EXT_line_rasterization extension, if the extendedDynamicState3LineRasterizationMode feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3LineRasterizationMode"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3LineStippleEnable is supported",
+        "extensions": [
+          "VK_KHR_line_rasterization",
+          "VK_EXT_line_rasterization"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_KHR_line_rasterization",
+            "VK_EXT_line_rasterization"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_KHR_line_rasterization or VK_EXT_line_rasterization extension, if the extendedDynamicState3LineStippleEnable feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3LineStippleEnable"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3DepthClipNegativeOneToOne is supported",
+        "extensions": [
+          "VK_EXT_depth_clip_control"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_EXT_depth_clip_control"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_EXT_depth_clip_control , if the extendedDynamicState3DepthClipNegativeOneToOne feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3DepthClipNegativeOneToOne"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3ViewportWScalingEnable is supported",
+        "extensions": [
+          "VK_NV_clip_space_w_scaling"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_clip_space_w_scaling"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_clip_space_w_scaling extension, if the extendedDynamicState3ViewportWScalingEnable feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3ViewportWScalingEnable"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3ViewportSwizzle is supported",
+        "extensions": [
+          "VK_NV_viewport_swizzle"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_viewport_swizzle"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_viewport_swizzle extension, if the extendedDynamicState3ViewportSwizzle feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3ViewportSwizzle"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3CoverageToColorEnable is supported",
+        "extensions": [
+          "VK_NV_fragment_coverage_to_color"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_fragment_coverage_to_color"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_fragment_coverage_to_color extension, if the extendedDynamicState3CoverageToColorEnable feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3CoverageToColorEnable"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3CoverageToColorLocation is supported",
+        "extensions": [
+          "VK_NV_fragment_coverage_to_color"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_fragment_coverage_to_color"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_fragment_coverage_to_color extension, if the extendedDynamicState3CoverageToColorLocation feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3CoverageToColorLocation"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3CoverageModulationMode is supported",
+        "extensions": [
+          "VK_NV_framebuffer_mixed_samples"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_framebuffer_mixed_samples"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_framebuffer_mixed_samples extension, if the extendedDynamicState3CoverageModulationMode feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3CoverageModulationMode"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3CoverageModulationTableEnable is supported",
+        "extensions": [
+          "VK_NV_framebuffer_mixed_samples"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_framebuffer_mixed_samples"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_framebuffer_mixed_samples extension, if the extendedDynamicState3CoverageModulationTableEnable feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3CoverageModulationTableEnable"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3CoverageModulationTable is supported",
+        "extensions": [
+          "VK_NV_framebuffer_mixed_samples"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_framebuffer_mixed_samples"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_framebuffer_mixed_samples extension, if the extendedDynamicState3CoverageModulationTable feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3CoverageModulationTable"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3CoverageReductionMode is supported",
+        "extensions": [
+          "VK_NV_coverage_reduction_mode"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_coverage_reduction_mode"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_coverage_reduction_mode , if the extendedDynamicState3CoverageReductionMode feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3CoverageReductionMode"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3RepresentativeFragmentTestEnable is supported",
+        "extensions": [
+          "VK_NV_representative_fragment_test"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_representative_fragment_test"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_representative_fragment_test , if the extendedDynamicState3RepresentativeFragmentTestEnable feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3RepresentativeFragmentTestEnable"
+        }
+      },
+      {
+        "explanation": "One of these extensions (or the named core version) must be supported when extendedDynamicState3ShadingRateImageEnable is supported",
+        "extensions": [
+          "VK_NV_shading_rate_image"
+        ],
+        "kind": "extension-required-by-feature",
+        "requirement": {
+          "extensions": [
+            "VK_NV_shading_rate_image"
+          ],
+          "kind": "any-of"
+        },
+        "text": "VK_NV_shading_rate_image , if the extendedDynamicState3ShadingRateImageEnable feature is supported.",
+        "trigger": {
+          "kind": "feature",
+          "name": "extendedDynamicState3ShadingRateImageEnable"
+        }
+      },
+      {
+        "explanation": "A graphics-only queue configuration must provide either host image copy or an extra transfer-capable queue family",
+        "kind": "either-or",
+        "options": [
+          "hostImageCopy feature supported",
+          "an additional transfer-capable queue family reported"
+        ],
+        "requirement": {
+          "features": [
+            "hostImageCopy"
+          ],
+          "kind": "any-of"
+        },
+        "text": "If Vulkan 1.4 is supported, at least one queue family is reported by vkGetPhysicalDeviceQueueFamilyProperties that includes the VK_QUEUE_GRAPHICS_BIT flag, and no additional queue families are reported that support the VK_QUEUE_TRANSFER_BIT flag, the hostImageCopy feature must be supported.",
+        "trigger": {
+          "kind": "graphics-queue-without-extra-transfer-queue"
+        }
+      }
     ],
     "registry_by_version": {
       "1.0": [
