@@ -162,6 +162,22 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Upstream BufferDescriptorCase binds uniform buffers across two descriptor sets, records its HOST_WRITE-to-UNIFORM_READ buffer dependencies and compares four deterministic quadrant values after dispatch."
+    },
+    {
+      "path": "dEQP-VK.pipeline.push_constant.compute_pipeline.simple_test",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelinePushConstantTests.cpp:3306",
+      "category": "pipeline",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "The original upstream compute test pushes one 16-byte vec4, dispatches eight invocations and byte-compares all eight SSBO vec4 results with (1,0,0,1)."
+    },
+    {
+      "path": "dEQP-VK.api.pipeline.pipeline_layout.lifetime.destroy_after_end",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiPipelineTests.cpp:1758",
+      "category": "pipeline",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "The original upstream Vulkan 1.0 compute test supplies a uint32 specialization constant and a uint32 push constant, destroys the pipeline layout after command recording, dispatches 100 invocations and verifies every exact SSBO result."
     }
   ],
   "diagnostics": []

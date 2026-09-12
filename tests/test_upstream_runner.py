@@ -335,6 +335,18 @@ class TestUpstreamRunner(unittest.TestCase):
         "multiple_descriptor_sets.single_descriptor.offset_view_zero",
     }
 
+    PUSH_SPECIALIZATION_CASES = {
+        "dEQP-VK.pipeline.push_constant.compute_pipeline.simple_test",
+        "dEQP-VK.api.pipeline.pipeline_layout.lifetime.destroy_after_end",
+    }
+
+    DEFERRED_SPIRV13_SPECIALIZATION_CASES = {
+        "dEQP-VK.pipeline.spec_constant.compute.basic.bool",
+        "dEQP-VK.pipeline.spec_constant.compute.basic.int",
+        "dEQP-VK.pipeline.spec_constant.compute.basic.uint",
+        "dEQP-VK.pipeline.spec_constant.compute.basic.float",
+    }
+
     def test_resource_family_cannot_be_silently_removed(self):
         """The resource expansion cases are part of the frozen acceptance set."""
         manifest = json.loads(MANIFEST_PATH.read_text())
@@ -354,6 +366,25 @@ class TestUpstreamRunner(unittest.TestCase):
                      "vktImageTestsUtil.cpp",
                      "vktBindingShaderAccessTests.cpp"):
             self.assertIn(name, build, f"{name} is not compiled into the payload")
+
+    def test_push_specialization_selection_is_frozen_and_bounded(self):
+        """Keep the audited Vulkan 1.0 cases and reject unsupported variants."""
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        paths = {case["path"] for case in manifest["cases"]}
+        self.assertTrue(self.PUSH_SPECIALIZATION_CASES <= paths)
+        self.assertFalse(self.DEFERRED_SPIRV13_SPECIALIZATION_CASES & paths)
+        self.assertFalse(any("local_size" in path.lower() for path in paths))
+        self.assertFalse(any("work_group_size" in path.lower() for path in paths))
+
+    def test_push_specialization_upstream_factories_are_linked(self):
+        """A selected leaf must retain its original upstream factory and body."""
+        build = (REPO_ROOT / "tools/build_upstream_cts.py").read_text(encoding="utf-8")
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text(encoding="utf-8")
+        self.assertIn("vktPipelinePushConstantTests.cpp", build)
+        self.assertIn("vktApiPipelineTests.cpp", build)
+        self.assertNotIn("vktPipelineSpecConstantTests.cpp", build)
+        self.assertIn("createPushConstantTests", package)
+        self.assertIn("createPipelineTests", package)
 
     def test_repaired_resource_cases_are_promoted_not_left_as_diagnostics(self):
         """The two repaired upstream cases must remain in strict acceptance."""

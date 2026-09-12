@@ -5257,11 +5257,13 @@
         ],
         "cases": [
           "dEQP-VK.api.pipeline.pipeline_invalid_pointers_unused_structs.compute",
-          "dEQP-VK.ubo.2_level_array.scalar.bool.both"
+          "dEQP-VK.ubo.2_level_array.scalar.bool.both",
+          "dEQP-VK.pipeline.push_constant.compute_pipeline.simple_test",
+          "dEQP-VK.api.pipeline.pipeline_layout.lifetime.destroy_after_end"
         ],
-        "note": "Pipeline-layout validity appears in api.*; UBO layout cases exercise the binding contract.",
+        "note": "Pipeline-layout validity appears in api.*; the focused native selection directly exercises a 16-byte compute push range and a scalar-specialization/push dispatch whose layout is destroyed after recording.",
         "coverage_quality": "representative-case",
-        "coverage_note": "Pipeline-layout validity is checked inside api.*, while push-constant behaviour needs shader-side cases that are not selected here."
+        "coverage_note": "The two selected upstream cases provide direct evidence for their bounded Vulkan 1.0 shapes, but do not exhaust pipeline-layout compatibility, stage combinations, overlapping ranges or every maxPushConstantsSize boundary."
       },
       "implementation_state": "not-audited",
       "baseline": {

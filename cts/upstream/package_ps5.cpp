@@ -1,10 +1,12 @@
 #include "package_ps5.hpp"
 #include "vktApiSmokeTests.hpp"
 #include "vktApiBufferViewAccessTests.hpp"
+#include "vktApiPipelineTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
+#include "vktPipelinePushConstantTests.hpp"
 #include "tcuTestPackage.hpp"
 #include "deUniquePtr.hpp"
 
@@ -34,6 +36,7 @@ void FocusedVkTestPackage::init(void)
         de::MovePtr<tcu::TestCaseGroup> bufferViewGroup(new tcu::TestCaseGroup(m_testCtx, "buffer_view"));
         bufferViewGroup->addChild(vkt::api::createBufferViewAccessTests(m_testCtx));
         apiGroup->addChild(bufferViewGroup.release());
+        apiGroup->addChild(vkt::api::createPipelineTests(m_testCtx));
         addChild(apiGroup.release());
     }
 
@@ -65,6 +68,16 @@ void FocusedVkTestPackage::init(void)
         de::MovePtr<tcu::TestCaseGroup> computeGroup(new tcu::TestCaseGroup(m_testCtx, "compute"));
         computeGroup->addChild(vkt::compute::createBasicComputeShaderTests(m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
         addChild(computeGroup.release());
+    }
+
+    // pipeline.push_constant group. The upstream factory is registered without
+    // replacing or wrapping individual test bodies; cases.txt remains the only
+    // execution filter.
+    {
+        de::MovePtr<tcu::TestCaseGroup> pipelineGroup(new tcu::TestCaseGroup(m_testCtx, "pipeline"));
+        pipelineGroup->addChild(vkt::pipeline::createPushConstantTests(
+            m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+        addChild(pipelineGroup.release());
     }
 }
 

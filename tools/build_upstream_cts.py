@@ -595,6 +595,7 @@ def main():
         # binding-model shader-access family (multi-set binding of buffers).
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferAndImageAllocationUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/api/vktApiPipelineTests.cpp",
         # vktImageTestsUtil provides the format-qualifier and packed-type helpers
         # the buffer-view access tests use to build their compute shader.
         cts_root / "external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp",
@@ -604,6 +605,14 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeTestsUtil.cpp",
+        # Genuine upstream push-constant factory. The focused package registers
+        # the complete group and cases.txt selects only the audited compute leaf.
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelinePushConstantTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineClearUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineImageUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineVertexUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineReferenceRenderer.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMakeUtil.cpp",
     ]
     for src in test_cpp:
         obj = obj_dir / "modules" / (src.stem + ".o")

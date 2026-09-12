@@ -67,11 +67,12 @@ selection manifest, strict acceptance policy and evidence rules are documented
 in [UPSTREAM_CTS.md](UPSTREAM_CTS.md). Results from that integration are
 reported separately and are not merged into the counts above.
 
-On 2026-09-12, two independent native launches completed **all eighteen selected
-upstream cases with Pass**. The selection contains seven API/synchronization/
-memory cases, six compute cases covering workgroup-shared memory, barriers and
-shared atomics, and five resource cases covering uniform buffers, an R32_UINT
-uniform texel buffer and storage/uniform resources across two descriptor sets.
+On 2026-09-12, two independent native launches completed **all twenty selected
+upstream cases with Pass**. In addition to the API/synchronization/memory,
+compute and resource groups, the selection now includes original upstream
+oracles for a 16-byte compute push range and a Vulkan 1.0 pipeline-lifetime
+case combining a scalar specialization constant, a scalar push constant,
+dispatch and exact 100-word SSBO verification.
 Both runs used native GLSL compilation and the original readback oracles, passed
 strict artifact/QPA verification and Close Game checks, observed GPU completion
 and reported zero tracked GPU allocation bytes at teardown. The two cases that
@@ -79,6 +80,13 @@ previously exposed component-mapping and `UNIFORM_READ` command-validation bugs
 are now part of strict acceptance. Artifact/report hashes, the fixes and the
 remaining focused-coverage limits are recorded in
 [UPSTREAM_CTS.md](UPSTREAM_CTS.md).
+
+The final twenty-case artifact and selection hashes are respectively
+`3cd38c3a7ed6b26384a82151eb9d08618473fd24f1a685299a87b2872fb62c83`
+and `8db6098fc129cc43e0238ebfeb1f70b812d8e0ca4a116195b569f33a16318d8b`.
+The four nearby specialization cases that demand SPIR-V 1.3 and every
+`LocalSizeId` workgroup-size case remain outside the selection; no advertised
+API or SPIR-V version was widened to bypass their upstream support checks.
 
 ## Independent native SDK consumer validation
 
