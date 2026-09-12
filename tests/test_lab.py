@@ -31,6 +31,12 @@ class LabTests(unittest.TestCase):
             self.assertIn("lab_root()", source)
             self.assertNotIn("ROOT.parents[1]", source)
 
+    def test_compiler_cache_tracks_dependency_pin_and_recipe(self):
+        workflow = (ROOT / ".github/workflows/host-contracts.yml").read_text()
+        self.assertIn("hashFiles(", workflow)
+        self.assertIn("tools/prepare_compiler_deps.py", workflow)
+        self.assertIn("tools/Makefile.psbc-host", workflow)
+
     def test_remoteplay_preserves_arguments_without_shell(self):
         args = ["remoteplay", "record-demo", "--name", "ps5vk demo ; literal"]
         result = lab.command(Path("/tmp/lab with spaces"), args)
