@@ -25,6 +25,19 @@ extern "C" {
 #define PS5VK_SDK_VERSION_PATCH 0
 
 /* Standard Vulkan 1.0 Entry Points exported by ps5vk */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
+    VkInstance instance,
+    const char* pName);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(
+    const char* pLayerName,
+    uint32_t* pPropertyCount,
+    VkExtensionProperties* pProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(
+    uint32_t* pPropertyCount,
+    VkLayerProperties* pProperties);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
     const VkInstanceCreateInfo* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
@@ -61,6 +74,21 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties(
     uint32_t* pQueueFamilyPropertyCount,
     VkQueueFamilyProperties* pQueueFamilyProperties);
 
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties(
+    VkPhysicalDevice physicalDevice,
+    VkFormat format,
+    VkImageType type,
+    VkImageTiling tiling,
+    VkImageUsageFlags usage,
+    VkImageCreateFlags flags,
+    VkImageFormatProperties* pImageFormatProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(
+    VkPhysicalDevice physicalDevice,
+    const char* pLayerName,
+    uint32_t* pPropertyCount,
+    VkExtensionProperties* pProperties);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(
     VkPhysicalDevice physicalDevice,
     const VkDeviceCreateInfo* pCreateInfo,
@@ -70,6 +98,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(
 VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(
     VkDevice device,
     const VkAllocationCallbacks* pAllocator);
+
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(
+    VkDevice device,
+    const char* pName);
 
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue(
     VkDevice device,
@@ -141,6 +173,50 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory(
     VkDeviceMemory memory,
     VkDeviceSize memoryOffset);
 
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(
+    VkDevice device,
+    const VkImageCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkImage* pImage);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyImage(
+    VkDevice device,
+    VkImage image,
+    const VkAllocationCallbacks* pAllocator);
+
+VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements(
+    VkDevice device,
+    VkImage image,
+    VkMemoryRequirements* pMemoryRequirements);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(
+    VkDevice device,
+    VkImage image,
+    VkDeviceMemory memory,
+    VkDeviceSize memoryOffset);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(
+    VkDevice device,
+    const VkImageViewCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkImageView* pView);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyImageView(
+    VkDevice device,
+    VkImageView imageView,
+    const VkAllocationCallbacks* pAllocator);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(
+    VkDevice device,
+    const VkSamplerCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkSampler* pSampler);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroySampler(
+    VkDevice device,
+    VkSampler sampler,
+    const VkAllocationCallbacks* pAllocator);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(
     VkDevice device,
     const VkShaderModuleCreateInfo* pCreateInfo,
@@ -174,11 +250,41 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipelineLayout(
     VkPipelineLayout pipelineLayout,
     const VkAllocationCallbacks* pAllocator);
 
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(
+    VkDevice device,
+    const VkRenderPassCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkRenderPass* pRenderPass);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyRenderPass(
+    VkDevice device,
+    VkRenderPass renderPass,
+    const VkAllocationCallbacks* pAllocator);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(
+    VkDevice device,
+    const VkFramebufferCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkFramebuffer* pFramebuffer);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyFramebuffer(
+    VkDevice device,
+    VkFramebuffer framebuffer,
+    const VkAllocationCallbacks* pAllocator);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
     VkDevice device,
     VkPipelineCache pipelineCache,
     uint32_t createInfoCount,
     const VkComputePipelineCreateInfo* pCreateInfos,
+    const VkAllocationCallbacks* pAllocator,
+    VkPipeline* pPipelines);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(
+    VkDevice device,
+    VkPipelineCache pipelineCache,
+    uint32_t createInfoCount,
+    const VkGraphicsPipelineCreateInfo* pCreateInfos,
     const VkAllocationCallbacks* pAllocator,
     VkPipeline* pPipelines);
 
@@ -274,6 +380,50 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(
     uint32_t groupCountX,
     uint32_t groupCountY,
     uint32_t groupCountZ);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(
+    VkCommandBuffer commandBuffer,
+    const VkRenderPassBeginInfo* pRenderPassBegin,
+    VkSubpassContents contents);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(
+    VkCommandBuffer commandBuffer);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(
+    VkCommandBuffer commandBuffer,
+    uint32_t firstBinding,
+    uint32_t bindingCount,
+    const VkBuffer* pBuffers,
+    const VkDeviceSize* pOffsets);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(
+    VkCommandBuffer commandBuffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    VkIndexType indexType);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDraw(
+    VkCommandBuffer commandBuffer,
+    uint32_t vertexCount,
+    uint32_t instanceCount,
+    uint32_t firstVertex,
+    uint32_t firstInstance);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(
+    VkCommandBuffer commandBuffer,
+    uint32_t indexCount,
+    uint32_t instanceCount,
+    uint32_t firstIndex,
+    int32_t vertexOffset,
+    uint32_t firstInstance);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
+    VkCommandBuffer commandBuffer,
+    VkBuffer srcBuffer,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkBufferImageCopy* pRegions);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(
     VkCommandBuffer commandBuffer,

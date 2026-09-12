@@ -1,6 +1,7 @@
 PYTHON ?= python3
 CC ?= cc
-GLSLANG ?= glslangValidator
+LOCAL_GLSLANG := $(abspath build/runtime-graphics/toolchain/usr/bin/glslangValidator)
+GLSLANG ?= $(if $(wildcard $(LOCAL_GLSLANG)),$(LOCAL_GLSLANG),glslangValidator)
 .DEFAULT_GOAL := check
 .PHONY: inspect-graphics-compiler
 inspect-graphics-compiler: build/libpsbc.host.a
@@ -184,6 +185,8 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache
 	./build/tests/test_compilation_cache
 	$(PYTHON) tools/build_sdk.py
+	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
+	./build/tests/test_cts_host
 	@if [ -d third_party/psbc-reference ]; then \
 		$(MAKE) test-compiler; \
 	else \

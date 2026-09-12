@@ -42,6 +42,8 @@ def main():
     # 1. Copy public headers
     shutil.copyfile(ROOT / "include/ps5vk/ps5vk.h", include_dir / "ps5vk/ps5vk.h")
     shutil.copyfile(ROOT / "include/ps5vk/ps5vk_present.h", include_dir / "ps5vk/ps5vk_present.h")
+    shutil.copyfile(ROOT / "native/ps5-pie.ld", lib_dir / "ps5-pie.ld")
+    shutil.copyfile(ROOT / "native/app-symbols.map", lib_dir / "app-symbols.map")
 
     # 2. Copy Vulkan core headers
     for sub in ("vulkan", "vk_video"):
@@ -166,7 +168,13 @@ def main():
         linker = sdk / "bin/prospero-lld"
         pie_ld = ROOT / "native/ps5-pie.ld"
         syms_map = ROOT / "native/app-symbols.map"
-        crt = sdk / "target/lib/crt1.o"
+        app_crt_cpp = lab / "third_party/ps5-native-app-boilerplate/tooling/native/app_crt.cpp"
+        crt = lib_dir / "crt.o"
+        if app_crt_cpp.is_file():
+            subprocess.run(["sh", str(clang_wrapper), "-std=c++20", "-O2", "-fno-exceptions", "-fno-rtti",
+                            "-c", str(app_crt_cpp), "-o", str(crt)], env=env, check=True)
+        else:
+            crt = sdk / "target/lib/crt1.o"
         stub = lib_dir / "libSceAgc.so"
         driver = lib_dir / "libSceAgcDriver.so"
         stub_objects = []
@@ -198,7 +206,7 @@ def main():
                 "-T", str(pie_ld),
                 "--eh-frame-hdr",
                 "--version-script", str(syms_map),
-                "-e", "main",
+                "-e", "_start",
                 "-o", str(out_elf),
                 str(crt),
                 str(consumer_obj),
@@ -241,8 +249,10 @@ def main():
         subprocess.run(["cc", *host_cflags, "-c", str(src_path), "-o", str(obj_path)], check=True)
         host_objs.append(str(obj_path))
 
-    host_lib = lib_dir / ("libps5vk_host.a" if has_native_sdk else "libps5vk.a")
+    host_lib = lib_dir / "libps5vk_host.a"
     archive("ar", host_lib, host_objs)
+    if not has_native_sdk:
+        shutil.copyfile(host_lib, lib_dir / "libps5vk.a")
 
     # 5. Generate SDK README
     readme_text = """# PS5 Vulkan (ps5vk) SDK
