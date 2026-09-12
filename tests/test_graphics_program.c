@@ -53,13 +53,13 @@ int main(void)
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_UNKNOWN);
     struct ps5vk_set_signature signature={.count=1};
     signature.binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_FRAGMENT_BIT};
-    signature.combined_image[0]=VK_TRUE;
+    signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     for(unsigned i=1;i<PS5VK_MAX_BINDINGS;++i)signature.binding[i].first=1;
     programs[0].key.descriptor_set_count=1;programs[0].key.descriptor_sets=&signature;
     struct ps5vk_set_signature requested=signature;
     key=programs[0].key;key.descriptor_sets=&requested;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS);
-    requested.combined_image[0]=VK_FALSE;
+    requested.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT);
     requested=signature;requested.binding[0].stages=VK_SHADER_STAGE_VERTEX_BIT;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT);

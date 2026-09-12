@@ -6,10 +6,16 @@
 - **Pinned Commit:** `a0270c1897597e6c77679870e10415398a13001c`
 - **License:** Apache-2.0
 - **Upstream Mustpass Source:** `external/vulkancts/mustpass/main/vk-default/*.txt`
-- **Porting Status:** **PENDING / IN PROGRESS**. Full upstream Khronos VK-GL-CTS framework execution (building the upstream C++ test runner against ps5vk) is an open milestone.
+- **Porting Status:** A focused genuine upstream runner is integrated and has
+  accepted 13 selected cases on hardware. This synthetic 26-case suite remains
+  a separate contract harness; neither suite is a conformance claim. See
+  [UPSTREAM_CTS.md](../UPSTREAM_CTS.md).
 
 ## 2. Synthetic API Contract Suite Scope & Rationale
-To validate driver ABI, descriptor state, memory mapping, compiler interfaces, and queue submission ahead of full upstream CTS porting, we implement a focused set of 26 **synthetic API contract tests** (`contract tests`) named with the `contract.*` prefix and modeled after the Khronos CTS mustpass selection:
+To validate driver ABI, descriptor state, memory mapping, compiler interfaces,
+and queue submission independently of the upstream runner, we maintain 26
+**synthetic API contract tests** named with the `contract.*` prefix and modeled
+after the Khronos CTS mustpass selection:
 1. **Device Initialization & Discovery (12 cases):** Verifies physical device enumeration, limit queries, memory property layout, queue family properties, and extensions.
 2. **Core API & Smoke Tests (4 cases):** Verifies device initialization, sampler creation, SPIR-V shader module ingestion, and triangle pipeline setup.
 3. **Memory Allocation & Mapping (5 cases):** Exercises small allocations, alignment boundaries, unified memory mapping, and non-coherent cache maintenance (`vkFlushMappedMemoryRanges`, `vkInvalidateMappedMemoryRanges`).
@@ -17,7 +23,7 @@ To validate driver ABI, descriptor state, memory mapping, compiler interfaces, a
 5. **Synchronization & Queue Submission (3 cases):** Exercises signaled/unsignaled fence lifecycle, queue submission, and CPU-GPU synchronization.
 
 ### Important Test Limitations
-- **Session Device Re-use (Lifecycle):** Restricción del backend/harness actual; reinicialización independiente no validada. The contract suite uses a process-scoped shared session device across tests (`helper_destroy_device` is a no-op across tests). Repeated independent device creation and destruction cycles per test case are **not** validated by this suite.
+- **Session Device Re-use (Lifecycle):** This is a restriction of the current backend/harness; independent reinitialization is not validated. The contract suite uses a process-scoped shared session device across tests (`helper_destroy_device` is a no-op across tests). Repeated independent device creation and destruction cycles per test case are **not** validated by this suite.
 - **Triangle Pipeline Scope:** `contract.api.smoke.triangle` (ref: `dEQP-VK.api.smoke.triangle`) validates vertex/fragment SPIR-V translation, render pass creation, descriptor layout, and pipeline compilation on GFX1013. It does **not** issue draw commands or verify rasterized pixels. Full draw submission, VideoOut presentation, and deterministic frame buffer readback are verified by the standalone native consumer in `examples/native_consumer/`.
 
 ---
@@ -38,7 +44,7 @@ To validate driver ABI, descriptor state, memory mapping, compiler interfaces, a
 | Instance Layers | Vulkan 1.0 | `src/vk_dispatch.c` | `<ps5vk/ps5vk.h>` | `contract.info.instance_layers` | `dEQP-VK.info.instance_layers` | PASS | PASS | 0 layers reported |
 | Device Extensions | Vulkan 1.0 | `src/vk_dispatch.c` | `<ps5vk/ps5vk.h>` | `contract.info.device_extensions` | `dEQP-VK.info.device_extensions` | PASS | PASS | Static embedded profile |
 | Physical Devices Enum | Vulkan 1.0 | `src/vk_device.c` | `<ps5vk/ps5vk.h>` | `contract.info.physical_devices` | `dEQP-VK.info.physical_devices` | PASS | PASS | Physical device enumeration count |
-| Logical Device Init | Vulkan 1.0 | `src/vk_device.c` | `<ps5vk/ps5vk.h>` | `contract.api.device_init.create_device` | `dEQP-VK.api.device_init.create_device.basic` | PASS | PASS | Session device init; restricción del backend/harness actual, reinicialización independiente no validada |
+| Logical Device Init | Vulkan 1.0 | `src/vk_device.c` | `<ps5vk/ps5vk.h>` | `contract.api.device_init.create_device` | `dEQP-VK.api.device_init.create_device.basic` | PASS | PASS | Session device init; current backend/harness restriction, independent reinitialization not validated |
 | Sampler Object Creation | Vulkan 1.0 | `src/vk_sampler.c` | `<ps5vk/ps5vk.h>` | `contract.api.smoke.create_sampler` | `dEQP-VK.api.smoke.create_sampler` | NotSupported | PASS | Host mock lacks graphics pipeline; native validates GFX10 S# descriptor |
 | Shader Module Ingestion | Vulkan 1.0 | `src/compilation_cache.c` | `<ps5vk/ps5vk.h>` | `contract.api.smoke.create_shader` | `dEQP-VK.api.smoke.create_shader` | PASS | PASS | Validates SPIR-V binary validation and parsing |
 | Graphics Triangle Pipeline | Vulkan 1.0 | `native/graphics_pipeline_ps5.c`, `src/graphics_program.c` | `<ps5vk/ps5vk.h>` | `contract.api.smoke.triangle` | `dEQP-VK.api.smoke.triangle` | NotSupported | PASS | Pipeline compilation only; draw/raster verified in native consumer |
@@ -59,4 +65,6 @@ To validate driver ABI, descriptor state, memory mapping, compiler interfaces, a
 - **Synthetic Contract Suite:** 26 test cases with dedicated `contract.*` names, retaining dEQP-VK IDs as upstream references.
 - **Native PS5 Execution:** 26/26 PASS within the session device context.
 - **Host Mock Execution:** 22 PASS, 4 NotSupported (GPU shader and graphics pipeline compilation unported on host mock harness), 0 FAIL.
-- **Upstream CTS Status:** Pending. Full upstream Khronos VK-GL-CTS C++ framework execution is an open milestone.
+- **Upstream CTS Status:** Focused runner integrated; 13/13 currently selected
+  genuine upstream cases have strict native acceptance. Broader CTS coverage
+  remains open; see [UPSTREAM_CTS.md](../UPSTREAM_CTS.md).

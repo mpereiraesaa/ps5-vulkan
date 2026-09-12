@@ -8,7 +8,7 @@
  * Direct upstream VK-GL-CTS framework porting remains pending.
  *
  * Lifecycle note:
- * Restricción del backend/harness actual; reinicialización independiente no validada.
+ * Current backend/harness restriction: independent reinitialization is not validated.
  * Therefore, these contract tests execute against a process-scoped session device
  * (initialized once on startup, released on shutdown). Independent device
  * creation/destruction cycles per test case are not validated.
@@ -365,7 +365,7 @@ static cts_result_t case_api_create_device_basic(void)
         return r;
     }
     helper_destroy_device(inst, dev);
-    snprintf(r.details, sizeof(r.details), "Logical device and queue created cleanly (session device; restricción del backend/harness actual, reinicialización independiente no validada)");
+    snprintf(r.details, sizeof(r.details), "Logical device and queue created cleanly (session device; independent reinitialization not validated)");
     return r;
 }
 

@@ -162,6 +162,17 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyBuffer(
     VkBuffer buffer,
     const VkAllocationCallbacks* pAllocator);
 
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateBufferView(
+    VkDevice device,
+    const VkBufferViewCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkBufferView* pView);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyBufferView(
+    VkDevice device,
+    VkBufferView bufferView,
+    const VkAllocationCallbacks* pAllocator);
+
 VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements(
     VkDevice device,
     VkBuffer buffer,

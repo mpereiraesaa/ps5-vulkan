@@ -20,7 +20,7 @@ static int equal_sets(const struct ps5vk_graphics_key *a,const struct ps5vk_grap
     for(unsigned s=0;s<a->descriptor_set_count;++s)for(unsigned i=0;i<PS5VK_MAX_BINDINGS;++i) {
         const struct ps5vk_binding *x=&a->descriptor_sets[s].binding[i],*y=&b->descriptor_sets[s].binding[i];
         if(x->count!=y->count || (x->count && (x->stages!=y->stages ||
-            a->descriptor_sets[s].combined_image[i]!=b->descriptor_sets[s].combined_image[i])))return 0;
+            a->descriptor_sets[s].type[i]!=b->descriptor_sets[s].type[i])))return 0;
     }
     return 1;
 }

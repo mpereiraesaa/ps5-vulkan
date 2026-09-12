@@ -164,15 +164,26 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     strcpy(p->deviceName, "ps5vk gfx1013 experimental graphics profile");
 #endif
     p->limits.maxStorageBufferRange = (uint32_t)HEAP_BYTES;
+    /* Resource-ABI bounds exercised by the native public consumer.  Keep the
+     * ranges deliberately below the backing heap ceiling; they are advertised
+     * implementation limits, not estimates of physical GPU memory. */
+    p->limits.maxUniformBufferRange = 64 * 1024;
+    p->limits.maxTexelBufferElements = 64 * 1024;
     /* Every native allocation charges at least 64 KiB against this heap.
      * Report that implementation ceiling, not zero or a guessed OS limit. */
     p->limits.maxMemoryAllocationCount = (uint32_t)(HEAP_BYTES / 65536);
     p->limits.minStorageBufferOffsetAlignment = 256;
+    p->limits.minUniformBufferOffsetAlignment = 256;
     p->limits.nonCoherentAtomSize = 64;
     p->limits.minMemoryMapAlignment = 64;
     p->limits.maxBoundDescriptorSets = PS5VK_MAX_SETS;
     p->limits.maxPerStageDescriptorStorageBuffers = PS5VK_MAX_DESCRIPTORS;
     p->limits.maxDescriptorSetStorageBuffers = PS5VK_MAX_DESCRIPTORS;
+    p->limits.maxPerStageDescriptorUniformBuffers = PS5VK_MAX_DESCRIPTORS;
+    p->limits.maxDescriptorSetUniformBuffers = PS5VK_MAX_DESCRIPTORS;
+    /* Uniform texel buffers count against Vulkan's sampled-image limits. */
+    p->limits.maxPerStageDescriptorSampledImages = 1;
+    p->limits.maxDescriptorSetSampledImages = 1;
     p->limits.maxPerStageResources = PS5VK_MAX_DESCRIPTORS;
     p->limits.maxComputeWorkGroupInvocations = 1024;
 #if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW

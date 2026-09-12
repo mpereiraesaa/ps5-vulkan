@@ -15,8 +15,9 @@ static struct ps5vk_compiled_program fixture(const uint32_t *module, const uint3
     return (struct ps5vk_compiled_program){.spirv = module, .spirv_words = 16,
         .code = code, .code_words = 1, .entry = "main", .gfx = 1013,
         .local_size = {64, 1, 1}, .wave_size = 32, .vgprs = 3, .sgprs = 10,
-        .float_mode = 192, .mem_ordered = 1, .user_sgprs = 2, .tg_size = 1,
-        .tgid = {1, 1, 1}, .descriptor_count = 1, .descriptors = {{0, 0, 0, 0}}};
+        .float_mode = 192, .mem_ordered = 1, .user_sgprs = 3, .tg_size = 1,
+        .tgid = {1, 1, 1}, .descriptor_set_mask=1,.descriptor_set_sgpr={2},
+        .descriptor_count = 1, .descriptors = {{0, 0, 0, 0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
 }
 static VkShaderModule shader(VkDevice d, const uint32_t *words)
 {

@@ -57,6 +57,9 @@ static inline void ps5vk_graphics_format_properties(VkFormat format,
     *out = (VkFormatProperties){0};
     if (ps5vk_vertex_format_size(format))
         out->bufferFeatures = VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
+    if (format == VK_FORMAT_R32_UINT || format == VK_FORMAT_R32_SINT ||
+        format == VK_FORMAT_R32_SFLOAT)
+        out->bufferFeatures |= VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
     switch (format) {
     case VK_FORMAT_B8G8R8A8_UNORM:
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;

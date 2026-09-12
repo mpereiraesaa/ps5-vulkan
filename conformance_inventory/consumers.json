@@ -59,7 +59,7 @@
           "evidence": "The pinned shader descriptor ABI declares set 0 bindings 0-2, set 1 bindings 0-12 including a uniform texel buffer, and set 2 binding 0 as a std140 uniform block.",
           "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/shaders/data_structures_buffers.h#L28"],
           "related_requirement_ids": ["VK14-DESCRIPTORS-001", "VK14-DESCRIPTORS-005", "VK14-DESCRIPTORS-007"],
-          "baseline_observation": "Runtime compute accepts a single set-0 scalar storage-buffer profile."
+          "baseline_observation": "Runtime compute now accepts up to four descriptor sets; a three-set storage/uniform/uniform-texel configuration has strict native hardware acceptance. Descriptor arrays remain outside that acceptance fixture."
         },
         {
           "id": "RDP-004", "classification": "mandatory",
@@ -67,7 +67,7 @@
           "evidence": "The RDP shader set uses a std140 uniform block and a readonly utextureBuffer for a divider LUT.",
           "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/shaders/data_structures_buffers.h#L117"],
           "related_requirement_ids": ["VK14-FORMATS-007", "VK14-DESCRIPTORS-003", "VK14-DESCRIPTORS-004"],
-          "baseline_observation": "Uniform buffers and texel-buffer views are absent from the supported compute descriptors."
+          "baseline_observation": "Uniform buffers and R32_UINT uniform texel-buffer views are implemented end to end and accepted by a strict native compute oracle; R32_SINT/R32_SFLOAT have object/encoder contracts only."
         },
         {
           "id": "RDP-005", "classification": "mandatory",
@@ -91,7 +91,7 @@
           "evidence": "The non-subgroup binning kernel uses shared memory, barriers and atomics; disabling subgroup support does not remove that requirement.",
           "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/shaders/tile_binning_combined.comp#L130"],
           "related_requirement_ids": ["VK14-SHADERS-004", "VK14-DESCRIPTORS-005"],
-          "baseline_observation": "The current compiler adapter rejects workgroup-shared memory requirements."
+          "baseline_observation": "The compiler adapter supports up to 64 KiB of LDS, and focused upstream shared-variable, barrier and shared-atomic cases pass on hardware; the complete tile-binning workload remains unvalidated."
         },
         {
           "id": "RDP-008", "classification": "optional",

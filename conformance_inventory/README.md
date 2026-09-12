@@ -15,6 +15,10 @@ Every number quoted below is generated from the data, not typed by hand:
 <!-- stats:begin -->
 ```json
 {
+  "baseline_dispatched": 83,
+  "baseline_entry_points": 83,
+  "baseline_implementation_only": 1,
+  "baseline_public_header": 82,
   "command_contracts": 12,
   "core_commands": 234,
   "core_conditional_feature_bits": 27,
@@ -252,16 +256,11 @@ Two rules are enforced by the validator and by tests:
 
 A third rule was added after review: baseline claims are checked against
 `baseline_surface.json`, which is derived from the implementation rather than
-from the public header. At the pinned baseline the implementation defines 81
-entry points, all 81 are in the dispatch table, only 54 are declared in
-`include/ps5vk/`, and 27 are implementation-only. For example
-`vkEnumerateInstanceExtensionProperties`, `vkEnumerateInstanceLayerProperties`
-and `vkEnumerateDeviceExtensionProperties` all exist and succeed with empty
-lists, and `vkCreateImage`, `vkCreateSampler`, `vkCreateRenderPass`,
-`vkCreateGraphicsPipelines` and `vkCmdDraw` are implemented but not declared in
-the public header. Rows must list the entry points that exist, the ones that do
-not, and say explicitly when an entry point exists only outside the public
-header.
+from documentation. The generated figures above record the current counts;
+only `vkResetDescriptorPool` remains implementation-only. Rows partition every
+named entry point into present and absent sets and record dispatch/public-header
+counts. `tools/update_requirements_baseline.py` regenerates those facts, and the
+validator rejects drift.
 
 ## CTS mapping
 
@@ -329,6 +328,7 @@ listing fetches, which are hash-checked against `sources.json`):
 
 ```sh
 python3 conformance_inventory/tools/collect_baseline_surface.py
+python3 conformance_inventory/tools/update_requirements_baseline.py
 python3 conformance_inventory/tools/derive_core_target.py
 python3 conformance_inventory/tools/derive_roadmap_comparison.py
 ```

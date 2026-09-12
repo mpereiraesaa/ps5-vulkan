@@ -1,15 +1,15 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "3ee04bec0a342fd7db75c74a0fff7c59449757ef",
-  "inspected_commit": "4a933acae2f82e904233824b8f50dc455d07b2ce",
+  "baseline_commit": "5bd276ef3971cabe3af8da1a0f0710437215692b",
+  "inspected_commit": "5bd276ef3971cabe3af8da1a0f0710437215692b",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 81,
-    "dispatched": 81,
-    "public_header": 54,
-    "implementation_only": 27
+    "entry_points": 83,
+    "dispatched": 83,
+    "public_header": 82,
+    "implementation_only": 1
   },
   "entry_points": [
     {
@@ -63,7 +63,7 @@
         "src/vk_memory.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -72,7 +72,7 @@
         "src/vk_command.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -90,7 +90,7 @@
         "src/vk_command.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -108,7 +108,7 @@
         "src/vk_command.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -117,7 +117,7 @@
         "src/vk_transfer.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -135,8 +135,8 @@
         "src/vk_command.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
-      "observed": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_command.c."
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_command.c, include/ps5vk/ps5vk.h."
     },
     {
       "name": "vkCmdDrawIndexed",
@@ -144,7 +144,7 @@
         "src/vk_command.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -153,7 +153,7 @@
         "src/vk_command.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -167,6 +167,15 @@
     },
     {
       "name": "vkCreateBuffer",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateBufferView",
       "files": [
         "src/vk_memory.c"
       ],
@@ -234,7 +243,7 @@
         "src/vk_framebuffer.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -243,8 +252,8 @@
         "src/vk_graphics_pipeline.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
-      "observed": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_graphics_pipeline.c."
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_graphics_pipeline.c, include/ps5vk/ps5vk.h."
     },
     {
       "name": "vkCreateImage",
@@ -252,8 +261,8 @@
         "src/vk_memory.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
-      "observed": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_memory.c."
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_memory.c, include/ps5vk/ps5vk.h."
     },
     {
       "name": "vkCreateImageView",
@@ -261,7 +270,7 @@
         "src/vk_image_view.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -288,8 +297,8 @@
         "src/vk_render_pass.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
-      "observed": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_render_pass.c."
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_render_pass.c, include/ps5vk/ps5vk.h."
     },
     {
       "name": "vkCreateSampler",
@@ -297,8 +306,8 @@
         "src/vk_sampler.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
-      "observed": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_sampler.c."
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_sampler.c, include/ps5vk/ps5vk.h."
     },
     {
       "name": "vkCreateShaderModule",
@@ -311,6 +320,15 @@
     },
     {
       "name": "vkDestroyBuffer",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyBufferView",
       "files": [
         "src/vk_memory.c"
       ],
@@ -369,7 +387,7 @@
         "src/vk_framebuffer.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -378,7 +396,7 @@
         "src/vk_memory.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -387,7 +405,7 @@
         "src/vk_image_view.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -423,7 +441,7 @@
         "src/vk_render_pass.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -432,7 +450,7 @@
         "src/vk_sampler.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -468,7 +486,7 @@
         "src/vk_device.c"
       ],
       "dispatch_scope": "INSTANCE",
-      "public_header": false,
+      "public_header": true,
       "observed": "Exists and is dispatched (INSTANCE); forwards to the instance enumeration, so it also reports zero extensions. Evidence: src/vk_device.c."
     },
     {
@@ -477,7 +495,7 @@
         "src/vk_device.c"
       ],
       "dispatch_scope": "GLOBAL",
-      "public_header": false,
+      "public_header": true,
       "observed": "Exists and is dispatched (GLOBAL). Returns VK_SUCCESS with *count = 0; a non-NULL layer name returns VK_ERROR_LAYER_NOT_PRESENT. Evidence: src/vk_device.c."
     },
     {
@@ -486,7 +504,7 @@
         "src/vk_device.c"
       ],
       "dispatch_scope": "GLOBAL",
-      "public_header": false,
+      "public_header": true,
       "observed": "Exists and is dispatched (GLOBAL). Returns VK_SUCCESS with *count = 0. Evidence: src/vk_device.c."
     },
     {
@@ -549,7 +567,7 @@
         "src/vk_dispatch.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": "Exists and is dispatched (DEVICE) over the same table. Evidence: src/vk_dispatch.c."
     },
     {
@@ -576,7 +594,7 @@
         "src/vk_memory.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
@@ -585,7 +603,7 @@
         "src/vk_dispatch.c"
       ],
       "dispatch_scope": "GLOBAL",
-      "public_header": false,
+      "public_header": true,
       "observed": "Exists and is dispatched (GLOBAL) over a fixed internal dispatch table. Evidence: src/vk_dispatch.c."
     },
     {
@@ -612,7 +630,7 @@
         "src/vk_device.c"
       ],
       "dispatch_scope": "INSTANCE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {

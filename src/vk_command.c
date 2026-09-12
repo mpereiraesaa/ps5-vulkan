@@ -4,11 +4,12 @@
 #define INVALID VK_ERROR_UNKNOWN
 static void clear(VkCommandBuffer c)
 {
-    c->state = PS5VK_INITIAL; c->usage = 0; c->pipeline = NULL; c->set = NULL;
+    c->state = PS5VK_INITIAL; c->usage = 0; c->pipeline = NULL;
     c->operation_count = 0;
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
-    c->graphics_set=NULL;memset(&c->graphics_set_signature,0,sizeof(c->graphics_set_signature));
-    memset(&c->set_signature, 0, sizeof(c->set_signature));
+    memset(c->sets, 0, sizeof(c->sets)); memset(c->set_signatures, 0, sizeof(c->set_signatures));
+    memset(c->graphics_sets,0,sizeof(c->graphics_sets));
+    memset(c->graphics_set_signatures,0,sizeof(c->graphics_set_signatures));
     memset(c->operations, 0, sizeof(c->operations));
     memset(c->vertices, 0, sizeof(c->vertices));
     memset(&c->indices, 0, sizeof(c->indices));
@@ -23,21 +24,24 @@ static int set_uses(VkDescriptorSet s, VkObjectType type, const void *object)
         if(type==VK_OBJECT_TYPE_SAMPLER && s->images[j].sampler==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE_VIEW && s->images[j].imageView==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && s->image_resources[j]==object)return 1;
+        if(type==VK_OBJECT_TYPE_BUFFER_VIEW && s->texel_views[j]==object)return 1;
     }
     if (type == VK_OBJECT_TYPE_BUFFER)
         for (uint32_t j = 0; j < s->signature.count; ++j)
-            if (s->defined[j] && (const void *)s->buffers[j].buffer == object) return 1;
+            if (s->defined[j] && ((const void *)s->buffers[j].buffer == object ||
+                (s->texel_views[j] && (const void *)s->texel_views[j]->buffer==object))) return 1;
     return 0;
 }
 static int references(VkCommandBuffer c, VkObjectType type, const void *object)
 {
     if (c->state == PS5VK_INITIAL || c->state == PS5VK_INVALID) return 0;
-    if(set_uses(c->graphics_set,type,object))return 1;
+    for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set)
+        if(set_uses(c->graphics_sets[set],type,object) || set_uses(c->sets[set],type,object))return 1;
     if(type==VK_OBJECT_TYPE_BUFFER && c->indices.buffer==object)return 1;
     if(type==VK_OBJECT_TYPE_BUFFER)for(unsigned k=0;k<PS5VK_MAX_VERTEX_BINDINGS;++k)
         if(c->vertices[k].buffer==object)return 1;
     if ((type == VK_OBJECT_TYPE_PIPELINE && ((const void *)c->pipeline == object ||
-        (const void *)c->graphics_pipeline == object)) || set_uses(c->set, type, object)) return 1;
+        (const void *)c->graphics_pipeline == object))) return 1;
     for (unsigned j = 0; j < c->operation_count; ++j)
     {
         const struct ps5vk_operation *op = &c->operations[j];
@@ -55,8 +59,9 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
             if ((type == VK_OBJECT_TYPE_IMAGE_VIEW && (const void *)view == object) ||
                 (type == VK_OBJECT_TYPE_IMAGE && (const void *)view->image == object)) return 1;
         }
-        if ((type == VK_OBJECT_TYPE_PIPELINE && (const void *)c->operations[j].pipeline == object) ||
-            set_uses(c->operations[j].set, type, object)) return 1;
+        if (type == VK_OBJECT_TYPE_PIPELINE && (const void *)c->operations[j].pipeline == object) return 1;
+        for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set)
+            if (set_uses(c->operations[j].sets[set], type, object)) return 1;
     }
     return 0;
 }
@@ -175,32 +180,42 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(VkCommandBuffer c, VkPipeline
     uint32_t first, uint32_t count, const VkDescriptorSet *sets, uint32_t dynamic_count, const uint32_t *offsets)
 {
     (void)offsets;
-    /* Current compiled ABI consumes only set 0; do not silently ignore others. */
     if (!c || c->state != PS5VK_RECORDING ||
         (point != VK_PIPELINE_BIND_POINT_COMPUTE && point != VK_PIPELINE_BIND_POINT_GRAPHICS) || !layout ||
-        layout->device != c->pool->device || first || count != 1 || !sets || !sets[0] || dynamic_count ||
-        sets[0]->pool->device != c->pool->device || !layout->set_count ||
-        memcmp(&layout->sets[0], &sets[0]->signature, sizeof(sets[0]->signature))) { invalid(c); return; }
+        layout->device != c->pool->device || !count || !sets || dynamic_count ||
+        first >= layout->set_count || count > layout->set_count - first) { invalid(c); return; }
+    for (uint32_t j = 0; j < count; ++j)
+        if (!sets[j] || sets[j]->pool->device != c->pool->device ||
+            memcmp(&layout->sets[first+j], &sets[j]->signature, sizeof(sets[j]->signature))) {
+            invalid(c); return;
+        }
     if(point==VK_PIPELINE_BIND_POINT_GRAPHICS) {
         if(!c->pool->device->graphics_enabled){invalid(c);return;}
-        c->graphics_set=sets[0];c->graphics_set_signature=layout->sets[0];
-    } else {c->set = sets[0]; c->set_signature = layout->sets[0];}
+        for (uint32_t j=0;j<count;++j) { c->graphics_sets[first+j]=sets[j];
+            c->graphics_set_signatures[first+j]=layout->sets[first+j]; }
+    } else for (uint32_t j=0;j<count;++j) { c->sets[first+j]=sets[j];
+        c->set_signatures[first+j]=layout->sets[first+j]; }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t y, uint32_t z)
 {
-    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !c->pipeline || !c->set || x > 65535 || y > 65535 || z > 65535 ||
-        c->operation_count == PS5VK_MAX_OPERATIONS ||
-        memcmp(&c->pipeline->sets[0], &c->set_signature, sizeof(c->set_signature))) { invalid(c); return; }
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !c->pipeline || x > 65535 || y > 65535 || z > 65535 ||
+        c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     const struct ps5vk_compiled_program *p = &c->pipeline->program;
+    for (uint32_t set=0;set<c->pipeline->set_count;++set)
+        if ((p->descriptor_set_mask&(1u<<set)) && (!c->sets[set] ||
+            memcmp(&c->pipeline->sets[set],&c->set_signatures[set],sizeof(c->set_signatures[set]))))
+            {invalid(c);return;}
     for (uint32_t j = 0; j < p->descriptor_count; ++j) {
         const struct ps5vk_program_descriptor *binding = &p->descriptors[j];
-        uint32_t index = c->set->signature.binding[binding->binding].first + binding->element;
-        void *address; VkDeviceSize size;
-        if (!c->set->defined[index] || ps5vk_buffer_span(c->pool->device, c->set->buffers[index].buffer,
-            c->set->buffers[index].offset, c->set->buffers[index].range, &address, &size) != VK_SUCCESS) { invalid(c); return; }
+        VkDescriptorSet set=c->sets[binding->set];
+        uint32_t index = set->signature.binding[binding->binding].first + binding->element;
+        if (!set->defined[index]) { invalid(c); return; }
     }
-    c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_DISPATCH,
-        .pipeline = c->pipeline, .set = c->set, .generation = c->set->generation, .groups = {x, y, z}};
+    struct ps5vk_operation *op=&c->operations[c->operation_count++];
+    *op=(struct ps5vk_operation){.type=PS5VK_DISPATCH,.pipeline=c->pipeline,.groups={x,y,z}};
+    for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set)) {
+        op->sets[set]=c->sets[set];op->generations[set]=c->sets[set]->generation;
+    }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRenderPassBeginInfo *info,
     VkSubpassContents contents)
@@ -268,8 +283,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if (!c || c->state != PS5VK_RECORDING || !c->render_pass || !c->graphics_pipeline ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkPipeline p = c->graphics_pipeline;
-    if(p->set_count && (p->set_count!=1 || !c->graphics_set ||
-        memcmp(&p->sets[0],&c->graphics_set_signature,sizeof(p->sets[0])))) {invalid(c);return;}
+    if(p->set_count && (p->set_count!=1 || !c->graphics_sets[0] ||
+        memcmp(&p->sets[0],&c->graphics_set_signatures[0],sizeof(p->sets[0])))) {invalid(c);return;}
     VkRenderPass pass = c->render_pass;
     VkFormat depth = pass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
         pass->attachments[pass->depth.attachment].format;
@@ -282,8 +297,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
         .first_instance = first_instance};
     memcpy(c->operations[c->operation_count-1].vertices,c->vertices,sizeof(c->vertices));
     if(p->set_count) {
-        c->operations[c->operation_count-1].set=c->graphics_set;
-        c->operations[c->operation_count-1].generation=c->graphics_set->generation;
+        c->operations[c->operation_count-1].sets[0]=c->graphics_sets[0];
+        c->operations[c->operation_count-1].generations[0]=c->graphics_sets[0]->generation;
     }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer c,uint32_t count,uint32_t instances,

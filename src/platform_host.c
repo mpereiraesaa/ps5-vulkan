@@ -1,4 +1,4 @@
-#include "vk_internal.h"
+#include "vk_descriptor.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -50,6 +50,17 @@ __attribute__((weak)) VkResult ps5vk_platform_query(struct ps5vk_platform *p)
     strcpy(p->properties.deviceName, "ps5vk host platform");
     p->properties.limits.nonCoherentAtomSize = 64;
     p->properties.limits.minStorageBufferOffsetAlignment = 256;
+    p->properties.limits.minUniformBufferOffsetAlignment = 256;
+    p->properties.limits.maxUniformBufferRange = 64 * 1024;
+    p->properties.limits.maxTexelBufferElements = 64 * 1024;
+    p->properties.limits.maxBoundDescriptorSets = PS5VK_MAX_SETS;
+    p->properties.limits.maxPerStageDescriptorStorageBuffers = PS5VK_MAX_DESCRIPTORS;
+    p->properties.limits.maxDescriptorSetStorageBuffers = PS5VK_MAX_DESCRIPTORS;
+    p->properties.limits.maxPerStageDescriptorUniformBuffers = PS5VK_MAX_DESCRIPTORS;
+    p->properties.limits.maxDescriptorSetUniformBuffers = PS5VK_MAX_DESCRIPTORS;
+    p->properties.limits.maxPerStageDescriptorSampledImages = 1;
+    p->properties.limits.maxDescriptorSetSampledImages = 1;
+    p->properties.limits.maxPerStageResources = PS5VK_MAX_DESCRIPTORS;
     p->properties.limits.maxComputeWorkGroupInvocations = 1024;
     for (int i = 0; i < 3; i++) {
         p->properties.limits.maxComputeWorkGroupCount[i] = 65535;

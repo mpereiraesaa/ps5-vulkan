@@ -88,10 +88,12 @@ struct VkDevice_T {
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
     VkDeviceSize buffer_alignment;
+    VkDeviceSize uniform_buffer_alignment;
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
     struct VkDeviceMemory_T *memories;
     struct VkBuffer_T *buffers;
+    struct VkBufferView_T *buffer_views;
     unsigned lifetime_errors;
     unsigned descriptor_objects;
     unsigned pipeline_objects;

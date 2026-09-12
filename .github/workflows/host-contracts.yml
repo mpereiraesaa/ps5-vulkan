@@ -85,7 +85,7 @@ jobs:
             homebrew_ps5/projects/ps5-vulkan/build/libpsbc.host.a
             homebrew_ps5/projects/ps5-vulkan/third_party/psbc-reference/**/*.host.o
             homebrew_ps5/projects/ps5-vulkan/third_party/psbc-reference/**/*.host.cpp.o
-          key: libpsbc-host-f31ec6cfd5af5a102365bde94842bb91e35cf2b1-v1
+          key: libpsbc-host-${{ hashFiles('homebrew_ps5/projects/ps5-vulkan/tools/prepare_compiler_deps.py', 'homebrew_ps5/projects/ps5-vulkan/tools/Makefile.psbc-host') }}-v1
 
       - name: Build host compiler library
         if: steps.cache-libpsbc.outputs.cache-hit != 'true'

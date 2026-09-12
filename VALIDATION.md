@@ -44,7 +44,8 @@ execution is described below.
   Observed result: **26 / 26 PASS** within the single session device context, 0 failures.
   Structured `ps5log/1` telemetry confirmed:
   - Core API build, platform and device introspection matching driver caps.
-  - Device initialization within session context (restricción del backend/harness actual; reinicialización independiente no validada).
+  - Device initialization within session context (a restriction of the current
+    backend/harness; independent reinitialization is not validated).
   - Device limits, non-coherent atom size (64B) and storage alignment (256B).
   - Memory allocation, suballocated memory mapping (257 bytes), cache flush and invalidate ranges.
   - Sampler and shader module creation and destruction.
@@ -85,7 +86,10 @@ are included or referenced (enforced by `tests/test_consumer_isolation.py`).
 Observed hardware results on PS5 (FW 12.02):
 
 - **Finite verification mode:**
-  - Runtime compute pipeline compilation and execution with memory bounds protection (front/tail guard words).
+  - Runtime compute pipeline compilation and execution with three simultaneously
+    bound resource sets: two storage buffers, one std140 uniform buffer and one
+    `VK_FORMAT_R32_UINT` uniform texel buffer.
+  - Exact verification of 64 output words and 128 front/tail guard words.
   - Runtime procedural graphics pipeline compilation with 1 cold compile (9,316 bytes cache entry) and 1 warm cache hit.
   - 18 frames presented to 1080p VideoOut across 3 distinct viewports (1920x1080, 1280x720, 640x480).
   - Deterministic GPU framebuffer readbacks on all 18 frames: valid pixel coverage, alpha channel = 255, and color gradient invariants verified.
@@ -99,3 +103,14 @@ Observed hardware results on PS5 (FW 12.02):
 
 Raw console logs, captures, deployment details and internal planning are kept out of
 the public repository. No proprietary shader or module data is required by the consumer fixture.
+
+The expanded resource ABI was accepted in two independent launches on 2026-09-12
+using the same deployed SELF (`c1433cc564eb4035aba391c89d6c4d0d03b78ffd8c2510c09a95fbd708d9b6fc`).
+Run IDs `20260912T204550691Z_PPSA99994_ps5vk_0xbf48764b48e` and
+`20260912T204616652Z_PPSA99994_ps5vk_0xbfa92d1a5c7` passed the strict
+`verify_consumer_resource_abi.py` oracle and independent Close Game checks.
+Their TCP transcript hashes were respectively
+`72d545af3092b6b6d828e813cd0b3b27dd0c6b0a14543d6f2f6f473906a8407b`
+and `c58300ed0cbaa4170ef7c27cf42fa890a49ff98d0084b728166f88ebb7bfecee`.
+These results establish only the exact bounded resource configuration above;
+they are not a Vulkan conformance claim.

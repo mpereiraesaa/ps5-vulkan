@@ -10,6 +10,9 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from lab import lab_root  # noqa: E402
+
 DIST_SDK = ROOT / "dist-sdk"
 CTS_DIR = ROOT / "cts"
 BUILD_DIR = CTS_DIR / "build"
@@ -25,7 +28,7 @@ def main():
         print("Staged SDK missing; running tools/build_sdk.py...")
         subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")], check=True)
 
-    lab = ROOT.parents[1]
+    lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk = foundation / ".deps/native/ps5-payload-sdk"
     clang_wrapper = foundation / "tooling/prospero-clang18"

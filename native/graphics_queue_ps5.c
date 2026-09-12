@@ -172,11 +172,11 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         const struct ps5vk_operation *op=&cb->operations[i];
         /* Require the uploaded image's predicted shader-readable layout. */
         if(op->pipeline->set_count) {
-            if(!op->set || !op->set->defined[0]){rc=VK_ERROR_UNKNOWN;goto fail;}
-            if(op->set->images[0].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            if(!op->sets[0] || !op->sets[0]->defined[0]){rc=VK_ERROR_UNKNOWN;goto fail;}
+            if(op->sets[0]->images[0].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
             }
-            rc=ps5vk_layout_require(&j->layouts,op->set->image_resources[0],op->set->images[0].imageLayout);
+            rc=ps5vk_layout_require(&j->layouts,op->sets[0]->image_resources[0],op->sets[0]->images[0].imageLayout);
             if(rc!=VK_SUCCESS)goto fail;
         }
         struct ps5vk_prepared_draw *draw=&j->draws[j->count];

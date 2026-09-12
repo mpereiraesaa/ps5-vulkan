@@ -25,8 +25,8 @@ struct ps5vk_operation {
     struct ps5vk_index_binding indices;
     struct ps5vk_vertex_binding vertices[PS5VK_MAX_VERTEX_BINDINGS];
     VkPipeline pipeline;
-    VkDescriptorSet set;
-    uint64_t generation;
+    VkDescriptorSet sets[PS5VK_MAX_SETS];
+    uint64_t generations[PS5VK_MAX_SETS];
     uint32_t groups[3];
     VkPipelineStageFlags src_stage, dst_stage;
     VkAccessFlags src_access, dst_access;
@@ -38,11 +38,11 @@ struct VkCommandBuffer_T {
     enum ps5vk_command_state state;
     VkCommandBufferUsageFlags usage;
     VkPipeline pipeline;
-    VkDescriptorSet set;
-    struct ps5vk_set_signature set_signature;
+    VkDescriptorSet sets[PS5VK_MAX_SETS];
+    struct ps5vk_set_signature set_signatures[PS5VK_MAX_SETS];
     VkPipeline graphics_pipeline;
-    VkDescriptorSet graphics_set;
-    struct ps5vk_set_signature graphics_set_signature;
+    VkDescriptorSet graphics_sets[PS5VK_MAX_SETS];
+    struct ps5vk_set_signature graphics_set_signatures[PS5VK_MAX_SETS];
     struct ps5vk_index_binding indices;
     struct ps5vk_vertex_binding vertices[PS5VK_MAX_VERTEX_BINDINGS];
     VkRenderPass render_pass;

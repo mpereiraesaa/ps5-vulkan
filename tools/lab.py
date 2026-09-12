@@ -13,10 +13,25 @@ REQUIRED = (
 )
 
 
+def _is_lab_root(path):
+    return all((path / relative).is_file() for relative in REQUIRED)
+
+
+def resolve_lab_root(script_path):
+    """Find the shared lab from either its canonical checkout or a worktree."""
+    script_path = Path(script_path).resolve()
+    fallback = script_path.parents[3]
+    for parent in script_path.parents:
+        for candidate in (parent, parent / "homebrew_ps5"):
+            if _is_lab_root(candidate):
+                return candidate.resolve()
+    return fallback.resolve()
+
+
 def lab_root():
     explicit = os.environ.get("PS5VK_LAB_ROOT")
-    return (Path(explicit).expanduser() if explicit else
-            Path(__file__).resolve().parents[3]).resolve()
+    return (Path(explicit).expanduser().resolve() if explicit else
+            resolve_lab_root(__file__))
 
 
 def command(root, args):

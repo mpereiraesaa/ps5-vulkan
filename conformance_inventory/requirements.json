@@ -703,7 +703,7 @@
           "src/vk_device.c",
           "src/vk_dispatch.c"
         ],
-        "note": "Baseline surface: 15 of 37 named entry points exist and are dispatched; 11 are declared in the public header."
+        "note": "Baseline surface: 15 of 37 named entry points exist; 15 are dispatched; 15 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -774,7 +774,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -847,7 +847,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -920,7 +920,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -990,7 +990,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -1066,7 +1066,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -1141,7 +1141,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -1207,7 +1207,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 1 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -1379,7 +1379,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 3 of 3 named entry points exist and are dispatched; 3 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -1450,7 +1450,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -1525,7 +1525,7 @@
         "refs": [
           "src/vk_dispatch.c"
         ],
-        "note": "Baseline surface: 2 of 3 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -1606,7 +1606,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 4 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 4 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -1672,7 +1672,7 @@
         "refs": [
           "BUILDING.md"
         ],
-        "note": "Baseline surface: none of the 1 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -2976,7 +2976,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3047,7 +3047,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 2 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3297,7 +3297,7 @@
           "src/vk_device.c",
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 2 of 3 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3441,15 +3441,14 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
-          "vkCreateBuffer"
-        ],
-        "absent_entry_points": [
+          "vkCreateBuffer",
           "vkCreateBufferView"
         ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3526,7 +3525,7 @@
         "refs": [
           "src/vk_graphics_pipeline.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3603,7 +3602,7 @@
         "refs": [
           "src/vk_image_view.c"
         ],
-        "note": "Baseline surface: 1 of 3 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 3 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3677,19 +3676,19 @@
         "entry_points": [
           "vkBindBufferMemory",
           "vkCreateBuffer",
+          "vkCreateBufferView",
           "vkDestroyBuffer",
+          "vkDestroyBufferView",
           "vkGetBufferMemoryRequirements"
         ],
         "absent_entry_points": [
           "vkBindBufferMemory2",
-          "vkCreateBufferView",
-          "vkDestroyBufferView",
           "vkGetBufferMemoryRequirements2"
         ],
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 4 of 8 named entry points exist and are dispatched; 4 are declared in the public header."
+        "note": "Baseline surface: 6 of 8 named entry points exist; 6 are dispatched; 6 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3779,7 +3778,7 @@
           "src/vk_image_view.c",
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 6 of 10 named entry points exist and are dispatched but none are declared in the public header."
+        "note": "Baseline surface: 6 of 10 named entry points exist; 6 are dispatched; 6 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3863,7 +3862,7 @@
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 6 of 8 named entry points exist and are dispatched; 6 are declared in the public header."
+        "note": "Baseline surface: 6 of 8 named entry points exist; 6 are dispatched; 6 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3938,7 +3937,7 @@
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4010,7 +4009,7 @@
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4090,7 +4089,7 @@
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4160,7 +4159,7 @@
         "refs": [
           "src/vk_image_view.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4230,7 +4229,7 @@
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4309,7 +4308,7 @@
           "src/vk_device.c",
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 3 of 3 named entry points exist and are dispatched; 3 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4388,7 +4387,7 @@
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 4 of 4 named entry points exist and are dispatched; 4 are declared in the public header."
+        "note": "Baseline surface: 4 of 4 named entry points exist; 4 are dispatched; 4 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4461,7 +4460,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4531,7 +4530,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 1 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4610,7 +4609,7 @@
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4690,7 +4689,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 3 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4716,7 +4715,7 @@
       "id": "VK14-RESOURCES-012",
       "category": "resources_memory",
       "core_introduction": "1.2",
-      "summary": "Buffer device address support promoted in 1.2 is an optional feature set with its own alignment and capture/replay rules.",
+      "summary": "Buffer device address support promoted in 1.2 is a core-mandatory feature set with alignment and capture/replay rules.",
       "applicability": {
         "core": "core-mandatory",
         "target": "required",
@@ -4775,7 +4774,7 @@
         "refs": [
           "src/vk_dispatch.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4794,7 +4793,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Corrected after review: bufferDeviceAddress is not core-mandatory in 1.4, but the declared target profile requires it. Mandatory for the target.",
+      "review_notes": "Corrected after review: bufferDeviceAddress is a cumulative core-mandatory feature in the declared Vulkan 1.4 target.",
       "classification_basis": "core-cumulative-required",
       "consumer_demand": [
         "dxvk"
@@ -4964,7 +4963,7 @@
         "refs": [
           "src/vk_descriptor.c"
         ],
-        "note": "Baseline surface: 10 of 13 named entry points exist and are dispatched; 9 are declared in the public header."
+        "note": "Baseline surface: 10 of 13 named entry points exist; 10 are dispatched; 9 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5040,7 +5039,7 @@
         "refs": [
           "src/vk_sampler.c"
         ],
-        "note": "Baseline surface: 2 of 4 named entry points exist and are dispatched but none are declared in the public header."
+        "note": "Baseline surface: 2 of 4 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5118,7 +5117,7 @@
         "refs": [
           "src/vk_descriptor.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5196,7 +5195,7 @@
         "refs": [
           "src/vk_descriptor.c"
         ],
-        "note": "Baseline surface: 4 of 4 named entry points exist and are dispatched; 4 are declared in the public header."
+        "note": "Baseline surface: 4 of 4 named entry points exist; 4 are dispatched; 4 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5277,7 +5276,7 @@
         "refs": [
           "src/vk_descriptor.c"
         ],
-        "note": "Baseline surface: 2 of 3 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5355,7 +5354,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 3 of 3 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5497,7 +5496,7 @@
         "refs": [
           "src/vk_descriptor.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5574,7 +5573,7 @@
         "refs": [
           "src/vk_sampler.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5660,7 +5659,7 @@
         "refs": [
           "src/vk_descriptor.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5738,7 +5737,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 2 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6016,7 +6015,7 @@
         "refs": [
           "src/vk_pipeline.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6150,7 +6149,7 @@
         "refs": [
           "src/vk_graphics_pipeline.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6301,7 +6300,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6386,7 +6385,7 @@
           "src/vk_graphics_pipeline.c",
           "src/vk_pipeline.c"
         ],
-        "note": "Baseline surface: 5 of 7 named entry points exist and are dispatched; 4 are declared in the public header."
+        "note": "Baseline surface: 5 of 7 named entry points exist; 5 are dispatched; 5 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6458,7 +6457,7 @@
         "refs": [
           "src/vk_pipeline.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6533,7 +6532,7 @@
         "refs": [
           "src/vk_graphics_pipeline.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6605,7 +6604,7 @@
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: none of the 3 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6679,7 +6678,7 @@
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: none of the 4 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 4 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6756,7 +6755,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6836,7 +6835,7 @@
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: none of the 1 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6911,7 +6910,7 @@
         "refs": [
           "src/vk_graphics_pipeline.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6992,7 +6991,7 @@
         "refs": [
           "src/vk_render_pass.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7060,7 +7059,7 @@
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: none of the 1 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7132,7 +7131,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7206,7 +7205,7 @@
         "refs": [
           "src/vk_framebuffer.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7274,7 +7273,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7351,7 +7350,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 2 of 4 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 4 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7377,7 +7376,7 @@
       "id": "VK14-RENDERPASS-007",
       "category": "renderpass",
       "core_introduction": "1.3",
-      "summary": "Dynamic rendering promoted in 1.3 (vkCmdBeginRendering/vkCmdEndRendering) is an optional feature with full state obligations when enabled.",
+      "summary": "Dynamic rendering promoted in 1.3 is a core-mandatory feature with full state obligations.",
       "applicability": {
         "core": "core-mandatory",
         "target": "required",
@@ -7430,7 +7429,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 2 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7449,7 +7448,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Corrected after review: dynamicRendering is a feature bit, not core-mandatory in 1.4, but the declared target profile requires it. Mandatory for the target.",
+      "review_notes": "Corrected after review: dynamicRendering is a cumulative core-mandatory feature in the declared Vulkan 1.4 target.",
       "classification_basis": "core-cumulative-required",
       "consumer_demand": [
         "dxvk"
@@ -7511,7 +7510,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 2 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7579,7 +7578,7 @@
           "vkCreateFramebuffer2"
         ],
         "refs": [],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7655,7 +7654,7 @@
         ],
         "absent_entry_points": [],
         "refs": [],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7737,7 +7736,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 3 of 3 named entry points exist and are dispatched; 3 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7815,7 +7814,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 4 of 4 named entry points exist and are dispatched; 4 are declared in the public header."
+        "note": "Baseline surface: 4 of 4 named entry points exist; 4 are dispatched; 4 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7892,7 +7891,7 @@
           "src/vk_command.c",
           "src/vk_queue.c"
         ],
-        "note": "Baseline surface: 4 of 4 named entry points exist and are dispatched; 4 are declared in the public header."
+        "note": "Baseline surface: 4 of 4 named entry points exist; 4 are dispatched; 4 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7973,7 +7972,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 2 of 3 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8041,7 +8040,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 1 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8118,7 +8117,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8209,7 +8208,7 @@
         "refs": [
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 1 of 8 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 8 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8295,7 +8294,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 4 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 4 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8369,7 +8368,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 3 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8453,7 +8452,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 8 of 8 named entry points exist and are dispatched; 8 are declared in the public header."
+        "note": "Baseline surface: 8 of 8 named entry points exist; 8 are dispatched; 8 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8701,7 +8700,7 @@
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 11 of 89 named entry points exist and are dispatched; 4 are declared in the public header."
+        "note": "Baseline surface: 11 of 89 named entry points exist; 11 are dispatched; 11 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8836,7 +8835,7 @@
           "src/vk_framebuffer.c",
           "src/vk_render_pass.c"
         ],
-        "note": "Baseline surface: 6 of 32 named entry points exist and are dispatched but none are declared in the public header."
+        "note": "Baseline surface: 6 of 32 named entry points exist; 6 are dispatched; 6 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8935,7 +8934,7 @@
           "src/vk_fence.c",
           "src/vk_queue.c"
         ],
-        "note": "Baseline surface: 8 of 15 named entry points exist and are dispatched; 8 are declared in the public header."
+        "note": "Baseline surface: 8 of 15 named entry points exist; 8 are dispatched; 8 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9004,7 +9003,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9072,7 +9071,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9140,7 +9139,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9209,7 +9208,7 @@
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9287,7 +9286,7 @@
         "refs": [
           "src/vk_fence.c"
         ],
-        "note": "Baseline surface: 5 of 5 named entry points exist and are dispatched; 5 are declared in the public header."
+        "note": "Baseline surface: 5 of 5 named entry points exist; 5 are dispatched; 5 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9363,7 +9362,7 @@
         "refs": [
           "src/vk_queue.c"
         ],
-        "note": "Baseline surface: 2 of 3 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9443,7 +9442,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 5 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 5 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9469,7 +9468,7 @@
       "id": "VK14-SYNC-008",
       "category": "synchronization",
       "core_introduction": "1.2",
-      "summary": "Timeline semaphores promoted in 1.2 are an optional feature with strict monotonic and payload semantics.",
+      "summary": "Timeline semaphores promoted in 1.2 are a core-mandatory feature with strict monotonic and payload semantics.",
       "applicability": {
         "core": "core-mandatory",
         "target": "required",
@@ -9524,7 +9523,7 @@
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: none of the 3 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9543,7 +9542,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Corrected after review: timelineSemaphore is not core-mandatory in 1.4, but the declared target profile VP_KHR_roadmap_2026 requires it, so it is a mandatory project requirement. It must not be classified optional.",
+      "review_notes": "Corrected after review: timelineSemaphore is a cumulative core-mandatory feature in the declared Vulkan 1.4 target.",
       "classification_basis": "core-cumulative-required",
       "consumer_demand": [
         "dxvk"
@@ -9553,7 +9552,7 @@
       "id": "VK14-SYNC-009",
       "category": "synchronization",
       "core_introduction": "1.3",
-      "summary": "Synchronization2 promoted in 1.3 is an optional feature that changes barrier and stage semantics when enabled.",
+      "summary": "Synchronization2 promoted in 1.3 is a core-mandatory feature that changes barrier and stage semantics.",
       "applicability": {
         "core": "core-mandatory",
         "target": "required",
@@ -9604,7 +9603,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 2 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9623,7 +9622,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Corrected after review: synchronization2 is a feature bit, not core-mandatory in 1.4, but the declared target profile requires it. Mandatory for the target.",
+      "review_notes": "Corrected after review: synchronization2 is a cumulative core-mandatory feature in the declared Vulkan 1.4 target.",
       "classification_basis": "core-cumulative-required",
       "consumer_demand": [
         "dxvk"
@@ -9679,7 +9678,7 @@
           "vkGetQueryPoolResults"
         ],
         "refs": [],
-        "note": "Baseline surface: none of the 3 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9754,7 +9753,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 4 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 4 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9833,7 +9832,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 2 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9909,7 +9908,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist and are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -10047,7 +10046,7 @@
         "refs": [
           "src/vk_queue.c"
         ],
-        "note": "Baseline surface: 2 of 2 named entry points exist and are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -10580,7 +10579,7 @@
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: none of the 3 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -10822,7 +10821,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 1 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -11341,7 +11340,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -11418,7 +11417,7 @@
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: none of the 2 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -11496,7 +11495,7 @@
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: none of the 2 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -11566,7 +11565,7 @@
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: none of the 1 named entry points exist at the baseline."
+        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
       },
       "evidence": {
         "source": {

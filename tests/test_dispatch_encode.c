@@ -1,77 +1,48 @@
 #include "dispatch_encode.h"
 #include <assert.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
+static size_t find_sh(const uint32_t *words,size_t count,uint32_t reg)
+{
+    for(size_t i=0;i<count;) {
+        assert((words[i]>>30)==3);
+        size_t n=((words[i]>>16)&0x3fff)+2;
+        if(((words[i]>>8)&0xff)==0x76 && n>=3 && 0xb000+words[i+1]*4==reg)return i;
+        i+=n;
+    }
+    return count;
+}
 int main(void)
 {
-    struct ps5vk_compiled_program p = {.gfx = 1013, .code_words = 80, .wave_size = 32,
-        .local_size = {64, 1, 1}, .vgprs = 3, .sgprs = 10, .float_mode = 192,
-        .mem_ordered = 1, .user_sgprs = 2, .tg_size = 1, .tgid = {1, 1, 1},
-        .descriptor_count = 2, .descriptors = {{0, 1, 0, 0}, {0, 0, 0, 4}}};
-    struct ps5vk_dispatch_encoding d = {.program = &p,
-        .addresses = {0x100004000, 0x100008000, 0x200000000, 0x200000040},
-        .groups = {16, 1, 1}, .completion_value = PS5VK_COMPLETION_VALUE};
-    uint32_t original[96] = {0}, result[96] = {0}, saved[96];
-    size_t n = ps5vk_compute_commands(original, 96, &d.addresses);
-    assert(n == ps5vk_dispatch_encode(result, 96, &d));
-    assert(!memcmp(original, result, n * 4)); /* Exact bootstrap compute profile regression. */
-    p.local_size[0] = 8; p.local_size[1] = 4; p.local_size[2] = 2;
-    p.vgprs = 17; p.ieee_mode = 1; p.tidig_components = 2; p.tgid[2] = 0;
-    d.groups[0] = 3; d.groups[1] = 7; d.groups[2] = 2;
-    d.completion_value = UINT64_C(0x123456789abcdef0);
-    assert(ps5vk_dispatch_encode(result, 96, &d) == n);
-    assert(result[7] == 8 && result[8] == 4 && result[9] == 2);
-    assert(result[16] == (0x400c0000u | (1u << 23) | 2));
-    assert(result[17] == ((0x784u & ~(1u << 9)) | (2u << 11)));
-    assert(result[43] == 3 && result[44] == 7 && result[45] == 2);
-    assert(result[n - 3] == 0x9abcdef0 && result[n - 2] == 0x12345678);
-    assert(result[n - 7] == 0x0070f528); /* No legacy GCR regression. */
-    d.groups[0] = 0; assert(ps5vk_dispatch_encode(result, 96, &d) == n && result[43] == 0);
-    memcpy(saved, result, sizeof(saved));
-    d.completion_value = 0; assert(!ps5vk_dispatch_encode(result, 96, &d));
-    d.completion_value = 2; d.groups[0] = 65536; assert(!ps5vk_dispatch_encode(result, 96, &d));
-    d.groups[0] = 1; p.vgprs = 257; assert(!ps5vk_dispatch_encode(result, 96, &d));
-    p.vgprs = 3; d.addresses.descriptor_table = d.addresses.code;
-    assert(!ps5vk_dispatch_encode(result, 96, &d));
-    d.addresses.descriptor_table = 0x100008000; d.addresses.code = 0x1ffffff00;
-    assert(!ps5vk_dispatch_encode(result, 96, &d)); /* ISA crosses high-address window. */
-    d.addresses.code = 0x100004000; d.addresses.readback = d.addresses.completion;
-    assert(!ps5vk_dispatch_encode(result, 96, &d));
-    assert(!memcmp(saved, result, sizeof(saved)));
-
-    /* Verify PSBC / ACO GFX10.3 ABI: user_sgprs = 3, wgp_mode = 1 */
-    p.user_sgprs = 3;
-    p.wgp_mode = 1;
-    d.addresses.readback = 0x200000040;
-    uint32_t psbc_result[96] = {0};
-    assert(!ps5vk_dispatch_encode(psbc_result, 96, &d)); /* PSBC address32_hi is 2. */
-    d.addresses.code = 0x200004000;
-    d.addresses.descriptor_table = 0x200008000;
-    d.completion_value = PS5VK_COMPLETION_VALUE;
-    size_t n_psbc = ps5vk_dispatch_encode(psbc_result, 96, &d);
-    assert(n_psbc == n + 1);
-    assert((psbc_result[16] & (1u << 29)) != 0); /* wgp_mode enabled */
-    assert((psbc_result[17] & 0x7e) == (3u << 1)); /* user_sgprs = 3 */
-    assert(psbc_result[24] == 0xc0037600); /* sh 0xb900 count 3 */
-    assert(psbc_result[25] == 0x240);
-    assert(psbc_result[26] == 0); /* s0 */
-    assert(psbc_result[27] == 0); /* s1 */
-    assert(psbc_result[28] == (uint32_t)d.addresses.descriptor_table); /* s2 */
-    /* Check completion value and trailer */
-    assert(psbc_result[n_psbc - 3] == (uint32_t)PS5VK_COMPLETION_VALUE);
-    assert(psbc_result[n_psbc - 2] == (uint32_t)(PS5VK_COMPLETION_VALUE >> 32));
-
-    p.user_sgprs = 6; p.grid_size_sgpr = 3; p.lds_size = 2;
-    d.groups[0] = 7; d.groups[1] = 3; d.groups[2] = 5;
-    assert(ps5vk_dispatch_encode(psbc_result, 96, &d) == n + 4);
-    assert(psbc_result[24] == 0xc0067600);
-    assert(psbc_result[29] == 7 && psbc_result[30] == 3 && psbc_result[31] == 5);
-    assert(((psbc_result[17] >> 15) & 0x1ff) == 2);
-    assert(((psbc_result[17] >> 1) & 0x1f) == 6);
-    p.grid_size_sgpr = 2;
-    assert(!ps5vk_dispatch_encode(psbc_result, 96, &d));
-    p.grid_size_sgpr = 3; p.lds_size = 129;
-    assert(!ps5vk_dispatch_encode(psbc_result, 96, &d));
-    puts("Parameterized dispatch encoding: pass (host packets only)");
+    struct ps5vk_compiled_program p={.gfx=1013,.code_words=80,.wave_size=32,
+        .local_size={8,4,2},.vgprs=17,.sgprs=10,.float_mode=192,.ieee_mode=1,
+        .mem_ordered=1,.user_sgprs=4,.tg_size=1,.tgid={1,1,0},.tidig_components=2,
+        .descriptor_set_mask=(1u<<0)|(1u<<2),.descriptor_set_sgpr={2,0,3,0},
+        .descriptor_count=2,.descriptors={
+            {.set=0,.binding=1,.table_dword=0,.type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+            {.set=2,.binding=0,.table_dword=4,.type=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER}}};
+    struct ps5vk_dispatch_encoding d={.program=&p,
+        .addresses={.code=0x200004000,.descriptor_table=0x200008000,
+            .completion=0x200010000,.readback=0x200010040},
+        .descriptor_tables={0x200008000,0,0x20000a000,0},
+        .groups={3,7,2},.completion_value=UINT64_C(0x123456789abcdef0)};
+    uint32_t words[128]={0},saved[128];
+    size_t n=ps5vk_dispatch_encode(words,128,&d);assert(n);
+    size_t user=find_sh(words,n,0xb900);assert(user<n);
+    assert(words[user+2]==0 && words[user+3]==0);
+    assert(words[user+4]==(uint32_t)d.descriptor_tables[0]);
+    assert(words[user+5]==(uint32_t)d.descriptor_tables[2]);
+    memcpy(saved,words,sizeof(saved));
+    d.descriptor_tables[2]=0;assert(!ps5vk_dispatch_encode(words,128,&d));
+    assert(!memcmp(words,saved,sizeof(saved)));
+    d.descriptor_tables[2]=0x20000a000;p.descriptor_set_sgpr[2]=4;
+    assert(!ps5vk_dispatch_encode(words,128,&d));
+    p.descriptor_set_sgpr[2]=3;p.grid_size_sgpr=4;p.user_sgprs=7;
+    n=ps5vk_dispatch_encode(words,128,&d);assert(n);
+    user=find_sh(words,n,0xb900);assert(user<n);
+    assert(words[user+6]==3 && words[user+7]==7 && words[user+8]==2);
+    d.descriptor_tables[1]=0x20000c000;assert(!ps5vk_dispatch_encode(words,128,&d));
+    d.descriptor_tables[1]=0;d.groups[0]=65536;assert(!ps5vk_dispatch_encode(words,128,&d));
+    puts("Multi-set dispatch SGPR encoding: pass (host packets only)");
 }

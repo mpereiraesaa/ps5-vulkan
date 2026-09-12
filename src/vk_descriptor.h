@@ -4,14 +4,23 @@
 
 /* Implementation bounds, not a claim of Vulkan minimum-limit conformance. */
 enum { PS5VK_MAX_BINDINGS = 32, PS5VK_MAX_DESCRIPTORS = 128, PS5VK_MAX_SETS = 4 };
+struct VkBufferView_T {
+    VkDevice device;
+    VkBuffer buffer;
+    VkFormat format;
+    VkDeviceSize offset, range;
+    VkAllocationCallbacks allocator;
+    VkBool32 custom_allocator;
+    unsigned pending;
+    struct VkBufferView_T *next;
+};
 struct ps5vk_binding {
     uint32_t count, first;
     VkShaderStageFlags stages;
 };
 struct ps5vk_set_signature {
     struct ps5vk_binding binding[PS5VK_MAX_BINDINGS];
-    /* Zero preserves the existing storage-buffer contract in host fixtures. */
-    VkBool32 combined_image[PS5VK_MAX_BINDINGS];
+    VkDescriptorType type[PS5VK_MAX_BINDINGS];
     uint32_t count;
 };
 struct VkDescriptorSetLayout_T {
@@ -26,6 +35,7 @@ struct VkDescriptorSet_T {
     struct ps5vk_set_signature signature;
     VkDescriptorBufferInfo buffers[PS5VK_MAX_DESCRIPTORS];
     VkDescriptorImageInfo images[PS5VK_MAX_DESCRIPTORS];
+    VkBufferView texel_views[PS5VK_MAX_DESCRIPTORS];
     VkImage image_resources[PS5VK_MAX_DESCRIPTORS];
     VkBool32 defined[PS5VK_MAX_DESCRIPTORS];
     uint64_t generation;
@@ -37,7 +47,9 @@ struct VkDescriptorPool_T {
     VkBool32 custom_allocator;
     VkDescriptorPoolCreateFlags flags;
     uint32_t max_sets, used_sets;
-    uint64_t capacity, used;
+    uint64_t storage_capacity, storage_used;
+    uint64_t uniform_capacity, uniform_used;
+    uint64_t texel_capacity, texel_used;
     uint64_t image_capacity, image_used;
     VkDescriptorSet sets;
 };

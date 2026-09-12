@@ -67,6 +67,8 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
         (vs && m->input_semantic_count) || (fs && m->output_semantic_count) ||
         (m->unresolved_fields & ~(PSBC_UNRESOLVED_PROGRAM_CHECKSUM |
             (vs ? PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE : 0)))) return -2;
+    for(uint32_t set=0;set<PSBC_MAX_DESCRIPTOR_SETS;++set)
+        if(m->descriptor_set_valid[set])return -2;
     if (!registers_valid(m->context_registers,m->context_register_count,PSBC_MAX_CONTEXT_REGISTERS) ||
         !registers_valid(m->shader_registers,m->shader_register_count,PSBC_MAX_SHADER_REGISTERS)) return -2;
     unsigned lo=vs?0xc8:8, rsrc=vs?0x8a:0xa;

@@ -36,8 +36,11 @@ int main(void)
     layout.sets[0].count = 2;
     layout.sets[0].binding[0].count = 1;
     layout.sets[0].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    layout.sets[0].type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     layout.sets[0].binding[1].count = 1;
+    layout.sets[0].binding[1].first = 1;
     layout.sets[0].binding[1].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    layout.sets[0].type[1]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 
     /* 2. Runtime compile shader 1 (minimal) */
     struct ps5vk_compiled_program prog1 = {0};
@@ -54,6 +57,25 @@ int main(void)
     assert(prog1.descriptor_count == 2);
     assert(prog1.descriptors[0].binding == 0 && prog1.descriptors[0].table_dword == 0);
     assert(prog1.descriptors[1].binding == 1 && prog1.descriptors[1].table_dword == 4);
+
+    size_t resource_bytes=0;
+    uint32_t *resource_spv=read_file("build/test-shaders/resource_abi.spv",&resource_bytes);
+    assert(resource_spv);
+    struct VkPipelineLayout_T resource_layout={.set_count=3};
+    resource_layout.sets[0]=layout.sets[0];
+    resource_layout.sets[1].binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
+    resource_layout.sets[1].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    resource_layout.sets[2].binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
+    resource_layout.sets[2].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    struct ps5vk_compiled_program resources={0};uint32_t *resource_code=NULL;
+    assert(ps5vk_runtime_compile_compute(resource_spv,resource_bytes/4,"main",&resource_layout,
+        &resources,&resource_code)==VK_SUCCESS);
+    assert(resources.descriptor_set_mask==7 && resources.descriptor_count==4 &&
+        resources.descriptor_set_sgpr[0]==2 && resources.descriptor_set_sgpr[1]==3 &&
+        resources.descriptor_set_sgpr[2]==4 && resources.user_sgprs>=5);
+    assert(resources.descriptors[2].type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+        resources.descriptors[3].type==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
+    free(resource_code);free(resource_spv);
 
     /* 3. Runtime compile shader 2 (previously unregistered shader) */
     size_t spv2_bytes = 0;
@@ -97,14 +119,12 @@ int main(void)
     struct VkPipelineLayout_T array_layout = layout;
     array_layout.sets[0].binding[0].count = 2;
     res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &array_layout, &bad_prog, &bad_code);
-    if (res != VK_ERROR_FEATURE_NOT_PRESENT)
-        fprintf(stderr, "descriptor-array rejection returned %d\n", res);
-    assert(res == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(res==VK_SUCCESS && bad_prog.descriptor_count==3);free(bad_code);bad_code=NULL;
 
     struct VkPipelineLayout_T multiset_layout = layout;
     multiset_layout.set_count = 2;
     res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &multiset_layout, &bad_prog, &bad_code);
-    assert(res == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(res==VK_SUCCESS && bad_prog.descriptor_set_mask==1);free(bad_code);bad_code=NULL;
 
     /* 5. Verify CPU reference computation semantics for both programs */
     for (uint32_t i = 0; i < 1024; i++) {

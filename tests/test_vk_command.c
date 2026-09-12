@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 static VkResult allocate(void *ctx, VkDeviceSize n, void **address, void **backing)
 { (void)ctx; *address = calloc(1, n); *backing = *address; return *address ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY; }
@@ -79,7 +80,8 @@ static void recording_and_invalidation(void)
     vkUpdateDescriptorSets(&d, 1, &write, 0, NULL);
     /* Internal recording fixture: no ISA and never submitted. */
     struct VkPipeline_T pipeline = {.device = &d, .set_count = 1,
-        .program = {.descriptor_count = 1, .descriptors = {{0, 0, 0, 0}}}};
+        .program = {.descriptor_set_mask=1,.descriptor_count = 1,
+            .descriptors = {{0, 0, 0, 0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}}};
     pipeline.sets[0] = set_layout->signature;
     VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT); VkCommandBuffer c = command(&d, p);
     VkBufferMemoryBarrier bb = {.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -115,7 +117,7 @@ static void recording_and_invalidation(void)
                          0, 1, &barrier, 0, NULL, 0, NULL);
     vkCmdDispatch(c, 16, 1, 1);
     assert(c->operation_count == 2 && c->operations[0].type == PS5VK_BARRIER);
-    assert(c->operations[1].groups[0] == 16 && c->operations[1].generation == set->generation);
+    assert(c->operations[1].groups[0] == 16 && c->operations[1].generations[0] == set->generation);
     assert(vkEndCommandBuffer(c) == VK_SUCCESS);
     c->state = PS5VK_PENDING; /* Synthetic ownership state only. */
     vkFreeMemory(&d, memory, NULL); assert(d.memories == memory);
@@ -135,6 +137,41 @@ static void recording_and_invalidation(void)
     vkDestroyDescriptorPool(&d, descriptors, NULL); vkDestroyPipelineLayout(&d, layout, NULL);
     vkDestroyDescriptorSetLayout(&d, set_layout, NULL); vkDestroyCommandPool(&d, p, NULL);
     assert(!d.command_pools && !d.buffers && !d.memories && !d.descriptor_objects);
+}
+static void multi_set_recording(void)
+{
+    struct VkDevice_T d={0};
+    struct VkDescriptorPool_T descriptor_pool={.device=&d};
+    struct VkDescriptorSet_T a={.pool=&descriptor_pool,.generation=3,.defined={VK_TRUE}};
+    struct VkDescriptorSet_T cset={.pool=&descriptor_pool,.generation=7,.defined={VK_TRUE}};
+    a.signature.binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
+    cset.signature.binding[0]=a.signature.binding[0];
+    a.signature.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    cset.signature.type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    struct VkPipelineLayout_T layout={.device=&d,.set_count=3};
+    layout.sets[0]=a.signature;layout.sets[2]=cset.signature;
+    struct VkPipeline_T pipeline={.device=&d,.set_count=3,
+        .program={.descriptor_set_mask=5,.descriptor_count=2,
+            .descriptors={{0,0,0,0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+                          {2,0,0,0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER}}}};
+    memcpy(pipeline.sets,layout.sets,sizeof(pipeline.sets));
+    VkCommandPool p=pool(&d,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer cmd=command(&d,p);assert(vkBeginCommandBuffer(cmd,&begin_info)==VK_SUCCESS);
+    vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
+    VkDescriptorSet set2=&cset;vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,
+        &layout,2,1,&set2,0,NULL);
+    VkDescriptorSet set0=&a;vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,
+        &layout,0,1,&set0,0,NULL);
+    vkCmdDispatch(cmd,1,1,1);
+    assert(cmd->state==PS5VK_RECORDING && cmd->operation_count==1 &&
+        cmd->operations[0].sets[0]==&a && cmd->operations[0].sets[2]==&cset &&
+        cmd->operations[0].generations[0]==3 && cmd->operations[0].generations[2]==7);
+    assert(vkEndCommandBuffer(cmd)==VK_SUCCESS);
+    assert(vkResetCommandBuffer(cmd,0)==VK_SUCCESS && vkBeginCommandBuffer(cmd,&begin_info)==VK_SUCCESS);
+    vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
+    vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,&layout,0,1,&set0,0,NULL);
+    vkCmdDispatch(cmd,1,1,1);assert(cmd->state==PS5VK_INVALID);
+    vkDestroyCommandPool(&d,p,NULL);
 }
 static void graphics_recording(void)
 {
@@ -169,17 +206,17 @@ static void graphics_recording(void)
     struct VkDescriptorSet_T graphics_set={.pool=&graphics_pool,.generation=9};
     graphics_set.signature.count=1;
     graphics_set.signature.binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_FRAGMENT_BIT};
-    graphics_set.signature.combined_image[0]=VK_TRUE;
+    graphics_set.signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     graphics_set.defined[0]=VK_TRUE;graphics_set.images[0].imageView=&view;
     graphics_set.image_resources[0]=&image;
     struct VkPipelineLayout_T graphics_layout={.device=&d,.set_count=1};
     graphics_layout.sets[0]=graphics_set.signature;
     VkDescriptorSet graphics_handle=&graphics_set;
     vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&graphics_layout,0,1,&graphics_handle,0,NULL);
-    assert(c->graphics_set==graphics_handle && !c->set);
+    assert(c->graphics_sets[0]==graphics_handle && !c->sets[0]);
     pipeline.set_count=1;pipeline.sets[0]=graphics_set.signature;
     vkCmdDraw(c, 3, 1, 2, 4);
-    assert(c->operations[1].set==graphics_handle && c->operations[1].generation==9);
+    assert(c->operations[1].sets[0]==graphics_handle && c->operations[1].generations[0]==9);
     vkCmdEndRenderPass(c);
     assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->operation_count == 3);
     assert(c->operations[1].first_vertex == 2 && c->operations[1].first_instance == 4);
@@ -190,7 +227,7 @@ static void graphics_recording(void)
     assert(!d.invalidate(&d, VK_OBJECT_TYPE_DESCRIPTOR_SET, graphics_handle));
     c->state = PS5VK_EXECUTABLE;
     assert(d.invalidate(&d, VK_OBJECT_TYPE_IMAGE_VIEW, &view) && c->state == PS5VK_INVALID);
-    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS && !c->graphics_pipeline && !c->graphics_set);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS && !c->graphics_pipeline && !c->graphics_sets[0]);
     pipeline.set_count=0;
     ri.clearValueCount = 0;
     vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
@@ -371,4 +408,4 @@ static void image_barriers(void)
     d.images=NULL;vkFreeMemory(&d,memory,NULL);
 }
 int main(void)
-{ states(); recording_and_invalidation(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ states(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); puts("Command recording/ownership: pass (host only, no submit)"); }

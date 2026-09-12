@@ -20,7 +20,8 @@ results; visual output is not the sole correctness signal.
 - Vulkan 1.0-style instance, physical-device, device and queue objects
 - Host-visible buffers and images backed by native direct memory
 - Command pools and command buffers with explicit recording state
-- Runtime-compiled compute pipelines, storage buffers, dispatch and fences
+- Runtime-compiled compute pipelines with up to four resource sets
+- Storage buffers, uniform buffers and R32 uniform texel buffers
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list draws
 - One BGRA8 color attachment and an optional D32 depth attachment
