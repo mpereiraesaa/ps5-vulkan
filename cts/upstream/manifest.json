@@ -74,6 +74,54 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Compiles compute shader with shared variable at runtime, dispatches to GPU compute queue, and verifies SSBO output oracle."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.shared_var_single_group",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4719",
+      "category": "compute",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream SharedVarTest with local_size (3,2,5) and one workgroup: 30 invocations write LDS, cross it with memoryBarrierShared/barrier and read a permuted value, so the oracle only holds if every invocation observes the barrier."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.shared_var_multiple_groups",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4723",
+      "category": "compute",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream SharedVarTest with local_size (3,4,1) across 42 workgroups: exercises gl_WorkGroupID/gl_NumWorkGroups addressing at full multi-group dispatch alongside the same intra-group LDS barrier oracle."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.shared_atomic_op_single_group",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4730",
+      "category": "compute",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream SharedVarAtomicOpTest with local_size (3,2,5) in one workgroup: every invocation must obtain a distinct atomicAdd return value on shared memory, so the SSBO permutation oracle fails if the shared atomic is not atomic."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.shared_var_multiple_invocations",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4721",
+      "category": "compute",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream SharedVarTest with local_size (1,1,1) across 40 workgroups: the LDS read-after-barrier oracle is applied independently per group, so a workgroup-id or per-group shared-memory aliasing defect fails the comparison."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.shared_atomic_op_multiple_groups",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4735",
+      "category": "compute",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream SharedVarAtomicOpTest with local_size (3,4,1) across 42 workgroups: requires the shared atomic counter to restart per workgroup and every invocation in each of the 42 groups to receive a distinct value."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.ssbo_local_barrier_multiple_groups",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4706",
+      "category": "compute",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream SSBOLocalBarrierTest with local_size (3,4,1) across 42 workgroups: each invocation reads back neighbour writes it did not perform, separated by memoryBarrierBuffer/barrier, so the oracle only holds if buffer writes become visible across invocations within a workgroup and stay private between workgroups."
     }
   ]
 }

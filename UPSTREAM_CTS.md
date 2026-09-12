@@ -45,7 +45,8 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the seven cases frozen in `cts/upstream/manifest.json`. Only
+* **Selected**: the thirteen cases frozen in `cts/upstream/manifest.json`
+  (seven API, synchronization and memory cases plus six compute cases). Only
   these are registered by `cts/upstream/package_ps5.cpp` and shipped in the
   packaged case list.
 * **Executed**: what a given report actually contains, which the strict verifier
@@ -150,12 +151,13 @@ correctness.
 
 ### Native acceptance (2026-09-12)
 
-Two independent launches on PS5 FW 12.02 / GFX1013 completed all seven frozen
-cases with **7 Pass, 0 Fail, 0 NotSupported**, exit code zero. Both strict
-verifications matched the deployed executable and selection, reconstructed the
-complete QPA, observed GPU completion and `allocations_bytes=0`, and confirmed
-the title stopped after Close Game. This is focused upstream execution, not
-Vulkan conformance or broad shared-memory coverage.
+Two independent launches on PS5 FW 12.02 / GFX1013 completed the seven
+API/synchronization/memory cases frozen at that time with **7 Pass, 0 Fail,
+0 NotSupported**, exit code zero. Both strict verifications matched the
+deployed executable and selection, reconstructed the complete QPA, observed
+GPU completion and `allocations_bytes=0`, and confirmed the title stopped
+after Close Game. This is focused upstream execution, not Vulkan conformance
+or broad shared-memory coverage.
 
 - Executable SHA-256: `992e607b6e1ec4d9fb54821796335380a7922b78dcd2c2cc08b7a911db3b9b64`
 - Selection SHA-256: `7dc544e694fa40439f49a15417bd56297434bc70381290acb921c371b8ffbfea`
@@ -163,6 +165,56 @@ Vulkan conformance or broad shared-memory coverage.
 - QPA 2 SHA-256: `429836ef94c67a92fca1827600852fc220f5260f26ccf9a4561ce15c45bc5fda`
 
 Raw logs and reports remain private; these are audited result summaries.
+
+### Compute expansion (2026-09-12)
+
+The selection now also contains six `dEQP-VK.compute.basic` cases implemented by
+the pinned upstream `vktComputeBasicComputeShaderTests.cpp`. All six execute
+their upstream shader generation, runtime GLSL compilation and upstream SSBO
+comparison oracles unchanged:
+
+| Case | Upstream shape | What the oracle establishes |
+| --- | --- | --- |
+| `shared_var_single_invocation` | 1 invocation, 1 workgroup | LDS write, `memoryBarrierShared`/`barrier`, read-back |
+| `shared_var_single_group` | 30 invocations, 1 workgroup | the same oracle with more than one invocation per group |
+| `shared_var_multiple_invocations` | 1 invocation, 40 workgroups | per-workgroup shared state and workgroup addressing |
+| `shared_var_multiple_groups` | 12 invocations, 42 workgroups | both dimensions at once, 504 checked values |
+| `shared_atomic_op_single_group` | 30 invocations, 1 workgroup | `atomicAdd` on shared memory must return 30 distinct values |
+| `shared_atomic_op_multiple_groups` | 12 invocations, 42 workgroups | the shared counter restarts per workgroup |
+
+Two further independent launches (run 3 and run 4) of the identical final
+payload completed the full thirteen-case selection with **13 Pass, 0 Fail,
+0 NotSupported**, exit code zero. Both strict verifications matched the
+deployed executable and selection, reconstructed a complete QPA whose declared
+chunk count and SHA-256 match, observed GPU completion and
+`allocations_bytes=0`, and confirmed the title stopped after Close Game. The
+reassembled reports contain one `OpControlBarrier`, one `OpMemoryBarrier` and
+(for the atomic cases) one `OpAtomicIAdd` per compute shader, so the predicates
+above are the ones the hardware actually exercised.
+
+- Executable SHA-256: `ee25e08f8f2aa35a2073b52a934a4197ba19095c6a1dd74b19eb4dfa9fe5380d`
+- Selection SHA-256: `4608cfa0d78d37c71d8944bbaced02b108ba1470b294f943a266f64921bdbf4b`
+- QPA 3 SHA-256: `782c0a46a35781928390964c10049c746beeeabe40b2d27abdeb80257e9ad0ff`
+- QPA 4 SHA-256: `ad98eeb88c3348eadcfddab473d60a0549b7a584f4a202fd57e4fc94c612d62a`
+
+The compute expansion needed no further driver change: the runtime compute
+profile established by the earlier fix (compiler LDS sizing, inline dispatch
+dimensions, per-dispatch retirement) already covers these shapes. The new
+coverage is a statement about which upstream code has now been executed, not a
+claim that the driver implements all of Vulkan compute.
+
+The expansion also surfaced two host-side build problems that were fixed in
+this change, because the work was done in a separate Git worktree rather than
+in the canonical checkout:
+
+- `tools/build_sdk.py` resolved the PS5 toolchain and the sibling lab projects
+  through `ROOT.parents[1]`, so an out-of-tree worktree silently staged a
+  host-only SDK and then failed to link the payload. It now uses the same
+  `tools/lab.py` `lab_root()` resolution as the other native tools, which is
+  unchanged in the canonical layout.
+- `Makefile` hard-coded `../ps5-agc-gears` and `../logging_server`. They now go
+  through `LAB_SIBLINGS`, whose default (`..`) is exactly the previous
+  behaviour for in-tree checkouts.
 
 ### Heap and driver fixes
 
@@ -190,6 +242,12 @@ oracle, or selection was replaced to obtain these results.
 * This is a focused selection, not the complete CTS and not conformance.
 * The pinned revision is a 1.3-era CTS; it does not establish Vulkan 1.4
   coverage.
+* Every selected shared-memory and atomic case uses at most 30 invocations per
+  workgroup, i.e. a single wave32. The selection therefore does not establish
+  multi-wave LDS barrier semantics. The upstream cases that would
+  (`dEQP-VK.compute.basic.max_local_size_*`) size their workgroups from
+  specialization constants through `local_size_x_id`, which this runtime
+  compute profile does not implement, so they are outside this change.
 * No selected case exercises a rendering or pixel-comparison oracle. The
   reference rasterizer is linked but unexecuted, so this integration does not
   demonstrate rasterisation correctness.
