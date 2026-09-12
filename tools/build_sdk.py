@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Stage reusable PS5 Vulkan SDK and exercise from isolated consumers."""
+import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +14,18 @@ DIST_SDK = ROOT / "dist-sdk"
 
 sys.path.insert(0, str(ROOT / "tools"))
 from lab import lab_root  # noqa: E402
+
+
+def validate_compiler_archive(archive: Path, expected_revision: str) -> None:
+    identity_path = archive.with_suffix(".json")
+    if not archive.is_file() or not identity_path.is_file():
+        raise RuntimeError("native PSBC archive or identity stamp is missing")
+    identity = json.loads(identity_path.read_text())
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    if (identity.get("schema") != 1 or identity.get("target") != "ps5" or
+            identity.get("source_commit") != expected_revision or
+            identity.get("archive_sha256") != digest):
+        raise RuntimeError("native PSBC archive identity is stale or inconsistent")
 
 
 def archive(tool, output, objects):
@@ -195,8 +209,13 @@ def main():
         subprocess.run([str(linker), "--shared", "-soname", "libSceAgcDriver.prx",
                         "-o", str(driver), str(driver_obj)], check=True)
         compiler_source = ROOT / "build/libpsbc.ps5.a"
-        if not compiler_source.is_file():
-            raise SystemExit("Native SDK requires build/libpsbc.ps5.a; run tools/build_psbc.py --target ps5")
+        expected_revision = subprocess.check_output(
+            ["git", "-C", str(ROOT / "third_party/psbc-reference"),
+             "rev-parse", "HEAD"], text=True).strip()
+        try:
+            validate_compiler_archive(compiler_source, expected_revision)
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
+            raise SystemExit(f"{error}; run tools/build_psbc.py --target ps5")
         psbc_lib = lib_dir / "libpsbc.a"
         shutil.copyfile(compiler_source, psbc_lib)
         out_elf = ROOT / "build/tests/test_sdk_consumer_native.elf"
@@ -275,8 +294,9 @@ The native SDK uses runtime SPIR-V compilation, not the demo's offline shader
 libraries. Graphics currently supports procedural triangle-list pipelines,
 one BGRA8 UNORM color target at sample count 1, full color writes and no
 blending. Vertex/fragment interfaces use matching smooth float32 scalar/vector
-locations; vertex buffers, graphics descriptors, push constants and additional
-render targets are not supported by this runtime compiler profile. A bounded
+locations. Push constants and scalar specialization constants are supported;
+vertex buffers, graphics descriptors and additional render targets are not
+supported by this runtime compiler profile. A bounded
 in-process cache retains compiled pairs. This is not a Vulkan-conformant driver.
 
 ## Usage

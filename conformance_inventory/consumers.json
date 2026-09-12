@@ -75,7 +75,7 @@
           "evidence": "The renderer records push constants around dispatch and the shader modules declare them.",
           "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/rdp_renderer.cpp"],
           "related_requirement_ids": ["VK14-DESCRIPTORS-003"],
-          "baseline_observation": "Pipeline layouts reject push constants at the baseline."
+          "baseline_observation": "Up to 256 bytes of push constants now participate in pipeline layouts, cache identity and immutable command snapshots; the public compute consumer has a strict native GPU oracle. Runtime graphics has host/compiler coverage but no separate native push-constant draw oracle."
         },
         {
           "id": "RDP-006", "classification": "mandatory",
@@ -83,7 +83,7 @@
           "evidence": "Shaders use specialization constants for local sizes and pipeline creation passes specialization info.",
           "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/rdp_renderer.cpp"],
           "related_requirement_ids": ["VK14-PIPELINES-001"],
-          "baseline_observation": "vkCreateComputePipelines rejects pSpecializationInfo at the baseline."
+          "baseline_observation": "Compute and runtime graphics pipelines now accept bounded scalar specialization maps with canonical cache identity. Non-default compute values pass a strict native oracle; specialization-dependent LocalSizeId remains unsupported."
         },
         {
           "id": "RDP-007", "classification": "mandatory",
@@ -224,7 +224,7 @@
           "evidence": "Required property in dxvk_common_required, alongside the 1.3 requirement that the value is at least 256.",
           "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
           "related_requirement_ids": ["VK14-DESCRIPTORS-003", "VK14-FORMATS-004"],
-          "baseline_observation": "The baseline profile rejects push constants entirely."
+          "baseline_observation": "maxPushConstantsSize is 256 and the bounded compute path has native evidence; this does not satisfy the remaining DXVK requirements or establish DXVK compatibility."
         },
         {
           "id": "DXVK-007", "classification": "mandatory",

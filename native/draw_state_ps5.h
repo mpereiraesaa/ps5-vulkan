@@ -11,6 +11,7 @@ struct ps5vk_draw_state {
     uint32_t cx_count;
     uint32_t sh_count; /* Zero preserves the legacy 12-register LLPC path. */
     uint64_t modifier;
+    uint32_t push_constant_low;
     struct ps5vk_runtime_draw_abi runtime;
 };
 /* Caller must keep the resulting register block in published GPU-visible

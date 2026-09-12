@@ -45,7 +45,7 @@ int main(void)
     /* 2. Runtime compile shader 1 (minimal) */
     struct ps5vk_compiled_program prog1 = {0};
     uint32_t *code1 = NULL;
-    VkResult res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &layout, &prog1, &code1);
+    VkResult res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &layout, NULL, &prog1, &code1);
     assert(res == VK_SUCCESS);
     assert(code1 != NULL);
     assert(prog1.gfx == 1013);
@@ -67,12 +67,15 @@ int main(void)
     resource_layout.sets[1].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     resource_layout.sets[2].binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
     resource_layout.sets[2].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    resource_layout.push_constant_size=4;
+    resource_layout.push_constant_stages[0]=VK_SHADER_STAGE_COMPUTE_BIT;
     struct ps5vk_compiled_program resources={0};uint32_t *resource_code=NULL;
-    assert(ps5vk_runtime_compile_compute(resource_spv,resource_bytes/4,"main",&resource_layout,
+    assert(ps5vk_runtime_compile_compute(resource_spv,resource_bytes/4,"main",&resource_layout,NULL,
         &resources,&resource_code)==VK_SUCCESS);
     assert(resources.descriptor_set_mask==7 && resources.descriptor_count==4 &&
         resources.descriptor_set_sgpr[0]==2 && resources.descriptor_set_sgpr[1]==3 &&
-        resources.descriptor_set_sgpr[2]==4 && resources.user_sgprs>=5);
+        resources.descriptor_set_sgpr[2]==4 && resources.push_constant_sgpr==5 &&
+        resources.push_constant_size==4 && resources.user_sgprs>=6);
     assert(resources.descriptors[2].type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
         resources.descriptors[3].type==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
     free(resource_code);free(resource_spv);
@@ -83,7 +86,7 @@ int main(void)
     assert(spv2 != NULL);
     struct ps5vk_compiled_program prog2 = {0};
     uint32_t *code2 = NULL;
-    res = ps5vk_runtime_compile_compute(spv2, spv2_bytes / 4, "main", &layout, &prog2, &code2);
+    res = ps5vk_runtime_compile_compute(spv2, spv2_bytes / 4, "main", &layout, NULL, &prog2, &code2);
     assert(res == VK_SUCCESS && code2 != NULL);
     size_t common_words = prog1.code_words < prog2.code_words ? prog1.code_words : prog2.code_words;
     assert(prog1.code_words != prog2.code_words || memcmp(code1, code2, common_words * 4) != 0);
@@ -94,12 +97,39 @@ int main(void)
     assert(shared);
     struct ps5vk_compiled_program shared_prog = {0};
     uint32_t *shared_code = NULL;
-    assert(ps5vk_runtime_compile_compute(shared, shared_bytes / 4, "main", &layout,
+    assert(ps5vk_runtime_compile_compute(shared, shared_bytes / 4, "main", &layout, NULL,
         &shared_prog, &shared_code) == VK_SUCCESS);
     assert(shared_prog.user_sgprs == 6 && shared_prog.grid_size_sgpr == 3);
     assert(shared_prog.lds_size > 0 && shared_prog.lds_size <= 128);
     assert(shared_prog.local_size[0] == 2);
     free(shared_code); free(shared);
+
+    /* Push constants use a stable indirect user-data pointer and Vulkan
+     * specialization values are consumed before NIR optimization. */
+    size_t parameterized_bytes=0;
+    uint32_t *parameterized=read_file("build/test-shaders/push_specialization.spv",
+                                     &parameterized_bytes);
+    assert(parameterized);
+    struct VkPipelineLayout_T parameterized_layout=layout;
+    parameterized_layout.push_constant_size=4;
+    parameterized_layout.push_constant_stages[0]=VK_SHADER_STAGE_COMPUTE_BIT;
+    uint32_t values_a[]={5,11},values_b[]={9,13};
+    VkSpecializationMapEntry map[]={{0,0,4},{1,4,4}};
+    VkSpecializationInfo spec_a={2,map,sizeof(values_a),values_a};
+    VkSpecializationInfo spec_b={2,map,sizeof(values_b),values_b};
+    struct ps5vk_compiled_program parameterized_a={0},parameterized_b={0};
+    uint32_t *parameterized_code_a=NULL,*parameterized_code_b=NULL;
+    assert(ps5vk_runtime_compile_compute(parameterized,parameterized_bytes/4,"main",
+        &parameterized_layout,&spec_a,&parameterized_a,&parameterized_code_a)==VK_SUCCESS);
+    assert(parameterized_a.push_constant_size==4 &&
+        parameterized_a.push_constant_sgpr==3 && parameterized_a.user_sgprs>=4);
+    assert(ps5vk_runtime_compile_compute(parameterized,parameterized_bytes/4,"main",
+        &parameterized_layout,&spec_b,&parameterized_b,&parameterized_code_b)==VK_SUCCESS);
+    size_t common_parameterized=parameterized_a.code_words<parameterized_b.code_words?
+        parameterized_a.code_words:parameterized_b.code_words;
+    assert(parameterized_a.code_words!=parameterized_b.code_words ||
+        memcmp(parameterized_code_a,parameterized_code_b,common_parameterized*4));
+    free(parameterized_code_a);free(parameterized_code_b);free(parameterized);
 
     /* 4. Test error handling */
     struct ps5vk_compiled_program bad_prog;
@@ -107,23 +137,23 @@ int main(void)
 
     /* Corrupted SPIR-V header */
     uint32_t bad_spv[16] = {0x12345678, 0, 0, 0};
-    assert(ps5vk_runtime_compile_compute(bad_spv, 16, "main", &layout, &bad_prog, &bad_code) != VK_SUCCESS);
+    assert(ps5vk_runtime_compile_compute(bad_spv, 16, "main", &layout, NULL, &bad_prog, &bad_code) != VK_SUCCESS);
 
     /* Nonexistent entrypoint */
-    assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "nonexistent_entry", &layout, &bad_prog, &bad_code) != VK_SUCCESS);
+    assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "nonexistent_entry", &layout, NULL, &bad_prog, &bad_code) != VK_SUCCESS);
 
     /* Empty layout */
     struct VkPipelineLayout_T empty_layout = {0};
-    assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &empty_layout, &bad_prog, &bad_code) != VK_SUCCESS);
+    assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &empty_layout, NULL, &bad_prog, &bad_code) != VK_SUCCESS);
 
     struct VkPipelineLayout_T array_layout = layout;
     array_layout.sets[0].binding[0].count = 2;
-    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &array_layout, &bad_prog, &bad_code);
+    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &array_layout, NULL, &bad_prog, &bad_code);
     assert(res==VK_SUCCESS && bad_prog.descriptor_count==3);free(bad_code);bad_code=NULL;
 
     struct VkPipelineLayout_T multiset_layout = layout;
     multiset_layout.set_count = 2;
-    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &multiset_layout, &bad_prog, &bad_code);
+    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &multiset_layout, NULL, &bad_prog, &bad_code);
     assert(res==VK_SUCCESS && bad_prog.descriptor_set_mask==1);free(bad_code);bad_code=NULL;
 
     /* 5. Verify CPU reference computation semantics for both programs */

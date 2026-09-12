@@ -1,0 +1,24 @@
+#version 450
+
+layout(local_size_x = 64) in;
+layout(constant_id = 0) const uint multiplier = 3u;
+layout(constant_id = 1) const uint bias = 7u;
+
+layout(push_constant) uniform PushConstants {
+    uint addend;
+} push_data;
+
+layout(set = 0, binding = 0, std430) readonly buffer InputBuffer {
+    uint values[];
+} input_buffer;
+
+layout(set = 0, binding = 1, std430) writeonly buffer OutputBuffer {
+    uint values[];
+} output_buffer;
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+    output_buffer.values[index] =
+        input_buffer.values[index] * multiplier + bias + push_data.addend;
+}

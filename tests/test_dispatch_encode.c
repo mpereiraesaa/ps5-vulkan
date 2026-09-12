@@ -44,5 +44,18 @@ int main(void)
     assert(words[user+6]==3 && words[user+7]==7 && words[user+8]==2);
     d.descriptor_tables[1]=0x20000c000;assert(!ps5vk_dispatch_encode(words,128,&d));
     d.descriptor_tables[1]=0;d.groups[0]=65536;assert(!ps5vk_dispatch_encode(words,128,&d));
+    d.groups[0]=3;p.grid_size_sgpr=0;p.user_sgprs=5;p.push_constant_size=16;
+    p.push_constant_sgpr=4;d.push_constants=0x20000c000;
+    n=ps5vk_dispatch_encode(words,128,&d);assert(n);
+    user=find_sh(words,n,0xb900);assert(user<n);
+    assert(words[user+4]==(uint32_t)d.descriptor_tables[0]);
+    assert(words[user+5]==(uint32_t)d.descriptor_tables[2]);
+    assert(words[user+6]==(uint32_t)d.push_constants);
+    d.push_constants=d.addresses.completion;
+    assert(!ps5vk_dispatch_encode(words,128,&d));
+    d.push_constants=0x20000c002;
+    assert(!ps5vk_dispatch_encode(words,128,&d));
+    d.push_constants=0x10000c000;
+    assert(!ps5vk_dispatch_encode(words,128,&d));
     puts("Multi-set dispatch SGPR encoding: pass (host packets only)");
 }

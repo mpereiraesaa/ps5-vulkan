@@ -4,6 +4,7 @@
 
 /* Implementation bounds, not a claim of Vulkan minimum-limit conformance. */
 enum { PS5VK_MAX_BINDINGS = 32, PS5VK_MAX_DESCRIPTORS = 128, PS5VK_MAX_SETS = 4 };
+enum { PS5VK_MAX_PUSH_CONSTANT_BYTES = 256, PS5VK_MAX_PUSH_CONSTANT_DWORDS = 64 };
 struct VkBufferView_T {
     VkDevice device;
     VkBuffer buffer;
@@ -59,5 +60,7 @@ struct VkPipelineLayout_T {
     VkBool32 custom_allocator;
     uint32_t set_count;
     struct ps5vk_set_signature sets[PS5VK_MAX_SETS];
+    uint32_t push_constant_size;
+    VkShaderStageFlags push_constant_stages[PS5VK_MAX_PUSH_CONSTANT_DWORDS];
 };
 #endif

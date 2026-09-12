@@ -54,7 +54,8 @@ int main(void)
     assert(ps5vk_native_draw_state(&p,&color,&depth,&area,640,480,&out)!=VK_SUCCESS && !out.cx_count);
     pair.vertex_quantization=0x2d;
     pair.runtime_arguments=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,
-        .fragment_count=2,.base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.lds_slot=1};
+        .fragment_count=2,.base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.lds_slot=1,
+        .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     pair.runtime_vertex.header.num_cx_registers=11;
     pair.runtime_fragment.header.num_cx_registers=9;
     pair.runtime_vertex.header.num_sh_registers=6;

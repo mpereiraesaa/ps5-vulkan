@@ -524,8 +524,8 @@ int main(void)
     const struct ps5vk_graphics_key *key=&graphics_library.programs[0].key;
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
     const struct ps5vk_graphics_key runtime_key={
-        .vertex={ps5vk_runtime_vertex,sizeof(ps5vk_runtime_vertex)/4,"main"},
-        .fragment={ps5vk_runtime_fragment,sizeof(ps5vk_runtime_fragment)/4,"main"},
+        .vertex={.words=ps5vk_runtime_vertex,.word_count=sizeof(ps5vk_runtime_vertex)/4,.entry="main"},
+        .fragment={.words=ps5vk_runtime_fragment,.word_count=sizeof(ps5vk_runtime_fragment)/4,.entry="main"},
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
         .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
     key=&runtime_key;

@@ -23,15 +23,43 @@ int main(void)
 
     /* 2. Build keys */
     struct ps5vk_cache_key key_a, key_b, key_mut;
-    assert(ps5vk_cache_build_key(spv_a, 32, "main", &layout, &key_a));
-    assert(ps5vk_cache_build_key(spv_b, 32, "main", &layout, &key_b));
+    assert(ps5vk_cache_build_key(spv_a, 32, "main", &layout, NULL, &key_a));
+    assert(ps5vk_cache_build_key(spv_b, 32, "main", &layout, NULL, &key_b));
     assert(memcmp(&key_a, &key_b, sizeof(key_a)) != 0);
 
     /* Key rejection on nulls / invalid */
-    assert(!ps5vk_cache_build_key(NULL, 32, "main", &layout, &key_mut));
-    assert(!ps5vk_cache_build_key(spv_a, 0, "main", &layout, &key_mut));
-    assert(!ps5vk_cache_build_key(spv_a, 32, NULL, &layout, &key_mut));
-    assert(!ps5vk_cache_build_key(spv_a, 32, "main", NULL, &key_mut));
+    assert(!ps5vk_cache_build_key(NULL, 32, "main", &layout, NULL, &key_mut));
+    assert(!ps5vk_cache_build_key(spv_a, 0, "main", &layout, NULL, &key_mut));
+    assert(!ps5vk_cache_build_key(spv_a, 32, NULL, &layout, NULL, &key_mut));
+    assert(!ps5vk_cache_build_key(spv_a, 32, "main", NULL, NULL, &key_mut));
+
+    /* Push ranges and specialization values are compiler inputs.  Map-entry
+     * order is not semantic and therefore must produce the same key. */
+    layout.push_constant_size=16;
+    for(unsigned i=0;i<4;++i)layout.push_constant_stages[i]=VK_SHADER_STAGE_COMPUTE_BIT;
+    uint32_t spec_data[]={11,29};
+    VkSpecializationMapEntry entries_a[]={{7,0,4},{3,4,4}};
+    VkSpecializationMapEntry entries_b[]={{3,4,4},{7,0,4}};
+    VkSpecializationInfo spec_a={2,entries_a,sizeof(spec_data),spec_data};
+    VkSpecializationInfo spec_b={2,entries_b,sizeof(spec_data),spec_data};
+    struct ps5vk_cache_key specialized_a,specialized_b;
+    assert(ps5vk_cache_build_key(spv_a,32,"main",&layout,&spec_a,&specialized_a));
+    assert(ps5vk_cache_build_key(spv_a,32,"main",&layout,&spec_b,&specialized_b));
+    assert(!memcmp(&specialized_a,&specialized_b,sizeof(specialized_a)));
+    spec_data[0]=12;
+    assert(ps5vk_cache_build_key(spv_a,32,"main",&layout,&spec_a,&key_mut));
+    assert(memcmp(&specialized_a,&key_mut,sizeof(key_mut)));
+    spec_data[0]=11;
+    entries_b[1].constantID=3;
+    assert(!ps5vk_cache_build_key(spv_a,32,"main",&layout,&spec_b,&key_mut));
+    entries_b[1].constantID=7;entries_b[1].size=9;
+    assert(!ps5vk_cache_build_key(spv_a,32,"main",&layout,&spec_b,&key_mut));
+    entries_b[1].size=4;entries_b[1].offset=sizeof(spec_data);
+    assert(!ps5vk_cache_build_key(spv_a,32,"main",&layout,&spec_b,&key_mut));
+    layout.push_constant_stages[0]=VK_SHADER_STAGE_VERTEX_BIT;
+    assert(ps5vk_cache_build_key(spv_a,32,"main",&layout,&spec_a,&key_mut));
+    assert(memcmp(&specialized_a,&key_mut,sizeof(key_mut)));
+    layout.push_constant_stages[0]=VK_SHADER_STAGE_COMPUTE_BIT;
 
     /* 3. Lookup on empty cache: miss */
     assert(ps5vk_compilation_cache_lookup(cache, &key_a, spv_a) == NULL);
@@ -103,7 +131,7 @@ int main(void)
         struct ps5vk_cache_key k_temp;
         char name[16];
         snprintf(name, sizeof(name), "entry_%d", i);
-        assert(ps5vk_cache_build_key(spv_temp, 32, name, &layout, &k_temp));
+        assert(ps5vk_cache_build_key(spv_temp, 32, name, &layout, NULL, &k_temp));
         struct ps5vk_cache_entry *e = ps5vk_compilation_cache_insert(cache, &k_temp, spv_temp, &prog_a, code_a);
         assert(e != NULL);
         ps5vk_cache_entry_release(cache, e);
@@ -127,7 +155,7 @@ int main(void)
         struct ps5vk_cache_key k_temp;
         char name[16];
         snprintf(name, sizeof(name), "spam_%d", i);
-        assert(ps5vk_cache_build_key(spv_temp, 32, name, &layout, &k_temp));
+        assert(ps5vk_cache_build_key(spv_temp, 32, name, &layout, NULL, &k_temp));
         struct ps5vk_cache_entry *e = ps5vk_compilation_cache_insert(cache, &k_temp, spv_temp, &prog_a, code_a);
         if (e) ps5vk_cache_entry_release(cache, e);
     }

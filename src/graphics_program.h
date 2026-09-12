@@ -3,10 +3,16 @@
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
 #include "vk_descriptor.h"
+struct ps5vk_graphics_specialization {
+    uint32_t constant_id, size;
+    uint8_t data[8];
+};
 struct ps5vk_graphics_module_key {
     const uint32_t *words;
     size_t word_count;
     const char *entry;
+    uint32_t specialization_count;
+    struct ps5vk_graphics_specialization specializations[64];
 };
 /* Offline compilation identity includes the complete vertex-input layout.
  * Description arrays are borrowed for lookup; library records must own them.
@@ -23,6 +29,8 @@ struct ps5vk_graphics_key {
     const VkVertexInputBindingDescription *vertex_bindings;
     const VkVertexInputAttributeDescription *vertex_attributes;
     const struct ps5vk_set_signature *descriptor_sets;
+    uint32_t push_constant_size;
+    VkShaderStageFlags push_constant_stages[PS5VK_MAX_PUSH_CONSTANT_DWORDS];
 };
 struct ps5vk_graphics_program {
     struct ps5vk_graphics_key key;

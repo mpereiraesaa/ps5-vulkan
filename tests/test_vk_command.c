@@ -407,5 +407,52 @@ static void image_barriers(void)
     vkDestroyCommandPool(&d,p,NULL);
     d.images=NULL;vkFreeMemory(&d,memory,NULL);
 }
+static void push_constant_recording(void)
+{
+    struct VkDevice_T d={0};
+    VkPushConstantRange range={VK_SHADER_STAGE_COMPUTE_BIT,0,16};
+    VkPipelineLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pushConstantRangeCount=1,.pPushConstantRanges=&range};
+    VkPipelineLayout layout;assert(vkCreatePipelineLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    struct VkPipeline_T pipeline={.device=&d,.program={.push_constant_size=16,.push_constant_sgpr=2}};
+    pipeline.push_constant_size=layout->push_constant_size;
+    memcpy(pipeline.push_constant_stages,layout->push_constant_stages,
+           sizeof(pipeline.push_constant_stages));
+    VkCommandPool p=pool(&d,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c=command(&d,p);
+    uint32_t values[]={1,2,3,4};
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
+    vkCmdPushConstants(c,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(values),values);
+    values[0]=99;
+    vkCmdDispatch(c,1,1,1);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+    assert(c->operations[0].push_constant_size==16);
+    assert(((const uint32_t *)c->operations[0].push_constants)[0]==1);
+    uint32_t replacement=17;
+    vkCmdPushConstants(c,layout,VK_SHADER_STAGE_COMPUTE_BIT,4,4,&replacement);
+    vkCmdDispatch(c,2,1,1);
+    assert(c->operation_count==2 &&
+        ((const uint32_t *)c->operations[1].push_constants)[1]==17 &&
+        ((const uint32_t *)c->operations[0].push_constants)[1]==2);
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
+    vkCmdDispatch(c,1,1,1);
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdPushConstants(c,layout,VK_SHADER_STAGE_VERTEX_BIT,0,4,&replacement);
+    assert(c->state==PS5VK_INVALID);
+    range=(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT,0,8};
+    VkPipelineLayout incompatible;
+    assert(vkCreatePipelineLayout(&d,&li,NULL,&incompatible)==VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
+    vkCmdPushConstants(c,incompatible,VK_SHADER_STAGE_COMPUTE_BIT,0,8,values);
+    vkCmdDispatch(c,1,1,1);
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
+    vkDestroyPipelineLayout(&d,incompatible,NULL);
+    vkDestroyPipelineLayout(&d,layout,NULL);vkDestroyCommandPool(&d,p,NULL);
+}
 int main(void)
-{ states(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ states(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }

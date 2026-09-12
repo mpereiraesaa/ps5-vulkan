@@ -3,8 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Structural/entry screening only; PSBC is responsible for shader validity.
- * Descriptor and push-constant storage have no runtime graphics ABI yet. */
+/* Structural/entry screening only; PSBC is responsible for shader validity. */
 static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned model)
 {
     if(!m->words || m->word_count<5 || m->word_count>4u*1024u*1024u || !m->entry ||
@@ -22,7 +21,7 @@ static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned m
         }
         if(op==59) {
             if(n<4)return 0;
-            if(w[3]==0 || w[3]==2 || w[3]==9 || w[3]==12)return 0;
+            if(w[3]==0 || w[3]==2 || w[3]==12)return 0;
         }
         if(op==54) {
             if(n!=5 || in_function)return 0;
@@ -46,12 +45,47 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
 
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
-    return key && module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
+    if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
+       key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
+    for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
+        if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
+    return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
         key->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
         key->color_format==VK_FORMAT_B8G8R8A8_UNORM && key->samples==VK_SAMPLE_COUNT_1_BIT &&
         key->color_write_mask==15 && !key->blend_enable && !key->vertex_binding_count &&
         !key->vertex_attribute_count && !key->descriptor_set_count &&
         ps5vk_spirv_graphics_interface(key);
+}
+
+static int apply_parameters(PsbcCompileOptions *options,
+                            const struct ps5vk_graphics_module_key *module,
+                            const struct ps5vk_graphics_key *key,VkShaderStageFlagBits stage)
+{
+    options->specialization_constant_count=module->specialization_count;
+    for(uint32_t i=0;i<module->specialization_count;++i) {
+        if(!module->specializations[i].size || module->specializations[i].size>8)return 0;
+        options->specialization_constants[i].constant_id=module->specializations[i].constant_id;
+        options->specialization_constants[i].size=module->specializations[i].size;
+        memcpy(options->specialization_constants[i].data,module->specializations[i].data,8);
+    }
+    for(uint32_t i=0;i<module->specialization_count;++i)
+        for(uint32_t j=0;j<i;++j)
+            if(module->specializations[i].constant_id==module->specializations[j].constant_id)return 0;
+    options->force_indirect_push_constants=false;
+    for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
+        if(key->push_constant_stages[i]&stage)options->force_indirect_push_constants=true;
+    return 1;
+}
+
+static int push_metadata_supported(const PsbcShaderMetadata *metadata,
+                                   const struct ps5vk_graphics_key *key,
+                                   VkShaderStageFlagBits stage)
+{
+    if(!metadata->push_constants_valid)return !metadata->push_constant_size;
+    if(!metadata->push_constant_size || metadata->push_constant_size>key->push_constant_size)return 0;
+    for(uint32_t i=0;i<(metadata->push_constant_size+3u)/4u;++i)
+        if(!(key->push_constant_stages[i]&stage))return 0;
+    return 1;
 }
 
 VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphics_key *key,const void **out)
@@ -62,11 +96,13 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     if(!ps5vk_runtime_graphics_supported(key))return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_runtime_graphics_program *p=calloc(1,sizeof(*p));
     if(!p)return VK_ERROR_OUT_OF_HOST_MEMORY;
+    PsbcResult result=PSBC_RESULT_INTERNAL_ERROR;
+    VkResult failure=VK_ERROR_FEATURE_NOT_PRESENT;
     PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
         .entrypoint=key->fragment.entry,.optimise=true,.address32_hi=2,
         .primitive_type=4,.rasterization_samples=1};
-    PsbcResult result=psbc_compile_shader(key->fragment.words,key->fragment.word_count*4u,&options,&p->fragment);
-    VkResult failure=VK_ERROR_FEATURE_NOT_PRESENT;
+    if(!apply_parameters(&options,&key->fragment,key,VK_SHADER_STAGE_FRAGMENT_BIT))goto failed;
+    result=psbc_compile_shader(key->fragment.words,key->fragment.word_count*4u,&options,&p->fragment);
     if(result!=PSBC_RESULT_OK)goto failed;
     /* Compile FS first so its actual metadata can prove PrimitiveID is unused. */
     if(p->fragment.metadata.input_semantic_count>PSBC_MAX_SEMANTICS)goto failed;
@@ -74,8 +110,11 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
         if((p->fragment.metadata.input_semantics[i]&255u)==PSBC_SEMANTIC_PRIMITIVE_ID)goto failed;
     options.stage=PSBC_STAGE_VERTEX;options.ngg=true;
     options.entrypoint=key->vertex.entry;options.omit_implicit_primitive_id=true;
+    if(!apply_parameters(&options,&key->vertex,key,VK_SHADER_STAGE_VERTEX_BIT))goto failed;
     result=psbc_compile_shader(key->vertex.words,key->vertex.word_count*4u,&options,&p->vertex);
     if(result!=PSBC_RESULT_OK)goto failed;
+    if(!push_metadata_supported(&p->vertex.metadata,key,VK_SHADER_STAGE_VERTEX_BIT) ||
+       !push_metadata_supported(&p->fragment.metadata,key,VK_SHADER_STAGE_FRAGMENT_BIT))goto failed;
     struct ps5vk_runtime_shader header;
     if(ps5vk_runtime_shader_build(&header,&p->vertex) ||
        ps5vk_runtime_shader_build(&header,&p->fragment) ||

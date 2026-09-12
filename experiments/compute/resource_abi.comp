@@ -1,5 +1,8 @@
 #version 450
 layout(local_size_x=64) in;
+layout(constant_id=0) const uint multiplier=3u;
+layout(constant_id=1) const uint extra_bias=7u;
+layout(push_constant) uniform PushConstants { uint addend; } push_data;
 layout(set=0,binding=0,std430) readonly buffer Input { uint values[]; } src;
 layout(set=0,binding=1,std430) writeonly buffer Output { uint values[]; } dst;
 layout(set=1,binding=0,std140) uniform Params { uint bias; } params;
@@ -7,5 +10,6 @@ layout(set=2,binding=0) uniform usamplerBuffer lookup_values;
 void main()
 {
     uint i=gl_GlobalInvocationID.x;
-    dst.values[i]=(src.values[i]+params.bias)^uint(texelFetch(lookup_values,int(i)).x);
+    dst.values[i]=(src.values[i]*multiplier+params.bias+extra_bias+push_data.addend)
+                  ^uint(texelFetch(lookup_values,int(i)).x);
 }

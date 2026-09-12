@@ -111,7 +111,8 @@ bool ps5vk_cache_build_stage_key(const uint32_t *spirv, size_t spirv_words,
 }
 
 bool ps5vk_cache_build_key(const uint32_t *spirv, size_t spirv_words,
-    const char *entry_name, VkPipelineLayout layout, struct ps5vk_cache_key *out_key)
+    const char *entry_name, VkPipelineLayout layout,
+    const VkSpecializationInfo *specialization, struct ps5vk_cache_key *out_key)
 {
     if (!layout || layout->set_count > PS5VK_MAX_SETS ||
         !ps5vk_cache_build_stage_key(spirv, spirv_words, entry_name,
@@ -128,6 +129,41 @@ bool ps5vk_cache_build_key(const uint32_t *spirv, size_t spirv_words,
             out_key->sets[s].bindings[b].stages = sig->binding[b].stages;
             out_key->sets[s].bindings[b].type = sig->type[b];
         }
+    }
+    out_key->push_constant_size = layout->push_constant_size;
+    memcpy(out_key->push_constant_stages, layout->push_constant_stages,
+           sizeof(out_key->push_constant_stages));
+
+    if (specialization) {
+        if (specialization->mapEntryCount > PS5VK_MAX_SPECIALIZATION_CONSTANTS ||
+            (specialization->mapEntryCount && !specialization->pMapEntries) ||
+            (specialization->dataSize && !specialization->pData)) return false;
+        for (uint32_t i = 0; i < specialization->mapEntryCount; ++i) {
+            const VkSpecializationMapEntry *source = &specialization->pMapEntries[i];
+            if (!source->size || source->size > PS5VK_MAX_SPECIALIZATION_BYTES ||
+                source->offset > specialization->dataSize ||
+                source->size > specialization->dataSize - source->offset)
+                return false;
+            uint32_t at = out_key->specialization_count++;
+            out_key->specializations[at].constant_id = source->constantID;
+            out_key->specializations[at].size = (uint32_t)source->size;
+            memcpy(out_key->specializations[at].data,
+                   (const uint8_t *)specialization->pData + source->offset,
+                   source->size);
+        }
+        /* Map-entry order is not semantic. Canonicalize it and reject duplicate
+         * constant IDs so equivalent VkSpecializationInfo values share a key. */
+        for (uint32_t i = 1; i < out_key->specialization_count; ++i) {
+            struct ps5vk_cache_specialization value = out_key->specializations[i];
+            uint32_t j = i;
+            while (j && out_key->specializations[j - 1].constant_id > value.constant_id) {
+                out_key->specializations[j] = out_key->specializations[j - 1]; --j;
+            }
+            out_key->specializations[j] = value;
+        }
+        for (uint32_t i = 1; i < out_key->specialization_count; ++i)
+            if (out_key->specializations[i - 1].constant_id ==
+                out_key->specializations[i].constant_id) return false;
     }
 
     return true;

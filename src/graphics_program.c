@@ -73,6 +73,9 @@ static int equal_module(const struct ps5vk_graphics_module_key *a,
     return a->words && b->words && a->entry && b->entry &&
         a->word_count >= 5 && a->word_count <= 4 * 1024 * 1024 &&
         a->word_count == b->word_count && !strcmp(a->entry, b->entry) &&
+        a->specialization_count==b->specialization_count &&
+        !memcmp(a->specializations,b->specializations,
+                a->specialization_count*sizeof(*a->specializations)) &&
         !memcmp(a->words, b->words, a->word_count * sizeof(uint32_t));
 }
 VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
@@ -90,6 +93,9 @@ VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
         if (!program->backend_data || !valid_sets(p) || !equal_sets(p,key) || !valid_vertex_layout(p) || !equal_vertex_layout(p,key) ||
             p->topology != key->topology || p->color_format != key->color_format || p->samples != key->samples ||
             p->color_write_mask != key->color_write_mask || p->blend_enable != key->blend_enable ||
+            p->push_constant_size!=key->push_constant_size ||
+            memcmp(p->push_constant_stages,key->push_constant_stages,
+                   sizeof(p->push_constant_stages)) ||
             !equal_module(&p->vertex, &key->vertex) || !equal_module(&p->fragment, &key->fragment)) continue;
         /* Multiple matching records are an ambiguous compiler library, not
          * permission to choose the first potentially different backend object. */
