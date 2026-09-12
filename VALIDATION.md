@@ -119,3 +119,25 @@ Their TCP transcript hashes were respectively
 and `c58300ed0cbaa4170ef7c27cf42fa890a49ff98d0084b728166f88ebb7bfecee`.
 These results establish only the exact bounded resource configuration above;
 they are not a Vulkan conformance claim.
+
+## Push and specialization constants
+
+On 2026-09-13, two independent launches of the same public-consumer SELF
+(`387555789fdcfdee19b35985128211eeefb6a30c8e6298c10d58130494682741`)
+passed an expanded compute oracle. The shader was compiled at runtime with two
+non-default scalar specialization values (`multiplier=5`, `extra_bias=11`) and
+consumed one four-byte push constant (`addend=19`). Each launch verified all 64
+output words and 128 guards, completed the existing 18-frame graphics/readback
+sequence, emitted a complete `ps5log/1` BYE and was then closed through the
+system in about 100 ms with the title confirmed absent.
+
+Run IDs were
+`20260912T221917075Z_PPSA99994_ps5vk_0x110dd9b55e3c` and
+`20260912T221948593Z_PPSA99994_ps5vk_0x11153046507d`; their TCP transcript
+hashes were respectively
+`43085eb90866eb55aedfaa02c03c946cc52c4f691fb79a3e35c6a5fd67e97b17`
+and `ba1f956cca47ab6feca758d53ddf5c7cf8531e46b0dd13c530429e3d60ff0ed0`.
+This validates the exact compute path. Runtime vertex/fragment compilation with
+push and specialization metadata has host/compiler regression coverage but no
+separate native draw oracle yet. `LocalSizeId` specialization remains outside
+the supported profile.

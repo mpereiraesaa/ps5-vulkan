@@ -13,6 +13,7 @@ MESSAGES = [
     "PS5VK_QUEUE_SUSPEND_POINT serial=1 index=0 rc=0",
     "PS5VK_QUEUE_COMPLETED serial=1 index=0 token=100000001 gcr=0070f528",
     "PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS sets=3 storage=2 uniform=1 texel=1 "
+    "push_bytes=4 spec_constants=2 multiplier=5 extra_bias=11 addend=19 "
     "elements=64 mismatches=0 guard_words=128 guard_mismatches=0",
     "PS5VK_CONSUMER_TEST_SUCCESS",
     "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1",
@@ -45,6 +46,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         result = validate(*self.fixture())
         self.assertEqual(result["descriptor_sets"], 3)
         self.assertEqual(result["guard_words_checked"], 128)
+        self.assertEqual(result["push_constant_bytes"], 4)
+        self.assertEqual(result["specialization_constants"], 2)
 
     def test_every_witness_is_required(self):
         for index in range(len(MESSAGES)):

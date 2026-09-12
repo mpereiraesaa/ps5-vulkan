@@ -386,6 +386,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(
     uint32_t dynamicOffsetCount,
     const uint32_t* pDynamicOffsets);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants(
+    VkCommandBuffer commandBuffer,
+    VkPipelineLayout layout,
+    VkShaderStageFlags stageFlags,
+    uint32_t offset,
+    uint32_t size,
+    const void* pValues);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(
     VkCommandBuffer commandBuffer,
     uint32_t groupCountX,

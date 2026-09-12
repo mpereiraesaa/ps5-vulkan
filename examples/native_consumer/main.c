@@ -90,23 +90,44 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
     dslci.pBindings = &texel_binding;
     CHECK(vkCreateDescriptorSetLayout(device, &dslci, NULL, &set_layouts[2]));
 
-    /* 3. Pipeline layout */
+    /* 3. Pipeline layout with one compute push-constant word. */
+    VkPushConstantRange push_range = {
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        .offset = 0,
+        .size = sizeof(uint32_t)
+    };
     VkPipelineLayoutCreateInfo plci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 3,
-        .pSetLayouts = set_layouts
+        .pSetLayouts = set_layouts,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &push_range
     };
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     CHECK(vkCreatePipelineLayout(device, &plci, NULL, &pipeline_layout));
 
     /* 4. Create compute pipeline (compiled at runtime on PS5 via PSBC/ACO) */
+    const uint32_t multiplier = 5u;
+    const uint32_t extra_bias = 11u;
+    VkSpecializationMapEntry specialization_entries[2] = {
+        {.constantID = 0, .offset = 0, .size = sizeof(uint32_t)},
+        {.constantID = 1, .offset = sizeof(uint32_t), .size = sizeof(uint32_t)}
+    };
+    const uint32_t specialization_data[2] = {multiplier, extra_bias};
+    VkSpecializationInfo specialization = {
+        .mapEntryCount = 2,
+        .pMapEntries = specialization_entries,
+        .dataSize = sizeof(specialization_data),
+        .pData = specialization_data
+    };
     VkComputePipelineCreateInfo cpci = {
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
         .stage = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = VK_SHADER_STAGE_COMPUTE_BIT,
             .module = comp_module,
-            .pName = "main"
+            .pName = "main",
+            .pSpecializationInfo = &specialization
         },
         .layout = pipeline_layout
     };
@@ -283,6 +304,9 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
     CHECK(vkBeginCommandBuffer(cmd_buf, &cbbi));
     vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
     vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 3, desc_sets, 0, NULL);
+    const uint32_t push_addend = 19u;
+    vkCmdPushConstants(cmd_buf, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, sizeof(push_addend), &push_addend);
     vkCmdDispatch(cmd_buf, 1, 1, 1);
     CHECK(vkEndCommandBuffer(cmd_buf));
 
@@ -318,12 +342,14 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
         }
     }
 
-    /* Check shader results: dst[i] = (src[i] + 0x1337u) ^ (i * 31u) */
+    /* Check non-default specialization values and the pushed word together. */
     int results_correct = 1;
     uint32_t *results = map_out + guard_count;
     for (uint32_t i = 0; i < element_count; ++i) {
         uint32_t src_val = i * 100u + 42u;
-        uint32_t expected = (src_val + 0x1337u) ^ (i * 31u);
+        uint32_t expected =
+            (src_val * multiplier + 0x1337u + extra_bias + push_addend) ^
+            (i * 31u);
         if (results[i] != expected) {
             results_correct = 0;
             ps5log_printf(PS5LOG_ERR, "Compute mismatch at %u: expected 0x%08x got 0x%08x", i, expected, results[i]);
@@ -346,8 +372,9 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
     }
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS sets=3 storage=2 uniform=1 texel=1 "
+        "push_bytes=4 spec_constants=2 multiplier=%u extra_bias=%u addend=%u "
         "elements=%u mismatches=0 guard_words=%u guard_mismatches=0",
-        element_count, guard_count * 2);
+        multiplier, extra_bias, push_addend, element_count, guard_count * 2);
 
     /* Clean up compute resources in reverse order */
     vkDestroyFence(device, fence, NULL);

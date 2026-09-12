@@ -169,6 +169,7 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * implementation limits, not estimates of physical GPU memory. */
     p->limits.maxUniformBufferRange = 64 * 1024;
     p->limits.maxTexelBufferElements = 64 * 1024;
+    p->limits.maxPushConstantsSize = PS5VK_MAX_PUSH_CONSTANT_BYTES;
     /* Every native allocation charges at least 64 KiB against this heap.
      * Report that implementation ceiling, not zero or a guessed OS limit. */
     p->limits.maxMemoryAllocationCount = (uint32_t)(HEAP_BYTES / 65536);

@@ -44,9 +44,13 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .fragment_count=f->user_sgpr_count,
         .base_vertex_slot=v->base_vertex_valid?v->base_vertex_user_data_dword:UINT32_MAX,
         .start_instance_slot=v->start_instance_valid?v->start_instance_user_data_dword:UINT32_MAX,
-        .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout};
+        .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout,
+        .vertex_push_slot=v->push_constants_valid?v->push_constants_user_data_dword:UINT32_MAX,
+        .fragment_push_slot=f->push_constants_valid?f->push_constants_user_data_dword:UINT32_MAX,
+        .push_constant_size=v->push_constant_size>f->push_constant_size?
+            v->push_constant_size:f->push_constant_size};
     uint32_t vertex[16],pixel[16];
-    if(ps5vk_runtime_draw_values(&abi,0,0,vertex,pixel))return -1;
+    if(ps5vk_runtime_draw_values(&abi,0,0,abi.push_constant_size?4:0,vertex,pixel))return -1;
     *out=abi;
     return 0;
 }
@@ -69,6 +73,10 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
             (vs ? PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE : 0)))) return -2;
     for(uint32_t set=0;set<PSBC_MAX_DESCRIPTOR_SETS;++set)
         if(m->descriptor_set_valid[set])return -2;
+    if (m->push_constants_valid ?
+        (!m->push_constant_size || m->push_constant_size>256 ||
+         m->push_constants_user_data_dword>=m->user_sgpr_count) :
+        (m->push_constant_size || m->push_constants_user_data_dword)) return -2;
     if (!registers_valid(m->context_registers,m->context_register_count,PSBC_MAX_CONTEXT_REGISTERS) ||
         !registers_valid(m->shader_registers,m->shader_register_count,PSBC_MAX_SHADER_REGISTERS)) return -2;
     unsigned lo=vs?0xc8:8, rsrc=vs?0x8a:0xa;

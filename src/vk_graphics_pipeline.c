@@ -5,6 +5,33 @@
 #include <string.h>
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
 
+static int specialization_key(const VkSpecializationInfo *info,
+                              struct ps5vk_graphics_module_key *out)
+{
+    if(!info)return 1;
+    if(info->mapEntryCount>64 || (info->mapEntryCount && !info->pMapEntries) ||
+       (info->dataSize && !info->pData))return 0;
+    for(uint32_t i=0;i<info->mapEntryCount;++i) {
+        const VkSpecializationMapEntry *entry=&info->pMapEntries[i];
+        if(!entry->size || entry->size>8 || entry->offset>info->dataSize ||
+           entry->size>info->dataSize-entry->offset)return 0;
+        uint32_t at=out->specialization_count++;
+        out->specializations[at].constant_id=entry->constantID;
+        out->specializations[at].size=(uint32_t)entry->size;
+        memcpy(out->specializations[at].data,(const uint8_t *)info->pData+entry->offset,entry->size);
+    }
+    for(uint32_t i=1;i<out->specialization_count;++i) {
+        struct ps5vk_graphics_specialization value=out->specializations[i];uint32_t j=i;
+        while(j && out->specializations[j-1].constant_id>value.constant_id) {
+            out->specializations[j]=out->specializations[j-1];--j;
+        }
+        out->specializations[j]=value;
+    }
+    for(uint32_t i=1;i<out->specialization_count;++i)
+        if(out->specializations[i-1].constant_id==out->specializations[i].constant_id)return 0;
+    return 1;
+}
+
 static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                        const VkAllocationCallbacks *allocator, VkPipeline *out)
 {
@@ -18,7 +45,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         const VkPipelineShaderStageCreateInfo *s=&in->pStages[i];
         if (s->sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO || !s->module ||
             s->module->device != d || !s->pName) return VK_ERROR_UNKNOWN;
-        if (s->flags || s->pNext || s->pSpecializationInfo) return VK_ERROR_FEATURE_NOT_PRESENT;
+        if (s->flags || s->pNext) return VK_ERROR_FEATURE_NOT_PRESENT;
         uint32_t id;
         if (!ps5vk_shader_entry(s->module, s->stage, s->pName, &id)) return VK_ERROR_UNKNOWN;
         if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;
@@ -74,14 +101,20 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_graphics_key key={
-        .vertex={vs->module->words,vs->module->word_count,vs->pName},
-        .fragment={fs->module->words,fs->module->word_count,fs->pName},
+        .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
+        .fragment={.words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName},
         .topology=ia->topology, .color_format=pass->attachments[pass->color.attachment].format,
         .samples=m->rasterizationSamples, .color_write_mask=b->pAttachments[0].colorWriteMask,
         .blend_enable=b->pAttachments[0].blendEnable,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
         .vertex_bindings=v->pVertexBindingDescriptions,.vertex_attributes=v->pVertexAttributeDescriptions,
-        .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets};
+        .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets,
+        .push_constant_size=in->layout->push_constant_size};
+    memcpy(key.push_constant_stages,in->layout->push_constant_stages,
+           sizeof(key.push_constant_stages));
+    if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
+       !specialization_key(fs->pSpecializationInfo,&key.fragment))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     const void *data=NULL;
     const struct ps5vk_graphics_program *program=NULL;
     VkResult rc;
@@ -115,6 +148,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     p->set_count=in->layout->set_count;
     if(p->set_count)memcpy(p->sets,in->layout->sets,p->set_count*sizeof(*p->sets));
     p->graphics_release=d->graphics_release; p->viewport=*viewport; p->scissor=*scissor;
+    p->push_constant_size=in->layout->push_constant_size;
+    memcpy(p->push_constant_stages,in->layout->push_constant_stages,
+           sizeof(p->push_constant_stages));
     p->cull_mode=r->cullMode; p->front_face=r->frontFace; p->color_format=key.color_format;
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
     if(key.vertex_binding_count)p->vertex_binding=*key.vertex_bindings;

@@ -10,6 +10,7 @@ VkResult ps5vk_runtime_compile_compute(
     size_t spirv_words,
     const char *entry_name,
     VkPipelineLayout layout,
+    const VkSpecializationInfo *specialization,
     struct ps5vk_compiled_program *out_program,
     uint32_t **out_code)
 {
@@ -51,8 +52,29 @@ VkResult ps5vk_runtime_compile_compute(
     opts.entrypoint = entry_name;
     opts.optimise = true;
     opts.address32_hi = 2;
+    opts.force_indirect_push_constants = layout->push_constant_size != 0;
 
-    if (!layout->set_count || layout->set_count > PS5VK_MAX_SETS)
+    if (specialization) {
+        if (specialization->mapEntryCount > PSBC_MAX_SPECIALIZATION_CONSTANTS ||
+            (specialization->mapEntryCount && !specialization->pMapEntries) ||
+            (specialization->dataSize && !specialization->pData))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        for (uint32_t i = 0; i < specialization->mapEntryCount; ++i) {
+            const VkSpecializationMapEntry *source = &specialization->pMapEntries[i];
+            if (!source->size || source->size > PSBC_MAX_SPECIALIZATION_BYTES ||
+                source->offset > specialization->dataSize ||
+                source->size > specialization->dataSize - source->offset)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            PsbcSpecializationConstant *target =
+                &opts.specialization_constants[opts.specialization_constant_count++];
+            target->constant_id = source->constantID;
+            target->size = (uint32_t)source->size;
+            memcpy(target->data, (const uint8_t *)specialization->pData + source->offset,
+                   source->size);
+        }
+    }
+
+    if (layout->set_count > PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Every Vulkan set remains a distinct RADV table. Offsets are local to a
      * set, while the compiler metadata identifies its direct user-SGPR slot. */
@@ -89,11 +111,6 @@ VkResult ps5vk_runtime_compile_compute(
         }
     }
 
-    if (!out_program->descriptor_count) {
-        /* Supported compute profile requires at least one storage buffer descriptor */
-        return VK_ERROR_UNKNOWN;
-    }
-
     PsbcShaderOutput out = {0};
     PsbcResult res = psbc_compile_shader(spirv, spirv_words * sizeof(uint32_t), &opts, &out);
     if (res != PSBC_RESULT_OK || !out.machine_code || !out.machine_code_size || (out.machine_code_size % 4) != 0) {
@@ -125,6 +142,8 @@ VkResult ps5vk_runtime_compile_compute(
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
         direct_set_count+=(expected_set_mask>>set)&1u;
     uint32_t base_user_sgprs=2+direct_set_count;
+    VkBool32 expects_push = layout->push_constant_size != 0;
+    if (expects_push) ++base_user_sgprs;
     /* Pinned RADV compute arguments: ring offsets, one direct 32-bit pointer
      * per used set, then optional inline grid dimensions. */
     if ((rsrc2 & 1u) || out.metadata.scratch_valid || lds_size > 128 ||
@@ -138,6 +157,12 @@ VkResult ps5vk_runtime_compile_compute(
            (expected && out.metadata.descriptor_set_user_data_dword[set]>=user_sgprs)) {
             psbc_free_output(&out);return VK_ERROR_FEATURE_NOT_PRESENT;
         }
+    }
+    if (out.metadata.push_constants_valid != expects_push ||
+        (expects_push && (out.metadata.push_constants_user_data_dword >= user_sgprs ||
+         !out.metadata.push_constant_size ||
+         out.metadata.push_constant_size > layout->push_constant_size))) {
+        psbc_free_output(&out); return VK_ERROR_FEATURE_NOT_PRESENT;
     }
 
     uint32_t *code = malloc(out.machine_code_size);
@@ -165,6 +190,8 @@ VkResult ps5vk_runtime_compile_compute(
 
     out_program->user_sgprs = (rsrc2 >> 1) & 0x1fu;
     out_program->grid_size_sgpr = user_sgprs == base_user_sgprs+3 ? base_user_sgprs : 0;
+    out_program->push_constant_size = out.metadata.push_constant_size;
+    out_program->push_constant_sgpr = out.metadata.push_constants_user_data_dword;
     out_program->descriptor_set_mask=expected_set_mask;
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
         out_program->descriptor_set_sgpr[set]=out.metadata.descriptor_set_user_data_dword[set];
@@ -190,9 +217,11 @@ VkResult ps5vk_compiler_adapter_compile(
     size_t spirv_words,
     const char *entry_name,
     VkPipelineLayout layout,
+    const VkSpecializationInfo *specialization,
     struct ps5vk_compiled_program *out_program,
     uint32_t **out_code)
 {
     (void)context;
-    return ps5vk_runtime_compile_compute(spirv, spirv_words, entry_name, layout, out_program, out_code);
+    return ps5vk_runtime_compile_compute(spirv, spirv_words, entry_name, layout,
+                                         specialization, out_program, out_code);
 }

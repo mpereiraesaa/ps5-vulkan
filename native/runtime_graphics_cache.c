@@ -21,10 +21,11 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
 {
     /* Validation bounds each module at 4M words and entry names at 63 bytes.
      * Fixed 64-byte strings and explicit lengths prevent concatenation aliases. */
-    size_t count=48+key->vertex.word_count+key->fragment.word_count;
+    enum { HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2 };
+    size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count;
     uint32_t *words=calloc(count,sizeof(*words));
     if(!words)return NULL;
-    words[0]=1; /* adapter/profile version */
+    words[0]=2; /* adapter/profile version */
     words[1]=(uint32_t)key->vertex.word_count;
     words[2]=(uint32_t)key->fragment.word_count;
     words[3]=key->topology;words[4]=key->color_format;
@@ -34,10 +35,22 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     words[9]=1; /* vertex NGG */
     words[10]=1; /* omit implicit PrimitiveID (FS verified by compiler adapter) */
     words[11]=PSBC_TARGET_PS5;
+    words[12]=key->push_constant_size;
     memcpy(words+16,key->vertex.entry,strlen(key->vertex.entry));
     memcpy(words+32,key->fragment.entry,strlen(key->fragment.entry));
-    memcpy(words+48,key->vertex.words,key->vertex.word_count*4);
-    memcpy(words+48+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
+    memcpy(words+48,key->push_constant_stages,sizeof(key->push_constant_stages));
+    size_t at=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS;
+    words[at++]=key->vertex.specialization_count;
+    words[at++]=key->fragment.specialization_count;
+    const struct ps5vk_graphics_module_key *modules[]={&key->vertex,&key->fragment};
+    for(unsigned stage=0;stage<2;++stage)for(unsigned i=0;i<64;++i) {
+        words[at++]=modules[stage]->specializations[i].constant_id;
+        words[at++]=modules[stage]->specializations[i].size;
+        memcpy(words+at,modules[stage]->specializations[i].data,8);at+=2;
+    }
+    if(at!=HEADER_WORDS){free(words);return NULL;}
+    memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
+    memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
     if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v1",
             VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,cache_key)) {
         free(words);return NULL;

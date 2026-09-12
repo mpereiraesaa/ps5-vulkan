@@ -335,8 +335,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(VkDevice d,
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO ||
         (info->setLayoutCount && !info->pSetLayouts)) return INVALID;
-    if (info->pNext || info->flags || info->pushConstantRangeCount || info->setLayoutCount > PS5VK_MAX_SETS)
+    if (info->pNext || info->flags || info->setLayoutCount > PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (info->pushConstantRangeCount && !info->pPushConstantRanges) return INVALID;
     for (uint32_t j = 0; j < info->setLayoutCount; ++j)
         if (!info->pSetLayouts[j] || info->pSetLayouts[j]->device != d) return INVALID;
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
@@ -346,6 +347,26 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(VkDevice d,
     layout->set_count = info->setLayoutCount;
     for (uint32_t j = 0; j < info->setLayoutCount; ++j)
         layout->sets[j] = info->pSetLayouts[j]->signature;
+    const VkShaderStageFlags supported = VK_SHADER_STAGE_COMPUTE_BIT |
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    for (uint32_t j = 0; j < info->pushConstantRangeCount; ++j) {
+        const VkPushConstantRange *range = &info->pPushConstantRanges[j];
+        if (!range->stageFlags || (range->stageFlags & ~supported) || !range->size ||
+            (range->offset & 3u) || (range->size & 3u) ||
+            range->offset >= PS5VK_MAX_PUSH_CONSTANT_BYTES ||
+            range->size > PS5VK_MAX_PUSH_CONSTANT_BYTES - range->offset) {
+            ps5vk_object_free(layout, &saved, custom); return INVALID;
+        }
+        uint32_t first = range->offset / 4u, end = (range->offset + range->size) / 4u;
+        for (uint32_t k = first; k < end; ++k) {
+            if (layout->push_constant_stages[k] & range->stageFlags) {
+                ps5vk_object_free(layout, &saved, custom); return INVALID;
+            }
+            layout->push_constant_stages[k] |= range->stageFlags;
+        }
+        if (range->offset + range->size > layout->push_constant_size)
+            layout->push_constant_size = range->offset + range->size;
+    }
     ++d->descriptor_objects; *out = layout;
     return VK_SUCCESS;
 }

@@ -5,8 +5,12 @@ int main(void)
 {
     uint32_t vs[5]={0x07230203,1,2,3,0}, fs[5]={0x07230203,4,5,6,0};
     int payload;
-    struct ps5vk_graphics_program programs[2]={{{{vs,5,"main"},{fs,5,"main"},
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,VK_FORMAT_B8G8R8A8_UNORM,VK_SAMPLE_COUNT_1_BIT,15,0,0,0,0,NULL,NULL,NULL},&payload}};
+    struct ps5vk_graphics_program programs[2]={{.key={
+        .vertex={.words=vs,.word_count=5,.entry="main"},
+        .fragment={.words=fs,.word_count=5,.entry="main"},
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
+        .color_write_mask=15},.backend_data=&payload}};
     struct ps5vk_graphics_library library={programs,1};
     struct ps5vk_graphics_key key=programs[0].key;
     const struct ps5vk_graphics_program *out;

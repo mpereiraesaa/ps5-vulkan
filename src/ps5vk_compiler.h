@@ -21,6 +21,7 @@ VkResult ps5vk_runtime_compile_compute(
     size_t spirv_words,
     const char *entry_name,
     VkPipelineLayout layout,
+    const VkSpecializationInfo *specialization,
     struct ps5vk_compiled_program *out_program,
     uint32_t **out_code
 );
@@ -32,6 +33,7 @@ VkResult ps5vk_compiler_adapter_compile(
     size_t spirv_words,
     const char *entry_name,
     VkPipelineLayout layout,
+    const VkSpecializationInfo *specialization,
     struct ps5vk_compiled_program *out_program,
     uint32_t **out_code
 );

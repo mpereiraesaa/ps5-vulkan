@@ -38,6 +38,11 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
     if(vertex_words)result.bytes=table_offset+16;
     size_t texture_offset=result.bytes;
     if(texture_words)result.bytes+=48;
+    size_t push_offset=result.bytes;
+    if(plan.runtime.push_constant_size) {
+        if(op->push_constant_size!=plan.runtime.push_constant_size)return VK_ERROR_UNKNOWN;
+        result.bytes+=plan.runtime.push_constant_size;
+    } else if(op->push_constant_size)return VK_ERROR_UNKNOWN;
     void *address = NULL;
     rc = result.memory.allocate(result.memory.context, result.bytes, &address, &result.backing);
     if (rc != VK_SUCCESS) return rc;
@@ -47,6 +52,14 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         ps5vk_native_release_draw(&result); return VK_ERROR_MEMORY_MAP_FAILED;
     }
     result.state = address; memcpy(result.state, &plan, sizeof(plan));
+    if(plan.runtime.push_constant_size) {
+        void *push=(unsigned char *)address+push_offset;
+        if(((uintptr_t)push>>32)!=2) {
+            ps5vk_native_release_draw(&result);return VK_ERROR_MEMORY_MAP_FAILED;
+        }
+        memcpy(push,op->push_constants,plan.runtime.push_constant_size);
+        result.state->push_constant_low=(uint32_t)(uintptr_t)push;
+    }
     if(vertex_words) {
         uint32_t *table=(uint32_t *)((unsigned char *)address+table_offset);
         if(!ps5vk_vertex_table_address(shader_address,(uintptr_t)table,16)) {

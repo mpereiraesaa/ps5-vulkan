@@ -40,7 +40,7 @@ static struct ps5vk_graphics_module_key read_module(const char *path)
     FILE *f=fopen(path,"rb");assert(f);assert(!fseek(f,0,SEEK_END));long bytes=ftell(f);
     assert(bytes>0 && !(bytes%4));rewind(f);uint32_t *data=malloc((size_t)bytes);assert(data);
     assert(fread(data,1,(size_t)bytes,f)==(size_t)bytes);fclose(f);
-    return (struct ps5vk_graphics_module_key){data,(size_t)bytes/4,"main"};
+    return (struct ps5vk_graphics_module_key){.words=data,.word_count=(size_t)bytes/4,.entry="main"};
 }
 int main(void)
 {

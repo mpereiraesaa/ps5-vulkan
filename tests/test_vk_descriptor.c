@@ -122,9 +122,33 @@ static void negative(void)
     d.uniform_buffer_alignment=256;
     assert(vkCreateDescriptorSetLayout(&d,&ci,NULL,&l)==VK_SUCCESS);
     vkDestroyDescriptorSetLayout(&d,l,NULL);
-    VkPipelineLayoutCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .pushConstantRangeCount = 1}; VkPipelineLayout p;
-    assert(vkCreatePipelineLayout(&d, &pi, NULL, &p) == VK_ERROR_FEATURE_NOT_PRESENT && !p);
+    assert(!d.descriptor_objects);
+}
+static void push_constant_layouts(void)
+{
+    struct VkDevice_T d={0};
+    VkPushConstantRange ranges[]={
+        {VK_SHADER_STAGE_COMPUTE_BIT,0,16},
+        {VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,16,16}};
+    VkPipelineLayoutCreateInfo info={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pushConstantRangeCount=2,.pPushConstantRanges=ranges};
+    VkPipelineLayout layout;
+    assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)==VK_SUCCESS);
+    assert(layout->push_constant_size==32);
+    for(unsigned i=0;i<4;++i)assert(layout->push_constant_stages[i]==VK_SHADER_STAGE_COMPUTE_BIT);
+    for(unsigned i=4;i<8;++i)assert(layout->push_constant_stages[i]==
+        (VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT));
+    vkDestroyPipelineLayout(&d,layout,NULL);
+    ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT,8,16};
+    assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
+    ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_FRAGMENT_BIT,2,4};
+    assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
+    ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_FRAGMENT_BIT,252,8};
+    assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
+    ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_GEOMETRY_BIT,16,4};
+    assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
+    info.pPushConstantRanges=NULL;
+    assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
     assert(!d.descriptor_objects);
 }
 static VkResult backing_alloc(void *ctx, VkDeviceSize size, void **address, void **backing)
@@ -245,6 +269,6 @@ static void uniform_resources(void)
 }
 int main(void)
 {
-    lifecycle(); rollback(); negative(); updates(); image_pool_types(); uniform_resources();
+    lifecycle(); rollback(); negative(); push_constant_layouts(); updates(); image_pool_types(); uniform_resources();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }

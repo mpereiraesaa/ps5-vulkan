@@ -5268,15 +5268,14 @@
         "surface_state": "symbol-present",
         "entry_points": [
           "vkCreatePipelineLayout",
-          "vkDestroyPipelineLayout"
-        ],
-        "absent_entry_points": [
+          "vkDestroyPipelineLayout",
           "vkCmdPushConstants"
         ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_descriptor.c"
         ],
-        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8614,7 +8613,8 @@
           "vkCmdDraw",
           "vkCmdDrawIndexed",
           "vkCmdEndRenderPass",
-          "vkCmdPipelineBarrier"
+          "vkCmdPipelineBarrier",
+          "vkCmdPushConstants"
         ],
         "absent_entry_points": [
           "vkCmdBeginQuery",
@@ -8650,7 +8650,6 @@
           "vkCmdNextSubpass",
           "vkCmdNextSubpass2",
           "vkCmdPipelineBarrier2",
-          "vkCmdPushConstants",
           "vkCmdPushConstants2",
           "vkCmdPushDescriptorSet",
           "vkCmdPushDescriptorSet2",
@@ -8700,7 +8699,7 @@
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 11 of 89 named entry points exist; 11 are dispatched; 11 are declared in the public header."
+        "note": "Baseline surface: 12 of 89 named entry points exist; 12 are dispatched; 12 are declared in the public header."
       },
       "evidence": {
         "source": {
