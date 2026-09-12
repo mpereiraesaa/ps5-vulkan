@@ -328,12 +328,9 @@ class TestUpstreamRunner(unittest.TestCase):
     RESOURCE_CASES = {
         "dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation",
         "dEQP-VK.compute.basic.ubo_to_ssbo_multiple_groups",
+        "dEQP-VK.api.buffer_view.access.uniform_texel_buffer.r32_uint",
         "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.storage_buffer.compute."
         "multiple_descriptor_sets.single_descriptor.offset_view_zero",
-    }
-
-    RESOURCE_DIAGNOSTICS = {
-        "dEQP-VK.api.buffer_view.access.uniform_texel_buffer.r32_uint",
         "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.uniform_buffer.compute."
         "multiple_descriptor_sets.single_descriptor.offset_view_zero",
     }
@@ -358,21 +355,18 @@ class TestUpstreamRunner(unittest.TestCase):
                      "vktBindingShaderAccessTests.cpp"):
             self.assertIn(name, build, f"{name} is not compiled into the payload")
 
-    def test_failing_resource_cases_stay_visible_as_diagnostics(self):
-        """A known-failing upstream case may not be deleted or silently accepted."""
+    def test_repaired_resource_cases_are_promoted_not_left_as_diagnostics(self):
+        """The two repaired upstream cases must remain in strict acceptance."""
         manifest = json.loads(MANIFEST_PATH.read_text())
         accepted = {case["path"] for case in manifest["cases"]}
-        diagnostics = {case["path"]: case for case in manifest.get("diagnostics", [])}
-
-        self.assertEqual(set(), self.RESOURCE_DIAGNOSTICS - set(diagnostics),
-                         "known-failing resource case removed instead of documented")
-        self.assertEqual(set(), self.RESOURCE_DIAGNOSTICS & accepted,
-                         "a known-failing case must not be an acceptance case")
-        for path, case in diagnostics.items():
-            self.assertNotEqual(case["observed_status"], "Pass", path)
-            self.assertTrue(case.get("observed_error"), path)
-            self.assertTrue(case.get("rationale"), path)
-            self.assertNotIn(path, accepted, path)
+        diagnostics = {case["path"] for case in manifest.get("diagnostics", [])}
+        repaired = {
+            "dEQP-VK.api.buffer_view.access.uniform_texel_buffer.r32_uint",
+            "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.uniform_buffer.compute."
+            "multiple_descriptor_sets.single_descriptor.offset_view_zero",
+        }
+        self.assertEqual(repaired, repaired & accepted)
+        self.assertFalse(repaired & diagnostics)
 
     def test_every_selected_family_is_registered_by_the_package(self):
         """The integration must register the first group of every selected case."""

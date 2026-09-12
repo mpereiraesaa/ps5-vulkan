@@ -146,24 +146,23 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Upstream BufferDescriptorCase bound through one vkCmdBindDescriptorSets call over two descriptor sets: storage-buffer resources live in set 0 binding 1 and set 1 binding 0 while the result buffer sits in set 0 binding 0, so the quadrant oracle fails unless a nonzero set index is bound and read correctly."
-    }
-  ],
-  "diagnostics": [
+    },
     {
       "path": "dEQP-VK.api.buffer_view.access.uniform_texel_buffer.r32_uint",
       "source": "external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp:1335",
       "category": "resource",
-      "observed_status": "Fail",
-      "observed_error": "Invalid result values: texelFetch of the R32_UINT uniform texel buffer returns the scalar replicated in every lane, e.g. expected (244,0,0,1) and read back (244,244,244,244).",
-      "rationale": "Kept as a diagnostic, not part of strict acceptance. The upstream oracle is unmodified; the observed values point at the gfx10 texel-buffer descriptor encoding (format selection / component mapping) rather than at the test. Repairing it belongs to the resource ABI implementation, which this task does not own."
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream BufferViewAccessTest reads VK_FORMAT_R32_UINT through texelFetch and compares all four lanes, directly requiring Vulkan one-component completion (R,0,0,1) rather than scalar replication."
     },
     {
       "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.uniform_buffer.compute.multiple_descriptor_sets.single_descriptor.offset_view_zero",
       "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9690",
       "category": "resource",
-      "observed_status": "Fail",
-      "observed_error": "vk.endCommandBuffer: VK_ERROR_UNKNOWN - a recorded command in this case is rejected by the driver while the storage-buffer twin of the same case passes.",
-      "rationale": "Kept as a diagnostic, not part of strict acceptance. Single-set uniform buffers and two-set storage buffers both pass, so the gap is specific to a uniform-buffer binding inside a multi-set layout. Repairing it belongs to the resource ABI implementation, which this task does not own."
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream BufferDescriptorCase binds uniform buffers across two descriptor sets, records its HOST_WRITE-to-UNIFORM_READ buffer dependencies and compares four deterministic quadrant values after dispatch."
     }
-  ]
+  ],
+  "diagnostics": []
 }

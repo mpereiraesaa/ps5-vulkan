@@ -48,7 +48,8 @@ supported.
 - Up to four descriptor sets in the compute ABI. The native acceptance fixture
   uses three sets simultaneously.
 - Storage buffers, uniform buffers and uniform texel buffers. The validated
-  texel format is `VK_FORMAT_R32_UINT`; broader format support is not implied.
+  texel format is `VK_FORMAT_R32_UINT`, including Vulkan's `(R,0,0,1)`
+  one-component completion; broader format support is not implied.
 - Partial descriptor-set binding is accepted, but every set and descriptor used
   by the compiled shader must be bound and defined before dispatch.
 - Pipeline layouts expose up to 256 bytes of 4-byte-aligned push constants.
@@ -61,7 +62,8 @@ supported.
 - A single serial native queue; no multi-queue or semaphore contract.
 - Simultaneous-use command buffers are accepted with serialized retirement.
 - Host/compute buffer barriers validate ranges and lifetimes, using stronger
-  global cache/completion dependencies; queue-family transfers are rejected.
+  global cache/completion dependencies. Host-write dependencies accept shader
+  and uniform reads; queue-family transfers are rejected.
 
 ## Programs and compilation
 

@@ -222,44 +222,36 @@ in the canonical checkout:
 
 The selection now also covers the resource contract that the runtime advertises
 for compute: uniform buffers, an R32 uniform texel buffer through a
-`VkBufferView`, and descriptor binding across more than one set. Three upstream
-cases are accepted: two come from the already linked compute module and one from
-the newly linked binding-model module. The payload also compiles the upstream
-buffer-view access module for the texel-buffer case below.
+`VkBufferView`, and descriptor binding across more than one set. Five upstream
+resource cases are accepted from the compute, binding-model and buffer-view
+access modules.
 
 | Case | Upstream shape | What the oracle establishes |
 | --- | --- | --- |
 | `dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation` | std140 `UNIFORM_BUFFER` + `STORAGE_BUFFER`, set 0, 1x1x1 | the uniform-buffer descriptor returns the 256 source values that the host inverts |
 | `dEQP-VK.compute.basic.ubo_to_ssbo_multiple_groups` | the same, local (1,4,2) over 8 workgroups | the same oracle over 1024 values read through the uniform buffer |
+| `dEQP-VK.api.buffer_view.access.uniform_texel_buffer.r32_uint` | `VK_FORMAT_R32_UINT` viewed through a uniform texel buffer | all four lanes of each `texelFetch` result match Vulkan one-component completion `(R,0,0,1)` |
 | `dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.storage_buffer.compute.multiple_descriptor_sets.single_descriptor.offset_view_zero` | two descriptor sets bound in one `vkCmdBindDescriptorSets`, resources in set 0 binding 1 and set 1 binding 0 | the quadrant read-back only matches if a nonzero set index is bound and read |
+| `dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.uniform_buffer.compute.multiple_descriptor_sets.single_descriptor.offset_view_zero` | the same two-set shape with uniform buffers and `HOST_WRITE -> UNIFORM_READ` dependencies | command recording completes and the four quadrant values match the original upstream oracle |
 
-Two further upstream cases are compiled and registered but are recorded in the
-manifest `diagnostics` list because they do not pass yet. They are deliberately
-kept visible: a strict run that includes them fails, and removing them from the
-manifest is not what happened.
+The first diagnostic run exposed two independent driver defects. The R32 SRD
+used generic `X,Y,Z,W` destination selectors, which made this one-component
+format replicate R; it now encodes `X,0,0,1`. The command validator also omitted
+`VK_ACCESS_UNIFORM_READ_BIT`, so the binding-model case's valid pre-dispatch
+buffer barrier invalidated its command buffer. Exact host regressions cover the
+SRD fields and the two-set UBO barrier/dispatch sequence, including a negative
+access-mask control.
 
-| Case | Observed upstream result | Narrowed cause |
-| --- | --- | --- |
-| `dEQP-VK.api.buffer_view.access.uniform_texel_buffer.r32_uint` | `Fail`, "Invalid result values" | `texelFetch` on the R32_UINT uniform texel buffer returns the scalar in every lane: expected `(244,0,0,1)`, read back `(244,244,244,244)`, with the same pattern for all four samples. The upstream oracle is untouched, so this points at the gfx10 texel-buffer descriptor encoding (format selection / component mapping). |
-| `dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.uniform_buffer.compute.multiple_descriptor_sets.single_descriptor.offset_view_zero` | `Fail`, `vk.endCommandBuffer: VK_ERROR_UNKNOWN` | a recorded command is rejected by the driver. The storage-buffer twin of the same case passes and single-set uniform buffers pass, so the gap is specific to a uniform-buffer binding inside a multi-set layout. |
+Two independent launches of the identical corrected payload completed the
+strict eighteen-case selection with **18 Pass, 0 Fail, 0 NotSupported**, exit
+code zero, matched executable/selection identity, complete QPA reconstruction,
+GPU completion, `allocations_bytes=0` and a stopped title after system Close
+Game. Both newly promoted cases passed their original upstream oracles.
 
-Both diagnostics need a change in the resource ABI implementation
-(`src/`, `native/`), which belongs to a different workstream; this selection
-expansion does not modify it.
-
-Two independent launches of the identical final payload (16 acceptance cases,
-`eboot.bin` unchanged) completed with **16 Pass, 0 Fail, 0 NotSupported**, exit
-code zero, matched artifact identity, a complete QPA, GPU completion,
-`allocations_bytes=0` and a stopped title. The earlier 18-case run that exposed
-the two diagnostics is retained as private evidence.
-
-- Executable SHA-256: `bd30ba49abdbcbdb48d78ee891a361fc4259e99a4e7b787a5d3b706046993049`
-- Selection SHA-256 (16 acceptance cases): `fe9c453e86e5eb6a8920a87d120192ec50830b2e54951281c8696889bf4dcf6d`
-- QPA A SHA-256: `979c8620fe4e47d8a51bb32cc4b78f2e593b0289023af25796f7bb748365b988`
-- QPA B SHA-256: `2274130ea5069daa6344cb6c628e1791f55a2f1c5bdb760c36a84cf304772e5c`
-
-The 18-case report that exposed the two diagnostics is private:
-`abe06ab46795dd353b3c33acc69e4fe5fb40e584941cd093a99050927f9f3f78`.
+- Executable SHA-256: `4c869d74ef25f9e1094ef83a334bd725deac6c2bec3a0a2b30664a4216f3182d`
+- Selection SHA-256: `4a1d671a7ca64e3b9e0dfa7b26dff8efe2ed54ad3829d1781a610a40a99072e8`
+- QPA A SHA-256: `274c9de7cfca7e57b74170a9793ab73731d9351558bd618ef0667dd89d2e5bfe`
+- QPA B SHA-256: `0de915028da2a6c7b7b336c62154f208d64dc222c6dcb3343de030b145bda7d2`
 
 ### Heap and driver fixes
 
@@ -300,11 +292,7 @@ oracle, or selection was replaced to obtain these results.
   does not establish the maximum safe heap size for arbitrary applications.
 * Cases that require API the driver does not implement are reported as failures
   or unsupported results, not silently converted into passes.
-* The resource selection is not complete: an R32 uniform texel buffer read
-  through `texelFetch` returns the wrong component mapping, and a uniform-buffer
-  binding inside a two-descriptor-set layout makes the driver reject a recorded
-  command. Both are frozen in the manifest `diagnostics` list with their
-  observed upstream status; neither is an acceptance case, and fixing them
-  belongs to the resource ABI implementation.
+* The resource selection is still focused: it does not establish general texel
+  formats, descriptor arrays, dynamic buffers, images or arbitrary set layouts.
 * `tcuImageIO` (libpng) and the generated EGL wrapper (`gluRenderConfig`) are
   not part of this focused build; no selected case uses them.
