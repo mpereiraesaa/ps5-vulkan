@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import shutil
+import os
 import subprocess
 
 
@@ -11,12 +12,13 @@ OUTPUT = ROOT / "build/test-shaders"
 
 
 def main():
-    sources = {name: ROOT / f"experiments/compute/{name}.comp" for name in ("minimal", "xor")}
+    sources = {name: ROOT / f"experiments/compute/{name}.comp" for name in ("minimal", "xor", "shared_grid")}
     targets = {name: OUTPUT / f"{name}.spv" for name in sources}
     if all(target.is_file() and target.stat().st_mtime >= sources[name].stat().st_mtime
            for name, target in targets.items()):
         return
-    compiler = shutil.which("glslangValidator")
+    local = ROOT / "build/runtime-graphics/toolchain/usr/bin/glslangValidator"
+    compiler = os.environ.get("GLSLANG") or (str(local) if local.is_file() else shutil.which("glslangValidator"))
     if not compiler:
         raise SystemExit("glslangValidator is required to prepare compiler test shaders")
     OUTPUT.mkdir(parents=True, exist_ok=True)

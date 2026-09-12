@@ -46,13 +46,19 @@ supported.
 - Storage-buffer descriptors, command-buffer dispatch and fences.
 - Exact GPU completion and checked readback, including guard validation.
 - A single serial native queue; no multi-queue or semaphore contract.
+- Simultaneous-use command buffers are accepted with serialized retirement.
+- Host/compute buffer barriers validate ranges and lifetimes, using stronger
+  global cache/completion dependencies; queue-family transfers are rejected.
 
 ## Programs and compilation
 
 Compute shaders are compiled at runtime using a pinned PSBC/NIR/ACO fork. The
 supported profile currently covers compute entry points with scalar
 storage-buffer descriptors in set 0; additional sets, descriptor arrays,
-scratch and workgroup-shared memory are rejected. Cache keys
+and scratch are rejected. Compiler LDS allocation (up to 64 KiB) and the
+pinned inline workgroup-count ABI are preserved during dispatch. The focused
+upstream shared-variable case passes on hardware; this does not establish
+general shared-memory, atomic or barrier conformance. Cache keys
 include the complete SPIR-V digest, entry point, compiler/ABI versions and
 pipeline-layout state, and entries are constrained by count and byte budgets.
 

@@ -33,7 +33,8 @@ test with ASan/UBSan enabled. The PSBC static archive itself is not instrumented
 A suite of 26 synthetic Vulkan API contract tests modeled after the Khronos `VK-GL-CTS`
 mustpass selection (`vulkan-cts-1.3.8.4`, commit `a0270c1897597e6c77679870e10415398a13001c`,
 Apache-2.0) was evaluated on both the host mock harness and real hardware. Full upstream
-Khronos VK-GL-CTS framework porting remains pending.
+Khronos VK-GL-CTS coverage remains incomplete; the separate focused upstream
+execution is described below.
 
 - **Host mock suite:** `make check` builds `build/tests/test_cts_host` against `dist-sdk/lib/libps5vk_host.a`.
   Observed result: `total=26 pass=22 not_supported=4 fail=0 skip=0`. The 4 `NotSupported` cases
@@ -54,6 +55,23 @@ Khronos VK-GL-CTS framework porting remains pending.
   - Clean graphics cache destruction and zero tracked GPU memory allocations at retirement.
 
 See [`cts/gap_matrix.md`](cts/gap_matrix.md) for the complete case list, Vulkan API mapping and rationales.
+
+## Genuine upstream VK-GL-CTS (separate from the synthetic contracts)
+
+The `contract.*` suite above is local and modelled on the Khronos *mustpass*
+selection; it is **not** upstream CTS code. A separate integration compiles a
+focused selection of real upstream VK-GL-CTS tests, the upstream framework and
+their original verification oracles into a native payload. Its build inputs,
+selection manifest, strict acceptance policy and evidence rules are documented
+in [UPSTREAM_CTS.md](UPSTREAM_CTS.md). Results from that integration are
+reported separately and are not merged into the counts above.
+
+On 2026-09-12, two independent native launches completed **all seven selected
+upstream cases with Pass**, including native GLSL compilation and the original
+compute readback oracle. Both passed strict artifact/QPA verification and
+Close Game checks, with GPU completion and zero tracked GPU allocation bytes
+at teardown. Artifact and report hashes, the heap fix and remaining coverage
+limits are recorded in [UPSTREAM_CTS.md](UPSTREAM_CTS.md).
 
 ## Independent native SDK consumer validation
 
@@ -79,4 +97,3 @@ Observed hardware results on PS5 (FW 12.02):
 
 Raw console logs, captures, deployment details and internal planning are kept out of
 the public repository. No proprietary shader or module data is required by the consumer fixture.
-

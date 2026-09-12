@@ -41,6 +41,7 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
     for (unsigned j = 0; j < c->operation_count; ++j)
     {
         const struct ps5vk_operation *op = &c->operations[j];
+        if(type==VK_OBJECT_TYPE_BUFFER && op->buffer_barrier.buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_source==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->copy_image==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->image_barrier.image==object)return 1;
@@ -149,7 +150,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
 {
     if (!c || !info || info->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO || info->pNext ||
         c->state == PS5VK_PENDING || c->state == PS5VK_RECORDING ||
-        (info->flags & ~VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)) return INVALID;
+        (info->flags & ~(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
+                         VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) ||
+        ((info->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) &&
+         (info->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))) return INVALID;
     if (c->state != PS5VK_INITIAL && !(c->pool->flags & VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)) return INVALID;
     clear(c); c->usage = info->flags; c->state = PS5VK_RECORDING; return VK_SUCCESS;
 }
@@ -320,7 +324,6 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
     VkDependencyFlags flags, uint32_t memory_count, const VkMemoryBarrier *memory, uint32_t buffer_count,
     const VkBufferMemoryBarrier *buffers, uint32_t image_count, const VkImageMemoryBarrier *images)
 {
-    (void)buffers;
     if(image_count) {
         if(!c || c->state!=PS5VK_RECORDING || c->render_pass || flags || memory_count || buffer_count ||
             !images || !c->pool->device->graphics_enabled ||
@@ -358,13 +361,32 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
     const VkAccessFlags accesses = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
         VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
     if (!c || c->state != PS5VK_RECORDING || c->render_pass || !src || !dst || (src & ~stages) || (dst & ~stages) || flags ||
-        buffer_count || image_count || (memory_count && !memory) || c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
+        image_count || (memory_count && !memory) || (buffer_count && !buffers) ||
+        c->operation_count == PS5VK_MAX_OPERATIONS ||
+        buffer_count > PS5VK_MAX_OPERATIONS - c->operation_count - 1) { invalid(c); return; }
     VkAccessFlags src_access = 0, dst_access = 0;
     for (uint32_t j = 0; j < memory_count; ++j) {
         if (memory[j].sType != VK_STRUCTURE_TYPE_MEMORY_BARRIER || memory[j].pNext ||
             ((memory[j].srcAccessMask | memory[j].dstAccessMask) & ~accesses)) { invalid(c); return; }
         src_access |= memory[j].srcAccessMask; dst_access |= memory[j].dstAccessMask;
     }
+    /* A full cache dependency is stronger than a buffer-range dependency.
+     * Retain the buffer/range for lifetime validation; never ignore ownership
+     * transfers or accept a range outside its bound allocation. */
+    for (uint32_t j = 0; j < buffer_count; ++j) {
+        const VkBufferMemoryBarrier *b = &buffers[j];
+        void *address; VkDeviceSize bytes;
+        if (b->sType != VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER || b->pNext ||
+            ((b->srcAccessMask | b->dstAccessMask) & ~accesses) ||
+            b->srcQueueFamilyIndex != b->dstQueueFamilyIndex ||
+            (b->srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED && b->srcQueueFamilyIndex != 0) ||
+            ps5vk_buffer_span(c->pool->device, b->buffer, b->offset, b->size,
+                &address, &bytes) != VK_SUCCESS) { invalid(c); return; }
+    }
+    for (uint32_t j = 0; j < buffer_count; ++j)
+        c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_BARRIER,
+            .src_stage = src, .dst_stage = dst, .src_access = buffers[j].srcAccessMask,
+            .dst_access = buffers[j].dstAccessMask, .buffer_barrier = buffers[j]};
     c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_BARRIER,
         .src_stage = src, .dst_stage = dst, .src_access = src_access, .dst_access = dst_access};
 }

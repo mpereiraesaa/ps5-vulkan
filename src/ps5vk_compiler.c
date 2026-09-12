@@ -106,10 +106,16 @@ VkResult ps5vk_runtime_compile_compute(
     uint32_t rsrc1 = csh->registers.computepgmrsrc1;
     uint32_t rsrc2 = csh->registers.computepgmrsrc2;
 
-    /* Scratch and LDS require allocation/programming that the current native
-     * dispatch ABI intentionally does not provide. Never silently clear the
-     * compiler's requirements when reconstructing COMPUTE_PGM_RSRC2. */
-    if ((rsrc2 & 1u) || ((rsrc2 >> 15) & 0x1ffu) || out.metadata.scratch_valid) {
+    /* LDS is allocated by hardware from LDS_SIZE; scratch still requires a
+     * backing allocation and remains unsupported. Preserve compiler sizing. */
+    uint32_t lds_size = (rsrc2 >> 15) & 0x1ffu;
+    uint32_t user_sgprs = (rsrc2 >> 1) & 0x1fu;
+    /* Pinned RADV compute arguments: ring offsets s0:s1, scalar set0 s2,
+     * optional inline grid dimensions s3:s5. Fail closed on ABI drift. */
+    if ((rsrc2 & 1u) || out.metadata.scratch_valid || lds_size > 128 ||
+        (user_sgprs != 3 && user_sgprs != 6) ||
+        !out.metadata.descriptor_set0_valid ||
+        out.metadata.descriptor_set0_user_data_dword != 2) {
         psbc_free_output(&out);
         return VK_ERROR_FEATURE_NOT_PRESENT;
     }
@@ -138,6 +144,8 @@ VkResult ps5vk_runtime_compile_compute(
     out_program->mem_ordered = (rsrc1 >> 30) & 1u;
 
     out_program->user_sgprs = (rsrc2 >> 1) & 0x1fu;
+    out_program->grid_size_sgpr = user_sgprs == 6 ? 3 : 0;
+    out_program->lds_size = lds_size;
     out_program->tgid[0] = (rsrc2 >> 7) & 1u;
     out_program->tgid[1] = (rsrc2 >> 8) & 1u;
     out_program->tgid[2] = (rsrc2 >> 9) & 1u;

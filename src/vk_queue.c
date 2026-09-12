@@ -110,7 +110,14 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 ps5vk_image_span(d,image,&address,&bytes)!=VK_SUCCESS)return 0;
             continue;
         }
-        if (op->type == PS5VK_BARRIER) continue;
+        if (op->type == PS5VK_BARRIER) {
+            if (op->buffer_barrier.buffer) {
+                void *address; VkDeviceSize bytes;
+                if (ps5vk_buffer_span(d, op->buffer_barrier.buffer, op->buffer_barrier.offset,
+                    op->buffer_barrier.size, &address, &bytes) != VK_SUCCESS) return 0;
+            }
+            continue;
+        }
         if (op->type != PS5VK_DISPATCH || !op->pipeline || op->pipeline->graphics || !op->set ||
             op->pipeline->device != d || op->set->pool->device != d || op->set->generation != op->generation) return 0;
         const struct ps5vk_compiled_program *p = &op->pipeline->program;
@@ -138,8 +145,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count, cons
             (info->commandBufferCount && !info->pCommandBuffers) ||
             info->commandBufferCount > PS5VK_MAX_SUBMITTED_BUFFERS - buffers) return INVALID;
         buffers += info->commandBufferCount;
-        for (uint32_t k = 0; k < info->commandBufferCount; ++k)
-            if (!command_valid(d, info->pCommandBuffers[k])) return INVALID;
+        for (uint32_t k = 0; k < info->commandBufferCount; ++k) {
+            VkCommandBuffer c = info->pCommandBuffers[k];
+            /* This backend serializes batches. Simultaneous reuse is legal,
+             * but retire the previous batch before validating/preparing reuse.
+             * Never reset or release pending ownership merely from the flag. */
+            if (c && c->pool->device == d && c->state == PS5VK_PENDING &&
+                (c->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
+                VkResult wait = vkQueueWaitIdle(queue);
+                if (wait != VK_SUCCESS) return wait;
+            }
+            if (!command_valid(d, c)) return INVALID;
+        }
     }
     if (buffers && (!d->submit_backend.prepare || !d->submit_backend.launch ||
                     !d->submit_backend.poll || !d->submit_backend.release)) return INVALID;
@@ -151,11 +168,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count, cons
     s->allocator = saved; s->custom_allocator = custom; s->fence = fence;
     for (uint32_t j = 0; j < count; ++j) for (uint32_t k = 0; k < infos[j].commandBufferCount; ++k) {
         VkCommandBuffer c = infos[j].pCommandBuffers[k];
-        for (unsigned n = 0; n < s->count; ++n) if (s->buffers[n] == c) { free_submission(s); return INVALID; }
+        for (unsigned n = 0; n < s->count; ++n)
+            if (s->buffers[n] == c && !(c->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
+                free_submission(s); return INVALID;
+            }
         s->buffers[s->count++] = c;
     }
     /* One backend batch in flight. QueueSubmit may block to preserve ordering;
-     * there is no simultaneous-use or semaphore support in this profile. */
+     * simultaneous reuse does not imply parallel GPU execution. Semaphores
+     * remain unsupported in this profile. */
     VkResult result = vkQueueWaitIdle(queue);
     if (result != VK_SUCCESS) { free_submission(s); return result; }
     s->serial = d->queue.next_serial;

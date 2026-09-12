@@ -66,6 +66,19 @@ int main(void)
     size_t common_words = prog1.code_words < prog2.code_words ? prog1.code_words : prog2.code_words;
     assert(prog1.code_words != prog2.code_words || memcmp(code1, code2, common_words * 4) != 0);
 
+    /* Shared memory and inline grid arguments survive compilation unchanged. */
+    size_t shared_bytes = 0;
+    uint32_t *shared = read_file("build/test-shaders/shared_grid.spv", &shared_bytes);
+    assert(shared);
+    struct ps5vk_compiled_program shared_prog = {0};
+    uint32_t *shared_code = NULL;
+    assert(ps5vk_runtime_compile_compute(shared, shared_bytes / 4, "main", &layout,
+        &shared_prog, &shared_code) == VK_SUCCESS);
+    assert(shared_prog.user_sgprs == 6 && shared_prog.grid_size_sgpr == 3);
+    assert(shared_prog.lds_size > 0 && shared_prog.lds_size <= 128);
+    assert(shared_prog.local_size[0] == 2);
+    free(shared_code); free(shared);
+
     /* 4. Test error handling */
     struct ps5vk_compiled_program bad_prog;
     uint32_t *bad_code = NULL;

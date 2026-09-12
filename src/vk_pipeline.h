@@ -12,6 +12,9 @@ struct ps5vk_compiled_program {
     uint32_t gfx, local_size[3], wave_size, vgprs, sgprs, float_mode;
     uint32_t ieee_mode, mem_ordered, user_sgprs, wgp_mode;
     uint32_t tg_size, tgid[3], tidig_components;
+    /* Pinned PSBC compute ABI: optional inline grid dimensions at s3..s5.
+     * LDS_SIZE is in the compiler's 512-byte allocation units. */
+    uint32_t grid_size_sgpr, lds_size;
     uint32_t descriptor_count;
     struct ps5vk_program_descriptor descriptors[PS5VK_MAX_BINDINGS];
 };

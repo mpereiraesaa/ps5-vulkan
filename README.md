@@ -33,6 +33,12 @@ The exact supported profile is documented in [API.md](API.md). Build and test
 requirements are in [BUILDING.md](BUILDING.md).
 Runtime graphics test results and their limits are summarized in [VALIDATION.md](VALIDATION.md).
 
+Two independent suites are integrated against this backend: a focused selection
+of **genuine upstream Khronos VK-GL-CTS** code compiled into a native payload
+([UPSTREAM_CTS.md](UPSTREAM_CTS.md)), and a synthetic `contract.*` suite modelled
+after the CTS *mustpass* selection. They are separate artifacts with separate
+verifiers; neither is a claim of Vulkan conformance.
+
 ## Important boundaries
 
 This is not a Vulkan-conformant driver or ICD, and it does not yet provide WSI,

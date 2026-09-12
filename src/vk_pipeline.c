@@ -108,7 +108,10 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
         strcmp(p->entry, entry) || memcmp(p->spirv, m->words, m->word_count * 4) ||
         memcmp(p->local_size, dims, 3 * sizeof(*dims)) || !p->vgprs || p->vgprs > 256 ||
         !p->sgprs || p->sgprs > 106 || p->float_mode > 255 || p->ieee_mode > 1 ||
-        p->mem_ordered > 1 || (p->user_sgprs != 2 && p->user_sgprs != 3) || p->tg_size > 1 || p->tidig_components > 2 ||
+        p->mem_ordered > 1 ||
+        (p->user_sgprs != 2 && p->user_sgprs != 3 && p->user_sgprs != 6) ||
+        p->grid_size_sgpr != (p->user_sgprs == 6 ? 3u : 0u) || p->lds_size > 128 ||
+        p->tg_size > 1 || p->tidig_components > 2 ||
         !p->descriptor_count || p->descriptor_count > PS5VK_MAX_BINDINGS) return 0;
     uint64_t invocations = 1;
     for (unsigned j = 0; j < 3; ++j) {

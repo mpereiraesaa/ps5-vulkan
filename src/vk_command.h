@@ -30,6 +30,7 @@ struct ps5vk_operation {
     uint32_t groups[3];
     VkPipelineStageFlags src_stage, dst_stage;
     VkAccessFlags src_access, dst_access;
+    VkBufferMemoryBarrier buffer_barrier;
 };
 struct VkCommandBuffer_T {
     VkCommandPool pool;
