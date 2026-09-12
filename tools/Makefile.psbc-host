@@ -3,6 +3,7 @@ PS5VK_ROOT ?= $(realpath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 
 LIBPSBC := $(PS5VK_ROOT)/build/libpsbc.host.a
 CONFIG := /dev/null
+OPENGNM_PSBC_ORBIS := 1
 
 SHARED_FLAGS = \
 	-Iinclude/ \
