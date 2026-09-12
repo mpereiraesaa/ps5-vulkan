@@ -113,6 +113,9 @@ def main():
 
     # Ensure host binary is built if needed
     if not args.binary.is_file() and args.binary == DEFAULT_HOST_BIN:
+        if not (ROOT / "dist-sdk/lib/libps5vk_host.a").is_file():
+            print("Staged SDK missing; running tools/build_sdk.py...")
+            subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")], check=True)
         print(f"Host CTS binary missing; compiling {DEFAULT_HOST_BIN}...")
         DEFAULT_HOST_BIN.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run([

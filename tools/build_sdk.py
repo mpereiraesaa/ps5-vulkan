@@ -249,8 +249,10 @@ def main():
         subprocess.run(["cc", *host_cflags, "-c", str(src_path), "-o", str(obj_path)], check=True)
         host_objs.append(str(obj_path))
 
-    host_lib = lib_dir / ("libps5vk_host.a" if has_native_sdk else "libps5vk.a")
+    host_lib = lib_dir / "libps5vk_host.a"
     archive("ar", host_lib, host_objs)
+    if not has_native_sdk:
+        shutil.copyfile(host_lib, lib_dir / "libps5vk.a")
 
     # 5. Generate SDK README
     readme_text = """# PS5 Vulkan (ps5vk) SDK

@@ -99,15 +99,27 @@ def main():
     if args.continuous:
         cflags.append("-DCONSUMER_CONTINUOUS=1")
 
+    has_native_toolchain = clang_wrapper.is_file() and linker.is_file() and builder.is_file()
+
     print("Compiling consumer main.c...")
-    env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
-    subprocess.run(
-        ["sh", str(clang_wrapper), *cflags, "-c", str(CONSUMER_DIR / "main.c"), "-o", str(obj_file)],
-        env=env, check=True
-    )
+    if has_native_toolchain:
+        env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
+        subprocess.run(
+            ["sh", str(clang_wrapper), *cflags, "-c", str(CONSUMER_DIR / "main.c"), "-o", str(obj_file)],
+            env=env, check=True
+        )
+    else:
+        subprocess.run(
+            ["cc", *cflags, "-c", str(CONSUMER_DIR / "main.c"), "-o", str(obj_file)],
+            check=True
+        )
 
     # Verify isolation immediately after compilation
     check_isolation(dep_file, obj_file)
+
+    if not has_native_toolchain:
+        print("Native PS5 toolchain not found; verified isolation on host and skipping packaging.")
+        return
 
     # 2. Link PIE ELF
     map_file = BUILD_DIR / "consumer.map"
