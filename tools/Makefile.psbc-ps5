@@ -87,7 +87,7 @@ BLAKE3_SRCS := $(filter-out src/util/blake3/blake3_neon.c,$(BLAKE3_SRCS))
 BLAKE3_OBJS := $(BLAKE3_SRCS:.c=.ps5.o)
 C11_THREADS_OBJS := $(C11_THREADS_SRCS:.c=.ps5.o)
 VK_RUNTIME_OBJS := $(VK_RUNTIME_SRCS:.c=.ps5.o)
-PS5_PLATFORM_OBJS := $(PS5VK_ROOT)/src/ps5_compiler_shims.ps5.o
+PS5_PLATFORM_OBJS := $(PS5VK_ROOT)/build/psbc-ps5/ps5_compiler_shims.o
 
 LIBPSBC_OBJS := \
 	$(PSBC_OBJS) \
@@ -117,6 +117,7 @@ libpsbc/psbc_compile.ps5.o: libpsbc/psbc_compile.h
 src/util/futex.ps5.o: CFLAGS += -D__ORBIS__
 
 $(PS5_PLATFORM_OBJS): $(PS5VK_ROOT)/src/ps5_compiler_shims.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 libpsbc: $(LIBPSBC)

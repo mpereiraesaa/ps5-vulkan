@@ -11,8 +11,8 @@ DEPS = [
     {
         "name": "opengnm-psbc",
         "dest": ROOT / "third_party/psbc-reference",
-        "url": "https://github.com/PS4-OpenGNM/opengnm-psbc.git",
-        "pin": "a92a1228ea3a64e4be9f0e61c2a65a5aa7ffed92",
+        "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
+        "pin": "f31ec6cfd5af5a102365bde94842bb91e35cf2b1",
     },
     {
         "name": "opengnm",
@@ -39,7 +39,7 @@ def prepare_dep(dep, check_only=False):
             if check_only:
                 raise SystemExit(f"{name} checkout differs (at {head}, expected {pin})")
             print(f"Updating {name} to pinned commit {pin}...")
-            subprocess.run(["git", "-C", str(dest), "fetch", "--depth=1", "origin", pin], check=True)
+            subprocess.run(["git", "-C", str(dest), "fetch", "--depth=1", url, pin], check=True)
             subprocess.run(["git", "-C", str(dest), "checkout", "--detach", "FETCH_HEAD"], check=True)
     elif dest.exists() and not (dest / ".git").exists():
         raise SystemExit(f"{dest} exists but is not a git repository")

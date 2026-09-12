@@ -46,7 +46,7 @@ int main(void)
     };
     ps5vk_present_surface surf = NULL;
     assert(ps5vkCreatePresentSurface(VK_NULL_HANDLE, &pcfg, 2, NULL, &surf) != VK_SUCCESS);
-    assert(ps5vkPresentFrame(NULL, 0, 0, 0) != VK_SUCCESS);
+    assert(ps5vkPresentFrame(NULL, 0, 0) != VK_SUCCESS);
     ps5vkDestroyPresentSurface(NULL);
 
     puts("Public SDK consumer contracts: pass (clean headers, no private symbols required)");

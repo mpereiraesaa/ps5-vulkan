@@ -52,13 +52,16 @@ VkResult ps5vk_runtime_compile_compute(
     opts.optimise = true;
     opts.address32_hi = 2;
 
+    /* The initial runtime ABI exposes one scalar storage descriptor table. */
+    if (layout->set_count != 1)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Build descriptor layout bindings from pipeline layout set 0 */
     if (layout->set_count > 0) {
         const struct ps5vk_set_signature *sig = &layout->sets[0];
         for (uint32_t b = 0; b < PS5VK_MAX_BINDINGS; b++) {
             if (sig->binding[b].count > 0 && (sig->binding[b].stages & VK_SHADER_STAGE_COMPUTE_BIT)) {
-                if (sig->combined_image[b]) {
-                    /* Compute sampled textures outside current compute profile */
+                if (sig->combined_image[b] || sig->binding[b].count != 1) {
+                    /* Images and descriptor arrays are outside this compute profile. */
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 }
                 uint32_t idx = opts.descriptor_binding_count++;
@@ -102,6 +105,14 @@ VkResult ps5vk_runtime_compile_compute(
 
     uint32_t rsrc1 = csh->registers.computepgmrsrc1;
     uint32_t rsrc2 = csh->registers.computepgmrsrc2;
+
+    /* Scratch and LDS require allocation/programming that the current native
+     * dispatch ABI intentionally does not provide. Never silently clear the
+     * compiler's requirements when reconstructing COMPUTE_PGM_RSRC2. */
+    if ((rsrc2 & 1u) || ((rsrc2 >> 15) & 0x1ffu) || out.metadata.scratch_valid) {
+        psbc_free_output(&out);
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
 
     uint32_t *code = malloc(out.machine_code_size);
     if (!code) {

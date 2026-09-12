@@ -39,7 +39,8 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         a->descriptor_table > (UINT64_C(1) << 48) - table_bytes ||
         a->completion > (UINT64_C(1) << 48) - 8 || a->readback > (UINT64_C(1) << 48) - 16 ||
         (a->code >> 32) != ((a->code + code_bytes - 1) >> 32) ||
-        (a->descriptor_table >> 32) != ((a->descriptor_table + table_bytes - 1) >> 32)) return 0;
+        (a->descriptor_table >> 32) != ((a->descriptor_table + table_bytes - 1) >> 32) ||
+        (p->user_sgprs == 3 && (a->descriptor_table >> 32) != 2)) return 0;
     uint64_t bases[] = {a->code, a->descriptor_table, a->completion, a->readback};
     uint64_t sizes[] = {code_bytes, table_bytes, 8, 16};
     for (unsigned j = 0; j < 4; ++j)

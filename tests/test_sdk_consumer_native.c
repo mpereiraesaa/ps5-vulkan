@@ -57,7 +57,7 @@ int main(void)
     VkResult pres = ps5vkCreatePresentSurface(VK_NULL_HANDLE, &pconfig, 2, NULL, &surface);
     assert(pres != VK_SUCCESS);
 
-    pres = ps5vkPresentFrame(NULL, 0, 0, 0);
+    pres = ps5vkPresentFrame(NULL, 0, 0);
     assert(pres != VK_SUCCESS);
 
     ps5vkDestroyPresentSurface(NULL);

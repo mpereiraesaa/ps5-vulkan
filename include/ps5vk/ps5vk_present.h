@@ -36,8 +36,7 @@ VKAPI_ATTR VkResult VKAPI_CALL ps5vkCreatePresentSurface(
 VKAPI_ATTR VkResult VKAPI_CALL ps5vkPresentFrame(
     ps5vk_present_surface surface,
     uint32_t buffer_index,
-    uint64_t token,
-    uint32_t timeout_us);
+    uint64_t token);
 
 /*
  * Destroy and close the presentation surface, releasing VideoOut resources.

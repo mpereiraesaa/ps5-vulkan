@@ -44,8 +44,11 @@ int main(void)
     p.user_sgprs = 3;
     p.wgp_mode = 1;
     d.addresses.readback = 0x200000040;
-    d.completion_value = PS5VK_COMPLETION_VALUE;
     uint32_t psbc_result[96] = {0};
+    assert(!ps5vk_dispatch_encode(psbc_result, 96, &d)); /* PSBC address32_hi is 2. */
+    d.addresses.code = 0x200004000;
+    d.addresses.descriptor_table = 0x200008000;
+    d.completion_value = PS5VK_COMPLETION_VALUE;
     size_t n_psbc = ps5vk_dispatch_encode(psbc_result, 96, &d);
     assert(n_psbc == n + 1);
     assert((psbc_result[16] & (1u << 29)) != 0); /* wgp_mode enabled */

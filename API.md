@@ -41,18 +41,24 @@ supported.
 
 ## Compute
 
-- Compute pipelines backed by offline-compiled, identity-checked programs.
+- Compute pipelines compiled from SPIR-V at runtime through PSBC/ACO for
+  GFX1013, with a bounded in-memory compilation cache.
 - Storage-buffer descriptors, command-buffer dispatch and fences.
 - Exact GPU completion and checked readback, including guard validation.
 - A single serial native queue; no multi-queue or semaphore contract.
 
 ## Programs and compilation
 
-Shaders are compiled offline using a pinned compiler toolchain. The complete
-SPIR-V input, compiler output, metadata, relocations and pipeline-relevant state
-form an exact program identity. The runtime accepts only entries represented in
-the generated program library; arbitrary SPIR-V and runtime compilation are not
-supported.
+Compute shaders are compiled at runtime using a pinned PSBC/NIR/ACO fork. The
+supported profile currently covers compute entry points with scalar
+storage-buffer descriptors in set 0; additional sets, descriptor arrays,
+scratch and workgroup-shared memory are rejected. Cache keys
+include the complete SPIR-V digest, entry point, compiler/ABI versions and
+pipeline-layout state, and entries are constrained by count and byte budgets.
+
+Graphics shaders continue to use the pinned offline compiler path. Their SPIR-V
+input, compiler output, metadata, relocations and pipeline-relevant state form
+an exact program identity represented in the generated program library.
 
 ## Memory and presentation
 

@@ -54,16 +54,16 @@ VkResult ps5vkCreatePresentSurface(
 VkResult ps5vkPresentFrame(
     ps5vk_present_surface surface,
     uint32_t buffer_index,
-    uint64_t token,
-    uint32_t timeout_us)
+    uint64_t token)
 {
     if (!surface || buffer_index >= surface->image_count) return VK_ERROR_DEVICE_LOST;
 
 #if defined(PS5VK_HAS_NATIVE_PRESENT)
-    return ps5vk_native_present_frame(&surface->native, buffer_index, token, timeout_us);
+    /* The native adapter owns its bounded completion waits. Public frame
+     * presentation never adds the demo-only post-present hold delay. */
+    return ps5vk_native_present_frame(&surface->native, buffer_index, token, 0);
 #else
     (void)token;
-    (void)timeout_us;
     return VK_SUCCESS;
 #endif
 }

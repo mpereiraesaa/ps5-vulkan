@@ -20,7 +20,7 @@ results; visual output is not the sole correctness signal.
 - Vulkan 1.0-style instance, physical-device, device and queue objects
 - Host-visible buffers and images backed by native direct memory
 - Command pools and command buffers with explicit recording state
-- Compute pipelines, storage buffers, dispatch and fences
+- Runtime-compiled compute pipelines, storage buffers, dispatch and fences
 - Vertex and index buffers, indexed and non-indexed triangle-list draws
 - One BGRA8 color attachment and an optional D32 depth attachment
 - Single-level RGBA8 sampled textures with GPU upload transitions
@@ -34,10 +34,12 @@ requirements are in [BUILDING.md](BUILDING.md).
 ## Important boundaries
 
 This is not a Vulkan-conformant driver or ICD, and it does not yet provide WSI,
-swapchains, a runtime shader compiler, broad format coverage, multiple queues,
+swapchains, broad format coverage, multiple queues,
 semaphores, blending, MSAA, mipmaps, anisotropy or arbitrary shader programs.
-Shader programs are compiled offline and accepted only when their complete
-identity and pipeline contract match the audited native program library.
+Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
+backend and cached under a bounded in-memory policy. Graphics programs remain
+offline-compiled and accepted only when their complete identity and pipeline
+contract match the audited native program library.
 
 ## Development
 
@@ -45,6 +47,7 @@ Host validation requires Python 3, Make, a C11 compiler and Git:
 
 ```sh
 make vulkan-headers
+make compiler-deps
 make check
 make check-sanitize
 ```

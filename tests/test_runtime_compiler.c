@@ -81,6 +81,18 @@ int main(void)
     struct VkPipelineLayout_T empty_layout = {0};
     assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &empty_layout, &bad_prog, &bad_code) != VK_SUCCESS);
 
+    struct VkPipelineLayout_T array_layout = layout;
+    array_layout.sets[0].binding[0].count = 2;
+    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &array_layout, &bad_prog, &bad_code);
+    if (res != VK_ERROR_FEATURE_NOT_PRESENT)
+        fprintf(stderr, "descriptor-array rejection returned %d\n", res);
+    assert(res == VK_ERROR_FEATURE_NOT_PRESENT);
+
+    struct VkPipelineLayout_T multiset_layout = layout;
+    multiset_layout.set_count = 2;
+    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &multiset_layout, &bad_prog, &bad_code);
+    assert(res == VK_ERROR_FEATURE_NOT_PRESENT);
+
     /* 5. Verify CPU reference computation semantics for both programs */
     for (uint32_t i = 0; i < 1024; i++) {
         uint32_t in_val = (i * UINT32_C(2654435761)) ^ 0x79bd2468;
