@@ -24,6 +24,8 @@ GRAPHICS_PAIR_TEST = -Inative -Isrc -I../ps5-agc-gears/src -I../ps5-agc-gears/in
 .PHONY: check doctor compiler-control compiler-programs native-bootstrap vulkan-headers check-sanitize native-memory-check test-shaders
 .PHONY: compiler-pipelines
 .PHONY: native-compute native-graphics native-runtime-graphics
+.PHONY: upstream-cts check-upstream-cts
+.PHONY: upstream-cts-run
 native-runtime-graphics:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
 	PS5VK_GLSLANG=$(GLSLANG) PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_PRESENT=1 PS5VK_GRAPHICS_DRAW=1 $(PYTHON) tools/build_native.py
@@ -187,6 +189,7 @@ check:
 	$(PYTHON) tools/build_sdk.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host
+	$(MAKE) check-upstream-cts
 	@if [ -d third_party/psbc-reference ]; then \
 		$(MAKE) test-compiler; \
 	else \
@@ -224,3 +227,17 @@ compiler-control:
 	$(PYTHON) tools/compile_control.py
 native-bootstrap:
 	$(PYTHON) tools/build_native.py
+# Genuine upstream VK-GL-CTS: cross-compile the focused native payload.
+# Host-only contract checks for the upstream CTS selection and verifier. These
+# never require the console, so CI can run them.
+check-upstream-cts:
+	$(PYTHON) tools/check_upstream_selection.py
+	$(PYTHON) -m unittest tests.test_upstream_runner -v
+upstream-cts:
+	$(PYTHON) tools/build_upstream_cts.py
+# One native acceptance run against the console. Both values are lab-specific,
+# so they are passed in rather than hard-coded here.
+upstream-cts-run:
+	@test -n "$(PS5_HOST)" || { echo "PS5_HOST is required" >&2; exit 2; }
+	@test -n "$(LOGS_RUNS_DIR)" || { echo "LOGS_RUNS_DIR is required" >&2; exit 2; }
+	$(PYTHON) tools/run_upstream_cts.py --host "$(PS5_HOST)" --runs-dir "$(LOGS_RUNS_DIR)"

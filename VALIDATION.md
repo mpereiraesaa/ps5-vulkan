@@ -55,6 +55,16 @@ Khronos VK-GL-CTS framework porting remains pending.
 
 See [`cts/gap_matrix.md`](cts/gap_matrix.md) for the complete case list, Vulkan API mapping and rationales.
 
+## Genuine upstream VK-GL-CTS (separate from the synthetic contracts)
+
+The `contract.*` suite above is local and modelled on the Khronos *mustpass*
+selection; it is **not** upstream CTS code. A separate integration compiles a
+focused selection of real upstream VK-GL-CTS tests, the upstream framework and
+their original verification oracles into a native payload. Its build inputs,
+selection manifest, strict acceptance policy and evidence rules are documented
+in [UPSTREAM_CTS.md](UPSTREAM_CTS.md). Results from that integration are
+reported separately and are not merged into the counts above.
+
 ## Independent native SDK consumer validation
 
 The independent native application in `examples/native_consumer/` consumes strictly

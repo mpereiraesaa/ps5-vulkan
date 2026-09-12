@@ -1,0 +1,79 @@
+{
+  "manifest_version": "1.0",
+  "cts_pin": {
+    "repo": "third_party/vk-gl-cts",
+    "tag": "vulkan-cts-1.3.8.4",
+    "commit": "a0270c1897597e6c77679870e10415398a13001c"
+  },
+  "external_pins": {
+    "comment": "Commits of the CTS external/ dependencies that were compiled and validated. upstream's external/fetch_sources.py declares older revisions for the same CTS tag; see UPSTREAM_CTS.md.",
+    "glslang": "1b65bd602b23d401d1c4c86dfa90a36a52c66294",
+    "spirv-tools": "ce37fd67f83cd1e8793b988d2e4126bbf72b19dd",
+    "spirv-headers": "e7294a8ebed84f8c5bd3686c68dbe12a4e65b644",
+    "amber": "8e90b2d2f532bcd4a80069e3f37a9698209a21bc"
+  },
+  "acceptance_policy": {
+    "required_status": "Pass",
+    "allow_not_supported": false,
+    "allow_skip": false,
+    "allow_fail": false
+  },
+  "cases": [
+    {
+      "path": "dEQP-VK.api.smoke.create_sampler",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiSmokeTests.cpp:64",
+      "category": "api",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Verifies genuine Vulkan sampler creation and destruction through ps5vk dispatch."
+    },
+    {
+      "path": "dEQP-VK.api.smoke.create_shader",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiSmokeTests.cpp:109",
+      "category": "api",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Compiles GLSL vertex shader at runtime via glslang and validates vkCreateShaderModule / vkDestroyShaderModule lifecycle."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.fence.one",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp:46",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Tests single VkFence signaling via queue submit and completion wait using vkWaitForFences."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.fence.multi",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp:177",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Tests multiple VkFence objects, reset, timeout, and wait-all completion behavior."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.fence.empty_submit",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp:238",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Verifies fence signaling on empty queue submission."
+    },
+    {
+      "path": "dEQP-VK.memory.mapping.suballocation.random.0",
+      "source": "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp:2039",
+      "category": "memory",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Exercises device memory suballocation, host mapping, random byte pattern read/write verification, and unmapping."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.shared_var_single_invocation",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4717",
+      "category": "compute",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Compiles compute shader with shared variable at runtime, dispatches to GPU compute queue, and verifies SSBO output oracle."
+    }
+  ]
+}
