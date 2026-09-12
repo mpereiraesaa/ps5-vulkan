@@ -8,6 +8,39 @@ This directory is deliberately self-contained: it adds no build targets and
 touches no existing source, headers or CI. Everything here runs offline with the
 Python standard library once the optional caches have been generated.
 
+## Generated figures
+
+Every number quoted below is generated from the data, not typed by hand:
+
+<!-- stats:begin -->
+```json
+{
+  "command_contracts": 12,
+  "core_commands": 234,
+  "core_conditional_feature_bits": 27,
+  "core_mandatory_feature_bits": 58,
+  "core_types": 606,
+  "cts_cases": 3247552,
+  "cts_direct_rows": 5,
+  "cts_group_files": 98,
+  "cts_mapped_rows": 126,
+  "cts_representative_or_family_rows": 121,
+  "extension_rules": 21,
+  "format_rows": 179,
+  "format_tables": 10,
+  "limits_raised_in_1_4": 32,
+  "limits_rows": 427,
+  "requirements": 136,
+  "requirements_conditional": 13,
+  "requirements_mandatory": 120,
+  "requirements_optional": 3
+}
+```
+<!-- stats:end -->
+
+Regenerate with `tools/update_readme_stats.py`; `validate.py` fails (`T018`) when
+the block disagrees with the inventory.
+
 ## What this is not
 
 * Not a conformance claim, a conformance submission, or a statement that any
@@ -24,7 +57,7 @@ Python standard library once the optional caches have been generated.
 | --- | --- |
 | `sources.json` | Pinned Khronos and consumer sources: tag, tag object, commit, retrieval date, license, artifact hashes, and cross-source compatibility rules. |
 | `schema.json` | JSON Schema 2020-12 contract for the data documents. |
-| `requirements.json` | 136 requirement rows with stable project IDs, classification, applicability, anchors, feature/limit/format/command/extension references, CTS join and evidence fields. |
+| `requirements.json` | Requirement rows with stable project IDs, classification, applicability, anchors, feature/limit/format/command/extension references, CTS join and evidence fields. Counts are in the generated block above. |
 | `spec_coverage.json` | Completeness ledger: every core chapter and appendix of the pinned specification with a review state and the requirement rows derived from it. |
 | `cts_manifest.json` | Identity of the pinned CTS `vk-default` mustpass listing: group files, sizes, SHA-256, Git blob ids and case counts. |
 | `core_target.json` | The declared target: cumulative core feature requirements, dependency-resolved API surface, required limits, mandatory format tables and command contracts, all derived from pinned sources. |
@@ -93,12 +126,12 @@ every input hash-checked against `sources.json`. The derivation records:
 * **58 unconditional core feature bits** across 1.0-1.4, including
   `timelineSemaphore` (1.2), `synchronization2`, `dynamicRendering` and
   `bufferDeviceAddress` (1.3);
-* **27 conditional core feature bits** with their exact trigger text, for
+* the conditional core feature bits with their exact trigger text, for
   example `descriptorIndexing` and its update-after-bind family (conditioned on
   descriptor indexing being supported) and the 8/16-bit storage features;
 * **301 further feature bits** that the specification conditions on an optional
   extension being advertised;
-* the cumulative core API surface: **182 commands and 476 types**;
+* the cumulative core API surface (commands and types resolved through the registry dependency chain);
 * the divergences between the specification's conditional phrasing and the
   registry's unconditional list, recorded per version rather than silently
   resolved.
@@ -145,14 +178,21 @@ Three core families are carried as machine-readable tables inside
 by requirement rows so that a table cannot exist without a tracked obligation:
 
 * **Limits** (`limits.rows`): the specification's *Required Limits* table resolved
-  per limit and limit type, 434 rows. Values keep their version tags, and
-  `required_for_core_1_4` only ever uses the `{core}` and `{limit1_4}` values;
-  roadmap-only values (`{limit2022}`, `{limit2024}`, `{limit2026}`) are recorded
-  separately in `roadmap_only_values`. 24 limits are raised in 1.4 and each is
+  per limit and limit type. Every value is interpreted - integers, decimals,
+  powers (`2^30^`), fractions, tuples, ranges, arithmetic, `max()`/`min()` over
+  other limits and enumerant expressions - and an expression that cannot be
+  interpreted fails generation instead of being approximated by stripping
+  characters. `required_for_core_1_4` uses only the `{core}` and `{limit1_4}`
+  values; roadmap-only values (`{limit2022}`, `{limit2024}`, `{limit2026}`) are
+  recorded separately in `roadmap_only_values`. Every limit raised in 1.4 is
   referenced by a requirement row.
 * **Formats** (`formats.tables`): the mandatory format support tables as
-  format x required-feature-bit rows: 10 tables covering 179 formats, each table
-  represented by a row.
+  format x feature-bit rows. Each cell keeps the symbol the specification uses
+  (`{sym1}` unconditional, `{sym2}`/`{sym3}`/`{sym4}` conditional), the per-table
+  annotation that explains it, the scope (`linearTilingFeatures`,
+  `optimalTilingFeatures`, `bufferFeatures`) and any `ifdef` guard that limits a
+  row to a core version or extension. Conditional cells are never promoted to
+  mandatory. Each table is represented by a row.
 * **Command contracts** (`command_contracts.contracts`): the resolved core
   command surface grouped into 12 differentiable API areas (instance/device,
   memory, buffers, images, samplers, descriptors, pipelines and shaders, command
@@ -215,8 +255,8 @@ header.
 
 `cts_manifest.json` was produced by reading
 `external/vulkancts/mustpass/main/vk-default.txt` and every group file it names,
-at the pinned CTS tag. For the pinned revision that is 98 group files and
-3,247,552 case names. Each group file is identified by size, SHA-256 and Git
+at the pinned CTS tag; the exact group-file and case-name counts are in the
+generated figures above. Each group file is identified by size, SHA-256 and Git
 blob id, and the blob id is cross-checked against the GitHub tree API for the
 same commit before the manifest is written.
 
@@ -237,9 +277,8 @@ Every mapped row also states how much of its requirement the mapping covers:
 * `not-mapped` — no CTS mapping is claimed.
 
 Anything other than `direct` requires a `coverage_note` describing the gap, and
-`direct` requires at least one named case. The current tally is 4 direct, 74
-representative-case, 15 family-level and 10 not-mapped rows. A representative or
-family-level mapping is a traceability aid: it is **not** complete coverage of
+`direct` requires at least one named case. The tally per quality label is in the generated figures above. A
+representative or family-level mapping is a traceability aid: it is **not** complete coverage of
 the requirement, and the coverage notes say so per row.
 
 ## Consumer overlays
@@ -338,8 +377,7 @@ claim, and incurs no fee or legal agreement.
   per-format feature bits, and they do not by themselves constitute
   per-capability test evidence. Per-command and per-format detail is expected to
   be attached as each contract is audited.
-* 12 rows are conditional on a capability or extension being supported; the
-  exact trigger text is carried per row and per bit in `core_target.json`.
+* Conditional rows carry the exact trigger text per row and per bit in `core_target.json`.
 * Three rows are optional because core does not require them: sparse resources,
   window-system integration, and external host memory import. WSI is required by
   roadmap 2026, which is recorded as a comparison, not as a core obligation.
@@ -366,3 +404,12 @@ reasoning stays auditable:
    obligations were kept as single disjunctive obligations instead of being
    expanded, and the limits, format and command-contract tables were added with
    rows per differentiable contract.
+5. Limit values are now interpreted rather than character-stripped (`2^30^` is
+   1073741824, `0.5` stays 0.5, tuples and ranges keep their element-wise
+   meaning, symbolic references resolve to the referenced limit) and an
+   uninterpretable expression fails generation. Format cells keep their symbol
+   (`{sym1}` vs `{sym2}`/`{sym3}`/`{sym4}`), the per-table condition, the
+   `linearTilingFeatures`/`optimalTilingFeatures`/`bufferFeatures` scope and any
+   `ifdef` guard, so conditional storage support such as R8_UNORM is not
+   promoted to mandatory. The figures quoted here are generated by
+   `tools/update_readme_stats.py` and checked by the validator.

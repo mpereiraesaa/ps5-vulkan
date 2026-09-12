@@ -620,6 +620,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "capability_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -1200,6 +1206,12 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "ulp_adjusted": {
+                          "type": "boolean"
                         }
                       }
                     }
@@ -1209,6 +1221,15 @@
                     "items": {
                       "type": "object"
                     }
+                  },
+                  "limit_types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "required_kind": {
+                    "type": "string"
                   }
                 }
               }
@@ -1270,6 +1291,82 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "guard": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "conditional_feature_bits": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "feature",
+                              "symbol",
+                              "condition"
+                            ],
+                            "properties": {
+                              "feature": {
+                                "type": "string"
+                              },
+                              "symbol": {
+                                "type": "string"
+                              },
+                              "scope": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "condition": {
+                                "type": "string"
+                              },
+                              "guard": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "table_annotation": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "symbol_legend": {
+                    "type": "object"
+                  },
+                  "annotations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "symbol",
+                        "condition"
+                      ],
+                      "properties": {
+                        "symbol": {
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": "string"
                         }
                       }
                     }

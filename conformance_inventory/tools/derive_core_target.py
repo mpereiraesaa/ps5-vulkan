@@ -447,17 +447,349 @@ def adoc_table_block(text: str, anchor: str) -> str:
     return text[open_at + 5:close_at]
 
 
-VALUE_RE = re.compile(r"(?P<value>[0-9][0-9A-Za-z_^{}.,^]*(?:\s*\.\.\s*[0-9^]+)?|[0-9]+\^[0-9]+\^|-\s*[0-9]+)\s*\((?P<tags>[^)]*)\)")
+FOOTNOTE_RE = re.compile(r"(?<=[\s)])\s*\^\d+\^\s*")  # footnote markers only, never the exponent of 2^30^
+VALUE_TAGS_RE = re.compile(r"(?P<value>\([^()]*\)|[^(){}]+?)(?:\s*\^\d+\^)?\s*\((?P<tags>[^()]*\{[^()]*)\)")
+NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+ULP_RE = re.compile(r"^(?P<head>.+?)\s*-\s*\(?\s*\d*\s*ULP\s*\)?$")
+ENUM_PREFIXES = ("ename:", "code:", "flagname:", "apiext:")
+REFERENCE_PREFIX = "pname:"
+REFERENCE_PREFIX_RE = re.compile(r"(?:pname|ptext|sname|sname|fname|flink|slink|basetype):")
 TAG_RE_SPLIT = re.compile(r"[,\s]+")
+
+import ast as _ast
+import operator as _operator
+
+_ARITHMETIC_OPS = {
+    _ast.Add: _operator.add,
+    _ast.Sub: _operator.sub,
+    _ast.Mult: _operator.mul,
+    _ast.Div: _operator.truediv,
+    _ast.Pow: _operator.pow,
+}
+POWER_RE = re.compile(r"(\d+)\^(\d+)\^?")
+
+
+def _safe_arithmetic(node):
+    if isinstance(node, _ast.Expression):
+        return _safe_arithmetic(node.body)
+    if isinstance(node, _ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, _ast.UnaryOp) and isinstance(node.op, (_ast.UAdd, _ast.USub)):
+        value = _safe_arithmetic(node.operand)
+        return value if isinstance(node.op, _ast.UAdd) else -value
+    if isinstance(node, _ast.BinOp) and type(node.op) in _ARITHMETIC_OPS:
+        return _ARITHMETIC_OPS[type(node.op)](_safe_arithmetic(node.left), _safe_arithmetic(node.right))
+    raise ValueError("unsupported arithmetic")
+
+
+def evaluate_arithmetic(text: str):
+    """Evaluate a numeric expression after turning a^b^ powers into (a**b).
+
+    Returns int/float, or None when the expression is not pure arithmetic.
+    """
+    expression = POWER_RE.sub(r"(\1**\2)", text)
+    if not re.fullmatch(r"[0-9+\-*/(). ^]*", expression):
+        return None
+    try:
+        value = _safe_arithmetic(_ast.parse(expression, mode="eval"))
+    except Exception:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    return None
+
+
+
+
+
+def interpret_number(text: str):
+    """Interpret one numeric token, or return ("unknown", None)."""
+    token = text.strip()
+    if token in ("", "-"):
+        return "none", None
+    power = re.fullmatch(r"(\d+)\^(\d+)\^", token)
+    if power:
+        return "power", int(power.group(1)) ** int(power.group(2))
+    fraction = re.fullmatch(r"(\d+)\s*/\s*(\d+)", token)
+    if fraction:
+        return "fraction", int(fraction.group(1)) / int(fraction.group(2))
+    if re.fullmatch(r"-?\d+", token):
+        return "integer", int(token)
+    if re.fullmatch(r"-?\d+\.\d+", token):
+        return "decimal", float(token)
+    return "unknown", None
+
+
+DESCRIPTIVE_VALUES = {
+    "duration": "descriptive",
+    "exact": "descriptive",
+    "bitfield": "bitfield",
+    "implementation-dependent": "descriptive",
+    "recommendation": "descriptive",
+    "unspecified": "descriptive",
+    "false": "boolean",
+    "true": "boolean",
+}
+FUNCTION_RE = re.compile(r"(?P<name>max|min)\s*\(")
+ULP_SUFFIX_RE = re.compile(r"^(?P<head>.+?)\s*-\s*\(?\s*\d*\s*ULP\s*\)?$")
+
+
+def _split_top_level(text: str, separator: str = ",") -> list[str]:
+    parts, depth, current = [], 0, ""
+    for char in text:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        if char == separator and depth == 0:
+            parts.append(current.strip())
+            current = ""
+        else:
+            current += char
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+
+def _expression_operands(text: str) -> list[dict]:
+    """Tokenize an arithmetic expression into numbers, references and functions."""
+    operands, index = [], 0
+    while index < len(text):
+        char = text[index]
+        if char.isspace() or char in "+-*/":
+            operands.append({"kind": "operator", "value": char})
+            index += 1
+            continue
+        function = FUNCTION_RE.match(text, index)
+        if function:
+            depth, cursor = 1, function.end()
+            while cursor < len(text) and depth:
+                if text[cursor] == "(":
+                    depth += 1
+                elif text[cursor] == ")":
+                    depth -= 1
+                cursor += 1
+            inner = text[function.end(): cursor - 1]
+            operands.append(
+                {
+                    "kind": "function",
+                    "name": function.group("name"),
+                    "operands": _expression_operands(inner),
+                }
+            )
+            index = cursor
+            continue
+        if char == "(":
+            depth, cursor = 1, index + 1
+            while cursor < len(text) and depth:
+                if text[cursor] == "(":
+                    depth += 1
+                elif text[cursor] == ")":
+                    depth -= 1
+                cursor += 1
+            operands.append({"kind": "group", "operands": _expression_operands(text[index + 1: cursor - 1])})
+            index = cursor
+            continue
+        reference = re.match(r"(?:pname|ptext|sname|fname):[A-Za-z0-9_]+", text[index:])
+        if reference:
+            operands.append({"kind": "reference", "value": reference.group(0).split(":", 1)[1]})
+            index += len(reference.group(0))
+            continue
+        token = re.match(r"[A-Za-z_][A-Za-z0-9_]*", text[index:])
+        if token:
+            operands.append({"kind": "reference", "value": token.group(0)})
+            index += len(token.group(0))
+            continue
+        number = re.match(r"\d+(?:\.\d+)?", text[index:])
+        if number:
+            value = float(number.group(0)) if "." in number.group(0) else int(number.group(0))
+            operands.append({"kind": "number", "value": value})
+            index += len(number.group(0))
+            continue
+        return [{"kind": "unknown-composite", "text": text}]
+    return operands
+
+
+def interpret_limit_value(expression: str) -> dict:
+    """Interpret a required-limits value without losing information.
+
+    Handles integers, decimals, powers (2^30^ or 2^22), fractions, arithmetic,
+    max()/min() over references, tuples and ranges, ULP-adjusted bounds,
+    enumerant expressions and descriptive values. Anything that cannot be
+    interpreted is returned as kind "unknown" so the caller fails loudly instead
+    of stripping characters.
+    """
+    raw = expression.strip()
+    text = FOOTNOTE_RE.sub(" ", raw).strip()
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"[\u00d7\u2715\u2a2f]", "*", text)
+    text = text.replace("{plus}", "+").replace("{times}", "*").replace("{minus}", "-")
+    equation = re.fullmatch(r"\[eq\]#(.*)#", text, re.S)
+    if equation:
+        text = equation.group(1).strip()
+    ulp_adjusted = False
+    if not text.startswith("("):
+        match = ULP_SUFFIX_RE.match(text)
+        if match:
+            ulp_adjusted = True
+            text = match.group("head").strip()
+    lowered = text.lower()
+    if lowered in DESCRIPTIVE_VALUES:
+        return {"kind": DESCRIPTIVE_VALUES[lowered], "value": lowered, "ulp_adjusted": ulp_adjusted, "raw": raw}
+    if text in ("", "-"):
+        return {"kind": "none", "value": None, "ulp_adjusted": ulp_adjusted, "raw": raw}
+    if text.startswith("(") and text.endswith(")") and not FUNCTION_RE.match(text):
+        elements = [_split_top_level(text[1:-1])]
+        values, kinds = [], []
+        for element in elements[0]:
+            parsed = interpret_limit_value(element)
+            kinds.append(parsed["kind"])
+            values.append(parsed.get("values") if parsed["kind"] == "tuple" else parsed.get("value"))
+        if "unknown" in kinds:
+            return {"kind": "unknown", "raw": raw}
+        return {"kind": "tuple", "values": values, "element_kinds": kinds, "ulp_adjusted": ulp_adjusted, "raw": raw}
+    if text.startswith(ENUM_PREFIXES) or text in ("VK_TRUE", "VK_FALSE"):
+        return {"kind": "enum", "value": text, "ulp_adjusted": ulp_adjusted, "raw": raw}
+    if re.fullmatch(r"(?:pname|ptext):[A-Za-z0-9_]+", text):
+        return {"kind": "reference", "value": REFERENCE_PREFIX_RE.sub("", text), "ulp_adjusted": ulp_adjusted, "raw": raw}
+    value = evaluate_arithmetic(text)
+    if value is not None:
+        kind = "integer" if isinstance(value, int) else "decimal"
+        return {"kind": kind, "value": value, "ulp_adjusted": ulp_adjusted, "raw": raw}
+    if any(token in text for token in ("+", "*", "/", "max(", "min(")) or re.search(r"pname:|\b[A-Za-z_]", text):
+        normalised = POWER_RE.sub(lambda m: str(int(m.group(1)) ** int(m.group(2))), text)
+        operands = _expression_operands(normalised)
+        if operands and all(operand["kind"] != "unknown-composite" for operand in operands):
+            return {"kind": "expression", "operands": operands, "ulp_adjusted": ulp_adjusted, "raw": raw}
+    kind, simple = interpret_number(text)
+    if kind != "unknown":
+        return {"kind": kind, "value": simple, "ulp_adjusted": ulp_adjusted, "raw": raw}
+    return {"kind": "unknown", "raw": raw}
+
+
+def evaluate_operands(operands: list, parsed: dict):
+    """Evaluate a token list, resolving references and max()/min() functions."""
+    total, pending_operator = None, "+"
+    for operand in operands:
+        kind = operand["kind"]
+        if kind == "operator":
+            pending_operator = operand["value"]
+            continue
+        if kind == "number":
+            value = operand["value"]
+        elif kind == "reference":
+            value = parsed.get(operand["value"], {}).get("required_for_core_1_4")
+            if value is None:
+                return None
+        elif kind in ("function", "group"):
+            inner = evaluate_operands(operand["operands"], parsed)
+            if isinstance(inner, list):
+                inner = max(inner) if operand.get("name") == "max" else (min(inner) if operand.get("name") == "min" else None)
+            if inner is None:
+                return None
+            value = inner
+        else:
+            return None
+        if total is None:
+            total = value
+        elif pending_operator == "+":
+            total = total + value
+        elif pending_operator == "-":
+            total = total - value
+        elif pending_operator == "*":
+            total = total * value
+        elif pending_operator == "/":
+            total = total / value
+        else:
+            return None
+    return total
+
+
+def combine(values: list, types: list, kinds: list):
+    """Combine core-tagged values: max for min-type, min for max-type."""
+    if not values:
+        return None
+    if all(kind in ("none",) for kind in kinds):
+        return None
+    scalars = [value for value, kind in zip(values, kinds) if kind not in ("none", "enum") and not isinstance(value, list)]
+    if len(scalars) == len([kind for kind in kinds if kind not in ("none", "enum")]) and scalars and not any(isinstance(value, list) for value in values):
+        kinds_of_types = [t for t in types if t]
+        prefer_min = bool(kinds_of_types) and kinds_of_types[0].startswith("min")
+        return max(scalars) if prefer_min else min(scalars)
+    lists = [value for value in values if isinstance(value, list)]
+    if lists:
+        length = max(len(item) for item in lists)
+        out = []
+        for index in range(length):
+            column = [item[index] for item in lists if len(item) > index and item[index] is not None]
+            if not column:
+                out.append(None)
+                continue
+            element_type = types[index] if index < len(types) else (types[0] if types else "min")
+            out.append(max(column) if element_type.startswith("min") else min(column))
+        return out
+    return None
+
+
+def resolve_limit_references(parsed: dict) -> dict:
+    """Resolve symbolic values; an unknown reference is a hard failure."""
+    # Resolve symbolic values ("pname:otherLimit") against the referenced row so
+    # the requirement is a real number instead of a name.
+    for record in parsed.values():
+        references = []
+        for entry in record["values"]:
+            if entry["kind"] == "reference":
+                references.append(entry["value"])
+            elif entry["kind"] == "tuple":
+                references.extend([value for value, kind in zip(entry["values"], entry["element_kinds"]) if kind == "reference"])
+        for reference in references:
+            if reference not in parsed:
+                raise SystemExit("limit value references unknown limit %r" % reference)
+        if record["required_for_core_1_4"] is None:
+            numeric = []
+            for entry in record["values"]:
+                if not (not entry["tags"] or {"core", "1_4"} & set(entry["tags"])):
+                    continue
+                if entry["kind"] == "reference" and parsed[entry["value"]]["required_for_core_1_4"] is not None:
+                    numeric.append(parsed[entry["value"]]["required_for_core_1_4"])
+                elif entry["kind"] == "expression":
+                    values = []
+                    resolvable = True
+                    for operand in entry["operands"]:
+                        if operand["kind"] == "reference":
+                            target = parsed.get(operand["value"], {}).get("required_for_core_1_4")
+                            if target is None:
+                                resolvable = False
+                                break
+                            values.append(target)
+                        else:
+                            values.append(operand["value"])
+                    if resolvable and values:
+                        total = values[0]
+                        for operator, value in zip(entry["operators"], values[1:]):
+                            total = total + value if operator == "+" else (total * value if operator == "*" else total - value)
+                        numeric.append(total)
+                elif entry["kind"] in ("integer", "decimal", "power", "fraction"):
+                    numeric.append(entry["value"])
+            if numeric:
+                prefer_min = record["limit_types"] and record["limit_types"][0].startswith("min")
+                record["required_for_core_1_4"] = max(numeric) if prefer_min else min(numeric)
+                record["required_kind"] = "decimal" if any(isinstance(value, float) for value in numeric) else "integer"
+                record["resolved_from_symbolic_values"] = references
+            elif references:
+                record["required_kind"] = "reference"
+                record["resolved_from_symbolic_values"] = references
+    return parsed
 
 
 def parse_limits_table(adoc: str) -> list[dict]:
-    """Parse the 'Required Limits' table into machine-readable rows.
+    """Parse the Required Limits table, interpreting every value.
 
-    Values keep their version tags, so a core 1.4 requirement is never confused
-    with a roadmap-only value (`{limit2022}` and friends). Continuation lines in
-    the AsciiDoc table are folded into the row they belong to.
+    Version tags decide applicability ({core}/{limit1_4} for the core target,
+    {limit2022}/{limit2024}/{limit2026} recorded separately). Unknown
+    expressions raise instead of being silently mangled.
     """
+    PIPES = "\u0000"
     rows: list[list[str]] = []
     previous_continues = False
     for raw in adoc_table_block(adoc, "limits-required").splitlines():
@@ -465,20 +797,21 @@ def parse_limits_table(adoc: str) -> list[dict]:
         if not line:
             continue
         if previous_continues and not line.startswith("|"):
-            parts = [part.strip() for part in line.split("|")]
+            parts = [cell.strip() for cell in line.replace("\\|", PIPES).split("|")]
             if rows:
-                rows[-1][2] = (rows[-1][2] + " " + parts[0]).strip()
-                if len(parts) > 1 and parts[1]:
-                    rows[-1][3] = parts[1]
+                rows[-1][-1] = (rows[-1][-1] + " + " + parts[0]).strip()
+                for extra in parts[1:]:
+                    if extra:
+                        rows[-1].append(extra)
             previous_continues = line.endswith("+")
             continue
         if not line.startswith("|"):
             continue
-        cells = [cell.strip() for cell in line.split("|")[1:]]
+        cells = [cell.strip().replace(PIPES, "|") for cell in line.replace("\\|", PIPES).split("|")[1:]]
         previous_continues = line.endswith("+")
         if previous_continues and cells:
             cells[-1] = cells[-1][:-1].strip()
-        while len(cells) < 4:
+        while len(cells) < 3:
             cells.append("")
         rows.append(cells)
 
@@ -487,50 +820,124 @@ def parse_limits_table(adoc: str) -> list[dict]:
         if len(cells) < 4 or "pname:" not in cells[0]:
             continue
         name = re.sub(r"^.*pname:", "", cells[0]).strip().split()[0]
-        values = []
-        for match in VALUE_RE.finditer(cells[2]):
-            tags = [tag.strip("{}").replace("limit", "") for tag in TAG_RE_SPLIT.split(match.group("tags")) if tag.strip("{}")]
-            values.append({"value": match.group("value").strip(), "tags": tags})
-        if not values:
-            values = [{"value": re.sub(r"\s+", " ", cells[2]).strip(), "tags": []}]
-        limit_type = cells[3].strip().strip("*^") or "unspecified"
-        core_values = [entry for entry in values if not entry["tags"] or {"core", "1_4"} & set(entry["tags"])]
-
-        def numeric(entry: dict):
-            digits = re.sub(r"[^0-9]", "", entry["value"].split("^")[0])
-            return int(digits) if digits else None
-
-        numbers = [number for number in (numeric(entry) for entry in core_values) if number is not None]
-        required = None
-        if numbers:
-            required = max(numbers) if limit_type.startswith("min") else min(numbers)
-        elif core_values:
-            required = core_values[-1]["value"]
+        type_like = re.compile(r"^(min|max|min,|max,|recommendation|implementation-dependent|Boolean|fixed point increment|\(max|min\))")
+        cells = [cell for cell in cells if cell != ""] or [""]
+        if len(cells) >= 3 and type_like.match(cells[-1]):
+            supported_cell, type_cell = cells[-2], cells[-1]
+        elif len(cells) >= 2:
+            supported_cell, type_cell = cells[-1], ""
+        else:
+            supported_cell, type_cell = "", ""
+        cells = [cells[0], supported_cell, type_cell]
+        value_records = []
+        keep_none = len(re.findall(r"\((?=[^)]*\{)", supported_cell)) == 0
+        chunks = [chunk.strip().strip("+").strip() for chunk in re.split(r"\s\+\s|\s\+$", supported_cell)]
+        for chunk in [c for c in chunks if c]:
+            chunk = FOOTNOTE_RE.sub(" ", chunk).strip()
+            match = VALUE_TAGS_RE.fullmatch(chunk)
+            if match:
+                raw_value = FOOTNOTE_RE.sub(" ", match.group("value")).strip()
+                tags = [tag.strip("{}").replace("limit", "") for tag in TAG_RE_SPLIT.split(match.group("tags")) if tag.strip("{}")]
+            else:
+                raw_value = FOOTNOTE_RE.sub(" ", chunk).strip()
+                tags = []
+            if not raw_value:
+                raw_value = "-" if keep_none else ""
+            interpretation = interpret_limit_value(raw_value)
+            if interpretation["kind"] == "unknown":
+                raise SystemExit("uninterpretable limit value for %s: %r" % (name, raw_value))
+            value_records.append({"value": raw_value, "tags": tags, **interpretation})
+        if not value_records:
+            interpretation = interpret_limit_value(supported_cell)
+            if interpretation["kind"] == "unknown":
+                raise SystemExit("uninterpretable limit value for %s: %r" % (name, supported_cell))
+            value_records.append({"value": supported_cell, "tags": [], **interpretation})
+        limit_types = [part.strip() for part in re.split(r",", type_cell.replace("*", "").replace("^", "")) if part.strip()]
+        base_type = limit_types[0] if limit_types else "unspecified"
+        core_values = [entry for entry in value_records if not entry["tags"] or {"core", "1_4"} & set(entry["tags"])]
+        kinds = [entry["kind"] for entry in core_values]
+        values = [entry.get("values") if entry["kind"] == "tuple" else entry.get("value") for entry in core_values]
+        required = combine(values, limit_types, kinds)
+        if required is None and all(kind == "enum" for kind in kinds) and kinds:
+            required = core_values[-1].get("value")
+        required_kind = "none"
+        if kinds:
+            if any(kind == "tuple" for kind in kinds):
+                required_kind = "tuple"
+            elif all(kind in ("integer", "decimal", "power", "fraction") for kind in kinds):
+                required_kind = "decimal" if any(kind == "decimal" for kind in kinds) else "integer"
+            elif any(kind == "enum" for kind in kinds):
+                required_kind = "enum"
         record = {
             "limit": name,
-            "limit_type": limit_type,
+            "limit_type": base_type,
+            "limit_types": limit_types,
+            "required_kind": required_kind,
             "required_for_core_1_4": required,
-            "values": values,
-            "roadmap_only_values": [entry for entry in values if set(entry["tags"]) & {"2022", "2024", "2026"}],
+            "values": value_records,
+            "roadmap_only_values": [entry for entry in value_records if set(entry["tags"]) & {"2022", "2024", "2026"}],
         }
         existing = parsed.get(name)
-        if existing is None:
+        if existing is None or len(record["values"]) > len(existing["values"]):
             parsed[name] = record
-            continue
-        # The table can mention a limit more than once; merge instead of
-        # silently keeping whichever row happened to be parsed last.
-        if len(record["values"]) > len(existing["values"]):
-            merged = dict(record)
-            parsed[name] = merged
-        else:
-            merged = existing
-        if merged["required_for_core_1_4"] is None:
-            merged["required_for_core_1_4"] = record["required_for_core_1_4"]
+
+    resolve_limit_references(parsed)
     return [parsed[name] for name in sorted(parsed)]
 
 
+SYMBOL_RE = re.compile(r"\{sym(\d)\}")
+IFDEF_RE = re.compile(r"^ifdef::([^\[]+)\[\]$")
+SCOPE_RE = re.compile(r"pname:(linearTilingFeatures|optimalTilingFeatures|bufferFeatures)")
+FEATURE_COND_RE = re.compile(r"pname:([A-Za-z0-9_]+)[^.]{0,40}?feature")
+EXTENSION_COND_RE = re.compile(r"apiext:(VK_[A-Za-z0-9_]+)")
+
+
+def parse_symbol_legend(adoc: str) -> dict:
+    legend = {}
+    block = adoc_table_block(adoc, "formats-key-for-format-feature-tables-table")
+    current = None
+    for line in block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("^|{sym"):
+            symbol = SYMBOL_RE.search(stripped).group(0)
+            current = symbol
+            legend[current] = stripped.split("|", 2)[-1].strip()
+        elif current and stripped and not stripped.startswith("|"):
+            legend[current] = (legend[current] + " " + stripped).strip()
+    return {key: re.sub(r"\s+", " ", value) for key, value in legend.items()}
+
+
+def _record_annotation(annotations: dict, text: str) -> None:
+    symbol_match = SYMBOL_RE.search(text)
+    if not symbol_match:
+        return
+    flat = re.sub(r"\s+", " ", text)
+    scope_match = SCOPE_RE.search(flat)
+    feature_match = FEATURE_COND_RE.search(flat)
+    extension_match = EXTENSION_COND_RE.search(flat)
+    reasons = []
+    if extension_match:
+        reasons.append("requires the %s extension" % extension_match.group(1))
+    if feature_match:
+        reasons.append("requires the %s feature" % feature_match.group(1))
+    annotations[symbol_match.group(0)] = {
+        "symbol": symbol_match.group(0),
+        "text": flat,
+        "scope": scope_match.group(1) if scope_match else None,
+        "condition": " and ".join(reasons) if reasons else flat,
+    }
+
+
 def parse_formats_tables(adoc: str) -> list[dict]:
-    """Parse the mandatory format support tables into format x feature-bit rows."""
+    """Parse the mandatory format tables without losing conditions.
+
+    Each cell keeps its symbol ({sym1} = unconditional, {sym2}/{sym3}/{sym4} =
+    conditional), the per-table annotation that explains the symbol, the scope
+    (linear/optimal tiling or buffer) and any ifdef guard that limits the row to
+    a core version or extension. Unknown markers raise instead of being treated
+    as mandatory.
+    """
+    legend = parse_symbol_legend(adoc)
     tables = []
     for match in re.finditer(r"\[\[(formats-mandatory-features-[a-z0-9-]+)\]\][\s\S]{0,4000}?\|====([\s\S]*?)\|====", adoc):
         anchor, block = match.group(1), match.group(2)
@@ -541,24 +948,84 @@ def parse_formats_tables(adoc: str) -> list[dict]:
             if column:
                 columns.append((int(column.group(1)), column.group(2)))
         columns.sort()
+        annotations: dict[str, dict] = {}
         rows = []
+        guards: list[str] = []
+        pending_annotation = None
         for line in block.splitlines():
+            stripped = line.strip()
+            if pending_annotation is not None:
+                pending_annotation = (pending_annotation + " " + stripped).strip()
+                continue
+            guard = IFDEF_RE.match(stripped)
+            if guard:
+                guards.append(guard.group(1))
+                continue
+            if stripped.startswith("endif::"):
+                if guards:
+                    guards.pop()
+                continue
+            annotation = re.match(r"\d+\+\|\s*(.*)$", stripped)
+            if annotation and annotation.group(1):
+                pending_annotation = annotation.group(1)
+                continue
+            if pending_annotation is not None:
+                _record_annotation(annotations, pending_annotation)
+                pending_annotation = None
             row = re.match(r"\s*\|\s*ename:(VK_FORMAT_[A-Z0-9_]+)\s*\|(.*)$", line)
             if not row:
                 continue
+            if pending_annotation is not None:
+                _record_annotation(annotations, pending_annotation)
+                pending_annotation = None
             cells = [cell.strip() for cell in row.group(2).split("|")]
-            features = [
-                feature
-                for index, (_, feature) in enumerate(columns)
-                if index < len(cells) and cells[index]
-            ]
-            rows.append({"format": row.group(1), "required_feature_bits": features})
+            features, conditional = [], []
+            for index, (_, feature) in enumerate(columns):
+                marker = cells[index] if index < len(cells) else ""
+                if not marker:
+                    continue
+                symbol_match = SYMBOL_RE.fullmatch(marker)
+                if not symbol_match:
+                    raise SystemExit("unknown format table marker %r for %s" % (marker, row.group(1)))
+                symbol = symbol_match.group(0)
+                if symbol == "{sym1}":
+                    features.append(feature)
+                else:
+                    annotation = annotations.get(symbol, {})
+                    conditional.append(
+                        {
+                            "feature": feature,
+                            "symbol": symbol,
+                            "scope": annotation.get("scope"),
+                            "condition": annotation.get("condition") or legend.get(symbol),
+                            "guard": guards[0] if guards else None,
+                        }
+                    )
+            rows.append(
+                {
+                    "format": row.group(1),
+                    "guard": guards[0] if guards else None,
+                    "required_feature_bits": features,
+                    "conditional_feature_bits": conditional,
+                }
+            )
+        if pending_annotation is not None:
+            _record_annotation(annotations, pending_annotation)
+            pending_annotation = None
+        for row in rows:
+            for cell in row["conditional_feature_bits"]:
+                annotation = annotations.get(cell["symbol"], {})
+                cell["scope"] = cell["scope"] or annotation.get("scope")
+                cell["condition"] = annotation.get("condition") or legend.get(cell["symbol"])
+                cell["table_annotation"] = annotation.get("text")
         if rows:
             tables.append(
                 {
                     "anchor": anchor,
                     "title": title.group(1).strip() if title else anchor,
                     "columns": [feature for _, feature in columns],
+                    "symbol_legend": legend,
+                    "annotations": list(annotations.values()),
                     "rows": rows,
                 }
             )

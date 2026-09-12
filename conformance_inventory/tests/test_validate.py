@@ -34,6 +34,16 @@ if INVENTORY_DIR not in sys.path:
 
 import validate  # noqa: E402  (path is prepared above)
 
+
+def _load_derive_module():
+    import importlib.util
+
+    path = os.path.join(INVENTORY_DIR, "tools", "derive_core_target.py")
+    spec = importlib.util.spec_from_file_location("derive_core_target", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 TARGET_SHA = "a" * 64
 
 
@@ -823,6 +833,81 @@ class CheckedInInventoryTests(unittest.TestCase):
             consumers=bundle.consumers, manifest=bundle.manifest, target=target,
             roadmap=bundle.roadmap, surface=bundle.surface))
         self.assertIn("T011", errors(problems))
+
+    def test_limit_values_are_interpreted_not_stripped(self):
+        """Regression: powers and decimals must keep their value."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        rows = {row["limit"]: row for row in bundle.target["limits"]["rows"]}
+        self.assertEqual(rows["maxMemoryAllocationSize"]["required_for_core_1_4"], 2 ** 30)
+        self.assertEqual(rows["lineWidthGranularity"]["required_for_core_1_4"], 0.5)
+        self.assertEqual(rows["pointSizeGranularity"]["required_for_core_1_4"], 0.125)
+        self.assertEqual(rows["maxComputeWorkGroupSize"]["required_for_core_1_4"], [256, 256, 64])
+        self.assertEqual(rows["viewportBoundsRange"]["required_for_core_1_4"], [-15360, 15359])
+        self.assertEqual(rows["bufferImageGranularity"]["required_for_core_1_4"], 4096)
+        self.assertIn(rows["maxMemoryAllocationSize"]["values"][0]["kind"], ("power", "integer"))
+        unknown = [(name, value["raw"]) for name, row in rows.items() for value in row["values"] if value["kind"] == "unknown"]
+        self.assertEqual(unknown, [])
+
+    def test_unknown_limit_expressions_are_rejected(self):
+        """Regression: unknown expressions must fail instead of being mangled."""
+        module = _load_derive_module()
+        for expression in ("0x1f", "??", "2 ^^ 3"):
+            self.assertEqual(module.interpret_limit_value(expression)["kind"], "unknown", expression)
+        # A value that references an unknown name is rejected when the table is resolved.
+        with self.assertRaises(SystemExit):
+            module.resolve_limit_references({"a": {"values": [{"kind": "reference", "value": "frobs"}], "required_for_core_1_4": None, "limit_types": ["min"]}})
+        for expression, expected in (("2^30^", 2 ** 30), ("2^22", 2 ** 22), ("2^32^-1", 2 ** 32 - 1), ("1/4", 0.25), ("0.5", 0.5)):
+            parsed = module.interpret_limit_value(expression)
+            self.assertEqual(parsed.get("value"), expected, expression)
+
+    def test_format_conditions_and_scopes_survive(self):
+        """Regression: {sym3} storage support must not become unconditional."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = {table["anchor"]: table for table in bundle.target["formats"]["tables"]}
+        two_byte = tables["formats-mandatory-features-2byte"]
+        r8 = next(entry for entry in two_byte["rows"] if entry["format"] == "VK_FORMAT_R8_UNORM")
+        self.assertNotIn("VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT", r8["required_feature_bits"])
+        storage = next(cell for cell in r8["conditional_feature_bits"] if cell["feature"] == "VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT")
+        self.assertEqual(storage["symbol"], "{sym3}")
+        self.assertEqual(storage["scope"], "optimalTilingFeatures")
+        self.assertIn("shaderStorageImageExtendedFormats", storage["condition"])
+        self.assertEqual(next(entry for entry in two_byte["rows"] if entry["format"] == "VK_FORMAT_A8_UNORM")["guard"], "VK_BASE_VERSION_1_4,VK_KHR_maintenance5")
+        rows = {row["id"]: row for row in bundle.requirements["requirements"]}
+        conditions = " ".join(rows["VK14-CORE-132"]["capability_conditions"])
+        self.assertIn("{sym3}", conditions)
+        self.assertIn("shaderStorageImageExtendedFormats", conditions)
+        self.assertIn("VK_BASE_VERSION_1_4", conditions)
+        four_four = tables["formats-mandatory-features-subbyte"]
+        self.assertTrue(any("VK_EXT_4444_formats" in annotation["condition"] for annotation in four_four["annotations"]))
+
+    def test_readme_figures_are_generated_and_current(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        stats = validate.readme_stats(bundle, bundle.requirements["requirements"])
+        text = bundle.readme_text
+        block = text.split(validate.README_BEGIN, 1)[1].split(validate.README_END, 1)[0]
+        quoted = json.loads(block.split("```json", 1)[-1].split("```", 1)[0])
+        self.assertEqual(quoted, stats)
+
+    def test_table_gates_fire_when_conditions_are_stripped(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        stripped = copy.deepcopy(bundle.requirements)
+        for row in stripped["requirements"]:
+            row.pop("capability_conditions", None)
+        problems, _ = validate.validate(validate.Bundle(
+            sources=bundle.sources, requirements=stripped, coverage=bundle.coverage,
+            consumers=bundle.consumers, manifest=bundle.manifest, target=bundle.target,
+            roadmap=bundle.roadmap, surface=bundle.surface, readme_text=bundle.readme_text))
+        self.assertIn("T017", errors(problems))
+
+    def test_limit_gate_fires_on_uninterpreted_values(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        target = copy.deepcopy(bundle.target)
+        target["limits"]["rows"][0]["values"][0]["kind"] = "unknown"
+        problems, _ = validate.validate(validate.Bundle(
+            sources=bundle.sources, requirements=bundle.requirements, coverage=bundle.coverage,
+            consumers=bundle.consumers, manifest=bundle.manifest, target=target,
+            roadmap=bundle.roadmap, surface=bundle.surface, readme_text=bundle.readme_text))
+        self.assertIn("T019", errors(problems))
 
     def test_wsi_is_not_a_core_requirement(self):
         bundle = validate.Bundle.load(INVENTORY_DIR)

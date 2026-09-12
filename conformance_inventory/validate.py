@@ -98,6 +98,7 @@ class Bundle:
     target: dict | None = None
     roadmap: dict | None = None
     surface: dict | None = None
+    readme_text: str | None = None
     anchor_index: set[str] | None = None
     cts_cache_dir: str | None = None
 
@@ -120,6 +121,10 @@ class Bundle:
             roadmap=read("roadmap_comparison.json"),
             surface=read("baseline_surface.json"),
         )
+        readme_path = os.path.join(inventory_dir, "README.md")
+        if os.path.exists(readme_path):
+            with open(readme_path, "r", encoding="utf-8") as handle:
+                bundle.readme_text = handle.read()
         for key, value in overrides.items():
             setattr(bundle, key, value)
         return bundle
@@ -619,6 +624,113 @@ def validate_core_tables(bundle: Bundle, rows: list[dict], problems: list[Proble
             problems.append(Problem("error", "T016", "core_target.json", "extension rule without its trigger: %r" % rule.get("text", "")[:80]))
     if not any(row.get("extensions") for row in rows) and rule_list:
         problems.append(Problem("error", "T016", "core_target.json", "extension rules are not referenced by any requirement row"))
+
+    # T017: conditional format cells and ifdef guards must survive into the rows.
+    rows_by_anchor = {}
+    for row in rows:
+        anchor = (row.get("source") or {}).get("anchor")
+        if anchor:
+            rows_by_anchor.setdefault(anchor, []).append(row)
+    for table in tables:
+        conditional_cells = sum(len(entry.get("conditional_feature_bits", [])) for entry in table.get("rows", []))
+        guards = sorted({entry["guard"] for entry in table.get("rows", []) if entry.get("guard")})
+        if not (table.get("annotations") or conditional_cells or guards):
+            continue
+        target_rows = rows_by_anchor.get(table["anchor"], [])
+        if not target_rows:
+            problems.append(Problem("error", "T017", table["anchor"], "format table with conditions is not referenced by any requirement row"))
+            continue
+        conditions = " ".join(entry for row in target_rows for entry in (row.get("capability_conditions") or []))
+        for annotation in table.get("annotations", []):
+            if annotation["symbol"] not in conditions:
+                problems.append(Problem("error", "T017", table["anchor"], "symbol %s lost its condition in the requirement row" % annotation["symbol"]))
+            if annotation.get("condition") and annotation["condition"][:24] not in conditions:
+                problems.append(Problem("error", "T017", table["anchor"], "condition for %s is not recorded in the requirement row" % annotation["symbol"]))
+        for guard in guards:
+            if guard not in conditions:
+                problems.append(Problem("error", "T017", table["anchor"], "ifdef guard %r is not recorded in the requirement row" % guard))
+
+    # T019: every limit value must have been interpreted, never stripped.
+    known_kinds = {"integer", "decimal", "power", "fraction", "tuple", "expression", "reference", "enum", "none", "descriptive", "bitfield", "boolean"}
+    for entry in limits.get("rows", []):
+        for value in entry.get("values", []):
+            if value.get("kind") not in known_kinds:
+                problems.append(Problem("error", "T019", entry["limit"], "uninterpreted limit value %r (kind %r)" % (value.get("raw"), value.get("kind"))))
+        if entry.get("required_kind") not in known_kinds:
+            problems.append(Problem("error", "T019", entry["limit"], "unknown required_kind %r" % entry.get("required_kind")))
+        if entry["limit_type"].startswith(("min", "max")) and entry.get("required_for_core_1_4") is None and entry.get("required_kind") not in ("none", "enum", "descriptive", "bitfield", "boolean", "reference"):
+            problems.append(Problem("error", "T019", entry["limit"], "required limit without an interpreted requirement"))
+    stats["conditional_format_cells"] = sum(len(entry.get("conditional_feature_bits", [])) for table in tables for entry in table.get("rows", []))
+    stats["limit_value_kinds"] = sorted({value.get("kind") for entry in limits.get("rows", []) for value in entry.get("values", [])})
+    return stats
+
+
+README_BEGIN = "<!-- stats:begin -->"
+README_END = "<!-- stats:end -->"
+
+
+def readme_stats(bundle: Bundle, rows: list[dict]) -> dict:
+    """The numbers quoted in README.md. Generated, never hand-maintained."""
+    target = bundle.target or {}
+    bits = target.get("mandatory_feature_bits", {})
+    conditional = {feature for entry in bits.get("conditional_in_version_blocks", []) for feature in entry.get("features", [])}
+    surface = (target.get("api_surface", {}).get("surface_by_profile", {}) or {}).get("graphics_resolved", {}) or {}
+    manifest = bundle.manifest or {}
+    counts = {"mandatory": 0, "conditional": 0, "optional": 0}
+    quality = {}
+    for row in rows:
+        counts[row.get("classification")] = counts.get(row.get("classification"), 0) + 1
+        value = (row.get("cts") or {}).get("coverage_quality")
+        if value:
+            quality[value] = quality.get(value, 0) + 1
+    return {
+        "requirements": len(rows),
+        "requirements_mandatory": counts.get("mandatory", 0),
+        "requirements_conditional": counts.get("conditional", 0),
+        "requirements_optional": counts.get("optional", 0),
+        "core_mandatory_feature_bits": len(set(bits.get("cumulative", [])) - conditional),
+        "core_conditional_feature_bits": len(conditional),
+        "core_commands": surface.get("commands_total"),
+        "core_types": surface.get("types_total"),
+        "limits_rows": len((target.get("limits") or {}).get("rows", [])),
+        "limits_raised_in_1_4": len((target.get("limits") or {}).get("raised_in_1_4", [])),
+        "format_tables": len((target.get("formats") or {}).get("tables", [])),
+        "format_rows": sum(len(table.get("rows", [])) for table in (target.get("formats") or {}).get("tables", [])),
+        "command_contracts": len((target.get("command_contracts") or {}).get("contracts", {})),
+        "extension_rules": len(bits.get("extension_rules", [])),
+        "cts_group_files": manifest.get("totals", {}).get("group_files"),
+        "cts_cases": manifest.get("totals", {}).get("cases"),
+        "cts_mapped_rows": sum(1 for row in rows if (row.get("cts") or {}).get("mapping") == "mapped"),
+        "cts_representative_or_family_rows": quality.get("representative-case", 0) + quality.get("family-level", 0),
+        "cts_direct_rows": quality.get("direct", 0),
+    }
+
+
+def validate_readme(bundle: Bundle, rows: list[dict], problems: list[Problem]) -> dict:
+    """The README quotes generated numbers; a stale block is an error."""
+    stats = readme_stats(bundle, rows)
+    text = bundle.readme_text
+    if text is None:
+        # Synthetic bundles in tests do not always carry the README; when the
+        # file is present it must contain a current block.
+        return stats
+    if README_BEGIN not in text or README_END not in text:
+        problems.append(Problem("error", "T018", "README.md", "README.md has no generated stats block"))
+        return stats
+    block = text.split(README_BEGIN, 1)[1].split(README_END, 1)[0]
+    payload = block.split("```json", 1)[-1].split("```", 1)[0]
+    try:
+        quoted = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        problems.append(Problem("error", "T018", "README.md", "stats block is not valid JSON: %s" % exc))
+        return stats
+    for key, value in sorted(stats.items()):
+        if key not in quoted:
+            problems.append(Problem("error", "T018", "README.md", "stats block is missing %r" % key))
+        elif quoted[key] != value:
+            problems.append(
+                Problem("error", "T018", "README.md", "stats block %s=%r but the data says %r" % (key, quoted[key], value))
+            )
     return stats
 
 
@@ -737,11 +849,12 @@ def validate(bundle: Bundle) -> tuple[list[Problem], dict]:
     quality_stats = validate_cts_coverage_quality(rows, problems)
     target_stats = validate_target(bundle, sources, rows, problems)
     table_stats = validate_core_tables(bundle, rows, problems)
+    readme_stats_result = validate_readme(bundle, rows, problems)
     surface_stats = validate_baseline_surface(bundle, rows, problems)
     validate_anchors(bundle, rows, problems)
     consumer_stats = validate_consumers(bundle, sources, row_ids, problems)
 
-    report = build_report(bundle, rows, cts_stats, quality_stats, target_stats, table_stats, surface_stats, consumer_stats, problems)
+    report = build_report(bundle, rows, cts_stats, quality_stats, target_stats, table_stats, readme_stats_result, surface_stats, consumer_stats, problems)
     return problems, report
 
 
@@ -752,6 +865,7 @@ def build_report(
     quality_stats: dict,
     target_stats: dict,
     table_stats: dict,
+    readme_stats_result: dict,
     surface_stats: dict,
     consumer_stats: dict,
     problems: list[Problem],
@@ -810,6 +924,7 @@ def build_report(
         },
         "target": target_stats,
         "core_tables": table_stats,
+        "readme_stats": readme_stats_result,
         "baseline_surface": surface_stats,
         "consumers": consumer_stats,
         "spec_coverage": {

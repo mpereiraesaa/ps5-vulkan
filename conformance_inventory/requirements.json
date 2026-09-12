@@ -1697,7 +1697,7 @@
     {
       "id": "VK14-CORE-120",
       "category": "formats_limits",
-      "summary": "Required limits table: 434 limits resolved per limit and limit type, of which 24 are raised in Vulkan 1.4.",
+      "summary": "Required limits table: 427 limits resolved per limit and limit type, of which 32 are raised in Vulkan 1.4.",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -1716,7 +1716,7 @@
       },
       "features": [],
       "limits": [
-        "core_target.json limits.rows (name, limit_type, required_for_core_1_4, roadmap_only_values)"
+        "core_target.json limits.rows (limit, limit_type, required_kind, required_for_core_1_4, values with tags)"
       ],
       "formats": [],
       "commands": [],
@@ -1757,12 +1757,12 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Roadmap-only values ({limit2022}, {limit2024}, {limit2026}) are recorded separately and never applied to the core target."
+      "review_notes": "Values are interpreted (powers such as 2^30^, decimals, tuples, ranges, arithmetic and symbolic references), unknown expressions fail generation, and roadmap-tagged values are recorded separately."
     },
     {
       "id": "VK14-CORE-131",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: Sub-Byte Components (12 formats, 21 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: Sub-Byte Components (12 formats, 15 unconditional feature bits, 6 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -1776,8 +1776,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-subbyte",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -1834,12 +1834,17 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature; rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5).",
+      "capability_conditions": [
+        "{sym2} in optimalTilingFeatures: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature",
+        "rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats",
+        "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5"
+      ]
     },
     {
       "id": "VK14-CORE-132",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 1-3 Byte-Sized Components (29 formats, 66 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: 1-3 Byte-Sized Components (29 formats, 58 unconditional feature bits, 8 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -1853,8 +1858,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-2byte",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -1928,12 +1933,16 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5).",
+      "capability_conditions": [
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5"
+      ]
     },
     {
       "id": "VK14-CORE-133",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 4 Byte-Sized Components (21 formats, 92 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: 4 Byte-Sized Components (21 formats, 92 unconditional feature bits, 0 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -1947,8 +1956,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-4byte",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -2014,12 +2023,13 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (none).",
+      "capability_conditions": []
     },
     {
       "id": "VK14-CORE-134",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 10-, 12-, and 14-Bit Components (30 formats, 17 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: 10-, 12-, and 14-Bit Components (30 formats, 15 unconditional feature bits, 2 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2033,8 +2043,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-10bit",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -2109,12 +2119,17 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; rows guarded by ifdef VK_ARM_format_pack; rows guarded by ifdef VK_BASE_VERSION_1_1,VK_KHR_sampler_ycbcr_conversion).",
+      "capability_conditions": [
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "rows guarded by ifdef VK_ARM_format_pack",
+        "rows guarded by ifdef VK_BASE_VERSION_1_1,VK_KHR_sampler_ycbcr_conversion"
+      ]
     },
     {
       "id": "VK14-CORE-135",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 16-bit Components (28 formats, 102 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: 16-bit Components (28 formats, 87 unconditional feature bits, 15 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2128,8 +2143,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-16bit",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -2202,12 +2217,15 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature).",
+      "capability_conditions": [
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature"
+      ]
     },
     {
       "id": "VK14-CORE-136",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 32-bit Components (12 formats, 80 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: 32-bit Components (12 formats, 80 unconditional feature bits, 0 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2221,8 +2239,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-32bit",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -2279,12 +2297,15 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures: requires the shaderImageFloat32Atomics feature).",
+      "capability_conditions": [
+        "{sym2} in optimalTilingFeatures: requires the shaderImageFloat32Atomics feature"
+      ]
     },
     {
       "id": "VK14-CORE-137",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 64-bit/uneven Components (14 formats, 9 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: 64-bit/uneven Components (14 formats, 8 unconditional feature bits, 1 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2298,8 +2319,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-64bit",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -2358,12 +2379,15 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature).",
+      "capability_conditions": [
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature"
+      ]
     },
     {
       "id": "VK14-CORE-138",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: Depth/Stencil With `VkImageType` ename:VK_IMAGE_TYPE_2D (7 formats, 9 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: Depth/Stencil With `VkImageType` ename:VK_IMAGE_TYPE_2D (7 formats, 5 unconditional feature bits, 4 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2377,8 +2401,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-depth-stencil",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -2430,12 +2454,13 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (none).",
+      "capability_conditions": []
     },
     {
       "id": "VK14-CORE-139",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: BC Compressed Formats With `VkImageType` ename:VK_IMAGE_TYPE_2D and ename:VK_IMAGE_TYPE_3D (16 formats, 48 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: BC Compressed Formats With `VkImageType` ename:VK_IMAGE_TYPE_2D and ename:VK_IMAGE_TYPE_3D (16 formats, 0 unconditional feature bits, 48 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2449,8 +2474,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-bcn",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -2511,12 +2536,13 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (none).",
+      "capability_conditions": []
     },
     {
       "id": "VK14-CORE-140",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: ETC2 and EAC Compressed Formats With `VkImageType` ename:VK_IMAGE_TYPE_2D (10 formats, 30 required feature-bit combinations).",
+      "summary": "Mandatory format support: Mandatory Format Support: ETC2 and EAC Compressed Formats With `VkImageType` ename:VK_IMAGE_TYPE_2D (10 formats, 0 unconditional feature bits, 30 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2530,8 +2556,8 @@
       "coverage_chapter": "chapters/formats.adoc",
       "source": {
         "source_id": "khronos-vulkan-spec",
-        "anchor": "formats",
-        "note": "Derived from the pinned core requirement set; see core_target.json for the machine-readable table."
+        "anchor": "formats-mandatory-features-etc",
+        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
       },
       "features": [],
       "limits": [],
@@ -2586,7 +2612,8 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Format/usage combination table derived from the pinned mandatory format support tables."
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (none).",
+      "capability_conditions": []
     },
     {
       "id": "VK14-FORMATS-001",
@@ -2804,7 +2831,7 @@
       "id": "VK14-FORMATS-004",
       "category": "formats_limits",
       "core_introduction": "1.4",
-      "summary": "Support the 24 limits raised in 1.4, with values resolved from the pinned required-limits table (core and 1.4 tags only).",
+      "summary": "Support the 32 limits raised in 1.4, with interpreted values from the pinned required-limits table.",
       "applicability": {
         "core": "core-mandatory",
         "target": "required",
@@ -2816,15 +2843,16 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "versions-1.4-updated-limits",
-        "note": "Values generated from the pinned limits table; roadmap-tagged values are excluded."
+        "note": "Values generated from the pinned limits table; roadmap-only tags are excluded."
       },
       "features": [],
       "limits": [
         "bufferImageGranularity <= 4096",
-        "lineWidthGranularity <= 5",
+        "lineWidthGranularity <= 0.5",
         "maxBoundDescriptorSets >= 7",
         "maxColorAttachments >= 8",
         "maxComputeWorkGroupInvocations >= 256",
+        "maxComputeWorkGroupSize >= (256,256,64)",
         "maxDescriptorSetStorageBuffers >= 96",
         "maxDescriptorSetStorageImages >= 144",
         "maxDescriptorSetUniformBuffers >= 90",
@@ -2841,9 +2869,16 @@
         "maxPushConstantsSize >= 256",
         "maxSamplerLodBias >= 14",
         "maxUniformBufferRange >= 65536",
+        "maxViewportDimensions >= (7680,7680)",
         "mipmapPrecisionBits >= 6",
-        "pointSizeGranularity <= 6",
-        "subTexelPrecisionBits >= 8"
+        "pointSizeGranularity <= 0.125",
+        "pointSizeRange <= (1.0,64.0)",
+        "shaderSignedZeroInfNanPreserveFloat16 == ename:VK_TRUE",
+        "shaderSignedZeroInfNanPreserveFloat32 == ename:VK_TRUE",
+        "standardSampleLocations == ename:VK_TRUE",
+        "subTexelPrecisionBits >= 8",
+        "timestampComputeAndGraphics == ename:VK_TRUE",
+        "viewportBoundsRange <= (-15360,15359)"
       ],
       "formats": [],
       "commands": [],
