@@ -144,6 +144,8 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
 
     const struct ps5vk_compiled_program *program = NULL;
     struct ps5vk_cache_entry *entry = NULL;
+    struct ps5vk_compiled_program compiled_storage = {0};
+    uint32_t *compiled_code = NULL;
 
     if (d->pipeline_cache) {
         struct ps5vk_cache_key key;
@@ -153,16 +155,20 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
             if (entry) {
                 program = &entry->program;
             } else if (d->runtime_compiler_enabled && d->compiler.compile) {
-                struct ps5vk_compiled_program compiled;
-                uint32_t *code = NULL;
                 VkResult cr = d->compiler.compile(d->compiler.context,
                     info->stage.module->words, info->stage.module->word_count,
-                    info->stage.pName, info->layout, &compiled, &code);
+                    info->stage.pName, info->layout, &compiled_storage, &compiled_code);
                 if (cr == VK_SUCCESS) {
+                    compiled_storage.code = compiled_code;
                     entry = ps5vk_compilation_cache_insert(d->pipeline_cache, &key,
-                        info->stage.module->words, &compiled, code);
-                    free(code);
-                    if (entry) program = &entry->program;
+                        info->stage.module->words, &compiled_storage, compiled_code);
+                    if (entry) {
+                        free(compiled_code);
+                        compiled_code = NULL;
+                        program = &entry->program;
+                    } else {
+                        program = &compiled_storage;
+                    }
                 } else if (cr != VK_ERROR_FEATURE_NOT_PRESENT) {
                     return cr;
                 }
@@ -173,12 +179,18 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     if (!program && d->compiler.resolve) {
         VkResult result = d->compiler.resolve(d->compiler.context, info->stage.module->words,
             info->stage.module->word_count, info->stage.pName, &program);
-        if (result != VK_SUCCESS)
+        if (result != VK_SUCCESS) {
+            if (compiled_code) free(compiled_code);
             return result == VK_ERROR_FEATURE_NOT_PRESENT ? VK_ERROR_UNKNOWN : result;
+        }
     }
 
-    if (!program) return VK_ERROR_UNKNOWN;
+    if (!program) {
+        if (compiled_code) free(compiled_code);
+        return VK_ERROR_UNKNOWN;
+    }
     if (!program_valid(program, info->stage.module, info->layout, info->stage.pName, dims)) {
+        if (compiled_code) free(compiled_code);
         if (entry) ps5vk_cache_entry_release(d->pipeline_cache, entry);
         return INVALID;
     }
@@ -187,6 +199,7 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     VkPipeline p = ps5vk_object_alloc(d->custom_allocator ? &d->allocator : NULL, a,
         sizeof(*p) + program->code_words * 4, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, &saved, &custom);
     if (!p) {
+        if (compiled_code) free(compiled_code);
         if (entry) ps5vk_cache_entry_release(d->pipeline_cache, entry);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
@@ -199,6 +212,7 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     /* Pipeline owns all execution metadata and code. Module/compiler source
      * pointers are deliberately removed; neither is needed at dispatch. */
     p->program.spirv = NULL; p->program.spirv_words = 0; p->program.entry = NULL;
+    if (compiled_code) free(compiled_code);
     ++d->pipeline_objects; *out = p;
     return VK_SUCCESS;
 }

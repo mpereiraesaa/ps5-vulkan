@@ -140,6 +140,44 @@ int main(void)
     /* 10. Clean cache destruction */
     ps5vk_compilation_cache_destroy(cache);
 
+    /* 11. Strict limit enforcement: entry exceeding total budget must be rejected */
+    struct ps5vk_compilation_cache *tiny_cache = ps5vk_compilation_cache_create(1, 1);
+    assert(tiny_cache != NULL);
+    struct ps5vk_cache_entry *oversized = ps5vk_compilation_cache_insert(tiny_cache, &key_a, spv_a, &prog_a, code_a);
+    assert(oversized == NULL); /* Must reject insert */
+    ps5vk_compilation_cache_get_stats(tiny_cache, &stats);
+    assert(stats.current_entries == 0);
+    assert(stats.current_bytes == 0);
+    ps5vk_compilation_cache_destroy(tiny_cache);
+
+    /* 12. Strict capacity enforcement when all entries are actively referenced */
+    struct ps5vk_compilation_cache *single_slot = ps5vk_compilation_cache_create(1, 1024 * 1024);
+    assert(single_slot != NULL);
+    struct ps5vk_cache_entry *first = ps5vk_compilation_cache_insert(single_slot, &key_a, spv_a, &prog_a, code_a);
+    assert(first != NULL);
+    assert(first->refcount == 1);
+    ps5vk_compilation_cache_get_stats(single_slot, &stats);
+    assert(stats.current_entries == 1);
+    size_t first_bytes = stats.current_bytes;
+
+    /* Inserting a second entry while 'first' is referenced (refcount == 1) MUST be rejected */
+    struct ps5vk_cache_entry *second = ps5vk_compilation_cache_insert(single_slot, &key_b, spv_b, &prog_a, code_b);
+    assert(second == NULL); /* Must reject insertion because limit of 1 entry cannot be preserved via eviction */
+    ps5vk_compilation_cache_get_stats(single_slot, &stats);
+    assert(stats.current_entries == 1);
+    assert(stats.current_bytes == first_bytes);
+
+    /* Now release first entry (refcount drops to 0, eligible for eviction) */
+    ps5vk_cache_entry_release(single_slot, first);
+    /* Now second insert must succeed by evicting the unreferenced first entry */
+    second = ps5vk_compilation_cache_insert(single_slot, &key_b, spv_b, &prog_a, code_b);
+    assert(second != NULL);
+    ps5vk_compilation_cache_get_stats(single_slot, &stats);
+    assert(stats.current_entries == 1);
+    assert(stats.evictions == 1);
+    ps5vk_cache_entry_release(single_slot, second);
+    ps5vk_compilation_cache_destroy(single_slot);
+
     puts("Compilation cache contracts: pass (bounded memory, collision rejection, refcounting)");
     return 0;
 }

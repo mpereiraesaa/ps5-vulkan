@@ -25,7 +25,8 @@ def ensure_generated(psbc_dir):
     # Ensure generated files exist from Mesa/ACO/NIR
     subprocess.run([
         "make", "-C", str(psbc_dir),
-        f"CONFIG={ROOT}/third_party/ps5-opengl-reference/toolchain/opengnm-psbc-host.mak",
+        f"CONFIG={ROOT}/tools/psbc-host-config.mak",
+        f"PS5VK_ROOT={ROOT}",
         "generated"
     ], check=True)
 
@@ -118,14 +119,16 @@ def ensure_generated(psbc_dir):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", action="store_true", help="Build libpsbc.host.a for host testing")
+    parser.add_argument("--target", choices=["ps5", "host"], default="ps5", help="Target platform (ps5 or host)")
+    parser.add_argument("--host", action="store_true", help="Build libpsbc.host.a for host testing (alias for --target=host)")
     parser.add_argument("--jobs", "-j", type=int, default=8, help="Parallel compile jobs")
     parser.add_argument("--clean", action="store_true", help="Clean object files before build")
     args = parser.parse_args()
 
+    is_host = args.host or args.target == "host"
     psbc_dir = ROOT / "third_party/psbc-reference"
 
-    if args.host:
+    if is_host:
         makefile = ROOT / "tools/Makefile.psbc-host"
         out_lib = ROOT / "build/libpsbc.host.a"
         if args.clean:

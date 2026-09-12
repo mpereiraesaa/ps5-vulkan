@@ -31,6 +31,8 @@ native-memory-check:
 	$(PYTHON) tools/check_native_memory.py
 vulkan-headers:
 	$(PYTHON) tools/prepare_vulkan_headers.py
+compiler-deps:
+	$(PYTHON) tools/prepare_compiler_deps.py
 check-sanitize:
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_sanitized
@@ -166,12 +168,15 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache
 	./build/tests/test_compilation_cache
 	$(PYTHON) tools/build_sdk.py
-	@if [ -f build/libpsbc.host.a ] && [ -d third_party/psbc-reference ]; then \
+	@if [ -d third_party/psbc-reference ]; then \
 		$(MAKE) test-compiler; \
 	else \
-		echo "Host compiler archive (build/libpsbc.host.a) not present; skipping host runtime compiler integration tests."; \
+		echo "Compiler dependencies (third_party/psbc-reference) not present; skipping host runtime compiler integration tests."; \
 	fi
-test-compiler:
+build/libpsbc.host.a:
+	$(PYTHON) tools/build_psbc.py --host
+test-compiler: build/libpsbc.host.a
+	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_compiler
 	./build/tests/test_runtime_compiler
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_pipeline_cache.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_pipeline_cache

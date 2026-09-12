@@ -37,6 +37,18 @@ int main(void)
         vkDestroyInstance(instance, NULL);
     }
 
+    /* Verify presentation functions compile and link cleanly */
+    struct ps5vk_present_config pcfg = {
+        .width = 1920,
+        .height = 1080,
+        .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .buffer_count = 2
+    };
+    ps5vk_present_surface surf = NULL;
+    assert(ps5vkCreatePresentSurface(VK_NULL_HANDLE, &pcfg, 2, NULL, &surf) != VK_SUCCESS);
+    assert(ps5vkPresentFrame(NULL, 0, 0, 0) != VK_SUCCESS);
+    ps5vkDestroyPresentSurface(NULL);
+
     puts("Public SDK consumer contracts: pass (clean headers, no private symbols required)");
     return 0;
 }

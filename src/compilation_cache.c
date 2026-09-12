@@ -247,7 +247,21 @@ struct ps5vk_cache_entry *ps5vk_compilation_cache_insert(
     size_t code_bytes = program->code_words * sizeof(uint32_t);
     size_t total_bytes = sizeof(struct ps5vk_cache_entry) + spirv_bytes + code_bytes;
 
+    /* Reject entry if it exceeds total budget or if max_entries is zero */
+    if (total_bytes > cache->max_bytes || cache->max_entries == 0) {
+        pthread_mutex_unlock(&cache->mutex);
+        return NULL;
+    }
+
     evict_unreferenced(cache, total_bytes);
+
+    /* Enforce strict bounds: if unreferenced entries could not be evicted
+     * because all entries are actively referenced, reject insertion. */
+    if (cache->stats.current_entries >= cache->max_entries ||
+        cache->stats.current_bytes + total_bytes > cache->max_bytes) {
+        pthread_mutex_unlock(&cache->mutex);
+        return NULL;
+    }
 
     struct ps5vk_cache_entry *entry = calloc(1, sizeof(*entry));
     if (!entry) {

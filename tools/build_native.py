@@ -223,7 +223,7 @@ def main():
     if use_runtime_compiler:
         psbc_lib = ROOT / "build/libpsbc.ps5.a"
         if not psbc_lib.is_file():
-            run("python3", "tools/build_psbc.py", "--target=ps5")
+            run(sys.executable, str(ROOT / "tools/build_psbc.py"), "--target=ps5")
         extra_libs += [
             str(psbc_lib),
             str(sdk / "target/lib/libc++.a"),
