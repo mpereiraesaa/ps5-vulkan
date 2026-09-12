@@ -48,7 +48,10 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
             out[0] = (uint32_t)gpu;
             out[1] = (uint32_t)(gpu >> 32) | (4u << 16);
             out[2] = (uint32_t)(bytes / 4);
-            out[3] = UINT32_C(0x11000fac) | (format << 12);
+            /* Vulkan's identity component mapping for a one-component format
+             * is (R, 0, 0, 1), not the buffer SRD's generic XYZW mapping.
+             * GFX10 DST_SEL encodes X=4, constant-0=0 and constant-1=1. */
+            out[3] = UINT32_C(0x11000204) | (format << 12);
             if (extent < p->table_dword + 4) extent = p->table_dword + 4;
             continue;
         }

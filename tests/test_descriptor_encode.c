@@ -55,6 +55,14 @@ int main(void)
     memset(table,0,sizeof(table));
     assert(ps5vk_descriptor_encode(&device,&typed,1,&texel,table,16)==VK_SUCCESS);
     assert(table[0]==0x4040 && table[1]==0x00040002 && table[2]==64 &&
-        table[3]==0x11014fac);
+        table[3]==0x11014204);
+    /* GFX10 buffer SRD: R32_UINT plus Vulkan identity completion (X,0,0,1).
+     * This exact field regression prevents the hardware's scalar replication
+     * (X,X,X,X), which violates texelFetch's (R,0,0,1) result. */
+    assert(((table[3] >> 12) & 0x7fu) == 20u);
+    assert(((table[3] >> 0) & 7u) == 4u);
+    assert(((table[3] >> 3) & 7u) == 0u);
+    assert(((table[3] >> 6) & 7u) == 0u);
+    assert(((table[3] >> 9) & 7u) == 1u);
     puts("Compiler-ordered raw descriptor table: pass (host only)");
 }

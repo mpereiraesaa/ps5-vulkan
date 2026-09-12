@@ -140,7 +140,16 @@ static void recording_and_invalidation(void)
 }
 static void multi_set_recording(void)
 {
-    struct VkDevice_T d={0};
+    struct VkDevice_T d={.memory={NULL,allocate,release,cache,cache},
+        .buffer_alignment=256,.uniform_buffer_alignment=256,
+        .noncoherent_atom=64,.max_allocation=4096};
+    VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=256,
+        .usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,.sharingMode=VK_SHARING_MODE_EXCLUSIVE};
+    VkMemoryAllocateInfo mi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=256};
+    VkBuffer uniform;VkDeviceMemory memory;
+    assert(vkCreateBuffer(&d,&bi,NULL,&uniform)==VK_SUCCESS);
+    assert(vkAllocateMemory(&d,&mi,NULL,&memory)==VK_SUCCESS);
+    assert(vkBindBufferMemory(&d,uniform,memory,0)==VK_SUCCESS);
     struct VkDescriptorPool_T descriptor_pool={.device=&d};
     struct VkDescriptorSet_T a={.pool=&descriptor_pool,.generation=3,.defined={VK_TRUE}};
     struct VkDescriptorSet_T cset={.pool=&descriptor_pool,.generation=7,.defined={VK_TRUE}};
@@ -162,16 +171,29 @@ static void multi_set_recording(void)
         &layout,2,1,&set2,0,NULL);
     VkDescriptorSet set0=&a;vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,
         &layout,0,1,&set0,0,NULL);
+    VkBufferMemoryBarrier uniform_ready={.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_HOST_WRITE_BIT,.dstAccessMask=VK_ACCESS_UNIFORM_READ_BIT,
+        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .buffer=uniform,.offset=0,.size=VK_WHOLE_SIZE};
+    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_HOST_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0,0,NULL,1,&uniform_ready,0,NULL);
     vkCmdDispatch(cmd,1,1,1);
-    assert(cmd->state==PS5VK_RECORDING && cmd->operation_count==1 &&
-        cmd->operations[0].sets[0]==&a && cmd->operations[0].sets[2]==&cset &&
-        cmd->operations[0].generations[0]==3 && cmd->operations[0].generations[2]==7);
+    assert(cmd->state==PS5VK_RECORDING && cmd->operation_count==3 &&
+        cmd->operations[0].dst_access==VK_ACCESS_UNIFORM_READ_BIT &&
+        cmd->operations[2].sets[0]==&a && cmd->operations[2].sets[2]==&cset &&
+        cmd->operations[2].generations[0]==3 && cmd->operations[2].generations[2]==7);
     assert(vkEndCommandBuffer(cmd)==VK_SUCCESS);
     assert(vkResetCommandBuffer(cmd,0)==VK_SUCCESS && vkBeginCommandBuffer(cmd,&begin_info)==VK_SUCCESS);
     vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
     vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,&layout,0,1,&set0,0,NULL);
     vkCmdDispatch(cmd,1,1,1);assert(cmd->state==PS5VK_INVALID);
-    vkDestroyCommandPool(&d,p,NULL);
+    assert(vkResetCommandBuffer(cmd,0)==VK_SUCCESS && vkBeginCommandBuffer(cmd,&begin_info)==VK_SUCCESS);
+    uniform_ready.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_HOST_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0,0,NULL,1,&uniform_ready,0,NULL);
+    assert(cmd->state==PS5VK_INVALID && !cmd->operation_count);
+    vkDestroyCommandPool(&d,p,NULL);vkDestroyBuffer(&d,uniform,NULL);vkFreeMemory(&d,memory,NULL);
 }
 static void graphics_recording(void)
 {
