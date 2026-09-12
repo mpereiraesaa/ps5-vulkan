@@ -289,7 +289,7 @@ def base_row(**overrides) -> dict:
             "entry_points": ["vkCreateInstance"],
             "absent_entry_points": [],
             "refs": ["src/vk_device.c"],
-            "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched (vkCreateInstance); 1 are declared in the public header.",
+            "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header.",
         },
         "evidence": {
             "source": {"state": "not-audited", "refs": []},
@@ -746,6 +746,13 @@ class CheckedInInventoryTests(unittest.TestCase):
             self.assertIn(bit, mandatory)
             self.assertNotIn(bit, conditional)
             self.assertEqual(rows[row_id]["classification"], "mandatory", row_id)
+            self.assertNotIn("optional feature", rows[row_id]["summary"].lower(), row_id)
+            self.assertIn("core-mandatory", (rows[row_id].get("review_notes") or "").lower(), row_id)
+
+    def test_requirement_baselines_match_current_surface(self):
+        problems, _ = validate.validate(validate.Bundle.load(INVENTORY_DIR))
+        baseline_errors = [p for p in problems if p.code in {"B005", "B006"}]
+        self.assertEqual(baseline_errors, [], "\n".join(p.render() for p in baseline_errors))
 
     def test_resolved_core_surface_is_a_dependency_walk(self):
         """Regression: the compute surface must not be dropped by summing categories."""

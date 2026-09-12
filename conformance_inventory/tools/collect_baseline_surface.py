@@ -62,11 +62,11 @@ OBSERVED = {
     "vkCreateInstance": "Accepts only apiVersion 1.0; other versions are rejected. Evidence: src/vk_device.c, src/platform_host.c.",
     "vkGetPhysicalDeviceProperties": "Reports apiVersion = VK_API_VERSION_1_0. Evidence: src/platform_host.c.",
     "vkGetPhysicalDeviceQueueFamilyProperties": "Reports a single queue family with queueCount = 1. Evidence: src/vk_device.c.",
-    "vkCreateImage": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_memory.c.",
-    "vkCreateSampler": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_sampler.c.",
-    "vkCreateRenderPass": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_render_pass.c.",
-    "vkCreateGraphicsPipelines": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_graphics_pipeline.c.",
-    "vkCmdDraw": "Implemented and dispatched (DEVICE) but not declared in the public header. Evidence: src/vk_command.c.",
+    "vkCreateImage": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_memory.c, include/ps5vk/ps5vk.h.",
+    "vkCreateSampler": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_sampler.c, include/ps5vk/ps5vk.h.",
+    "vkCreateRenderPass": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_render_pass.c, include/ps5vk/ps5vk.h.",
+    "vkCreateGraphicsPipelines": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_graphics_pipeline.c, include/ps5vk/ps5vk.h.",
+    "vkCmdDraw": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_command.c, include/ps5vk/ps5vk.h.",
 }
 
 

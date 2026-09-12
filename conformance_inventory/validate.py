@@ -765,6 +765,7 @@ def readme_stats(bundle: Bundle, rows: list[dict]) -> dict:
     conditional = {feature for entry in bits.get("conditional_in_version_blocks", []) for feature in entry.get("features", [])}
     surface = (target.get("api_surface", {}).get("surface_by_profile", {}) or {}).get("graphics_resolved", {}) or {}
     manifest = bundle.manifest or {}
+    baseline_counts = (bundle.surface or {}).get("counts", {})
     counts = {"mandatory": 0, "conditional": 0, "optional": 0}
     quality = {}
     for row in rows:
@@ -777,6 +778,10 @@ def readme_stats(bundle: Bundle, rows: list[dict]) -> dict:
         "requirements_mandatory": counts.get("mandatory", 0),
         "requirements_conditional": counts.get("conditional", 0),
         "requirements_optional": counts.get("optional", 0),
+        "baseline_entry_points": baseline_counts.get("entry_points"),
+        "baseline_dispatched": baseline_counts.get("dispatched"),
+        "baseline_public_header": baseline_counts.get("public_header"),
+        "baseline_implementation_only": baseline_counts.get("implementation_only"),
         "core_mandatory_feature_bits": len(set(bits.get("cumulative", [])) - conditional),
         "core_conditional_feature_bits": len(conditional),
         "core_commands": surface.get("commands_total"),
@@ -828,12 +833,21 @@ def validate_baseline_surface(bundle: Bundle, rows: list[dict], problems: list[P
     if surface is None:
         problems.append(Problem("error", "B000", "baseline_surface.json", "document is missing"))
         return {}
-    names = {entry["name"] for entry in surface.get("entry_points", [])}
-    public = {entry["name"] for entry in surface.get("entry_points", []) if entry.get("public_header")}
+    entries = {entry["name"]: entry for entry in surface.get("entry_points", [])}
+    names = set(entries)
+    public = {name for name, entry in entries.items() if entry.get("public_header")}
     for row in rows:
         baseline = row.get("baseline") or {}
         present = baseline.get("entry_points") or []
         absent = baseline.get("absent_entry_points") or []
+        commands = row.get("commands") or []
+        expected_present = [name for name in commands if name in names]
+        expected_absent = [name for name in commands if name not in names]
+        if present != expected_present or absent != expected_absent:
+            problems.append(Problem(
+                "error", "B005", row.get("id"),
+                "baseline entry-point partition is stale; regenerate it from baseline_surface.json",
+            ))
         for name in present:
             if name not in names:
                 problems.append(Problem("error", "B001", row.get("id"), "baseline claims entry point %r that is not in baseline_surface.json" % name))
@@ -848,6 +862,19 @@ def validate_baseline_surface(bundle: Bundle, rows: list[dict], problems: list[P
             problems.append(
                 Problem("error", "B004", row.get("id"), "entry points exist only outside the public header; the note must say so explicitly")
             )
+        if commands:
+            dispatched = sum(bool(entries[name].get("dispatch_scope")) for name in expected_present)
+            public_count = sum(name in public for name in expected_present)
+            expected_note = (
+                "Baseline surface: %d of %d named entry points exist; %d are dispatched; "
+                "%d are declared in the public header."
+                % (len(expected_present), len(commands), dispatched, public_count)
+            )
+            if baseline.get("note") != expected_note:
+                problems.append(Problem(
+                    "error", "B006", row.get("id"),
+                    "baseline note is stale; regenerate it from baseline_surface.json",
+                ))
     return {
         "entry_points": surface.get("counts", {}).get("entry_points"),
         "dispatched": surface.get("counts", {}).get("dispatched"),
