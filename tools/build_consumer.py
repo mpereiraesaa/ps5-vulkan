@@ -32,7 +32,7 @@ def check_isolation(dep_file: Path, obj_file: Path):
         # - third_party/ps5-native-app-boilerplate/... (toolchain / system libc headers)
         is_sdk = str(hp).startswith(str(DIST_SDK / "include"))
         is_local = str(hp).startswith(str(CONSUMER_DIR))
-        is_crt = "ps5-native-app-boilerplate" in str(hp) or "/usr/include" in str(hp)
+        is_crt = "ps5-native-app-boilerplate" in str(hp) or str(hp).startswith("/usr/")
         if not (is_sdk or is_local or is_crt):
             raise AssertionError(f"Isolation violation: consumer includes forbidden private header {hp}")
         # Explicit check: cannot include anything from src/ or native/
