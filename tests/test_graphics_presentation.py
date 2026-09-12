@@ -15,7 +15,7 @@ class GraphicsPresentationTests(unittest.TestCase):
         manifest = dict(sha256=hashlib.sha256(log).hexdigest(), transport="tcp", protocol="ps5log/1",
                         clean=True, bye=True, gaps=[], last_seq=len(messages), run_id="synthetic",
                         identity=dict(title="PPSA99994", app="ps5vk", boot="test"))
-        artifact = dict(stage="graphics-graphics-api-native-presentation", submit_enabled=True,
+        artifact = dict(title="PPSA99994", stage="graphics-api-native-presentation-reuse", submit_enabled=True,
                         files={"eboot.bin": REFERENCE_SELF})
         return log, manifest, artifact
 

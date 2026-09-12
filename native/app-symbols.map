@@ -1,0 +1,9 @@
+/*
+ * ps5vk - Application symbol visibility policy.
+ * Keeps all application symbols internal; only shared library imports remain dynamic.
+ */
+
+{
+    local:
+        *;
+};

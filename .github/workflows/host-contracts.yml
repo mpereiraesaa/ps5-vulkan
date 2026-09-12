@@ -46,3 +46,45 @@ jobs:
       - name: Run host contracts
         working-directory: homebrew_ps5/projects/ps5-vulkan
         run: make check
+
+  compiler-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out ps5-vulkan
+        uses: actions/checkout@v4
+        with:
+          path: homebrew_ps5/projects/ps5-vulkan
+
+      - name: Install host-test dependencies
+        run: sudo apt-get update && sudo apt-get install -y glslang-tools
+
+      - name: Install Python host-test dependencies
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Prepare pinned Vulkan headers
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make vulkan-headers
+
+      - name: Prepare pinned compiler dependencies
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make compiler-deps
+
+      - name: Cache host compiler library
+        uses: actions/cache@v4
+        id: cache-libpsbc
+        with:
+          path: |
+            homebrew_ps5/projects/ps5-vulkan/build/libpsbc.host.a
+            homebrew_ps5/projects/ps5-vulkan/third_party/psbc-reference/**/*.host.o
+            homebrew_ps5/projects/ps5-vulkan/third_party/psbc-reference/**/*.host.cpp.o
+          key: libpsbc-host-f31ec6cfd5af5a102365bde94842bb91e35cf2b1-v1
+
+      - name: Build host compiler library
+        if: steps.cache-libpsbc.outputs.cache-hit != 'true'
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: python3 tools/build_psbc.py --host
+
+      - name: Run runtime compiler tests
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make test-compiler

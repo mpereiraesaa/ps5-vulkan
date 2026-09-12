@@ -1,0 +1,129 @@
+# Makefile for building libpsbc.ps5.a for PS5
+PS5VK_ROOT ?= $(realpath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+PS5_PAYLOAD_SDK ?= $(PS5VK_ROOT)/../third_party/ps5-native-app-boilerplate/.deps/native/ps5-payload-sdk
+
+OPENGNM_PSBC_ORBIS := 1
+CONFIG := /dev/null
+LIBPSBC := $(PS5VK_ROOT)/build/libpsbc.ps5.a
+
+SHARED_FLAGS = \
+	-Iinclude/ \
+	-Ilibpsbc/ \
+	-I$(PS5VK_ROOT)/third_party/opengnm/include \
+	-I$(PS5VK_ROOT)/third_party/vulkan-headers/include \
+	-Isrc/ \
+	-Isrc/amd \
+	-Isrc/amd/common \
+	-Isrc/amd/common/nir \
+	-Isrc/amd/compiler \
+	-Isrc/amd/vulkan \
+	-Isrc/amd/vulkan/nir \
+	-Isrc/vulkan/runtime \
+	-Isrc/vulkan/runtime/bvh \
+	-Isrc/vulkan/util \
+	-Isrc/compiler \
+	-Isrc/compiler/nir \
+	-Isrc/compiler/spirv \
+	-Isrc/gallium/include \
+	-Isrc/mesa \
+	-Isrc/mesa/main \
+	-Isrc/util \
+	-Icmd/psbc \
+	-Iinclude/mesa \
+	-D_GNU_SOURCE \
+	-D_XOPEN_SOURCE=700 \
+	-DUTIL_ARCH_LITTLE_ENDIAN=1 \
+	-DUTIL_ARCH_BIG_ENDIAN=0 \
+	-DHAVE_STRUCT_TIMESPEC=1 \
+	-DHAVE_PTHREAD=1 \
+	-DHAVE_SYSCONF=1 \
+	-DHAVE_FUNC_ATTRIBUTE_PACKED=1 \
+	-Dalloca=__builtin_alloca \
+	-include strings.h \
+	-DBLAKE3_NO_SSE2 \
+	-DBLAKE3_NO_SSE41 \
+	-DBLAKE3_NO_AVX2 \
+	-DBLAKE3_NO_AVX512
+
+CC = $(PS5_PAYLOAD_SDK)/bin/prospero-clang
+CXX = $(PS5_PAYLOAD_SDK)/bin/prospero-clang++
+AR = $(PS5_PAYLOAD_SDK)/bin/prospero-ar
+PYTHON ?= python3
+
+CFLAGS = -std=gnu11 -O2 -g -Wall -fPIC -DOPENGNM_PSBC_ORBIS=1 $(SHARED_FLAGS) \
+	-Dstatic_assert=_Static_assert \
+	-Wno-unused-function -Wno-unused-variable \
+	-Wno-unreachable-code-generic-assoc
+CXXFLAGS = -std=c++17 -O2 -g -Wall -fPIC -DNDEBUG -DOPENGNM_PSBC_ORBIS=1 $(SHARED_FLAGS) \
+	-Wno-unused-function -Wno-unused-variable \
+	-Wno-unreachable-code-generic-assoc
+
+include Makefile
+
+PSBC_OBJS := $(PSBC_SRCS:.c=.ps5.o)
+NIR_OBJS := $(NIR_SRCS:.c=.ps5.o)
+SPIRV_OBJS := $(SPIRV_SRCS:.c=.ps5.o)
+ACO_OBJS := $(ACO_SRCS:.cpp=.ps5.cpp.o)
+AMD_COMMON_OBJS := $(AMD_COMMON_SRCS:.c=.ps5.o)
+AMD_COMMON_NIR_OBJS := $(AMD_COMMON_NIR_SRCS:.c=.ps5.o)
+RADV_OBJS := $(RADV_SRCS:.c=.ps5.o)
+RADV_NIR_OBJS := $(RADV_NIR_SRCS:.c=.ps5.o)
+UTIL_SRCS := $(filter-out \
+	src/util/anon_file.c \
+	src/util/log.c \
+	src/util/mesa_cache_db.c \
+	src/util/mesa_cache_db_multipart.c \
+	src/util/os_file.c \
+	src/util/os_time.c \
+	src/util/u_process.c \
+	src/util/u_thread.c \
+	,$(UTIL_SRCS))
+UTIL_OBJS := $(patsubst %.c,%.ps5.o,$(filter %.c,$(UTIL_SRCS))) \
+	$(patsubst %.cpp,%.ps5.cpp.o,$(filter %.cpp,$(UTIL_SRCS)))
+UTIL_FORMAT_SRCS := $(wildcard src/util/format/*.c)
+UTIL_FORMAT_OBJS := $(UTIL_FORMAT_SRCS:.c=.ps5.o)
+COMPILER_COMMON_OBJS := $(COMPILER_COMMON_SRCS:.c=.ps5.o)
+BLAKE3_SRCS := $(filter-out src/util/blake3/blake3_neon.c,$(BLAKE3_SRCS))
+BLAKE3_OBJS := $(BLAKE3_SRCS:.c=.ps5.o)
+C11_THREADS_OBJS := $(C11_THREADS_SRCS:.c=.ps5.o)
+VK_RUNTIME_OBJS := $(VK_RUNTIME_SRCS:.c=.ps5.o)
+PS5_PLATFORM_OBJS := $(PS5VK_ROOT)/build/psbc-ps5/ps5_compiler_shims.o
+
+LIBPSBC_OBJS := \
+	$(PSBC_OBJS) \
+	$(NIR_OBJS) \
+	$(SPIRV_OBJS) \
+	$(ACO_OBJS) \
+	$(AMD_COMMON_OBJS) \
+	$(AMD_COMMON_NIR_OBJS) \
+	$(RADV_OBJS) \
+	$(RADV_NIR_OBJS) \
+	$(UTIL_OBJS) \
+	$(UTIL_FORMAT_OBJS) \
+	$(COMPILER_COMMON_OBJS) \
+	$(BLAKE3_OBJS) \
+	$(C11_THREADS_OBJS) \
+	$(VK_RUNTIME_OBJS) \
+	$(PS5_PLATFORM_OBJS)
+
+%.ps5.o: %.c | $(GENERATED)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.ps5.cpp.o: %.cpp | $(GENERATED)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+libpsbc/psbc_compile.ps5.o: libpsbc/psbc_compile.h
+
+src/util/futex.ps5.o: CFLAGS += -D__ORBIS__
+
+$(PS5_PLATFORM_OBJS): $(PS5VK_ROOT)/src/ps5_compiler_shims.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+libpsbc: $(LIBPSBC)
+
+$(LIBPSBC): $(LIBPSBC_OBJS)
+	@mkdir -p $(dir $@)
+	$(AR) rcs $@ $(LIBPSBC_OBJS)
+
+.DEFAULT_GOAL := libpsbc

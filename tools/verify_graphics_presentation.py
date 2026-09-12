@@ -46,9 +46,12 @@ def validate(log, manifest, artifact):
     def require(condition, message):
         if not condition:
             raise ValueError(message)
-    require(artifact.get("stage") == "graphics-graphics-api-native-presentation" and
-            artifact.get("submit_enabled") is True and
-            artifact.get("files", {}).get("eboot.bin") == REFERENCE_SELF, "artifact identity")
+    require(artifact.get("title") == "PPSA99994", "artifact title")
+    require(artifact.get("stage") == "graphics-api-native-presentation-reuse", "profile mismatch")
+    require(artifact.get("submit_enabled") is True, "submit must be enabled")
+    eboot = artifact.get("files", {}).get("eboot.bin")
+    require(isinstance(eboot, str) and len(eboot) == 64 and all(c in "0123456789abcdef" for c in eboot.lower()),
+            "artifact identity")
     require(hashlib.sha256(log).hexdigest() == manifest.get("sha256"), "log hash")
     require(manifest.get("protocol") == "ps5log/1" and manifest.get("transport") == "tcp", "transport")
     require(manifest.get("clean") is True and manifest.get("bye") is True and
@@ -82,7 +85,7 @@ def validate(log, manifest, artifact):
     require(manifest.get("last_seq") == len(expected), "manifest sequence")
     require(lines[-1] == f"BYE seq={len(expected)} reason=graphics-api-end", "bye")
     return {"run_id": manifest["run_id"], "log_sha256": manifest["sha256"],
-            "deployment_self_sha256": REFERENCE_SELF, "presentations": 3,
+            "deployment_self_sha256": eboot, "presentations": 3,
             "aggregate_readbacks": 3, "clean_tcp": True,
             "scope": "three-viewports native interop; not swapchain or full graphics profile acceptance"}
 

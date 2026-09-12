@@ -2,17 +2,19 @@
 
 ## Host checks
 
-Install Python 3, Make, a C11 compiler and Git, then prepare the pinned Vulkan
-headers and run the contract suite:
+Install Python 3, Make, a C11 compiler, Git and `glslangValidator`, then prepare the pinned Vulkan
+headers, compiler dependencies and run the contract suite:
 
 ```sh
 make vulkan-headers
+make compiler-deps
 make check
 make check-sanitize
 ```
 
-`make vulkan-headers` is the only header-fetch step. The regular host suite is
-designed to run offline after dependencies are prepared.
+The preparation targets fetch exact revisions. `make compiler-deps` uses the
+public `mpereiraesaa/opengnm-psbc` GFX1013 fork plus pinned OpenGNM headers.
+The regular host suite runs offline after these dependencies are prepared.
 
 ## Companion repositories
 

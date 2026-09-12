@@ -13,3 +13,5 @@ __pycache__/
 *.elf
 *.bin
 *.prx
+dist-sdk/
+

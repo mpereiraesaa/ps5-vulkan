@@ -1,4 +1,5 @@
 #include "vk_internal.h"
+#include "compilation_cache.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -156,6 +157,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->max_allocation = p->platform.max_allocation;
     d->submit_backend = p->platform.queue_backend;
     d->progress = p->platform.progress;
+    d->pipeline_cache = ps5vk_compilation_cache_create(64, 4 * 1024 * 1024);
     if (p->platform.configure) p->platform.configure(d);
     ++i->devices; *out = d;
     return VK_SUCCESS;
@@ -174,8 +176,17 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
         d->queue.next_serial != d->queue.completed_serial + 1) {
         ++d->lifetime_errors; return;
     }
+    if (d->pipeline_cache) {
+        ps5vk_compilation_cache_destroy(d->pipeline_cache);
+        d->pipeline_cache = NULL;
+    }
     d->physical->platform.close(&d->memory);
     --d->physical->instance->devices;
     VkAllocationCallbacks a = d->allocator; VkBool32 custom = d->custom_allocator;
     ps5vk_object_free(d, &a, custom);
+}
+
+void ps5vk_device_enable_runtime_compiler(VkDevice device)
+{
+    if (device) device->runtime_compiler_enabled = VK_TRUE;
 }

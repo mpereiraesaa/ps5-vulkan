@@ -1,0 +1,111 @@
+# Makefile for building libpsbc.host.a for host testing
+PS5VK_ROOT ?= $(realpath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+
+LIBPSBC := $(PS5VK_ROOT)/build/libpsbc.host.a
+CONFIG := /dev/null
+OPENGNM_PSBC_ORBIS := 1
+
+SHARED_FLAGS = \
+	-Iinclude/ \
+	-Ilibpsbc/ \
+	-I$(PS5VK_ROOT)/third_party/opengnm/include \
+	-I$(PS5VK_ROOT)/third_party/vulkan-headers/include \
+	-Isrc/ \
+	-Isrc/amd \
+	-Isrc/amd/common \
+	-Isrc/amd/common/nir \
+	-Isrc/amd/compiler \
+	-Isrc/amd/vulkan \
+	-Isrc/amd/vulkan/nir \
+	-Isrc/vulkan/runtime \
+	-Isrc/vulkan/runtime/bvh \
+	-Isrc/vulkan/util \
+	-Isrc/compiler \
+	-Isrc/compiler/nir \
+	-Isrc/compiler/spirv \
+	-Isrc/gallium/include \
+	-Isrc/mesa \
+	-Isrc/mesa/main \
+	-Isrc/util \
+	-Icmd/psbc \
+	-Iinclude/mesa \
+	-D_GNU_SOURCE \
+	-D_XOPEN_SOURCE=700 \
+	-DUTIL_ARCH_LITTLE_ENDIAN=1 \
+	-DUTIL_ARCH_BIG_ENDIAN=0 \
+	-DHAVE_STRUCT_TIMESPEC=1 \
+	-DHAVE_PTHREAD=1 \
+	-DHAVE_SYSCONF=1 \
+	-DHAVE_FUNC_ATTRIBUTE_PACKED=1 \
+	-DBLAKE3_NO_SSE2 \
+	-DBLAKE3_NO_SSE41 \
+	-DBLAKE3_NO_AVX2 \
+	-DBLAKE3_NO_AVX512
+
+CC ?= gcc
+CXX ?= g++
+AR ?= ar
+PYTHON ?= python3
+
+CFLAGS = -std=gnu11 -O2 -g -Wall -fPIC $(SHARED_FLAGS) \
+	-Wno-unused-function -Wno-unused-variable
+CXXFLAGS = -std=c++17 -O2 -g -Wall -fPIC -DNDEBUG $(SHARED_FLAGS) \
+	-Wno-unused-function -Wno-unused-variable
+
+include Makefile
+
+PSBC_OBJS := $(PSBC_SRCS:.c=.host.o)
+NIR_OBJS := $(NIR_SRCS:.c=.host.o)
+SPIRV_OBJS := $(SPIRV_SRCS:.c=.host.o)
+ACO_OBJS := $(ACO_SRCS:.cpp=.host.cpp.o)
+AMD_COMMON_OBJS := $(AMD_COMMON_SRCS:.c=.host.o)
+AMD_COMMON_NIR_OBJS := $(AMD_COMMON_NIR_SRCS:.c=.host.o)
+RADV_OBJS := $(RADV_SRCS:.c=.host.o)
+RADV_NIR_OBJS := $(RADV_NIR_SRCS:.c=.host.o)
+UTIL_SRCS := $(filter-out \
+	src/util/anon_file.c \
+	src/util/mesa_cache_db.c \
+	src/util/mesa_cache_db_multipart.c \
+	src/util/os_time.c \
+	,$(UTIL_SRCS))
+UTIL_OBJS := $(patsubst %.c,%.host.o,$(filter %.c,$(UTIL_SRCS))) \
+	$(patsubst %.cpp,%.host.cpp.o,$(filter %.cpp,$(UTIL_SRCS)))
+UTIL_FORMAT_SRCS := $(wildcard src/util/format/*.c)
+UTIL_FORMAT_OBJS := $(UTIL_FORMAT_SRCS:.c=.host.o)
+COMPILER_COMMON_OBJS := $(COMPILER_COMMON_SRCS:.c=.host.o)
+BLAKE3_SRCS := $(filter-out src/util/blake3/blake3_neon.c,$(BLAKE3_SRCS))
+BLAKE3_OBJS := $(BLAKE3_SRCS:.c=.host.o)
+C11_THREADS_OBJS := $(C11_THREADS_SRCS:.c=.host.o)
+VK_RUNTIME_OBJS := $(VK_RUNTIME_SRCS:.c=.host.o)
+
+LIBPSBC_OBJS := \
+	$(PSBC_OBJS) \
+	$(NIR_OBJS) \
+	$(SPIRV_OBJS) \
+	$(ACO_OBJS) \
+	$(AMD_COMMON_OBJS) \
+	$(AMD_COMMON_NIR_OBJS) \
+	$(RADV_OBJS) \
+	$(RADV_NIR_OBJS) \
+	$(UTIL_OBJS) \
+	$(UTIL_FORMAT_OBJS) \
+	$(COMPILER_COMMON_OBJS) \
+	$(BLAKE3_OBJS) \
+	$(C11_THREADS_OBJS) \
+	$(VK_RUNTIME_OBJS)
+
+%.host.o: %.c | $(GENERATED)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.host.cpp.o: %.cpp | $(GENERATED)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+libpsbc/psbc_compile.host.o: libpsbc/psbc_compile.h
+
+libpsbc: $(LIBPSBC)
+
+$(LIBPSBC): $(LIBPSBC_OBJS)
+	@mkdir -p $(dir $@)
+	$(AR) rcs $@ $(LIBPSBC_OBJS)
+
+.DEFAULT_GOAL := libpsbc
