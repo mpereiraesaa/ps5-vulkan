@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 from pathlib import Path
+import re
 import unittest
 
 from cts.upstream_runner import (
@@ -323,6 +324,77 @@ class TestUpstreamRunner(unittest.TestCase):
 
         # The frozen list must not be the retired synthetic contract suite.
         self.assertFalse(any("contract." in p for p in paths))
+
+    RESOURCE_CASES = {
+        "dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation",
+        "dEQP-VK.compute.basic.ubo_to_ssbo_multiple_groups",
+        "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.storage_buffer.compute."
+        "multiple_descriptor_sets.single_descriptor.offset_view_zero",
+    }
+
+    RESOURCE_DIAGNOSTICS = {
+        "dEQP-VK.api.buffer_view.access.uniform_texel_buffer.r32_uint",
+        "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.uniform_buffer.compute."
+        "multiple_descriptor_sets.single_descriptor.offset_view_zero",
+    }
+
+    def test_resource_family_cannot_be_silently_removed(self):
+        """The resource expansion cases are part of the frozen acceptance set."""
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        by_path = {case["path"]: case for case in manifest["cases"]}
+        missing = sorted(self.RESOURCE_CASES - set(by_path))
+        self.assertEqual([], missing, "resource cases dropped from the selection")
+        for path in sorted(self.RESOURCE_CASES):
+            self.assertEqual(by_path[path]["category"], "resource", path)
+            self.assertTrue(by_path[path]["source"], path)
+            self.assertTrue(by_path[path]["rationale"], path)
+
+    def test_resource_module_sources_are_linked(self):
+        """A selected family is only real if its upstream module is compiled in."""
+        build = (REPO_ROOT / "tools/build_upstream_cts.py").read_text(encoding="utf-8")
+        for name in ("vktApiBufferViewAccessTests.cpp",
+                     "vktApiBufferAndImageAllocationUtil.cpp",
+                     "vktImageTestsUtil.cpp",
+                     "vktBindingShaderAccessTests.cpp"):
+            self.assertIn(name, build, f"{name} is not compiled into the payload")
+
+    def test_failing_resource_cases_stay_visible_as_diagnostics(self):
+        """A known-failing upstream case may not be deleted or silently accepted."""
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        accepted = {case["path"] for case in manifest["cases"]}
+        diagnostics = {case["path"]: case for case in manifest.get("diagnostics", [])}
+
+        self.assertEqual(set(), self.RESOURCE_DIAGNOSTICS - set(diagnostics),
+                         "known-failing resource case removed instead of documented")
+        self.assertEqual(set(), self.RESOURCE_DIAGNOSTICS & accepted,
+                         "a known-failing case must not be an acceptance case")
+        for path, case in diagnostics.items():
+            self.assertNotEqual(case["observed_status"], "Pass", path)
+            self.assertTrue(case.get("observed_error"), path)
+            self.assertTrue(case.get("rationale"), path)
+            self.assertNotIn(path, accepted, path)
+
+    def test_every_selected_family_is_registered_by_the_package(self):
+        """The integration must register the first group of every selected case."""
+        integration = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text(encoding="utf-8")
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        for case in manifest["cases"]:
+            group = case["path"].split(".")[1]
+            self.assertRegex(integration, r'"' + re.escape(group) + r'"',
+                             f"{case['path']}: group {group!r} is not registered")
+
+    def test_packaged_case_list_matches_the_manifest(self):
+        """The packaged list and selection hash must derive from the manifest."""
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        expected = "\n".join(case["path"] for case in manifest["cases"]) + "\n"
+        expected_hash = hashlib.sha256(expected.encode("utf-8")).hexdigest()
+
+        dist = REPO_ROOT / "dist-upstream-cts/PPSA99994"
+        if not dist.is_dir():
+            self.skipTest("payload not built; packaged case list not available")
+        self.assertEqual((dist / "cases.txt").read_text(encoding="utf-8"), expected)
+        self.assertEqual((dist / "selection_hash.txt").read_text(encoding="utf-8").strip(),
+                         expected_hash)
 
     if __name__ == "__main__":
         unittest.main()

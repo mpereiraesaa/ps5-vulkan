@@ -24,7 +24,10 @@ INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
 
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
-    cases = manifest["cases"]
+    # Diagnostics are frozen upstream cases that are executed but are known not
+    # to pass yet; they are held to the same traceability rule as acceptance
+    # cases so that a failing case cannot be relabelled from an invented name.
+    cases = manifest["cases"] + manifest.get("diagnostics", [])
 
     if not UPSTREAM.is_dir():
         print("upstream vk-gl-cts checkout not present; selection check skipped")
@@ -66,6 +69,12 @@ def main() -> int:
             continue
         if leaf.isdigit():
             continue
+        # Format sub-groups are not written as literals: the upstream factories
+        # register them with the lowercased format enum minus its "VK_FORMAT_"
+        # prefix, so "r32_uint" traces back to VK_FORMAT_R32_UINT in the file.
+        if leaf in {token[len("VK_FORMAT_"):].lower()
+                    for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text)}:
+            continue
         failures.append(
             f"{path}: leaf name {leaf!r} is not registered in {source_ref}")
 
@@ -75,7 +84,10 @@ def main() -> int:
             print(f"  {failure}", file=sys.stderr)
         return 1
 
-    print(f"Upstream selection check passed: {len(cases)} cases traceable to sources.")
+    accepted = len(manifest["cases"])
+    diagnostics = len(manifest.get("diagnostics", []))
+    print(f"Upstream selection check passed: {len(cases)} cases traceable to sources "
+          f"({accepted} acceptance, {diagnostics} diagnostic).")
     return 0
 
 

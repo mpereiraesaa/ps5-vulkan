@@ -1,5 +1,7 @@
 #include "package_ps5.hpp"
 #include "vktApiSmokeTests.hpp"
+#include "vktApiBufferViewAccessTests.hpp"
+#include "vktBindingShaderAccessTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
@@ -26,7 +28,20 @@ void FocusedVkTestPackage::init(void)
     {
         de::MovePtr<tcu::TestCaseGroup> apiGroup(new tcu::TestCaseGroup(m_testCtx, "api"));
         apiGroup->addChild(vkt::api::createSmokeTests(m_testCtx));
+        // api.buffer_view.access: upstream buffer-view resource tests. The
+        // focused selection only runs the compute ones; the group is registered
+        // whole so the packaged case list stays the single source of selection.
+        de::MovePtr<tcu::TestCaseGroup> bufferViewGroup(new tcu::TestCaseGroup(m_testCtx, "buffer_view"));
+        bufferViewGroup->addChild(vkt::api::createBufferViewAccessTests(m_testCtx));
+        apiGroup->addChild(bufferViewGroup.release());
         addChild(apiGroup.release());
+    }
+
+    // binding_model.shader_access group
+    {
+        de::MovePtr<tcu::TestCaseGroup> bindingModelGroup(new tcu::TestCaseGroup(m_testCtx, "binding_model"));
+        bindingModelGroup->addChild(vkt::BindingModel::createShaderAccessTests(m_testCtx));
+        addChild(bindingModelGroup.release());
     }
 
     // synchronization.basic.fence group
