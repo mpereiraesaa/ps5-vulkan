@@ -121,7 +121,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", choices=["ps5", "host"], default="ps5", help="Target platform (ps5 or host)")
     parser.add_argument("--host", action="store_true", help="Build libpsbc.host.a for host testing (alias for --target=host)")
-    parser.add_argument("--jobs", "-j", type=int, default=8, help="Parallel compile jobs")
+    parser.add_argument("--jobs", "-j", type=int, default=os.cpu_count() or 4, help="Parallel compile jobs")
     parser.add_argument("--clean", action="store_true", help="Clean object files before build")
     args = parser.parse_args()
 
