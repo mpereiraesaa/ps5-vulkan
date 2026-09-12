@@ -56,6 +56,9 @@ jobs:
           path: homebrew_ps5/projects/ps5-vulkan
 
       - name: Install host-test dependencies
+        run: sudo apt-get update && sudo apt-get install -y glslang-tools
+
+      - name: Install Python host-test dependencies
         working-directory: homebrew_ps5/projects/ps5-vulkan
         run: python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
 

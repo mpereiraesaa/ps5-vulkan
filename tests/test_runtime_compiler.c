@@ -26,11 +26,7 @@ int main(void)
 {
     /* 1. Load minimal.comp SPIR-V */
     size_t spv1_bytes = 0;
-    uint32_t *spv1 = read_file("build/compute/Shader_0xAB87313840E48C25.spv", &spv1_bytes);
-    if (!spv1) {
-        /* Fallback path if run from subdirectory */
-        spv1 = read_file("../../build/compute/Shader_0xAB87313840E48C25.spv", &spv1_bytes);
-    }
+    uint32_t *spv1 = read_file("build/test-shaders/minimal.spv", &spv1_bytes);
     assert(spv1 != NULL);
     size_t spv1_words = spv1_bytes / 4;
 
@@ -60,11 +56,15 @@ int main(void)
     assert(prog1.descriptors[1].binding == 1 && prog1.descriptors[1].table_dword == 4);
 
     /* 3. Runtime compile shader 2 (previously unregistered shader) */
-    /* Create an in-memory compute SPIR-V or load xor shader */
-    /* Let's load the SPIR-V for program 1 (xor.comp) from build/program-library if available */
     size_t spv2_bytes = 0;
-    uint32_t *spv2 = read_file("build/compute/control-waktji4i/Shader_0xAB87313840E48C25.spv", &spv2_bytes);
-    if (!spv2) spv2 = spv1; /* If second spv file not separate on disk */
+    uint32_t *spv2 = read_file("build/test-shaders/xor.spv", &spv2_bytes);
+    assert(spv2 != NULL);
+    struct ps5vk_compiled_program prog2 = {0};
+    uint32_t *code2 = NULL;
+    res = ps5vk_runtime_compile_compute(spv2, spv2_bytes / 4, "main", &layout, &prog2, &code2);
+    assert(res == VK_SUCCESS && code2 != NULL);
+    size_t common_words = prog1.code_words < prog2.code_words ? prog1.code_words : prog2.code_words;
+    assert(prog1.code_words != prog2.code_words || memcmp(code1, code2, common_words * 4) != 0);
 
     /* 4. Test error handling */
     struct ps5vk_compiled_program bad_prog;
@@ -105,8 +105,9 @@ int main(void)
     }
 
     free(code1);
+    free(code2);
     free(spv1);
-    if (spv2 != spv1) free(spv2);
+    free(spv2);
 
     puts("Runtime compute compiler: pass (PSBC/ACO GFX1013 ABI, CS registers, error guards, CPU reference)");
     return 0;

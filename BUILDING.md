@@ -2,7 +2,7 @@
 
 ## Host checks
 
-Install Python 3, Make, a C11 compiler and Git, then prepare the pinned Vulkan
+Install Python 3, Make, a C11 compiler, Git and `glslangValidator`, then prepare the pinned Vulkan
 headers, compiler dependencies and run the contract suite:
 
 ```sh

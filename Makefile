@@ -12,7 +12,7 @@ VK_GRAPHICS_SOURCES = src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c 
 VK_DEVICE_SOURCES = $(VK_QUEUE_SOURCES) $(VK_GRAPHICS_SOURCES) src/vk_device.c src/vk_dispatch.c
 NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I../ps5-agc-gears/include -I../logging_server/client native/queue_ps5.c src/descriptor_encode.c src/dispatch_encode.c src/compute_commands.c tests/test_native_prepare.c
 GRAPHICS_PAIR_TEST = -Inative -Isrc -I../ps5-agc-gears/src -I../ps5-agc-gears/include native/graphics_pair.c src/shader_relocate.c ../ps5-agc-gears/src/ps5_shader_header.c tests/test_graphics_pair.c
-.PHONY: check doctor compiler-control compiler-programs native-bootstrap vulkan-headers check-sanitize native-memory-check
+.PHONY: check doctor compiler-control compiler-programs native-bootstrap vulkan-headers check-sanitize native-memory-check test-shaders
 .PHONY: compiler-pipelines
 .PHONY: native-compute native-graphics
 native-compute:
@@ -33,6 +33,8 @@ vulkan-headers:
 	$(PYTHON) tools/prepare_vulkan_headers.py
 compiler-deps:
 	$(PYTHON) tools/prepare_compiler_deps.py
+test-shaders:
+	$(PYTHON) tools/prepare_test_shaders.py
 check-sanitize:
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_sanitized
@@ -177,7 +179,7 @@ check:
 	fi
 build/libpsbc.host.a:
 	$(PYTHON) tools/build_psbc.py --host
-test-compiler: build/libpsbc.host.a
+test-compiler: build/libpsbc.host.a test-shaders
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_compiler
 	./build/tests/test_runtime_compiler

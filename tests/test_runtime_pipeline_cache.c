@@ -58,8 +58,7 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 int main(void)
 {
     size_t spv_bytes = 0;
-    uint32_t *spv = read_file("build/compute/Shader_0xAB87313840E48C25.spv", &spv_bytes);
-    if (!spv) spv = read_file("../../build/compute/Shader_0xAB87313840E48C25.spv", &spv_bytes);
+    uint32_t *spv = read_file("build/test-shaders/minimal.spv", &spv_bytes);
     assert(spv != NULL);
 
     VkInstance instance;
