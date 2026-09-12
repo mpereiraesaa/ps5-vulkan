@@ -196,7 +196,7 @@ def base_core_target(**overrides) -> dict:
         "api_surface": {"surface_by_profile": {"graphics_including_base": {"commands_total": 2, "types_total": 3},
                          "graphics_resolved": {"commands": ["vkCreateInstance", "vkCreateImage"], "types": [], "roots": []}}},
         "limits": {"resolution_rule": "core and 1_4 tags only", "rows": [], "raised_in_1_4": []},
-        "formats": {"resolution_rule": "format x required feature bits", "tables": []},
+        "formats": {"resolution_rule": "format x required feature bits", "tables": [], "registry_formats": ["VK_FORMAT_R8G8B8A8_UNORM"]},
         "command_contracts": {"resolution_rule": "resolved surface grouped by area", "contracts": {}},
         "roadmap_comparison": {"file": "roadmap_comparison.json", "note": "comparison only"},
     }
@@ -958,6 +958,67 @@ class CheckedInInventoryTests(unittest.TestCase):
         sixteen = tables["formats-mandatory-features-16bit"]
         self.assertEqual(sixteen["column_scopes"]["VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR"]["guard"], "VK_KHR_copy_memory_indirect")
         self.assertEqual(sixteen["column_scopes"]["VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT"]["scope"], "bufferFeatures")
+
+    def test_depth_stencil_rule_is_all_of_two_any_of_groups(self):
+        """Regression: satisfying only one depth/stencil group must not satisfy the rule."""
+        module = _load_derive_module()
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = {table["anchor"]: table for table in bundle.target["formats"]["tables"]}
+        annotation = next(a for a in tables["formats-mandatory-features-depth-stencil"]["annotations"] if a["kind"] == "any-of-formats-rule")
+        requirement = annotation["requirement"]
+        self.assertEqual(requirement["kind"], "all-of")
+        self.assertEqual(len(requirement["items"]), 2)
+        for item in requirement["items"]:
+            self.assertEqual(item["kind"], "any-of")
+            self.assertEqual(len(item["formats"]), 2)
+        # Only one of the two groups satisfied -> the rule is not satisfied.
+        self.assertFalse(module.requirement_satisfied(requirement, {"VK_FORMAT_X8_D24_UNORM_PACK32"}))
+        self.assertFalse(module.requirement_satisfied(requirement, {"VK_FORMAT_D32_SFLOAT"}))
+        self.assertFalse(module.requirement_satisfied(requirement, {"VK_FORMAT_D24_UNORM_S8_UINT"}))
+        # One format from each group -> satisfied.
+        self.assertTrue(module.requirement_satisfied(requirement, {"VK_FORMAT_X8_D24_UNORM_PACK32", "VK_FORMAT_D24_UNORM_S8_UINT"}))
+        self.assertTrue(module.requirement_satisfied(requirement, {"VK_FORMAT_D32_SFLOAT", "VK_FORMAT_D32_SFLOAT_S8_UINT"}))
+
+    def test_bc_alone_satisfies_the_compression_alternative(self):
+        """Regression: the BC/ETC/ASTC alternative includes 'this table'."""
+        module = _load_derive_module()
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = {table["anchor"]: table for table in bundle.target["formats"]["tables"]}
+        for anchor in ("formats-mandatory-features-bcn", "formats-mandatory-features-etc", "formats-mandatory-features-astc"):
+            annotation = next(a for a in tables[anchor]["annotations"] if a["kind"] == "table-choice-rule")
+            requirement = annotation["requirement"]
+            self.assertEqual(requirement["kind"], "any-of")
+            self.assertEqual(set(requirement["tables"]), {"formats-mandatory-features-bcn", "formats-mandatory-features-etc", "formats-mandatory-features-astc"})
+            self.assertTrue(module.requirement_satisfied(requirement, satisfied_tables={"formats-mandatory-features-bcn"}))
+            self.assertFalse(module.requirement_satisfied(requirement, satisfied_tables=set()))
+
+    def test_rule_candidates_are_real_formats_and_tables(self):
+        """Regression: VK_FORMAT_FEATURE_* is not a format, and tables must exist."""
+        module = _load_derive_module()
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        known_formats = set(bundle.target["formats"]["registry_formats"])
+        known_tables = {table["anchor"] for table in bundle.target["formats"]["tables"]}
+        problems: list[str] = []
+        module.validate_rule_candidates(bundle.target["formats"]["tables"], known_formats, known_tables, problems)
+        self.assertEqual(problems, [])
+        for table in bundle.target["formats"]["tables"]:
+            for annotation in table["annotations"]:
+                for name in annotation["format_options"]:
+                    self.assertFalse(name.startswith("VK_FORMAT_FEATURE"), name)
+        broken = copy.deepcopy(bundle.target["formats"]["tables"])
+        broken[0]["annotations"][0]["format_options"] = ["VK_FORMAT_NOT_A_REAL_FORMAT"]
+        problems = []
+        module.validate_rule_candidates(broken, known_formats, known_tables, problems)
+        self.assertTrue(problems)
+
+    def test_astc_table_is_present_and_complete(self):
+        """Regression: format names with lowercase (ASTC 4x4) were dropped."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = {table["anchor"]: table for table in bundle.target["formats"]["tables"]}
+        astc = tables.get("formats-mandatory-features-astc")
+        self.assertIsNotNone(astc)
+        self.assertGreaterEqual(len(astc["rows"]), 20)
+        self.assertTrue(any(row["format"] == "VK_FORMAT_ASTC_4x4_UNORM_BLOCK" for row in astc["rows"]))
 
     def test_table_rules_are_all_classified_and_recorded(self):
         bundle = validate.Bundle.load(INVENTORY_DIR)

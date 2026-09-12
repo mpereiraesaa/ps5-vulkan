@@ -23,16 +23,16 @@ Every number quoted below is generated from the data, not typed by hand:
   "cts_cases": 3247552,
   "cts_direct_rows": 5,
   "cts_group_files": 98,
-  "cts_mapped_rows": 126,
-  "cts_representative_or_family_rows": 121,
+  "cts_mapped_rows": 127,
+  "cts_representative_or_family_rows": 122,
   "extension_rules": 21,
-  "format_rows": 179,
-  "format_tables": 10,
+  "format_rows": 207,
+  "format_tables": 11,
   "limits_raised_in_1_4": 32,
   "limits_rows": 427,
-  "requirements": 136,
+  "requirements": 137,
   "requirements_conditional": 13,
-  "requirements_mandatory": 120,
+  "requirements_mandatory": 121,
   "requirements_optional": 3
 }
 ```
@@ -199,7 +199,12 @@ by requirement rows so that a table cannot exist without a tracked obligation:
   extension-conditioned column. Table rules are kept as a list and classified as
   `symbol-rule`, `scope-rule`, `negative-scope-rule`, `column-rule`,
   `any-of-formats-rule` or `table-choice-rule`; a rule that cannot be resolved is
-  recorded as such and rejected by the validator rather than dropped.
+  recorded as such and rejected by the validator rather than dropped. Rules keep
+  their logical structure (`all-of` over `any-of` groups - depth/stencil requires
+  one format from *each* of two groups - and `any-of` over tables, with "this
+  table" resolved to the anchor it appears in so BC/ETC/ASTC carry the complete
+  alternative set), and every candidate format or table is validated against the
+  pinned registry format list and the parsed tables.
 * **Command contracts** (`command_contracts.contracts`): the resolved core
   command surface grouped into 12 differentiable API areas (instance/device,
   memory, buffers, images, samplers, descriptors, pipelines and shaders, command

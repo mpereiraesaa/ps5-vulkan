@@ -410,7 +410,9 @@ def parse_vk_xml(xml_text: str) -> dict:
         }
 
     graphics_resolved = resolve("VK_GRAPHICS_VERSION_1_4")
+    format_names = sorted({entry.get("name") for entry in root.findall("formats/format") if entry.get("name")})
     return {
+        "formats": format_names,
         "versions": versions,
         "mandatory_feature_bits_by_version": version_features,
         "surface_by_profile": {
@@ -886,6 +888,7 @@ def parse_limits_table(adoc: str) -> list[dict]:
 
 
 FEATURE_BIT_RE = re.compile(r"ename:(VK_FORMAT_FEATURE[A-Z0-9_]*)")
+FORMAT_ANY_OF_RE = re.compile(r"at least one of\s+(?P<options>.+?)(?:, and |\.|$)", re.I)
 FEATURE_COND_RE = re.compile(r"pname:([A-Za-z0-9_]+)[^.]{0,40}?feature")
 EXTENSION_COND_RE = re.compile(r"apiext:(VK_[A-Za-z0-9_]+)")
 SCOPE_TABLE_ANCHORS = [
@@ -947,10 +950,10 @@ def parse_symbol_legend(adoc: str) -> dict:
 IFDEF_MARKER_RE = re.compile(r"^ifdef::(?P<guard>[A-Za-z0-9_,]+)\[\{sym(?P<symbol>\d)\}\]$")
 ANNOTATION_LINE_RE = re.compile(r"^(?P<span>\d+)\+\|\s*(?P<text>.*)$")
 COLUMN_HEADER_RE = re.compile(r"^(?P<span>\d+)\+>")
-FORMAT_ROW_RE = re.compile(r"^\|\s*ename:(?P<format>VK_FORMAT_[A-Z0-9_]+)\s*\|(?P<rest>.*)$")
+FORMAT_ROW_RE = re.compile(r"^\|\s*ename:(?P<format>VK_FORMAT_(?!FEATURE_)[A-Za-z0-9_]+)\s*\|(?P<rest>.*)$")
 
 
-FORMAT_ANCHOR_RE = re.compile(r"ename:(VK_FORMAT_[A-Z0-9_]+)")
+FORMAT_ANCHOR_RE = re.compile(r"ename:(VK_FORMAT_(?!FEATURE_)[A-Za-z0-9_]+)")
 TABLE_ANCHOR_RE = re.compile(r"<<(formats-mandatory-features-[a-z0-9-]+)")
 NEGATIVE_RULE_RE = re.compile(r"must:? not (?:support|advertise)")
 FEATURE_IS_SUPPORTED_RE = re.compile(r"pname:([A-Za-z0-9_]+)[^.]{0,40}?feature is supported")
@@ -958,7 +961,33 @@ SUPPORTS_FEATURE_RE = re.compile(r"supports the\s+[^.]{0,80}?pname:([A-Za-z0-9_]
 ANY_OF_RE = re.compile(r"at least one of", re.I)
 
 
-def _classify_annotation(text: str, guard: str | None, legend: dict) -> dict:
+def parse_structured_requirement(flat: str, table_options: list[str]) -> dict | None:
+    """Build the logical requirement of a rule.
+
+    * several "must be supported for at least one of ..." clauses joined by
+      ", and " become an all-of of any-of groups (depth/stencil);
+    * "at least one of: this table, <<other>>" becomes an any-of over tables
+      with "this table" resolved by the caller.
+    """
+    clauses = [clause.strip() for clause in re.split(r",\s*and\s+", flat) if clause.strip()]
+    groups = []
+    for clause in clauses:
+        match = FORMAT_ANY_OF_RE.search(clause)
+        if not match:
+            continue
+        options = [name for name in FORMAT_ANCHOR_RE.findall(match.group("options"))]
+        if options:
+            groups.append({"kind": "any-of", "formats": sorted(set(options))})
+    if groups:
+        if len(groups) == 1:
+            return groups[0]
+        return {"kind": "all-of", "items": groups}
+    if table_options:
+        return {"kind": "any-of", "tables": sorted(set(table_options))}
+    return None
+
+
+def _classify_annotation(text: str, guard: str | None, legend: dict, current_anchor: str | None = None) -> dict:
     """Resolve one table annotation into an explicit rule.
 
     Kinds: symbol-rule (a {symN} marker), negative-scope-rule (a scope that must
@@ -980,8 +1009,10 @@ def _classify_annotation(text: str, guard: str | None, legend: dict) -> dict:
     if NEGATIVE_RULE_RE.search(flat):
         kind = "negative-scope-rule"
         reasons.append("%s must not advertise features for these formats" % (scope_match.group(1) if scope_match else "the named scope"))
-    elif ANY_OF_RE.search(flat) and table_options:
+    elif ANY_OF_RE.search(flat) and (table_options or "this table" in flat.lower()):
         kind = "table-choice-rule"
+        if "this table" in flat.lower() and current_anchor:
+            table_options = sorted(set(table_options) | {current_anchor})
         reasons.append("required for all formats of one of: %s" % ", ".join(table_options))
     elif ANY_OF_RE.search(flat) and format_options:
         kind = "any-of-formats-rule"
@@ -1012,8 +1043,47 @@ def _classify_annotation(text: str, guard: str | None, legend: dict) -> dict:
         "condition_kind": "resolved" if reasons else "unresolved",
         "condition": " and ".join(reasons) if reasons else flat,
         "legend_condition": legend.get(symbol_match.group(0)) if symbol_match else None,
+        "requirement": parse_structured_requirement(flat, table_options),
         "text": flat,
     }
+
+
+def requirement_satisfied(requirement: dict | None, satisfied_formats=(), satisfied_tables=()) -> bool:
+    """Evaluate a structured rule against a set of satisfied formats/tables."""
+    if not requirement:
+        return False
+    formats = set(satisfied_formats)
+    tables = set(satisfied_tables)
+    kind = requirement.get("kind")
+    if kind == "any-of":
+        options = list(requirement.get("formats") or []) + list(requirement.get("tables") or [])
+        return any(option in formats or option in tables for option in options)
+    if kind == "all-of":
+        return all(requirement_satisfied(item, formats, tables) for item in requirement.get("items", []))
+    return False
+
+
+def validate_rule_candidates(tables: list[dict], known_formats: set[str], known_tables: set[str], problems: list[str]) -> None:
+    """Every candidate in a rule must be a real format or a real table."""
+    for table in tables:
+        for annotation in table["annotations"]:
+            for name in annotation.get("format_options", []):
+                if name not in known_formats:
+                    problems.append("%s: unknown format candidate %s" % (table["anchor"], name))
+            for name in annotation.get("table_options", []):
+                if name not in known_tables:
+                    problems.append("%s: unknown table candidate %s" % (table["anchor"], name))
+            requirement = annotation.get("requirement") or {}
+            stack = [requirement]
+            while stack:
+                item = stack.pop()
+                for name in item.get("formats", []):
+                    if name not in known_formats:
+                        problems.append("%s: unknown format candidate %s" % (table["anchor"], name))
+                for name in item.get("tables", []):
+                    if name not in known_tables:
+                        problems.append("%s: unknown table candidate %s" % (table["anchor"], name))
+                stack.extend(item.get("items", []))
 
 
 def parse_formats_tables(adoc: str) -> list[dict]:
@@ -1056,7 +1126,7 @@ def parse_formats_tables(adoc: str) -> list[dict]:
         def flush_annotation():
             nonlocal pending_annotation
             if pending_annotation is not None:
-                annotations.append(_classify_annotation(pending_annotation["text"], pending_annotation["guard"], legend))
+                annotations.append(_classify_annotation(pending_annotation["text"], pending_annotation["guard"], legend, anchor))
                 pending_annotation = None
 
         for raw in block.splitlines():
@@ -1312,6 +1382,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     limits_table = parse_limits_table(limits_bytes.decode("utf-8"))
     formats_tables = parse_formats_tables(formats_bytes.decode("utf-8"))
+    candidate_problems: list[str] = []
+    validate_rule_candidates(
+        formats_tables,
+        set(surface["formats"]),
+        {table["anchor"] for table in formats_tables},
+        candidate_problems,
+    )
+    if candidate_problems:
+        raise SystemExit("invalid rule candidates:\n  " + "\n  ".join(sorted(set(candidate_problems))))
     resolved_commands = surface["surface_by_profile"]["graphics_resolved"]["commands"]
     contracts = classify_commands(resolved_commands)
 
@@ -1443,6 +1522,7 @@ def main(argv: list[str] | None = None) -> int:
         },
         "formats": {
             "source_anchors": [table["anchor"] for table in formats_tables],
+            "registry_formats": surface["formats"],
             "resolution_rule": "each row is a format plus the feature bits the specification requires for it; an empty marker means the feature is not mandatory for that format",
             "tables": formats_tables,
         },

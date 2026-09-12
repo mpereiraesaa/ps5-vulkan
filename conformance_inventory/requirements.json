@@ -1777,7 +1777,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-subbyte",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -1797,6 +1797,28 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "{sym2} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature",
+        "{sym3} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4B4G4R4 feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats",
+        "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5",
+        "cell condition: guarded by VK_BASE_VERSION_1_3,VK_EXT_4444_formats"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -1807,15 +1829,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -1834,16 +1858,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature; {sym3} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4B4G4R4 feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5; cell condition: guarded by VK_BASE_VERSION_1_3,VK_EXT_4444_formats).",
-      "capability_conditions": [
-        "{sym2} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature",
-        "{sym3} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4B4G4R4 feature",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
-        "rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats",
-        "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5",
-        "cell condition: guarded by VK_BASE_VERSION_1_3,VK_EXT_4444_formats"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-132",
@@ -1863,7 +1878,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-2byte",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -1900,6 +1915,25 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -1910,15 +1944,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -1937,13 +1973,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5).",
-      "capability_conditions": [
-        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
-        "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-133",
@@ -1963,7 +1993,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-4byte",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -1992,6 +2022,23 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -2002,15 +2049,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -2029,12 +2078,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures).",
-      "capability_conditions": [
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-134",
@@ -2054,7 +2098,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-10bit",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -2092,6 +2136,26 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "rows guarded by ifdef VK_ARM_format_pack",
+        "rows guarded by ifdef VK_BASE_VERSION_1_1,VK_KHR_sampler_ycbcr_conversion"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -2102,15 +2166,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -2129,14 +2195,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; rows guarded by ifdef VK_ARM_format_pack; rows guarded by ifdef VK_BASE_VERSION_1_1,VK_KHR_sampler_ycbcr_conversion).",
-      "capability_conditions": [
-        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
-        "rows guarded by ifdef VK_ARM_format_pack",
-        "rows guarded by ifdef VK_BASE_VERSION_1_1,VK_KHR_sampler_ycbcr_conversion"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-135",
@@ -2156,7 +2215,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-16bit",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -2192,6 +2251,26 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "{sym4} in optimalTilingFeatures [guard VK_NV_shader_atomic_float16_vector]: requires the shaderFloat16VectorAtomics feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "cell condition: guarded by VK_NV_shader_atomic_float16_vector"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -2202,15 +2281,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -2229,14 +2310,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; {sym4} in optimalTilingFeatures [guard VK_NV_shader_atomic_float16_vector]: requires the shaderFloat16VectorAtomics feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; cell condition: guarded by VK_NV_shader_atomic_float16_vector).",
-      "capability_conditions": [
-        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
-        "{sym4} in optimalTilingFeatures [guard VK_NV_shader_atomic_float16_vector]: requires the shaderFloat16VectorAtomics feature",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
-        "cell condition: guarded by VK_NV_shader_atomic_float16_vector"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-136",
@@ -2256,7 +2330,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-32bit",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -2276,6 +2350,25 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "{sym2} in optimalTilingFeatures [guard VK_EXT_shader_atomic_float]: requires the shaderImageFloat32Atomics feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "cell condition: guarded by VK_EXT_shader_atomic_float"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -2286,15 +2379,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -2313,13 +2408,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures [guard VK_EXT_shader_atomic_float]: requires the shaderImageFloat32Atomics feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; cell condition: guarded by VK_EXT_shader_atomic_float).",
-      "capability_conditions": [
-        "{sym2} in optimalTilingFeatures [guard VK_EXT_shader_atomic_float]: requires the shaderImageFloat32Atomics feature",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
-        "cell condition: guarded by VK_EXT_shader_atomic_float"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-137",
@@ -2339,7 +2428,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-64bit",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -2361,6 +2450,28 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures [guard VK_EXT_shader_image_atomic_int64]: requires the shaderImageInt64Atomics feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT: requires the shaderImageInt64Atomics feature",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT: requires the shaderImageInt64Atomics feature",
+        "cell condition: guarded by VK_EXT_shader_image_atomic_int64"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -2371,15 +2482,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -2398,16 +2511,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures [guard VK_EXT_shader_image_atomic_int64]: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; cell condition: guarded by VK_EXT_shader_image_atomic_int64).",
-      "capability_conditions": [
-        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
-        "VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures [guard VK_EXT_shader_image_atomic_int64]: requires the shaderImageInt64Atomics feature",
-        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT: requires the shaderImageInt64Atomics feature",
-        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT: requires the shaderImageInt64Atomics feature",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
-        "cell condition: guarded by VK_EXT_shader_image_atomic_int64"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-138",
@@ -2427,7 +2531,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-depth-stencil",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -2442,6 +2546,26 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_X8_D24_UNORM_PACK32 | structured: all of: [any of: VK_FORMAT_D32_SFLOAT, VK_FORMAT_X8_D24_UNORM_PACK32; any of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT]",
+        "negative-scope-rule in bufferFeatures: bufferFeatures must not advertise features for these formats",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_X8_D24_UNORM_PACK32"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -2452,15 +2576,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -2479,14 +2605,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32; negative-scope-rule in bufferFeatures: bufferFeatures must not advertise features for these formats; column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures).",
-      "capability_conditions": [
-        "VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32",
-        "negative-scope-rule in bufferFeatures: bufferFeatures must not advertise features for these formats",
-        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-139",
@@ -2506,7 +2625,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-bcn",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -2530,6 +2649,27 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc | structured: any of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -2540,15 +2680,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -2567,15 +2709,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures).",
-      "capability_conditions": [
-        "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
-        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
-        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
-        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
-        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures"
-      ]
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-CORE-140",
@@ -2595,7 +2729,7 @@
       "source": {
         "source_id": "khronos-vulkan-spec",
         "anchor": "formats-mandatory-features-etc",
-        "note": "Format/usage table generated from the pinned specification; each cell keeps its symbol, condition and scope."
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
       },
       "features": [],
       "limits": [],
@@ -2613,6 +2747,27 @@
       ],
       "commands": [],
       "extensions": [],
+      "capability_conditions": [
+        "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc | structured: any of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc"
+      ],
       "cts": {
         "mapping": "mapped",
         "basis": "static-source-listing",
@@ -2623,15 +2778,17 @@
         "cases": [],
         "coverage_quality": "family-level",
         "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
-        "note": "Obligation set derived from the pinned core requirement table."
+        "note": "Obligation table derived from the pinned mandatory format support tables."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
+        "surface_state": "documented",
         "entry_points": [],
         "absent_entry_points": [],
-        "refs": [],
-        "note": "Baseline surface: this row is a table obligation with no single entry point."
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
       },
       "evidence": {
         "source": {
@@ -2650,15 +2807,123 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures).",
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
+    },
+    {
+      "id": "VK14-CORE-141",
+      "category": "formats_limits",
+      "summary": "Mandatory format support: Mandatory Format Support: ASTC LDR Compressed Formats With `VkImageType` ename:VK_IMAGE_TYPE_2D (28 formats, 0 unconditional feature bits, 84 conditional cells).",
+      "core_introduction": "1.0",
+      "applicability": {
+        "core": "core-mandatory",
+        "target": "required",
+        "target_condition": null,
+        "note": ""
+      },
+      "classification": "mandatory",
+      "classification_basis": "core-cumulative-required",
+      "condition": null,
+      "coverage_chapter": "chapters/formats.adoc",
+      "source": {
+        "source_id": "khronos-vulkan-spec",
+        "anchor": "formats-mandatory-features-astc",
+        "note": "Format/usage table generated from the pinned specification; every cell keeps its symbol, effective scope, conditions and guard."
+      },
+      "features": [],
+      "limits": [],
+      "formats": [
+        "VK_FORMAT_ASTC_4x4_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_4x4_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_5x4_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_5x4_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_5x5_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_5x5_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_6x5_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_6x5_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_6x6_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_6x6_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_8x5_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_8x5_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_8x6_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_8x6_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_8x8_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_8x8_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_10x5_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_10x5_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_10x6_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_10x6_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_10x8_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_10x8_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_10x10_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_10x10_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_12x10_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_12x10_SRGB_BLOCK",
+        "VK_FORMAT_ASTC_12x12_UNORM_BLOCK",
+        "VK_FORMAT_ASTC_12x12_SRGB_BLOCK"
+      ],
+      "commands": [],
+      "extensions": [],
       "capability_conditions": [
-        "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
-        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
-        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
-        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
+        "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc | structured: any of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
         "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
-        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures"
-      ]
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_DST_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT scope: bufferFeatures",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn, formats-mandatory-features-etc"
+      ],
+      "cts": {
+        "mapping": "mapped",
+        "basis": "static-source-listing",
+        "groups": [
+          "vk-default/api.txt",
+          "vk-default/image/load-store.txt"
+        ],
+        "cases": [],
+        "coverage_quality": "family-level",
+        "coverage_note": "The per-format required feature bits are the machine-readable table in core_target.json; the named CTS groups exercise load/store behaviour but are not a per-format proof.",
+        "note": "Obligation table derived from the pinned mandatory format support tables."
+      },
+      "implementation_state": "not-audited",
+      "baseline": {
+        "surface_state": "documented",
+        "entry_points": [],
+        "absent_entry_points": [],
+        "refs": [
+          "API.md"
+        ],
+        "note": "Baseline surface: this row is a format/usage obligation with no single entry point; public documentation records the supported format profile."
+      },
+      "evidence": {
+        "source": {
+          "state": "not-audited",
+          "refs": []
+        },
+        "runtime": {
+          "state": "not-run",
+          "refs": []
+        },
+        "conformance": {
+          "state": "not-established",
+          "refs": []
+        }
+      },
+      "owner": "implementation",
+      "provenance": "spec-section-plus-vkxml",
+      "manual_review": true,
+      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
     },
     {
       "id": "VK14-FORMATS-001",
@@ -10946,7 +11211,7 @@
       "review_notes": "This row is an index for the machine-readable trigger table in core_target.json, not evidence of coverage."
     },
     {
-      "id": "VK14-CORE-141",
+      "id": "VK14-CORE-150",
       "category": "extensions",
       "summary": "Extension requirements triggered by a supported feature: 21 rules (20 extension-triggered, 1 either-or). These are indexed here so they are no longer unclassified prose.",
       "core_introduction": "1.0",

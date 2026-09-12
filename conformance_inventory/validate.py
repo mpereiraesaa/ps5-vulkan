@@ -705,6 +705,36 @@ def validate_core_tables(bundle: Bundle, rows: list[dict], problems: list[Proble
                         )
         stats["conditional_format_cells"] = stats.get("conditional_format_cells", 0) + conditional_cells
         stats["format_annotations"] = stats.get("format_annotations", 0) + len(annotations)
+    # T023: every candidate named by a rule must be a real format or a real table.
+    known_formats = set((formats.get("registry_formats") or []))
+    known_tables = {table["anchor"] for table in tables}
+    if not known_formats:
+        problems.append(Problem("error", "T023", "core_target.json", "the pinned registry format list is missing"))
+    for table in tables:
+        for annotation in table.get("annotations", []):
+            requirement = annotation.get("requirement") or {}
+            stack = [requirement] if requirement else []
+            while stack:
+                item = stack.pop()
+                for name in item.get("formats", []):
+                    if name not in known_formats:
+                        problems.append(Problem("error", "T023", table["anchor"], "rule names unknown format %r" % name))
+                for name in item.get("tables", []):
+                    if name not in known_tables:
+                        problems.append(Problem("error", "T023", table["anchor"], "rule names unknown table %r" % name))
+                stack.extend(item.get("items", []))
+            for name in annotation.get("format_options", []):
+                if name not in known_formats:
+                    problems.append(Problem("error", "T023", table["anchor"], "rule names unknown format %r" % name))
+            for name in annotation.get("table_options", []):
+                if name not in known_tables:
+                    problems.append(Problem("error", "T023", table["anchor"], "rule names unknown table %r" % name))
+    stats["rule_format_candidates"] = sum(
+        len(annotation.get("format_options", [])) for table in tables for annotation in table.get("annotations", [])
+    )
+    stats["rule_table_candidates"] = sum(
+        len(annotation.get("table_options", [])) for table in tables for annotation in table.get("annotations", [])
+    )
     stats["format_annotation_kinds"] = sorted({annotation.get("kind") for table in tables for annotation in table.get("annotations", [])})
     stats["unresolved_format_annotations"] = sum(
         1 for table in tables for annotation in table.get("annotations", []) if annotation.get("condition_kind") != "resolved"

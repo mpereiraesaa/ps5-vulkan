@@ -1477,6 +1477,20 @@
                         },
                         "text": {
                           "type": "string"
+                        },
+                        "requirement": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "any-of",
+                                "all-of"
+                              ]
+                            }
+                          }
                         }
                       }
                     }
@@ -1489,8 +1503,17 @@
                         "type": "string"
                       }
                     }
+                  },
+                  "column_scopes": {
+                    "type": "object"
                   }
                 }
+              }
+            },
+            "registry_formats": {
+              "type": "array",
+              "items": {
+                "type": "string"
               }
             }
           }
