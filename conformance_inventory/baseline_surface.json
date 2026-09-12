@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "f937f1635222a7d7ac07d860e6af513e254e7707",
-  "inspected_commit": "f937f1635222a7d7ac07d860e6af513e254e7707",
+  "baseline_commit": "0b600961ce13fafe4bf1b3813bf04dfd91c5b7b7",
+  "inspected_commit": "0b600961ce13fafe4bf1b3813bf04dfd91c5b7b7",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
