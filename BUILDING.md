@@ -29,8 +29,9 @@ homebrew_ps5/
     ps5-vulkan/
 ```
 
-The host suite uses the same relative layout. CI pins known companion revisions
-so public pull requests do not silently change contracts underneath the build.
+The shared resolver also supports repository worktrees placed beside the
+canonical `homebrew_ps5` directory. CI pins known companion revisions so public
+pull requests do not silently change contracts underneath the build.
 
 ## Native build
 
@@ -74,6 +75,13 @@ runtime triangle's TCP receipt, cold/warm cache, GPU readbacks, presentation
 and resource retirement. Verified deployment hashes and successful OS close
 must be established separately; the log does not attest its executable.
 
+For the bounded multi-set compute acceptance in the public consumer, use
+`tools/verify_consumer_resource_abi.py LOG --artifact MANIFEST`. The artifact
+manifest must identify the deployed SELF and profile; the verifier requires
+three sets, two storage buffers, one uniform buffer, one uniform texel buffer,
+64 exact results, 128 intact guard words, complete queue witnesses and a clean
+TCP `BYE`. System Close Game remains a separate lifecycle check.
+
 Host checks validate API state machines, encoder contracts, resource ownership,
 negative paths and generated-program invariants. A successful host build alone
 does not prove GPU execution. Native evidence additionally requires exact
@@ -84,8 +92,8 @@ VideoOut ownership; screenshots are only supporting visual evidence.
 
 A pinned set of 26 synthetic Vulkan API contract tests modeled after the Khronos
 `VK-GL-CTS` mustpass selection is maintained in `cts/case_list.txt` and documented
-in `cts/gap_matrix.md`. Full upstream Khronos VK-GL-CTS framework porting remains
-an open milestone.
+in `cts/gap_matrix.md`. It remains separate from the focused genuine upstream
+integration documented in [UPSTREAM_CTS.md](UPSTREAM_CTS.md).
 
 ```sh
 # Host contract test execution (part of make check)
@@ -116,5 +124,7 @@ python3 tools/build_consumer.py --continuous
 
 # Consumer header and symbol isolation tests
 python3 -m unittest tests/test_consumer_isolation.py
-```
 
+# Strict verifier regression tests for the multi-set resource witness
+python3 -m unittest tests/test_consumer_resource_abi.py
+```

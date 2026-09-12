@@ -40,9 +40,15 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
             uint32_t format = view->format == VK_FORMAT_R32_UINT ? 20u :
                 view->format == VK_FORMAT_R32_SINT ? 21u : 22u;
             uint32_t *out = scratch + p->table_dword;
-            out[0] = (uint32_t)gpu; out[1] = (uint32_t)(gpu >> 32);
+            /* Match RADV's gfx10 texel-buffer descriptor contract: a 4-byte
+             * structured element, NUM_RECORDS in texels, structured OOB
+             * selection, and RESOURCE_LEVEL set.  A raw/stride-zero descriptor
+             * is valid for SSBO byte addressing but makes typed texel loads
+             * return the OOB value on this path. */
+            out[0] = (uint32_t)gpu;
+            out[1] = (uint32_t)(gpu >> 32) | (4u << 16);
             out[2] = (uint32_t)(bytes / 4);
-            out[3] = UINT32_C(0x31000fac) | (format << 12);
+            out[3] = UINT32_C(0x11000fac) | (format << 12);
             if (extent < p->table_dword + 4) extent = p->table_dword + 4;
             continue;
         }

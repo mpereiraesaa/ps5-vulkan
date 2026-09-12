@@ -42,6 +42,10 @@ static VkResult allocate(void *ctx, VkDeviceSize bytes, void **address, void **b
 {
     (void)ctx; assert(bytes < 65536); ++attempts;
     if (fail_arena == attempts) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    /* This fixed aperture is part of the native ABI under test: ACO emits
+     * 32-bit descriptor pointers with address32_hi=2. The Makefile therefore
+     * runs this fixture under UBSan, because x86-64 ASan reserves the same
+     * range as its shadow gap. */
     uintptr_t base=UINT64_C(0x200040000)+(uintptr_t)arenas*65536;
     *address=*backing=mmap((void *)base,65536,PROT_READ|PROT_WRITE,
         MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE,-1,0);

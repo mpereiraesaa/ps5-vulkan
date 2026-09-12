@@ -54,6 +54,7 @@ int main(void)
         .descriptors={{1,0,0,0,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER}}};
     memset(table,0,sizeof(table));
     assert(ps5vk_descriptor_encode(&device,&typed,1,&texel,table,16)==VK_SUCCESS);
-    assert(table[0]==0x4040 && table[1]==2 && table[2]==64 && table[3]==0x31014fac);
+    assert(table[0]==0x4040 && table[1]==0x00040002 && table[2]==64 &&
+        table[3]==0x11014fac);
     puts("Compiler-ordered raw descriptor table: pass (host only)");
 }

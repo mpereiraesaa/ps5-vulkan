@@ -11,6 +11,26 @@ spec.loader.exec_module(lab)
 
 
 class LabTests(unittest.TestCase):
+    def test_worktree_resolves_sibling_canonical_lab(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lab_root = root / "engineering/homebrew_ps5"
+            script = root / "engineering/worktrees/ps5vk-topic/tools/lab.py"
+            script.parent.mkdir(parents=True)
+            script.touch()
+            for relative in lab.REQUIRED:
+                path = lab_root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            self.assertEqual(lab.resolve_lab_root(script), lab_root)
+
+    def test_native_packagers_use_shared_lab_resolver(self):
+        for relative in ("tools/build_sdk.py", "tools/build_consumer.py",
+                         "tools/build_cts_native.py"):
+            source = (ROOT / relative).read_text()
+            self.assertIn("lab_root()", source)
+            self.assertNotIn("ROOT.parents[1]", source)
+
     def test_remoteplay_preserves_arguments_without_shell(self):
         args = ["remoteplay", "record-demo", "--name", "ps5vk demo ; literal"]
         result = lab.command(Path("/tmp/lab with spaces"), args)

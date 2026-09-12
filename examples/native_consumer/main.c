@@ -77,14 +77,18 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
     };
     VkDescriptorSetLayout set_layouts[3] = {VK_NULL_HANDLE};
     CHECK(vkCreateDescriptorSetLayout(device, &dslci, NULL, &set_layouts[0]));
-    VkDescriptorSetLayoutBinding uniform_binding={0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,
-        VK_SHADER_STAGE_COMPUTE_BIT,NULL};
-    dslci.bindingCount=1;dslci.pBindings=&uniform_binding;
-    CHECK(vkCreateDescriptorSetLayout(device,&dslci,NULL,&set_layouts[1]));
-    VkDescriptorSetLayoutBinding texel_binding={0,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,1,
-        VK_SHADER_STAGE_COMPUTE_BIT,NULL};
-    dslci.pBindings=&texel_binding;
-    CHECK(vkCreateDescriptorSetLayout(device,&dslci,NULL,&set_layouts[2]));
+    VkDescriptorSetLayoutBinding uniform_binding = {
+        0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL
+    };
+    dslci.bindingCount = 1;
+    dslci.pBindings = &uniform_binding;
+    CHECK(vkCreateDescriptorSetLayout(device, &dslci, NULL, &set_layouts[1]));
+    VkDescriptorSetLayoutBinding texel_binding = {
+        0, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1,
+        VK_SHADER_STAGE_COMPUTE_BIT, NULL
+    };
+    dslci.pBindings = &texel_binding;
+    CHECK(vkCreateDescriptorSetLayout(device, &dslci, NULL, &set_layouts[2]));
 
     /* 3. Pipeline layout */
     VkPipelineLayoutCreateInfo plci = {
@@ -123,16 +127,18 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
     VkBuffer buffer_in = VK_NULL_HANDLE, buffer_out = VK_NULL_HANDLE;
     CHECK(vkCreateBuffer(device, &bci, NULL, &buffer_in));
     CHECK(vkCreateBuffer(device, &bci, NULL, &buffer_out));
-    bci.usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    VkBuffer buffer_uniform=VK_NULL_HANDLE;CHECK(vkCreateBuffer(device,&bci,NULL,&buffer_uniform));
-    bci.usage=VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-    VkBuffer buffer_texel=VK_NULL_HANDLE;CHECK(vkCreateBuffer(device,&bci,NULL,&buffer_texel));
+    bci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    VkBuffer buffer_uniform = VK_NULL_HANDLE;
+    CHECK(vkCreateBuffer(device, &bci, NULL, &buffer_uniform));
+    bci.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+    VkBuffer buffer_texel = VK_NULL_HANDLE;
+    CHECK(vkCreateBuffer(device, &bci, NULL, &buffer_texel));
 
-    VkMemoryRequirements req_in, req_out,req_uniform,req_texel;
+    VkMemoryRequirements req_in, req_out, req_uniform, req_texel;
     vkGetBufferMemoryRequirements(device, buffer_in, &req_in);
     vkGetBufferMemoryRequirements(device, buffer_out, &req_out);
-    vkGetBufferMemoryRequirements(device,buffer_uniform,&req_uniform);
-    vkGetBufferMemoryRequirements(device,buffer_texel,&req_texel);
+    vkGetBufferMemoryRequirements(device, buffer_uniform, &req_uniform);
+    vkGetBufferMemoryRequirements(device, buffer_texel, &req_texel);
 
     VkMemoryAllocateInfo mai_in = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -147,28 +153,31 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
     VkDeviceMemory mem_in = VK_NULL_HANDLE, mem_out = VK_NULL_HANDLE;
     CHECK(vkAllocateMemory(device, &mai_in, NULL, &mem_in));
     CHECK(vkAllocateMemory(device, &mai_out, NULL, &mem_out));
-    mai_in.allocationSize=req_uniform.size;VkDeviceMemory mem_uniform=VK_NULL_HANDLE;
-    CHECK(vkAllocateMemory(device,&mai_in,NULL,&mem_uniform));
-    mai_in.allocationSize=req_texel.size;VkDeviceMemory mem_texel=VK_NULL_HANDLE;
-    CHECK(vkAllocateMemory(device,&mai_in,NULL,&mem_texel));
+    mai_in.allocationSize = req_uniform.size;
+    VkDeviceMemory mem_uniform = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &mai_in, NULL, &mem_uniform));
+    mai_in.allocationSize = req_texel.size;
+    VkDeviceMemory mem_texel = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &mai_in, NULL, &mem_texel));
 
     CHECK(vkBindBufferMemory(device, buffer_in, mem_in, 0));
     CHECK(vkBindBufferMemory(device, buffer_out, mem_out, 0));
-    CHECK(vkBindBufferMemory(device,buffer_uniform,mem_uniform,0));
-    CHECK(vkBindBufferMemory(device,buffer_texel,mem_texel,0));
+    CHECK(vkBindBufferMemory(device, buffer_uniform, mem_uniform, 0));
+    CHECK(vkBindBufferMemory(device, buffer_texel, mem_texel, 0));
 
     /* 6. Populate input data and guard words */
-    uint32_t *map_in = NULL, *map_out = NULL,*map_uniform=NULL,*map_texel=NULL;
+    uint32_t *map_in = NULL, *map_out = NULL;
+    uint32_t *map_uniform = NULL, *map_texel = NULL;
     CHECK(vkMapMemory(device, mem_in, 0, buffer_bytes, 0, (void **)&map_in));
     CHECK(vkMapMemory(device, mem_out, 0, buffer_bytes, 0, (void **)&map_out));
-    CHECK(vkMapMemory(device,mem_uniform,0,buffer_bytes,0,(void **)&map_uniform));
-    CHECK(vkMapMemory(device,mem_texel,0,buffer_bytes,0,(void **)&map_texel));
+    CHECK(vkMapMemory(device, mem_uniform, 0, buffer_bytes, 0, (void **)&map_uniform));
+    CHECK(vkMapMemory(device, mem_texel, 0, buffer_bytes, 0, (void **)&map_texel));
 
     for (uint32_t i = 0; i < element_count; ++i) {
         map_in[i] = i * 100u + 42u;
-        map_texel[i]=i*31u;
+        map_texel[i] = i * 31u;
     }
-    map_uniform[0]=0x1337u;
+    map_uniform[0] = 0x1337u;
     /* Guard words in destination buffer */
     for (uint32_t i = 0; i < buffer_bytes / 4; ++i) {
         map_out[i] = 0xdeadbeefu;
@@ -183,7 +192,8 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
     CHECK(vkFlushMappedMemoryRanges(device, 4, flush_ranges));
     vkUnmapMemory(device, mem_in);
     vkUnmapMemory(device, mem_out);
-    vkUnmapMemory(device,mem_uniform);vkUnmapMemory(device,mem_texel);
+    vkUnmapMemory(device, mem_uniform);
+    vkUnmapMemory(device, mem_texel);
 
     /* 7. Descriptor pool and allocation */
     VkDescriptorPoolSize pool_sizes[] = {
@@ -218,11 +228,16 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
         .offset = guard_count * sizeof(uint32_t), /* store output after front guards */
         .range = element_count * sizeof(uint32_t)
     };
-    VkDescriptorBufferInfo dbi_uniform={buffer_uniform,0,256};
-    VkBufferViewCreateInfo bvci={.sType=VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
-        .buffer=buffer_texel,.format=VK_FORMAT_R32_UINT,.offset=0,
-        .range=element_count*sizeof(uint32_t)};
-    VkBufferView texel_view=VK_NULL_HANDLE;CHECK(vkCreateBufferView(device,&bvci,NULL,&texel_view));
+    VkDescriptorBufferInfo dbi_uniform = {buffer_uniform, 0, 256};
+    VkBufferViewCreateInfo bvci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+        .buffer = buffer_texel,
+        .format = VK_FORMAT_R32_UINT,
+        .offset = 0,
+        .range = element_count * sizeof(uint32_t)
+    };
+    VkBufferView texel_view = VK_NULL_HANDLE;
+    CHECK(vkCreateBufferView(device, &bvci, NULL, &texel_view));
     VkWriteDescriptorSet writes[4] = {
         {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -330,8 +345,9 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
         exit(1);
     }
     ps5log_printf(PS5LOG_MARK,
-        "PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS sets=3 storage=2 uniform=1 texel=1 elements=%u guards_intact=1",
-        element_count);
+        "PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS sets=3 storage=2 uniform=1 texel=1 "
+        "elements=%u mismatches=0 guard_words=%u guard_mismatches=0",
+        element_count, guard_count * 2);
 
     /* Clean up compute resources in reverse order */
     vkDestroyFence(device, fence, NULL);
@@ -341,13 +357,16 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
     vkDestroyBufferView(device,texel_view,NULL);
     vkDestroyBuffer(device, buffer_in, NULL);
     vkDestroyBuffer(device, buffer_out, NULL);
-    vkDestroyBuffer(device,buffer_uniform,NULL);vkDestroyBuffer(device,buffer_texel,NULL);
+    vkDestroyBuffer(device, buffer_uniform, NULL);
+    vkDestroyBuffer(device, buffer_texel, NULL);
     vkFreeMemory(device, mem_in, NULL);
     vkFreeMemory(device, mem_out, NULL);
-    vkFreeMemory(device,mem_uniform,NULL);vkFreeMemory(device,mem_texel,NULL);
+    vkFreeMemory(device, mem_uniform, NULL);
+    vkFreeMemory(device, mem_texel, NULL);
     vkDestroyPipeline(device, compute_pipeline, NULL);
     vkDestroyPipelineLayout(device, pipeline_layout, NULL);
-    for(unsigned set=0;set<3;++set)vkDestroyDescriptorSetLayout(device,set_layouts[set],NULL);
+    for (unsigned set = 0; set < 3; ++set)
+        vkDestroyDescriptorSetLayout(device, set_layouts[set], NULL);
     vkDestroyShaderModule(device, comp_module, NULL);
 }
 

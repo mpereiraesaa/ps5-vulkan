@@ -146,6 +146,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         VkBool32 buffer=b->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
             b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         VkBool32 texel=b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+        if (b->descriptorCount && b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+            !d->uniform_buffer_alignment)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount && (image ? (!d->graphics_enabled || b->pImmutableSamplers ||
                 b->stageFlags!=VK_SHADER_STAGE_FRAGMENT_BIT) :
                 (!(buffer||texel) || b->pImmutableSamplers ||

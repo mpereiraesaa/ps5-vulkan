@@ -116,6 +116,12 @@ static void negative(void)
     bindings[0].descriptorCount = 0;
     assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &l) == VK_SUCCESS);
     assert(!l->signature.count); vkDestroyDescriptorSetLayout(&d, l, NULL);
+    bindings[0]=(VkDescriptorSetLayoutBinding){0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,
+        VK_SHADER_STAGE_COMPUTE_BIT,NULL};
+    assert(vkCreateDescriptorSetLayout(&d,&ci,NULL,&l)==VK_ERROR_FEATURE_NOT_PRESENT && !l);
+    d.uniform_buffer_alignment=256;
+    assert(vkCreateDescriptorSetLayout(&d,&ci,NULL,&l)==VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(&d,l,NULL);
     VkPipelineLayoutCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pushConstantRangeCount = 1}; VkPipelineLayout p;
     assert(vkCreatePipelineLayout(&d, &pi, NULL, &p) == VK_ERROR_FEATURE_NOT_PRESENT && !p);

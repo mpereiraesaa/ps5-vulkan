@@ -1,9 +1,9 @@
 # Supported API profile
 
 `ps5-vulkan` exposes a deliberately bounded Vulkan-style API over the native
-PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely, but
-support is limited to paths that have both host-contract tests and native
-hardware evidence.
+PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely. Each
+capability below states its evidence boundary when it is narrower than native
+hardware acceptance.
 
 ## Graphics
 
@@ -28,6 +28,8 @@ hardware evidence.
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
 | `VK_FORMAT_D32_SFLOAT` | Depth attachment |
 | `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled image and transfer destination |
+| `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
+| `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
 
 Texture uploads use the GPU transfer path and require the sequence
 `UNDEFINED -> TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL`. Image layout
@@ -43,7 +45,13 @@ supported.
 
 - Compute pipelines compiled from SPIR-V at runtime through PSBC/ACO for
   GFX1013, with a bounded in-memory compilation cache.
-- Storage-buffer descriptors, command-buffer dispatch and fences.
+- Up to four descriptor sets in the compute ABI. The native acceptance fixture
+  uses three sets simultaneously.
+- Storage buffers, uniform buffers and uniform texel buffers. The validated
+  texel format is `VK_FORMAT_R32_UINT`; broader format support is not implied.
+- Partial descriptor-set binding is accepted, but every set and descriptor used
+  by the compiled shader must be bound and defined before dispatch.
+- Command-buffer dispatch and fences.
 - Exact GPU completion and checked readback, including guard validation.
 - A single serial native queue; no multi-queue or semaphore contract.
 - Simultaneous-use command buffers are accepted with serialized retirement.
@@ -53,14 +61,19 @@ supported.
 ## Programs and compilation
 
 Compute shaders are compiled at runtime using a pinned PSBC/NIR/ACO fork. The
-supported profile currently covers compute entry points with scalar
-storage-buffer descriptors in set 0; additional sets, descriptor arrays,
-and scratch are rejected. Compiler LDS allocation (up to 64 KiB) and the
-pinned inline workgroup-count ABI are preserved during dispatch. The focused
-upstream shared-variable case passes on hardware; this does not establish
-general shared-memory, atomic or barrier conformance. Cache keys
-include the complete SPIR-V digest, entry point, compiler/ABI versions and
-pipeline-layout state, and entries are constrained by count and byte budgets.
+supported profile currently covers storage, uniform and uniform-texel buffer
+descriptors across at most four independent sets. Each shader-used set receives
+a distinct, compiler-selected direct user-SGPR table pointer. Descriptor arrays
+remain a bounded implementation contract without native acceptance coverage;
+scratch is rejected. The compiler adapter conservatively includes every
+compute-visible layout binding in execution metadata, so applications must
+define those bindings even when static shader use could eliminate one.
+Compiler LDS allocation (up to 64 KiB) and the pinned inline workgroup-count ABI
+are preserved during dispatch. Focused upstream shared-variable, barrier and
+shared-atomic cases pass on hardware; this is not broad compute conformance.
+Cache keys include the complete SPIR-V digest, entry point, compiler/ABI
+versions and pipeline-layout state, and entries are constrained by count and
+byte budgets.
 
 Runtime graphics uses the same pinned PSBC/NIR/ACO stack for vertex and
 fragment SPIR-V. The current profile supports procedural triangle lists,

@@ -66,7 +66,11 @@ check-sanitize:
 	./build/tests/test_graphics_pair_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Isrc src/shader_relocate.c tests/test_shader_relocate.c -o build/tests/test_shader_relocate_sanitized
 	./build/tests/test_shader_relocate_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined $(NATIVE_PREPARE_TEST) -o build/tests/test_native_prepare_sanitized
+	# The native queue fixture must map CPU-visible memory in the gfx1013
+	# address32_hi=2 aperture (0x2xxxxxxxx). ASan reserves that aperture as
+	# shadow gap on x86-64, so this one fixture is intentionally UBSan-only;
+	# all surrounding queue/descriptor tests below retain ASan+UBSan.
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=undefined $(NATIVE_PREPARE_TEST) -o build/tests/test_native_prepare_sanitized
 	./build/tests/test_native_prepare_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/descriptor_encode.c tests/test_descriptor_encode.c -o build/tests/test_descriptor_encode_sanitized
 	./build/tests/test_descriptor_encode_sanitized
