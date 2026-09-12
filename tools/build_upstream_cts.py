@@ -716,6 +716,10 @@ def main():
         "--file-name", "eboot.elf"
     ], check=True)
 
+    from cts_heap_parameters import use_application_heap
+    linked_elf = out / "eboot.elf"
+    linked_elf.write_bytes(use_application_heap(linked_elf.read_bytes()))
+
     eboot_bin = dist / "eboot.bin"
     subprocess.run([
         str(builder), "self", "--sign",

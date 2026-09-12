@@ -62,5 +62,16 @@ int main(void)
     assert(psbc_result[n_psbc - 3] == (uint32_t)PS5VK_COMPLETION_VALUE);
     assert(psbc_result[n_psbc - 2] == (uint32_t)(PS5VK_COMPLETION_VALUE >> 32));
 
+    p.user_sgprs = 6; p.grid_size_sgpr = 3; p.lds_size = 2;
+    d.groups[0] = 7; d.groups[1] = 3; d.groups[2] = 5;
+    assert(ps5vk_dispatch_encode(psbc_result, 96, &d) == n + 4);
+    assert(psbc_result[24] == 0xc0067600);
+    assert(psbc_result[29] == 7 && psbc_result[30] == 3 && psbc_result[31] == 5);
+    assert(((psbc_result[17] >> 15) & 0x1ff) == 2);
+    assert(((psbc_result[17] >> 1) & 0x1f) == 6);
+    p.grid_size_sgpr = 2;
+    assert(!ps5vk_dispatch_encode(psbc_result, 96, &d));
+    p.grid_size_sgpr = 3; p.lds_size = 129;
+    assert(!ps5vk_dispatch_encode(psbc_result, 96, &d));
     puts("Parameterized dispatch encoding: pass (host packets only)");
 }

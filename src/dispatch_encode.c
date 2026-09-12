@@ -13,7 +13,8 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
     const struct ps5vk_compute_addresses *a = &d->addresses;
     if (p->gfx != 1013 || p->wave_size != 32 || !p->code_words || p->code_words > 1024 * 1024 ||
         !p->vgprs || p->vgprs > 256 || !p->sgprs || p->sgprs > 106 ||
-        (p->user_sgprs != 2 && p->user_sgprs != 3) ||
+        (p->user_sgprs != 2 && p->user_sgprs != 3 && p->user_sgprs != 6) ||
+        p->grid_size_sgpr != (p->user_sgprs == 6 ? 3u : 0u) || p->lds_size > 128 ||
         p->float_mode > 255 || p->ieee_mode > 1 || p->mem_ordered > 1 || p->tg_size > 1 ||
         p->tidig_components > 2 || !p->descriptor_count || p->descriptor_count > PS5VK_MAX_BINDINGS)
         return 0;
@@ -40,7 +41,7 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         a->completion > (UINT64_C(1) << 48) - 8 || a->readback > (UINT64_C(1) << 48) - 16 ||
         (a->code >> 32) != ((a->code + code_bytes - 1) >> 32) ||
         (a->descriptor_table >> 32) != ((a->descriptor_table + table_bytes - 1) >> 32) ||
-        (p->user_sgprs == 3 && (a->descriptor_table >> 32) != 2)) return 0;
+        (p->user_sgprs >= 3 && (a->descriptor_table >> 32) != 2)) return 0;
     uint64_t bases[] = {a->code, a->descriptor_table, a->completion, a->readback};
     uint64_t sizes[] = {code_bytes, table_bytes, 8, 16};
     for (unsigned j = 0; j < 4; ++j)
@@ -55,11 +56,12 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
     size_t n = ps5vk_compute_commands(packet, PS5VK_COMPUTE_COMMAND_CAPACITY, a);
     if (!n) return 0;
     /* gfx10.json COMPUTE_PGM_RSRC1/2 and RADV's wave32 allocation granule.
-     * SGPRS field is unused for this GFX10 ABI; scratch/LDS remain disabled. */
+     * SGPRS field is unused for this GFX10 ABI; scratch remains disabled. */
     uint32_t rsrc1 = ((p->vgprs - 1) / 8) | (p->float_mode << 12) |
         (p->ieee_mode << 23) | (p->wgp_mode << 29) | (p->mem_ordered << 30);
     uint32_t rsrc2 = (p->user_sgprs << 1) | (p->tgid[0] << 7) | (p->tgid[1] << 8) |
-        (p->tgid[2] << 9) | (p->tg_size << 10) | (p->tidig_components << 11);
+        (p->tgid[2] << 9) | (p->tg_size << 10) | (p->tidig_components << 11) |
+        (p->lds_size << 15);
     unsigned found = 0;
     size_t out = 0;
     for (size_t i = 0; i < n;) {
@@ -79,14 +81,17 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
                 words[out] = packet[i]; words[out + 1] = packet[i + 1];
                 words[out + 2] = rsrc1; words[out + 3] = rsrc2;
                 out += 4; found |= 2;
-            } else if (reg == 0xb900 && p->user_sgprs == 3) {
-                if (total != 4 || (found & 16) || out + 5 > capacity) return 0;
-                words[out] = UINT32_C(0xc0037600);
+            } else if (reg == 0xb900 && p->user_sgprs >= 3) {
+                size_t count = p->user_sgprs + 2;
+                if (total != 4 || (found & 16) || out + count > capacity) return 0;
+                words[out] = UINT32_C(0xc0007600) | (p->user_sgprs << 16);
                 words[out + 1] = packet[i + 1];
                 words[out + 2] = 0;
                 words[out + 3] = 0;
                 words[out + 4] = (uint32_t)a->descriptor_table;
-                out += 5; found |= 16;
+                if (p->grid_size_sgpr)
+                    memcpy(words + out + 5, d->groups, 3 * sizeof(uint32_t));
+                out += count; found |= 16;
             } else {
                 if (out + total > capacity) return 0;
                 memcpy(words + out, packet + i, total * sizeof(uint32_t));
@@ -112,7 +117,7 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         }
         i += total;
     }
-    unsigned expected_mask = (p->user_sgprs == 3) ? 31 : 15;
+    unsigned expected_mask = (p->user_sgprs >= 3) ? 31 : 15;
     if (found != expected_mask) return 0;
     return out;
 }

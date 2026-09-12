@@ -62,9 +62,9 @@ std::vector<std::string> buildArguments(int argc, char **argv)
         args.push_back("--deqp-watchdog=disable");
         args.push_back("--deqp-crashhandler=disable");
         // The CTS shader cache preallocates a fixed 16 MiB item pool on first
-        // use (cacheMaxItems = 1024 * 1024 uint32 items). The payload heap cannot
-        // satisfy that single contiguous block, and failing it raises a fatal
-        // ResourceError that aborts the whole session. The cache is a compile
+        // use (cacheMaxItems = 1024 * 1024 uint32 items). Avoid this optional
+        // allocation for the focused run. Application-heap mode now also fixes
+        // the original internal-heap budget limit. The cache is a compile
         // cache only, so disabling it (an upstream-supported option) changes no
         // test body, oracle or result semantics.
         args.push_back("--deqp-shadercache=disable");

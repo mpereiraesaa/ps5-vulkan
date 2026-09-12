@@ -82,6 +82,30 @@ static void recording_and_invalidation(void)
         .program = {.descriptor_count = 1, .descriptors = {{0, 0, 0, 0}}}};
     pipeline.sets[0] = set_layout->signature;
     VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT); VkCommandBuffer c = command(&d, p);
+    VkBufferMemoryBarrier bb = {.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask=VK_ACCESS_HOST_READ_BIT,
+        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .buffer=buffer, .offset=0, .size=VK_WHOLE_SIZE};
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,
+        0,0,NULL,1,&bb,0,NULL);
+    assert(vkEndCommandBuffer(c)==VK_SUCCESS && c->operations[0].buffer_barrier.buffer==buffer);
+    c->state=PS5VK_PENDING;
+    vkDestroyBuffer(&d,buffer,NULL); assert(d.buffers==buffer);
+    c->state=PS5VK_EXECUTABLE;
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    bb.offset=513;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,
+        0,0,NULL,1,&bb,0,NULL);
+    assert(c->state==PS5VK_INVALID && c->operation_count==0);
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    bb.offset=0; bb.dstQueueFamilyIndex=1;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,
+        0,0,NULL,1,&bb,0,NULL);
+    assert(c->state==PS5VK_INVALID && c->operation_count==0);
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS);
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
     vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, &pipeline);
     vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 1, &set, 0, NULL);

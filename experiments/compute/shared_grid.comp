@@ -1,0 +1,14 @@
+#version 450
+layout(local_size_x=2) in;
+layout(set=0,binding=0,std430) buffer Output { uint values[]; } output_data;
+shared uint exchanged[2];
+void main()
+{
+    uint lane = gl_LocalInvocationID.x;
+    uint group = gl_WorkGroupID.x + gl_NumWorkGroups.x *
+        (gl_WorkGroupID.y + gl_NumWorkGroups.y * gl_WorkGroupID.z);
+    exchanged[lane] = group * 2 + lane;
+    memoryBarrierShared();
+    barrier();
+    output_data.values[group * 2 + lane] = exchanged[1 - lane];
+}

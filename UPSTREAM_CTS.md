@@ -148,21 +148,53 @@ correctness.
 
 ## Limitations
 
+### Native acceptance (2026-09-12)
+
+Two independent launches on PS5 FW 12.02 / GFX1013 completed all seven frozen
+cases with **7 Pass, 0 Fail, 0 NotSupported**, exit code zero. Both strict
+verifications matched the deployed executable and selection, reconstructed the
+complete QPA, observed GPU completion and `allocations_bytes=0`, and confirmed
+the title stopped after Close Game. This is focused upstream execution, not
+Vulkan conformance or broad shared-memory coverage.
+
+- Executable SHA-256: `992e607b6e1ec4d9fb54821796335380a7922b78dcd2c2cc08b7a911db3b9b64`
+- Selection SHA-256: `7dc544e694fa40439f49a15417bd56297434bc70381290acb921c371b8ffbfea`
+- QPA 1 SHA-256: `601c90bc47e4371e158f1476d6514c159dba688242edda62268469aa5ece2cf8`
+- QPA 2 SHA-256: `429836ef94c67a92fca1827600852fc220f5260f26ccf9a4561ce15c45bc5fda`
+
+Raw logs and reports remain private; these are audited result summaries.
+
+### Heap and driver fixes
+
+The original roughly 13 MiB ceiling belonged to the foundation's **internal
+libc heap mode**, not the console's available RAM. That mode ignored the
+application's existing expandable-heap parameters. `tools/cts_heap_parameters.py`
+selects application mode in this project's freshly linked ELF before signing,
+validating the parameter layout and refusing ambiguity or drift. It does not
+patch system code or change the shared foundation. Removing that limit allowed
+all seven cases to execute and exposed two genuine driver gaps:
+
+- Simultaneous-use command buffers now retain ownership until retirement;
+  the conservative backend serializes reuse rather than pretending it is idle.
+- Runtime compute preserves compiler LDS sizing and supplies inline dispatch
+  dimensions for the pinned PSBC six-user-SGPR ABI. Validated buffer barriers
+  use the backend's stronger global completion/cache dependency, retaining
+  buffer references and rejecting ownership transfers and invalid ranges.
+
+The optional upstream shader cache remains disabled to avoid its fixed 16 MiB
+pool; GLSL compilation still happens natively. No selected test body, shader,
+oracle, or selection was replaced to obtain these results.
+
+### Remaining scope limits
+
 * This is a focused selection, not the complete CTS and not conformance.
 * The pinned revision is a 1.3-era CTS; it does not establish Vulkan 1.4
   coverage.
 * No selected case exercises a rendering or pixel-comparison oracle. The
   reference rasterizer is linked but unexecuted, so this integration does not
   demonstrate rasterisation correctness.
-* **Host heap budget.** The payload process can commit only about 13 MiB of
-  host heap. Upstream cases that compile GLSL at runtime
-  (`dEQP-VK.api.smoke.create_shader`) exhaust it and raise `ResourceError`,
-  which upstream treats as fatal and which therefore aborts the whole session.
-  The payload disables the CTS shader cache (`--deqp-shadercache=disable`, an
-  upstream-supported option) because its fixed 16 MiB preallocation cannot fit;
-  that removes one guaranteed failure but not the underlying budget limit.
-  Raising the budget or compiling shaders host-side is required before the
-  selection can run to completion.
+* Application heap mode removes the measured internal-mode ceiling; this run
+  does not establish the maximum safe heap size for arbitrary applications.
 * Cases that require API the driver does not implement are reported as failures
   or unsupported results, not silently converted into passes.
 * `tcuImageIO` (libpng) and the generated EGL wrapper (`gluRenderConfig`) are

@@ -88,6 +88,21 @@ int main(void)
     assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
     VkCommandBuffer duplicate[] = {c, c}; submit.commandBufferCount = 2; submit.pCommandBuffers = duplicate;
     assert(vkQueueSubmit(&d.queue, 1, &submit, fence) == VK_ERROR_UNKNOWN && f.prepares == 2);
+    record_empty(c, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    assert(vkQueueSubmit(&d.queue, 1, &submit, fence) == VK_SUCCESS);
+    assert(d.submission->count == 2 && c->state == PS5VK_PENDING);
+    assert(vkResetCommandBuffer(c, 0) != VK_SUCCESS);
+    /* Re-submit while pending: backend must retire the old batch first. */
+    unsigned old_releases = f.releases;
+    assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    assert(f.releases == old_releases + 1 && fence->signaled);
+    assert(c->state == PS5VK_PENDING);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+    assert(c->state == PS5VK_EXECUTABLE);
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    VkCommandBufferBeginInfo conflicting = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+    assert(vkBeginCommandBuffer(c, &conflicting) != VK_SUCCESS);
     submit.commandBufferCount = 1; submit.pCommandBuffers = &c;
     f.prepare_result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
     uint64_t next = d.queue.next_serial;

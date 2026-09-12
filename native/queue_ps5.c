@@ -91,7 +91,8 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             const struct ps5vk_operation *op = &cb->operations[i];
             /* Each dispatch is fully retired before the next. This is stronger
              * than supported global host/compute barriers, not a skipped GPU
-             * dependency. No image or range-barrier semantics are advertised. */
+             * dependency. Buffer ranges use this stronger global dependency;
+             * image transitions and queue-family transfers are not handled here. */
             if (op->type == PS5VK_BARRIER) continue;
             if (job->count == MAX_DISPATCHES) { result = VK_ERROR_UNKNOWN; goto fail; }
             struct prepared_dispatch *p = &job->dispatches[job->count++];
