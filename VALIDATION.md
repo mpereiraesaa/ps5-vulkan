@@ -67,14 +67,19 @@ selection manifest, strict acceptance policy and evidence rules are documented
 in [UPSTREAM_CTS.md](UPSTREAM_CTS.md). Results from that integration are
 reported separately and are not merged into the counts above.
 
-On 2026-09-12, two independent native launches completed **all thirteen selected
-upstream cases with Pass** (seven API/synchronization/memory cases plus six
-compute cases covering workgroup-shared memory, barriers and shared atomics
-across multiple invocations and workgroups), including native GLSL compilation
-and the original compute readback oracles. Both passed strict artifact/QPA
-verification and Close Game checks, with GPU completion and zero tracked GPU
-allocation bytes at teardown. Artifact and report hashes, the heap fix and
-remaining coverage limits are recorded in [UPSTREAM_CTS.md](UPSTREAM_CTS.md).
+On 2026-09-12, two independent native launches completed **all sixteen selected
+upstream cases with Pass** (seven API/synchronization/memory cases, six compute
+cases covering workgroup-shared memory, barriers and shared atomics across
+multiple invocations and workgroups, and three resource cases covering uniform
+buffers and a storage-buffer resource bound through a second descriptor set),
+including
+native GLSL compilation and the original readback oracles. Both passed strict
+artifact/QPA verification and Close Game checks, with GPU completion and zero
+tracked GPU allocation bytes at teardown. Two further upstream resource cases
+are compiled and registered but currently fail; they are recorded as
+diagnostics rather than acceptance cases. Artifact and report hashes, the heap
+fix and remaining coverage limits are recorded in
+[UPSTREAM_CTS.md](UPSTREAM_CTS.md).
 
 ## Independent native SDK consumer validation
 

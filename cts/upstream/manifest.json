@@ -122,6 +122,48 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Upstream SSBOLocalBarrierTest with local_size (3,4,1) across 42 workgroups: each invocation reads back neighbour writes it did not perform, separated by memoryBarrierBuffer/barrier, so the oracle only holds if buffer writes become visible across invocations within a workgroup and stay private between workgroups."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4647",
+      "category": "resource",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream BufferToBufferInvertTest UBO variant: reads a std140 uniform buffer through a uniform-buffer descriptor and writes the inverted 256 values to a storage buffer, so the upstream comparison covers both descriptor kinds."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.ubo_to_ssbo_multiple_groups",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4656",
+      "category": "resource",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "The same upstream uniform-buffer case with local_size (1,4,2) over 8 workgroups: every invocation must read the uniform buffer through a distinct uniform-buffer descriptor offset and invert 1024 values."
+    },
+    {
+      "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.storage_buffer.compute.multiple_descriptor_sets.single_descriptor.offset_view_zero",
+      "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9690",
+      "category": "resource",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Upstream BufferDescriptorCase bound through one vkCmdBindDescriptorSets call over two descriptor sets: storage-buffer resources live in set 0 binding 1 and set 1 binding 0 while the result buffer sits in set 0 binding 0, so the quadrant oracle fails unless a nonzero set index is bound and read correctly."
+    }
+  ],
+  "diagnostics": [
+    {
+      "path": "dEQP-VK.api.buffer_view.access.uniform_texel_buffer.r32_uint",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp:1335",
+      "category": "resource",
+      "observed_status": "Fail",
+      "observed_error": "Invalid result values: texelFetch of the R32_UINT uniform texel buffer returns the scalar replicated in every lane, e.g. expected (244,0,0,1) and read back (244,244,244,244).",
+      "rationale": "Kept as a diagnostic, not part of strict acceptance. The upstream oracle is unmodified; the observed values point at the gfx10 texel-buffer descriptor encoding (format selection / component mapping) rather than at the test. Repairing it belongs to the resource ABI implementation, which this task does not own."
+    },
+    {
+      "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.uniform_buffer.compute.multiple_descriptor_sets.single_descriptor.offset_view_zero",
+      "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9690",
+      "category": "resource",
+      "observed_status": "Fail",
+      "observed_error": "vk.endCommandBuffer: VK_ERROR_UNKNOWN - a recorded command in this case is rejected by the driver while the storage-buffer twin of the same case passes.",
+      "rationale": "Kept as a diagnostic, not part of strict acceptance. Single-set uniform buffers and two-set storage buffers both pass, so the gap is specific to a uniform-buffer binding inside a multi-set layout. Repairing it belongs to the resource ABI implementation, which this task does not own."
     }
   ]
 }

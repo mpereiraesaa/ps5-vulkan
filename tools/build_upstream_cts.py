@@ -591,6 +591,14 @@ def main():
         # framework's compute pipeline wrapper, so the module util is linked in.
         cts_root / "external/vulkancts/modules/vulkan/shader_object/vktShaderObjectCreateUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiSmokeTests.cpp",
+        # Resource-focused modules: buffer views (uniform texel buffers) and the
+        # binding-model shader-access family (multi-set binding of buffers).
+        cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferAndImageAllocationUtil.cpp",
+        # vktImageTestsUtil provides the format-qualifier and packed-type helpers
+        # the buffer-view access tests use to build their compute shader.
+        cts_root / "external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp",
