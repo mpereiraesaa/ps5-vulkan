@@ -215,7 +215,7 @@ def main():
     param = json.loads((gears / "sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
                  contentId="UP9000-PPSA99994_00-PS5VKCOMPUTE0001")
-    param["localizedParameters"]["en-US"]["titleName"] = "ps5vk Compute"
+    param["localizedParameters"]["en-US"]["titleName"] = "PS5 Vulkan"
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
     # Temporary unmodified boilerplate icon; title metadata is project-specific.
@@ -228,14 +228,14 @@ def main():
                 "submit_enabled": os.environ.get("PS5VK_SUBMIT") == "1",
                 "foundation": pin, "files": {}}
     if compute:
-        manifest.update(stage="compute-compute-api", submit_enabled=True,
+        manifest.update(stage="compute-api", submit_enabled=True,
                         dma_only=False, inspection_hold=False,
                         program_library=json.loads((ROOT / "build/program-library/manifest.json").read_text()))
     if graphics:
         manifest.update(stage="graphics-native-link-only", submit_enabled=False,
                         graphics=json.loads((graphics / "manifest.json").read_text()))
         if graphics_api:
-            manifest.update(stage="graphics-graphics-api-creation-only", submit_enabled=False,
+            manifest.update(stage="graphics-api-creation-only", submit_enabled=False,
                             scene="two-cubes" if scene else "triangle-controls",
                             scissor_probe=int(scissor_probe),
                             scissor_depth_comparison=scissor_probe in ("2", "3"),
@@ -249,10 +249,10 @@ def main():
                             exit_control=exit_control, keep_agc_module=keep_agc_module,
                             termination="os-close-during-render" if continuous == "1" else ("shell-close-after-cleanup" if shell_close else "return-main"))
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
-                manifest.update(stage="graphics-graphics-api-offscreen-draw", submit_enabled=True,
+                manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")
                 if os.environ.get("PS5VK_GRAPHICS_PRESENT") == "1":
-                    manifest.update(stage="graphics-graphics-api-native-presentation-reuse")
+                    manifest.update(stage="graphics-api-native-presentation-reuse")
     if exit_control:
         manifest.update(stage={1:"graphics-exit-control-no-graphics",2:"graphics-exit-control-device",3:"graphics-exit-control-logging-load"}[exit_control], submit_enabled=False,
                         scene=None)
