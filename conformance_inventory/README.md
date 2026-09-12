@@ -186,13 +186,18 @@ by requirement rows so that a table cannot exist without a tracked obligation:
   values; roadmap-only values (`{limit2022}`, `{limit2024}`, `{limit2026}`) are
   recorded separately in `roadmap_only_values`. Every limit raised in 1.4 is
   referenced by a requirement row.
-* **Formats** (`formats.tables`): the mandatory format support tables as
-  format x feature-bit rows. Each cell keeps the symbol the specification uses
-  (`{sym1}` unconditional, `{sym2}`/`{sym3}`/`{sym4}` conditional), the per-table
-  annotation that explains it, the scope (`linearTilingFeatures`,
-  `optimalTilingFeatures`, `bufferFeatures`) and any `ifdef` guard that limits a
-  row to a core version or extension. Conditional cells are never promoted to
-  mandatory. Each table is represented by a row.
+* **Formats** (`formats.tables`): the mandatory format support tables resolved
+  to one obligation per format and feature bit. Every cell carries the symbol the
+  specification uses (`{sym1}` unconditional, `{sym2}`/`{sym3}`/`{sym4}`
+  conditional), the effective scope (`linearTilingFeatures`,
+  `optimalTilingFeatures`, `bufferFeatures`, or an explicit `table-defined`
+  marker when no rule states one), the resolved conditions and any guard -
+  including rows written across several physical lines and markers emitted inline
+  by `ifdef::EXT[{symN}]`, which a core row can carry for an
+  extension-conditioned column. Table rules are kept as a list and classified as
+  `symbol-rule`, `scope-rule`, `negative-scope-rule`, `column-rule`,
+  `any-of-formats-rule` or `table-choice-rule`; a rule that cannot be resolved is
+  recorded as such and rejected by the validator rather than dropped.
 * **Command contracts** (`command_contracts.contracts`): the resolved core
   command surface grouped into 12 differentiable API areas (instance/device,
   memory, buffers, images, samplers, descriptors, pipelines and shaders, command
@@ -404,6 +409,13 @@ reasoning stays auditable:
    obligations were kept as single disjunctive obligations instead of being
    expanded, and the limits, format and command-contract tables were added with
    rows per differentiable contract.
+6. The format-table parser now resolves multiple annotations per table, cells
+   written across several lines, inline `ifdef::EXT[{symN}]` markers and
+   annotations that are not symbol-scoped (column, scope, any-of-formats and
+   table-choice rules). Each cell obligation carries its symbol, effective scope,
+   resolved conditions and guard. The validator rejects an unresolved or generic
+   condition (`T021`), a rule or guard that does not reach the requirement rows
+   (`T020`) and a scope stated by a rule but missing on the cell (`T022`).
 5. Limit values are now interpreted rather than character-stripped (`2^30^` is
    1073741824, `0.5` stays 0.5, tuples and ranges keep their element-wise
    meaning, symbolic references resolve to the referenced limit) and an

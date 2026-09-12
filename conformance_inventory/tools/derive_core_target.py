@@ -885,57 +885,110 @@ def parse_limits_table(adoc: str) -> list[dict]:
     return [parsed[name] for name in sorted(parsed)]
 
 
+FEATURE_BIT_RE = re.compile(r"ename:(VK_FORMAT_FEATURE[A-Z0-9_]*)")
+FEATURE_COND_RE = re.compile(r"pname:([A-Za-z0-9_]+)[^.]{0,40}?feature")
+EXTENSION_COND_RE = re.compile(r"apiext:(VK_[A-Za-z0-9_]+)")
 SYMBOL_RE = re.compile(r"\{sym(\d)\}")
 IFDEF_RE = re.compile(r"^ifdef::([^\[]+)\[\]$")
 SCOPE_RE = re.compile(r"pname:(linearTilingFeatures|optimalTilingFeatures|bufferFeatures)")
-FEATURE_COND_RE = re.compile(r"pname:([A-Za-z0-9_]+)[^.]{0,40}?feature")
-EXTENSION_COND_RE = re.compile(r"apiext:(VK_[A-Za-z0-9_]+)")
 
 
 def parse_symbol_legend(adoc: str) -> dict:
+    """The global key table: what {sym1}..{sym4} mean outside a specific table."""
     legend = {}
     block = adoc_table_block(adoc, "formats-key-for-format-feature-tables-table")
     current = None
     for line in block.splitlines():
         stripped = line.strip()
         if stripped.startswith("^|{sym"):
-            symbol = SYMBOL_RE.search(stripped).group(0)
-            current = symbol
+            current = SYMBOL_RE.search(stripped).group(0)
             legend[current] = stripped.split("|", 2)[-1].strip()
         elif current and stripped and not stripped.startswith("|"):
             legend[current] = (legend[current] + " " + stripped).strip()
     return {key: re.sub(r"\s+", " ", value) for key, value in legend.items()}
 
 
-def _record_annotation(annotations: dict, text: str) -> None:
-    symbol_match = SYMBOL_RE.search(text)
-    if not symbol_match:
-        return
-    flat = re.sub(r"\s+", " ", text)
+IFDEF_MARKER_RE = re.compile(r"^ifdef::(?P<guard>[A-Za-z0-9_,]+)\[\{sym(?P<symbol>\d)\}\]$")
+ANNOTATION_LINE_RE = re.compile(r"^(?P<span>\d+)\+\|\s*(?P<text>.*)$")
+COLUMN_HEADER_RE = re.compile(r"^(?P<span>\d+)\+>")
+FORMAT_ROW_RE = re.compile(r"^\|\s*ename:(?P<format>VK_FORMAT_[A-Z0-9_]+)\s*\|(?P<rest>.*)$")
+
+
+FORMAT_ANCHOR_RE = re.compile(r"ename:(VK_FORMAT_[A-Z0-9_]+)")
+TABLE_ANCHOR_RE = re.compile(r"<<(formats-mandatory-features-[a-z0-9-]+)")
+NEGATIVE_RULE_RE = re.compile(r"must:? not (?:support|advertise)")
+FEATURE_IS_SUPPORTED_RE = re.compile(r"pname:([A-Za-z0-9_]+)[^.]{0,40}?feature is supported")
+SUPPORTS_FEATURE_RE = re.compile(r"supports the\s+[^.]{0,80}?pname:([A-Za-z0-9_]+)[^.]{0,20}?feature")
+ANY_OF_RE = re.compile(r"at least one of", re.I)
+
+
+def _classify_annotation(text: str, guard: str | None, legend: dict) -> dict:
+    """Resolve one table annotation into an explicit rule.
+
+    Kinds: symbol-rule (a {symN} marker), negative-scope-rule (a scope that must
+    not advertise features), column-rule (a feature bit with a condition),
+    any-of-formats-rule (a feature required for at least one of several formats),
+    table-choice-rule (a feature required in one of several format tables) and
+    unresolved-rule (kept for the validator to reject).
+    """
+    flat = re.sub(r"\s+", " ", text).strip()
+    symbol_match = SYMBOL_RE.search(flat)
     scope_match = SCOPE_RE.search(flat)
-    feature_match = FEATURE_COND_RE.search(flat)
-    extension_match = EXTENSION_COND_RE.search(flat)
-    reasons = []
-    if extension_match:
-        reasons.append("requires the %s extension" % extension_match.group(1))
-    if feature_match:
-        reasons.append("requires the %s feature" % feature_match.group(1))
-    annotations[symbol_match.group(0)] = {
-        "symbol": symbol_match.group(0),
-        "text": flat,
+    feature_matches = sorted(set(FEATURE_BIT_RE.findall(flat)))
+    extensions = sorted(set(EXTENSION_COND_RE.findall(flat)))
+    feature_conditions = sorted(set(FEATURE_IS_SUPPORTED_RE.findall(flat)) | {name for name in SUPPORTS_FEATURE_RE.findall(flat) if name not in ("VkPhysicalDevice",)})
+    format_options = sorted(set(FORMAT_ANCHOR_RE.findall(flat)))
+    table_options = sorted(set(TABLE_ANCHOR_RE.findall(flat)))
+
+    reasons, kind = [], None
+    if NEGATIVE_RULE_RE.search(flat):
+        kind = "negative-scope-rule"
+        reasons.append("%s must not advertise features for these formats" % (scope_match.group(1) if scope_match else "the named scope"))
+    elif ANY_OF_RE.search(flat) and table_options:
+        kind = "table-choice-rule"
+        reasons.append("required for all formats of one of: %s" % ", ".join(table_options))
+    elif ANY_OF_RE.search(flat) and format_options:
+        kind = "any-of-formats-rule"
+        reasons.append("required for at least one of: %s" % ", ".join(format_options))
+    else:
+        if extensions:
+            reasons.append("requires the %s extension" % ", ".join(extensions))
+        if feature_conditions:
+            reasons.append("requires the %s feature" % ", ".join(feature_conditions))
+        if symbol_match:
+            kind = "symbol-rule"
+        elif scope_match:
+            kind = "scope-rule"
+        elif feature_matches:
+            kind = "column-rule"
+    if kind is None:
+        kind = "unresolved-rule"
+    if kind in ("column-rule", "any-of-formats-rule", "table-choice-rule") and not reasons:
+        kind = "unresolved-rule"
+    return {
+        "kind": kind,
+        "symbol": symbol_match.group(0) if symbol_match else None,
+        "features": feature_matches,
+        "format_options": format_options,
+        "table_options": table_options,
         "scope": scope_match.group(1) if scope_match else None,
+        "guard": guard,
+        "condition_kind": "resolved" if reasons else "unresolved",
         "condition": " and ".join(reasons) if reasons else flat,
+        "legend_condition": legend.get(symbol_match.group(0)) if symbol_match else None,
+        "text": flat,
     }
 
 
 def parse_formats_tables(adoc: str) -> list[dict]:
-    """Parse the mandatory format tables without losing conditions.
+    """Parse the mandatory format tables into per-cell obligations.
 
-    Each cell keeps its symbol ({sym1} = unconditional, {sym2}/{sym3}/{sym4} =
-    conditional), the per-table annotation that explains the symbol, the scope
-    (linear/optimal tiling or buffer) and any ifdef guard that limits the row to
-    a core version or extension. Unknown markers raise instead of being treated
-    as mandatory.
+    Every cell keeps its symbol, its effective scope, its resolved conditions and
+    any guard - including rows written across several physical lines and markers
+    emitted inline by ``ifdef::EXT[{symN}]``. Annotations are kept as a list, so a
+    table may carry several rules (symbol-scoped, scope-scoped or column-scoped)
+    without any of them overwriting another; an annotation that cannot be
+    resolved is recorded as such instead of being dropped.
     """
     legend = parse_symbol_legend(adoc)
     tables = []
@@ -948,14 +1001,36 @@ def parse_formats_tables(adoc: str) -> list[dict]:
             if column:
                 columns.append((int(column.group(1)), column.group(2)))
         columns.sort()
-        annotations: dict[str, dict] = {}
-        rows = []
+        column_names = [feature for _, feature in columns]
+        expected_cells = len(column_names) + 1  # the leading Format column
+
+        annotations: list[dict] = []
+        rows: list[dict] = []
         guards: list[str] = []
+        current = None
         pending_annotation = None
-        for line in block.splitlines():
-            stripped = line.strip()
+
+        def flush_row():
+            nonlocal current
+            if current is not None:
+                rows.append(current)
+                current = None
+
+        def flush_annotation():
+            nonlocal pending_annotation
             if pending_annotation is not None:
-                pending_annotation = (pending_annotation + " " + stripped).strip()
+                annotations.append(_classify_annotation(pending_annotation["text"], pending_annotation["guard"], legend))
+                pending_annotation = None
+
+        for raw in block.splitlines():
+            stripped = raw.strip()
+            marker = IFDEF_MARKER_RE.match(stripped)
+            if marker:
+                # Guards a single marker inside an open cell: the marker is the
+                # cell content and the guard limits it to that extension.
+                if current is not None and current["cells"]:
+                    current["cells"][-1] = (current["cells"][-1] + "{sym%s}" % marker.group("symbol")).strip()
+                    current["cell_guards"][-1] = marker.group("guard")
                 continue
             guard = IFDEF_RE.match(stripped)
             if guard:
@@ -965,68 +1040,118 @@ def parse_formats_tables(adoc: str) -> list[dict]:
                 if guards:
                     guards.pop()
                 continue
-            annotation = re.match(r"\d+\+\|\s*(.*)$", stripped)
-            if annotation and annotation.group(1):
-                pending_annotation = annotation.group(1)
+            annotation = ANNOTATION_LINE_RE.match(stripped)
+            if annotation:
+                flush_row()
+                flush_annotation()
+                pending_annotation = {"text": annotation.group("text"), "guard": guards[-1] if guards else None}
+                continue
+            if COLUMN_HEADER_RE.match(stripped):
+                continue
+            row = FORMAT_ROW_RE.match(stripped)
+            if row:
+                flush_row()
+                flush_annotation()
+                current = {
+                    "format": row.group("format"),
+                    "guard": guards[-1] if guards else None,
+                    "cells": [""],
+                    "cell_guards": [guards[-1] if guards else None],
+                }
+                for part in row.group("rest").split("|"):
+                    current["cells"].append(part.strip())
+                    current["cell_guards"].append(guards[-1] if guards else None)
+                continue
+            if current is not None and (stripped.startswith("|") or stripped == "" or set(stripped) <= set("| ")):
+                parts = stripped.split("|")
+                first = parts[0].strip()
+                if first:
+                    current["cells"][-1] = (current["cells"][-1] + " " + first).strip()
+                for part in parts[1:]:
+                    current["cells"].append(part.strip())
+                    current["cell_guards"].append(guards[-1] if guards else None)
                 continue
             if pending_annotation is not None:
-                _record_annotation(annotations, pending_annotation)
-                pending_annotation = None
-            row = re.match(r"\s*\|\s*ename:(VK_FORMAT_[A-Z0-9_]+)\s*\|(.*)$", line)
-            if not row:
+                pending_annotation["text"] += " " + stripped
                 continue
-            if pending_annotation is not None:
-                _record_annotation(annotations, pending_annotation)
-                pending_annotation = None
-            cells = [cell.strip() for cell in row.group(2).split("|")]
-            features, conditional = [], []
-            for index, (_, feature) in enumerate(columns):
-                marker = cells[index] if index < len(cells) else ""
-                if not marker:
+        flush_row()
+        flush_annotation()
+
+        # Normalise the cell count against the column layout, then build one
+        # obligation per cell: symbol, effective scope, resolved conditions and
+        # guard, attributed to the table rules that actually apply to it.
+        column_conditions: dict[str, list[dict]] = {}
+        for annotation in annotations:
+            if annotation["symbol"] is not None:
+                continue
+            for feature in annotation["features"]:
+                column_conditions.setdefault(feature, []).append(annotation)
+
+        entries = []
+        for entry in rows:
+            values = list(entry["cells"])
+            guards_for_cells = list(entry["cell_guards"])
+            while len(values) > expected_cells and not values[-1]:
+                values.pop()
+                guards_for_cells.pop()
+            while len(values) < expected_cells:
+                values.append("")
+                guards_for_cells.append(entry["guard"])
+            cells = []
+            for index, feature in enumerate(column_names):
+                value = values[index + 1] if index + 1 < len(values) else ""
+                if not value:
                     continue
-                symbol_match = SYMBOL_RE.fullmatch(marker)
+                symbol_match = SYMBOL_RE.fullmatch(value)
                 if not symbol_match:
-                    raise SystemExit("unknown format table marker %r for %s" % (marker, row.group(1)))
+                    raise SystemExit("unknown format table marker %r for %s" % (value, entry["format"]))
                 symbol = symbol_match.group(0)
-                if symbol == "{sym1}":
-                    features.append(feature)
-                else:
-                    annotation = annotations.get(symbol, {})
-                    conditional.append(
-                        {
-                            "feature": feature,
-                            "symbol": symbol,
-                            "scope": annotation.get("scope"),
-                            "condition": annotation.get("condition") or legend.get(symbol),
-                            "guard": guards[0] if guards else None,
-                        }
-                    )
-            rows.append(
+                applicable = [
+                    rule
+                    for rule in annotations
+                    if (rule["symbol"] and rule["symbol"] == symbol) or (feature in rule["features"])
+                ]
+                rule_scopes = sorted({rule["scope"] for rule in applicable if rule["scope"]})
+                conditions = [rule["condition"] for rule in applicable if rule["condition"]]
+                guard = guards_for_cells[index + 1] or entry["guard"]
+                for rule in applicable:
+                    marker = "guarded by %s" % rule["guard"]
+                    if rule["guard"] and marker not in conditions:
+                        conditions.append(marker)
+                cells.append(
+                    {
+                        "feature": feature,
+                        "symbol": symbol,
+                        "required": symbol == "{sym1}" and not conditions,
+                        "scope": rule_scopes[0] if rule_scopes else None,
+                        "rule_scopes": rule_scopes,
+                        "scope_kind": "rule" if rule_scopes else "table-defined",
+                        "conditions": conditions,
+                        "guard": guard,
+                        "applicable_rules": len(applicable),
+                    }
+                )
+            required = [cell["feature"] for cell in cells if cell["required"] and not cell["conditions"]]
+            conditional = [cell for cell in cells if not (cell["required"] and not cell["conditions"])]
+            entries.append(
                 {
-                    "format": row.group(1),
-                    "guard": guards[0] if guards else None,
-                    "required_feature_bits": features,
+                    "format": entry["format"],
+                    "guard": entry["guard"],
+                    "cells": cells,
+                    "required_feature_bits": required,
                     "conditional_feature_bits": conditional,
                 }
             )
-        if pending_annotation is not None:
-            _record_annotation(annotations, pending_annotation)
-            pending_annotation = None
-        for row in rows:
-            for cell in row["conditional_feature_bits"]:
-                annotation = annotations.get(cell["symbol"], {})
-                cell["scope"] = cell["scope"] or annotation.get("scope")
-                cell["condition"] = annotation.get("condition") or legend.get(cell["symbol"])
-                cell["table_annotation"] = annotation.get("text")
-        if rows:
+        if entries:
             tables.append(
                 {
                     "anchor": anchor,
                     "title": title.group(1).strip() if title else anchor,
-                    "columns": [feature for _, feature in columns],
+                    "columns": column_names,
                     "symbol_legend": legend,
-                    "annotations": list(annotations.values()),
-                    "rows": rows,
+                    "annotations": annotations,
+                    "column_conditions": {feature: [rule["condition"] for rule in rules] for feature, rules in column_conditions.items()},
+                    "rows": entries,
                 }
             )
     return tables

@@ -625,31 +625,77 @@ def validate_core_tables(bundle: Bundle, rows: list[dict], problems: list[Proble
     if not any(row.get("extensions") for row in rows) and rule_list:
         problems.append(Problem("error", "T016", "core_target.json", "extension rules are not referenced by any requirement row"))
 
-    # T017: conditional format cells and ifdef guards must survive into the rows.
+    # T017/T020/T021/T022: format rules, cells and scopes must survive into the
+    # requirement rows without any generic or unresolved condition.
     rows_by_anchor = {}
     for row in rows:
         anchor = (row.get("source") or {}).get("anchor")
         if anchor:
             rows_by_anchor.setdefault(anchor, []).append(row)
     for table in tables:
-        conditional_cells = sum(len(entry.get("conditional_feature_bits", [])) for entry in table.get("rows", []))
-        guards = sorted({entry["guard"] for entry in table.get("rows", []) if entry.get("guard")})
-        if not (table.get("annotations") or conditional_cells or guards):
-            continue
-        target_rows = rows_by_anchor.get(table["anchor"], [])
-        if not target_rows:
-            problems.append(Problem("error", "T017", table["anchor"], "format table with conditions is not referenced by any requirement row"))
-            continue
-        conditions = " ".join(entry for row in target_rows for entry in (row.get("capability_conditions") or []))
-        for annotation in table.get("annotations", []):
-            if annotation["symbol"] not in conditions:
-                problems.append(Problem("error", "T017", table["anchor"], "symbol %s lost its condition in the requirement row" % annotation["symbol"]))
-            if annotation.get("condition") and annotation["condition"][:24] not in conditions:
-                problems.append(Problem("error", "T017", table["anchor"], "condition for %s is not recorded in the requirement row" % annotation["symbol"]))
-        for guard in guards:
-            if guard not in conditions:
-                problems.append(Problem("error", "T017", table["anchor"], "ifdef guard %r is not recorded in the requirement row" % guard))
-
+        anchor = table["anchor"]
+        target_rows = rows_by_anchor.get(anchor, [])
+        recorded = " ".join(entry for row in target_rows for entry in (row.get("capability_conditions") or []))
+        annotations = table.get("annotations", [])
+        for annotation in annotations:
+            if annotation.get("condition_kind") != "resolved":
+                problems.append(
+                    Problem("error", "T021", anchor, "annotation is unresolved: %r" % (annotation.get("text", "")[:90]))
+                )
+                continue
+            if annotation.get("condition") and annotation["condition"] not in recorded:
+                problems.append(
+                    Problem("error", "T020", anchor, "annotation (%s) is not recorded in the requirement row" % annotation.get("kind"))
+                )
+            if annotation.get("symbol") and annotation["symbol"] not in recorded:
+                problems.append(Problem("error", "T020", anchor, "symbol %s lost during row generation" % annotation["symbol"]))
+            if annotation.get("guard") and annotation["guard"] not in recorded:
+                problems.append(Problem("error", "T020", anchor, "guard %s lost during row generation" % annotation["guard"]))
+        for feature, conditions in (table.get("column_conditions") or {}).items():
+            for condition in conditions:
+                if condition not in recorded:
+                    problems.append(Problem("error", "T020", anchor, "column condition for %s is not recorded: %r" % (feature, condition[:60])))
+        conditional_cells = 0
+        for entry in table.get("rows", []):
+            for cell in entry.get("cells", []):
+                if cell.get("symbol") != "{sym1}" or cell.get("conditions"):
+                    conditional_cells += 1
+                    if not cell.get("conditions"):
+                        problems.append(
+                            Problem("error", "T021", anchor, "%s/%s carries a conditional symbol with no resolved condition" % (entry["format"], cell["feature"]))
+                        )
+                    legend_text = (table.get("symbol_legend") or {}).get(cell.get("symbol"))
+                    if legend_text and [condition for condition in cell.get("conditions", []) if condition == legend_text]:
+                        problems.append(
+                            Problem("error", "T021", anchor, "%s/%s uses the generic legend text as its condition" % (entry["format"], cell["feature"]))
+                        )
+                    # A scope that the source states must reach the cell; a cell
+                    # whose rules state no scope keeps the explicit
+                    # "table-defined" marker instead of inventing one.
+                    # The generator attributes each cell to the rules that apply
+                    # to it (its symbol or its feature bit). A scope stated by
+                    # one of those rules must survive; when none states a scope,
+                    # the cell keeps an explicit "table-defined" marker.
+                    stated_scopes = set(cell.get("rule_scopes") or [])
+                    if stated_scopes and cell.get("scope") not in stated_scopes:
+                        problems.append(
+                            Problem("error", "T022", anchor, "%s/%s lost the scope %s stated by its rules" % (entry["format"], cell["feature"], sorted(stated_scopes)))
+                        )
+                    elif not stated_scopes and cell.get("scope_kind") != "table-defined":
+                        problems.append(
+                            Problem("error", "T022", anchor, "%s/%s has no scope and no explicit table-defined marker" % (entry["format"], cell["feature"]))
+                        )
+                for condition in cell.get("conditions", []):
+                    if condition not in recorded:
+                        problems.append(
+                            Problem("error", "T017", anchor, "%s/%s condition not recorded in the row: %r" % (entry["format"], cell["feature"], condition[:60]))
+                        )
+        stats["conditional_format_cells"] = stats.get("conditional_format_cells", 0) + conditional_cells
+        stats["format_annotations"] = stats.get("format_annotations", 0) + len(annotations)
+    stats["format_annotation_kinds"] = sorted({annotation.get("kind") for table in tables for annotation in table.get("annotations", [])})
+    stats["unresolved_format_annotations"] = sum(
+        1 for table in tables for annotation in table.get("annotations", []) if annotation.get("condition_kind") != "resolved"
+    )
     # T019: every limit value must have been interpreted, never stripped.
     known_kinds = {"integer", "decimal", "power", "fraction", "tuple", "expression", "reference", "enum", "none", "descriptive", "bitfield", "boolean"}
     for entry in limits.get("rows", []):

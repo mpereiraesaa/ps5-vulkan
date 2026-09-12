@@ -1337,6 +1337,68 @@
                               }
                             }
                           }
+                        },
+                        "cells": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "feature",
+                              "symbol",
+                              "required",
+                              "scope_kind",
+                              "conditions"
+                            ],
+                            "properties": {
+                              "feature": {
+                                "type": "string"
+                              },
+                              "symbol": {
+                                "enum": [
+                                  "{sym1}",
+                                  "{sym2}",
+                                  "{sym3}",
+                                  "{sym4}"
+                                ]
+                              },
+                              "required": {
+                                "type": "boolean"
+                              },
+                              "scope": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "rule_scopes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "scope_kind": {
+                                "enum": [
+                                  "rule",
+                                  "table-defined"
+                                ]
+                              },
+                              "conditions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "guard": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "applicable_rules": {
+                                "type": "integer"
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -1349,12 +1411,45 @@
                     "items": {
                       "type": "object",
                       "required": [
-                        "symbol",
-                        "condition"
+                        "kind",
+                        "condition_kind",
+                        "condition",
+                        "text"
                       ],
                       "properties": {
+                        "kind": {
+                          "enum": [
+                            "symbol-rule",
+                            "scope-rule",
+                            "negative-scope-rule",
+                            "column-rule",
+                            "any-of-formats-rule",
+                            "table-choice-rule"
+                          ]
+                        },
                         "symbol": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "format_options": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "table_options": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "scope": {
                           "type": [
@@ -1362,12 +1457,36 @@
                             "null"
                           ]
                         },
+                        "guard": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "condition_kind": {
+                          "const": "resolved"
+                        },
                         "condition": {
                           "type": "string"
+                        },
+                        "legend_condition": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "text": {
                           "type": "string"
                         }
+                      }
+                    }
+                  },
+                  "column_conditions": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
                       }
                     }
                   }

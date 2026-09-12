@@ -35,6 +35,13 @@ if INVENTORY_DIR not in sys.path:
 import validate  # noqa: E402  (path is prepared above)
 
 
+def _row_conditions_for_anchor(bundle, anchor: str) -> str:
+    for row in bundle.requirements["requirements"]:
+        if (row.get("source") or {}).get("anchor") == anchor:
+            return " ".join(row.get("capability_conditions") or [])
+    return ""
+
+
 def _load_derive_module():
     import importlib.util
 
@@ -870,15 +877,100 @@ class CheckedInInventoryTests(unittest.TestCase):
         storage = next(cell for cell in r8["conditional_feature_bits"] if cell["feature"] == "VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT")
         self.assertEqual(storage["symbol"], "{sym3}")
         self.assertEqual(storage["scope"], "optimalTilingFeatures")
-        self.assertIn("shaderStorageImageExtendedFormats", storage["condition"])
+        self.assertIn("shaderStorageImageExtendedFormats", " ".join(storage["conditions"]))
         self.assertEqual(next(entry for entry in two_byte["rows"] if entry["format"] == "VK_FORMAT_A8_UNORM")["guard"], "VK_BASE_VERSION_1_4,VK_KHR_maintenance5")
         rows = {row["id"]: row for row in bundle.requirements["requirements"]}
-        conditions = " ".join(rows["VK14-CORE-132"]["capability_conditions"])
+        conditions = _row_conditions_for_anchor(bundle, "formats-mandatory-features-2byte")
         self.assertIn("{sym3}", conditions)
         self.assertIn("shaderStorageImageExtendedFormats", conditions)
         self.assertIn("VK_BASE_VERSION_1_4", conditions)
         four_four = tables["formats-mandatory-features-subbyte"]
         self.assertTrue(any("VK_EXT_4444_formats" in annotation["condition"] for annotation in four_four["annotations"]))
+
+    def test_format_sym3_and_sym4_coexist(self):
+        """Regression: a table may carry several symbol rules; both must survive."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = {table["anchor"]: table for table in bundle.target["formats"]["tables"]}
+        sixteen = tables["formats-mandatory-features-16bit"]
+        kinds = {annotation["symbol"]: annotation for annotation in sixteen["annotations"]}
+        self.assertIn("{sym3}", kinds)
+        self.assertIn("{sym4}", kinds)
+        self.assertEqual(kinds["{sym3}"]["scope"], "optimalTilingFeatures")
+        self.assertEqual(kinds["{sym4}"]["guard"], "VK_NV_shader_atomic_float16_vector")
+        self.assertIn("shaderFloat16VectorAtomics", kinds["{sym4}"]["condition"])
+        row = next(entry for entry in sixteen["rows"] if entry["format"] == "VK_FORMAT_R16G16_SFLOAT")
+        symbols = {cell["symbol"] for cell in row["cells"]}
+        self.assertLessEqual({"{sym3}", "{sym4}"}, symbols)
+        by_symbol = {cell["symbol"]: cell for cell in row["cells"]}
+        self.assertIn("shaderStorageImageExtendedFormats", " ".join(by_symbol["{sym3}"]["conditions"]))
+        self.assertIn("shaderFloat16VectorAtomics", " ".join(by_symbol["{sym4}"]["conditions"]))
+        self.assertIn("VK_NV_shader_atomic_float16_vector", " ".join(by_symbol["{sym4}"]["conditions"]))
+        recorded = _row_conditions_for_anchor(bundle, "formats-mandatory-features-16bit")
+        self.assertIn("{sym4}", recorded)
+        self.assertIn("VK_NV_shader_atomic_float16_vector", recorded)
+
+    def test_extension_conditioned_column_in_core_row(self):
+        """Regression: a core format row can carry a column conditioned on an extension."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = {table["anchor"]: table for table in bundle.target["formats"]["tables"]}
+        sixty_four = tables["formats-mandatory-features-64bit"]
+        row = next(entry for entry in sixty_four["rows"] if entry["format"] == "VK_FORMAT_R64_UINT")
+        conditional = {cell["feature"]: cell for cell in row["cells"] if cell["symbol"] == "{sym2}"}
+        self.assertIn("VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT", conditional)
+        self.assertIn("VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT", conditional)
+        for cell in conditional.values():
+            self.assertEqual(cell["guard"], "VK_EXT_shader_image_atomic_int64")
+            self.assertIn("shaderImageInt64Atomics", " ".join(cell["conditions"]))
+            self.assertEqual(cell["scope"], "optimalTilingFeatures")
+            self.assertFalse(cell["required"])
+        self.assertIn("VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT", row["required_feature_bits"] + [c["feature"] for c in row["cells"]])
+        recorded = _row_conditions_for_anchor(bundle, "formats-mandatory-features-64bit")
+        self.assertIn("shaderImageInt64Atomics", recorded)
+        self.assertIn("VK_EXT_shader_image_atomic_int64", recorded)
+
+    def test_table_rules_are_all_classified_and_recorded(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        allowed = {"symbol-rule", "scope-rule", "negative-scope-rule", "column-rule", "any-of-formats-rule", "table-choice-rule"}
+        for table in bundle.target["formats"]["tables"]:
+            for annotation in table["annotations"]:
+                self.assertIn(annotation["kind"], allowed, annotation["text"][:80])
+                self.assertEqual(annotation["condition_kind"], "resolved", annotation["text"][:80])
+
+    def test_unresolved_condition_is_rejected(self):
+        """The validator must fail on a generic condition, not accept it."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        target = copy.deepcopy(bundle.target)
+        table = target["formats"]["tables"][1]
+        table["annotations"][0]["condition"] = "This feature must be supported with some caveats"
+        table["annotations"][0]["condition_kind"] = "generic"
+        problems, _ = validate.validate(validate.Bundle(
+            sources=bundle.sources, requirements=bundle.requirements, coverage=bundle.coverage,
+            consumers=bundle.consumers, manifest=bundle.manifest, target=target,
+            roadmap=bundle.roadmap, surface=bundle.surface, readme_text=bundle.readme_text))
+        self.assertIn("T021", errors(problems))
+
+    def test_lost_annotation_and_scope_are_rejected(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        target = copy.deepcopy(bundle.target)
+        for table in target["formats"]["tables"]:
+            for entry in table["rows"]:
+                for cell in entry["cells"]:
+                    cell["scope"] = None
+                    cell["rule_scopes"] = ["optimalTilingFeatures"]
+        problems, _ = validate.validate(validate.Bundle(
+            sources=bundle.sources, requirements=bundle.requirements, coverage=bundle.coverage,
+            consumers=bundle.consumers, manifest=bundle.manifest, target=target,
+            roadmap=bundle.roadmap, surface=bundle.surface, readme_text=bundle.readme_text))
+        self.assertIn("T022", errors(problems))
+        stripped = copy.deepcopy(bundle.requirements)
+        for row in stripped["requirements"]:
+            if row["id"].startswith("VK14-CORE-1"):
+                row["capability_conditions"] = []
+        problems, _ = validate.validate(validate.Bundle(
+            sources=bundle.sources, requirements=stripped, coverage=bundle.coverage,
+            consumers=bundle.consumers, manifest=bundle.manifest, target=bundle.target,
+            roadmap=bundle.roadmap, surface=bundle.surface, readme_text=bundle.readme_text))
+        self.assertIn("T020", errors(problems))
 
     def test_readme_figures_are_generated_and_current(self):
         bundle = validate.Bundle.load(INVENTORY_DIR)

@@ -1834,11 +1834,13 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature; rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature; {sym3} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4B4G4R4 feature; rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5; cell condition: guarded by VK_BASE_VERSION_1_3,VK_EXT_4444_formats).",
       "capability_conditions": [
-        "{sym2} in optimalTilingFeatures: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature",
+        "{sym2} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature",
+        "{sym3} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4B4G4R4 feature",
         "rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats",
-        "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5"
+        "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5",
+        "cell condition: guarded by VK_BASE_VERSION_1_3,VK_EXT_4444_formats"
       ]
     },
     {
@@ -2217,15 +2219,17 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; {sym4} in optimalTilingFeatures [guard VK_NV_shader_atomic_float16_vector]: requires the shaderFloat16VectorAtomics feature; cell condition: guarded by VK_NV_shader_atomic_float16_vector).",
       "capability_conditions": [
-        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature"
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "{sym4} in optimalTilingFeatures [guard VK_NV_shader_atomic_float16_vector]: requires the shaderFloat16VectorAtomics feature",
+        "cell condition: guarded by VK_NV_shader_atomic_float16_vector"
       ]
     },
     {
       "id": "VK14-CORE-136",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 32-bit Components (12 formats, 80 unconditional feature bits, 0 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: 32-bit Components (12 formats, 86 unconditional feature bits, 1 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2297,15 +2301,16 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures: requires the shaderImageFloat32Atomics feature).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures [guard VK_EXT_shader_atomic_float]: requires the shaderImageFloat32Atomics feature; cell condition: guarded by VK_EXT_shader_atomic_float).",
       "capability_conditions": [
-        "{sym2} in optimalTilingFeatures: requires the shaderImageFloat32Atomics feature"
+        "{sym2} in optimalTilingFeatures [guard VK_EXT_shader_atomic_float]: requires the shaderImageFloat32Atomics feature",
+        "cell condition: guarded by VK_EXT_shader_atomic_float"
       ]
     },
     {
       "id": "VK14-CORE-137",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 64-bit/uneven Components (14 formats, 8 unconditional feature bits, 1 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: 64-bit/uneven Components (14 formats, 8 unconditional feature bits, 5 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2379,15 +2384,19 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures [guard VK_EXT_shader_image_atomic_int64]: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT: requires the shaderImageInt64Atomics feature; cell condition: guarded by VK_EXT_shader_image_atomic_int64).",
       "capability_conditions": [
-        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature"
+        "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures [guard VK_EXT_shader_image_atomic_int64]: requires the shaderImageInt64Atomics feature",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT: requires the shaderImageInt64Atomics feature",
+        "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT: requires the shaderImageInt64Atomics feature",
+        "cell condition: guarded by VK_EXT_shader_image_atomic_int64"
       ]
     },
     {
       "id": "VK14-CORE-138",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: Depth/Stencil With `VkImageType` ename:VK_IMAGE_TYPE_2D (7 formats, 5 unconditional feature bits, 4 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: Depth/Stencil With `VkImageType` ename:VK_IMAGE_TYPE_2D (7 formats, 4 unconditional feature bits, 5 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2454,8 +2463,12 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (none).",
-      "capability_conditions": []
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32; negative-scope-rule in bufferFeatures: bufferFeatures must not advertise features for these formats; column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32).",
+      "capability_conditions": [
+        "VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32",
+        "negative-scope-rule in bufferFeatures: bufferFeatures must not advertise features for these formats",
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32"
+      ]
     },
     {
       "id": "VK14-CORE-139",
@@ -2536,8 +2549,13 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (none).",
-      "capability_conditions": []
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc).",
+      "capability_conditions": [
+        "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc"
+      ]
     },
     {
       "id": "VK14-CORE-140",
@@ -2612,8 +2630,13 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (none).",
-      "capability_conditions": []
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn).",
+      "capability_conditions": [
+        "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
+        "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn"
+      ]
     },
     {
       "id": "VK14-FORMATS-001",
