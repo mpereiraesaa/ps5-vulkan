@@ -46,7 +46,9 @@ int main(void)
     struct ps5vk_compiled_program prog_a = {
         .gfx = 1013, .wave_size = 32, .code_words = 16, .spirv_words = 32,
         .user_sgprs = 3, .wgp_mode = 1, .vgprs = 16, .sgprs = 32,
-        .descriptor_count = 2, .descriptors = {{0, 0, 0, 0}, {0, 1, 0, 4}}
+        .descriptor_set_mask=1,.descriptor_set_sgpr={2},.descriptor_count = 2,
+        .descriptors = {{0, 0, 0, 0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+                        {0, 1, 0, 4,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}
     };
     struct ps5vk_cache_entry *entry_a = ps5vk_compilation_cache_insert(cache, &key_a, spv_a, &prog_a, code_a);
     assert(entry_a != NULL);

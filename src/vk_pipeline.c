@@ -108,11 +108,22 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
         strcmp(p->entry, entry) || memcmp(p->spirv, m->words, m->word_count * 4) ||
         memcmp(p->local_size, dims, 3 * sizeof(*dims)) || !p->vgprs || p->vgprs > 256 ||
         !p->sgprs || p->sgprs > 106 || p->float_mode > 255 || p->ieee_mode > 1 ||
-        p->mem_ordered > 1 ||
-        (p->user_sgprs != 2 && p->user_sgprs != 3 && p->user_sgprs != 6) ||
-        p->grid_size_sgpr != (p->user_sgprs == 6 ? 3u : 0u) || p->lds_size > 128 ||
+        p->mem_ordered > 1 || p->user_sgprs < 2 || p->user_sgprs > 9 || p->lds_size > 128 ||
         p->tg_size > 1 || p->tidig_components > 2 ||
-        !p->descriptor_count || p->descriptor_count > PS5VK_MAX_BINDINGS) return 0;
+        !p->descriptor_count || p->descriptor_count > PS5VK_MAX_DESCRIPTORS ||
+        !p->descriptor_set_mask || (p->descriptor_set_mask & ~((1u << PS5VK_MAX_SETS) - 1))) return 0;
+    uint32_t expected_user_sgprs = 2;
+    for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set) {
+        VkBool32 used = (p->descriptor_set_mask & (1u << set)) != 0;
+        if (used) {
+            if (set >= layout->set_count || p->descriptor_set_sgpr[set] != expected_user_sgprs++) return 0;
+        } else if (p->descriptor_set_sgpr[set]) return 0;
+    }
+    if (p->grid_size_sgpr) {
+        if (p->grid_size_sgpr != expected_user_sgprs) return 0;
+        expected_user_sgprs += 3;
+    }
+    if (p->user_sgprs != expected_user_sgprs) return 0;
     uint64_t invocations = 1;
     for (unsigned j = 0; j < 3; ++j) {
         if (!dims[j] || dims[j] > 1024 || p->tgid[j] > 1) return 0;
@@ -121,13 +132,17 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
     if (invocations > 1024) return 0;
     for (uint32_t j = 0; j < p->descriptor_count; ++j) {
         const struct ps5vk_program_descriptor *b = &p->descriptors[j];
-        if (b->set != 0 || b->set >= layout->set_count || b->binding >= PS5VK_MAX_BINDINGS ||
-            b->element || b->table_dword >= 128 || b->table_dword % 4) return 0;
+        if (b->set >= layout->set_count || !(p->descriptor_set_mask & (1u << b->set)) ||
+            b->binding >= PS5VK_MAX_BINDINGS || b->table_dword >= 128 || b->table_dword % 4) return 0;
         const struct ps5vk_binding *binding = &layout->sets[b->set].binding[b->binding];
-        if (layout->sets[b->set].combined_image[b->binding] || binding->count <= b->element || !(binding->stages & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
+        if (layout->sets[b->set].type[b->binding] != b->type ||
+            (b->type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && b->type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+             b->type != VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) ||
+            binding->count <= b->element || !(binding->stages & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
         for (uint32_t k = 0; k < j; ++k)
-            if (p->descriptors[k].table_dword == b->table_dword ||
-                (p->descriptors[k].set == b->set && p->descriptors[k].binding == b->binding)) return 0;
+            if (p->descriptors[k].set == b->set &&
+                (p->descriptors[k].table_dword == b->table_dword ||
+                 (p->descriptors[k].binding == b->binding && p->descriptors[k].element == b->element))) return 0;
     }
     return 1;
 }

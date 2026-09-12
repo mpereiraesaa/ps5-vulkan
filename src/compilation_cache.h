@@ -31,7 +31,7 @@ struct ps5vk_cache_key {
             uint32_t count;
             uint32_t first;
             uint32_t stages;
-            uint32_t combined_image;
+            uint32_t type;
         } bindings[PS5VK_MAX_BINDINGS];
     } sets[PS5VK_MAX_SETS];
     size_t spirv_words;

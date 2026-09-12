@@ -24,11 +24,13 @@ static void pin(struct ps5vk_submission *s, int acquire)
             if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED) {
                 if (acquire) ++op->pipeline->pending;
                 else --op->pipeline->pending;
-                if(op->set) {if(acquire)++op->set->pending;else --op->set->pending;}
+                if(op->sets[0]) {if(acquire)++op->sets[0]->pending;else --op->sets[0]->pending;}
             }
             if (op->type != PS5VK_DISPATCH) continue;
-            if (acquire) { ++op->pipeline->pending; ++op->set->pending; }
-            else { --op->pipeline->pending; --op->set->pending; }
+            if (acquire) ++op->pipeline->pending; else --op->pipeline->pending;
+            for (uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(op->sets[set]) {
+                if(acquire)++op->sets[set]->pending;else --op->sets[set]->pending;
+            }
         }
         c->state = acquire ? PS5VK_PENDING :
             (c->usage & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT ? PS5VK_INVALID : PS5VK_EXECUTABLE);
@@ -96,8 +98,8 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED) {
                     if (!op->pipeline || op->pipeline->device != d || !op->pipeline->graphics ||
                         !op->pipeline->graphics_state) return 0;
-                    if(op->pipeline->set_count && (!op->set || op->set->pool->device!=d ||
-                        op->generation!=op->set->generation))return 0;
+                    if(op->pipeline->set_count && (!op->sets[0] || op->sets[0]->pool->device!=d ||
+                        op->generations[0]!=op->sets[0]->generation))return 0;
                 } else { active = NULL; framebuffer = NULL; }
             }
             continue;
@@ -118,15 +120,18 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             }
             continue;
         }
-        if (op->type != PS5VK_DISPATCH || !op->pipeline || op->pipeline->graphics || !op->set ||
-            op->pipeline->device != d || op->set->pool->device != d || op->set->generation != op->generation) return 0;
+        if (op->type != PS5VK_DISPATCH || !op->pipeline || op->pipeline->graphics ||
+            op->pipeline->device != d) return 0;
         const struct ps5vk_compiled_program *p = &op->pipeline->program;
+        for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set)) {
+            if(!op->sets[set] || op->sets[set]->pool->device!=d ||
+               op->sets[set]->generation!=op->generations[set])return 0;
+        }
         for (uint32_t k = 0; k < p->descriptor_count; ++k) {
             const struct ps5vk_program_descriptor *b = &p->descriptors[k];
-            unsigned index = op->set->signature.binding[b->binding].first + b->element;
-            void *address; VkDeviceSize size;
-            if (!op->set->defined[index] || ps5vk_buffer_span(d, op->set->buffers[index].buffer,
-                op->set->buffers[index].offset, op->set->buffers[index].range, &address, &size) != VK_SUCCESS) return 0;
+            VkDescriptorSet set=op->sets[b->set];
+            unsigned index = set->signature.binding[b->binding].first + b->element;
+            if (!set->defined[index]) return 0;
         }
     }
     return active == NULL;

@@ -173,7 +173,9 @@ static void lifecycle(void)
         VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT};
     for(unsigned n=0;n<4;++n) {
         vkGetPhysicalDeviceFormatProperties(p,vertex_formats[n],&fp);
-        assert(fp.bufferFeatures==VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+        VkFormatFeatureFlags expected=VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
+            (vertex_formats[n]==VK_FORMAT_R32_SFLOAT?VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT:0);
+        assert(fp.bufferFeatures==expected);
         assert(!fp.linearTilingFeatures && !fp.optimalTilingFeatures);
         assert(ps5vk_vertex_format_size(vertex_formats[n])==4*(n+1));
         assert(vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
@@ -181,7 +183,8 @@ static void lifecycle(void)
             ==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }
     vkGetPhysicalDeviceFormatProperties(p,VK_FORMAT_R32_UINT,&fp);
-    assert(!fp.bufferFeatures && !ps5vk_vertex_format_size(VK_FORMAT_R32_UINT));
+    assert(fp.bufferFeatures==VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT &&
+        !ps5vk_vertex_format_size(VK_FORMAT_R32_UINT));
     count=1; vkGetPhysicalDeviceQueueFamilyProperties(p, &count, queues);
     assert(count==1 && queues[0].queueFlags==VK_QUEUE_GRAPHICS_BIT);
     p->platform.queue_flags=VK_QUEUE_COMPUTE_BIT;

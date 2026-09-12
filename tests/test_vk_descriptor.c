@@ -52,7 +52,7 @@ static void lifecycle(void)
     VkDescriptorSet sets[2];
     assert(vkAllocateDescriptorSets(&other, &ai, sets) != VK_SUCCESS && !sets[0] && !sets[1]);
     assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_SUCCESS);
-    assert(p->used_sets == 2 && p->used == 6);
+    assert(p->used_sets == 2 && p->storage_used == 6);
     for (unsigned j = 0; j < PS5VK_MAX_DESCRIPTORS; ++j) assert(!sets[0]->defined[j]);
     VkDescriptorSet extra[2];
     assert(vkAllocateDescriptorSets(&d, &ai, extra) == VK_ERROR_OUT_OF_POOL_MEMORY);
@@ -70,8 +70,8 @@ static void lifecycle(void)
     assert(vkResetDescriptorPool(&d, p, 0) != VK_SUCCESS);
     vkDestroyDescriptorPool(&d, p, NULL); assert(d.lifetime_errors == 1 && p->used_sets == 2);
     sets[1]->pending = 0;
-    assert(vkFreeDescriptorSets(&d, p, 1, sets) == VK_SUCCESS && p->used == 3);
-    assert(vkResetDescriptorPool(&d, p, 0) == VK_SUCCESS && !p->used_sets && !p->used);
+    assert(vkFreeDescriptorSets(&d, p, 1, sets) == VK_SUCCESS && p->storage_used == 3);
+    assert(vkResetDescriptorPool(&d, p, 0) == VK_SUCCESS && !p->used_sets && !p->storage_used);
     vkDestroyDescriptorPool(&d, p, NULL); vkDestroyPipelineLayout(&d, pipeline, NULL);
     assert(!d.descriptor_objects);
 }
@@ -87,7 +87,7 @@ static void rollback(void)
         .descriptorPool = p, .descriptorSetCount = 2, .pSetLayouts = layouts};
     VkDescriptorSet sets[2]; counts.remaining = 1;
     assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_ERROR_OUT_OF_HOST_MEMORY);
-    assert(!sets[0] && !sets[1] && !p->used_sets && !p->used && counts.live == 1);
+    assert(!sets[0] && !sets[1] && !p->used_sets && !p->storage_used && counts.live == 1);
     counts.remaining = -1;
     assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_SUCCESS && counts.live == 3);
     assert(vkFreeDescriptorSets(&d, p, 2, sets) != VK_SUCCESS); /* Pool lacks FREE flag. */
@@ -190,13 +190,55 @@ static void image_pool_types(void)
     VkDescriptorSet set;assert(vkAllocateDescriptorSets(&d,&ai,&set)==VK_ERROR_OUT_OF_POOL_MEMORY && !set);
     vkDestroyDescriptorPool(&d,pool,NULL);size.type=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;size.descriptorCount=2;
     assert(vkCreateDescriptorPool(&d,&pi,NULL,&pool)==VK_SUCCESS);ai.descriptorPool=pool;
-    assert(vkAllocateDescriptorSets(&d,&ai,&set)==VK_SUCCESS && pool->image_used==2 && !pool->used);
+    assert(vkAllocateDescriptorSets(&d,&ai,&set)==VK_SUCCESS && pool->image_used==2 && !pool->storage_used);
     VkDescriptorSet extra;assert(vkAllocateDescriptorSets(&d,&ai,&extra)==VK_ERROR_OUT_OF_POOL_MEMORY);
     assert(vkResetDescriptorPool(&d,pool,0)==VK_SUCCESS && !pool->image_used);
     vkDestroyDescriptorPool(&d,pool,NULL);vkDestroyDescriptorSetLayout(&d,layout,NULL);
     assert(!d.descriptor_objects);
 }
+static void uniform_resources(void)
+{
+    struct VkDevice_T d={.memory={NULL,backing_alloc,backing_free,cache,cache},
+        .buffer_alignment=256,.uniform_buffer_alignment=256,.noncoherent_atom=64,.max_allocation=4096};
+    VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=1024,
+        .usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT};
+    VkBuffer buffer;assert(vkCreateBuffer(&d,&bi,NULL,&buffer)==VK_SUCCESS);
+    VkMemoryAllocateInfo mi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=1024};
+    VkDeviceMemory memory;assert(vkAllocateMemory(&d,&mi,NULL,&memory)==VK_SUCCESS);
+    assert(vkBindBufferMemory(&d,buffer,memory,0)==VK_SUCCESS);
+    VkBufferViewCreateInfo vi={.sType=VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,.buffer=buffer,
+        .format=VK_FORMAT_R32_UINT,.offset=256,.range=256};
+    VkBufferView view;assert(vkCreateBufferView(&d,&vi,NULL,&view)==VK_SUCCESS);
+    VkDescriptorSetLayoutBinding bindings[]={
+        {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL},
+        {1,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL}};
+    VkDescriptorSetLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount=2,.pBindings=bindings};VkDescriptorSetLayout layout;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,1}};
+    VkDescriptorPoolCreateInfo pi={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets=1,.poolSizeCount=2,.pPoolSizes=sizes};VkDescriptorPool pool;
+    assert(vkCreateDescriptorPool(&d,&pi,NULL,&pool)==VK_SUCCESS);
+    VkDescriptorSetAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool=pool,.descriptorSetCount=1,.pSetLayouts=&layout};VkDescriptorSet set;
+    assert(vkAllocateDescriptorSets(&d,&ai,&set)==VK_SUCCESS);
+    VkDescriptorBufferInfo uniform={buffer,0,256};
+    VkWriteDescriptorSet writes[]={
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=0,
+         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.pBufferInfo=&uniform},
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=1,
+         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,.pTexelBufferView=&view}};
+    vkUpdateDescriptorSets(&d,2,writes,0,NULL);
+    assert(!d.lifetime_errors && set->defined[0] && set->defined[1] &&
+        set->buffers[0].buffer==buffer && set->texel_views[1]==view);
+    assert(pool->uniform_used==1 && pool->texel_used==1);
+    vkDestroyDescriptorPool(&d,pool,NULL);vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    vkDestroyBufferView(&d,view,NULL);vkDestroyBuffer(&d,buffer,NULL);vkFreeMemory(&d,memory,NULL);
+    assert(!d.buffer_views && !d.buffers && !d.memories && !d.descriptor_objects);
+}
 int main(void)
 {
-    lifecycle(); rollback(); negative(); updates(); image_pool_types(); puts("Descriptor ownership/pools/updates: pass (host only)");
+    lifecycle(); rollback(); negative(); updates(); image_pool_types(); uniform_resources();
+    puts("Descriptor ownership/pools/updates: pass (host only)");
 }

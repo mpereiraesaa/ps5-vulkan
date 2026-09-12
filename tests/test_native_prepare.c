@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/mman.h>
 
 /* Runs native prepare/release with explicit host syscall doubles. No DCB is
  * submitted and no shader is executed or computed on the CPU. */
@@ -41,11 +42,14 @@ static VkResult allocate(void *ctx, VkDeviceSize bytes, void **address, void **b
 {
     (void)ctx; assert(bytes < 65536); ++attempts;
     if (fail_arena == attempts) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
-    *address = *backing = aligned_alloc(65536, 65536); assert(*address); ++arenas;
+    uintptr_t base=UINT64_C(0x200040000)+(uintptr_t)arenas*65536;
+    *address=*backing=mmap((void *)base,65536,PROT_READ|PROT_WRITE,
+        MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE,-1,0);
+    assert(*address!=MAP_FAILED);++arenas;
     return VK_SUCCESS;
 }
 static void release(void *ctx, void *backing)
-{ (void)ctx; assert(arenas); --arenas; free(backing); }
+{ (void)ctx; assert(arenas); --arenas; assert(!munmap(backing,65536)); }
 VkResult ps5vk_buffer_span(VkDevice d, VkBuffer b, VkDeviceSize off,
                           VkDeviceSize range, void **address, VkDeviceSize *bytes)
 { (void)d; *address = (void *)((uintptr_t)b + off); *bytes = range; return VK_SUCCESS; }
@@ -58,15 +62,18 @@ int main(void)
     struct VkDescriptorPool_T pool = {.device = &device};
     struct VkDescriptorSet_T set = {.pool = &pool, .defined = {VK_TRUE}};
     set.signature.binding[0] = (struct ps5vk_binding){1, 0, VK_SHADER_STAGE_COMPUTE_BIT};
+    set.signature.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     set.buffers[0] = (VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)0x100004000, 256, 4096};
     uint32_t code[80] = {0}; /* Packet metadata fixture, never executed. */
     struct VkPipeline_T *pipeline = calloc(1, sizeof(*pipeline)); assert(pipeline);
     pipeline->program = (struct ps5vk_compiled_program){.code = code, .code_words = 80,
         .gfx = 1013, .wave_size = 32, .local_size = {64, 1, 1}, .vgprs = 3,
-        .sgprs = 10, .user_sgprs = 2, .descriptor_count = 1};
+        .sgprs = 10, .user_sgprs = 3, .descriptor_set_mask=1,
+        .descriptor_set_sgpr={2},.descriptor_count = 1,
+        .descriptors={{.set=0,.binding=0,.element=0,.table_dword=0,.type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
     struct VkCommandBuffer_T cb = {.operation_count = 2};
     for (unsigned i = 0; i < 2; ++i) cb.operations[i] = (struct ps5vk_operation){
-        .type = PS5VK_DISPATCH, .pipeline = pipeline, .set = &set, .groups = {16, 1, 1}};
+        .type = PS5VK_DISPATCH, .pipeline = pipeline, .sets = {&set}, .groups = {16, 1, 1}};
     struct ps5vk_submission submit = {.serial = 1, .count = 1, .buffers = {&cb}};
     void *job = NULL;
     fail_reserve = 1;

@@ -1,4 +1,5 @@
 #include "vk_internal.h"
+#include "vk_descriptor.h"
 #include "vk_image.h"
 
 #include <stdint.h>
@@ -181,7 +182,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateBuffer(VkDevice d, const VkBufferCreateIn
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO ||
         !info->size || !power_two(d->buffer_alignment)) return INVALID;
     if (info->pNext || info->flags || info->sharingMode != VK_SHARING_MODE_EXCLUSIVE ||
-        !info->usage || (info->usage & ~(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT))) return VK_ERROR_FEATURE_NOT_PRESENT;
+        !info->usage || (info->usage & ~(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+        VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT))) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (info->size > UINT64_MAX - (d->buffer_alignment - 1))
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     VkDeviceSize required = (info->size + d->buffer_alignment - 1) & ~(d->buffer_alignment - 1);
@@ -197,11 +200,44 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateBuffer(VkDevice d, const VkBufferCreateIn
 }
 VkBool32 ps5vk_buffer_usage(VkDevice d,VkBuffer b,VkBufferUsageFlags usage)
 { return d && b && b->device==d && (b->usage & usage)==usage; }
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateBufferView(VkDevice d,const VkBufferViewCreateInfo *info,
+    const VkAllocationCallbacks *allocator,VkBufferView *out)
+{
+    if(!out)return INVALID;
+    *out=VK_NULL_HANDLE;
+    if(!d || !info || info->sType!=VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO || info->pNext ||
+       info->flags || !ps5vk_buffer_usage(d,info->buffer,VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT) ||
+       (info->format!=VK_FORMAT_R32_UINT && info->format!=VK_FORMAT_R32_SINT &&
+        info->format!=VK_FORMAT_R32_SFLOAT) || info->offset%4)return VK_ERROR_FEATURE_NOT_PRESENT;
+    void *address;VkDeviceSize range;
+    if(ps5vk_buffer_span(d,info->buffer,info->offset,info->range,&address,&range)!=VK_SUCCESS ||
+       range%4 || (uintptr_t)address%4)return INVALID;
+    VkAllocationCallbacks saved={0};VkBool32 custom=VK_FALSE;
+    VkBufferView view=object_alloc(d,allocator,sizeof(*view),&saved,&custom);
+    if(!view)return VK_ERROR_OUT_OF_HOST_MEMORY;
+    view->device=d;view->buffer=info->buffer;view->format=info->format;
+    view->offset=info->offset;view->range=range;view->allocator=saved;view->custom_allocator=custom;
+    view->next=d->buffer_views;d->buffer_views=view;*out=view;return VK_SUCCESS;
+}
+VKAPI_ATTR void VKAPI_CALL vkDestroyBufferView(VkDevice d,VkBufferView view,
+    const VkAllocationCallbacks *allocator)
+{
+    (void)allocator;if(!d || !view || view->device!=d)return;
+    if(view->pending || (d->invalidate && !d->invalidate(d,VK_OBJECT_TYPE_BUFFER_VIEW,view)))
+        {++d->lifetime_errors;return;}
+    VkBufferView *link=&d->buffer_views;while(*link && *link!=view)link=&(*link)->next;
+    if(!*link)return;
+    *link=view->next;
+    VkAllocationCallbacks saved=view->allocator;VkBool32 custom=view->custom_allocator;
+    object_free(view,&saved,custom);
+}
 VKAPI_ATTR void VKAPI_CALL vkDestroyBuffer(VkDevice d, VkBuffer b,
                                           const VkAllocationCallbacks *allocator)
 {
     (void)allocator;
     if (!d || !b || b->device != d) return;
+    for(VkBufferView view=d->buffer_views;view;view=view->next)
+        if(view->buffer==b){++d->lifetime_errors;return;}
     if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_BUFFER, b)) { ++d->lifetime_errors; return; }
     VkBuffer *p = &d->buffers;
     while (*p && *p != b) p = &(*p)->next;

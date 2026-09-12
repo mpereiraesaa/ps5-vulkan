@@ -12,7 +12,8 @@ OUTPUT = ROOT / "build/test-shaders"
 
 
 def main():
-    sources = {name: ROOT / f"experiments/compute/{name}.comp" for name in ("minimal", "xor", "shared_grid")}
+    sources = {name: ROOT / f"experiments/compute/{name}.comp" for name in
+               ("minimal", "xor", "shared_grid", "resource_abi")}
     targets = {name: OUTPUT / f"{name}.spv" for name in sources}
     if all(target.is_file() and target.stat().st_mtime >= sources[name].stat().st_mtime
            for name, target in targets.items()):

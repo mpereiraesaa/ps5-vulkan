@@ -172,7 +172,7 @@ static void test_failures_and_allocators(void)
     info.memoryTypeIndex = 0; info.pNext = &info;
     assert(vkAllocateMemory(&d, &info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT);
     VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = 256, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
+        .size = 256, .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT};
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_FEATURE_NOT_PRESENT && !b);
     bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; bi.size = UINT64_MAX;
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_OUT_OF_DEVICE_MEMORY);

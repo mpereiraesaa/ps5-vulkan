@@ -52,31 +52,39 @@ VkResult ps5vk_runtime_compile_compute(
     opts.optimise = true;
     opts.address32_hi = 2;
 
-    /* The initial runtime ABI exposes one scalar storage descriptor table. */
-    if (layout->set_count != 1)
+    if (!layout->set_count || layout->set_count > PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    /* Build descriptor layout bindings from pipeline layout set 0 */
-    if (layout->set_count > 0) {
-        const struct ps5vk_set_signature *sig = &layout->sets[0];
+    /* Every Vulkan set remains a distinct RADV table. Offsets are local to a
+     * set, while the compiler metadata identifies its direct user-SGPR slot. */
+    for (uint32_t set = 0; set < layout->set_count; ++set) {
+        const struct ps5vk_set_signature *sig = &layout->sets[set];
         for (uint32_t b = 0; b < PS5VK_MAX_BINDINGS; b++) {
             if (sig->binding[b].count > 0 && (sig->binding[b].stages & VK_SHADER_STAGE_COMPUTE_BIT)) {
-                if (sig->combined_image[b] || sig->binding[b].count != 1) {
-                    /* Images and descriptor arrays are outside this compute profile. */
+                PsbcDescriptorType type;
+                switch (sig->type[b]) {
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
+                case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
+                default:
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 }
+                if (opts.descriptor_binding_count == PSBC_MAX_DESCRIPTOR_BINDINGS ||
+                    sig->binding[b].count > PS5VK_MAX_DESCRIPTORS-out_program->descriptor_count)
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
                 uint32_t idx = opts.descriptor_binding_count++;
-                opts.descriptor_bindings[idx].set = 0;
+                opts.descriptor_bindings[idx].set = set;
                 opts.descriptor_bindings[idx].binding = b;
-                opts.descriptor_bindings[idx].type = PSBC_DESCRIPTOR_STORAGE_BUFFER;
-                opts.descriptor_bindings[idx].array_size = 1;
-                opts.descriptor_bindings[idx].offset = b * 16;
+                opts.descriptor_bindings[idx].type = type;
+                opts.descriptor_bindings[idx].array_size = sig->binding[b].count;
+                opts.descriptor_bindings[idx].offset = sig->binding[b].first * 16;
                 opts.descriptor_bindings[idx].stride = 16;
-
-                struct ps5vk_program_descriptor *desc = &out_program->descriptors[out_program->descriptor_count++];
-                desc->set = 0;
-                desc->binding = b;
-                desc->element = 0;
-                desc->table_dword = b * 4;
+                for (uint32_t element=0;element<sig->binding[b].count;++element) {
+                    struct ps5vk_program_descriptor *desc =
+                        &out_program->descriptors[out_program->descriptor_count++];
+                    desc->set=set;desc->binding=b;desc->element=element;
+                    desc->table_dword=(sig->binding[b].first+element)*4;
+                    desc->type=sig->type[b];
+                }
             }
         }
     }
@@ -110,14 +118,26 @@ VkResult ps5vk_runtime_compile_compute(
      * backing allocation and remains unsupported. Preserve compiler sizing. */
     uint32_t lds_size = (rsrc2 >> 15) & 0x1ffu;
     uint32_t user_sgprs = (rsrc2 >> 1) & 0x1fu;
-    /* Pinned RADV compute arguments: ring offsets s0:s1, scalar set0 s2,
-     * optional inline grid dimensions s3:s5. Fail closed on ABI drift. */
+    uint32_t expected_set_mask=0;
+    for(uint32_t i=0;i<opts.descriptor_binding_count;++i)
+        expected_set_mask|=1u<<opts.descriptor_bindings[i].set;
+    uint32_t direct_set_count=0;
+    for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
+        direct_set_count+=(expected_set_mask>>set)&1u;
+    uint32_t base_user_sgprs=2+direct_set_count;
+    /* Pinned RADV compute arguments: ring offsets, one direct 32-bit pointer
+     * per used set, then optional inline grid dimensions. */
     if ((rsrc2 & 1u) || out.metadata.scratch_valid || lds_size > 128 ||
-        (user_sgprs != 3 && user_sgprs != 6) ||
-        !out.metadata.descriptor_set0_valid ||
-        out.metadata.descriptor_set0_user_data_dword != 2) {
+        (user_sgprs != base_user_sgprs && user_sgprs != base_user_sgprs+3)) {
         psbc_free_output(&out);
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) {
+        VkBool32 expected=(expected_set_mask&(1u<<set))!=0;
+        if(out.metadata.descriptor_set_valid[set]!=expected ||
+           (expected && out.metadata.descriptor_set_user_data_dword[set]>=user_sgprs)) {
+            psbc_free_output(&out);return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
     }
 
     uint32_t *code = malloc(out.machine_code_size);
@@ -144,7 +164,10 @@ VkResult ps5vk_runtime_compile_compute(
     out_program->mem_ordered = (rsrc1 >> 30) & 1u;
 
     out_program->user_sgprs = (rsrc2 >> 1) & 0x1fu;
-    out_program->grid_size_sgpr = user_sgprs == 6 ? 3 : 0;
+    out_program->grid_size_sgpr = user_sgprs == base_user_sgprs+3 ? base_user_sgprs : 0;
+    out_program->descriptor_set_mask=expected_set_mask;
+    for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
+        out_program->descriptor_set_sgpr[set]=out.metadata.descriptor_set_user_data_dword[set];
     out_program->lds_size = lds_size;
     out_program->tgid[0] = (rsrc2 >> 7) & 1u;
     out_program->tgid[1] = (rsrc2 >> 8) & 1u;

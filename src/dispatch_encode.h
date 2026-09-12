@@ -5,6 +5,7 @@
 struct ps5vk_dispatch_encoding {
     const struct ps5vk_compiled_program *program;
     struct ps5vk_compute_addresses addresses;
+    uint64_t descriptor_tables[PS5VK_MAX_SETS];
     uint32_t groups[3];
     uint64_t completion_value;
 };

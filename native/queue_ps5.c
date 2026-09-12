@@ -102,18 +102,26 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             }
             size_t code_bytes = program->code_words * 4;
             size_t table_offset = (code_bytes + 255) & ~(size_t)255;
-            p->bytes = table_offset + 512;
+            p->bytes = table_offset + PS5VK_MAX_SETS * 512;
             result = device->memory.allocate(device->memory.context, p->bytes, &p->arena, &p->backing);
             if (result != VK_SUCCESS) goto fail;
             memcpy(p->arena, program->code, code_bytes);
-            uint32_t *table = (void *)((unsigned char *)p->arena + table_offset);
-            memset(table, 0, 512);
-            result = ps5vk_descriptor_encode(device, program, op->set, table, 128);
-            if (result != VK_SUCCESS) goto fail;
+            uint32_t *tables = (void *)((unsigned char *)p->arena + table_offset);
+            memset(tables, 0, PS5VK_MAX_SETS * 512);
             struct ps5vk_dispatch_encoding encoding = {.program = program,
-                .addresses = {(uintptr_t)p->arena, (uintptr_t)table,
-                    (uintptr_t)job->command + 0x1100, (uintptr_t)job->command + 0xff4},
+                .addresses = {.code=(uintptr_t)p->arena,
+                    .completion=(uintptr_t)job->command + 0x1100,
+                    .readback=(uintptr_t)job->command + 0xff4},
                 .completion_value = (job->serial << 32) | job->count};
+            for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
+                if(program->descriptor_set_mask&(1u<<set)) {
+                    uint32_t *table=tables+set*128;
+                    result=ps5vk_descriptor_encode(device,program,set,op->sets[set],table,128);
+                    if(result!=VK_SUCCESS)goto fail;
+                    encoding.descriptor_tables[set]=(uintptr_t)table;
+                    if(!encoding.addresses.descriptor_table)
+                        encoding.addresses.descriptor_table=(uintptr_t)table;
+                }
             memcpy(encoding.groups, op->groups, sizeof(encoding.groups));
             /* Mesa ac_emit_cp_acquire_mem GFX10 compute form + pkt3 GCR_CNTL:
              * invalidate instruction/scalar/vector/L1/L2 caches globally.

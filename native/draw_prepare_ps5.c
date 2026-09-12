@@ -78,10 +78,10 @@ VkResult ps5vk_native_prepare_vertex_draw(VkDevice d,const struct ps5vk_operatio
     VkResult rc=ps5vk_vertex_fetch_descriptor(d,key,op,words);if(rc!=VK_SUCCESS)return rc;
     uint32_t texture[12];const uint32_t *texture_words=NULL;
     if(op->pipeline && op->pipeline->set_count) {
-        VkDescriptorSet set=op->set;
-        if(op->pipeline->set_count!=1 || !set || set->pool->device!=d || set->generation!=op->generation ||
+        VkDescriptorSet set=op->sets[0];
+        if(op->pipeline->set_count!=1 || !set || set->pool->device!=d || set->generation!=op->generations[0] ||
             set->signature.count!=1 || set->signature.binding[0].count!=1 ||
-            !set->signature.combined_image[0] || !set->defined[0])return VK_ERROR_UNKNOWN;
+            set->signature.type[0]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || !set->defined[0])return VK_ERROR_UNKNOWN;
         rc=ps5vk_texture_descriptor(d,set->images[0].imageView,set->images[0].sampler,texture);
         if(rc!=VK_SUCCESS)return rc;
         texture_words=texture;

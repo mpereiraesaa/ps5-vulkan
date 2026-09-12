@@ -153,6 +153,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->physical = p; d->queue.device = d; d->queue.next_serial = 1;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;
+    d->uniform_buffer_alignment = p->platform.properties.limits.minUniformBufferOffsetAlignment;
     d->noncoherent_atom = p->platform.properties.limits.nonCoherentAtomSize;
     d->max_allocation = p->platform.max_allocation;
     d->submit_backend = p->platform.queue_backend;
@@ -172,7 +173,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
     if (!d) return;
     /* Valid usage requires children destroyed and work completed first. Defend
      * against invalid destruction by retaining ownership, not implicit frees. */
-    if (d->memories || d->buffers || d->descriptor_objects || d->pipeline_objects || d->graphics_objects || d->command_pools || d->fences || d->submission ||
+    if (d->memories || d->buffers || d->buffer_views || d->descriptor_objects || d->pipeline_objects || d->graphics_objects || d->command_pools || d->fences || d->submission ||
         d->queue.next_serial != d->queue.completed_serial + 1) {
         ++d->lifetime_errors; return;
     }

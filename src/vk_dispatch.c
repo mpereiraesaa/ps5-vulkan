@@ -32,6 +32,8 @@ static const struct entry entries[] = {
     ENTRY(vkInvalidateMappedMemoryRanges, DEVICE),
     ENTRY(vkCreateBuffer, DEVICE),
     ENTRY(vkDestroyBuffer, DEVICE),
+    ENTRY(vkCreateBufferView, DEVICE),
+    ENTRY(vkDestroyBufferView, DEVICE),
     ENTRY(vkGetBufferMemoryRequirements, DEVICE),
     ENTRY(vkBindBufferMemory, DEVICE),
     ENTRY(vkCreateImage, DEVICE),

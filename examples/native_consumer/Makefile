@@ -52,7 +52,7 @@ all: $(TARGET_PIE)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/main.o: main.c shaders.h ps5log.h | $(BUILD_DIR)
+$(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h | $(BUILD_DIR)
 	PS5_PAYLOAD_SDK=$(PS5_PAYLOAD_SDK) sh $(CLANG_WRAPPER) $(CFLAGS) -c $< -o $@
 
 $(TARGET_PIE): $(BUILD_DIR)/main.o
