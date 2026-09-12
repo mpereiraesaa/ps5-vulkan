@@ -154,6 +154,15 @@ correctness.
 * No selected case exercises a rendering or pixel-comparison oracle. The
   reference rasterizer is linked but unexecuted, so this integration does not
   demonstrate rasterisation correctness.
+* **Host heap budget.** The payload process can commit only about 13 MiB of
+  host heap. Upstream cases that compile GLSL at runtime
+  (`dEQP-VK.api.smoke.create_shader`) exhaust it and raise `ResourceError`,
+  which upstream treats as fatal and which therefore aborts the whole session.
+  The payload disables the CTS shader cache (`--deqp-shadercache=disable`, an
+  upstream-supported option) because its fixed 16 MiB preallocation cannot fit;
+  that removes one guaranteed failure but not the underlying budget limit.
+  Raising the budget or compiling shaders host-side is required before the
+  selection can run to completion.
 * Cases that require API the driver does not implement are reported as failures
   or unsupported results, not silently converted into passes.
 * `tcuImageIO` (libpng) and the generated EGL wrapper (`gluRenderConfig`) are
