@@ -54,6 +54,17 @@ EXPECTED_CASE_STATE_VOCAB = {
     "not-run",
     "harness-blocked",
 }
+CORE_STATUS_VOCAB = {"core-mandatory", "core-feature-gated", "extension-optional", "outside-core"}
+TARGET_STATUS_VOCAB = {"required", "conditional", "not-required"}
+TARGET_TO_CLASSIFICATION = {"required": "mandatory", "conditional": "conditional", "not-required": "optional"}
+CLASSIFICATION_BASIS_VOCAB = {
+    "core-mandatory",
+    "target-profile-required",
+    "project-conditional",
+    "not-required-by-target",
+    "consumer-required",
+}
+CTS_COVERAGE_QUALITY_VOCAB = {"direct", "representative-case", "family-level", "not-mapped"}
 NEVER_A_PASS = {
     "not-audited",
     "not-run",
@@ -83,6 +94,8 @@ class Bundle:
     coverage: dict | None = None
     consumers: dict | None = None
     manifest: dict | None = None
+    target: dict | None = None
+    surface: dict | None = None
     anchor_index: set[str] | None = None
     cts_cache_dir: str | None = None
 
@@ -101,6 +114,8 @@ class Bundle:
             coverage=read("spec_coverage.json"),
             consumers=read("consumers.json"),
             manifest=read("cts_manifest.json"),
+            target=read("target_profile.json"),
+            surface=read("baseline_surface.json"),
         )
         for key, value in overrides.items():
             setattr(bundle, key, value)
@@ -248,6 +263,7 @@ def validate_requirements(bundle: Bundle, sources: dict, coverage_index: dict, p
         "core_introduction",
         "applicability",
         "classification",
+        "classification_basis",
         "condition",
         "coverage_chapter",
         "source",
@@ -284,14 +300,17 @@ def validate_requirements(bundle: Bundle, sources: dict, coverage_index: dict, p
         seen[row_id] = index
         if row.get("core_introduction") not in versions:
             problems.append(Problem("error", "R004", location, "unknown core_introduction %r" % row.get("core_introduction")))
-        if (row.get("applicability") or {}).get("vulkan14") not in applicability:
-            problems.append(Problem("error", "R005", location, "unknown applicability.vulkan14 %r" % (row.get("applicability") or {}).get("vulkan14")))
+        applicability_obj = row.get("applicability") or {}
+        if applicability_obj.get("core") not in CORE_STATUS_VOCAB:
+            problems.append(Problem("error", "R005", location, "unknown applicability.core %r" % applicability_obj.get("core")))
+        if applicability_obj.get("target") not in TARGET_STATUS_VOCAB:
+            problems.append(Problem("error", "R005", location, "unknown applicability.target %r" % applicability_obj.get("target")))
+        if row.get("classification_basis") not in CLASSIFICATION_BASIS_VOCAB:
+            problems.append(Problem("error", "R020", location, "unknown classification_basis %r" % row.get("classification_basis")))
         if row.get("classification") not in classifications:
             problems.append(Problem("error", "R006", location, "unknown classification %r" % row.get("classification")))
         if row.get("classification") == "conditional" and not (row.get("condition") or "").strip():
             problems.append(Problem("error", "R007", location, "conditional requirement without an exact condition"))
-        if row.get("classification") == "mandatory" and (row.get("applicability") or {}).get("vulkan14") == "optional-feature-gated":
-            problems.append(Problem("warning", "R016", location, "mandatory classification with optional-feature-gated applicability"))
         if row.get("implementation_state") not in state_vocab:
             problems.append(Problem("error", "R009", location, "implementation_state %r is outside the state vocabulary" % row.get("implementation_state")))
         source = row.get("source") or {}
@@ -413,6 +432,163 @@ def load_cts_cache(manifest: dict, cache_dir: str, problems: list[Problem]) -> s
     return cases
 
 
+def validate_target(bundle: Bundle, sources: dict, rows: list[dict], problems: list[Problem]) -> dict:
+    """Check requirement classifications against the pinned target profile.
+
+    This is the accuracy check that structural validation cannot provide: a
+    capability the declared target requires must not be classified optional, and
+    a capability that is only feature-gated must not be presented as core
+    mandatory.
+    """
+    target = bundle.target
+    declared = (bundle.requirements or {}).get("target") or {}
+    if target is None:
+        problems.append(Problem("error", "T000", "target_profile.json", "document is missing"))
+        return {}
+    if declared.get("target_file") != "target_profile.json":
+        problems.append(Problem("error", "T000", "requirements.json", "requirements.target.target_file must reference target_profile.json"))
+
+    basis = target.get("target", {}).get("basis", {})
+    source = sources.get(basis.get("source_id"))
+    if source is None:
+        problems.append(Problem("error", "T001", "target_profile.json", "target basis names unknown source %r" % basis.get("source_id")))
+    else:
+        artifact = next((a for a in source.get("artifacts", []) if a.get("path") == basis.get("path")), None)
+        if artifact is None:
+            problems.append(Problem("error", "T001", "target_profile.json", "source has no artifact %r" % basis.get("path")))
+        elif artifact.get("sha256") != basis.get("sha256"):
+            problems.append(
+                Problem("error", "T001", "target_profile.json", "target sha256 %s does not match sources.json pin %s" % (basis.get("sha256"), artifact.get("sha256")))
+            )
+
+    required_bits = set(target.get("required_feature_bits", []))
+    required_ext = set(target.get("required_extensions", []))
+    core_bits = set((target.get("core_mandatory_from_spec_1_4") or {}).get("feature_bits", []))
+
+    referenced_bits: set[str] = set()
+    referenced_ext: set[str] = set()
+    optional_rows_with_target_capability = []
+    for row in rows:
+        location = row.get("id")
+        applicability = row.get("applicability") or {}
+        target_status = applicability.get("target")
+        expected = TARGET_TO_CLASSIFICATION.get(target_status)
+        if expected and row.get("classification") != expected:
+            problems.append(
+                Problem(
+                    "error",
+                    "T002",
+                    location,
+                    "classification %r contradicts applicability.target %r (expected %r)" % (row.get("classification"), target_status, expected),
+                )
+            )
+        if target_status == "conditional" and not (applicability.get("target_condition") or "").strip():
+            problems.append(Problem("error", "T003", location, "target-conditional row without an exact target_condition"))
+
+        feats = set(row.get("features") or [])
+        exts = set(row.get("extensions") or [])
+        referenced_bits |= feats & required_bits
+        referenced_ext |= exts & required_ext
+        hits = sorted((feats & required_bits) | (exts & required_ext))
+        if hits and target_status != "required":
+            optional_rows_with_target_capability.append((location, hits, target_status))
+            problems.append(
+                Problem(
+                    "error",
+                    "T004",
+                    location,
+                    "declares target-required capabilities %s but applicability.target is %r" % (hits[:6], target_status),
+                )
+            )
+        if feats:
+            if feats <= core_bits and applicability.get("core") != "core-mandatory":
+                problems.append(Problem("error", "T005", location, "capabilities mandated by 1.4 core, but applicability.core is %r" % applicability.get("core")))
+            if (feats - core_bits) and applicability.get("core") == "core-mandatory":
+                problems.append(
+                    Problem(
+                        "error",
+                        "T006",
+                        location,
+                        "declares feature-gated capabilities %s but applicability.core is core-mandatory" % sorted(feats - core_bits)[:6],
+                    )
+                )
+
+    uncovered_bits = sorted(required_bits - referenced_bits)
+    uncovered_ext = sorted(required_ext - referenced_ext)
+    for name in uncovered_bits:
+        problems.append(Problem("error", "T007", "target_profile.json", "target-required feature bit %r is not referenced by any requirement row" % name))
+    for name in uncovered_ext:
+        problems.append(Problem("error", "T007", "target_profile.json", "target-required extension %r is not referenced by any requirement row" % name))
+
+    deviations = [row.get("id") for row in rows if row.get("target_deviation")]
+    return {
+        "profile": basis.get("profile"),
+        "api_version": basis.get("api_version"),
+        "required_feature_bits": len(required_bits),
+        "required_extensions": len(required_ext),
+        "one_of_groups": len(target.get("one_of_groups", [])),
+        "rows_classified_against_target": len(rows),
+        "optional_rows_with_target_capability": optional_rows_with_target_capability,
+        "deviation_rows": sorted(deviations),
+    }
+
+
+def validate_baseline_surface(bundle: Bundle, rows: list[dict], problems: list[Problem]) -> dict:
+    surface = bundle.surface
+    if surface is None:
+        problems.append(Problem("error", "B000", "baseline_surface.json", "document is missing"))
+        return {}
+    names = {entry["name"] for entry in surface.get("entry_points", [])}
+    public = {entry["name"] for entry in surface.get("entry_points", []) if entry.get("public_header")}
+    for row in rows:
+        baseline = row.get("baseline") or {}
+        present = baseline.get("entry_points") or []
+        absent = baseline.get("absent_entry_points") or []
+        for name in present:
+            if name not in names:
+                problems.append(Problem("error", "B001", row.get("id"), "baseline claims entry point %r that is not in baseline_surface.json" % name))
+        for name in absent:
+            if name in names:
+                problems.append(Problem("error", "B001", row.get("id"), "baseline claims entry point %r is absent but the baseline surface inventory contains it" % name))
+        if present and baseline.get("surface_state") == "none":
+            problems.append(Problem("error", "B002", row.get("id"), "surface_state 'none' contradicts a non-empty entry_point list"))
+        if present and not baseline.get("note"):
+            problems.append(Problem("error", "B003", row.get("id"), "present entry points must carry an explicit baseline note"))
+        if present and all(name not in public for name in present) and "public header" not in (baseline.get("note") or ""):
+            problems.append(
+                Problem("error", "B004", row.get("id"), "entry points exist only outside the public header; the note must say so explicitly")
+            )
+    return {
+        "entry_points": surface.get("counts", {}).get("entry_points"),
+        "dispatched": surface.get("counts", {}).get("dispatched"),
+        "public_header": surface.get("counts", {}).get("public_header"),
+        "implementation_only": surface.get("counts", {}).get("implementation_only"),
+        "baseline_commit": surface.get("baseline_commit"),
+    }
+
+
+def validate_cts_coverage_quality(rows: list[dict], problems: list[Problem]) -> dict:
+    counts = {name: 0 for name in sorted(CTS_COVERAGE_QUALITY_VOCAB)}
+    for row in rows:
+        cts = row.get("cts") or {}
+        quality = cts.get("coverage_quality")
+        if quality not in CTS_COVERAGE_QUALITY_VOCAB:
+            problems.append(Problem("error", "C010", row.get("id"), "cts.coverage_quality %r is missing or unknown" % quality))
+            continue
+        counts[quality] = counts.get(quality, 0) + 1
+        note = (cts.get("coverage_note") or "").strip()
+        if quality == "not-mapped":
+            if cts.get("mapping") == "mapped":
+                problems.append(Problem("error", "C012", row.get("id"), "mapped CTS row cannot use coverage_quality 'not-mapped'"))
+        elif not note:
+            problems.append(Problem("error", "C011", row.get("id"), "coverage_quality %r requires a coverage_note describing the gap" % quality))
+        if quality == "direct" and not (cts.get("cases") or []):
+            problems.append(Problem("error", "C013", row.get("id"), "coverage_quality 'direct' requires at least one named case"))
+        if quality == "family-level" and (cts.get("cases") or []):
+            problems.append(Problem("warning", "C014", row.get("id"), "family-level mapping also names specific cases; confirm the quality label"))
+    return counts
+
+
 def validate_anchors(bundle: Bundle, rows: list[dict], problems: list[Problem]) -> None:
     if not bundle.anchor_index:
         return
@@ -469,14 +645,26 @@ def validate(bundle: Bundle) -> tuple[list[Problem], dict]:
     if bundle.coverage is not None:
         validate_coverage(coverage_index, row_ids, problems)
     cts_stats = validate_cts_mapping(bundle, rows, problems)
+    quality_stats = validate_cts_coverage_quality(rows, problems)
+    target_stats = validate_target(bundle, sources, rows, problems)
+    surface_stats = validate_baseline_surface(bundle, rows, problems)
     validate_anchors(bundle, rows, problems)
     consumer_stats = validate_consumers(bundle, sources, row_ids, problems)
 
-    report = build_report(bundle, rows, cts_stats, consumer_stats, problems)
+    report = build_report(bundle, rows, cts_stats, quality_stats, target_stats, surface_stats, consumer_stats, problems)
     return problems, report
 
 
-def build_report(bundle: Bundle, rows: list[dict], cts_stats: dict, consumer_stats: dict, problems: list[Problem]) -> dict:
+def build_report(
+    bundle: Bundle,
+    rows: list[dict],
+    cts_stats: dict,
+    quality_stats: dict,
+    target_stats: dict,
+    surface_stats: dict,
+    consumer_stats: dict,
+    problems: list[Problem],
+) -> dict:
     by_category: dict[str, int] = {}
     by_classification: dict[str, int] = {}
     by_state: dict[str, int] = {}
@@ -521,6 +709,7 @@ def build_report(bundle: Bundle, rows: list[dict], cts_stats: dict, consumer_sta
         },
         "cts": {
             "mapping_counts": dict(sorted(cts_stats.items())),
+            "coverage_quality_counts": dict(sorted((k, v) for k, v in quality_stats.items() if v)),
             "pinned_tag": manifest.get("tag"),
             "pinned_commit": manifest.get("commit"),
             "group_files": manifest.get("totals", {}).get("group_files"),
@@ -528,6 +717,8 @@ def build_report(bundle: Bundle, rows: list[dict], cts_stats: dict, consumer_sta
             "listing_kind": manifest.get("listing_kind"),
             "unmapped_requirement_ids": sorted(unmapped_rows),
         },
+        "target": target_stats,
+        "baseline_surface": surface_stats,
         "consumers": consumer_stats,
         "spec_coverage": {
             "core_chapters": coverage_counts,
@@ -565,6 +756,29 @@ def render_text(report: dict) -> str:
     lines.append("requirements by classification")
     for name, count in report["requirements"]["by_classification"].items():
         lines.append("  %-20s %3d" % (name, count))
+    target = report.get("target") or {}
+    if target:
+        lines.append("")
+        lines.append(
+            "declared target: %s (api-version %s), %s required feature bits, %s required extensions, %s one-of group(s)"
+            % (target.get("profile"), target.get("api_version"), target.get("required_feature_bits"), target.get("required_extensions"), target.get("one_of_groups"))
+        )
+        lines.append("  rows classified against the target profile: %s" % target.get("rows_classified_against_target"))
+        if target.get("deviation_rows"):
+            lines.append("  declared deviations (target-required but not implemented): %s" % ", ".join(target["deviation_rows"]))
+    surface = report.get("baseline_surface") or {}
+    if surface:
+        lines.append("")
+        lines.append(
+            "baseline surface @ %s: %s entry points, %s dispatched, %s declared in the public header, %s implementation-only"
+            % (
+                (surface.get("baseline_commit") or "")[:12],
+                surface.get("entry_points"),
+                surface.get("dispatched"),
+                surface.get("public_header"),
+                surface.get("implementation_only"),
+            )
+        )
     lines.append("requirements by core introduction version")
     for name, count in report["requirements"]["by_core_introduction"].items():
         lines.append("  %-20s %3d" % (name, count))
@@ -579,6 +793,8 @@ def render_text(report: dict) -> str:
     lines.append("  cases in listing    %s" % cts["cases_in_listing"])
     for name, count in cts["mapping_counts"].items():
         lines.append("  %-19s %3d" % (name, count))
+    for name, count in (cts.get("coverage_quality_counts") or {}).items():
+        lines.append("  quality %-11s %3d" % (name, count))
     if cts["unmapped_requirement_ids"]:
         lines.append("  unmapped: %s" % ", ".join(cts["unmapped_requirement_ids"]))
     lines.append("")

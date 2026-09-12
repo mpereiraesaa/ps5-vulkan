@@ -65,6 +65,15 @@
           "git_blob_sha1"
         ]
       }
+    },
+    {
+      "id": "profile-and-registry-same-pin",
+      "description": "The Khronos roadmap profile file lives in the registry repository, so its pin must match the pinned registry revision.",
+      "check": {
+        "op": "field_equals_field",
+        "left": "khronos-vulkan-roadmap-profiles.commit",
+        "right": "khronos-vulkan-registry.commit"
+      }
     }
   ],
   "sources": [
@@ -264,6 +273,39 @@
         "note": "Pages are referenced, not redistributed. Only URLs, sizes and hashes are recorded."
       },
       "notes": "Used only to establish that (a) CTS source is freely available and (b) using the Vulkan trademark for a conformant product requires Adopter status and fees. This inventory performs no enrollment, payment or legal agreement and makes no conformance claim."
+    },
+    {
+      "id": "khronos-vulkan-roadmap-profiles",
+      "kind": "profile",
+      "role": "target-definition",
+      "title": "Khronos Vulkan Roadmap profiles (VP_KHR_roadmap)",
+      "publisher": "Khronos Group",
+      "repo": "https://github.com/KhronosGroup/Vulkan-Headers",
+      "revision_kind": "annotated-tag",
+      "tag": "v1.4.362",
+      "tag_object": "20fbec479cd2a035e24a801fe7a1e8b74d223bd3",
+      "commit": "ee2ec5fd83dafce291024683b50dc89219333076",
+      "license": {
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/KhronosGroup/Vulkan-Headers/blob/v1.4.362/LICENSE.md"
+      },
+      "retrieved_date": "2026-09-12",
+      "retrieval_method": "raw.githubusercontent.com blob at the pinned registry commit",
+      "artifacts": [
+        {
+          "path": "registry/profiles/VP_KHR_roadmap.json",
+          "kind": "file",
+          "size_bytes": 36864,
+          "sha256": "41d8e5b2421bcd78e36d346de18933f5e8ac8e13a82bbcb197bed3fb7fec066d",
+          "git_blob_sha1": "627f1dbb010fb69b81f916748b451e9d00cb24d2"
+        }
+      ],
+      "verified_content": [
+        "The file defines VP_KHR_roadmap_2022 (api-version 1.3.204), VP_KHR_roadmap_2024 (1.3.276) and VP_KHR_roadmap_2026 (1.4.328)",
+        "VP_KHR_roadmap_2026 is the only profile in the pinned revision whose api-version is 1.4.x",
+        "Profiles use one-of groups, for example one of six interpolated line-style capabilities"
+      ],
+      "notes": "This is the primary-source basis for the declared project target. It defines a requirement set beyond the core specification; it does not replace the normative specification text and it is not a conformance claim."
     },
     {
       "id": "parallel-rdp",

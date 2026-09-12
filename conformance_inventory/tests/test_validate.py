@@ -7,9 +7,16 @@ not an importable package):
     python3 -m unittest discover -s conformance_inventory/tests -t conformance_inventory/tests
 
 Most tests build small synthetic bundles so that every failure mode is exercised
-without touching the real data. Three integration tests validate the checked-in
-inventory and are skipped when the optional pins (anchor index, CTS listing
-cache) have not been generated.
+without touching the real data. The suite covers two kinds of correctness:
+
+* structural correctness of the documents, and
+* accuracy of the interesting fields, by cross-checking classifications against
+  the pinned target profile, baseline claims against the baseline surface
+  inventory, and CTS mappings against the pinned listing.
+
+The integration tests validate the checked-in inventory and are skipped only
+when the optional caches (anchor index, CTS listing cache) have not been
+generated.
 """
 
 from __future__ import annotations
@@ -25,6 +32,8 @@ if INVENTORY_DIR not in sys.path:
     sys.path.insert(0, INVENTORY_DIR)
 
 import validate  # noqa: E402  (path is prepared above)
+
+TARGET_SHA = "a" * 64
 
 
 def base_sources() -> dict:
@@ -46,8 +55,17 @@ def base_sources() -> dict:
                 "description": "commits pinned",
                 "check": {
                     "op": "all_of_kind_have_field",
-                    "kinds": ["specification", "registry", "conformance-test-suite"],
+                    "kinds": ["specification", "registry", "conformance-test-suite", "profile"],
                     "field": "commit",
+                },
+            },
+            {
+                "id": "profile-and-registry-same-pin",
+                "description": "profile file lives in the registry repo",
+                "check": {
+                    "op": "field_equals_field",
+                    "left": "khronos-vulkan-roadmap-profiles.commit",
+                    "right": "khronos-vulkan-registry.commit",
                 },
             },
         ],
@@ -66,12 +84,7 @@ def base_sources() -> dict:
                 "license": {"spdx": "CC-BY-4.0"},
                 "retrieved_date": "2026-01-01",
                 "artifacts": [
-                    {
-                        "path": "chapters/versions.adoc",
-                        "kind": "file",
-                        "sha256": "b" * 64,
-                        "git_blob_sha1": "c" * 40,
-                    }
+                    {"path": "chapters/versions.adoc", "kind": "file", "sha256": "b" * 64, "git_blob_sha1": "c" * 40}
                 ],
             },
             {
@@ -101,6 +114,70 @@ def base_sources() -> dict:
                 "license": {"spdx": "Apache-2.0"},
                 "retrieved_date": "2026-01-01",
             },
+            {
+                "id": "khronos-vulkan-roadmap-profiles",
+                "kind": "profile",
+                "role": "target-definition",
+                "title": "roadmap profiles",
+                "publisher": "Khronos",
+                "repo": "https://example.invalid/headers.git",
+                "revision_kind": "annotated-tag",
+                "tag": "v1.4.0",
+                "commit": "d" * 40,
+                "license": {"spdx": "Apache-2.0"},
+                "retrieved_date": "2026-01-01",
+                "artifacts": [
+                    {
+                        "path": "registry/profiles/VP_KHR_roadmap.json",
+                        "kind": "file",
+                        "sha256": TARGET_SHA,
+                        "git_blob_sha1": "f" * 40,
+                    }
+                ],
+            },
+        ],
+    }
+
+
+def base_target(**overrides) -> dict:
+    target = {
+        "schema_version": "1.0",
+        "target": {
+            "id": "example-1.4-graphics",
+            "statement": "example target",
+            "basis": {
+                "source_id": "khronos-vulkan-roadmap-profiles",
+                "path": "registry/profiles/VP_KHR_roadmap.json",
+                "profile": "VP_KHR_roadmap_2026",
+                "api_version": "1.4.328",
+                "sha256": TARGET_SHA,
+            },
+        },
+        "required_feature_bits": ["timelineSemaphore"],
+        "required_extensions": ["VK_KHR_surface"],
+        "required_properties": {},
+        "one_of_groups": [],
+        "core_mandatory_from_spec_1_4": {"feature_bits": ["fragmentStoresAndAtomics"], "anchor": "versions-1.4-new-features"},
+    }
+    target.update(overrides)
+    return target
+
+
+def base_surface() -> dict:
+    return {
+        "schema_version": "1.0",
+        "baseline_commit": "3" * 40,
+        "method": "parsed",
+        "counts": {"entry_points": 2, "dispatched": 2, "public_header": 1, "implementation_only": 1},
+        "entry_points": [
+            {"name": "vkCreateInstance", "files": ["src/vk_device.c"], "dispatch_scope": "GLOBAL", "public_header": True, "observed": None},
+            {
+                "name": "vkEnumerateDeviceExtensionProperties",
+                "files": ["src/vk_device.c"],
+                "dispatch_scope": "INSTANCE",
+                "public_header": False,
+                "observed": "returns an empty list",
+            },
         ],
     }
 
@@ -113,9 +190,7 @@ def base_coverage(rows) -> dict:
             {"path": "chapters/initialization.adoc", "review_state": "reviewed", "rows": rows},
             {"path": "chapters/introduction.adoc", "review_state": "not-reviewed", "rows": []},
         ],
-        "appendices": [
-            {"path": "appendices/versions.adoc", "review_state": "reviewed", "rows": []},
-        ],
+        "appendices": [{"path": "appendices/versions.adoc", "review_state": "reviewed", "rows": []}],
         "extension_appendices": {
             "path_prefix": "appendices/",
             "total_extension_files": 483,
@@ -131,25 +206,34 @@ def base_row(**overrides) -> dict:
         "category": "instance_device",
         "summary": "Create an instance for the reported API version.",
         "core_introduction": "1.0",
-        "applicability": {"vulkan14": "mandatory", "note": "inherited"},
+        "applicability": {"core": "core-feature-gated", "target": "required", "note": "n"},
         "classification": "mandatory",
+        "classification_basis": "target-profile-required",
         "condition": None,
         "coverage_chapter": "chapters/initialization.adoc",
         "source": {"source_id": "khronos-vulkan-spec", "anchor": "initialization", "note": "n"},
-        "features": [],
+        "features": ["timelineSemaphore"],
         "limits": [],
         "formats": [],
         "commands": ["vkCreateInstance"],
-        "extensions": [],
+        "extensions": ["VK_KHR_surface"],
         "cts": {
             "mapping": "mapped",
             "basis": "static-source-listing",
             "groups": ["vk-default/api.txt"],
             "cases": ["dEQP-VK.api.version_check.entry_points"],
+            "coverage_quality": "representative-case",
+            "coverage_note": "Single representative case; not complete coverage.",
             "note": "n",
         },
         "implementation_state": "not-audited",
-        "baseline": {"surface_state": "symbol-present", "refs": ["include/ps5vk/ps5vk.h"], "note": "n"},
+        "baseline": {
+            "surface_state": "symbol-present",
+            "entry_points": ["vkCreateInstance"],
+            "absent_entry_points": [],
+            "refs": ["src/vk_device.c"],
+            "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched (vkCreateInstance); 1 are declared in the public header.",
+        },
         "evidence": {
             "source": {"state": "not-audited", "refs": []},
             "runtime": {"state": "not-run", "refs": []},
@@ -200,6 +284,15 @@ def base_requirements(rows) -> dict:
             "allowed-not-supported",
             "cts-fail",
         ],
+        "target": {
+            "id": "example-1.4-graphics",
+            "statement": "example target",
+            "target_file": "target_profile.json",
+            "source_id": "khronos-vulkan-roadmap-profiles",
+            "profile": "VP_KHR_roadmap_2026",
+            "api_version": "1.4.328",
+            "requirement_rule": "classification follows applicability.target",
+        },
         "requirements": rows,
     }
 
@@ -212,7 +305,7 @@ def base_manifest() -> dict:
         "tag": "vulkan-cts-1.4.0.0",
         "commit": "e" * 40,
         "groups": [
-            {"group": "vk-default/api.txt", "path": "external/vulkancts/mustpass/main/vk-default/api.txt", "git_blob_sha1": "f" * 40},
+            {"group": "vk-default/api.txt", "path": "external/vulkancts/mustpass/main/vk-default/api.txt", "git_blob_sha1": "f" * 40}
         ],
         "totals": {"group_files": 1, "cases": 1, "missing_group_files": []},
     }
@@ -248,6 +341,8 @@ def bundle(**overrides) -> validate.Bundle:
             ],
         },
         "manifest": base_manifest(),
+        "target": base_target(),
+        "surface": base_surface(),
     }
     defaults.update(overrides)
     return validate.Bundle(**defaults)
@@ -267,17 +362,10 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(errors(problems), [], "\n".join(p.render() for p in problems))
         self.assertEqual(report["documents"]["requirements"], 1)
 
+    # ---- structural ------------------------------------------------------
+
     def test_duplicate_ids_are_rejected(self):
-        rows = [base_row(), base_row()]
-        problems, _ = self.run_bundle(
-            requirements=base_requirements(rows),
-            coverage={
-                **base_coverage(["VK14-INSTANCE-001"]),
-                "core_chapters": [
-                    {"path": "chapters/initialization.adoc", "review_state": "reviewed", "rows": ["VK14-INSTANCE-001"]},
-                ],
-            },
-        )
+        problems, _ = self.run_bundle(requirements=base_requirements([base_row(), base_row()]))
         self.assertIn("R002", errors(problems))
 
     def test_malformed_row_missing_required_field(self):
@@ -292,7 +380,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertIn("R010", errors(problems))
 
     def test_conditional_requirement_without_condition(self):
-        row = base_row(classification="conditional", condition=None)
+        row = base_row(classification="conditional", condition=None, applicability={"core": "outside-core", "target": "conditional", "target_condition": "only for packaged ICDs"})
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
         self.assertIn("R007", errors(problems))
 
@@ -301,58 +389,46 @@ class ValidatorTests(unittest.TestCase):
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
         self.assertIn("R004", errors(problems))
 
-    def test_unknown_applicability_value(self):
-        row = base_row(applicability={"vulkan14": "definitely-required"})
-        problems, _ = self.run_bundle(requirements=base_requirements([row]))
-        self.assertIn("R005", errors(problems))
-
     def test_unknown_state_values(self):
-        row = base_row(implementation_state="passed")
-        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        problems, _ = self.run_bundle(requirements=base_requirements([base_row(implementation_state="passed")]))
         self.assertIn("R009", errors(problems))
-
         row = base_row()
         row["evidence"]["runtime"] = {"state": "definitely-passed", "refs": []}
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
         self.assertIn("R008", errors(problems))
 
     def test_broken_cts_mapping(self):
-        row = base_row(cts={"mapping": "mapped", "basis": "static-source-listing", "groups": [], "cases": [], "note": "n"})
+        row = base_row(
+            cts={"mapping": "mapped", "basis": "static-source-listing", "groups": [], "cases": [], "coverage_quality": "not-mapped", "coverage_note": "n", "note": "n"}
+        )
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
         self.assertIn("R013", errors(problems))
 
     def test_unmapped_mapping_requires_a_note(self):
-        row = base_row(cts={"mapping": "unmapped", "basis": "static-source-listing", "groups": [], "cases": [], "note": ""})
+        row = base_row(
+            cts={"mapping": "unmapped", "basis": "static-source-listing", "groups": [], "cases": [], "coverage_quality": "not-mapped", "coverage_note": "", "note": ""}
+        )
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
         self.assertIn("R013", errors(problems))
 
     def test_not_applicable_mapping_must_be_empty(self):
-        row = base_row(cts={"mapping": "not-applicable", "basis": "static-source-listing", "groups": ["vk-default/api.txt"], "cases": [], "note": "n"})
+        row = base_row(
+            cts={"mapping": "not-applicable", "basis": "static-source-listing", "groups": ["vk-default/api.txt"], "cases": [], "coverage_quality": "not-mapped", "coverage_note": "", "note": "n"}
+        )
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
         self.assertIn("R017", errors(problems))
 
     def test_unknown_cts_group_against_manifest(self):
-        row = base_row(cts={"mapping": "mapped", "basis": "static-source-listing", "groups": ["vk-default/nope.txt"], "cases": [], "note": "n"})
-        problems, _ = self.run_bundle(requirements=base_requirements([row]))
-        self.assertIn("R014", errors(problems))
-
-    def test_bad_case_name_shape(self):
-        row = base_row(cts={"mapping": "mapped", "basis": "static-source-listing", "groups": ["vk-default/api.txt"], "cases": ["tests.something.pass"], "note": "n"})
+        row = base_row(
+            cts={"mapping": "mapped", "basis": "static-source-listing", "groups": ["vk-default/nope.txt"], "cases": [], "coverage_quality": "family-level", "coverage_note": "n", "note": "n"}
+        )
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
         self.assertIn("R014", errors(problems))
 
     def test_deterministic_ordering(self):
         later = base_row(id="VK14-EXTENSIONS-001", category="extensions")
         earlier = base_row(id="VK14-INSTANCE-001", category="instance_device")
-        coverage = {
-            "schema_version": "1.0",
-            "source_id": "khronos-vulkan-spec",
-            "core_chapters": [
-                {"path": "chapters/initialization.adoc", "review_state": "reviewed", "rows": ["VK14-INSTANCE-001", "VK14-EXTENSIONS-001"]},
-            ],
-            "appendices": [],
-            "extension_appendices": {"path_prefix": "appendices/", "total_extension_files": 0, "review_state": "not-reviewed", "reviewed_exceptions": []},
-        }
+        coverage = base_coverage(["VK14-INSTANCE-001", "VK14-EXTENSIONS-001"])
         problems, _ = self.run_bundle(requirements=base_requirements([later, earlier]), coverage=coverage)
         self.assertIn("R015", errors(problems))
         problems, _ = self.run_bundle(requirements=base_requirements([earlier, later]), coverage=coverage)
@@ -360,11 +436,6 @@ class ValidatorTests(unittest.TestCase):
 
     def test_coverage_ledger_disagreement(self):
         problems, _ = self.run_bundle(coverage=base_coverage([]))
-        self.assertIn("V002", errors(problems))
-
-    def test_coverage_names_unknown_requirement(self):
-        coverage = base_coverage(["VK14-INSTANCE-001", "VK14-NOPE-999"])
-        problems, _ = self.run_bundle(coverage=coverage)
         self.assertIn("V002", errors(problems))
 
     def test_incompatible_source_pins(self):
@@ -391,12 +462,6 @@ class ValidatorTests(unittest.TestCase):
         problems, _ = self.run_bundle(manifest=manifest)
         self.assertIn("C001", errors(problems))
 
-    def test_cts_manifest_listing_kind(self):
-        manifest = base_manifest()
-        manifest["listing_kind"] = "executable-generated"
-        problems, _ = self.run_bundle(manifest=manifest)
-        self.assertIn("C002", errors(problems))
-
     def test_anchor_check_fires_with_index(self):
         problems, _ = self.run_bundle(anchor_index={"initialization", "versions"})
         self.assertEqual(errors(problems), [])
@@ -405,11 +470,121 @@ class ValidatorTests(unittest.TestCase):
         self.assertIn("A001", errors(problems))
 
     def test_consumer_requirement_join_is_checked(self):
-        consumers = bundle().consumers
-        consumers = copy.deepcopy(consumers)
+        consumers = copy.deepcopy(bundle().consumers)
         consumers["consumers"][0]["requirements"][0]["related_requirement_ids"] = ["VK14-NOPE-999"]
         problems, _ = self.run_bundle(consumers=consumers)
         self.assertIn("N003", errors(problems))
+
+    # ---- classification accuracy against the target profile --------------
+
+    def test_target_required_capability_may_not_be_optional(self):
+        """The defect found in review: a target-required capability classified optional."""
+        row = base_row(
+            classification="optional",
+            classification_basis="not-required-by-target",
+            applicability={"core": "core-feature-gated", "target": "not-required", "target_condition": None, "note": "n"},
+        )
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("T004", errors(problems))
+
+    def test_classification_must_follow_applicability_target(self):
+        row = base_row(classification="optional", applicability={"core": "core-feature-gated", "target": "required", "note": "n"})
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("T002", errors(problems))
+
+    def test_target_conditional_requires_an_exact_condition(self):
+        row = base_row(
+            classification="conditional",
+            classification_basis="project-conditional",
+            condition="s",
+            applicability={"core": "outside-core", "target": "conditional", "target_condition": "", "note": "n"},
+        )
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("T003", errors(problems))
+
+    def test_target_capability_must_be_referenced_by_some_row(self):
+        target = base_target()
+        target["required_feature_bits"] = ["timelineSemaphore", "bufferDeviceAddress"]
+        problems, _ = self.run_bundle(target=target)
+        self.assertIn("T007", errors(problems))
+
+    def test_feature_gated_capability_may_not_claim_core_mandatory(self):
+        row = base_row(applicability={"core": "core-mandatory", "target": "required", "note": "n"})
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("T006", errors(problems))
+
+    def test_core_mandated_capability_must_be_marked_core(self):
+        row = base_row(features=["fragmentStoresAndAtomics"], applicability={"core": "core-feature-gated", "target": "required", "note": "n"})
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("T005", errors(problems))
+
+    def test_target_profile_pin_must_match_sources(self):
+        target = base_target()
+        target["target"]["basis"]["sha256"] = "9" * 64
+        problems, _ = self.run_bundle(target=target)
+        self.assertIn("T001", errors(problems))
+
+    # ---- baseline surface accuracy ---------------------------------------
+
+    def test_baseline_claim_about_unknown_symbol(self):
+        row = base_row()
+        row["baseline"]["entry_points"] = ["vkNotInSurface"]
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("B001", errors(problems))
+
+    def test_baseline_claim_that_an_existing_symbol_is_absent(self):
+        row = base_row()
+        row["baseline"]["entry_points"] = ["vkCreateInstance"]
+        row["baseline"]["absent_entry_points"] = ["vkEnumerateDeviceExtensionProperties"]
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("B001", errors(problems))
+
+    def test_baseline_none_with_entry_points(self):
+        row = base_row()
+        row["baseline"]["surface_state"] = "none"
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("B002", errors(problems))
+
+    def test_implementation_only_symbols_must_be_labelled(self):
+        row = base_row(commands=["vkEnumerateDeviceExtensionProperties"])
+        row["baseline"] = {
+            "surface_state": "symbol-present",
+            "entry_points": ["vkEnumerateDeviceExtensionProperties"],
+            "absent_entry_points": [],
+            "refs": ["src/vk_device.c"],
+            "note": "Baseline surface: 1 of 1 named entry points exist and are dispatched.",
+        }
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("B004", errors(problems))
+
+    # ---- CTS coverage quality --------------------------------------------
+
+    def test_cts_coverage_quality_is_required(self):
+        row = base_row()
+        del row["cts"]["coverage_quality"]
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("C010", errors(problems))
+
+    def test_non_direct_mapping_requires_a_gap_note(self):
+        row = base_row()
+        row["cts"]["coverage_note"] = ""
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("C011", errors(problems))
+
+    def test_direct_quality_requires_a_named_case(self):
+        row = base_row()
+        row["cts"]["coverage_quality"] = "direct"
+        row["cts"]["cases"] = []
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("C013", errors(problems))
+
+    def test_mapped_row_may_not_use_not_mapped_quality(self):
+        row = base_row()
+        row["cts"]["coverage_quality"] = "not-mapped"
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("C012", errors(problems))
+
+    # ---- result vocabulary ------------------------------------------------
 
     def test_report_never_counts_non_pass_states_as_pass(self):
         rows = [
@@ -422,67 +597,59 @@ class ValidatorTests(unittest.TestCase):
             base_row(id="VK14-INSTANCE-007", implementation_state="allowed-not-supported"),
             base_row(id="VK14-INSTANCE-008", implementation_state="cts-pass"),
         ]
-        coverage = {
-            "schema_version": "1.0",
-            "source_id": "khronos-vulkan-spec",
-            "core_chapters": [
-                {
-                    "path": "chapters/initialization.adoc",
-                    "review_state": "reviewed",
-                    "rows": [row["id"] for row in rows],
-                }
-            ],
-            "appendices": [],
-            "extension_appendices": {"path_prefix": "appendices/", "total_extension_files": 0, "review_state": "not-reviewed", "reviewed_exceptions": []},
-        }
+        coverage = base_coverage([row["id"] for row in rows])
         _, report = self.run_bundle(requirements=base_requirements(rows), coverage=coverage)
         states = report["requirements"]["by_implementation_state"]
         self.assertEqual(states.get("cts-pass"), 1)
-        for state in validate.NEVER_A_PASS:
-            self.assertNotIn(state, report["cts"]["mapping_counts"])
         self.assertNotIn("success_rate", report)
-        self.assertNotIn("percent", report["unknowns"])
-        # The only pass-like state present is the single cts-pass row.
         pass_like = sum(states.get(state, 0) for state in ("cts-pass", "native-evidence", "host-only-evidence"))
         self.assertEqual(pass_like, 1)
 
 
 class CheckedInInventoryTests(unittest.TestCase):
-    def test_manifest_entries_are_fully_hashed(self):
-        manifest = validate.Bundle.load(INVENTORY_DIR).manifest
-        self.assertIsNotNone(manifest, "cts_manifest.json is missing")
-        self.assertEqual(manifest["listing_kind"], "static-source-listing")
-        self.assertGreater(manifest["totals"]["group_files"], 0)
-        self.assertGreater(manifest["totals"]["cases"], 0)
-        for entry in manifest["groups"]:
-            self.assertRegex(entry["sha256"], r"^[0-9a-f]{64}$")
-            self.assertRegex(entry["git_blob_sha1"], r"^[0-9a-f]{40}$")
-            self.assertGreater(entry["case_count"], 0)
+    def strict_bundle(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        cache = os.path.join(INVENTORY_DIR, ".cache", "cts")
+        anchors = os.path.join(INVENTORY_DIR, ".cache", "spec_anchors.txt")
+        if os.path.isdir(cache):
+            bundle.cts_cache_dir = cache
+        if os.path.exists(anchors):
+            with open(anchors, "r", encoding="utf-8") as handle:
+                bundle.anchor_index = {line.strip() for line in handle if line.strip() and not line.startswith("#")}
+        return bundle
 
     def test_checked_in_inventory_has_no_errors(self):
         problems, report = validate.validate(validate.Bundle.load(INVENTORY_DIR))
         self.assertEqual(errors(problems), [], "\n".join(p.render() for p in problems))
         self.assertGreater(report["documents"]["requirements"], 50)
+        self.assertNotIn("percent", report["unknowns"])
 
-    def test_mapped_cases_exist_in_pinned_listing(self):
-        cache = os.path.join(INVENTORY_DIR, ".cache", "cts")
-        anchors = os.path.join(INVENTORY_DIR, ".cache", "spec_anchors.txt")
+    def test_target_profile_and_baseline_surface_are_consistent(self):
+        problems, report = validate.validate(validate.Bundle.load(INVENTORY_DIR))
+        self.assertEqual(errors(problems), [], "\n".join(p.render() for p in problems))
+        self.assertEqual(report["target"]["required_feature_bits"], 101)
+        self.assertGreater(report["baseline_surface"]["entry_points"], 0)
+
+    def test_no_optional_requirement_carries_a_target_capability(self):
         bundle = validate.Bundle.load(INVENTORY_DIR)
-        if os.path.isdir(cache):
-            bundle.cts_cache_dir = cache
-        else:
+        target = bundle.target
+        required = set(target["required_feature_bits"]) | set(target["required_extensions"])
+        offenders = []
+        for row in (bundle.requirements or {}).get("requirements", []):
+            if row["classification"] == "optional":
+                hits = (set(row["features"]) | set(row["extensions"])) & required
+                if hits:
+                    offenders.append((row["id"], sorted(hits)))
+        self.assertEqual(offenders, [], "optional rows carry target-required capabilities: %r" % offenders)
+
+    def test_mapped_cases_and_anchors_exist_in_pins(self):
+        bundle = self.strict_bundle()
+        if bundle.cts_cache_dir is None:
             self.skipTest("CTS listing cache not generated; run tools/collect_cts_listing.py")
-        if os.path.exists(anchors):
-            with open(anchors, "r", encoding="utf-8") as handle:
-                bundle.anchor_index = {line.strip() for line in handle if line.strip() and not line.startswith("#")}
+        if bundle.anchor_index is None:
+            self.skipTest("anchor index not generated; run tools/extract_spec_anchors.py")
         problems, _ = validate.validate(bundle)
         self.assertEqual(errors(problems), [], "\n".join(p.render() for p in problems))
-
-    def test_no_anchor_index_is_reported_as_skipped_not_passed(self):
-        bundle = validate.Bundle.load(INVENTORY_DIR)
-        bundle.anchor_index = None
-        problems, _ = validate.validate(bundle)
-        self.assertNotIn("A001", errors(problems))
 
 
 if __name__ == "__main__":

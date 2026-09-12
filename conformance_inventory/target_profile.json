@@ -1,0 +1,358 @@
+{
+  "core_mandatory_from_spec_1_4": {
+    "anchor": "versions-1.4-new-features",
+    "feature_bits": [
+      "fullDrawIndexUint32",
+      "imageCubeArray",
+      "independentBlend",
+      "sampleRateShading",
+      "drawIndirectFirstInstance",
+      "depthClamp",
+      "depthBiasClamp",
+      "samplerAnisotropy",
+      "fragmentStoresAndAtomics",
+      "shaderStorageImageExtendedFormats",
+      "shaderUniformBufferArrayDynamicIndexing",
+      "shaderSampledImageArrayDynamicIndexing",
+      "shaderStorageBufferArrayDynamicIndexing",
+      "shaderStorageImageArrayDynamicIndexing",
+      "shaderImageGatherExtended",
+      "shaderInt16",
+      "largePoints",
+      "samplerYcbcrConversion",
+      "storageBuffer16BitAccess",
+      "variablePointers",
+      "variablePointersStorageBuffer",
+      "samplerMirrorClampToEdge",
+      "scalarBlockLayout",
+      "shaderUniformTexelBufferArrayDynamicIndexing",
+      "shaderStorageTexelBufferArrayDynamicIndexing",
+      "shaderInt8",
+      "storageBuffer8BitAccess"
+    ],
+    "note": "Feature bits that Vulkan 1.4 itself makes mandatory. Transcribed from the pinned specification appendix (anchor versions-1.4-new-features); this list is not derived from the profile file."
+  },
+  "limits_note": "Profiles express required limits and properties per struct; required_properties above is the machine-readable form. Values in the specification's own limits table are separate obligations recorded in requirements.json.",
+  "one_of_groups": [
+    {
+      "alternatives": [
+        {
+          "capability": "vulkan14requirements_roadmap2026_line0",
+          "extensions": [],
+          "feature_bits": [
+            "rectangularLines"
+          ]
+        },
+        {
+          "capability": "vulkan14requirements_roadmap2026_line1",
+          "extensions": [],
+          "feature_bits": [
+            "bresenhamLines"
+          ]
+        },
+        {
+          "capability": "vulkan14requirements_roadmap2026_line2",
+          "extensions": [],
+          "feature_bits": [
+            "smoothLines"
+          ]
+        },
+        {
+          "capability": "vulkan14requirements_roadmap2026_line3",
+          "extensions": [],
+          "feature_bits": [
+            "stippledRectangularLines"
+          ]
+        },
+        {
+          "capability": "vulkan14requirements_roadmap2026_line4",
+          "extensions": [],
+          "feature_bits": [
+            "stippledBresenhamLines"
+          ]
+        },
+        {
+          "capability": "vulkan14requirements_roadmap2026_line5",
+          "extensions": [],
+          "feature_bits": [
+            "stippledSmoothLines"
+          ]
+        }
+      ],
+      "capabilities": [
+        "vulkan14requirements_roadmap2026_line0",
+        "vulkan14requirements_roadmap2026_line1",
+        "vulkan14requirements_roadmap2026_line2",
+        "vulkan14requirements_roadmap2026_line3",
+        "vulkan14requirements_roadmap2026_line4",
+        "vulkan14requirements_roadmap2026_line5"
+      ],
+      "required_in_every_alternative": {
+        "extensions": [
+          "VK_KHR_line_rasterization"
+        ],
+        "feature_bits": []
+      }
+    }
+  ],
+  "required_extensions": [
+    "VK_KHR_compute_shader_derivatives",
+    "VK_KHR_cooperative_matrix",
+    "VK_KHR_copy_memory_indirect",
+    "VK_KHR_depth_clamp_zero_one",
+    "VK_KHR_dynamic_rendering",
+    "VK_KHR_dynamic_rendering_local_read",
+    "VK_KHR_fragment_shading_rate",
+    "VK_KHR_get_surface_capabilities2",
+    "VK_KHR_index_type_uint8",
+    "VK_KHR_line_rasterization",
+    "VK_KHR_load_store_op_none",
+    "VK_KHR_maintenance5",
+    "VK_KHR_maintenance7",
+    "VK_KHR_maintenance8",
+    "VK_KHR_maintenance9",
+    "VK_KHR_map_memory2",
+    "VK_KHR_pipeline_binary",
+    "VK_KHR_present_id2",
+    "VK_KHR_present_mode_fifo_latest_ready",
+    "VK_KHR_present_wait2",
+    "VK_KHR_push_descriptor",
+    "VK_KHR_robustness2",
+    "VK_KHR_shader_clock",
+    "VK_KHR_shader_expect_assume",
+    "VK_KHR_shader_float_controls2",
+    "VK_KHR_shader_maximal_reconvergence",
+    "VK_KHR_shader_quad_control",
+    "VK_KHR_shader_subgroup_rotate",
+    "VK_KHR_shader_subgroup_uniform_control_flow",
+    "VK_KHR_shader_untyped_pointers",
+    "VK_KHR_surface",
+    "VK_KHR_surface_maintenance1",
+    "VK_KHR_swapchain",
+    "VK_KHR_swapchain_maintenance1",
+    "VK_KHR_vertex_attribute_divisor",
+    "VK_KHR_workgroup_memory_explicit_layout"
+  ],
+  "required_feature_bits": [
+    "bufferDeviceAddress",
+    "computeDerivativeGroupLinear",
+    "computeFullSubgroups",
+    "cooperativeMatrix",
+    "depthBiasClamp",
+    "depthClamp",
+    "depthClampZeroOne",
+    "descriptorBindingInlineUniformBlockUpdateAfterBind",
+    "descriptorBindingPartiallyBound",
+    "descriptorBindingSampledImageUpdateAfterBind",
+    "descriptorBindingStorageBufferUpdateAfterBind",
+    "descriptorBindingStorageImageUpdateAfterBind",
+    "descriptorBindingStorageTexelBufferUpdateAfterBind",
+    "descriptorBindingUniformTexelBufferUpdateAfterBind",
+    "descriptorBindingUpdateUnusedWhilePending",
+    "descriptorBindingVariableDescriptorCount",
+    "descriptorIndexing",
+    "drawIndirectFirstInstance",
+    "dynamicRendering",
+    "dynamicRenderingLocalRead",
+    "fragmentStoresAndAtomics",
+    "fullDrawIndexUint32",
+    "globalPriorityQuery",
+    "hostImageCopy",
+    "hostQueryReset",
+    "imageCubeArray",
+    "imagelessFramebuffer",
+    "independentBlend",
+    "indexTypeUint8",
+    "indirectMemoryCopy",
+    "inlineUniformBlock",
+    "maintenance4",
+    "maintenance5",
+    "maintenance7",
+    "maintenance8",
+    "maintenance9",
+    "multiDrawIndirect",
+    "multiview",
+    "nullDescriptor",
+    "occlusionQueryPrecise",
+    "pipelineBinaries",
+    "pipelineCreationCacheControl",
+    "pipelineFragmentShadingRate",
+    "presentId2",
+    "presentModeFifoLatestReady",
+    "presentWait2",
+    "privateData",
+    "pushDescriptor",
+    "robustBufferAccess",
+    "robustBufferAccess2",
+    "robustImageAccess",
+    "robustImageAccess2",
+    "runtimeDescriptorArray",
+    "sampleRateShading",
+    "samplerAnisotropy",
+    "samplerYcbcrConversion",
+    "scalarBlockLayout",
+    "separateDepthStencilLayouts",
+    "shaderDemoteToHelperInvocation",
+    "shaderDrawParameters",
+    "shaderExpectAssume",
+    "shaderFloat16",
+    "shaderFloatControls2",
+    "shaderImageGatherExtended",
+    "shaderInt16",
+    "shaderInt8",
+    "shaderIntegerDotProduct",
+    "shaderMaximalReconvergence",
+    "shaderQuadControl",
+    "shaderSampledImageArrayDynamicIndexing",
+    "shaderSampledImageArrayNonUniformIndexing",
+    "shaderStorageBufferArrayDynamicIndexing",
+    "shaderStorageBufferArrayNonUniformIndexing",
+    "shaderStorageImageArrayDynamicIndexing",
+    "shaderStorageImageArrayNonUniformIndexing",
+    "shaderStorageImageExtendedFormats",
+    "shaderStorageTexelBufferArrayDynamicIndexing",
+    "shaderStorageTexelBufferArrayNonUniformIndexing",
+    "shaderSubgroupClock",
+    "shaderSubgroupExtendedTypes",
+    "shaderSubgroupRotate",
+    "shaderSubgroupUniformControlFlow",
+    "shaderTerminateInvocation",
+    "shaderUniformBufferArrayDynamicIndexing",
+    "shaderUniformBufferArrayNonUniformIndexing",
+    "shaderUniformTexelBufferArrayDynamicIndexing",
+    "shaderUniformTexelBufferArrayNonUniformIndexing",
+    "shaderUntypedPointers",
+    "shaderZeroInitializeWorkgroupMemory",
+    "storageBuffer16BitAccess",
+    "storageBuffer8BitAccess",
+    "subgroupBroadcastDynamicId",
+    "subgroupSizeControl",
+    "swapchainMaintenance1",
+    "synchronization2",
+    "timelineSemaphore",
+    "uniformBufferStandardLayout",
+    "vertexAttributeInstanceRateDivisor",
+    "vulkanMemoryModel",
+    "vulkanMemoryModelDeviceScope",
+    "workgroupMemoryExplicitLayout"
+  ],
+  "required_properties": {
+    "VkPhysicalDeviceMaintenance7PropertiesKHR": {
+      "maxDescriptorSetTotalBuffersDynamic": 12,
+      "maxDescriptorSetTotalStorageBuffersDynamic": 4,
+      "maxDescriptorSetTotalUniformBuffersDynamic": 8,
+      "maxDescriptorSetUpdateAfterBindTotalBuffersDynamic": 12,
+      "maxDescriptorSetUpdateAfterBindTotalStorageBuffersDynamic": 4,
+      "maxDescriptorSetUpdateAfterBindTotalUniformBuffersDynamic": 8
+    },
+    "VkPhysicalDeviceProperties": {
+      "limits": {
+        "maxComputeSharedMemorySize": 32768,
+        "maxDescriptorSetInputAttachments": 8,
+        "maxDescriptorSetStorageBuffers": 1800,
+        "maxDescriptorSetUniformBuffers": 1800,
+        "maxFragmentInputComponents": 112,
+        "maxFragmentOutputAttachments": 8,
+        "maxFramebufferHeight": 8192,
+        "maxFramebufferWidth": 8192,
+        "maxGeometryOutputComponents": 128,
+        "maxPerStageDescriptorInputAttachments": 8,
+        "maxPerStageDescriptorStorageBuffers": 200,
+        "maxPerStageDescriptorUniformBuffers": 200,
+        "maxTessellationControlPerVertexInputComponents": 128,
+        "maxTessellationControlPerVertexOutputComponents": 128,
+        "maxTessellationControlTotalOutputComponents": 4096,
+        "maxTessellationEvaluationInputComponents": 128,
+        "maxTessellationEvaluationOutputComponents": 128,
+        "maxVertexOutputComponents": 124,
+        "maxViewportDimensions": [
+          8192,
+          8192
+        ],
+        "subPixelPrecisionBits": 8
+      }
+    },
+    "VkPhysicalDeviceVulkan11Properties": {
+      "maxMultiviewInstanceIndex": 134217727,
+      "maxMultiviewViewCount": 6,
+      "subgroupSize": 4,
+      "subgroupSupportedOperations": [
+        "VK_SUBGROUP_FEATURE_BASIC_BIT",
+        "VK_SUBGROUP_FEATURE_VOTE_BIT",
+        "VK_SUBGROUP_FEATURE_ARITHMETIC_BIT",
+        "VK_SUBGROUP_FEATURE_BALLOT_BIT",
+        "VK_SUBGROUP_FEATURE_SHUFFLE_BIT",
+        "VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT",
+        "VK_SUBGROUP_FEATURE_QUAD_BIT"
+      ],
+      "subgroupSupportedStages": [
+        "VK_SHADER_STAGE_COMPUTE_BIT",
+        "VK_SHADER_STAGE_FRAGMENT_BIT"
+      ]
+    },
+    "VkPhysicalDeviceVulkan12Properties": {
+      "maxDescriptorSetUpdateAfterBindInputAttachments": 7,
+      "maxDescriptorSetUpdateAfterBindSampledImages": 500000,
+      "maxDescriptorSetUpdateAfterBindSamplers": 500000,
+      "maxDescriptorSetUpdateAfterBindStorageBuffers": 500000,
+      "maxDescriptorSetUpdateAfterBindStorageBuffersDynamic": 4,
+      "maxDescriptorSetUpdateAfterBindStorageImages": 500000,
+      "maxDescriptorSetUpdateAfterBindUniformBuffers": 72,
+      "maxDescriptorSetUpdateAfterBindUniformBuffersDynamic": 8,
+      "maxPerStageDescriptorUpdateAfterBindInputAttachments": 7,
+      "maxPerStageDescriptorUpdateAfterBindSampledImages": 500000,
+      "maxPerStageDescriptorUpdateAfterBindSamplers": 500000,
+      "maxPerStageDescriptorUpdateAfterBindStorageBuffers": 500000,
+      "maxPerStageDescriptorUpdateAfterBindStorageImages": 500000,
+      "maxPerStageDescriptorUpdateAfterBindUniformBuffers": 12,
+      "maxPerStageUpdateAfterBindResources": 500000,
+      "maxTimelineSemaphoreValueDifference": 2147483647,
+      "shaderRoundingModeRTEFloat16": true,
+      "shaderRoundingModeRTEFloat32": true,
+      "shaderSignedZeroInfNanPreserveFloat16": true,
+      "shaderSignedZeroInfNanPreserveFloat32": true
+    },
+    "VkPhysicalDeviceVulkan13Properties": {
+      "maxBufferSize": 1073741824,
+      "maxDescriptorSetInlineUniformBlocks": 4,
+      "maxDescriptorSetUpdateAfterBindInlineUniformBlocks": 4,
+      "maxInlineUniformBlockSize": 256,
+      "maxInlineUniformTotalSize": 256,
+      "maxPerStageDescriptorInlineUniformBlocks": 4,
+      "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks": 4
+    }
+  },
+  "schema_version": "1.0",
+  "target": {
+    "basis": {
+      "api_version": "1.4.328",
+      "path": "registry/profiles/VP_KHR_roadmap.json",
+      "profile": "VP_KHR_roadmap_2026",
+      "sha256": "41d8e5b2421bcd78e36d346de18933f5e8ac8e13a82bbcb197bed3fb7fec066d",
+      "source_id": "khronos-vulkan-roadmap-profiles"
+    },
+    "id": "ps5vk-vulkan14-graphics",
+    "other_profiles_in_file": [
+      {
+        "api_version": "1.3.204",
+        "extensions": 1,
+        "feature_bits": 62,
+        "inherits": [],
+        "one_of_groups": 0,
+        "profile": "VP_KHR_roadmap_2022"
+      },
+      {
+        "api_version": "1.3.276",
+        "extensions": 16,
+        "feature_bits": 80,
+        "inherits": [
+          "VP_KHR_roadmap_2022"
+        ],
+        "one_of_groups": 1,
+        "profile": "VP_KHR_roadmap_2024"
+      }
+    ],
+    "statement": "Declared project target: a graphics-capable Vulkan 1.4 implementation. This is a target, not a claim of support.",
+    "why_this_profile": "It is the only roadmap profile in the pinned registry revision whose api-version is 1.4.x; the 2024 and 2022 profiles declare 1.3.x and are recorded for reference only."
+  }
+}

@@ -7,7 +7,9 @@
     "sources.json": "#/$defs/sources_document",
     "requirements.json": "#/$defs/requirements_document",
     "spec_coverage.json": "#/$defs/coverage_document",
-    "consumers.json": "#/$defs/consumers_document"
+    "consumers.json": "#/$defs/consumers_document",
+    "target_profile.json": "#/$defs/target_profile_document",
+    "baseline_surface.json": "#/$defs/baseline_surface_document"
   },
   "$defs": {
     "anchor": {
@@ -131,12 +133,14 @@
     },
     "cts_mapping": {
       "type": "object",
-      "required": ["mapping", "basis", "groups", "cases"],
+      "required": ["mapping", "basis", "groups", "cases", "coverage_quality", "coverage_note"],
       "properties": {
         "mapping": {"enum": ["mapped", "unmapped", "not-applicable"]},
         "basis": {"enum": ["static-source-listing"]},
         "groups": {"type": "array", "items": {"type": "string", "pattern": "^vk-default/[A-Za-z0-9._/-]+\\.txt$"}},
         "cases": {"type": "array", "items": {"type": "string", "pattern": "^dEQP-VK\\.[A-Za-z0-9._-]+$"}},
+        "coverage_quality": {"enum": ["direct", "representative-case", "family-level", "not-mapped"]},
+        "coverage_note": {"type": "string"},
         "note": {"type": "string"}
       }
     },
@@ -173,13 +177,18 @@
         "core_introduction": {"enum": ["1.0", "1.1", "1.2", "1.3", "1.4"]},
         "applicability": {
           "type": "object",
-          "required": ["vulkan14"],
+          "required": ["core", "target"],
           "properties": {
-            "vulkan14": {"enum": ["mandatory", "conditional", "optional-feature-gated", "allowed-not-supported"]},
+            "core": {"enum": ["core-mandatory", "core-feature-gated", "extension-optional", "outside-core"]},
+            "target": {"enum": ["required", "conditional", "not-required"]},
+            "target_condition": {"type": ["string", "null"]},
             "note": {"type": "string"}
           }
         },
         "classification": {"enum": ["mandatory", "conditional", "optional"]},
+        "classification_basis": {
+          "enum": ["core-mandatory", "target-profile-required", "project-conditional", "not-required-by-target", "consumer-required"]
+        },
         "condition": {"type": ["string", "null"]},
         "coverage_chapter": {"type": "string", "pattern": "^(chapters|appendices)/[A-Za-z0-9_.-]+\\.adoc$"},
         "source": {
@@ -200,9 +209,11 @@
         "implementation_state": {"type": "string"},
         "baseline": {
           "type": "object",
-          "required": ["surface_state", "refs", "note"],
+          "required": ["surface_state", "entry_points", "absent_entry_points", "refs", "note"],
           "properties": {
             "surface_state": {"enum": ["none", "symbol-present", "documented", "host-tested", "native-demonstrated"]},
+            "entry_points": {"type": "array", "items": {"type": "string"}},
+            "absent_entry_points": {"type": "array", "items": {"type": "string"}},
             "refs": {"type": "array", "items": {"type": "string"}},
             "note": {"type": "string"}
           }
@@ -219,7 +230,16 @@
         "owner": {"enum": ["implementation", "inventory"]},
         "provenance": {"type": "string"},
         "manual_review": {"type": "boolean"},
-        "review_notes": {"type": ["string", "null"]}
+        "review_notes": {"type": ["string", "null"]},
+        "target_deviation": {
+          "type": "object",
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"enum": ["proposed", "accepted", "rejected"]},
+            "reason": {"type": "string"},
+            "decision_owner": {"type": "string"}
+          }
+        }
       }
     },
     "requirements_document": {
@@ -229,7 +249,83 @@
         "schema_version": {"const": "1.0"},
         "state_vocabulary": {"type": "array", "items": {"type": "string"}, "minItems": 10},
         "category_order": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+        "target": {
+          "type": "object",
+          "required": ["id", "target_file", "source_id", "profile"],
+          "properties": {
+            "id": {"type": "string"},
+            "statement": {"type": "string"},
+            "target_file": {"const": "target_profile.json"},
+            "source_id": {"type": "string"},
+            "profile": {"type": "string"},
+            "api_version": {"type": "string"},
+            "requirement_rule": {"type": "string"},
+            "core_mandatory_scope": {"type": "string"}
+          }
+        },
         "requirements": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/requirement"}}
+      }
+    },
+    "target_profile_document": {
+      "type": "object",
+      "required": ["schema_version", "target", "required_feature_bits", "required_extensions"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "target": {
+          "type": "object",
+          "required": ["id", "basis"],
+          "properties": {
+            "id": {"type": "string"},
+            "statement": {"type": "string"},
+            "basis": {
+              "type": "object",
+              "required": ["source_id", "path", "profile", "sha256"],
+              "properties": {
+                "source_id": {"type": "string"},
+                "path": {"type": "string"},
+                "profile": {"type": "string"},
+                "api_version": {"type": "string"},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              }
+            }
+          }
+        },
+        "required_feature_bits": {"type": "array", "items": {"type": "string"}},
+        "required_extensions": {"type": "array", "items": {"type": "string"}},
+        "one_of_groups": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "baseline_surface_document": {
+      "type": "object",
+      "required": ["schema_version", "baseline_commit", "counts", "entry_points"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "baseline_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "method": {"type": "string"},
+        "counts": {
+          "type": "object",
+          "required": ["entry_points", "dispatched", "public_header", "implementation_only"],
+          "properties": {
+            "entry_points": {"type": "integer"},
+            "dispatched": {"type": "integer"},
+            "public_header": {"type": "integer"},
+            "implementation_only": {"type": "integer"}
+          }
+        },
+        "entry_points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "files", "public_header"],
+            "properties": {
+              "name": {"type": "string"},
+              "files": {"type": "array", "items": {"type": "string"}},
+              "dispatch_scope": {"type": ["string", "null"]},
+              "public_header": {"type": "boolean"},
+              "observed": {"type": ["string", "null"]}
+            }
+          }
+        }
       }
     },
     "coverage_entry": {
