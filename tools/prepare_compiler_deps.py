@@ -59,9 +59,32 @@ def prepare_dep(dep, check_only=False):
     print(f"{name} {pin}: {dest}")
 
 
+import shutil
+
+
 def main(check_only=False):
     for dep in DEPS:
         prepare_dep(dep, check_only)
+
+    # Ensure SPIRV-Headers compatibility link exists for psbc-reference codegen
+    spirv_dir = ROOT / "third_party/SPIRV-Headers/include/spirv"
+    spirv_dir.mkdir(parents=True, exist_ok=True)
+    xml_target = spirv_dir / "spir-v.xml"
+    src_xml = ROOT / "third_party/psbc-reference/src/compiler/spirv/spir-v.xml"
+    if not xml_target.exists() and src_xml.exists():
+        try:
+            xml_target.symlink_to(src_xml)
+        except OSError:
+            shutil.copyfile(src_xml, xml_target)
+
+    # Ensure Vulkan-Headers case-compatible link exists if needed
+    vh_link = ROOT / "third_party/Vulkan-Headers"
+    vh_dir = ROOT / "third_party/vulkan-headers"
+    if not vh_link.exists() and vh_dir.exists():
+        try:
+            vh_link.symlink_to(vh_dir)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
