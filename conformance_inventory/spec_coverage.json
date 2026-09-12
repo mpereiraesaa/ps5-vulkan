@@ -50,7 +50,18 @@
       "path": "chapters/features.adoc",
       "review_state": "reviewed",
       "rows": [
+        "VK14-CORE-001",
+        "VK14-CORE-002",
+        "VK14-CORE-003",
+        "VK14-CORE-004",
+        "VK14-CORE-005",
+        "VK14-CORE-012",
         "VK14-INSTANCE-008",
+        "VK14-CORE-007",
+        "VK14-CORE-006",
+        "VK14-CORE-008",
+        "VK14-CORE-009",
+        "VK14-CORE-011",
         "VK14-PROMOTED-001",
         "VK14-PROMOTED-002",
         "VK14-PROMOTED-003",
@@ -59,7 +70,7 @@
         "VK14-PROMOTED-006",
         "VK14-PROMOTED-007",
         "VK14-PROMOTED-008",
-        "VK14-TARGET-001"
+        "VK14-CORE-010"
       ]
     },
     {
@@ -250,8 +261,7 @@
       "rows": [
         "VK14-EXTENSIONS-001",
         "VK14-EXTENSIONS-002",
-        "VK14-EXTENSIONS-004",
-        "VK14-TARGET-002"
+        "VK14-EXTENSIONS-004"
       ]
     },
     {

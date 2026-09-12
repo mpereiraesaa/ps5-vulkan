@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Derive the declared target requirement set from the pinned Khronos profile file.
+"""Record the Khronos roadmap profiles as a comparison, not as the target definition.
+
+This file is deliberately NOT the classification basis. The declared target is
+Vulkan 1.4 core for a graphics implementation (see core_target.json); roadmap
+profiles add requirements on top of core and must not be used to reclassify core
+obligations. They are recorded here only so the difference is visible.
 
 The Khronos registry ships machine-readable Vulkan profiles. At the pinned
 registry revision the file ``registry/profiles/VP_KHR_roadmap.json`` defines
@@ -19,8 +24,8 @@ against the same pinned bytes produces identical output.
 
 Usage
 -----
-    python3 conformance_inventory/tools/derive_target_profile.py
-    python3 conformance_inventory/tools/derive_target_profile.py --profile-file /path/to/VP_KHR_roadmap.json
+    python3 conformance_inventory/tools/derive_roadmap_comparison.py
+    python3 conformance_inventory/tools/derive_roadmap_comparison.py --profile-file /path/to/VP_KHR_roadmap.json
 """
 
 from __future__ import annotations
@@ -35,10 +40,10 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 INVENTORY_DIR = os.path.dirname(HERE)
 DEFAULT_SOURCES = os.path.join(INVENTORY_DIR, "sources.json")
-DEFAULT_OUT = os.path.join(INVENTORY_DIR, "target_profile.json")
+DEFAULT_OUT = os.path.join(INVENTORY_DIR, "roadmap_comparison.json")
 PROFILE_SOURCE_ID = "khronos-vulkan-roadmap-profiles"
 PROFILE_PATH = "registry/profiles/VP_KHR_roadmap.json"
-SELECTED_PROFILE = "VP_KHR_roadmap_2026"
+REFERENCE_PROFILE = "VP_KHR_roadmap_2026"
 
 
 def load_profile_source(path: str) -> tuple[dict, dict]:
@@ -132,8 +137,8 @@ def main(argv: list[str] | None = None) -> int:
     document = json.loads(data.decode("utf-8"))
     profiles = document["profiles"]
     caps = document["capabilities"]
-    if SELECTED_PROFILE not in profiles:
-        raise SystemExit("pinned profile file does not define %s" % SELECTED_PROFILE)
+    if REFERENCE_PROFILE not in profiles:
+        raise SystemExit("pinned profile file does not define %s" % REFERENCE_PROFILE)
 
     def summarise(name: str) -> dict:
         feats, exts, props, one_of = expand_profile(profiles, caps, name)
@@ -146,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             "one_of_groups": len(one_of),
         }
 
-    feats, exts, props, one_of = expand_profile(profiles, caps, SELECTED_PROFILE)
+    feats, exts, props, one_of = expand_profile(profiles, caps, REFERENCE_PROFILE)
 
     # Resolve one-of groups: anything required by every alternative is promoted to
     # the flat required sets; the remainder stays an explicit one-of group.
@@ -184,56 +189,25 @@ def main(argv: list[str] | None = None) -> int:
 
     output = {
         "schema_version": "1.0",
-        "target": {
-            "id": "ps5vk-vulkan14-graphics",
-            "statement": "Declared project target: a graphics-capable Vulkan 1.4 implementation. This is a target, not a claim of support.",
+        "comparison": {
+            "id": "vp-khr-roadmap-comparison",
+            "statement": "Khronos roadmap profile requirement sets, recorded for comparison with the declared Vulkan 1.4 core target.",
+            "status": "comparison-only",
+            "not_the_basis": "These sets are not the definition of core conformance and must not drive requirement classification.",
             "basis": {
                 "source_id": source["id"],
                 "path": PROFILE_PATH,
-                "profile": SELECTED_PROFILE,
-                "api_version": profiles[SELECTED_PROFILE].get("api-version"),
+                "profile": REFERENCE_PROFILE,
+                "api_version": profiles[REFERENCE_PROFILE].get("api-version"),
                 "sha256": digest,
             },
             "why_this_profile": "It is the only roadmap profile in the pinned registry revision whose api-version is 1.4.x; the 2024 and 2022 profiles declare 1.3.x and are recorded for reference only.",
-            "other_profiles_in_file": [summarise(name) for name in sorted(profiles) if name != SELECTED_PROFILE],
+            "other_profiles_in_file": [summarise(name) for name in sorted(profiles) if name != REFERENCE_PROFILE],
         },
         "required_feature_bits": required_bits,
         "required_extensions": sorted(required_exts),
         "required_properties": props,
         "one_of_groups": resolved_one_of,
-        "core_mandatory_from_spec_1_4": {
-            "note": "Feature bits that Vulkan 1.4 itself makes mandatory. Transcribed from the pinned specification appendix (anchor versions-1.4-new-features); this list is not derived from the profile file.",
-            "anchor": "versions-1.4-new-features",
-            "feature_bits": [
-                "fullDrawIndexUint32",
-                "imageCubeArray",
-                "independentBlend",
-                "sampleRateShading",
-                "drawIndirectFirstInstance",
-                "depthClamp",
-                "depthBiasClamp",
-                "samplerAnisotropy",
-                "fragmentStoresAndAtomics",
-                "shaderStorageImageExtendedFormats",
-                "shaderUniformBufferArrayDynamicIndexing",
-                "shaderSampledImageArrayDynamicIndexing",
-                "shaderStorageBufferArrayDynamicIndexing",
-                "shaderStorageImageArrayDynamicIndexing",
-                "shaderImageGatherExtended",
-                "shaderInt16",
-                "largePoints",
-                "samplerYcbcrConversion",
-                "storageBuffer16BitAccess",
-                "variablePointers",
-                "variablePointersStorageBuffer",
-                "samplerMirrorClampToEdge",
-                "scalarBlockLayout",
-                "shaderUniformTexelBufferArrayDynamicIndexing",
-                "shaderStorageTexelBufferArrayDynamicIndexing",
-                "shaderInt8",
-                "storageBuffer8BitAccess",
-            ],
-        },
         "limits_note": "Profiles express required limits and properties per struct; required_properties above is the machine-readable form. Values in the specification's own limits table are separate obligations recorded in requirements.json.",
     }
 
@@ -246,8 +220,8 @@ def main(argv: list[str] | None = None) -> int:
         "wrote %s: %s api-version %s, %d required feature bits, %d required extensions, %d one-of groups"
         % (
             args.out,
-            SELECTED_PROFILE,
-            profiles[SELECTED_PROFILE].get("api-version"),
+            REFERENCE_PROFILE,
+            profiles[REFERENCE_PROFILE].get("api-version"),
             len(required_bits),
             len(required_exts),
             len(resolved_one_of),

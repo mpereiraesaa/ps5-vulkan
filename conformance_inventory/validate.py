@@ -59,9 +59,10 @@ TARGET_STATUS_VOCAB = {"required", "conditional", "not-required"}
 TARGET_TO_CLASSIFICATION = {"required": "mandatory", "conditional": "conditional", "not-required": "optional"}
 CLASSIFICATION_BASIS_VOCAB = {
     "core-mandatory",
-    "target-profile-required",
+    "core-cumulative-required",
+    "core-conditional",
     "project-conditional",
-    "not-required-by-target",
+    "not-required-by-core",
     "consumer-required",
 }
 CTS_COVERAGE_QUALITY_VOCAB = {"direct", "representative-case", "family-level", "not-mapped"}
@@ -95,6 +96,7 @@ class Bundle:
     consumers: dict | None = None
     manifest: dict | None = None
     target: dict | None = None
+    roadmap: dict | None = None
     surface: dict | None = None
     anchor_index: set[str] | None = None
     cts_cache_dir: str | None = None
@@ -114,7 +116,8 @@ class Bundle:
             coverage=read("spec_coverage.json"),
             consumers=read("consumers.json"),
             manifest=read("cts_manifest.json"),
-            target=read("target_profile.json"),
+            target=read("core_target.json"),
+            roadmap=read("roadmap_comparison.json"),
             surface=read("baseline_surface.json"),
         )
         for key, value in overrides.items():
@@ -433,103 +436,130 @@ def load_cts_cache(manifest: dict, cache_dir: str, problems: list[Problem]) -> s
 
 
 def validate_target(bundle: Bundle, sources: dict, rows: list[dict], problems: list[Problem]) -> dict:
-    """Check requirement classifications against the pinned target profile.
+    """Check requirement classifications against the cumulative core requirement set.
 
-    This is the accuracy check that structural validation cannot provide: a
-    capability the declared target requires must not be classified optional, and
-    a capability that is only feature-gated must not be presented as core
-    mandatory.
+    The basis is Vulkan 1.4 core for a graphics implementation: the cumulative
+    obligations of 1.0 through 1.4, taken from the pinned specification section
+    "Feature Requirements" and the pinned registry per-version blocks, with each
+    conditional obligation carrying its exact trigger. Roadmap profiles are a
+    comparison and must not drive classification.
     """
     target = bundle.target
     declared = (bundle.requirements or {}).get("target") or {}
     if target is None:
-        problems.append(Problem("error", "T000", "target_profile.json", "document is missing"))
+        problems.append(Problem("error", "T000", "core_target.json", "document is missing"))
         return {}
-    if declared.get("target_file") != "target_profile.json":
-        problems.append(Problem("error", "T000", "requirements.json", "requirements.target.target_file must reference target_profile.json"))
+    if declared.get("target_file") != "core_target.json":
+        problems.append(Problem("error", "T000", "requirements.json", "requirements.target.target_file must reference core_target.json"))
 
     basis = target.get("target", {}).get("basis", {})
-    source = sources.get(basis.get("source_id"))
-    if source is None:
-        problems.append(Problem("error", "T001", "target_profile.json", "target basis names unknown source %r" % basis.get("source_id")))
+    fr = basis.get("feature_requirements") or {}
+    spec_source = sources.get(fr.get("source_id"))
+    if spec_source is None:
+        problems.append(Problem("error", "T001", "core_target.json", "feature-requirement basis names unknown source %r" % fr.get("source_id")))
     else:
-        artifact = next((a for a in source.get("artifacts", []) if a.get("path") == basis.get("path")), None)
+        alias_sha = (spec_source.get("document_alias") or {}).get("sha256")
+        if alias_sha != fr.get("document_sha256"):
+            problems.append(Problem("error", "T001", "core_target.json", "specification basis sha256 does not match sources.json (%s vs %s)" % (fr.get("document_sha256"), alias_sha)))
+    api = basis.get("api_surface") or {}
+    reg_source = sources.get(api.get("source_id"))
+    if reg_source is None:
+        problems.append(Problem("error", "T001", "core_target.json", "api-surface basis names unknown source %r" % api.get("source_id")))
+    else:
+        artifact = next((a for a in reg_source.get("artifacts", []) if a.get("path") == api.get("path")), None)
         if artifact is None:
-            problems.append(Problem("error", "T001", "target_profile.json", "source has no artifact %r" % basis.get("path")))
-        elif artifact.get("sha256") != basis.get("sha256"):
-            problems.append(
-                Problem("error", "T001", "target_profile.json", "target sha256 %s does not match sources.json pin %s" % (basis.get("sha256"), artifact.get("sha256")))
-            )
+            problems.append(Problem("error", "T001", "core_target.json", "registry basis names artifact %r that sources.json does not pin" % api.get("path")))
+        elif artifact.get("sha256") != api.get("sha256"):
+            problems.append(Problem("error", "T001", "core_target.json", "registry basis sha256 does not match sources.json pin"))
 
-    required_bits = set(target.get("required_feature_bits", []))
-    required_ext = set(target.get("required_extensions", []))
-    core_bits = set((target.get("core_mandatory_from_spec_1_4") or {}).get("feature_bits", []))
+    bits = target.get("mandatory_feature_bits", {})
+    cumulative_bits = set(bits.get("cumulative", []))
+    conditional_map: dict[str, str] = {}
+    for entry in bits.get("conditional_in_version_blocks", []):
+        for feature in entry.get("features", []):
+            conditional_map[feature] = entry.get("condition") or ""
+    optional_extension_bits: dict[str, str] = {}
+    for entry in bits.get("conditional_on_optional_extension", []):
+        for feature in entry.get("features", []):
+            optional_extension_bits.setdefault(feature, entry.get("condition") or "")
+    if not cumulative_bits:
+        problems.append(Problem("error", "T000", "core_target.json", "no mandatory core feature bits were derived"))
 
-    referenced_bits: set[str] = set()
-    referenced_ext: set[str] = set()
-    optional_rows_with_target_capability = []
+    mandatory_bits = cumulative_bits - set(conditional_map)
+    referenced_mandatory: set[str] = set()
+    referenced_conditional: set[str] = set()
+    optional_rows_with_core_capability = []
     for row in rows:
         location = row.get("id")
         applicability = row.get("applicability") or {}
-        target_status = applicability.get("target")
-        expected = TARGET_TO_CLASSIFICATION.get(target_status)
-        if expected and row.get("classification") != expected:
+        core_status = applicability.get("core")
+        expected = TARGET_TO_CLASSIFICATION.get("required" if row.get("classification") == "mandatory" else row.get("classification"))
+        feats = set(row.get("features") or [])
+        hit_mandatory = feats & mandatory_bits
+        hit_conditional = feats & (set(conditional_map) | (set(optional_extension_bits) - mandatory_bits - set(conditional_map)))
+        referenced_mandatory |= hit_mandatory
+        referenced_conditional |= hit_conditional
+
+        if hit_mandatory and row.get("classification") != "mandatory":
             problems.append(
                 Problem(
                     "error",
                     "T002",
                     location,
-                    "classification %r contradicts applicability.target %r (expected %r)" % (row.get("classification"), target_status, expected),
+                    "declares core-mandatory capabilities %s but is classified %r" % (sorted(hit_mandatory)[:6], row.get("classification")),
                 )
             )
-        if target_status == "conditional" and not (applicability.get("target_condition") or "").strip():
-            problems.append(Problem("error", "T003", location, "target-conditional row without an exact target_condition"))
-
-        feats = set(row.get("features") or [])
-        exts = set(row.get("extensions") or [])
-        referenced_bits |= feats & required_bits
-        referenced_ext |= exts & required_ext
-        hits = sorted((feats & required_bits) | (exts & required_ext))
-        if hits and target_status != "required":
-            optional_rows_with_target_capability.append((location, hits, target_status))
+        elif hit_conditional and not hit_mandatory and row.get("classification") not in ("conditional",):
             problems.append(
                 Problem(
                     "error",
-                    "T004",
+                    "T003",
                     location,
-                    "declares target-required capabilities %s but applicability.target is %r" % (hits[:6], target_status),
+                    "declares core-conditional capabilities %s; classification must be conditional, not %r" % (sorted(hit_conditional)[:6], row.get("classification")),
                 )
             )
-        if feats:
-            if feats <= core_bits and applicability.get("core") != "core-mandatory":
-                problems.append(Problem("error", "T005", location, "capabilities mandated by 1.4 core, but applicability.core is %r" % applicability.get("core")))
-            if (feats - core_bits) and applicability.get("core") == "core-mandatory":
-                problems.append(
-                    Problem(
-                        "error",
-                        "T006",
-                        location,
-                        "declares feature-gated capabilities %s but applicability.core is core-mandatory" % sorted(feats - core_bits)[:6],
-                    )
+        if row.get("classification") == "conditional" and not (row.get("condition") or applicability.get("target_condition") or "").strip():
+            problems.append(Problem("error", "T004", location, "conditional row without an exact condition"))
+        if row.get("classification") == "optional" and (hit_mandatory or hit_conditional):
+            optional_rows_with_core_capability.append((location, sorted(hit_mandatory | hit_conditional)))
+            problems.append(
+                Problem(
+                    "error",
+                    "T005",
+                    location,
+                    "classified optional but declares core capabilities %s" % sorted(hit_mandatory | hit_conditional)[:6],
                 )
+            )
+        if row.get("classification_basis", "").startswith("roadmap") or "roadmap" in (applicability.get("target_condition") or "").lower():
+            problems.append(Problem("error", "T009", location, "classification must not be derived from a roadmap profile"))
 
-    uncovered_bits = sorted(required_bits - referenced_bits)
-    uncovered_ext = sorted(required_ext - referenced_ext)
-    for name in uncovered_bits:
-        problems.append(Problem("error", "T007", "target_profile.json", "target-required feature bit %r is not referenced by any requirement row" % name))
-    for name in uncovered_ext:
-        problems.append(Problem("error", "T007", "target_profile.json", "target-required extension %r is not referenced by any requirement row" % name))
+    uncovered_mandatory = sorted(mandatory_bits - referenced_mandatory)
+    uncovered_conditional = sorted(set(conditional_map) - referenced_conditional)
+    for name in uncovered_mandatory:
+        problems.append(Problem("error", "T007", "core_target.json", "core-mandatory feature bit %r is not referenced by any requirement row" % name))
+    for name in uncovered_conditional:
+        problems.append(Problem("error", "T008", "core_target.json", "core-conditional feature bit %r is not referenced by any requirement row" % name))
 
-    deviations = [row.get("id") for row in rows if row.get("target_deviation")]
+    roadmap = bundle.roadmap or {}
+    comparison = roadmap.get("comparison") or {}
+    if comparison and comparison.get("status") != "comparison-only":
+        problems.append(Problem("error", "T010", "roadmap_comparison.json", "roadmap file must be marked comparison-only"))
+
     return {
-        "profile": basis.get("profile"),
-        "api_version": basis.get("api_version"),
-        "required_feature_bits": len(required_bits),
-        "required_extensions": len(required_ext),
-        "one_of_groups": len(target.get("one_of_groups", [])),
+        "id": target.get("target", {}).get("id"),
+        "definition": target.get("target", {}).get("definition"),
+        "core_mandatory_feature_bits": len(mandatory_bits),
+        "core_conditional_feature_bits": len(conditional_map),
+        "api_surface_commands": (target.get("api_surface", {}).get("surface_by_profile", {}).get("graphics_including_base", {}) or {}).get("commands_total"),
+        "api_surface_types": (target.get("api_surface", {}).get("surface_by_profile", {}).get("graphics_including_base", {}) or {}).get("types_total"),
+        "roadmap_comparison": {
+            "status": comparison.get("status"),
+            "reference_profile": roadmap.get("comparison", {}).get("basis", {}).get("profile"),
+            "feature_bits": len(roadmap.get("required_feature_bits", [])),
+            "extensions": len(roadmap.get("required_extensions", [])),
+        },
         "rows_classified_against_target": len(rows),
-        "optional_rows_with_target_capability": optional_rows_with_target_capability,
-        "deviation_rows": sorted(deviations),
+        "optional_rows_with_core_capability": optional_rows_with_core_capability,
     }
 
 
@@ -759,13 +789,23 @@ def render_text(report: dict) -> str:
     target = report.get("target") or {}
     if target:
         lines.append("")
+        lines.append("declared target: %s" % target.get("id"))
+        lines.append("  %s" % (target.get("definition") or ""))
         lines.append(
-            "declared target: %s (api-version %s), %s required feature bits, %s required extensions, %s one-of group(s)"
-            % (target.get("profile"), target.get("api_version"), target.get("required_feature_bits"), target.get("required_extensions"), target.get("one_of_groups"))
+            "  core requirement sets: %s unconditional feature bits, %s conditional feature bits, %s core commands / %s core types"
+            % (
+                target.get("core_mandatory_feature_bits"),
+                target.get("core_conditional_feature_bits"),
+                target.get("api_surface_commands"),
+                target.get("api_surface_types"),
+            )
         )
-        lines.append("  rows classified against the target profile: %s" % target.get("rows_classified_against_target"))
-        if target.get("deviation_rows"):
-            lines.append("  declared deviations (target-required but not implemented): %s" % ", ".join(target["deviation_rows"]))
+        comparison = target.get("roadmap_comparison") or {}
+        if comparison:
+            lines.append(
+                "  roadmap comparison (not the classification basis, %s): %s with %s feature bits and %s extensions"
+                % (comparison.get("status"), comparison.get("reference_profile"), comparison.get("feature_bits"), comparison.get("extensions"))
+            )
     surface = report.get("baseline_surface") or {}
     if surface:
         lines.append("")

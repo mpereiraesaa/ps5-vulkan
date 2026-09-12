@@ -1,36 +1,37 @@
 {
-  "core_mandatory_from_spec_1_4": {
-    "anchor": "versions-1.4-new-features",
-    "feature_bits": [
-      "fullDrawIndexUint32",
-      "imageCubeArray",
-      "independentBlend",
-      "sampleRateShading",
-      "drawIndirectFirstInstance",
-      "depthClamp",
-      "depthBiasClamp",
-      "samplerAnisotropy",
-      "fragmentStoresAndAtomics",
-      "shaderStorageImageExtendedFormats",
-      "shaderUniformBufferArrayDynamicIndexing",
-      "shaderSampledImageArrayDynamicIndexing",
-      "shaderStorageBufferArrayDynamicIndexing",
-      "shaderStorageImageArrayDynamicIndexing",
-      "shaderImageGatherExtended",
-      "shaderInt16",
-      "largePoints",
-      "samplerYcbcrConversion",
-      "storageBuffer16BitAccess",
-      "variablePointers",
-      "variablePointersStorageBuffer",
-      "samplerMirrorClampToEdge",
-      "scalarBlockLayout",
-      "shaderUniformTexelBufferArrayDynamicIndexing",
-      "shaderStorageTexelBufferArrayDynamicIndexing",
-      "shaderInt8",
-      "storageBuffer8BitAccess"
+  "comparison": {
+    "basis": {
+      "api_version": "1.4.328",
+      "path": "registry/profiles/VP_KHR_roadmap.json",
+      "profile": "VP_KHR_roadmap_2026",
+      "sha256": "41d8e5b2421bcd78e36d346de18933f5e8ac8e13a82bbcb197bed3fb7fec066d",
+      "source_id": "khronos-vulkan-roadmap-profiles"
+    },
+    "id": "vp-khr-roadmap-comparison",
+    "not_the_basis": "These sets are not the definition of core conformance and must not drive requirement classification.",
+    "other_profiles_in_file": [
+      {
+        "api_version": "1.3.204",
+        "extensions": 1,
+        "feature_bits": 62,
+        "inherits": [],
+        "one_of_groups": 0,
+        "profile": "VP_KHR_roadmap_2022"
+      },
+      {
+        "api_version": "1.3.276",
+        "extensions": 16,
+        "feature_bits": 80,
+        "inherits": [
+          "VP_KHR_roadmap_2022"
+        ],
+        "one_of_groups": 1,
+        "profile": "VP_KHR_roadmap_2024"
+      }
     ],
-    "note": "Feature bits that Vulkan 1.4 itself makes mandatory. Transcribed from the pinned specification appendix (anchor versions-1.4-new-features); this list is not derived from the profile file."
+    "statement": "Khronos roadmap profile requirement sets, recorded for comparison with the declared Vulkan 1.4 core target.",
+    "status": "comparison-only",
+    "why_this_profile": "It is the only roadmap profile in the pinned registry revision whose api-version is 1.4.x; the 2024 and 2022 profiles declare 1.3.x and are recorded for reference only."
   },
   "limits_note": "Profiles express required limits and properties per struct; required_properties above is the machine-readable form. Values in the specification's own limits table are separate obligations recorded in requirements.json.",
   "one_of_groups": [
@@ -322,37 +323,5 @@
       "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks": 4
     }
   },
-  "schema_version": "1.0",
-  "target": {
-    "basis": {
-      "api_version": "1.4.328",
-      "path": "registry/profiles/VP_KHR_roadmap.json",
-      "profile": "VP_KHR_roadmap_2026",
-      "sha256": "41d8e5b2421bcd78e36d346de18933f5e8ac8e13a82bbcb197bed3fb7fec066d",
-      "source_id": "khronos-vulkan-roadmap-profiles"
-    },
-    "id": "ps5vk-vulkan14-graphics",
-    "other_profiles_in_file": [
-      {
-        "api_version": "1.3.204",
-        "extensions": 1,
-        "feature_bits": 62,
-        "inherits": [],
-        "one_of_groups": 0,
-        "profile": "VP_KHR_roadmap_2022"
-      },
-      {
-        "api_version": "1.3.276",
-        "extensions": 16,
-        "feature_bits": 80,
-        "inherits": [
-          "VP_KHR_roadmap_2022"
-        ],
-        "one_of_groups": 1,
-        "profile": "VP_KHR_roadmap_2024"
-      }
-    ],
-    "statement": "Declared project target: a graphics-capable Vulkan 1.4 implementation. This is a target, not a claim of support.",
-    "why_this_profile": "It is the only roadmap profile in the pinned registry revision whose api-version is 1.4.x; the 2024 and 2022 profiles declare 1.3.x and are recorded for reference only."
-  }
+  "schema_version": "1.0"
 }

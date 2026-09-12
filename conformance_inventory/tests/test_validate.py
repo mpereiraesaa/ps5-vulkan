@@ -86,6 +86,7 @@ def base_sources() -> dict:
                 "artifacts": [
                     {"path": "chapters/versions.adoc", "kind": "file", "sha256": "b" * 64, "git_blob_sha1": "c" * 40}
                 ],
+                "document_alias": {"url": "https://example.invalid/vkspec.html", "size_bytes": 1, "sha256": "b" * 64},
             },
             {
                 "id": "khronos-vulkan-registry",
@@ -100,6 +101,9 @@ def base_sources() -> dict:
                 "header_version": "1.4.0",
                 "license": {"spdx": "Apache-2.0"},
                 "retrieved_date": "2026-01-01",
+                "artifacts": [
+                    {"path": "registry/vk.xml", "kind": "file", "sha256": "c" * 64, "git_blob_sha1": "d" * 40}
+                ],
             },
             {
                 "id": "khronos-vk-gl-cts",
@@ -139,28 +143,58 @@ def base_sources() -> dict:
     }
 
 
-def base_target(**overrides) -> dict:
+def base_core_target(**overrides) -> dict:
     target = {
         "schema_version": "1.0",
         "target": {
-            "id": "example-1.4-graphics",
+            "id": "example-1.4-graphics-core",
             "statement": "example target",
+            "definition": "cumulative core obligations",
             "basis": {
-                "source_id": "khronos-vulkan-roadmap-profiles",
-                "path": "registry/profiles/VP_KHR_roadmap.json",
-                "profile": "VP_KHR_roadmap_2026",
-                "api_version": "1.4.328",
-                "sha256": TARGET_SHA,
+                "feature_requirements": {
+                    "source_id": "khronos-vulkan-spec",
+                    "anchor": "features-requirements",
+                    "spec_version": "1.4.0",
+                    "document_sha256": "b" * 64,
+                },
+                "api_surface": {
+                    "source_id": "khronos-vulkan-registry",
+                    "path": "registry/vk.xml",
+                    "sha256": "c" * 64,
+                },
             },
         },
-        "required_feature_bits": ["timelineSemaphore"],
-        "required_extensions": ["VK_KHR_surface"],
-        "required_properties": {},
-        "one_of_groups": [],
-        "core_mandatory_from_spec_1_4": {"feature_bits": ["fragmentStoresAndAtomics"], "anchor": "versions-1.4-new-features"},
+        "mandatory_feature_bits": {
+            "registry_by_version": {"1.2": ["timelineSemaphore", "storageBuffer8BitAccess"]},
+            "cumulative": ["timelineSemaphore", "storageBuffer8BitAccess"],
+            "specification_by_version": {},
+            "specification_registry_mismatches": [],
+            "conditional_in_version_blocks": [{"features": ["storageBuffer8BitAccess"], "condition": "uniformAndStorageBuffer8BitAccess is supported", "version": "1.2"}],
+            "conditional_on_optional_extension": [{"features": ["nullDescriptor"], "condition": "VK_KHR_robustness2 is supported", "version": None}],
+            "at_least_one_groups": [{"features": ["hostImageCopy"], "text": "either host image copy or an extra transfer queue"}],
+            "extension_rules_not_core_classification": [],
+        },
+        "api_surface": {"surface_by_profile": {"graphics_including_base": {"commands_total": 2, "types_total": 3}}},
+        "roadmap_comparison": {"file": "roadmap_comparison.json", "note": "comparison only"},
     }
     target.update(overrides)
     return target
+
+
+def base_roadmap(**overrides) -> dict:
+    roadmap = {
+        "schema_version": "1.0",
+        "comparison": {
+            "id": "vp-khr-roadmap-comparison",
+            "status": "comparison-only",
+            "statement": "recorded for comparison",
+            "basis": {"source_id": "khronos-vulkan-roadmap-profiles", "profile": "VP_KHR_roadmap_2026", "sha256": TARGET_SHA},
+        },
+        "required_feature_bits": ["timelineSemaphore"],
+        "required_extensions": ["VK_KHR_surface"],
+    }
+    roadmap.update(overrides)
+    return roadmap
 
 
 def base_surface() -> dict:
@@ -206,9 +240,9 @@ def base_row(**overrides) -> dict:
         "category": "instance_device",
         "summary": "Create an instance for the reported API version.",
         "core_introduction": "1.0",
-        "applicability": {"core": "core-feature-gated", "target": "required", "note": "n"},
+        "applicability": {"core": "core-mandatory", "target": "required", "note": "n"},
         "classification": "mandatory",
-        "classification_basis": "target-profile-required",
+        "classification_basis": "core-cumulative-required",
         "condition": None,
         "coverage_chapter": "chapters/initialization.adoc",
         "source": {"source_id": "khronos-vulkan-spec", "anchor": "initialization", "note": "n"},
@@ -216,7 +250,7 @@ def base_row(**overrides) -> dict:
         "limits": [],
         "formats": [],
         "commands": ["vkCreateInstance"],
-        "extensions": ["VK_KHR_surface"],
+        "extensions": [],
         "cts": {
             "mapping": "mapped",
             "basis": "static-source-listing",
@@ -248,6 +282,21 @@ def base_row(**overrides) -> dict:
     return row
 
 
+def base_conditional_row(**overrides) -> dict:
+    row = base_row(
+        id="VK14-CORE-006",
+        category="shaders",
+        summary="Core feature obligation conditioned on a supporting capability.",
+        features=["storageBuffer8BitAccess"],
+        applicability={"core": "core-feature-gated", "target": "conditional", "target_condition": "uniformAndStorageBuffer8BitAccess is supported", "note": "n"},
+        classification="conditional",
+        classification_basis="core-conditional",
+        condition="uniformAndStorageBuffer8BitAccess is supported",
+    )
+    row.update(overrides)
+    return row
+
+
 def base_requirements(rows) -> dict:
     return {
         "schema_version": "1.0",
@@ -263,10 +312,11 @@ def base_requirements(rows) -> dict:
             "not-run",
             "harness-blocked",
         ],
-        "category_order": [["instance_device"], ["extensions", "platform_wsi"]],
+        "category_order": [["instance_device"], ["shaders"], ["extensions", "platform_wsi"]],
         "core_introduction_versions": ["1.0", "1.1", "1.2", "1.3", "1.4"],
         "classification_vocabulary": ["mandatory", "conditional", "optional"],
-        "applicability_vocabulary": ["mandatory", "conditional", "optional-feature-gated", "allowed-not-supported"],
+        "applicability_vocabulary": ["core-mandatory", "core-feature-gated", "extension-optional", "outside-core"],
+        "classification_basis_vocabulary": ["core-cumulative-required", "core-conditional", "not-required-by-core", "consumer-required", "project-conditional"],
         "cts_mapping_vocabulary": ["mapped", "unmapped", "not-applicable"],
         "cts_mapping_basis": ["static-source-listing"],
         "evidence_state_vocabulary": {
@@ -285,13 +335,12 @@ def base_requirements(rows) -> dict:
             "cts-fail",
         ],
         "target": {
-            "id": "example-1.4-graphics",
+            "id": "example-1.4-graphics-core",
             "statement": "example target",
-            "target_file": "target_profile.json",
-            "source_id": "khronos-vulkan-roadmap-profiles",
-            "profile": "VP_KHR_roadmap_2026",
-            "api_version": "1.4.328",
-            "requirement_rule": "classification follows applicability.target",
+            "definition": "cumulative core obligations",
+            "target_file": "core_target.json",
+            "comparison_file": "roadmap_comparison.json",
+            "specification_anchor": "features-requirements",
         },
         "requirements": rows,
     }
@@ -314,8 +363,8 @@ def base_manifest() -> dict:
 def bundle(**overrides) -> validate.Bundle:
     defaults = {
         "sources": base_sources(),
-        "requirements": base_requirements([base_row()]),
-        "coverage": base_coverage(["VK14-INSTANCE-001"]),
+        "requirements": base_requirements([base_row(), base_conditional_row()]),
+        "coverage": base_coverage(["VK14-INSTANCE-001", "VK14-CORE-006"]),
         "consumers": {
             "schema_version": "1.0",
             "join_notes": ["n"],
@@ -341,7 +390,8 @@ def bundle(**overrides) -> validate.Bundle:
             ],
         },
         "manifest": base_manifest(),
-        "target": base_target(),
+        "target": base_core_target(),
+        "roadmap": base_roadmap(),
         "surface": base_surface(),
     }
     defaults.update(overrides)
@@ -360,7 +410,7 @@ class ValidatorTests(unittest.TestCase):
     def test_valid_bundle_has_no_errors(self):
         problems, report = self.run_bundle()
         self.assertEqual(errors(problems), [], "\n".join(p.render() for p in problems))
-        self.assertEqual(report["documents"]["requirements"], 1)
+        self.assertEqual(report["documents"]["requirements"], 2)
 
     # ---- structural ------------------------------------------------------
 
@@ -475,52 +525,67 @@ class ValidatorTests(unittest.TestCase):
         problems, _ = self.run_bundle(consumers=consumers)
         self.assertIn("N003", errors(problems))
 
-    # ---- classification accuracy against the target profile --------------
+    # ---- classification accuracy against the cumulative core sets --------
+    # These are the accuracy checks that structural validation cannot provide.
 
-    def test_target_required_capability_may_not_be_optional(self):
-        """The defect found in review: a target-required capability classified optional."""
+    def test_core_capability_may_not_be_optional(self):
+        """The defect found in review: a core requirement classified optional."""
         row = base_row(
             classification="optional",
-            classification_basis="not-required-by-target",
+            classification_basis="not-required-by-core",
             applicability={"core": "core-feature-gated", "target": "not-required", "target_condition": None, "note": "n"},
+        )
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("T005", errors(problems))
+
+    def test_core_mandatory_capability_must_be_mandatory(self):
+        row = base_row(classification="optional", applicability={"core": "core-mandatory", "target": "not-required", "note": "n"})
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("T002", errors(problems))
+
+    def test_core_conditional_capability_must_be_conditional(self):
+        row = base_row(features=["storageBuffer8BitAccess"], applicability={"core": "core-mandatory", "target": "required", "note": "n"})
+        problems, _ = self.run_bundle(requirements=base_requirements([row]))
+        self.assertIn("T003", errors(problems))
+
+    def test_conditional_row_needs_an_exact_condition(self):
+        row = base_row(
+            classification="conditional",
+            classification_basis="core-conditional",
+            condition="",
+            applicability={"core": "core-feature-gated", "target": "conditional", "target_condition": "", "note": "n"},
         )
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
         self.assertIn("T004", errors(problems))
 
-    def test_classification_must_follow_applicability_target(self):
-        row = base_row(classification="optional", applicability={"core": "core-feature-gated", "target": "required", "note": "n"})
-        problems, _ = self.run_bundle(requirements=base_requirements([row]))
-        self.assertIn("T002", errors(problems))
-
-    def test_target_conditional_requires_an_exact_condition(self):
-        row = base_row(
-            classification="conditional",
-            classification_basis="project-conditional",
-            condition="s",
-            applicability={"core": "outside-core", "target": "conditional", "target_condition": "", "note": "n"},
-        )
-        problems, _ = self.run_bundle(requirements=base_requirements([row]))
-        self.assertIn("T003", errors(problems))
-
-    def test_target_capability_must_be_referenced_by_some_row(self):
-        target = base_target()
-        target["required_feature_bits"] = ["timelineSemaphore", "bufferDeviceAddress"]
+    def test_every_core_capability_must_be_referenced(self):
+        target = base_core_target()
+        target["mandatory_feature_bits"]["cumulative"] = ["robustBufferAccess", "timelineSemaphore", "multiview", "bufferDeviceAddress"]
         problems, _ = self.run_bundle(target=target)
         self.assertIn("T007", errors(problems))
 
-    def test_feature_gated_capability_may_not_claim_core_mandatory(self):
-        row = base_row(applicability={"core": "core-mandatory", "target": "required", "note": "n"})
-        problems, _ = self.run_bundle(requirements=base_requirements([row]))
-        self.assertIn("T006", errors(problems))
+    def test_every_core_conditional_capability_must_be_referenced(self):
+        target = base_core_target()
+        target["mandatory_feature_bits"]["conditional_in_version_blocks"] = [
+            {"features": ["shaderInt64"], "condition": "shaderSharedInt64Atomics is supported", "version": "1.2"}
+        ]
+        problems, _ = self.run_bundle(target=target)
+        self.assertIn("T008", errors(problems))
 
-    def test_core_mandated_capability_must_be_marked_core(self):
-        row = base_row(features=["fragmentStoresAndAtomics"], applicability={"core": "core-feature-gated", "target": "required", "note": "n"})
+    def test_classification_may_not_come_from_a_roadmap_profile(self):
+        row = base_row(classification_basis="roadmap-profile-required")
         problems, _ = self.run_bundle(requirements=base_requirements([row]))
-        self.assertIn("T005", errors(problems))
+        self.assertIn("R020", errors(problems))
 
-    def test_target_profile_pin_must_match_sources(self):
-        target = base_target()
-        target["target"]["basis"]["sha256"] = "9" * 64
+    def test_roadmap_file_must_be_marked_comparison_only(self):
+        roadmap = base_roadmap()
+        roadmap["comparison"]["status"] = "classification-basis"
+        problems, _ = self.run_bundle(roadmap=roadmap)
+        self.assertIn("T010", errors(problems))
+
+    def test_core_target_pin_must_match_sources(self):
+        target = base_core_target()
+        target["target"]["basis"]["feature_requirements"]["document_sha256"] = "9" * 64
         problems, _ = self.run_bundle(target=target)
         self.assertIn("T001", errors(problems))
 
@@ -624,23 +689,47 @@ class CheckedInInventoryTests(unittest.TestCase):
         self.assertGreater(report["documents"]["requirements"], 50)
         self.assertNotIn("percent", report["unknowns"])
 
-    def test_target_profile_and_baseline_surface_are_consistent(self):
+    def test_core_target_and_baseline_surface_are_consistent(self):
         problems, report = validate.validate(validate.Bundle.load(INVENTORY_DIR))
         self.assertEqual(errors(problems), [], "\n".join(p.render() for p in problems))
-        self.assertEqual(report["target"]["required_feature_bits"], 101)
+        bits = report["target"]["core_mandatory_feature_bits"]
+        conditional = report["target"]["core_conditional_feature_bits"]
+        self.assertGreater(bits, 0)
+        self.assertGreater(conditional, 0)
+        self.assertEqual(report["target"]["roadmap_comparison"]["status"], "comparison-only")
         self.assertGreater(report["baseline_surface"]["entry_points"], 0)
 
-    def test_no_optional_requirement_carries_a_target_capability(self):
+    def test_no_optional_requirement_carries_a_core_capability(self):
         bundle = validate.Bundle.load(INVENTORY_DIR)
-        target = bundle.target
-        required = set(target["required_feature_bits"]) | set(target["required_extensions"])
+        bits = bundle.target["mandatory_feature_bits"]
+        core_bits = set(bits["cumulative"])
+        conditional = {f for entry in bits["conditional_in_version_blocks"] for f in entry["features"]}
+        required = core_bits | conditional
         offenders = []
         for row in (bundle.requirements or {}).get("requirements", []):
             if row["classification"] == "optional":
-                hits = (set(row["features"]) | set(row["extensions"])) & required
+                hits = set(row["features"]) & required
                 if hits:
                     offenders.append((row["id"], sorted(hits)))
-        self.assertEqual(offenders, [], "optional rows carry target-required capabilities: %r" % offenders)
+        self.assertEqual(offenders, [], "optional rows carry core capabilities: %r" % offenders)
+
+    def test_the_four_reviewed_capabilities_are_mandatory_core(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        mandatory = set(bundle.target["mandatory_feature_bits"]["cumulative"])
+        conditional = {f for e in bundle.target["mandatory_feature_bits"]["conditional_in_version_blocks"] for f in e["features"]}
+        rows = {r["id"]: r for r in bundle.requirements["requirements"]}
+        for bit, row_id in (("timelineSemaphore", "VK14-SYNC-008"), ("synchronization2", "VK14-SYNC-009"),
+                            ("dynamicRendering", "VK14-RENDERPASS-007"), ("bufferDeviceAddress", "VK14-RESOURCES-012")):
+            self.assertIn(bit, mandatory)
+            self.assertNotIn(bit, conditional)
+            self.assertEqual(rows[row_id]["classification"], "mandatory", row_id)
+
+    def test_wsi_is_not_a_core_requirement(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        rows = {r["id"]: r for r in bundle.requirements["requirements"]}
+        wsi = rows["VK14-EXTENSIONS-002"]
+        self.assertEqual(wsi["classification"], "optional")
+        self.assertEqual(wsi["classification_basis"], "not-required-by-core")
 
     def test_mapped_cases_and_anchors_exist_in_pins(self):
         bundle = self.strict_bundle()
