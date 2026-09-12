@@ -1834,10 +1834,12 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature; {sym3} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4B4G4R4 feature; rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5; cell condition: guarded by VK_BASE_VERSION_1_3,VK_EXT_4444_formats).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature; {sym3} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4B4G4R4 feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5; cell condition: guarded by VK_BASE_VERSION_1_3,VK_EXT_4444_formats).",
       "capability_conditions": [
         "{sym2} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4R4G4B4 feature",
         "{sym3} in optimalTilingFeatures [guard VK_BASE_VERSION_1_3,VK_EXT_4444_formats]: requires the VK_EXT_4444_formats extension and requires the formatA4B4G4R4 feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
         "rows guarded by ifdef VK_BASE_VERSION_1_3,VK_EXT_4444_formats",
         "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5",
         "cell condition: guarded by VK_BASE_VERSION_1_3,VK_EXT_4444_formats"
@@ -1846,7 +1848,7 @@
     {
       "id": "VK14-CORE-132",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 1-3 Byte-Sized Components (29 formats, 58 unconditional feature bits, 8 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: 1-3 Byte-Sized Components (29 formats, 50 unconditional feature bits, 16 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -1935,16 +1937,18 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5).",
       "capability_conditions": [
         "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
         "rows guarded by ifdef VK_BASE_VERSION_1_4,VK_KHR_maintenance5"
       ]
     },
     {
       "id": "VK14-CORE-133",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 4 Byte-Sized Components (21 formats, 92 unconditional feature bits, 0 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: 4 Byte-Sized Components (21 formats, 88 unconditional feature bits, 4 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2025,13 +2029,17 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (none).",
-      "capability_conditions": []
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures).",
+      "capability_conditions": [
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures"
+      ]
     },
     {
       "id": "VK14-CORE-134",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 10-, 12-, and 14-Bit Components (30 formats, 15 unconditional feature bits, 2 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: 10-, 12-, and 14-Bit Components (30 formats, 13 unconditional feature bits, 4 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2121,9 +2129,11 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; rows guarded by ifdef VK_ARM_format_pack; rows guarded by ifdef VK_BASE_VERSION_1_1,VK_KHR_sampler_ycbcr_conversion).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; rows guarded by ifdef VK_ARM_format_pack; rows guarded by ifdef VK_BASE_VERSION_1_1,VK_KHR_sampler_ycbcr_conversion).",
       "capability_conditions": [
         "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
         "rows guarded by ifdef VK_ARM_format_pack",
         "rows guarded by ifdef VK_BASE_VERSION_1_1,VK_KHR_sampler_ycbcr_conversion"
       ]
@@ -2131,7 +2141,7 @@
     {
       "id": "VK14-CORE-135",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 16-bit Components (28 formats, 87 unconditional feature bits, 15 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: 16-bit Components (28 formats, 72 unconditional feature bits, 30 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2219,17 +2229,19 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; {sym4} in optimalTilingFeatures [guard VK_NV_shader_atomic_float16_vector]: requires the shaderFloat16VectorAtomics feature; cell condition: guarded by VK_NV_shader_atomic_float16_vector).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; {sym4} in optimalTilingFeatures [guard VK_NV_shader_atomic_float16_vector]: requires the shaderFloat16VectorAtomics feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; cell condition: guarded by VK_NV_shader_atomic_float16_vector).",
       "capability_conditions": [
         "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
         "{sym4} in optimalTilingFeatures [guard VK_NV_shader_atomic_float16_vector]: requires the shaderFloat16VectorAtomics feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
         "cell condition: guarded by VK_NV_shader_atomic_float16_vector"
       ]
     },
     {
       "id": "VK14-CORE-136",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 32-bit Components (12 formats, 86 unconditional feature bits, 1 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: 32-bit Components (12 formats, 77 unconditional feature bits, 10 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2301,16 +2313,18 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures [guard VK_EXT_shader_atomic_float]: requires the shaderImageFloat32Atomics feature; cell condition: guarded by VK_EXT_shader_atomic_float).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym2} in optimalTilingFeatures [guard VK_EXT_shader_atomic_float]: requires the shaderImageFloat32Atomics feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; cell condition: guarded by VK_EXT_shader_atomic_float).",
       "capability_conditions": [
         "{sym2} in optimalTilingFeatures [guard VK_EXT_shader_atomic_float]: requires the shaderImageFloat32Atomics feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
         "cell condition: guarded by VK_EXT_shader_atomic_float"
       ]
     },
     {
       "id": "VK14-CORE-137",
       "category": "formats_limits",
-      "summary": "Mandatory format support: Mandatory Format Support: 64-bit/uneven Components (14 formats, 8 unconditional feature bits, 5 conditional cells).",
+      "summary": "Mandatory format support: Mandatory Format Support: 64-bit/uneven Components (14 formats, 7 unconditional feature bits, 6 conditional cells).",
       "core_introduction": "1.0",
       "applicability": {
         "core": "core-mandatory",
@@ -2384,12 +2398,14 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures [guard VK_EXT_shader_image_atomic_int64]: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT: requires the shaderImageInt64Atomics feature; cell condition: guarded by VK_EXT_shader_image_atomic_int64).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition ({sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature; VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures [guard VK_EXT_shader_image_atomic_int64]: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT: requires the shaderImageInt64Atomics feature; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures; cell condition: guarded by VK_EXT_shader_image_atomic_int64).",
       "capability_conditions": [
         "{sym3} in optimalTilingFeatures: requires the shaderStorageImageExtendedFormats feature",
         "VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures [guard VK_EXT_shader_image_atomic_int64]: requires the shaderImageInt64Atomics feature",
         "column VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT: requires the shaderImageInt64Atomics feature",
         "column VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT: requires the shaderImageInt64Atomics feature",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures",
         "cell condition: guarded by VK_EXT_shader_image_atomic_int64"
       ]
     },
@@ -2463,11 +2479,13 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32; negative-scope-rule in bufferFeatures: bufferFeatures must not advertise features for these formats; column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32; negative-scope-rule in bufferFeatures: bufferFeatures must not advertise features for these formats; column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures).",
       "capability_conditions": [
         "VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32",
         "negative-scope-rule in bufferFeatures: bufferFeatures must not advertise features for these formats",
-        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32"
+        "column VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT: required for at least one of: VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FORMAT_X8_D24_UNORM_PACK32",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR scope: optimalTilingFeatures"
       ]
     },
     {
@@ -2549,12 +2567,14 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures).",
       "capability_conditions": [
         "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
         "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
         "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
-        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc"
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-etc",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures"
       ]
     },
     {
@@ -2630,12 +2650,14 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn).",
+      "review_notes": "Conditional cells keep their symbol ({sym2}/{sym3}/{sym4}) and the per-table condition (VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn; column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect; column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures).",
       "capability_conditions": [
         "VK_FORMAT_FEATURE_BLIT_SRC_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
         "column VK_FORMAT_FEATURE_BLIT_SRC_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
         "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
-        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn"
+        "column VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: required for all formats of one of: formats-mandatory-features-astc, formats-mandatory-features-bcn",
+        "column VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR: column guarded by VK_KHR_copy_memory_indirect",
+        "column VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT scope: bufferFeatures"
       ]
     },
     {

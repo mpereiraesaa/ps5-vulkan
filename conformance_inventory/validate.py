@@ -672,19 +672,32 @@ def validate_core_tables(bundle: Bundle, rows: list[dict], problems: list[Proble
                     # A scope that the source states must reach the cell; a cell
                     # whose rules state no scope keeps the explicit
                     # "table-defined" marker instead of inventing one.
-                    # The generator attributes each cell to the rules that apply
-                    # to it (its symbol or its feature bit). A scope stated by
-                    # one of those rules must survive; when none states a scope,
-                    # the cell keeps an explicit "table-defined" marker.
-                    stated_scopes = set(cell.get("rule_scopes") or [])
-                    if stated_scopes and cell.get("scope") not in stated_scopes:
+                    # A cell's effective scope comes from the rules that apply
+                    # to it or from the column definition table (optimal tiling
+                    # or buffer features). A scope stated by either must survive;
+                    # only a cell for which neither states one may keep the
+                    # explicit "table-defined" marker.
+                    expected_scopes = set(cell.get("rule_scopes") or [])
+                    column_scope = (table.get("column_scopes") or {}).get(cell["feature"]) or {}
+                    if column_scope.get("scope"):
+                        expected_scopes.add(column_scope["scope"])
+                    if expected_scopes and cell.get("scope") not in expected_scopes:
                         problems.append(
-                            Problem("error", "T022", anchor, "%s/%s lost the scope %s stated by its rules" % (entry["format"], cell["feature"], sorted(stated_scopes)))
+                            Problem("error", "T022", anchor, "%s/%s lost the scope %s" % (entry["format"], cell["feature"], sorted(expected_scopes)))
                         )
-                    elif not stated_scopes and cell.get("scope_kind") != "table-defined":
-                        problems.append(
-                            Problem("error", "T022", anchor, "%s/%s has no scope and no explicit table-defined marker" % (entry["format"], cell["feature"]))
-                        )
+                    if cell.get("scope_kind") not in ("rule", "column", "table-defined"):
+                        problems.append(Problem("error", "T022", anchor, "%s/%s has an unknown scope_kind %r" % (entry["format"], cell["feature"], cell.get("scope_kind"))))
+                    if cell.get("scope_kind") == "column" and not cell.get("scope"):
+                        problems.append(Problem("error", "T022", anchor, "%s/%s claims a column scope but has none" % (entry["format"], cell["feature"])))
+                    if column_scope.get("guard"):
+                        note = "column guarded by %s" % column_scope["guard"]
+                        if note not in (cell.get("conditions") or []):
+                            problems.append(Problem("error", "T022", anchor, "%s/%s does not record its column guard" % (entry["format"], cell["feature"])))
+        for feature, column_scope in (table.get("column_scopes") or {}).items():
+            if column_scope.get("guard"):
+                note = "column guarded by %s" % column_scope["guard"]
+                if note not in recorded:
+                    problems.append(Problem("error", "T020", anchor, "column guard for %s is not recorded in the requirement row" % feature))
                 for condition in cell.get("conditions", []):
                     if condition not in recorded:
                         problems.append(

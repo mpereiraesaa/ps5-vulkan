@@ -888,6 +888,42 @@ def parse_limits_table(adoc: str) -> list[dict]:
 FEATURE_BIT_RE = re.compile(r"ename:(VK_FORMAT_FEATURE[A-Z0-9_]*)")
 FEATURE_COND_RE = re.compile(r"pname:([A-Za-z0-9_]+)[^.]{0,40}?feature")
 EXTENSION_COND_RE = re.compile(r"apiext:(VK_[A-Za-z0-9_]+)")
+SCOPE_TABLE_ANCHORS = [
+    ("formats-feature-bits-in-optimaltilingfeatures-table", "optimalTilingFeatures"),
+    ("formats-feature-bits-in-bufferfeatures-table", "bufferFeatures"),
+]
+
+
+def parse_column_scopes(adoc: str) -> dict:
+    """Column -> effective scope, from the specification's feature-bit tables.
+
+    The mandatory format tables use the columns defined for
+    optimalTilingFeatures and bufferFeatures, so every cell (including {sym1})
+    has an effective scope. Columns guarded by an ifdef keep that guard.
+    """
+    scopes: dict[str, dict] = {}
+    for anchor, scope in SCOPE_TABLE_ANCHORS:
+        try:
+            block = adoc_table_block(adoc, anchor)
+        except SystemExit:
+            continue
+        guards: list[str] = []
+        for line in block.splitlines():
+            stripped = line.strip()
+            guard = IFDEF_RE.match(stripped)
+            if guard:
+                guards.append(guard.group(1))
+                continue
+            if stripped.startswith("endif::"):
+                if guards:
+                    guards.pop()
+                continue
+            feature = FEATURE_BIT_RE.match(stripped.lstrip("|").strip())
+            if feature:
+                scopes[feature.group(1)] = {"scope": scope, "guard": guards[-1] if guards else None}
+    return scopes
+
+
 SYMBOL_RE = re.compile(r"\{sym(\d)\}")
 IFDEF_RE = re.compile(r"^ifdef::([^\[]+)\[\]$")
 SCOPE_RE = re.compile(r"pname:(linearTilingFeatures|optimalTilingFeatures|bufferFeatures)")
@@ -991,6 +1027,7 @@ def parse_formats_tables(adoc: str) -> list[dict]:
     resolved is recorded as such instead of being dropped.
     """
     legend = parse_symbol_legend(adoc)
+    column_scopes = parse_column_scopes(adoc)
     tables = []
     for match in re.finditer(r"\[\[(formats-mandatory-features-[a-z0-9-]+)\]\][\s\S]{0,4000}?\|====([\s\S]*?)\|====", adoc):
         anchor, block = match.group(1), match.group(2)
@@ -1112,8 +1149,14 @@ def parse_formats_tables(adoc: str) -> list[dict]:
                     if (rule["symbol"] and rule["symbol"] == symbol) or (feature in rule["features"])
                 ]
                 rule_scopes = sorted({rule["scope"] for rule in applicable if rule["scope"]})
+                column_scope = column_scopes.get(feature, {})
+                effective_scope = rule_scopes[0] if rule_scopes else column_scope.get("scope")
                 conditions = [rule["condition"] for rule in applicable if rule["condition"]]
-                guard = guards_for_cells[index + 1] or entry["guard"]
+                guard = guards_for_cells[index + 1] or entry["guard"] or column_scope.get("guard")
+                if column_scope.get("guard") and not rule_scopes:
+                    column_note = "column guarded by %s" % column_scope["guard"]
+                    if column_note not in conditions:
+                        conditions.append(column_note)
                 for rule in applicable:
                     marker = "guarded by %s" % rule["guard"]
                     if rule["guard"] and marker not in conditions:
@@ -1123,9 +1166,9 @@ def parse_formats_tables(adoc: str) -> list[dict]:
                         "feature": feature,
                         "symbol": symbol,
                         "required": symbol == "{sym1}" and not conditions,
-                        "scope": rule_scopes[0] if rule_scopes else None,
+                        "scope": effective_scope,
                         "rule_scopes": rule_scopes,
-                        "scope_kind": "rule" if rule_scopes else "table-defined",
+                        "scope_kind": "rule" if rule_scopes else ("column" if column_scope.get("scope") else "table-defined"),
                         "conditions": conditions,
                         "guard": guard,
                         "applicable_rules": len(applicable),
@@ -1151,6 +1194,7 @@ def parse_formats_tables(adoc: str) -> list[dict]:
                     "symbol_legend": legend,
                     "annotations": annotations,
                     "column_conditions": {feature: [rule["condition"] for rule in rules] for feature, rules in column_conditions.items()},
+                    "column_scopes": {feature: entry for feature, entry in column_scopes.items() if feature in column_names},
                     "rows": entries,
                 }
             )

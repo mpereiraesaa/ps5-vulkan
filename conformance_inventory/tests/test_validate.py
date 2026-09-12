@@ -928,6 +928,37 @@ class CheckedInInventoryTests(unittest.TestCase):
         self.assertIn("shaderImageInt64Atomics", recorded)
         self.assertIn("VK_EXT_shader_image_atomic_int64", recorded)
 
+    def test_every_cell_has_an_effective_scope_including_sym1(self):
+        """Regression: {sym1} obligations carry a scope too, from the column tables."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = {table["anchor"]: table for table in bundle.target["formats"]["tables"]}
+        four_byte = tables["formats-mandatory-features-4byte"]
+        row = next(entry for entry in four_byte["rows"] if entry["format"] == "VK_FORMAT_R8G8B8A8_UNORM")
+        sampled = next(cell for cell in row["cells"] if cell["feature"] == "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT")
+        self.assertEqual(sampled["symbol"], "{sym1}")
+        self.assertTrue(sampled["required"])
+        self.assertEqual(sampled["scope"], "optimalTilingFeatures")
+        self.assertEqual(sampled["scope_kind"], "column")
+        vertex = next(cell for cell in row["cells"] if cell["feature"] == "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT")
+        self.assertEqual(vertex["scope"], "bufferFeatures")
+        without_scope = [cell for table in bundle.target["formats"]["tables"] for entry in table["rows"] for cell in entry["cells"] if not cell.get("scope")]
+        self.assertEqual(without_scope, [], "every cell must carry an effective scope")
+
+    def test_column_guard_reaches_a_core_row(self):
+        """Regression: an extension-conditioned column inside a core row."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = {table["anchor"]: table for table in bundle.target["formats"]["tables"]}
+        for anchor, table in tables.items():
+            guarded = {feature: entry for feature, entry in table["column_scopes"].items() if entry.get("guard")}
+            if not guarded:
+                continue
+            recorded = _row_conditions_for_anchor(bundle, anchor)
+            for feature, entry in guarded.items():
+                self.assertIn("column guarded by %s" % entry["guard"], recorded, anchor)
+        sixteen = tables["formats-mandatory-features-16bit"]
+        self.assertEqual(sixteen["column_scopes"]["VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR"]["guard"], "VK_KHR_copy_memory_indirect")
+        self.assertEqual(sixteen["column_scopes"]["VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT"]["scope"], "bufferFeatures")
+
     def test_table_rules_are_all_classified_and_recorded(self):
         bundle = validate.Bundle.load(INVENTORY_DIR)
         allowed = {"symbol-rule", "scope-rule", "negative-scope-rule", "column-rule", "any-of-formats-rule", "table-choice-rule"}

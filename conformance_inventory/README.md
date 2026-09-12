@@ -189,9 +189,11 @@ by requirement rows so that a table cannot exist without a tracked obligation:
 * **Formats** (`formats.tables`): the mandatory format support tables resolved
   to one obligation per format and feature bit. Every cell carries the symbol the
   specification uses (`{sym1}` unconditional, `{sym2}`/`{sym3}`/`{sym4}`
-  conditional), the effective scope (`linearTilingFeatures`,
-  `optimalTilingFeatures`, `bufferFeatures`, or an explicit `table-defined`
-  marker when no rule states one), the resolved conditions and any guard -
+  conditional), the effective scope (`optimalTilingFeatures` or `bufferFeatures`
+  from the specification's column definition tables, `linearTilingFeatures` when
+  a rule states it, or an explicit `table-defined` marker when nothing states
+  one - including for `{sym1}` obligations), the resolved conditions and any
+  guard -
   including rows written across several physical lines and markers emitted inline
   by `ifdef::EXT[{symN}]`, which a core row can carry for an
   extension-conditioned column. Table rules are kept as a list and classified as
@@ -413,9 +415,13 @@ reasoning stays auditable:
    written across several lines, inline `ifdef::EXT[{symN}]` markers and
    annotations that are not symbol-scoped (column, scope, any-of-formats and
    table-choice rules). Each cell obligation carries its symbol, effective scope,
-   resolved conditions and guard. The validator rejects an unresolved or generic
-   condition (`T021`), a rule or guard that does not reach the requirement rows
-   (`T020`) and a scope stated by a rule but missing on the cell (`T022`).
+   resolved conditions and guard, with the scope of `{sym1}` cells taken from
+   the column definition tables (`optimalTilingFeatures` / `bufferFeatures`) and
+   their column guards (`VK_KHR_copy_memory_indirect` for the indirect copy
+   destination bit, for example) recorded in the requirement rows. The validator
+   rejects an unresolved or generic condition (`T021`), a rule, symbol or guard
+   that does not reach the requirement rows (`T020`) and a scope stated by a rule
+   or a column but missing on the cell (`T022`).
 5. Limit values are now interpreted rather than character-stripped (`2^30^` is
    1073741824, `0.5` stays 0.5, tuples and ranges keep their element-wise
    meaning, symbolic references resolve to the referenced limit) and an
