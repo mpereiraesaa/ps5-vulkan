@@ -54,29 +54,67 @@ def parse_cts_line_output(output: str) -> List[Dict]:
     return results
 
 
-def validate_results(expected_cases: List[str], results: List[Dict]) -> Dict:
-    """Ensure every case in case_list was reported with no omissions or unknown tests."""
-    reported_names = {r["name"] for r in results}
+def validate_results(expected_cases: List[str], results: List[Dict], exit_code: int = 0) -> Dict:
+    """Ensure every case in case_list was reported with no omissions, duplicates, or invalid statuses."""
     expected_set = set(expected_cases)
 
-    missing = expected_set - reported_names
-    unexpected = reported_names - expected_set
+    reported_names = []
+    duplicates = []
+    seen = set()
+    for r in results:
+        name = r.get("name", "")
+        reported_names.append(name)
+        if name in seen:
+            duplicates.append(name)
+        seen.add(name)
 
-    pass_count = sum(1 for r in results if r["status"] == "PASS")
-    not_supported_count = sum(1 for r in results if r["status"] == "NotSupported")
-    fail_count = sum(1 for r in results if r["status"] == "FAIL")
-    skip_count = sum(1 for r in results if r["status"] == "SKIP")
+    reported_set = set(reported_names)
+    missing = expected_set - reported_set
+    unexpected = reported_set - expected_set
+
+    ALLOWED_STATUSES = {"PASS", "NotSupported", "SKIP"}
+
+    pass_count = 0
+    not_supported_count = 0
+    fail_count = 0
+    skip_count = 0
+    invalid_statuses = []
+
+    for r in results:
+        st = r.get("status", "")
+        if st == "PASS":
+            pass_count += 1
+        elif st == "NotSupported":
+            not_supported_count += 1
+        elif st == "SKIP":
+            skip_count += 1
+        elif st == "FAIL":
+            fail_count += 1
+        else:
+            invalid_statuses.append({"name": r.get("name"), "status": st})
+
+    ok = (
+        len(missing) == 0
+        and len(unexpected) == 0
+        and len(duplicates) == 0
+        and len(invalid_statuses) == 0
+        and fail_count == 0
+        and exit_code == 0
+    )
 
     return {
         "total_expected": len(expected_cases),
         "total_reported": len(results),
         "missing": sorted(list(missing)),
         "unexpected": sorted(list(unexpected)),
+        "duplicates": sorted(list(set(duplicates))),
+        "invalid_statuses": invalid_statuses,
         "pass": pass_count,
         "not_supported": not_supported_count,
         "fail": fail_count,
         "skip": skip_count,
-        "ok": (len(missing) == 0 and len(unexpected) == 0 and fail_count == 0)
+        "exit_code": exit_code,
+        "ok": ok
     }
 
 
@@ -129,15 +167,24 @@ def main():
 
     # Execute binary with --json for reliable machine parsing
     res = subprocess.run([str(args.binary), "--json"], capture_output=True, text=True)
-    parsed = parse_cts_json(res.stdout)
+    try:
+        parsed = parse_cts_json(res.stdout)
+    except Exception as e:
+        parsed = {"results": [], "error": str(e)}
     results = parsed.get("results", [])
 
-    val = validate_results(expected_cases, results)
+    val = validate_results(expected_cases, results, exit_code=res.returncode)
 
+    if res.returncode != 0:
+        print(f"ERROR: Process exited with non-zero exit code {res.returncode}", file=sys.stderr)
     if val["missing"]:
         print(f"ERROR: Missing CTS cases from report: {val['missing']}", file=sys.stderr)
     if val["unexpected"]:
         print(f"ERROR: Unexpected/unknown CTS cases in report: {val['unexpected']}", file=sys.stderr)
+    if val["duplicates"]:
+        print(f"ERROR: Duplicate CTS case results in report: {val['duplicates']}", file=sys.stderr)
+    if val["invalid_statuses"]:
+        print(f"ERROR: Unrecognized test statuses in report: {val['invalid_statuses']}", file=sys.stderr)
 
     report_text = ""
     if args.format == "json":

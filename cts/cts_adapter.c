@@ -1,4 +1,23 @@
 #define _DEFAULT_SOURCE 1
+/*
+ * Vulkan API Contract Test Suite
+ *
+ * NOTE: These are synthetic Vulkan API contract tests modeled after the Khronos
+ * VK-GL-CTS 1.3.8.4 mustpass selection to validate driver ABI, descriptor state,
+ * memory mapping, shader compiler ABI, and queue synchronization.
+ * Direct upstream VK-GL-CTS framework porting remains pending.
+ *
+ * Lifecycle note:
+ * PS5 AGC runtime constraints limit repeated initialization and teardown of AGC
+ * modules within a single process. Therefore, these contract tests execute against
+ * a process-scoped session device (initialized once on startup, released on shutdown).
+ * Independent device creation/destruction cycles per test case are not validated.
+ *
+ * Rasterization note:
+ * The triangle test verifies vertex/fragment SPIR-V compiler integration, render
+ * pass state, and pipeline creation on GFX1013. Framebuffer drawing and pixel
+ * readback are exercised and verified by the native consumer in examples/native_consumer.
+ */
 #include "cts_adapter.h"
 #include "cts_shaders.h"
 
@@ -107,7 +126,7 @@ static void helper_destroy_device(VkInstance inst, VkDevice dev)
 static cts_result_t case_info_build(void)
 {
     cts_result_t r = { .case_name = "dEQP-VK.info.build", .status = CTS_STATUS_PASS };
-    snprintf(r.details, sizeof(r.details), "Khronos CTS pinned vulkan-cts-1.3.8.4 (commit a0270c18), Vulkan 1.0 core");
+    snprintf(r.details, sizeof(r.details), "Contract test modeled after vulkan-cts-1.3.8.4 (commit a0270c18), Vulkan 1.0 (upstream port pending)");
     return r;
 }
 
@@ -346,7 +365,7 @@ static cts_result_t case_api_create_device_basic(void)
         return r;
     }
     helper_destroy_device(inst, dev);
-    snprintf(r.details, sizeof(r.details), "Logical device created and destroyed cleanly");
+    snprintf(r.details, sizeof(r.details), "Logical device and queue created cleanly (session device; repeated reinitialization restricted on PS5)");
     return r;
 }
 
@@ -553,7 +572,7 @@ static cts_result_t case_api_smoke_triangle(void)
         r.status = CTS_STATUS_FAIL;
         snprintf(r.details, sizeof(r.details), "vkCreateGraphicsPipelines failed with %d", (int)pres);
     } else {
-        snprintf(r.details, sizeof(r.details), "Runtime triangle graphics pipeline compiled and created cleanly");
+        snprintf(r.details, sizeof(r.details), "Runtime triangle pipeline compiled cleanly (pipeline creation contract; draw/raster verified in consumer)");
         vkDestroyPipeline(dev, pipeline, NULL);
     }
 

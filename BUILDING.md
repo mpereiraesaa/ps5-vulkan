@@ -80,20 +80,22 @@ does not prove GPU execution. Native evidence additionally requires exact
 artifact identity, structured `ps5log/1` telemetry, GPU completion/readback and
 VideoOut ownership; screenshots are only supporting visual evidence.
 
-## Focused Vulkan CTS
+## Vulkan API contract tests (modeled after CTS)
 
-A pinned set of 26 core Vulkan CTS test cases is maintained in `cts/case_list.txt`
-and documented in `cts/gap_matrix.md`:
+A pinned set of 26 synthetic Vulkan API contract tests modeled after the Khronos
+`VK-GL-CTS` mustpass selection is maintained in `cts/case_list.txt` and documented
+in `cts/gap_matrix.md`. Full upstream Khronos VK-GL-CTS framework porting remains
+an open milestone.
 
 ```sh
-# Host CTS test execution (part of make check)
+# Host contract test execution (part of make check)
 ./build/tests/test_cts_host --json
 ./build/tests/test_cts_host --tap
 
-# CTS runner and gap matrix unit tests
+# Contract runner and gap matrix unit tests
 python3 -m unittest discover -s tests -p "test_cts*.py"
 
-# Package native CTS title for console execution
+# Package native contract test title for console execution
 python3 tools/build_cts_native.py
 ```
 

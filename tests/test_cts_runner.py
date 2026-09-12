@@ -88,6 +88,38 @@ class TestCTSRunner(unittest.TestCase):
         self.assertFalse(val["ok"])
         self.assertEqual(val["fail"], 1)
 
+    def test_validate_results_invalid_status_rejected(self):
+        cases = ["case.a", "case.b"]
+        results = [
+            {"name": "case.a", "status": "PASS", "details": ""},
+            {"name": "case.b", "status": "BROKEN", "details": "invented status"},
+        ]
+        val = validate_results(cases, results)
+        self.assertFalse(val["ok"], "Expected validate_results to reject invented status 'BROKEN'")
+        self.assertEqual(len(val["invalid_statuses"]), 1)
+        self.assertEqual(val["invalid_statuses"][0]["status"], "BROKEN")
+
+    def test_validate_results_duplicate_rejected(self):
+        cases = ["case.a", "case.b"]
+        results = [
+            {"name": "case.a", "status": "PASS", "details": ""},
+            {"name": "case.b", "status": "PASS", "details": ""},
+            {"name": "case.b", "status": "PASS", "details": "duplicate"},
+        ]
+        val = validate_results(cases, results)
+        self.assertFalse(val["ok"], "Expected validate_results to reject duplicate case results")
+        self.assertIn("case.b", val["duplicates"])
+
+    def test_validate_results_nonzero_exit_code_rejected(self):
+        cases = ["case.a", "case.b"]
+        results = [
+            {"name": "case.a", "status": "PASS", "details": ""},
+            {"name": "case.b", "status": "PASS", "details": ""},
+        ]
+        val = validate_results(cases, results, exit_code=1)
+        self.assertFalse(val["ok"], "Expected validate_results to reject non-zero process exit code")
+        self.assertEqual(val["exit_code"], 1)
+
     def test_runner_host_execution(self):
         """Execute runner on host against mock binary and check exit code & validation."""
         cmd = ["python3", str(ROOT / "cts/runner.py"), "--format", "json"]

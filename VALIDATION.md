@@ -28,24 +28,26 @@ See [BUILDING.md](BUILDING.md) for the SDK-linked diagnostic and the
 `make check`, `make check-sanitize` and the runtime graphics compiler/cache
 test with ASan/UBSan enabled. The PSBC static archive itself is not instrumented.
 
-## Focused Vulkan CTS validation
+## Vulkan API contract suite validation (CTS-modeled)
 
-A pinned selection of 26 core Vulkan CTS test cases from upstream
-`VK-GL-CTS` (`vulkan-cts-1.3.8.4`, commit `a0270c1897597e6c77679870e10415398a13001c`, Apache-2.0)
-was integrated and evaluated on both the host mock harness and real hardware:
+A suite of 26 synthetic Vulkan API contract tests modeled after the Khronos `VK-GL-CTS`
+mustpass selection (`vulkan-cts-1.3.8.4`, commit `a0270c1897597e6c77679870e10415398a13001c`,
+Apache-2.0) was evaluated on both the host mock harness and real hardware. Full upstream
+Khronos VK-GL-CTS framework porting remains pending.
 
 - **Host mock suite:** `make check` builds `build/tests/test_cts_host` against `dist-sdk/lib/libps5vk_host.a`.
   Observed result: `total=26 pass=22 not_supported=4 fail=0 skip=0`. The 4 `NotSupported` cases
   faithfully reflect the host mock environment's lack of native PSBC shader compilation and AGC hardware queues.
-- **PS5 hardware execution (FW 12.02, GFX1013):** The native package executes the exact 26 mustpass cases
+- **PS5 hardware execution (FW 12.02, GFX1013):** The native package executes the 26 contract cases
   in a single session using the statically linked driver and runtime compiler.
-  Observed result: **26 / 26 PASS (100%)**, 0 failures, 0 unsupported, 0 skipped.
+  Observed result: **26 / 26 PASS** within the single session device context, 0 failures.
   Structured `ps5log/1` telemetry confirmed:
   - Core API build, platform and device introspection matching driver caps.
-  - Device initialization, limits, non-coherent atom size (64B) and storage alignment (256B).
+  - Device initialization within session context (note: independent per-test create/destroy cycles are not tested due to PS5 AGC driver reinit limits).
+  - Device limits, non-coherent atom size (64B) and storage alignment (256B).
   - Memory allocation, suballocated memory mapping (257 bytes), cache flush and invalidate ranges.
   - Sampler and shader module creation and destruction.
-  - Runtime triangle graphics pipeline compilation and cache insertion (9,316 bytes).
+  - Runtime triangle graphics pipeline compilation and cache insertion (9,316 bytes; pipeline creation only, draw/rasterization verified in native consumer below).
   - Runtime SSBO compute dispatch (`vkCmdDispatch` 16 workgroups x 64 threads = 1,024 elements) with exact arithmetic verification.
   - Empty compute pipeline compilation and retirement.
   - Signaled and unsignaled fence status polling, reset, and queue empty submission.
