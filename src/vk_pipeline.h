@@ -10,7 +10,7 @@ struct ps5vk_compiled_program {
     size_t spirv_words, code_words;
     const char *entry;
     uint32_t gfx, local_size[3], wave_size, vgprs, sgprs, float_mode;
-    uint32_t ieee_mode, mem_ordered, user_sgprs;
+    uint32_t ieee_mode, mem_ordered, user_sgprs, wgp_mode;
     uint32_t tg_size, tgid[3], tidig_components;
     uint32_t descriptor_count;
     struct ps5vk_program_descriptor descriptors[PS5VK_MAX_BINDINGS];
@@ -40,6 +40,7 @@ struct VkPipeline_T {
     uint32_t set_count;
     struct ps5vk_set_signature sets[PS5VK_MAX_SETS];
     struct ps5vk_compiled_program program;
+    void *cache_entry;
     VkBool32 graphics;
     void *graphics_state;
     void (*graphics_release)(VkDevice, void *);

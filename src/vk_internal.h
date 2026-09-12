@@ -25,6 +25,8 @@ struct ps5vk_compiler {
     void *context;
     VkResult (*resolve)(void *, const uint32_t *, size_t, const char *,
                         const struct ps5vk_compiled_program **);
+    VkResult (*compile)(void *, const uint32_t *, size_t, const char *,
+                        VkPipelineLayout, struct ps5vk_compiled_program *, uint32_t **);
 };
 struct ps5vk_progress {
     void *context;
@@ -104,6 +106,8 @@ struct VkDevice_T {
     VkResult (*image_requirements)(VkDevice, const VkImageCreateInfo *, VkMemoryRequirements *);
     struct VkImage_T *images;
     struct ps5vk_compiler compiler;
+    struct ps5vk_compilation_cache *pipeline_cache;
+    VkBool32 runtime_compiler_enabled;
     struct VkCommandPool_T *command_pools;
     VkBool32 (*invalidate)(VkDevice, VkObjectType, const void *);
     struct VkFence_T *fences;
@@ -113,6 +117,8 @@ struct VkDevice_T {
     struct ps5vk_submission *submission;
     VkBool32 lost;
 };
+
+void ps5vk_device_enable_runtime_compiler(VkDevice device);
 
 void *ps5vk_object_alloc(const VkAllocationCallbacks *fallback,
     const VkAllocationCallbacks *given, size_t size, VkSystemAllocationScope scope,

@@ -1,5 +1,7 @@
 #include "vk_pipeline.h"
+#include "compilation_cache.h"
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -106,7 +108,7 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
         strcmp(p->entry, entry) || memcmp(p->spirv, m->words, m->word_count * 4) ||
         memcmp(p->local_size, dims, 3 * sizeof(*dims)) || !p->vgprs || p->vgprs > 256 ||
         !p->sgprs || p->sgprs > 106 || p->float_mode > 255 || p->ieee_mode > 1 ||
-        p->mem_ordered > 1 || p->user_sgprs != 2 || p->tg_size > 1 || p->tidig_components > 2 ||
+        p->mem_ordered > 1 || (p->user_sgprs != 2 && p->user_sgprs != 3) || p->tg_size > 1 || p->tidig_components > 2 ||
         !p->descriptor_count || p->descriptor_count > PS5VK_MAX_BINDINGS) return 0;
     uint64_t invocations = 1;
     for (unsigned j = 0; j < 3; ++j) {
@@ -126,6 +128,7 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
     }
     return 1;
 }
+
 static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *info,
                                 const VkAllocationCallbacks *a, VkPipeline *out)
 {
@@ -133,24 +136,65 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
         info->layout->device != d || info->stage.sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO ||
         !info->stage.module || info->stage.module->device != d || !info->stage.pName) return INVALID;
     if (info->pNext || info->flags || info->stage.pNext || info->stage.flags ||
-        info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT || info->stage.pSpecializationInfo ||
-        !d->compiler.resolve) return VK_ERROR_UNKNOWN;
+        info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT || info->stage.pSpecializationInfo)
+        return VK_ERROR_UNKNOWN;
+    if (!d->compiler.resolve && (!d->runtime_compiler_enabled || !d->compiler.compile)) return VK_ERROR_UNKNOWN;
     uint32_t dims[3];
     if (!local_size(info->stage.module, info->stage.pName, dims)) return VK_ERROR_UNKNOWN;
+
     const struct ps5vk_compiled_program *program = NULL;
-    VkResult result = d->compiler.resolve(d->compiler.context, info->stage.module->words,
-        info->stage.module->word_count, info->stage.pName, &program);
-    if (result != VK_SUCCESS)
-        return result == VK_ERROR_FEATURE_NOT_PRESENT ? VK_ERROR_UNKNOWN : result;
-    if (!program_valid(program, info->stage.module, info->layout, info->stage.pName, dims)) return INVALID;
+    struct ps5vk_cache_entry *entry = NULL;
+
+    if (d->pipeline_cache) {
+        struct ps5vk_cache_key key;
+        if (ps5vk_cache_build_key(info->stage.module->words, info->stage.module->word_count,
+                                  info->stage.pName, info->layout, &key)) {
+            entry = ps5vk_compilation_cache_lookup(d->pipeline_cache, &key, info->stage.module->words);
+            if (entry) {
+                program = &entry->program;
+            } else if (d->runtime_compiler_enabled && d->compiler.compile) {
+                struct ps5vk_compiled_program compiled;
+                uint32_t *code = NULL;
+                VkResult cr = d->compiler.compile(d->compiler.context,
+                    info->stage.module->words, info->stage.module->word_count,
+                    info->stage.pName, info->layout, &compiled, &code);
+                if (cr == VK_SUCCESS) {
+                    entry = ps5vk_compilation_cache_insert(d->pipeline_cache, &key,
+                        info->stage.module->words, &compiled, code);
+                    free(code);
+                    if (entry) program = &entry->program;
+                } else if (cr != VK_ERROR_FEATURE_NOT_PRESENT) {
+                    return cr;
+                }
+            }
+        }
+    }
+
+    if (!program && d->compiler.resolve) {
+        VkResult result = d->compiler.resolve(d->compiler.context, info->stage.module->words,
+            info->stage.module->word_count, info->stage.pName, &program);
+        if (result != VK_SUCCESS)
+            return result == VK_ERROR_FEATURE_NOT_PRESENT ? VK_ERROR_UNKNOWN : result;
+    }
+
+    if (!program) return VK_ERROR_UNKNOWN;
+    if (!program_valid(program, info->stage.module, info->layout, info->stage.pName, dims)) {
+        if (entry) ps5vk_cache_entry_release(d->pipeline_cache, entry);
+        return INVALID;
+    }
+
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkPipeline p = ps5vk_object_alloc(d->custom_allocator ? &d->allocator : NULL, a,
         sizeof(*p) + program->code_words * 4, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, &saved, &custom);
-    if (!p) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (!p) {
+        if (entry) ps5vk_cache_entry_release(d->pipeline_cache, entry);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     p->device = d; p->allocator = saved; p->custom_allocator = custom;
     p->set_count = info->layout->set_count;
     memcpy(p->sets, info->layout->sets, sizeof(p->sets));
     p->program = *program;
+    p->cache_entry = entry;
     memcpy(p->code, program->code, program->code_words * 4); p->program.code = p->code;
     /* Pipeline owns all execution metadata and code. Module/compiler source
      * pointers are deliberately removed; neither is needed at dispatch. */
@@ -179,6 +223,10 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(VkDevice d, VkPipeline p, const VkA
     if (!d || !p || p->device != d) return;
     if (p->pending) { ++d->lifetime_errors; return; }
     if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_PIPELINE, p)) { ++d->lifetime_errors; return; }
+    if (p->cache_entry) {
+        ps5vk_cache_entry_release(d->pipeline_cache, p->cache_entry);
+        p->cache_entry = NULL;
+    }
     VkAllocationCallbacks saved = p->allocator; VkBool32 custom = p->custom_allocator;
     if (p->graphics && p->graphics_state) p->graphics_release(d, p->graphics_state);
     --d->pipeline_objects; ps5vk_object_free(p, &saved, custom);
