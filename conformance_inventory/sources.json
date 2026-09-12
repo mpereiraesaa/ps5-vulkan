@@ -1,0 +1,366 @@
+{
+  "schema_version": "1.0",
+  "inventory": "ps5vk Vulkan 1.4 conformance requirements inventory",
+  "retrieved_date": "2026-09-12",
+  "retrieval_notes": "All revisions were resolved from the upstream repositories with `git ls-remote`; file hashes were computed from raw.githubusercontent.com blobs fetched at the pinned revision. `sha256` is over the exact bytes; `git_blob_sha1` is the Git object id of the same bytes and can be re-derived with `git hash-object`.",
+  "compatibility_rules": [
+    {
+      "id": "spec-registry-release-train",
+      "description": "The pinned specification and the pinned registry/header revision must be the same release train.",
+      "check": {
+        "op": "field_equals_field",
+        "left": "khronos-vulkan-spec.spec_version",
+        "right": "khronos-vulkan-registry.header_version"
+      }
+    },
+    {
+      "id": "spec-is-vulkan-1.4",
+      "description": "This inventory targets the Vulkan 1.4 core revision.",
+      "check": {
+        "op": "field_equals",
+        "left": "khronos-vulkan-spec.core_version",
+        "right": "1.4"
+      }
+    },
+    {
+      "id": "registry-core-matches-spec",
+      "description": "Registry and specification must describe the same core revision.",
+      "check": {
+        "op": "field_equals_field",
+        "left": "khronos-vulkan-registry.core_version",
+        "right": "khronos-vulkan-spec.core_version"
+      }
+    },
+    {
+      "id": "cts-pinned-to-release-tag",
+      "description": "The CTS listing must come from a tagged CTS release, never a moving branch head.",
+      "check": {
+        "op": "field_matches",
+        "left": "khronos-vk-gl-cts.tag",
+        "pattern": "^vulkan-cts-[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"
+      }
+    },
+    {
+      "id": "commit-pinned-sources",
+      "description": "Every normative or consumer source must be pinned to an immutable commit object.",
+      "check": {
+        "op": "all_of_kind_have_field",
+        "kinds": [
+          "specification",
+          "registry",
+          "conformance-test-suite",
+          "consumer",
+          "consumer-dependency"
+        ],
+        "field": "commit"
+      }
+    },
+    {
+      "id": "hashed-artifacts-declare-hashes",
+      "description": "Any artifact used for verification must carry both a sha256 and a git blob id.",
+      "check": {
+        "op": "every_hashable_artifact_has",
+        "fields": [
+          "sha256",
+          "git_blob_sha1"
+        ]
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "khronos-vulkan-spec",
+      "kind": "specification",
+      "role": "normative",
+      "title": "Vulkan 1.4 specification with all registered extensions",
+      "publisher": "Khronos Group",
+      "repo": "https://github.com/KhronosGroup/Vulkan-Docs",
+      "revision_kind": "annotated-tag",
+      "tag": "v1.4.362",
+      "tag_object": "cafe0e3f42089d3543219dbd92b15bf9e0af72fe",
+      "commit": "f84d432d5b8912362f96f581f29bbc4f3c8c7843",
+      "spec_version": "1.4.362",
+      "core_version": "1.4",
+      "license": {
+        "spdx": "CC-BY-4.0",
+        "applies_to": "specification source documents",
+        "url": "https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.362/LICENSE.adoc"
+      },
+      "retrieved_date": "2026-09-12",
+      "retrieval_method": "git ls-remote --tags; raw.githubusercontent.com blobs at the pinned tag",
+      "artifacts": [
+        {
+          "path": "appendices/versions.adoc",
+          "kind": "file",
+          "size_bytes": 41810,
+          "sha256": "998beee540be484185662f0a1e0bcb5c5ce1dafe4c683e2fb7a00479c9902435",
+          "git_blob_sha1": "1710243065e30903606201fbec4c77c7dd17f9e7"
+        },
+        {
+          "path": "chapters/introduction.adoc",
+          "kind": "file",
+          "size_bytes": 15959,
+          "sha256": "a8cff7be42b43f9cab6c150af845587d4d4f3758a4266972290735ed55ac9767",
+          "git_blob_sha1": "09e1e35ce2c9b76a6d728617ae1acf3797491d28"
+        },
+        {
+          "path": "chapters/fundamentals.adoc",
+          "kind": "file",
+          "size_bytes": 91224,
+          "sha256": "70dde6bad83bd48c3438eb96a9cfc3387f53dfbdd8a1cae33a87dab1310cc0d3",
+          "git_blob_sha1": "dcef69011ff63aed2873279b7daa6144ffb16633"
+        },
+        {
+          "path": "chapters/devsandqueues.adoc",
+          "kind": "file",
+          "size_bytes": 198937,
+          "sha256": "dfa3025d0c82d558a4a88eb1552d52aef77e3213429a8ab90f2516aae5d0489b",
+          "git_blob_sha1": "f705431c968b2f5ac6be72df0c71242a0156667d"
+        },
+        {
+          "path": "chapters/interfaces.adoc",
+          "kind": "file",
+          "size_bytes": 267517,
+          "sha256": "9e6d6065b6b7c4ca6d19241b070c1158d6251b232d3070f8959b64b2b9da4fc8",
+          "git_blob_sha1": "71524facd036cb5b9da9b31eb6302dfaa25b9f4e"
+        },
+        {
+          "path": "chapters/",
+          "kind": "tree",
+          "entry_count": 48,
+          "note": "core chapter sources; counted from the pinned tree via the GitHub contents API"
+        },
+        {
+          "path": "appendices/",
+          "kind": "tree",
+          "entry_count": 495,
+          "note": "extension appendices plus version/glossary/credits appendices"
+        }
+      ],
+      "document_alias": {
+        "url": "https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html",
+        "alias_stability": "moving",
+        "title_at_retrieval": "Vulkan 1.4.362 - A Specification (with all registered extensions)",
+        "size_bytes": 41591409,
+        "sha256": "008db2e7cfd2cecc46330bc3810e91a41c2bbf7d70d8758eaf17b03b0993c803",
+        "note": "Convenience rendering. It currently reports 1.4.362, matching the pinned tag, but the URL is not immutable and is not the normative identity."
+      },
+      "notes": "No normative specification text is copied into this inventory. Rows use project-owned summaries, section anchors, and short identifiers only."
+    },
+    {
+      "id": "khronos-vulkan-registry",
+      "kind": "registry",
+      "role": "normative",
+      "title": "Vulkan registry and C headers (Vulkan-Headers)",
+      "publisher": "Khronos Group",
+      "repo": "https://github.com/KhronosGroup/Vulkan-Headers",
+      "revision_kind": "annotated-tag",
+      "tag": "v1.4.362",
+      "tag_object": "20fbec479cd2a035e24a801fe7a1e8b74d223bd3",
+      "commit": "ee2ec5fd83dafce291024683b50dc89219333076",
+      "header_version": "1.4.362",
+      "core_version": "1.4",
+      "license": {
+        "spdx": "Apache-2.0",
+        "applies_to": "headers and registry tooling",
+        "url": "https://github.com/KhronosGroup/Vulkan-Headers/blob/v1.4.362/LICENSE.md",
+        "additional": "registry/vk.xml and registry/video.xml are also offered under MIT in Vulkan-Docs"
+      },
+      "retrieved_date": "2026-09-12",
+      "retrieval_method": "git ls-remote --tags; raw.githubusercontent.com blobs at the pinned tag",
+      "artifacts": [
+        {
+          "path": "registry/vk.xml",
+          "kind": "file",
+          "size_bytes": 3309653,
+          "sha256": "cf31c965cf6e788697139601da0c7e02a75a9b6c7ac764e7641f5521ffd9da06",
+          "git_blob_sha1": "0161e0261ccd6beb72944317898a30d83fc61c73"
+        },
+        {
+          "path": "include/vulkan/vulkan_core.h",
+          "kind": "file",
+          "size_bytes": 1362362,
+          "sha256": "a98e440889e790573a0f77c77bbc2d5b3de6fc33d066f879d4b2df2f11cf468b",
+          "git_blob_sha1": "b0b11638ba24caf11c0eb8ae0bfe856bc23996f7"
+        },
+        {
+          "path": "include/vulkan/vk_platform.h",
+          "kind": "file",
+          "size_bytes": 2832,
+          "sha256": "a2cd9085c66776845d2524c3b0e73ccf4827ba046aa6f676c4b8ddbed47d6552",
+          "git_blob_sha1": "bbe60245d0f6f054782782b4de390193837e569c"
+        }
+      ],
+      "verified_content": [
+        "vk.xml declares VK_HEADER_VERSION 362 and VK_HEADER_VERSION_COMPLETE VK_MAKE_API_VERSION(0, 1, 4, VK_HEADER_VERSION)",
+        "vulkan_core.h defines VK_API_VERSION_1_4",
+        "The registry is metadata plus headers, not the normative specification text"
+      ],
+      "notes": "Registry enums/commands are not a substitute for the normative specification and are not treated as an exhaustive requirement list."
+    },
+    {
+      "id": "khronos-vk-gl-cts",
+      "kind": "conformance-test-suite",
+      "role": "test-reference",
+      "title": "Vulkan Conformance Test Suite",
+      "publisher": "Khronos Group",
+      "repo": "https://github.com/KhronosGroup/VK-GL-CTS",
+      "revision_kind": "annotated-tag",
+      "tag": "vulkan-cts-1.4.6.2",
+      "tag_object": "42c723aa10d2652590f02741827aef43b0421d23",
+      "commit": "f6a29701220f34dd1407513bfe80d74ca7b392ce",
+      "release_published_utc": "2026-08-14T11:33:13Z",
+      "license": {
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/KhronosGroup/VK-GL-CTS/blob/vulkan-cts-1.4.6.2/LICENSE"
+      },
+      "retrieved_date": "2026-09-12",
+      "retrieval_method": "git ls-remote --tags; GitHub git/trees API for blob identities; raw.githubusercontent.com blobs for listing content",
+      "listing": {
+        "path": "external/vulkancts/mustpass/main/vk-default.txt",
+        "kind": "static-source-listing",
+        "note": "Group list checked into the pinned revision. It is a source-checked listing, not an executable-generated case list; case generation also depends on platform, driver capabilities and enabled extensions at runtime."
+      },
+      "generated_manifest": "conformance_inventory/cts_manifest.json",
+      "submission_eligibility": {
+        "status": "not-established",
+        "reason": "Formal Vulkan conformance submission requires Khronos Adopter status, an approved CTS revision and a paid Adopter Fee. This inventory records a development/test revision only and makes no submission or conformity claim.",
+        "references": [
+          "khronos-conformance-process"
+        ]
+      },
+      "notes": "The pinned revision is the newest tagged CTS release at retrieval time. A tagged release is necessary but not sufficient for a submission; the approved revision for a submission is selected per the Khronos conformance process."
+    },
+    {
+      "id": "khronos-conformance-process",
+      "kind": "process-reference",
+      "role": "process",
+      "title": "Khronos conformance process and Vulkan registry index",
+      "publisher": "Khronos Group",
+      "retrieved_date": "2026-09-12",
+      "retrieval_method": "HTTPS GET of the public pages and document listed below",
+      "documents": [
+        {
+          "url": "https://www.khronos.org/files/conformance_procedures.pdf",
+          "title": "Khronos Conformance Process Document",
+          "size_bytes": 2412353,
+          "sha256": "32ed6404bbe6542dbc8a87c8e9c59c5f4dd1bc0132f693577d79076168652095"
+        },
+        {
+          "url": "https://www.khronos.org/conformance/adopters/conformance-test-suites",
+          "title": "Khronos conformance test suites page",
+          "size_bytes": 41591,
+          "sha256": "b26d795f71c80dbb1da00599938433df0a09bc604c4240bee9f8075a5d69024d"
+        },
+        {
+          "url": "https://registry.khronos.org/vulkan/",
+          "title": "Vulkan registry index",
+          "size_bytes": 33862,
+          "sha256": "13cf3067ec1502f91ab0c8a510ecb0622f07da98a9d7c4fe52519b08a34d45f6"
+        }
+      ],
+      "license": {
+        "spdx": "LicenseRef-Khronos-website",
+        "note": "Pages are referenced, not redistributed. Only URLs, sizes and hashes are recorded."
+      },
+      "notes": "Used only to establish that (a) CTS source is freely available and (b) using the Vulkan trademark for a conformant product requires Adopter status and fees. This inventory performs no enrollment, payment or legal agreement and makes no conformance claim."
+    },
+    {
+      "id": "parallel-rdp",
+      "kind": "consumer",
+      "role": "consumer",
+      "title": "ParaLLEl-RDP",
+      "publisher": "Themaister",
+      "repo": "https://github.com/Themaister/parallel-rdp",
+      "revision_kind": "commit",
+      "commit": "1cecd042b2619bc505c12bfdc713808386f2b54d",
+      "also_ref": "refs/heads/master at retrieval time",
+      "license": {
+        "spdx": "MIT",
+        "url": "https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/LICENSE"
+      },
+      "retrieved_date": "2026-09-12",
+      "retrieval_method": "git ls-remote; raw.githubusercontent.com blobs at the pinned commit",
+      "artifacts": [
+        {
+          "path": "parallel-rdp/rdp_renderer.cpp",
+          "kind": "file",
+          "sha256": "f5f30f4d538dcee0c3cdd1bdc3596d2341d0c2a1cbc4c25cc429aca06b1e9b85",
+          "git_blob_sha1": "ec822b55f0843da6816dda7358ceab5c60400c89"
+        },
+        {
+          "path": "parallel-rdp/shaders/data_structures_buffers.h",
+          "kind": "file",
+          "sha256": "11382099d69e215cc8e086312c465b32ebfd3c285df497aa85c441fd3e2a4a1e",
+          "git_blob_sha1": "d8d2c63f113d4f5935038c826a308e56a372396e"
+        },
+        {
+          "path": "parallel-rdp/video_interface.cpp",
+          "kind": "file",
+          "sha256": "a5a59c18a3fa0d3b1a8de4a817ed181dbced8ee0b29143ad90d0641766df9747",
+          "git_blob_sha1": "e401067e48eb8cd4a24ca4ec13833259172825c9"
+        }
+      ],
+      "notes": "Revision carried over from an earlier project-level RDP audit and re-verified as an existing upstream commit. The commit is currently also the master head; the overlay pins the commit, not the branch."
+    },
+    {
+      "id": "granite",
+      "kind": "consumer-dependency",
+      "role": "consumer-dependency",
+      "title": "Granite (Vulkan abstraction used by ParaLLEl-RDP)",
+      "publisher": "Themaister",
+      "repo": "https://github.com/Themaister/Granite",
+      "revision_kind": "commit",
+      "commit": "cf71dee71fb00110749a9a3fcbd87b0297e49b6a",
+      "license": {
+        "spdx": "MIT",
+        "url": "https://github.com/Themaister/Granite/blob/cf71dee71fb00110749a9a3fcbd87b0297e49b6a/LICENSE"
+      },
+      "retrieved_date": "2026-09-12",
+      "retrieval_method": "commit existence verified through the GitHub commits API and raw file fetch",
+      "notes": "Recorded as a separate pin because most of the Vulkan usage requirements observed in the RDP audit live in Granite, not in parallel-rdp itself."
+    },
+    {
+      "id": "dxvk",
+      "kind": "consumer",
+      "role": "consumer",
+      "title": "DXVK",
+      "publisher": "doitsujin / Philip Rebohle et al.",
+      "repo": "https://github.com/doitsujin/dxvk",
+      "revision_kind": "annotated-tag",
+      "tag": "v3.1",
+      "tag_object": "a1596f766f236244686c0c0fffba4416f0e185b1",
+      "commit": "70d7508c01201ed3d4bfb33da42ba834eafe3857",
+      "release_published_utc": "2026-08-28T16:23:29Z",
+      "project_version": "3.1.0",
+      "license": {
+        "spdx": "Zlib",
+        "url": "https://github.com/doitsujin/dxvk/blob/v3.1/LICENSE"
+      },
+      "retrieved_date": "2026-09-12",
+      "retrieval_method": "shallow clone at the release tag; file inspection inside the clone",
+      "artifacts": [
+        {
+          "path": "VP_DXVK_requirements.json",
+          "kind": "file",
+          "size_bytes": 23834,
+          "sha256": "d490930920a24fb9ac4a0585c68042929acd7e700e04d0a032c79d9fddf1c462",
+          "git_blob_sha1": "ba814825a854d0df4e62194ec1b5bf01a7d0826d"
+        },
+        {
+          "path": "src/dxvk/dxvk_instance.h",
+          "kind": "file",
+          "sha256": "4ea6a2e0f92e82e67b3069b89ad39368944841e299859dabb79217abc4a3eb5f",
+          "git_blob_sha1": "1b0263ed6df1dc14dc173028dabbab0ba50cd972"
+        },
+        {
+          "path": "src/dxvk/dxvk_device_info.cpp",
+          "kind": "file",
+          "sha256": "8490053f675515542864854ae160fc6f0a399282dc32d5af194c3a6004bf810b",
+          "git_blob_sha1": "63d89d9d8f0390a2789d156522a68c474d98ceec"
+        }
+      ],
+      "notes": "DXVK publishes machine-readable Vulkan Profiles requirement files with its release, which are used as the primary consumer-side evidence."
+    }
+  ]
+}

@@ -1,0 +1,813 @@
+{
+  "manifest_version": "1.0",
+  "generated_by": "conformance_inventory/tools/collect_cts_listing.py",
+  "source_id": "khronos-vk-gl-cts",
+  "listing_kind": "static-source-listing",
+  "listing_scope": "external/vulkancts/mustpass/main/vk-default",
+  "repo": "https://github.com/KhronosGroup/VK-GL-CTS",
+  "tag": "vulkan-cts-1.4.6.2",
+  "commit": "f6a29701220f34dd1407513bfe80d74ca7b392ce",
+  "retrieved_date": "2026-09-12",
+  "groups_file": {
+    "path": "external/vulkancts/mustpass/main/vk-default.txt",
+    "sha256": "b689703bdc65a04764db3b9a8f6fe872b3fe94d0df68d78f6da6e5a06cfa9ed4",
+    "git_blob_sha1": "365c6bf5fa66e22b8a62139e317da41765ab7ae0",
+    "group_count": 98
+  },
+  "groups": [
+    {
+      "group": "vk-default/api.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/api.txt",
+      "size_bytes": 40296059,
+      "git_blob_sha1": "9440aee9b3291b2927119c97ab44e2858a63a39b",
+      "sha256": "a329e8606983b982a34e45f254ac871b3d46b9fce137b78efa15878a5d238a0c",
+      "case_count": 327795
+    },
+    {
+      "group": "vk-default/binding-model.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/binding-model.txt",
+      "size_bytes": 21368255,
+      "git_blob_sha1": "c68692b2457b63beb05454647dbf24288a11fff3",
+      "sha256": "673e35537472743bddf6e45c66260a46f592ff6f754324017b23e251ddb97676",
+      "case_count": 146920
+    },
+    {
+      "group": "vk-default/clipping.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/clipping.txt",
+      "size_bytes": 22338,
+      "git_blob_sha1": "7603888a73bcdde96db5fbe1cd91275d22e410ca",
+      "sha256": "a8e324a44f2117c49fd7954e1a5fd550f82e7337cbd0042455b5d8eeec369b9a",
+      "case_count": 308
+    },
+    {
+      "group": "vk-default/compute.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/compute.txt",
+      "size_bytes": 7621392,
+      "git_blob_sha1": "53492483a2f82a5a8f82c40cc28b7f14cd5fe8d0",
+      "sha256": "f2c7fbee1f7f9b3ba8f78b767a9a3531d3c673d023b147fe740a372b056fa904",
+      "case_count": 60838
+    },
+    {
+      "group": "vk-default/conditional-rendering.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/conditional-rendering.txt",
+      "size_bytes": 109451,
+      "git_blob_sha1": "a434f7c0d910ff775c6c933a667eb9e6dd847603",
+      "sha256": "c54292b817ef692c9fcdf9c43471fc028ee951c9e34ac94d9d8e6fce9381a7ef",
+      "case_count": 1030
+    },
+    {
+      "group": "vk-default/cooperative-vector.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/cooperative-vector.txt",
+      "size_bytes": 6995522,
+      "git_blob_sha1": "beacaaaa27d39d897f7f7a392189f1727a7ea78c",
+      "sha256": "85c880de286450f5853ce4ed7940469f8f9ccba77e875834d67fb5236db02d63",
+      "case_count": 53562
+    },
+    {
+      "group": "vk-default/data-graph.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/data-graph.txt",
+      "size_bytes": 1875952,
+      "git_blob_sha1": "89d9b47a88d3af924cc5121050adc9564349c18b",
+      "sha256": "2b54dcfaf2f023b88be57581d4bdbb8e24ec77a6e26e4582b36b79d9c1a6cf55",
+      "case_count": 10176
+    },
+    {
+      "group": "vk-default/depth.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/depth.txt",
+      "size_bytes": 274,
+      "git_blob_sha1": "8d2b2272d99293e3ec82f313753612ecbc6d97db",
+      "sha256": "a0768ad0296f9be0e907121d875249f3728930fb11e0e0b6dff5e3b9f45ff51f",
+      "case_count": 8
+    },
+    {
+      "group": "vk-default/descriptor-indexing.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/descriptor-indexing.txt",
+      "size_bytes": 6622,
+      "git_blob_sha1": "af4130454461356828fa2663d9f8478675988f79",
+      "sha256": "4ff300adf83eb34b223c371f7689d6d8030a4d39d1253690b2ae81298a798f79",
+      "case_count": 110
+    },
+    {
+      "group": "vk-default/device-group.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/device-group.txt",
+      "size_bytes": 730,
+      "git_blob_sha1": "f6bfa73b9342885cdee341e8163aaff9daf03d1b",
+      "sha256": "b56de023809160eeebc9bcc6c9db035dbd96648528afa6c91af259be15aa3eeb",
+      "case_count": 18
+    },
+    {
+      "group": "vk-default/dgc.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/dgc.txt",
+      "size_bytes": 492270,
+      "git_blob_sha1": "adf6f379059b05e6417ed3ab6f39c7f77fad6848",
+      "sha256": "aa793011dfe51eb9b6dfe3459a2fd49c6db321947b94af950240b016ad85e690",
+      "case_count": 4473
+    },
+    {
+      "group": "vk-default/draw.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/draw.txt",
+      "size_bytes": 4018496,
+      "git_blob_sha1": "7fb789e8c0aa3080ea7545bca5ba940a67ab1bfe",
+      "sha256": "4a74b1b33a71f8ae7527b9105e92cfdf13d99c8f9cc773b85ba9f95c46238e3d",
+      "case_count": 29392
+    },
+    {
+      "group": "vk-default/drm-format-modifiers.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/drm-format-modifiers.txt",
+      "size_bytes": 113354,
+      "git_blob_sha1": "a86f68a931b30784a5dc39e1174370ba2d2eef2d",
+      "sha256": "5f432ccd6b0dda78c3c4d21df2b4ac77d7432b4170f04e9c90af8706e4ef4f8e",
+      "case_count": 1572
+    },
+    {
+      "group": "vk-default/dynamic-state.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/dynamic-state.txt",
+      "size_bytes": 55103,
+      "git_blob_sha1": "b276460ef470481444b57ec35a72bca79f3b64b8",
+      "sha256": "af0663a7745464d515e580478f148837f2fde78b6ef1a95e6d12b223a2a6e457",
+      "case_count": 671
+    },
+    {
+      "group": "vk-default/fragment-operations.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/fragment-operations.txt",
+      "size_bytes": 12994,
+      "git_blob_sha1": "eb7d326236831007a16fa0650bd521e36a4245c1",
+      "sha256": "cb3fa3b2291cfaccb06aa819d4882b02870bc2ea2c77ab3cefce80461edccc46",
+      "case_count": 151
+    },
+    {
+      "group": "vk-default/fragment-shader-interlock.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/fragment-shader-interlock.txt",
+      "size_bytes": 58272,
+      "git_blob_sha1": "6fd102cd6389e073905b0c7ab353802a5e700be7",
+      "sha256": "f0015584e36819d2056f36faf049b85af57f92ea6c14ac13f9042c8d9881ad67",
+      "case_count": 576
+    },
+    {
+      "group": "vk-default/fragment-shading-barycentric.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/fragment-shading-barycentric.txt",
+      "size_bytes": 2957707,
+      "git_blob_sha1": "8bfff8bef91cb962758f53c3845b5718ae2c5adf",
+      "sha256": "5b7210a3fa184ff08b7cb6dacfe6dc2d78796276ce1bc6d45ce813b6c6a07fcd",
+      "case_count": 20991
+    },
+    {
+      "group": "vk-default/fragment-shading-rate.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/fragment-shading-rate.txt",
+      "size_bytes": 15710739,
+      "git_blob_sha1": "c86d83701d45144514c08e79373279053345ee12",
+      "sha256": "43d19833353e50c60a358bc24dd585fb12a20e6aa06f512c6b1a4836fa839ba6",
+      "case_count": 110363
+    },
+    {
+      "group": "vk-default/geometry.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/geometry.txt",
+      "size_bytes": 11727,
+      "git_blob_sha1": "fde0667268c9b893aef8d25ffc58d3d7c2dfa132",
+      "sha256": "c10156036fb3d0950d2a0b1d21e2bb970f7a374953a5871e547487fc649b2f72",
+      "case_count": 199
+    },
+    {
+      "group": "vk-default/glsl.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/glsl.txt",
+      "size_bytes": 2111255,
+      "git_blob_sha1": "ba422a1dec83461833fdaebd34874312602aac24",
+      "sha256": "27faee26111dfd85b790b077519b5c4342f17e12df71f9173f74ed0d6c4bc96d",
+      "case_count": 26763
+    },
+    {
+      "group": "vk-default/graphicsfuzz.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/graphicsfuzz.txt",
+      "size_bytes": 45539,
+      "git_blob_sha1": "326a1fcb2c60c7bc1e067577fd201e9bea690f1a",
+      "sha256": "3bee93bd2dd42fec53ae41d8ad3b00acf0f2ea84637a6632952e508fefa9ae7b",
+      "case_count": 757
+    },
+    {
+      "group": "vk-default/image-processing.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image-processing.txt",
+      "size_bytes": 62318,
+      "git_blob_sha1": "66bc61e96b04bad2e448369c0ab101c1d650551d",
+      "sha256": "ce62dcf2c9a752c48477588f06b059982bf851505a6eaa55a1c098d4412a662d",
+      "case_count": 611
+    },
+    {
+      "group": "vk-default/image/2d-array-compatible.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/2d-array-compatible.txt",
+      "size_bytes": 610,
+      "git_blob_sha1": "a5edf13f3f82e2b328f74c462ad4afbe0f221df5",
+      "sha256": "d10d547312ded41667342ca4f0dda8b4d2e8e7db9bdcbd43877f26f23ed7a0da",
+      "case_count": 12
+    },
+    {
+      "group": "vk-default/image/astc-decode-mode.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/astc-decode-mode.txt",
+      "size_bytes": 10592,
+      "git_blob_sha1": "a2db197d68c414d28696f94830c8b8f4fc15dc74",
+      "sha256": "03096d3d0d8912052822af4b256e3cc6158e605c5086a2627b57b66c1487b038",
+      "case_count": 164
+    },
+    {
+      "group": "vk-default/image/atomic-operations.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/atomic-operations.txt",
+      "size_bytes": 624490,
+      "git_blob_sha1": "9467f9f9f5a2c759f64334c549cad23e6d761848",
+      "sha256": "181aea2045b0d45df0c3ba61aa975f7c0f50b78f7832dae2a7593d76965c9e4f",
+      "case_count": 6208
+    },
+    {
+      "group": "vk-default/image/concurrent-copy.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/concurrent-copy.txt",
+      "size_bytes": 28908,
+      "git_blob_sha1": "b5aabbbf0f2f652435ca83fd0fc861a4fcfc7562",
+      "sha256": "fb6d7a3c9ef587bd3f6f8813af9f982c9bc6cb6bb876239f041f36dc5b3a9b93",
+      "case_count": 216
+    },
+    {
+      "group": "vk-default/image/depth-stencil-descriptor.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/depth-stencil-descriptor.txt",
+      "size_bytes": 4746,
+      "git_blob_sha1": "9fec7c94e7fdf387fefefc144bbaf4ce8a1ceb4b",
+      "sha256": "29a6f9bf9325ac980319a90b0c1ea002c5f2c62b5ad18826fe66157930664d27",
+      "case_count": 42
+    },
+    {
+      "group": "vk-default/image/depth-stencil-separate-access.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/depth-stencil-separate-access.txt",
+      "size_bytes": 8673,
+      "git_blob_sha1": "fff6b10c94a1864dba87ad248d58e01d49d4d7e2",
+      "sha256": "bda09288cc0ec1c6ddf3887d1d3c25689b9532cdab9f94a1eb1745dd620765da",
+      "case_count": 81
+    },
+    {
+      "group": "vk-default/image/device-scope-access.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/device-scope-access.txt",
+      "size_bytes": 25065,
+      "git_blob_sha1": "23e93629ef0d6f3977c50f83a848cb00c6f8dc11",
+      "sha256": "8f21a3d61d41523b219657334e63549088b8437a9cd3a71d526925093dcacbb9",
+      "case_count": 390
+    },
+    {
+      "group": "vk-default/image/extend-operands-spirv1p4.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/extend-operands-spirv1p4.txt",
+      "size_bytes": 7121,
+      "git_blob_sha1": "c1765283eaa6dc0c7a659c771f4340a3e178e87f",
+      "sha256": "4415bdf522b974f84d507c61fa71c14f9f88b1dbf6cd0f239ea49d7d6bcf1059",
+      "case_count": 81
+    },
+    {
+      "group": "vk-default/image/extended-usage-bit-compatibility.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/extended-usage-bit-compatibility.txt",
+      "size_bytes": 1589320,
+      "git_blob_sha1": "9a3e68bd9c803fe16753298aaf83955473579924",
+      "sha256": "1d442fdf4c8dc4be1706369c3dcc5a18ea0d39379dcc57cd2de74763022bdc59",
+      "case_count": 13248
+    },
+    {
+      "group": "vk-default/image/extended-usage-bit.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/extended-usage-bit.txt",
+      "size_bytes": 13472,
+      "git_blob_sha1": "ce3843b41bfe701cfd667b9e2e1b468c8c809c34",
+      "sha256": "724751b5ca9431aed2217eafc29dde91be737f8ab128b0d6a29880144efc38ce",
+      "case_count": 216
+    },
+    {
+      "group": "vk-default/image/format-reinterpret.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/format-reinterpret.txt",
+      "size_bytes": 419806,
+      "git_blob_sha1": "0fb857ab1764fcbc302182f0b44b3bd14ff481ea",
+      "sha256": "09d11a1cc40c04db3406e119480c477367a7ba90cd8c76b435dc9a6223424a0e",
+      "case_count": 5944
+    },
+    {
+      "group": "vk-default/image/general-layout.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/general-layout.txt",
+      "size_bytes": 2003,
+      "git_blob_sha1": "fbf69dae957ce29a47c80dc1e564f6f0462d27e9",
+      "sha256": "29c931e633dd02fc1a9633c6d35aa85c080b4f672c146280a7b1f3afb1e1e1f4",
+      "case_count": 29
+    },
+    {
+      "group": "vk-default/image/host-image-copy.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/host-image-copy.txt",
+      "size_bytes": 10269828,
+      "git_blob_sha1": "c75d2aed8081d0586f0028643f4fbf01285e47b5",
+      "sha256": "335cd420bad90086047c1bef61f44ba138101681bf01e92caaa5080f7a1c6dba",
+      "case_count": 73289
+    },
+    {
+      "group": "vk-default/image/image-size.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/image-size.txt",
+      "size_bytes": 5430,
+      "git_blob_sha1": "265a63fdfffb0ac0fa7231a3f36ab2dec197859b",
+      "sha256": "20a63efd8145a30c8a4896060c9c5693e4c085f2e846e81f7f8e2015f1f3c0cf",
+      "case_count": 108
+    },
+    {
+      "group": "vk-default/image/load-store-lod.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/load-store-lod.txt",
+      "size_bytes": 45975,
+      "git_blob_sha1": "1238263bd8149d4465b3a7a84ab10ce0abcb01bf",
+      "sha256": "fcf315f0e3b52c150693a8969cda6a5c9021aab76a74e4373a52890d43536203",
+      "case_count": 702
+    },
+    {
+      "group": "vk-default/image/load-store-multisample.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/load-store-multisample.txt",
+      "size_bytes": 18570,
+      "git_blob_sha1": "ac6aaf2bfa9dd3bbd9a58237d8fc1a70f46f1626",
+      "sha256": "f278ba9b6bb299443213992ee386bdc910f9bbd2bf64321e1fb8f0c409c8cd3c",
+      "case_count": 252
+    },
+    {
+      "group": "vk-default/image/load-store.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/load-store.txt",
+      "size_bytes": 239830,
+      "git_blob_sha1": "1cae642db023f73a421cbce652ab036d920b7564",
+      "sha256": "0f04bac2cf5be407abe783adefb8f56f5f63441f5d314aee7438813ba373592b",
+      "case_count": 3446
+    },
+    {
+      "group": "vk-default/image/misaligned-cube.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/misaligned-cube.txt",
+      "size_bytes": 162,
+      "git_blob_sha1": "13000ca9f356d49e3f1def44aa2da4b17e6c20bf",
+      "sha256": "71a5af93fca9d6d26dacfd8d6b3055de4201f665281bb35b9a7ef2c03e8a147d",
+      "case_count": 5
+    },
+    {
+      "group": "vk-default/image/mismatched-formats.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/mismatched-formats.txt",
+      "size_bytes": 23139,
+      "git_blob_sha1": "51ba9d1e2eb181fb51401d8e3e242467151e39b7",
+      "sha256": "7b787f8e23deb69bc34a75d7f30fe0ac52985fb328770519a7c7674a58584a65",
+      "case_count": 306
+    },
+    {
+      "group": "vk-default/image/mismatched-write-op.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/mismatched-write-op.txt",
+      "size_bytes": 37547,
+      "git_blob_sha1": "a6d661232cfefd8b94a43494aedc410819e834de",
+      "sha256": "c8b12e04f26a9a280a14269bc3a92a9658911ce5ecb64b976ea88134afe4db03",
+      "case_count": 464
+    },
+    {
+      "group": "vk-default/image/mutable.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/mutable.txt",
+      "size_bytes": 751928,
+      "git_blob_sha1": "98337ad29f9abaa038ab81938de4d2281bef2542",
+      "sha256": "afae8d3c9841abdc0c35d29f8dffdab3d895c3c859729d4b92b3bb36d92e89b2",
+      "case_count": 10118
+    },
+    {
+      "group": "vk-default/image/non-uniform-offset-sample.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/non-uniform-offset-sample.txt",
+      "size_bytes": 1812,
+      "git_blob_sha1": "e0c4a89d50b6d25e03f3121eac4e8ab53d2cbd3f",
+      "sha256": "137939d85e5d310dcd54f7b6b52379ffd04d067cd70b2db434643256a12518b9",
+      "case_count": 24
+    },
+    {
+      "group": "vk-default/image/nontemporal-operand.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/nontemporal-operand.txt",
+      "size_bytes": 976,
+      "git_blob_sha1": "112b380327a30fdbbe5bfbb43fa9658c4d378167",
+      "sha256": "53f6d843c5e55493a2309b150ec0b5e0f80732025ffe03e10c33a16f84684a1e",
+      "case_count": 21
+    },
+    {
+      "group": "vk-default/image/qualifiers.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/qualifiers.txt",
+      "size_bytes": 2510,
+      "git_blob_sha1": "3f2bf591c04c1514c0dbe18bcf2a10c34c78fa85",
+      "sha256": "434ce24775d19f8a7d1782b7210be9518fc14634cfcf946a9300a1e051e38888",
+      "case_count": 56
+    },
+    {
+      "group": "vk-default/image/queue-transfer.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/queue-transfer.txt",
+      "size_bytes": 113331,
+      "git_blob_sha1": "9d054d30f09c0c6093137961b7ead48fb8f95d82",
+      "sha256": "91c19a2ed769445864c9936ff0a5e22842a96c677e67947cc6320567c05fa479",
+      "case_count": 1965
+    },
+    {
+      "group": "vk-default/image/sample-cubemap.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/sample-cubemap.txt",
+      "size_bytes": 42,
+      "git_blob_sha1": "adb9ff2acb4adf38de786f0badb667e308bdb231",
+      "sha256": "9aa2bda74e30d72fe3f06ed5c832efeb1aab410db8c38d659e973034e5f876cc",
+      "case_count": 1
+    },
+    {
+      "group": "vk-default/image/sample-texture.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/sample-texture.txt",
+      "size_bytes": 520,
+      "git_blob_sha1": "64ca79bb13781b2fa0cd17bbf14c4101de699ffe",
+      "sha256": "23f9e0e407b8d63ee2892e5b97bf01946e4885216efad0f7de1157dce7d62831",
+      "case_count": 8
+    },
+    {
+      "group": "vk-default/image/store.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/store.txt",
+      "size_bytes": 187747,
+      "git_blob_sha1": "9c2c9e1b7fd0dbe64b20b94845a6e2b89630f3d9",
+      "sha256": "bd5db694d165e8f866d61fb1667913b797d162e31a9f8dadb93b3308822a934b",
+      "case_count": 3012
+    },
+    {
+      "group": "vk-default/image/subresource-layout.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/subresource-layout.txt",
+      "size_bytes": 236379,
+      "git_blob_sha1": "cff2ecb8e4cbb0c2be76327be44c61403bd2c724",
+      "sha256": "a6eedfbc9f489dfe122afbb16f82afcfd6373e90fb148d5688f32b5e35aaa846",
+      "case_count": 3537
+    },
+    {
+      "group": "vk-default/image/swapchain-mutable.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/swapchain-mutable.txt",
+      "size_bytes": 316512,
+      "git_blob_sha1": "342cfce70f9c1416d0cc819e2894621e60c16f47",
+      "sha256": "de46ad4dfcf0a8b90cc32ce83f08828ed1cd03a3a5a8a70715daa3d1b0fd9d0e",
+      "case_count": 3240
+    },
+    {
+      "group": "vk-default/image/texel-view-compatible.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/image/texel-view-compatible.txt",
+      "size_bytes": 955956,
+      "git_blob_sha1": "f40327ebe23427e8ef7167415f499b4666f3d7e3",
+      "sha256": "e3aa027e1023287cccc64a69ed8456f335918f201657939bee716c56bcc5d8e1",
+      "case_count": 8640
+    },
+    {
+      "group": "vk-default/imageless-framebuffer.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/imageless-framebuffer.txt",
+      "size_bytes": 271,
+      "git_blob_sha1": "bd05bdec7ab1f89344ff1279cbb5652b26f192c6",
+      "sha256": "07e8bf2a7cc7796c8e6cd4298603332afe9763a53ca4e432c613688e7d2afdbe",
+      "case_count": 6
+    },
+    {
+      "group": "vk-default/info.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/info.txt",
+      "size_bytes": 711,
+      "git_blob_sha1": "1f03758c9c7765651f9cfd684ed0889d6197c0ef",
+      "sha256": "7f0ef2cda61db501abd4daa6d578a46a9b0efb945c0da4a50690c4f917aaa459",
+      "case_count": 21
+    },
+    {
+      "group": "vk-default/memory-model.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/memory-model.txt",
+      "size_bytes": 2404040,
+      "git_blob_sha1": "43467653763d03b50ea433168757415a9085bce7",
+      "sha256": "cf7a18e668166fa0c7d48592403819a2dc6d6319e800c292a0202eebec944672",
+      "case_count": 17300
+    },
+    {
+      "group": "vk-default/memory.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/memory.txt",
+      "size_bytes": 522197,
+      "git_blob_sha1": "ef243ae37b093d04db4d868915cbf2b2662b6ace",
+      "sha256": "a2ca5bf050274361a372f704eaf43a7f0e2cae59375f4ba1cf25ca5ada32cbba",
+      "case_count": 6279
+    },
+    {
+      "group": "vk-default/mesh-shader.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/mesh-shader.txt",
+      "size_bytes": 4644598,
+      "git_blob_sha1": "2322b8d7290074bd6cdb6468c17fb4859258121b",
+      "sha256": "f28f65fd71af395fa42febce8182ec956f5da4bf5cba6858a44e23329594b32a",
+      "case_count": 28012
+    },
+    {
+      "group": "vk-default/multiview.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/multiview.txt",
+      "size_bytes": 49746,
+      "git_blob_sha1": "4076023931edd896a13642f8a2102828fd3e6ba0",
+      "sha256": "7142bf8e0d38ffee9fd8eff32ddeca9f495a043e501d6414b1ac0816f0e854d9",
+      "case_count": 694
+    },
+    {
+      "group": "vk-default/pipeline/fast-linked-library.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/pipeline/fast-linked-library.txt",
+      "size_bytes": 18943120,
+      "git_blob_sha1": "f39c45edd3152eb522869be5ce1e2419d1ddf5a9",
+      "sha256": "7bf53c4e640c3baee52016460fe503768e92eddff2be63e053ef2f86883918fc",
+      "case_count": 128113
+    },
+    {
+      "group": "vk-default/pipeline/monolithic/monolithic.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/pipeline/monolithic/monolithic.txt",
+      "size_bytes": 61932251,
+      "git_blob_sha1": "eb647590b6b54eca7a94ecdd14ca5d6bf310d401",
+      "sha256": "b572e0c4a1fd079378dd4911a1d4712e2862c1885e7f4cc2b7f4e105d3a9736a",
+      "case_count": 461812
+    },
+    {
+      "group": "vk-default/pipeline/no-queues.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/pipeline/no-queues.txt",
+      "size_bytes": 1775,
+      "git_blob_sha1": "c14eb3e2eb95fb2ce69174601332ab0e20765484",
+      "sha256": "41f2b3a67d1711e597bcad97c61fd4e08aa7927ff99b4d0c5c420dbc0be62bc1",
+      "case_count": 36
+    },
+    {
+      "group": "vk-default/pipeline/pipeline-library.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/pipeline/pipeline-library.txt",
+      "size_bytes": 16990842,
+      "git_blob_sha1": "80be68b6aa58ec99904a9738bdac38c5ff5ab6b9",
+      "sha256": "ec5f817e94032e42ad0a1d55d82ab0b61fe04a1f86255d342c357caf43ed72a1",
+      "case_count": 118915
+    },
+    {
+      "group": "vk-default/pipeline/shader-object-linked-binary.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/pipeline/shader-object-linked-binary.txt",
+      "size_bytes": 3446974,
+      "git_blob_sha1": "6e2ca89cbd5379cd390b97fab02a76e914242229",
+      "sha256": "57cc8f56e789a6a27b06850bfeb80fa62d8aa59293598a0bde40ef8797681ecf",
+      "case_count": 24350
+    },
+    {
+      "group": "vk-default/pipeline/shader-object-linked-spirv.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/pipeline/shader-object-linked-spirv.txt",
+      "size_bytes": 3422624,
+      "git_blob_sha1": "a681803132149b7c1165f933abc15d6e66d78812",
+      "sha256": "2193bea0f242aa24dd56afd994a90b2964ca80d76b2d5fe01024aad5383a91e3",
+      "case_count": 24350
+    },
+    {
+      "group": "vk-default/pipeline/shader-object-unlinked-binary.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/pipeline/shader-object-unlinked-binary.txt",
+      "size_bytes": 3495674,
+      "git_blob_sha1": "0bc804091ba1cceca7a7e99b2f4ed95d28e94bd6",
+      "sha256": "c75bc43b889529b6bb0ed79565833bac338d52763ee42a3d625183bfb36860cc",
+      "case_count": 24350
+    },
+    {
+      "group": "vk-default/pipeline/shader-object-unlinked-spirv/shader-object-unlinked-spirv.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/pipeline/shader-object-unlinked-spirv/shader-object-unlinked-spirv.txt",
+      "size_bytes": 55935076,
+      "git_blob_sha1": "6af13bd942c2c3edc8e846aff880c6cfdd7e8974",
+      "sha256": "f2e6da499985fc728ca3ca115462a04a392dc95cd61d851fe66f9b5db699fe5a",
+      "case_count": 380168
+    },
+    {
+      "group": "vk-default/protected-memory.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/protected-memory.txt",
+      "size_bytes": 705028,
+      "git_blob_sha1": "2a3f17545019a56a4621af006fa91a35a3f48359",
+      "sha256": "abcdd82b96b6ddf7f603f1ccb0cb6c73a9880070300b9e603143f8b3b4fbbd1a",
+      "case_count": 6000
+    },
+    {
+      "group": "vk-default/query-pool.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/query-pool.txt",
+      "size_bytes": 2565388,
+      "git_blob_sha1": "6dcfd5fe33894d1178bf6433ff41b3cd9c402afd",
+      "sha256": "42d5f9084d3cc01183eaeec7c03aab8586963100e0586f725abf0c04279d33a1",
+      "case_count": 18270
+    },
+    {
+      "group": "vk-default/rasterization.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/rasterization.txt",
+      "size_bytes": 2011402,
+      "git_blob_sha1": "68fb210de6257e742d4fe2819824e430ef4512e9",
+      "sha256": "e45a070413ff0dfe3b89ad584374aff47958dc91fc0a3e4eb22348cc1c73d898",
+      "case_count": 15079
+    },
+    {
+      "group": "vk-default/ray-query.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/ray-query.txt",
+      "size_bytes": 6122539,
+      "git_blob_sha1": "4068eb2092a6b53fff0815e808305615bbd102d3",
+      "sha256": "46a7bd5484a24d51ed9482ad84695665ffdb0ce1743cd5696bfde1a9ad0d0160",
+      "case_count": 38509
+    },
+    {
+      "group": "vk-default/ray-tracing-pipeline.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/ray-tracing-pipeline.txt",
+      "size_bytes": 2655591,
+      "git_blob_sha1": "036f47d2a0270acf58c6542016aa8084af6ff0f8",
+      "sha256": "c0fa614668a95ddaf9a7466e69b0d2e39780e6aad9cc24c8e04f95f1823a310c",
+      "case_count": 18681
+    },
+    {
+      "group": "vk-default/reconvergence.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/reconvergence.txt",
+      "size_bytes": 463087,
+      "git_blob_sha1": "f96459abd6315313149c6de35bda6988cfac62d4",
+      "sha256": "fcacc70390a0a0c50a3e6a47cb0f6c341ac0899ff2840292aae3e1bd7b9fe1c6",
+      "case_count": 6253
+    },
+    {
+      "group": "vk-default/renderpasses.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/renderpasses.txt",
+      "size_bytes": 10273402,
+      "git_blob_sha1": "c3b459d83e6e6cdf9f71e7554c3d259111b1288e",
+      "sha256": "5b54e0ac38678a468a2112b4735543a2cb46fcfeda7ad73e3886469beda31d73",
+      "case_count": 79748
+    },
+    {
+      "group": "vk-default/robustness.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/robustness.txt",
+      "size_bytes": 13045748,
+      "git_blob_sha1": "dd018f26009b01d60b8f25eae841663a765e600a",
+      "sha256": "33ee251fd69e816d376b0babba16916505a7314fe6c9b57a8021637bc09cf191",
+      "case_count": 96843
+    },
+    {
+      "group": "vk-default/shader-object/api.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/api.txt",
+      "size_bytes": 225,
+      "git_blob_sha1": "727b161b7cae8f34c07f103a3c190ace9d28a2ff",
+      "sha256": "f7c6ada81defd36cd9471863b3291e80646df4a28c9a8d13e7fa8b3fc6683f27",
+      "case_count": 5
+    },
+    {
+      "group": "vk-default/shader-object/binary.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/binary.txt",
+      "size_bytes": 26866,
+      "git_blob_sha1": "8fb7478e7d5aeae5f7878657ff4337cb527f6034",
+      "sha256": "d941a2dc5303793be8cada0d6b1dcd827ad13d50610090c291019aefabd825a1",
+      "case_count": 437
+    },
+    {
+      "group": "vk-default/shader-object/binding.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/binding.txt",
+      "size_bytes": 20460,
+      "git_blob_sha1": "9e8c88c195618c64e73a46b1e25770edbcd47010",
+      "sha256": "1059c1e8b9b0b7d573db2bf708f3326e7fd0ce8de43dc34edfe2f5ea90bd8303",
+      "case_count": 273
+    },
+    {
+      "group": "vk-default/shader-object/create.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/create.txt",
+      "size_bytes": 920,
+      "git_blob_sha1": "7bfa89a8ee1f6a63077524fab368a7ec4c319710",
+      "sha256": "fcd86a8847b301fd361607355399a4edfe03479cb1ddbd0c8b9101b148e63bce",
+      "case_count": 22
+    },
+    {
+      "group": "vk-default/shader-object/link.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/link.txt",
+      "size_bytes": 13197,
+      "git_blob_sha1": "504c8df2786d0e4aa2f7e94d7564625f8d5854c9",
+      "sha256": "504d3e690ca00c69b2809c49d7f440e3128859a7f1aa74a805eeea3b4c2ccfda",
+      "case_count": 161
+    },
+    {
+      "group": "vk-default/shader-object/misc.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/misc.txt",
+      "size_bytes": 54371,
+      "git_blob_sha1": "2e3a79910d0e5def61f31952dbb4df24b247d0d7",
+      "sha256": "93387f00d1ee2804b7f0a2ae77a019580e95b817454dd00fb7e69eaed7685631",
+      "case_count": 744
+    },
+    {
+      "group": "vk-default/shader-object/pipeline-interaction.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/pipeline-interaction.txt",
+      "size_bytes": 1184,
+      "git_blob_sha1": "638c2f1c54189d5c5d95d2a023053f0eea0c55bc",
+      "sha256": "d73ab64022433b8fc078ee0d9554be511ae5e93223fb77287323bfe70bb7ee6e",
+      "case_count": 18
+    },
+    {
+      "group": "vk-default/shader-object/rendering.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/rendering.txt",
+      "size_bytes": 36351931,
+      "git_blob_sha1": "b6c583b38cfb73e9b65ac05f2423ac9b582ace00",
+      "sha256": "c259031354cab2a8c432ed69b3006eda118e7c56f9dc8d1878ccdb6866272149",
+      "case_count": 240686
+    },
+    {
+      "group": "vk-default/shader-object/tessellation.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/shader-object/tessellation.txt",
+      "size_bytes": 2162,
+      "git_blob_sha1": "98700d205147ad3a050af3d0c41fbde588020997",
+      "sha256": "efe5060d4acdef224d92285886ee59dd9e998dc95ff19f252fc90ce829c02ddf",
+      "case_count": 36
+    },
+    {
+      "group": "vk-default/sparse-resources.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/sparse-resources.txt",
+      "size_bytes": 1826241,
+      "git_blob_sha1": "a9c7f7ece135bd7d22bbb7fe826be5954419664e",
+      "sha256": "b3089ea40223dfd6b3ba1d80e88cb2e426aa4f3fb5c48c5626db17d15caa5723",
+      "case_count": 19078
+    },
+    {
+      "group": "vk-default/spirv-assembly.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/spirv-assembly.txt",
+      "size_bytes": 6833760,
+      "git_blob_sha1": "67f976e9cb8a0792f325c13ae77f25820caad213",
+      "sha256": "facd5a5b8472e8b80db5d48504261aa246c4ccf93f5eded708b08997d54d3328",
+      "case_count": 68563
+    },
+    {
+      "group": "vk-default/ssbo.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/ssbo.txt",
+      "size_bytes": 823487,
+      "git_blob_sha1": "c314242d96c23caee72c82af1c643c816440fb31",
+      "sha256": "b611568c5686a490f339fb4aae798415fd7364612bb5bb1ce1238270792dfea9",
+      "case_count": 12225
+    },
+    {
+      "group": "vk-default/subgroups.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/subgroups.txt",
+      "size_bytes": 3836014,
+      "git_blob_sha1": "c2ad38916d86acc9d63037f474827327a9653b49",
+      "sha256": "dabe843613b109afb52d44f1b03e17df4a64dd334a5667d1ff7d5c7813ad9fab",
+      "case_count": 48621
+    },
+    {
+      "group": "vk-default/synchronization.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/synchronization.txt",
+      "size_bytes": 8738894,
+      "git_blob_sha1": "e855b90aaa13cd715f8956ee9f7303de24809ab6",
+      "sha256": "5bea06c50b04c87b8f4d6d5caeec0c7a876fdf3f4053c0c35140002f93aba829",
+      "case_count": 64871
+    },
+    {
+      "group": "vk-default/synchronization2.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/synchronization2.txt",
+      "size_bytes": 11515449,
+      "git_blob_sha1": "7e292bf54a45f51407845d0a18128a4ba430cd73",
+      "sha256": "fe3a3f9c558429eb92d781598650f70436ec477a633c3f798c2f70c87b2536ad",
+      "case_count": 81616
+    },
+    {
+      "group": "vk-default/tensor.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/tensor.txt",
+      "size_bytes": 69987,
+      "git_blob_sha1": "00fe4ead6f54cbd3daf73284a9d5c2af9e4549b6",
+      "sha256": "835b6f5c3f4d5b258afd6b6d6c7dfbe1580b8828252f967d424fd770f43e2b52",
+      "case_count": 844
+    },
+    {
+      "group": "vk-default/tessellation.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/tessellation.txt",
+      "size_bytes": 97655,
+      "git_blob_sha1": "6945513e52d09630d582ac79713c5343bf40c536",
+      "sha256": "e7315a224decfddd85d958c3e75df040ab4c475844423ad036793983cae80b67",
+      "case_count": 1103
+    },
+    {
+      "group": "vk-default/texture.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/texture.txt",
+      "size_bytes": 2371358,
+      "git_blob_sha1": "72a0de55dee91b2f2ed6aeea91bbf094f70942a2",
+      "sha256": "b42dda5d16f57740c964b089ad70def988f7c69ef020cde40660dbe10ebca165",
+      "case_count": 27301
+    },
+    {
+      "group": "vk-default/transform-feedback.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/transform-feedback.txt",
+      "size_bytes": 20427868,
+      "git_blob_sha1": "225cb97472d92c4e6e9bbd0142b3c1379f64b8eb",
+      "sha256": "a687997cb23142beb36b8548ea749720c5d3bc52d3f6c7456572174de14c2792",
+      "case_count": 133695
+    },
+    {
+      "group": "vk-default/ubo.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/ubo.txt",
+      "size_bytes": 791459,
+      "git_blob_sha1": "b02cb184c4c8a37b731a91be046b8a84212d1919",
+      "sha256": "3cf25f4eeb667d90d7117c29aa4424e2baf87e1b63a1828fb214558d8fdab4ec",
+      "case_count": 13240
+    },
+    {
+      "group": "vk-default/video.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/video.txt",
+      "size_bytes": 809484,
+      "git_blob_sha1": "f219541260e83a48a65a640e704ce0325a7d7e18",
+      "sha256": "de8eb2acec29a37ba854697fc366237ea16b6171ba9f9699403316fbf90dcd0b",
+      "case_count": 9301
+    },
+    {
+      "group": "vk-default/wsi.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/wsi.txt",
+      "size_bytes": 3686364,
+      "git_blob_sha1": "85f009a7e910c2cda1238e6ba3ac401e4a066ce8",
+      "sha256": "298749863c1079779fba4c1896c2a405615b9f77ef3a7ce7f77b460779bda57d",
+      "case_count": 35481
+    },
+    {
+      "group": "vk-default/ycbcr.txt",
+      "path": "external/vulkancts/mustpass/main/vk-default/ycbcr.txt",
+      "size_bytes": 6848559,
+      "git_blob_sha1": "77fd15a2045587e6dbb88bcc2f97644e355032f6",
+      "sha256": "4822a9443811cb1ffeafbb4e53fc470f57cde164a75eacfffe2d9a6f9e62c34c",
+      "case_count": 62333
+    }
+  ],
+  "totals": {
+    "group_files": 98,
+    "cases": 3247552,
+    "missing_group_files": []
+  },
+  "limits": [
+    "Static listing checked into the pinned source revision; not an executable case list.",
+    "Case presence does not imply the case is runnable on any particular device or driver.",
+    "No case in this manifest has been executed by collecting it."
+  ]
+}

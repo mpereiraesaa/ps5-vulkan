@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ps5vk/conformance_inventory/schema.json",
+  "title": "ps5vk Vulkan 1.4 conformance inventory",
+  "description": "Contract for the four data documents in this directory. validate.py enforces these rules with the standard library only; this file is the readable contract and can also be used with any JSON Schema 2020-12 validator.",
+  "documents": {
+    "sources.json": "#/$defs/sources_document",
+    "requirements.json": "#/$defs/requirements_document",
+    "spec_coverage.json": "#/$defs/coverage_document",
+    "consumers.json": "#/$defs/consumers_document"
+  },
+  "$defs": {
+    "anchor": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "HTML fragment id inside the pinned specification, or a Vulkan name that the specification renders as an anchor. Never specification prose."
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["path", "kind"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["file", "tree"]},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "git_blob_sha1": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "entry_count": {"type": "integer", "minimum": 0},
+        "note": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "file"}}},
+          "then": {"required": ["sha256", "git_blob_sha1"]}
+        }
+      ]
+    },
+    "web_document": {
+      "type": "object",
+      "required": ["url", "title", "sha256", "size_bytes"],
+      "properties": {
+        "url": {"type": "string", "format": "uri"},
+        "title": {"type": "string"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["id", "kind", "role", "title", "publisher", "license", "retrieved_date"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "kind": {
+          "enum": [
+            "specification",
+            "registry",
+            "conformance-test-suite",
+            "process-reference",
+            "consumer",
+            "consumer-dependency"
+          ]
+        },
+        "role": {"enum": ["normative", "test-reference", "process", "consumer", "consumer-dependency"]},
+        "title": {"type": "string"},
+        "publisher": {"type": "string"},
+        "repo": {"type": "string"},
+        "url": {"type": "string"},
+        "revision_kind": {"enum": ["annotated-tag", "lightweight-tag", "commit", "release", "moving-branch"]},
+        "tag": {"type": "string"},
+        "tag_object": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "license": {"type": "object"},
+        "retrieved_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "retrieval_method": {"type": "string"},
+        "artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+        "documents": {"type": "array", "items": {"$ref": "#/$defs/web_document"}},
+        "notes": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"enum": ["specification", "registry", "conformance-test-suite", "consumer", "consumer-dependency"]}}},
+          "then": {"required": ["repo", "commit"]}
+        }
+      ]
+    },
+    "compatibility_rule": {
+      "type": "object",
+      "required": ["id", "description", "check"],
+      "properties": {
+        "id": {"type": "string"},
+        "description": {"type": "string"},
+        "check": {
+          "type": "object",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "enum": [
+                "field_equals_field",
+                "field_equals",
+                "field_matches",
+                "all_of_kind_have_field",
+                "every_hashable_artifact_has"
+              ]
+            },
+            "left": {"type": "string"},
+            "right": {"type": "string"},
+            "pattern": {"type": "string"},
+            "kinds": {"type": "array", "items": {"type": "string"}},
+            "field": {"type": "string"},
+            "fields": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "sources_document": {
+      "type": "object",
+      "required": ["schema_version", "retrieved_date", "compatibility_rules", "sources"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "retrieved_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "compatibility_rules": {"type": "array", "items": {"$ref": "#/$defs/compatibility_rule"}},
+        "sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}}
+      }
+    },
+    "evidence_state": {
+      "type": "object",
+      "required": ["state", "refs"],
+      "properties": {
+        "state": {"type": "string"},
+        "refs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "cts_mapping": {
+      "type": "object",
+      "required": ["mapping", "basis", "groups", "cases"],
+      "properties": {
+        "mapping": {"enum": ["mapped", "unmapped", "not-applicable"]},
+        "basis": {"enum": ["static-source-listing"]},
+        "groups": {"type": "array", "items": {"type": "string", "pattern": "^vk-default/[A-Za-z0-9._/-]+\\.txt$"}},
+        "cases": {"type": "array", "items": {"type": "string", "pattern": "^dEQP-VK\\.[A-Za-z0-9._-]+$"}},
+        "note": {"type": "string"}
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "required": [
+        "id",
+        "category",
+        "summary",
+        "core_introduction",
+        "applicability",
+        "classification",
+        "condition",
+        "coverage_chapter",
+        "source",
+        "features",
+        "limits",
+        "formats",
+        "commands",
+        "extensions",
+        "cts",
+        "implementation_state",
+        "baseline",
+        "evidence",
+        "owner",
+        "provenance",
+        "manual_review",
+        "review_notes"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^VK14-[A-Z0-9]+(-[A-Z0-9]+)*-[0-9]{3}$"},
+        "category": {"type": "string"},
+        "summary": {"type": "string", "minLength": 10},
+        "core_introduction": {"enum": ["1.0", "1.1", "1.2", "1.3", "1.4"]},
+        "applicability": {
+          "type": "object",
+          "required": ["vulkan14"],
+          "properties": {
+            "vulkan14": {"enum": ["mandatory", "conditional", "optional-feature-gated", "allowed-not-supported"]},
+            "note": {"type": "string"}
+          }
+        },
+        "classification": {"enum": ["mandatory", "conditional", "optional"]},
+        "condition": {"type": ["string", "null"]},
+        "coverage_chapter": {"type": "string", "pattern": "^(chapters|appendices)/[A-Za-z0-9_.-]+\\.adoc$"},
+        "source": {
+          "type": "object",
+          "required": ["source_id", "anchor"],
+          "properties": {
+            "source_id": {"type": "string"},
+            "anchor": {"$ref": "#/$defs/anchor"},
+            "note": {"type": "string"}
+          }
+        },
+        "features": {"type": "array", "items": {"type": "string"}},
+        "limits": {"type": "array", "items": {"type": "string"}},
+        "formats": {"type": "array", "items": {"type": "string"}},
+        "commands": {"type": "array", "items": {"type": "string"}},
+        "extensions": {"type": "array", "items": {"type": "string"}},
+        "cts": {"$ref": "#/$defs/cts_mapping"},
+        "implementation_state": {"type": "string"},
+        "baseline": {
+          "type": "object",
+          "required": ["surface_state", "refs", "note"],
+          "properties": {
+            "surface_state": {"enum": ["none", "symbol-present", "documented", "host-tested", "native-demonstrated"]},
+            "refs": {"type": "array", "items": {"type": "string"}},
+            "note": {"type": "string"}
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "required": ["source", "runtime", "conformance"],
+          "properties": {
+            "source": {"$ref": "#/$defs/evidence_state"},
+            "runtime": {"$ref": "#/$defs/evidence_state"},
+            "conformance": {"$ref": "#/$defs/evidence_state"}
+          }
+        },
+        "owner": {"enum": ["implementation", "inventory"]},
+        "provenance": {"type": "string"},
+        "manual_review": {"type": "boolean"},
+        "review_notes": {"type": ["string", "null"]}
+      }
+    },
+    "requirements_document": {
+      "type": "object",
+      "required": ["schema_version", "state_vocabulary", "category_order", "requirements"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "state_vocabulary": {"type": "array", "items": {"type": "string"}, "minItems": 10},
+        "category_order": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+        "requirements": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/requirement"}}
+      }
+    },
+    "coverage_entry": {
+      "type": "object",
+      "required": ["path", "review_state", "rows"],
+      "properties": {
+        "path": {"type": "string"},
+        "review_state": {"enum": ["reviewed", "partially-reviewed", "not-reviewed"]},
+        "rows": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "coverage_document": {
+      "type": "object",
+      "required": ["schema_version", "source_id", "core_chapters", "appendices", "extension_appendices"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "source_id": {"type": "string"},
+        "core_chapters": {"type": "array", "items": {"$ref": "#/$defs/coverage_entry"}},
+        "appendices": {"type": "array", "items": {"$ref": "#/$defs/coverage_entry"}},
+        "extension_appendices": {
+          "type": "object",
+          "required": ["path_prefix", "total_extension_files", "review_state"],
+          "properties": {
+            "path_prefix": {"type": "string"},
+            "total_extension_files": {"type": "integer", "minimum": 0},
+            "review_state": {"enum": ["reviewed", "partially-reviewed", "not-reviewed"]},
+            "reviewed_exceptions": {"type": "array", "items": {"$ref": "#/$defs/coverage_entry"}}
+          }
+        }
+      }
+    },
+    "consumer_requirement": {
+      "type": "object",
+      "required": ["id", "classification", "summary", "evidence", "references", "related_requirement_ids"],
+      "properties": {
+        "id": {"type": "string"},
+        "classification": {"enum": ["mandatory", "conditional", "optional"]},
+        "summary": {"type": "string"},
+        "evidence": {"type": "string"},
+        "references": {"type": "array", "items": {"type": "string"}},
+        "related_requirement_ids": {"type": "array", "items": {"type": "string"}},
+        "baseline_observation": {"type": "string"}
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "required": ["id", "title", "source_id", "revision", "evidence_basis", "requirements", "limits"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "source_id": {"type": "string"},
+        "revision": {"type": "object"},
+        "evidence_basis": {"type": "string"},
+        "requirements": {"type": "array", "items": {"$ref": "#/$defs/consumer_requirement"}},
+        "unmeasured": {"type": "array", "items": {"type": "string"}},
+        "limits": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "consumers_document": {
+      "type": "object",
+      "required": ["schema_version", "join_notes", "consumers"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "join_notes": {"type": "array", "items": {"type": "string"}},
+        "consumers": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/consumer"}}
+      }
+    }
+  }
+}
