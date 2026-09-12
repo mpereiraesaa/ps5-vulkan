@@ -9,6 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeDiagnosticOptions(unittest.TestCase):
+    def test_runtime_graphics_recipe_uses_system_close(self):
+        result = subprocess.run(
+            ["make", "-n", "native-runtime-graphics", "GRAPHICS_CONTROL=fixture",
+             "GLSLANG=glslang-test"], cwd=ROOT, capture_output=True, text=True,
+            check=True)
+        self.assertIn("PS5VK_RUNTIME_GRAPHICS=1", result.stdout)
+        self.assertIn("PS5VK_SHELL_CLOSE=1", result.stdout)
+        self.assertIn("PS5VK_GLSLANG=glslang-test", result.stdout)
+        self.assertIn("PS5VK_GRAPHICS_DRAW=1", result.stdout)
+        self.assertIn("PS5VK_GRAPHICS_PRESENT=1", result.stdout)
+
     def test_witnesses_require_graphics_api(self):
         self.rejected({"PS5VK_GRAPHICS_WITNESSES":"1"},"requires graphics profile API")
 

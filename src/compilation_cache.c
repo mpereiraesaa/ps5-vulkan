@@ -87,28 +87,36 @@ static uint64_t hash_key(const struct ps5vk_cache_key *key)
     return h;
 }
 
-bool ps5vk_cache_build_key(
-    const uint32_t *spirv,
-    size_t spirv_words,
-    const char *entry_name,
-    VkPipelineLayout layout,
+bool ps5vk_cache_build_stage_key(const uint32_t *spirv, size_t spirv_words,
+    const char *entry_name, uint32_t stages, uint32_t flags,
     struct ps5vk_cache_key *out_key)
 {
-    if (!spirv || !spirv_words || !entry_name || !layout || !out_key)
+    if (!spirv || !spirv_words || spirv_words > SIZE_MAX / sizeof(uint32_t) ||
+        !entry_name || !*entry_name || !stages || !out_key)
         return false;
     if (strlen(entry_name) >= sizeof(out_key->entry_name))
         return false;
-    if (layout->set_count > PS5VK_MAX_SETS)
-        return false;
-
     memset(out_key, 0, sizeof(*out_key));
     out_key->target_gfx = 1013;
-    out_key->stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    out_key->stage = stages;
     out_key->compiler_id = PS5VK_COMPILER_ID_PSBC_ACO;
     out_key->compiler_version = PS5VK_COMPILER_VERSION_1;
     out_key->abi_version = PS5VK_CACHE_ABI_VERSION_1;
-    out_key->flags = 0;
+    out_key->flags = flags;
     strncpy(out_key->entry_name, entry_name, sizeof(out_key->entry_name) - 1);
+
+    out_key->spirv_words = spirv_words;
+    sha256_hash(spirv, spirv_words * sizeof(uint32_t), out_key->spirv_sha256);
+    return true;
+}
+
+bool ps5vk_cache_build_key(const uint32_t *spirv, size_t spirv_words,
+    const char *entry_name, VkPipelineLayout layout, struct ps5vk_cache_key *out_key)
+{
+    if (!layout || layout->set_count > PS5VK_MAX_SETS ||
+        !ps5vk_cache_build_stage_key(spirv, spirv_words, entry_name,
+                                    VK_SHADER_STAGE_COMPUTE_BIT, 0, out_key))
+        return false;
 
     out_key->set_count = layout->set_count;
     for (uint32_t s = 0; s < layout->set_count; s++) {
@@ -122,8 +130,6 @@ bool ps5vk_cache_build_key(
         }
     }
 
-    out_key->spirv_words = spirv_words;
-    sha256_hash(spirv, spirv_words * sizeof(uint32_t), out_key->spirv_sha256);
     return true;
 }
 
@@ -167,6 +173,7 @@ static void free_entry_memory(struct ps5vk_cache_entry *entry)
 {
     free(entry->spirv_copy);
     free(entry->code_copy);
+    free(entry->payload_copy);
     free(entry);
 }
 
@@ -175,7 +182,7 @@ struct ps5vk_cache_entry *ps5vk_compilation_cache_lookup(
     const struct ps5vk_cache_key *key,
     const uint32_t *spirv)
 {
-    if (!cache || !key || !spirv) return NULL;
+    if (!cache || !key || !spirv || key->spirv_words > SIZE_MAX / sizeof(uint32_t)) return NULL;
     pthread_mutex_lock(&cache->mutex);
 
     uint64_t h = hash_key(key);
@@ -204,7 +211,7 @@ struct ps5vk_cache_entry *ps5vk_compilation_cache_lookup(
 static void evict_unreferenced(struct ps5vk_compilation_cache *cache, size_t needed_bytes)
 {
     while ((cache->stats.current_entries >= cache->max_entries ||
-            cache->stats.current_bytes + needed_bytes > cache->max_bytes) &&
+            needed_bytes > cache->max_bytes - cache->stats.current_bytes) &&
            cache->lru_tail) {
         /* Find oldest entry with refcount == 0 */
         struct ps5vk_cache_entry *cur = cache->lru_tail;
@@ -233,19 +240,30 @@ static void evict_unreferenced(struct ps5vk_compilation_cache *cache, size_t nee
     }
 }
 
-struct ps5vk_cache_entry *ps5vk_compilation_cache_insert(
+static struct ps5vk_cache_entry *insert_entry(
     struct ps5vk_compilation_cache *cache,
     const struct ps5vk_cache_key *key,
     const uint32_t *spirv,
     const struct ps5vk_compiled_program *program,
-    const uint32_t *code)
+    const uint32_t *code,
+    const void *payload,
+    size_t payload_bytes)
 {
-    if (!cache || !key || !spirv || !program || !code) return NULL;
-    pthread_mutex_lock(&cache->mutex);
-
+    if (!cache || !key || !spirv || !key->spirv_words ||
+        key->spirv_words > SIZE_MAX / sizeof(uint32_t)) return NULL;
+    if (program ? (!code || payload || payload_bytes ||
+                   program->code_words > SIZE_MAX / sizeof(uint32_t)) :
+                  (!payload || !payload_bytes || code)) return NULL;
     size_t spirv_bytes = key->spirv_words * sizeof(uint32_t);
-    size_t code_bytes = program->code_words * sizeof(uint32_t);
-    size_t total_bytes = sizeof(struct ps5vk_cache_entry) + spirv_bytes + code_bytes;
+    size_t code_bytes = program ? program->code_words * sizeof(uint32_t) : 0;
+    size_t total_bytes = sizeof(struct ps5vk_cache_entry);
+    if (spirv_bytes > SIZE_MAX - total_bytes) return NULL;
+    total_bytes += spirv_bytes;
+    if (code_bytes > SIZE_MAX - total_bytes) return NULL;
+    total_bytes += code_bytes;
+    if (payload_bytes > SIZE_MAX - total_bytes) return NULL;
+    total_bytes += payload_bytes;
+    pthread_mutex_lock(&cache->mutex);
 
     /* Reject entry if it exceeds total budget or if max_entries is zero */
     if (total_bytes > cache->max_bytes || cache->max_entries == 0) {
@@ -258,7 +276,7 @@ struct ps5vk_cache_entry *ps5vk_compilation_cache_insert(
     /* Enforce strict bounds: if unreferenced entries could not be evicted
      * because all entries are actively referenced, reject insertion. */
     if (cache->stats.current_entries >= cache->max_entries ||
-        cache->stats.current_bytes + total_bytes > cache->max_bytes) {
+        total_bytes > cache->max_bytes - cache->stats.current_bytes) {
         pthread_mutex_unlock(&cache->mutex);
         return NULL;
     }
@@ -270,21 +288,27 @@ struct ps5vk_cache_entry *ps5vk_compilation_cache_insert(
     }
 
     entry->spirv_copy = malloc(spirv_bytes);
-    entry->code_copy = malloc(code_bytes);
-    if (!entry->spirv_copy || !entry->code_copy) {
+    if (program) entry->code_copy = malloc(code_bytes);
+    else entry->payload_copy = malloc(payload_bytes);
+    if (!entry->spirv_copy || (program ? !entry->code_copy : !entry->payload_copy)) {
         free_entry_memory(entry);
         pthread_mutex_unlock(&cache->mutex);
         return NULL;
     }
 
     memcpy(entry->spirv_copy, spirv, spirv_bytes);
-    memcpy(entry->code_copy, code, code_bytes);
     entry->key = *key;
-    entry->program = *program;
-    entry->program.code = entry->code_copy;
-    entry->program.spirv = entry->spirv_copy;
-    snprintf(entry->entry_name_copy, sizeof(entry->entry_name_copy), "%s", key->entry_name);
-    entry->program.entry = entry->entry_name_copy;
+    if (program) {
+        memcpy(entry->code_copy, code, code_bytes);
+        entry->program = *program;
+        entry->program.code = entry->code_copy;
+        entry->program.spirv = entry->spirv_copy;
+        snprintf(entry->entry_name_copy, sizeof(entry->entry_name_copy), "%s", key->entry_name);
+        entry->program.entry = entry->entry_name_copy;
+    } else {
+        memcpy(entry->payload_copy, payload, payload_bytes);
+        entry->payload_bytes = payload_bytes;
+    }
 
     entry->size_bytes = total_bytes;
     entry->refcount = 1;
@@ -308,6 +332,22 @@ struct ps5vk_cache_entry *ps5vk_compilation_cache_insert(
 
     pthread_mutex_unlock(&cache->mutex);
     return entry;
+}
+
+struct ps5vk_cache_entry *ps5vk_compilation_cache_insert(
+    struct ps5vk_compilation_cache *cache, const struct ps5vk_cache_key *key,
+    const uint32_t *spirv, const struct ps5vk_compiled_program *program,
+    const uint32_t *code)
+{
+    if (!program) return NULL;
+    return insert_entry(cache, key, spirv, program, code, NULL, 0);
+}
+
+struct ps5vk_cache_entry *ps5vk_compilation_cache_insert_payload(
+    struct ps5vk_compilation_cache *cache, const struct ps5vk_cache_key *key,
+    const uint32_t *input_words, const void *payload, size_t payload_bytes)
+{
+    return insert_entry(cache, key, input_words, NULL, NULL, payload, payload_bytes);
 }
 
 void ps5vk_cache_entry_acquire(struct ps5vk_cache_entry *entry)

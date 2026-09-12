@@ -50,6 +50,30 @@ proprietary artifacts are intentionally outside this repository.
 
 ## Reproducibility and evidence
 
+For the owned runtime-compiled triangle diagnostic, reuse the generated
+control directory as a negative offline-lookup reference:
+
+```sh
+PS5VK_USE_SDK=1 make native-runtime-graphics GRAPHICS_CONTROL=build/graphics/control-REPLACE
+```
+
+This builds the SDK and links its native archive into the diagnostic. Vertex
+and fragment ISA are compiled on the console; only GLSL-to-SPIR-V runs on the
+host. Set `GLSLANG=/path/to/glslangValidator` if needed. After the bounded test
+retires resources, it waits for system Close Game; it is not the continuous
+textured demo. Omit `PS5VK_USE_SDK=1` to compile backend objects directly.
+
+`python3 tools/build_sdk.py` independently stages public headers, native and
+host archives, the native compiler dependency and link-time import facades in
+`dist-sdk/`. It requires the prepared native PSBC archive for native builds.
+The generated SDK README documents linking and supported profiles. Native
+consumer checks cross-link only; host execution is a mock-backend test.
+
+Use `tools/verify_graphics_runtime.py LOG --artifact MANIFEST` to check the
+runtime triangle's TCP receipt, cold/warm cache, GPU readbacks, presentation
+and resource retirement. Verified deployment hashes and successful OS close
+must be established separately; the log does not attest its executable.
+
 Host checks validate API state machines, encoder contracts, resource ownership,
 negative paths and generated-program invariants. A successful host build alone
 does not prove GPU execution. Native evidence additionally requires exact

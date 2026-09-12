@@ -43,6 +43,15 @@ int main(void)
     /* Must identify PS5 GFX1013 profile and not the host harness */
     assert(strstr(props.deviceName, "gfx1013") != NULL);
     assert(strstr(props.deviceName, "host") == NULL);
+    uint32_t family_count=1;
+    VkQueueFamilyProperties family={0};
+    vkGetPhysicalDeviceQueueFamilyProperties(dev,&family_count,&family);
+    assert(family_count==1);
+    assert((family.queueFlags & (VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT)) ==
+           (VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT));
+    /* Force linkage of the public graphics entrypoint without private setup. */
+    VkPipeline pipeline=VK_NULL_HANDLE;
+    assert(vkCreateGraphicsPipelines(VK_NULL_HANDLE,VK_NULL_HANDLE,0,NULL,NULL,&pipeline)!=VK_SUCCESS);
 
     /* 3. Verify public presentation API functions from <ps5vk/ps5vk_present.h> */
     struct ps5vk_present_config pconfig = {

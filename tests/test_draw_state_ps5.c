@@ -40,7 +40,7 @@ int main(void)
     p.depth_format = VK_FORMAT_D32_SFLOAT; p.depth_test = p.depth_write = VK_TRUE;
     p.depth_compare = VK_COMPARE_OP_LESS;
     assert(ps5vk_native_draw_state(&p, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
-    assert(out.cx_count == PS5VK_DRAW_CX_CAPACITY && out.cx[106].value == 0x16);
+    assert(out.cx_count == 114 && out.cx_count<=PS5VK_DRAW_CX_CAPACITY && out.cx[106].value == 0x16);
     assert(out.cx[112].offset==0x204 && out.cx[112].value==0x01080000);
     assert(out.cx[113].offset==0x2f9 && out.cx[113].value==0x2d);
     p.depth_test = VK_FALSE;
@@ -52,4 +52,19 @@ int main(void)
     assert(ps5vk_native_draw_state(&p, &color, &depth, &area, 640, 480, &out) != VK_SUCCESS);
     color.registers[0].offset=offsets[0];pair.vertex_quantization=0;
     assert(ps5vk_native_draw_state(&p,&color,&depth,&area,640,480,&out)!=VK_SUCCESS && !out.cx_count);
+    pair.vertex_quantization=0x2d;
+    pair.runtime_arguments=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,
+        .fragment_count=2,.base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.lds_slot=1};
+    pair.runtime_vertex.header.num_cx_registers=11;
+    pair.runtime_fragment.header.num_cx_registers=9;
+    pair.runtime_vertex.header.num_sh_registers=6;
+    pair.runtime_fragment.header.num_sh_registers=4;
+    pair.runtime_vertex.context[10]=(ps5_agc_register){0x2ab,1};
+    pair.runtime_vertex.shader[5]=(ps5_agc_register){0x81,0xffff};
+    pair.runtime_fragment.shader[3]=(ps5_agc_register){0xb,4};
+    pair.runtime_vertex.specials.draw_modifier=7;
+    assert(ps5vk_native_draw_state(&p,&color,&depth,&area,640,480,&out)==VK_SUCCESS);
+    assert(out.cx_count==115 && out.cx[75].offset==0x2ab && out.cx[75].value==1);
+    assert(out.sh_count==10 && out.sh[5].offset==0x81 && out.sh[9].offset==0xb);
+    assert(out.modifier==5 && out.runtime.enabled && out.runtime.base_vertex_slot==0);
 }

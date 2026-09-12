@@ -178,6 +178,53 @@ int main(void)
     ps5vk_cache_entry_release(single_slot, second);
     ps5vk_compilation_cache_destroy(single_slot);
 
-    puts("Compilation cache contracts: pass (bounded memory, collision rejection, refcounting)");
+    /* Graphics payloads share the exact same LRU budget and lease ownership,
+     * without pretending that a linked pair is a compute program. */
+    struct ps5vk_cache_key graphics_key;
+    assert(ps5vk_cache_build_stage_key(spv_a, key_a.spirv_words, "graphics-pair-v1",
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 2, &graphics_key));
+    assert(graphics_key.target_gfx == 1013 && graphics_key.flags == 2);
+    assert(!memcmp(graphics_key.spirv_sha256, key_a.spirv_sha256, 32));
+    assert(!ps5vk_cache_build_stage_key(spv_a, SIZE_MAX, "pair", 1, 0, &key_mut));
+    unsigned char payload[37];
+    memset(payload, 0x5a, sizeof(payload));
+    size_t payload_cost = sizeof(struct ps5vk_cache_entry) +
+                          key_a.spirv_words * sizeof(uint32_t) + sizeof(payload);
+    cache = ps5vk_compilation_cache_create(1, payload_cost);
+    struct ps5vk_cache_entry *graphics_entry = ps5vk_compilation_cache_insert_payload(
+        cache, &graphics_key, spv_a, payload, sizeof(payload));
+    assert(graphics_entry && graphics_entry->payload_bytes == sizeof(payload));
+    assert(!graphics_entry->program.code && !graphics_entry->code_copy);
+    memset(payload, 0, sizeof(payload));
+    assert(((unsigned char *)graphics_entry->payload_copy)[0] == 0x5a);
+    assert(!ps5vk_compilation_cache_lookup(cache, &key_a, spv_a));
+    struct ps5vk_cache_entry *graphics_hit = ps5vk_compilation_cache_lookup(
+        cache, &graphics_key, spv_a);
+    assert(graphics_hit == graphics_entry && graphics_hit->refcount == 2);
+    assert(!ps5vk_compilation_cache_insert_payload(cache, &key_b, spv_b,
+                                                  payload, sizeof(payload)));
+    assert(!ps5vk_compilation_cache_insert_payload(cache, &key_b, spv_b,
+                                                  payload, SIZE_MAX));
+    struct ps5vk_cache_key overflow_key = graphics_key;
+    overflow_key.spirv_words = SIZE_MAX;
+    assert(!ps5vk_compilation_cache_insert_payload(cache, &overflow_key, spv_a,
+                                                  payload, sizeof(payload)));
+    ps5vk_compilation_cache_get_stats(cache, &stats);
+    assert(stats.current_bytes == payload_cost && stats.current_entries == 1);
+    ps5vk_cache_entry_release(cache, graphics_hit);
+    ps5vk_cache_entry_release(cache, graphics_entry);
+    /* Unreferenced graphics storage is evicted with the shared policy. */
+    graphics_entry = ps5vk_compilation_cache_insert_payload(cache, &key_b, spv_b,
+                                                           payload, sizeof(payload));
+    assert(graphics_entry);
+    ps5vk_compilation_cache_get_stats(cache, &stats);
+    assert(stats.evictions == 1 && stats.current_bytes == payload_cost);
+    /* Destruction detaches a held payload; its lease remains valid. */
+    ps5vk_compilation_cache_destroy(cache);
+    assert(!graphics_entry->in_cache);
+    assert(!memcmp(graphics_entry->payload_copy, payload, sizeof(payload)));
+    ps5vk_cache_entry_release(NULL, graphics_entry);
+
+    puts("Compilation cache contracts: pass (compute/payload LRU, bounds, collision rejection, leases)");
     return 0;
 }

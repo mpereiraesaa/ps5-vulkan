@@ -1,6 +1,14 @@
 PYTHON ?= python3
 CC ?= cc
+GLSLANG ?= glslangValidator
 .DEFAULT_GOAL := check
+.PHONY: inspect-graphics-compiler
+inspect-graphics-compiler: build/libpsbc.host.a
+	mkdir -p build/runtime-graphics
+	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
+	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I../ps5-agc-gears/src -I../ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tools/inspect_graphics_compiler.c src/ps5_compiler_shims.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/runtime-graphics/inspect
+	./build/runtime-graphics/inspect build/runtime-graphics/triangle.vert.spv build/runtime-graphics/triangle.frag.spv
 VULKAN_CFLAGS ?= -Ithird_party/vulkan-headers/include
 VK_MEMORY_SOURCES = src/vk_alloc.c src/vk_memory.c
 VK_IMAGE_TEST_SOURCES = $(VK_MEMORY_SOURCES) src/vk_image_view.c src/vk_render_pass.c src/vk_framebuffer.c
@@ -14,7 +22,10 @@ NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I../ps5-agc-gear
 GRAPHICS_PAIR_TEST = -Inative -Isrc -I../ps5-agc-gears/src -I../ps5-agc-gears/include native/graphics_pair.c src/shader_relocate.c ../ps5-agc-gears/src/ps5_shader_header.c tests/test_graphics_pair.c
 .PHONY: check doctor compiler-control compiler-programs native-bootstrap vulkan-headers check-sanitize native-memory-check test-shaders
 .PHONY: compiler-pipelines
-.PHONY: native-compute native-graphics
+.PHONY: native-compute native-graphics native-runtime-graphics
+native-runtime-graphics:
+	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
+	PS5VK_GLSLANG=$(GLSLANG) PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_PRESENT=1 PS5VK_GRAPHICS_DRAW=1 $(PYTHON) tools/build_native.py
 native-compute:
 	PS5VK_COMPUTE=1 $(PYTHON) tools/build_native.py
 native-graphics:
@@ -36,6 +47,7 @@ compiler-deps:
 test-shaders:
 	$(PYTHON) tools/prepare_test_shaders.py
 check-sanitize:
+	@if [ -d third_party/psbc-reference ]; then $(MAKE) test-runtime-header RUNTIME_HEADER_SANITIZERS=-fsanitize=address,undefined; fi
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_sanitized
 	./build/tests/test_vk_sampler_sanitized
@@ -179,7 +191,25 @@ check:
 	fi
 build/libpsbc.host.a:
 	$(PYTHON) tools/build_psbc.py --host
+.PHONY: test-runtime-header
+.PHONY: test-runtime-graphics-compiler
+test-runtime-graphics-compiler: inspect-graphics-compiler
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I../ps5-agc-gears/src -I../ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c src/spirv_graphics_interface.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
+	./build/tests/test_runtime_graphics_compiler
+.PHONY: test-runtime-graphics-native
+test-runtime-graphics-native:
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I../ps5-agc-gears/src -I../ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
+	./build/tests/test_runtime_graphics_native
+test-runtime-header:
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) -Inative -I../ps5-agc-gears/src -I../ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tests/test_runtime_shader.c -o build/tests/test_runtime_shader
+	./build/tests/test_runtime_shader
 test-compiler: build/libpsbc.host.a test-shaders
+	$(MAKE) test-runtime-header
+	$(MAKE) test-runtime-graphics-compiler
+	$(MAKE) test-runtime-graphics-native
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_compiler
 	./build/tests/test_runtime_compiler

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 from lab import lab_root
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -126,6 +127,12 @@ def main():
         ("net", logger / "ps5log_ps5_net.c", []),
     ]
     use_runtime_compiler = compute and os.environ.get("PS5VK_RUNTIME_COMPILER") != "0"
+    use_runtime_graphics = os.environ.get("PS5VK_RUNTIME_GRAPHICS") == "1"
+    use_runtime_sdk = os.environ.get("PS5VK_USE_SDK") == "1"
+    if use_runtime_sdk and not use_runtime_graphics:
+        raise SystemExit("SDK-linked diagnostic requires runtime graphics")
+    if use_runtime_graphics and not graphics_api:
+        raise SystemExit("Runtime graphics requires a graphics API build")
     if compute:
         common += ["-I" + str(ROOT / "third_party/vulkan-headers/include"),
                    "-I" + str(ROOT / "build/program-library")]
@@ -155,7 +162,7 @@ def main():
                     ("net", logger / "ps5log_ps5_net.c", [])]
         if graphics_api:
             sources = [s for s in sources if s[0] != "graphics_link_main"]
-            scene = graphics_manifest.get("source") == "experiments/graphics/scene3d.pipe"
+            scene = not use_runtime_graphics and graphics_manifest.get("source") == "experiments/graphics/scene3d.pipe"
             if witnesses != "0" and (not scene or continuous != "0" or observe_scene != "0" or
                     scissor_probe != "0" or scene_split != "0" or exit_control or keep_agc_module or
                     os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
@@ -202,6 +209,21 @@ def main():
                 ROOT / "src/graphics_program.c", ROOT / "src/compute_commands.c",
                 ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c",
                 ROOT / "src/compilation_cache.c")]
+    if use_runtime_graphics:
+        run(sys.executable,ROOT / "tools/prepare_runtime_graphics.py","--out",out / "runtime_graphics_spirv.h")
+        common += ["-DPS5VK_RUNTIME_GRAPHICS=1", "-I" + str(ROOT / "third_party/psbc-reference")]
+        sources += [(p.stem, p, []) for p in (
+            ROOT / "native/runtime_shader.c", ROOT / "native/runtime_graphics_compiler.c",
+            ROOT / "native/runtime_graphics_cache.c",
+            ROOT / "src/spirv_graphics_interface.c",
+            ROOT / "native/runtime_graphics_ps5.c", ROOT / "src/ps5_compiler_shims.c")]
+    if use_runtime_sdk:
+        run(sys.executable, ROOT / "tools/build_sdk.py")
+        # Only application/test-oracle objects remain outside libps5vk.a.
+        # The harness can inspect internals, but cannot supply backend objects.
+        application_sources = {"graphics_main", "compute_main", "scene_geometry",
+                               "scene_region", "triangle_readback"}
+        sources = [item for item in sources if item[0] in application_sources]
     for name, source, extra in sources:
         obj = out / (name + ".o")
         run(*cc, "-std=c11", *common, *extra, "-c", source, "-o", obj, env=env)
@@ -220,8 +242,10 @@ def main():
         gears / "native/stubs/libSceAgcDriver.c", "-o", out / "driver.o", env=env)
     run(linker, "--shared", "-soname", "libSceAgcDriver.prx", "-o", driver, out / "driver.o")
     extra_libs = []
-    if use_runtime_compiler:
-        psbc_lib = ROOT / "build/libpsbc.ps5.a"
+    if use_runtime_sdk:
+        extra_libs.append(str(ROOT / "dist-sdk/lib/libps5vk.a"))
+    if use_runtime_compiler or use_runtime_graphics:
+        psbc_lib = ROOT / ("dist-sdk/lib/libpsbc.a" if use_runtime_sdk else "build/libpsbc.ps5.a")
         if not psbc_lib.is_file():
             run(sys.executable, str(ROOT / "tools/build_psbc.py"), "--target=ps5")
         extra_libs += [
@@ -255,10 +279,17 @@ def main():
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     manifest = {"title": "PPSA99994", "stage": "compute-bootstrap",
+                "runtime_graphics": use_runtime_graphics,
+                "runtime_sdk": use_runtime_sdk,
                 "dma_only": os.environ.get("PS5VK_DMA_ONLY") == "1",
                 "inspection_hold": os.environ.get("PS5VK_INSPECT") == "1",
                 "submit_enabled": os.environ.get("PS5VK_SUBMIT") == "1",
                 "foundation": pin, "files": {}}
+    if use_runtime_sdk:
+        manifest["sdk_archive_sha256"] = {
+            name: hashlib.sha256((ROOT / "dist-sdk/lib" / name).read_bytes()).hexdigest()
+            for name in ("libps5vk.a", "libpsbc.a")}
+        manifest["application_objects"] = [name for name, _, _ in sources]
     if compute:
         manifest.update(stage="compute-api", submit_enabled=True,
                         compiler="runtime-psbc-aco" if use_runtime_compiler else "offline-exact-library",
@@ -289,13 +320,24 @@ def main():
     if exit_control:
         manifest.update(stage={1:"graphics-exit-control-no-graphics",2:"graphics-exit-control-device",3:"graphics-exit-control-logging-load"}[exit_control], submit_enabled=False,
                         scene=None)
+    if use_runtime_graphics:
+        manifest.update(compiler="runtime-psbc-aco", target_gfx=1013,
+                        graphics_shader_source="owned-runtime-triangle",
+                        graphics_offline_library_role="negative-lookup-control-only")
+        manifest["runtime_graphics_inputs"] = {
+            stage: {"glsl_sha256": hashlib.sha256(
+                        (ROOT / f"experiments/graphics/runtime_triangle.{extension}").read_bytes()).hexdigest(),
+                    "spirv_sha256": hashlib.sha256(
+                        (out / f"runtime_triangle.{extension}.spv").read_bytes()).hexdigest()}
+            for stage, extension in (("vertex", "vert"), ("fragment", "frag"))
+        }
     if compute or graphics:
         # Local public-safe source identity; never hash/archive dev.conf contents
         # as source provenance or infer a clean git revision from this worktree.
         source_paths = [ROOT / "Makefile"]
-        for folder in ("src", "native", "tools", "experiments/compute"):
+        for folder in ("src", "native", "tools", "experiments/compute", "experiments/graphics"):
             source_paths += [p for p in (ROOT / folder).rglob("*")
-                             if p.is_file() and p.suffix in (".c", ".h", ".py", ".comp")]
+                             if p.is_file() and p.suffix in (".c", ".h", ".py", ".comp", ".vert", ".frag")]
         manifest["source_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                                      for p in sorted(source_paths)}
     for path in sorted(dist.rglob("*")):

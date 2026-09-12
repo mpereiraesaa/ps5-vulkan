@@ -18,7 +18,7 @@ extern "C" {
 /* Immutable compiler cache key capturing every compiler-relevant input. */
 struct ps5vk_cache_key {
     uint32_t target_gfx;        /* GFX target (1013) */
-    uint32_t stage;             /* VK_SHADER_STAGE_COMPUTE_BIT */
+    uint32_t stage;             /* shader stage or linked-stage mask */
     uint32_t compiler_id;       /* PS5VK_COMPILER_ID_PSBC_ACO */
     uint32_t compiler_version;  /* Compiler implementation version */
     uint32_t abi_version;       /* ABI version */
@@ -54,6 +54,9 @@ struct ps5vk_cache_entry {
     uint32_t *spirv_copy;
     struct ps5vk_compiled_program program;
     uint32_t *code_copy;
+    /* Pointer-free serialized compiler output for non-compute stages. */
+    void *payload_copy;
+    size_t payload_bytes;
     char entry_name_copy[64];
     size_t size_bytes;
     int refcount;
@@ -90,6 +93,13 @@ bool ps5vk_cache_build_key(
     struct ps5vk_cache_key *out_key
 );
 
+/* Canonical stage-domain key for compiler adapters with a word-serialized
+ * input. Adapters encode stage-specific options, entrypoints and resources in
+ * those words; this routine adds compiler/ABI/target identity and SHA-256. */
+bool ps5vk_cache_build_stage_key(const uint32_t *words, size_t word_count,
+    const char *entry_name, uint32_t stages, uint32_t flags,
+    struct ps5vk_cache_key *out_key);
+
 /* Look up an entry in the cache. On hit, increments entry refcount and returns entry.
  * On miss, returns NULL. */
 struct ps5vk_cache_entry *ps5vk_compilation_cache_lookup(
@@ -107,6 +117,18 @@ struct ps5vk_cache_entry *ps5vk_compilation_cache_insert(
     const struct ps5vk_compiled_program *program,
     const uint32_t *code
 );
+
+/* Copy a pointer-free compiled payload using the same bounded LRU/lease rules.
+ * key + input words must encode ALL compiler inputs, including both entrypoints
+ * for a linked pair. A distinct stage/ABI separates this from compute entries.
+ * The caller retains its input and payload allocations on success or failure.
+ * Deserialization must validate sizes and must not persist process pointers. */
+struct ps5vk_cache_entry *ps5vk_compilation_cache_insert_payload(
+    struct ps5vk_compilation_cache *cache,
+    const struct ps5vk_cache_key *key,
+    const uint32_t *input_words,
+    const void *payload,
+    size_t payload_bytes);
 
 /* Acquire an additional reference on a cache entry. */
 void ps5vk_cache_entry_acquire(struct ps5vk_cache_entry *entry);

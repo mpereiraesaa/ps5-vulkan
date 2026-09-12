@@ -5,9 +5,19 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST_SDK = ROOT / "dist-sdk"
+
+
+def archive(tool, output, objects):
+    # Recreate instead of ar-updating an old archive: removed source members
+    # must not survive a change of SDK profile.
+    with tempfile.TemporaryDirectory(dir=output.parent) as temp:
+        fresh = Path(temp) / output.name
+        subprocess.run([str(tool), "rcs", str(fresh), *objects], check=True)
+        fresh.replace(output)
 
 
 def get_ps5_toolchain():
@@ -92,6 +102,20 @@ def main():
             (logger / "ps5log.c", ["-include", str(logger / "ps5log_ps5_net.h")]),
             (logger / "ps5log_ps5_net.c", []),
         ]
+        graphics_sources = (
+            "native/graphics_pair.c", "src/shader_relocate.c",
+            "native/graphics_pipeline_ps5.c", "native/image_ps5.c",
+            "src/depth_layout.c", "src/color_clear.c",
+            "native/draw_prepare_ps5.c", "native/draw_emit_ps5.c", "native/index_emit_ps5.c",
+            "src/graphics_sync.c", "src/vertex_descriptor.c", "src/vertex_fetch.c", "src/index_fetch.c",
+            "src/texture_descriptor.c", "src/texture_dma.c", "src/image_layout_state.c",
+            "native/graphics_queue_ps5.c", "native/draw_state_ps5.c", "native/viewport_ps5.c",
+            "native/targets_ps5.c", "native/runtime_shader.c", "native/runtime_graphics_compiler.c",
+            "native/runtime_graphics_cache.c", "native/runtime_graphics_ps5.c",
+            "src/spirv_graphics_interface.c")
+        native_sources += [(ROOT / source, []) for source in graphics_sources]
+        native_sources += [(gears / "src" / source, []) for source in (
+            "ps5_shader_header.c", "ps5_pipeline.c", "ps5_color_target.c", "ps5_depth_target.c")]
 
         native_cflags = [
             "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
@@ -110,6 +134,8 @@ def main():
             "-I" + str(ROOT / "third_party/opengnm/include"),
             "-DPS5VK_RUNTIME_COMPILER=1",
             "-DPS5VK_TARGET_PS5=1",
+            "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
+            "-DPS5VK_RUNTIME_GRAPHICS=1", "-DPS5VK_NO_OFFLINE_LIBRARY=1",
         ]
 
         obj_dir = ROOT / "build/sdk-objs-native"
@@ -124,7 +150,7 @@ def main():
 
         native_lib = lib_dir / "libps5vk.a"
         ar_bin = str(sdk / "bin/prospero-ar") if (sdk / "bin/prospero-ar").is_file() else "ar"
-        subprocess.run([ar_bin, "rcs", str(native_lib)] + native_objs, check=True)
+        archive(ar_bin, native_lib, native_objs)
         has_native_sdk = True
 
         # Build independent native consumer test
@@ -141,9 +167,27 @@ def main():
         pie_ld = ROOT / "native/ps5-pie.ld"
         syms_map = ROOT / "native/app-symbols.map"
         crt = sdk / "target/lib/crt1.o"
-        stub = ROOT / "build/native-compute/stubs/libSceAgc.so"
-        driver = ROOT / "build/native-compute/stubs/libSceAgcDriver.so"
-        psbc_lib = ROOT / "build/libpsbc.ps5.a"
+        stub = lib_dir / "libSceAgc.so"
+        driver = lib_dir / "libSceAgcDriver.so"
+        stub_objects = []
+        for source in (gears / "native/stubs/libSceAgc.c", ROOT / "native/index_import_stub.c"):
+            obj = obj_dir / (source.stem + "_stub.o")
+            subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c", str(source), "-o", str(obj)],
+                           env=env, check=True)
+            stub_objects.append(str(obj))
+        subprocess.run([str(linker), "--shared", "-soname", "libSceAgc.prx", "-o", str(stub),
+                        *stub_objects], check=True)
+        driver_obj = obj_dir / "driver_stub.o"
+        subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c",
+                        str(gears / "native/stubs/libSceAgcDriver.c"), "-o", str(driver_obj)],
+                       env=env, check=True)
+        subprocess.run([str(linker), "--shared", "-soname", "libSceAgcDriver.prx",
+                        "-o", str(driver), str(driver_obj)], check=True)
+        compiler_source = ROOT / "build/libpsbc.ps5.a"
+        if not compiler_source.is_file():
+            raise SystemExit("Native SDK requires build/libpsbc.ps5.a; run tools/build_psbc.py --target ps5")
+        psbc_lib = lib_dir / "libpsbc.a"
+        shutil.copyfile(compiler_source, psbc_lib)
         out_elf = ROOT / "build/tests/test_sdk_consumer_native.elf"
 
         if (stub.is_file() and driver.is_file() and psbc_lib.is_file() and
@@ -198,7 +242,7 @@ def main():
         host_objs.append(str(obj_path))
 
     host_lib = lib_dir / ("libps5vk_host.a" if has_native_sdk else "libps5vk.a")
-    subprocess.run(["ar", "rcs", str(host_lib)] + host_objs, check=True)
+    archive("ar", host_lib, host_objs)
 
     # 5. Generate SDK README
     readme_text = """# PS5 Vulkan (ps5vk) SDK
@@ -209,15 +253,35 @@ Reusable SDK distribution for PlayStation 5 Vulkan development.
 - `include/ps5vk/`: Public ps5vk headers (`ps5vk.h`, `ps5vk_present.h`)
 - `include/vulkan/`: Vulkan 1.0 core standard headers
 - `lib/`: Prebuilt runtime libraries:
-  - `libps5vk.a`: Native PlayStation 5 runtime (GFX1013 profile, VideoOut presentation)
+  - `libps5vk.a`: Native PlayStation 5 runtime (gfx1013, graphics/compute, VideoOut)
   - `libps5vk_host.a`: Host test runtime for mock contracts and tooling
+  - `libpsbc.a`: Pinned PSBC/NIR/ACO native compiler dependency
+  - `libSceAgc.so`, `libSceAgcDriver.so`: Link-time import facades, not system module replacements
+
+The native SDK uses runtime SPIR-V compilation, not the demo's offline shader
+libraries. Graphics currently supports procedural triangle-list pipelines,
+one BGRA8 UNORM color target at sample count 1, full color writes and no
+blending. Vertex/fragment interfaces use matching smooth float32 scalar/vector
+locations; vertex buffers, graphics descriptors, push constants and additional
+render targets are not supported by this runtime compiler profile. A bounded
+in-process cache retains compiled pairs. This is not a Vulkan-conformant driver.
 
 ## Usage
 Include `<ps5vk/ps5vk.h>` and `<ps5vk/ps5vk_present.h>` and compile with:
 ```sh
-prospero-clang -Iinclude consumer.c -Llib -lps5vk ...
+prospero-clang -Iinclude consumer.c -Llib -lps5vk -lpsbc ...
 ```
 No private internal headers (`vk_internal.h`, `command_arena_ps5.h`, etc.) are required.
+Native applications still need the native-app scaffold, PS5 C/C++ runtime link
+dependencies and the AGC import facades. Initialize the lab's TCP logger before
+device creation; do not add filesystem/USB logging. Use normal system Close
+Game with the existing GPU suspension protocol. The SDK does not own app main,
+telemetry configuration, deployment or the application's event loop.
+
+Native consumer validation performed by this script is a cross-compile/link
+check, not a hardware run. Host consumer execution uses a mock backend and
+does not certify GPU output. If no native toolchain is available, libps5vk.a
+contains the host validation backend instead; no native capability is implied.
 """
     (DIST_SDK / "README.md").write_text(readme_text)
 

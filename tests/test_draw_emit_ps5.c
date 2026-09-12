@@ -90,4 +90,20 @@ int main(void)
     op.type=PS5VK_DRAW;
     assert(ps5vk_native_emit_textured_draw(&cursor,64,&state,&state,sizeof(state),&op,
         0x123400,0x567800,0x900000,NULL,NULL)==VK_SUCCESS && cursor==commands+18);
+    state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,.fragment_count=2,
+        .base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.lds_slot=1,.lds_value=0};
+    state.sh_count=10;cursor=commands;calls=0;
+    assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)==VK_SUCCESS);
+    assert(commands[2]==10 && commands[3]==0x8c && commands[4]==2);
+    assert(commands[5]==11 && commands[6]==0); /* No LLPC table address in base vertex. */
+    assert(commands[7]==0xc && commands[8]==2 && commands[9]==0 && commands[10]==0);
+    cursor=commands;calls=0;state.runtime.lds_slot=0;
+    assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)!=VK_SUCCESS);
+    assert(cursor==commands && !calls);
+    state.runtime.lds_slot=2;
+    assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)!=VK_SUCCESS);
+    assert(cursor==commands && !calls);
+    state.runtime.lds_slot=1;state.sh_count=17;
+    assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0)!=VK_SUCCESS);
+    assert(cursor==commands && !calls);
 }

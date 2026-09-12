@@ -13,5 +13,6 @@ struct ps5vk_native_graphics_pipeline {
     size_t allocation_bytes;
 };
 VkResult ps5vk_native_graphics_create(VkDevice, const void *, void **);
+VkResult ps5vk_native_runtime_graphics_create(VkDevice,const void *,void **);
 void ps5vk_native_graphics_release(VkDevice, void *);
 #endif

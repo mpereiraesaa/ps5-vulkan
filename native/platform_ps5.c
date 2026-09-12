@@ -1,6 +1,10 @@
 #include "vk_internal.h"
 #include "vk_pipeline.h"
+#ifdef PS5VK_NO_OFFLINE_LIBRARY
+static struct ps5vk_program_library ps5vk_compiled_library={0};
+#else
 #include "program_library.h"
+#endif
 #include "ps5_platform.h"
 #include "ps5_agc.h"
 #include "ps5log.h"
@@ -9,8 +13,28 @@
 #include <string.h>
 #include <unistd.h>
 #ifdef PS5VK_GRAPHICS_API
+#if !defined(PS5VK_RUNTIME_GRAPHICS) || !PS5VK_RUNTIME_GRAPHICS
 #include "graphics_library.h"
+#endif
 #include "graphics_pipeline_ps5.h"
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+#include "runtime_graphics_compiler.h"
+#include "compilation_cache.h"
+static struct ps5vk_compilation_cache *graphics_cache;
+static VkResult acquire_graphics(void *context,const struct ps5vk_graphics_key *key,const void **out)
+{
+    struct ps5vk_cache_stats before={0},after={0};
+    ps5vk_compilation_cache_get_stats(context,&before);
+    VkResult rc=ps5vk_runtime_graphics_cached_acquire(context,key,out);
+    ps5vk_compilation_cache_get_stats(context,&after);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_RUNTIME_GRAPHICS_CACHE rc=%d hit=%u compiled_pairs=%llu hits=%llu misses=%llu entries=%u bytes=%llu",
+        rc,(unsigned)(after.hits>before.hits),(unsigned long long)after.compiles,
+        (unsigned long long)after.hits,(unsigned long long)after.misses,
+        after.current_entries,(unsigned long long)after.current_bytes);
+    return rc;
+}
+#endif
 void ps5vk_native_graphics_queue_configure(VkDevice);
 #endif
 #if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER
@@ -49,6 +73,13 @@ static VkResult open_backend(void *unused, struct ps5vk_memory_backend *memory)
         if (sceSysmoduleUnloadModuleInternal(0x80000094u)) retain("init-rollback-unload");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+    graphics_cache=ps5vk_compilation_cache_create(32,4u*1024u*1024u);
+    if(!graphics_cache) {
+        if(sceSysmoduleUnloadModuleInternal(0x80000094u))retain("cache-rollback-unload");
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+#endif
     opened = 1;
     *memory =
 #ifdef PS5VK_GRAPHICS_API
@@ -62,6 +93,10 @@ static VkResult open_backend(void *unused, struct ps5vk_memory_backend *memory)
 static void close_backend(struct ps5vk_memory_backend *memory)
 {
     if (!opened || memory->context != &budget || budget.used) retain("live-memory-on-close");
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+    ps5vk_compilation_cache_destroy(graphics_cache);graphics_cache=NULL;
+    ps5log_line(PS5LOG_MARK,"PS5VK_RUNTIME_GRAPHICS_CACHE_DESTROYED");
+#endif
 #if defined(PS5VK_KEEP_AGC_MODULE) && PS5VK_KEEP_AGC_MODULE
     /* Diagnostic only: leave the module reference for process termination.
      * Do not report this as a successful explicit unload. */
@@ -85,9 +120,17 @@ static void configure(VkDevice d)
     /* Experimental graphics objects; real submission is separately enabled by
      * PS5VK_GRAPHICS_DRAW. A complete graphics queue profile is not yet advertised. */
     d->graphics_enabled = VK_TRUE;
+    d->graphics_release = ps5vk_native_graphics_release;
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+    d->graphics_library=NULL;
+    d->graphics_compiler_context=graphics_cache;
+    d->graphics_acquire=acquire_graphics;
+    d->graphics_compiled_release=ps5vk_runtime_graphics_cached_release;
+    d->graphics_create=ps5vk_native_runtime_graphics_create;
+#else
     d->graphics_library = &graphics_library;
     d->graphics_create = ps5vk_native_graphics_create;
-    d->graphics_release = ps5vk_native_graphics_release;
+#endif
     d->image_requirements = ps5vk_native_image_requirements;
 #if PS5VK_GRAPHICS_DRAW
     struct ps5vk_queue_backend compute=d->submit_backend;

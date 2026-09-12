@@ -4,9 +4,18 @@
 #include <assert.h>
 #include <stdlib.h>
 static unsigned created, released;
+static unsigned acquired, compiled_released, compile_fail, backend_fail;
 static VkResult backend(VkDevice d,const void *data,void **out)
-{ (void)d; assert(data); ++created; *out=malloc(1); return *out ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY; }
+{ (void)d; assert(data); ++created; *out=malloc(1); return backend_fail?VK_ERROR_UNKNOWN:(*out ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY); }
 static void release(VkDevice d,void *data) { (void)d; ++released; free(data); }
+static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const void **out)
+{
+    assert(context==&acquired && key->vertex.word_count==10 && key->fragment.word_count==10);
+    ++acquired;*out=malloc(1);assert(*out);
+    return compile_fail?VK_ERROR_FEATURE_NOT_PRESENT:VK_SUCCESS;
+}
+static void compiled_release(void *context,const void *data)
+{ assert(context==&acquired && data);++compiled_released;free((void *)data); }
 int main(void)
 {
     uint32_t vs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,0,1,0x6e69616d,0};
@@ -39,6 +48,23 @@ int main(void)
         .stageCount=2,.pStages=stages,.pVertexInputState=&v,.pInputAssemblyState=&ia,.pRasterizationState=&r,.pMultisampleState=&m,.pViewportState=&vp,.pColorBlendState=&b};
     VkPipeline p; assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&p)==VK_SUCCESS && p->graphics && created==1);
     viewport.width=1; assert(p->viewport.width==1920);
+    d.graphics_library=NULL;d.graphics_compiler_context=&acquired;
+    d.graphics_acquire=acquire;d.graphics_compiled_release=compiled_release;
+    VkPipeline runtime;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
+    assert(acquired==1 && compiled_released==1);
+    vkDestroyPipeline(&d,runtime,NULL);
+    compile_fail=1;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
+    assert(acquired==2 && compiled_released==2 && created==2);
+    compile_fail=0;backend_fail=1;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_UNKNOWN && !runtime);
+    assert(acquired==3 && compiled_released==3 && released==2);
+    backend_fail=0;d.graphics_compiled_release=NULL;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
+    assert(acquired==3);
+    d.graphics_acquire=NULL;d.graphics_library=&library;
+    created=1;released=0;
     vkDestroyShaderModule(&d,modules[0],NULL); vkDestroyShaderModule(&d,modules[1],NULL);
     p->pending=1; vkDestroyPipeline(&d,p,NULL); assert(!released);
     p->pending=0; vkDestroyPipeline(&d,p,NULL); assert(released==1 && !d.pipeline_objects);
