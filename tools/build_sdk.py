@@ -10,6 +10,9 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 DIST_SDK = ROOT / "dist-sdk"
 
+sys.path.insert(0, str(ROOT / "tools"))
+from lab import lab_root  # noqa: E402
+
 
 def archive(tool, output, objects):
     # Recreate instead of ar-updating an old archive: removed source members
@@ -25,9 +28,9 @@ def get_ps5_toolchain():
     if sdk_env:
         sdk = Path(sdk_env).resolve()
     else:
-        lab = ROOT.parents[1]
+        lab = lab_root()
         sdk = lab / "third_party/ps5-native-app-boilerplate/.deps/native/ps5-payload-sdk"
-    wrapper = ROOT.parents[1] / "third_party/ps5-native-app-boilerplate/tooling/prospero-clang18"
+    wrapper = lab_root() / "third_party/ps5-native-app-boilerplate/tooling/prospero-clang18"
     if (sdk / "bin/prospero-lld").is_file() and wrapper.is_file():
         return sdk, wrapper
     return None, None
@@ -55,7 +58,7 @@ def main():
                 shutil.copyfile(hdr, dst / hdr.name)
 
     sdk, clang_wrapper = get_ps5_toolchain()
-    lab = ROOT.parents[1]
+    lab = lab_root()
     gears = lab / "projects/ps5-agc-gears"
     logger = lab / "projects/logging_server/client"
 
