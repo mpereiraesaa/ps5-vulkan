@@ -10,6 +10,9 @@ static void clear(VkCommandBuffer c)
     memset(c->sets, 0, sizeof(c->sets)); memset(c->set_signatures, 0, sizeof(c->set_signatures));
     memset(c->graphics_sets,0,sizeof(c->graphics_sets));
     memset(c->graphics_set_signatures,0,sizeof(c->graphics_set_signatures));
+    c->push_constants_valid=VK_FALSE;
+    memset(c->push_constant_stages,0,sizeof(c->push_constant_stages));
+    memset(c->push_constants,0,sizeof(c->push_constants));
     memset(c->operations, 0, sizeof(c->operations));
     memset(c->vertices, 0, sizeof(c->vertices));
     memset(&c->indices, 0, sizeof(c->indices));
@@ -196,11 +199,32 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(VkCommandBuffer c, VkPipeline
     } else for (uint32_t j=0;j<count;++j) { c->sets[first+j]=sets[j];
         c->set_signatures[first+j]=layout->sets[first+j]; }
 }
+VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants(VkCommandBuffer c, VkPipelineLayout layout,
+    VkShaderStageFlags stages, uint32_t offset, uint32_t size, const void *values)
+{
+    const VkShaderStageFlags supported = VK_SHADER_STAGE_COMPUTE_BIT |
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    if (!c || c->state != PS5VK_RECORDING || !layout ||
+        layout->device != c->pool->device || !stages || (stages & ~supported) ||
+        !size || !values || (offset & 3u) || (size & 3u) ||
+        offset >= PS5VK_MAX_PUSH_CONSTANT_BYTES ||
+        size > PS5VK_MAX_PUSH_CONSTANT_BYTES - offset) { invalid(c); return; }
+    uint32_t first=offset/4u,end=(offset+size)/4u;
+    for(uint32_t j=first;j<end;++j)
+        if((layout->push_constant_stages[j]&stages)!=stages){invalid(c);return;}
+    memcpy(c->push_constants+offset,values,size);
+    memcpy(c->push_constant_stages,layout->push_constant_stages,
+           sizeof(c->push_constant_stages));
+    c->push_constants_valid=VK_TRUE;
+}
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t y, uint32_t z)
 {
     if (!c || c->state != PS5VK_RECORDING || c->render_pass || !c->pipeline || x > 65535 || y > 65535 || z > 65535 ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     const struct ps5vk_compiled_program *p = &c->pipeline->program;
+    if (p->push_constant_size && (!c->push_constants_valid ||
+        memcmp(c->pipeline->push_constant_stages,c->push_constant_stages,
+               sizeof(c->push_constant_stages)))) { invalid(c); return; }
     for (uint32_t set=0;set<c->pipeline->set_count;++set)
         if ((p->descriptor_set_mask&(1u<<set)) && (!c->sets[set] ||
             memcmp(&c->pipeline->sets[set],&c->set_signatures[set],sizeof(c->set_signatures[set]))))
@@ -213,6 +237,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t
     }
     struct ps5vk_operation *op=&c->operations[c->operation_count++];
     *op=(struct ps5vk_operation){.type=PS5VK_DISPATCH,.pipeline=c->pipeline,.groups={x,y,z}};
+    op->push_constant_size=p->push_constant_size;
+    if(op->push_constant_size)memcpy(op->push_constants,c->push_constants,op->push_constant_size);
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set)) {
         op->sets[set]=c->sets[set];op->generations[set]=c->sets[set]->generation;
     }
@@ -283,6 +309,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if (!c || c->state != PS5VK_RECORDING || !c->render_pass || !c->graphics_pipeline ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkPipeline p = c->graphics_pipeline;
+    if(p->push_constant_size && (!c->push_constants_valid ||
+        memcmp(p->push_constant_stages,c->push_constant_stages,
+               sizeof(c->push_constant_stages)))) {invalid(c);return;}
     if(p->set_count && (p->set_count!=1 || !c->graphics_sets[0] ||
         memcmp(&p->sets[0],&c->graphics_set_signatures[0],sizeof(p->sets[0])))) {invalid(c);return;}
     VkRenderPass pass = c->render_pass;
@@ -296,6 +325,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
         .vertex_count = vertices, .instance_count = instances, .first_vertex = first_vertex,
         .first_instance = first_instance};
     memcpy(c->operations[c->operation_count-1].vertices,c->vertices,sizeof(c->vertices));
+    c->operations[c->operation_count-1].push_constant_size=p->push_constant_size;
+    if(p->push_constant_size)memcpy(c->operations[c->operation_count-1].push_constants,
+        c->push_constants,p->push_constant_size);
     if(p->set_count) {
         c->operations[c->operation_count-1].sets[0]=c->graphics_sets[0];
         c->operations[c->operation_count-1].generations[0]=c->graphics_sets[0]->generation;

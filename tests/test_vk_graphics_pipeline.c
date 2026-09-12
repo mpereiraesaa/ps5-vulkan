@@ -20,7 +20,7 @@ int main(void)
 {
     uint32_t vs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,0,1,0x6e69616d,0};
     uint32_t fs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,4,1,0x6e69616d,0};
-    struct ps5vk_graphics_program program={.key={.vertex={vs,10,"main"},.fragment={fs,10,"main"},
+    struct ps5vk_graphics_program program={.key={.vertex={.words=vs,.word_count=10,.entry="main"},.fragment={.words=fs,.word_count=10,.entry="main"},
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
         .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15},.backend_data=vs};
     struct ps5vk_graphics_library library={&program,1};

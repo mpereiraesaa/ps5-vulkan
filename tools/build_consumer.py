@@ -59,11 +59,15 @@ def main():
     parser = argparse.ArgumentParser(description="Build independent native consumer")
     parser.add_argument("--continuous", action="store_true", help="Compile in continuous rendering mode")
     parser.add_argument("--check-only", action="store_true", help="Only verify header and symbol isolation")
+    parser.add_argument("--use-staged-sdk", action="store_true",
+                        help="Reuse dist-sdk without rebuilding it (caller guarantees freshness)")
     args = parser.parse_args()
 
-    # Ensure SDK is staged
-    if not (DIST_SDK / "lib/libps5vk.a").is_file():
-        print("Staged SDK missing; running tools/build_sdk.py...")
+    # A merely present archive may predate the source tree.  Fresh staging is
+    # the safe default for a standalone consumer and prevents false link
+    # failures (or, worse, validation against yesterday's implementation).
+    if not args.use_staged_sdk or not (DIST_SDK / "lib/libps5vk.a").is_file():
+        print("Staging current SDK with tools/build_sdk.py...")
         subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")], check=True)
 
     lab = lab_root()

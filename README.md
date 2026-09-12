@@ -22,6 +22,7 @@ results; visual output is not the sole correctness signal.
 - Command pools and command buffers with explicit recording state
 - Runtime-compiled compute pipelines with up to four resource sets
 - Storage buffers, uniform buffers and R32 uniform texel buffers
+- Push constants and scalar specialization constants in compute and runtime graphics
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list draws
 - One BGRA8 color attachment and an optional D32 depth attachment
@@ -48,7 +49,8 @@ semaphores, blending, MSAA, mipmaps, anisotropy or arbitrary shader programs.
 Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
 backend and cached under a bounded in-memory policy. Runtime vertex/fragment
 compilation now supports procedural triangles with matching smooth float32
-interfaces, a BGRA8 color target and no graphics descriptors. Compiled pairs
+interfaces, a BGRA8 color target, push/specialization constants and no graphics
+descriptors. Compiled pairs
 reuse the bounded cache. The textured scene still uses its audited offline
 program library; it does not imply textured runtime-shader support.
 

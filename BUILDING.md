@@ -79,8 +79,9 @@ For the bounded multi-set compute acceptance in the public consumer, use
 `tools/verify_consumer_resource_abi.py LOG --artifact MANIFEST`. The artifact
 manifest must identify the deployed SELF and profile; the verifier requires
 three sets, two storage buffers, one uniform buffer, one uniform texel buffer,
-64 exact results, 128 intact guard words, complete queue witnesses and a clean
-TCP `BYE`. System Close Game remains a separate lifecycle check.
+two non-default scalar specialization values, one pushed 32-bit word, 64 exact
+results, 128 intact guard words, complete queue witnesses and a clean TCP
+`BYE`. System Close Game remains a separate lifecycle check.
 
 Host checks validate API state machines, encoder contracts, resource ownership,
 negative paths and generated-program invariants. A successful host build alone

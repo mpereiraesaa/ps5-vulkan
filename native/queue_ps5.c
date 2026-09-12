@@ -102,7 +102,9 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             }
             size_t code_bytes = program->code_words * 4;
             size_t table_offset = (code_bytes + 255) & ~(size_t)255;
-            p->bytes = table_offset + PS5VK_MAX_SETS * 512;
+            size_t push_offset = table_offset + PS5VK_MAX_SETS * 512;
+            p->bytes = push_offset + (program->push_constant_size ?
+                PS5VK_MAX_PUSH_CONSTANT_BYTES : 0);
             result = device->memory.allocate(device->memory.context, p->bytes, &p->arena, &p->backing);
             if (result != VK_SUCCESS) goto fail;
             memcpy(p->arena, program->code, code_bytes);
@@ -113,6 +115,14 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
                     .completion=(uintptr_t)job->command + 0x1100,
                     .readback=(uintptr_t)job->command + 0xff4},
                 .completion_value = (job->serial << 32) | job->count};
+            if(program->push_constant_size) {
+                if(op->push_constant_size!=program->push_constant_size) {
+                    result=VK_ERROR_UNKNOWN;goto fail;
+                }
+                void *push=(unsigned char *)p->arena+push_offset;
+                memcpy(push,op->push_constants,program->push_constant_size);
+                encoding.push_constants=(uintptr_t)push;
+            }
             for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
                 if(program->descriptor_set_mask&(1u<<set)) {
                     uint32_t *table=tables+set*128;

@@ -73,6 +73,7 @@ static const struct entry entries[] = {
     ENTRY(vkResetCommandBuffer, DEVICE),
     ENTRY(vkCmdBindPipeline, DEVICE),
     ENTRY(vkCmdBindDescriptorSets, DEVICE),
+    ENTRY(vkCmdPushConstants, DEVICE),
     ENTRY(vkCmdDispatch, DEVICE),
     ENTRY(vkCmdBeginRenderPass, DEVICE),
     ENTRY(vkCmdEndRenderPass, DEVICE),

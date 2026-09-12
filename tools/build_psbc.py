@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Build libpsbc for PS5 or host."""
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -8,6 +10,18 @@ import sys
 from lab import lab_root
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def write_identity(out_lib: Path, psbc_dir: Path, target: str) -> None:
+    revision = subprocess.check_output(
+        ["git", "-C", str(psbc_dir), "rev-parse", "HEAD"], text=True).strip()
+    identity = {
+        "schema": 1,
+        "target": target,
+        "source_commit": revision,
+        "archive_sha256": hashlib.sha256(out_lib.read_bytes()).hexdigest(),
+    }
+    out_lib.with_suffix(".json").write_text(json.dumps(identity, indent=2) + "\n")
 
 
 def get_sdk():
@@ -126,7 +140,10 @@ def main():
     args = parser.parse_args()
 
     is_host = args.host or args.target == "host"
-    psbc_dir = ROOT / "third_party/psbc-reference"
+    psbc_dir = Path(os.environ.get(
+        "PS5VK_PSBC_SOURCE", ROOT / "third_party/psbc-reference")).resolve()
+    if not (psbc_dir / "libpsbc/psbc_compile.c").is_file():
+        sys.exit(f"PSBC source tree not found or incomplete at {psbc_dir}")
 
     if is_host:
         makefile = ROOT / "tools/Makefile.psbc-host"
@@ -147,6 +164,7 @@ def main():
             "libpsbc"
         ]
         subprocess.run(cmd, check=True)
+        write_identity(out_lib, psbc_dir, "host")
         print(f"Successfully built {out_lib}")
         return
 
@@ -174,6 +192,7 @@ def main():
         "libpsbc"
     ]
     subprocess.run(cmd, check=True)
+    write_identity(out_lib, psbc_dir, "ps5")
     print(f"Successfully built {out_lib}")
 
 

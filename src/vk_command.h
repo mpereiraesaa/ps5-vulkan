@@ -28,6 +28,8 @@ struct ps5vk_operation {
     VkDescriptorSet sets[PS5VK_MAX_SETS];
     uint64_t generations[PS5VK_MAX_SETS];
     uint32_t groups[3];
+    uint32_t push_constant_size;
+    uint8_t push_constants[PS5VK_MAX_PUSH_CONSTANT_BYTES];
     VkPipelineStageFlags src_stage, dst_stage;
     VkAccessFlags src_access, dst_access;
     VkBufferMemoryBarrier buffer_barrier;
@@ -43,6 +45,9 @@ struct VkCommandBuffer_T {
     VkPipeline graphics_pipeline;
     VkDescriptorSet graphics_sets[PS5VK_MAX_SETS];
     struct ps5vk_set_signature graphics_set_signatures[PS5VK_MAX_SETS];
+    VkBool32 push_constants_valid;
+    VkShaderStageFlags push_constant_stages[PS5VK_MAX_PUSH_CONSTANT_DWORDS];
+    uint8_t push_constants[PS5VK_MAX_PUSH_CONSTANT_BYTES];
     struct ps5vk_index_binding indices;
     struct ps5vk_vertex_binding vertices[PS5VK_MAX_VERTEX_BINDINGS];
     VkRenderPass render_pass;

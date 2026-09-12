@@ -27,7 +27,8 @@ struct ps5vk_compiler {
     VkResult (*resolve)(void *, const uint32_t *, size_t, const char *,
                         const struct ps5vk_compiled_program **);
     VkResult (*compile)(void *, const uint32_t *, size_t, const char *,
-                        VkPipelineLayout, struct ps5vk_compiled_program *, uint32_t **);
+                        VkPipelineLayout, const VkSpecializationInfo *,
+                        struct ps5vk_compiled_program *, uint32_t **);
 };
 struct ps5vk_progress {
     void *context;

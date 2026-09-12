@@ -14,6 +14,14 @@ extern "C" {
 #define PS5VK_COMPILER_ID_PSBC_ACO  UINT32_C(0x50534243) /* "PSBC" */
 #define PS5VK_COMPILER_VERSION_1    UINT32_C(1)
 #define PS5VK_CACHE_ABI_VERSION_1   UINT32_C(1)
+#define PS5VK_MAX_SPECIALIZATION_CONSTANTS 64u
+#define PS5VK_MAX_SPECIALIZATION_BYTES 8u
+
+struct ps5vk_cache_specialization {
+    uint32_t constant_id;
+    uint32_t size;
+    uint8_t data[PS5VK_MAX_SPECIALIZATION_BYTES];
+};
 
 /* Immutable compiler cache key capturing every compiler-relevant input. */
 struct ps5vk_cache_key {
@@ -34,6 +42,11 @@ struct ps5vk_cache_key {
             uint32_t type;
         } bindings[PS5VK_MAX_BINDINGS];
     } sets[PS5VK_MAX_SETS];
+    uint32_t push_constant_size;
+    uint32_t push_constant_stages[PS5VK_MAX_PUSH_CONSTANT_DWORDS];
+    uint32_t specialization_count;
+    struct ps5vk_cache_specialization
+        specializations[PS5VK_MAX_SPECIALIZATION_CONSTANTS];
     size_t spirv_words;
     uint8_t spirv_sha256[32];
 };
@@ -90,6 +103,7 @@ bool ps5vk_cache_build_key(
     size_t spirv_words,
     const char *entry_name,
     VkPipelineLayout layout,
+    const VkSpecializationInfo *specialization,
     struct ps5vk_cache_key *out_key
 );
 

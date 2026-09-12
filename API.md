@@ -51,6 +51,11 @@ supported.
   texel format is `VK_FORMAT_R32_UINT`; broader format support is not implied.
 - Partial descriptor-set binding is accepted, but every set and descriptor used
   by the compiled shader must be bound and defined before dispatch.
+- Pipeline layouts expose up to 256 bytes of 4-byte-aligned push constants.
+  Recorded dispatches own immutable snapshots of the bytes visible to their
+  compute stage.
+- Pipeline specialization supports up to 64 uniquely numbered scalar constants
+  of at most 8 bytes each. Map-entry order does not affect cache identity.
 - Command-buffer dispatch and fences.
 - Exact GPU completion and checked readback, including guard validation.
 - A single serial native queue; no multi-queue or semaphore contract.
@@ -73,19 +78,24 @@ are preserved during dispatch. Focused upstream shared-variable, barrier and
 shared-atomic cases pass on hardware; this is not broad compute conformance.
 Cache keys include the complete SPIR-V digest, entry point, compiler/ABI
 versions and pipeline-layout state, and entries are constrained by count and
-byte budgets.
+byte budgets. Cache identity includes canonical specialization values and the
+complete push-range stage signature. Specialization-dependent `LocalSizeId`
+workgroup dimensions are not yet supported; local size must remain literal.
 
 Runtime graphics uses the same pinned PSBC/NIR/ACO stack for vertex and
 fragment SPIR-V. The current profile supports procedural triangle lists,
 smooth float32 scalar/vector interfaces at matching whole locations 0–31,
 one vec4 fragment output at location 0, BGRA8 UNORM/sample1 and full color
-writes. VertexIndex is supported; vertex buffers, graphics descriptors,
-push constants, blending, additional targets and other interpolation modes
-are rejected. Interface reflection is bounded to 65,536 IDs and is not a
-complete SPIR-V validator; use developer-owned valid shader modules.
+writes. VertexIndex, push constants and scalar specialization constants are
+supported. Vertex buffers, graphics descriptors, blending, additional targets
+and other interpolation modes are rejected by this runtime-compiled profile.
+The separate audited offline graphics path supports vertex buffers. Interface
+reflection is bounded to 65,536 IDs and is not a complete SPIR-V validator;
+use developer-owned valid shader modules.
 
-Pair-cache identity includes both complete modules, both entrypoints and
-compiler/profile options. Cache leases protect metadata and ISA while the
+Pair-cache identity includes both complete modules, both entrypoints,
+compiler/profile options, per-stage canonical specialization maps and the push
+layout signature. Cache leases protect metadata and ISA while the
 native backend copies them into direct memory. The native SDK retains at most
 32 pairs / 4 MiB; transient compilation allocations are outside that retained
 budget. No persistent Vulkan pipeline-cache format is provided.

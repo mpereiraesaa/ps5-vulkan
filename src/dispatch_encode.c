@@ -13,10 +13,12 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
     const struct ps5vk_compute_addresses *a = &d->addresses;
     if (p->gfx != 1013 || p->wave_size != 32 || !p->code_words || p->code_words > 1024 * 1024 ||
         !p->vgprs || p->vgprs > 256 || !p->sgprs || p->sgprs > 106 ||
-        p->user_sgprs < 3 || p->user_sgprs > 9 || p->lds_size > 128 ||
+        p->user_sgprs < 2 || p->user_sgprs > 10 || p->lds_size > 128 ||
         p->float_mode > 255 || p->ieee_mode > 1 || p->mem_ordered > 1 || p->tg_size > 1 ||
-        p->tidig_components > 2 || !p->descriptor_count || p->descriptor_count > PS5VK_MAX_DESCRIPTORS ||
-        !p->descriptor_set_mask || (p->descriptor_set_mask & ~((1u << PS5VK_MAX_SETS) - 1)))
+        p->tidig_components > 2 || p->descriptor_count > PS5VK_MAX_DESCRIPTORS ||
+        (p->descriptor_set_mask & ~((1u << PS5VK_MAX_SETS) - 1)) ||
+        (!!p->descriptor_count != !!p->descriptor_set_mask) ||
+        p->push_constant_size > PS5VK_MAX_PUSH_CONSTANT_BYTES)
         return 0;
     uint64_t local = 1, table_bytes[PS5VK_MAX_SETS] = {0};
     for (unsigned j = 0; j < 3; ++j) {
@@ -50,6 +52,13 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
             (d->descriptor_tables[set] >> 32) !=
                 ((d->descriptor_tables[set] + table_bytes[set] - 1) >> 32)) return 0;
     }
+    if (p->push_constant_size) {
+        if (p->push_constant_sgpr != next_sgpr++ || !d->push_constants ||
+            (d->push_constants & 3u) || (d->push_constants >> 32) != 2 ||
+            d->push_constants > (UINT64_C(1) << 48) - p->push_constant_size ||
+            (d->push_constants >> 32) !=
+                ((d->push_constants + p->push_constant_size - 1) >> 32)) return 0;
+    } else if (p->push_constant_sgpr || d->push_constants) return 0;
     if (p->grid_size_sgpr) {
         if (p->grid_size_sgpr != next_sgpr) return 0;
         next_sgpr += 3;
@@ -59,13 +68,16 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
     if (a->code > (UINT64_C(1) << 48) - code_bytes ||
         a->completion > (UINT64_C(1) << 48) - 8 || a->readback > (UINT64_C(1) << 48) - 16 ||
         (a->code >> 32) != ((a->code + code_bytes - 1) >> 32)) return 0;
-    uint64_t bases[3 + PS5VK_MAX_SETS] = {a->code, a->completion, a->readback};
-    uint64_t sizes[3 + PS5VK_MAX_SETS] = {code_bytes, 8, 16};
+    uint64_t bases[4 + PS5VK_MAX_SETS] = {a->code, a->completion, a->readback};
+    uint64_t sizes[4 + PS5VK_MAX_SETS] = {code_bytes, 8, 16};
     unsigned regions = 3;
     for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set)
         if (p->descriptor_set_mask & (1u << set)) {
             bases[regions] = d->descriptor_tables[set]; sizes[regions++] = table_bytes[set];
         }
+    if (p->push_constant_size) {
+        bases[regions] = d->push_constants; sizes[regions++] = p->push_constant_size;
+    }
     for (unsigned j = 0; j < regions; ++j)
         for (unsigned k = 0; k < j; ++k)
             if (overlap(bases[j], sizes[j], bases[k], sizes[k])) return 0;
@@ -114,6 +126,8 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
                 for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set)
                     if (p->descriptor_set_mask & (1u << set))
                         words[out + 2 + p->descriptor_set_sgpr[set]] = (uint32_t)d->descriptor_tables[set];
+                if (p->push_constant_size)
+                    words[out + 2 + p->push_constant_sgpr] = (uint32_t)d->push_constants;
                 if (p->grid_size_sgpr)
                     memcpy(words + out + 2 + p->grid_size_sgpr, d->groups, 3 * sizeof(uint32_t));
                 out += count; found |= 16;

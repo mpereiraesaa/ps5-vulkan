@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "5bd276ef3971cabe3af8da1a0f0710437215692b",
-  "inspected_commit": "5bd276ef3971cabe3af8da1a0f0710437215692b",
+  "baseline_commit": "f937f1635222a7d7ac07d860e6af513e254e7707",
+  "inspected_commit": "f937f1635222a7d7ac07d860e6af513e254e7707",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 83,
-    "dispatched": 83,
-    "public_header": 82,
+    "entry_points": 84,
+    "dispatched": 84,
+    "public_header": 83,
     "implementation_only": 1
   },
   "entry_points": [
@@ -158,6 +158,15 @@
     },
     {
       "name": "vkCmdPipelineBarrier",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdPushConstants",
       "files": [
         "src/vk_command.c"
       ],

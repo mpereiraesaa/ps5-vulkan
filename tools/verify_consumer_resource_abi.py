@@ -90,8 +90,10 @@ def validate(log, receipt, artifact):
     require("serial=1 index=0 token=100000001 gcr=0070f528" in completed[1],
             "completion")
     require(witness[1].split()[1:] == [
-        "sets=3", "storage=2", "uniform=1", "texel=1", "elements=64",
-        "mismatches=0", "guard_words=128", "guard_mismatches=0"],
+        "sets=3", "storage=2", "uniform=1", "texel=1",
+        "push_bytes=4", "spec_constants=2", "multiplier=5",
+        "extra_bias=11", "addend=19", "elements=64", "mismatches=0",
+        "guard_words=128", "guard_mismatches=0"],
         "resource oracle")
     require(retired[1].endswith("zero_tracked_allocations=1") and
             ready[1].endswith("resources_retired=1"), "resource retirement")
@@ -104,6 +106,8 @@ def validate(log, receipt, artifact):
         "storage_buffers": 2,
         "uniform_buffers": 1,
         "uniform_texel_buffers": 1,
+        "push_constant_bytes": 4,
+        "specialization_constants": 2,
         "elements_checked": 64,
         "guard_words_checked": 128,
         "clean_tcp": True,

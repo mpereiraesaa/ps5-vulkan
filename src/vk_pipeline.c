@@ -108,10 +108,11 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
         strcmp(p->entry, entry) || memcmp(p->spirv, m->words, m->word_count * 4) ||
         memcmp(p->local_size, dims, 3 * sizeof(*dims)) || !p->vgprs || p->vgprs > 256 ||
         !p->sgprs || p->sgprs > 106 || p->float_mode > 255 || p->ieee_mode > 1 ||
-        p->mem_ordered > 1 || p->user_sgprs < 2 || p->user_sgprs > 9 || p->lds_size > 128 ||
+        p->mem_ordered > 1 || p->user_sgprs < 2 || p->user_sgprs > 10 || p->lds_size > 128 ||
         p->tg_size > 1 || p->tidig_components > 2 ||
-        !p->descriptor_count || p->descriptor_count > PS5VK_MAX_DESCRIPTORS ||
-        !p->descriptor_set_mask || (p->descriptor_set_mask & ~((1u << PS5VK_MAX_SETS) - 1))) return 0;
+        p->descriptor_count > PS5VK_MAX_DESCRIPTORS ||
+        (p->descriptor_set_mask & ~((1u << PS5VK_MAX_SETS) - 1)) ||
+        (!!p->descriptor_count != !!p->descriptor_set_mask)) return 0;
     uint32_t expected_user_sgprs = 2;
     for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set) {
         VkBool32 used = (p->descriptor_set_mask & (1u << set)) != 0;
@@ -119,6 +120,12 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
             if (set >= layout->set_count || p->descriptor_set_sgpr[set] != expected_user_sgprs++) return 0;
         } else if (p->descriptor_set_sgpr[set]) return 0;
     }
+    if (p->push_constant_size) {
+        if (p->push_constant_size > layout->push_constant_size ||
+            p->push_constant_sgpr != expected_user_sgprs++) return 0;
+        for (uint32_t j = 0; j < (p->push_constant_size + 3u) / 4u; ++j)
+            if (!(layout->push_constant_stages[j] & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
+    } else if (p->push_constant_sgpr) return 0;
     if (p->grid_size_sgpr) {
         if (p->grid_size_sgpr != expected_user_sgprs) return 0;
         expected_user_sgprs += 3;
@@ -154,7 +161,7 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
         info->layout->device != d || info->stage.sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO ||
         !info->stage.module || info->stage.module->device != d || !info->stage.pName) return INVALID;
     if (info->pNext || info->flags || info->stage.pNext || info->stage.flags ||
-        info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT || info->stage.pSpecializationInfo)
+        info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT)
         return VK_ERROR_UNKNOWN;
     if (!d->compiler.resolve && (!d->runtime_compiler_enabled || !d->compiler.compile)) return VK_ERROR_UNKNOWN;
     uint32_t dims[3];
@@ -165,17 +172,19 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     struct ps5vk_compiled_program compiled_storage = {0};
     uint32_t *compiled_code = NULL;
 
+    struct ps5vk_cache_key key;
+    if (!ps5vk_cache_build_key(info->stage.module->words, info->stage.module->word_count,
+                               info->stage.pName, info->layout,
+                               info->stage.pSpecializationInfo, &key)) return INVALID;
     if (d->pipeline_cache) {
-        struct ps5vk_cache_key key;
-        if (ps5vk_cache_build_key(info->stage.module->words, info->stage.module->word_count,
-                                  info->stage.pName, info->layout, &key)) {
             entry = ps5vk_compilation_cache_lookup(d->pipeline_cache, &key, info->stage.module->words);
             if (entry) {
                 program = &entry->program;
             } else if (d->runtime_compiler_enabled && d->compiler.compile) {
                 VkResult cr = d->compiler.compile(d->compiler.context,
                     info->stage.module->words, info->stage.module->word_count,
-                    info->stage.pName, info->layout, &compiled_storage, &compiled_code);
+                    info->stage.pName, info->layout, info->stage.pSpecializationInfo,
+                    &compiled_storage, &compiled_code);
                 if (cr == VK_SUCCESS) {
                     compiled_storage.code = compiled_code;
                     entry = ps5vk_compilation_cache_insert(d->pipeline_cache, &key,
@@ -191,10 +200,14 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
                     return cr;
                 }
             }
-        }
     }
 
     if (!program && d->compiler.resolve) {
+        if (info->stage.pSpecializationInfo &&
+            info->stage.pSpecializationInfo->mapEntryCount) {
+            if (compiled_code) free(compiled_code);
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
         VkResult result = d->compiler.resolve(d->compiler.context, info->stage.module->words,
             info->stage.module->word_count, info->stage.pName, &program);
         if (result != VK_SUCCESS) {
@@ -224,6 +237,9 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     p->device = d; p->allocator = saved; p->custom_allocator = custom;
     p->set_count = info->layout->set_count;
     memcpy(p->sets, info->layout->sets, sizeof(p->sets));
+    p->push_constant_size = info->layout->push_constant_size;
+    memcpy(p->push_constant_stages, info->layout->push_constant_stages,
+           sizeof(p->push_constant_stages));
     p->program = *program;
     p->cache_entry = entry;
     memcpy(p->code, program->code, program->code_words * 4); p->program.code = p->code;

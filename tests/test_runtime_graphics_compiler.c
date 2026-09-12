@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static struct ps5vk_graphics_module_key read_module(const char *path)
 {
@@ -11,7 +12,7 @@ static struct ps5vk_graphics_module_key read_module(const char *path)
     assert(!fseek(f,0,SEEK_END));long bytes=ftell(f);assert(bytes>0 && bytes%4==0);
     rewind(f);uint32_t *code=malloc((size_t)bytes);assert(code);
     assert(fread(code,1,(size_t)bytes,f)==(size_t)bytes);fclose(f);
-    return (struct ps5vk_graphics_module_key){code,(size_t)bytes/4,"main"};
+    return (struct ps5vk_graphics_module_key){.words=code,.word_count=(size_t)bytes/4,.entry="main"};
 }
 static void check_interfaces(struct ps5vk_graphics_key *key)
 {
@@ -95,6 +96,41 @@ int main(void)
     /* View remains valid until its detached lease is released. */
     assert(p->vertex.machine_code_size && p->arguments.lds_slot==1);
     ps5vk_runtime_graphics_cached_release(NULL,cold);
+
+    struct ps5vk_graphics_key parameters={
+        .vertex=read_module("build/runtime-graphics/parameters.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/parameters.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,.push_constant_size=16};
+    for(unsigned i=0;i<4;++i)parameters.push_constant_stages[i]=
+        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+    float vertex_scale=0.75f,fragment_intensity=0.5f;
+    parameters.vertex.specialization_count=1;
+    parameters.vertex.specializations[0].constant_id=0;
+    parameters.vertex.specializations[0].size=sizeof(vertex_scale);
+    memcpy(parameters.vertex.specializations[0].data,&vertex_scale,sizeof(vertex_scale));
+    parameters.fragment.specialization_count=1;
+    parameters.fragment.specializations[0].constant_id=1;
+    parameters.fragment.specializations[0].size=sizeof(fragment_intensity);
+    memcpy(parameters.fragment.specializations[0].data,&fragment_intensity,sizeof(fragment_intensity));
+    assert(ps5vk_runtime_graphics_compile(NULL,&parameters,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(p->arguments.push_constant_size && p->arguments.push_constant_size<=16 &&
+        p->arguments.vertex_push_slot!=UINT32_MAX &&
+        p->arguments.fragment_push_slot!=UINT32_MAX);
+    ps5vk_runtime_graphics_free(NULL,out);
+    cache=ps5vk_compilation_cache_create(4,1024*1024);
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&parameters,&cold)==VK_SUCCESS);
+    vertex_scale=1.25f;
+    memcpy(parameters.vertex.specializations[0].data,&vertex_scale,sizeof(vertex_scale));
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&parameters,&warm)==VK_SUCCESS);
+    ps5vk_compilation_cache_get_stats(cache,&stats);
+    assert(stats.compiles==2 && stats.misses==2 && stats.current_entries==2);
+    ps5vk_runtime_graphics_cached_release(cache,warm);
+    ps5vk_runtime_graphics_cached_release(cache,cold);
+    ps5vk_compilation_cache_destroy(cache);
+    free((void *)parameters.vertex.words);free((void *)parameters.fragment.words);
+
     cache=ps5vk_compilation_cache_create(1,1);
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&out)==VK_ERROR_OUT_OF_HOST_MEMORY && !out);
     ps5vk_compilation_cache_destroy(cache);
