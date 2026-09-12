@@ -107,7 +107,7 @@ class TestUpstreamRunner(unittest.TestCase):
         lines = self._generate_log_stream(self.sample_qpa, exit_status=None)
         with self.assertRaises(UpstreamVerificationError) as ctx:
             parse_upstream_log_lines(lines)
-        self.assertIn("Missing UPSTREAM_CTS_COMPLETE marker", str(ctx.exception))
+        self.assertIn("UPSTREAM_CTS_COMPLETE marker", str(ctx.exception))
 
     def test_nonzero_exit_status_fails_strict(self):
         lines = self._generate_log_stream(self.sample_qpa, exit_status=1)
@@ -181,6 +181,123 @@ class TestUpstreamRunner(unittest.TestCase):
         self.assertIn("selection_hash", str(ctx.exception))
         with self.assertRaises(UpstreamVerificationError):
             verify_run_identity(meta, {"eboot_sha256": "stale-binary"})
+
+    # --- structural (fail-closed) parsing -----------------------------------
+
+    def _parse(self, qpa_text):
+        lines = self._generate_log_stream(qpa_text.encode("utf-8"))
+        metadata, qpa_bytes = parse_upstream_log_lines(lines)
+        return parse_qpa_results(qpa_bytes.decode("utf-8"))
+
+    def test_incomplete_xml_is_rejected(self):
+        """A missing closing tag must not be salvaged into a Pass status."""
+        qpa = self.sample_qpa.decode("utf-8").replace("</TestCaseResult>", "", 1)
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            self._parse(qpa)
+        self.assertIn("never closed", str(ctx.exception))
+
+    def test_multiple_result_elements_are_rejected(self):
+        qpa = self.sample_qpa.decode("utf-8").replace(
+            '<Result StatusCode="Pass">Creating sampler succeeded</Result>',
+            '<Result StatusCode="Pass">a</Result><Result StatusCode="Fail">b</Result>',
+            1)
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            self._parse(qpa)
+        self.assertIn("exactly one <Result>", str(ctx.exception))
+
+    def test_case_path_mismatch_is_rejected(self):
+        qpa = self.sample_qpa.decode("utf-8").replace(
+            'CasePath="dEQP-VK.api.smoke.create_sampler"',
+            'CasePath="dEQP-VK.api.smoke.something_else"', 1)
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            self._parse(qpa)
+        self.assertIn("CasePath", str(ctx.exception))
+
+    def test_missing_session_markers_are_rejected(self):
+        qpa = (self.sample_qpa.decode("utf-8")
+               .replace("#beginSession\n", "")
+               .replace("#endSession\n", ""))
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            self._parse(qpa)
+        self.assertIn("#beginSession", str(ctx.exception))
+
+    def test_unterminated_final_case_is_rejected(self):
+        # Drop the terminator of the last case: the session must not accept it.
+        qpa = self.sample_qpa.decode("utf-8").replace(
+            "#endTestCaseResult\n#endSession", "#endSession")
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            self._parse(qpa)
+        self.assertIn("no terminator", str(ctx.exception))
+
+    def test_terminated_case_is_not_a_pass(self):
+        """#terminateTestCaseResult must surface as a failure, never disappear."""
+        qpa = (
+            "#beginSession\n"
+            "#beginTestCaseResult dEQP-VK.api.smoke.create_sampler\n"
+            '<TestCaseResult CasePath="dEQP-VK.api.smoke.create_sampler">\n'
+            '  <Result StatusCode="Pass">ok</Result>\n'
+            "</TestCaseResult>\n"
+            "#endTestCaseResult\n"
+            "#beginTestCaseResult dEQP-VK.api.smoke.create_shader\n"
+            '<TestCaseResult CasePath="dEQP-VK.api.smoke.create_shader">\n'
+            "#terminateTestCaseResult Crash\n"
+            "#endSession\n"
+        )
+        results = self._parse(qpa)
+        terminated = [r for r in results if r["case_path"].endswith("create_shader")]
+        self.assertEqual(len(terminated), 1)
+        self.assertEqual(terminated[0]["status"], "Crash")
+        self.assertTrue(terminated[0]["terminated"])
+
+    def test_case_timing_section_is_tolerated(self):
+        qpa = self.sample_qpa.decode("utf-8").replace(
+            "#beginSession\n",
+            "#beginSession\n#beginTestsCasesTime\n"
+            "<TestsCasesTime></TestsCasesTime>\n#endTestsCasesTime\n", 1)
+        self.assertEqual(len(self._parse(qpa)), 3)
+
+    def test_empty_selection_is_rejected(self):
+        """An empty manifest must never satisfy acceptance vacuously."""
+        lines = self._generate_log_stream(self.sample_qpa)
+        metadata, qpa_bytes = parse_upstream_log_lines(lines)
+        results = parse_qpa_results(qpa_bytes.decode("utf-8"))
+        verification = verify_upstream_acceptance({"cases": []}, metadata, results)
+        self.assertFalse(verification["report_valid"])
+        self.assertFalse(verification["strict_verified"])
+        self.assertTrue(verification["policy_failures"])
+
+    # --- stream-level marker integrity --------------------------------------
+
+    def test_duplicate_start_marker_is_rejected(self):
+        lines = self._generate_log_stream(self.sample_qpa)
+        lines.insert(1, lines[0])
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            parse_upstream_log_lines(lines)
+        self.assertIn("UPSTREAM_CTS_START", str(ctx.exception))
+
+    def test_duplicate_completion_marker_is_rejected(self):
+        lines = self._generate_log_stream(self.sample_qpa)
+        lines.append(lines[-1])
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            parse_upstream_log_lines(lines)
+        self.assertIn("UPSTREAM_CTS_COMPLETE", str(ctx.exception))
+
+    def test_out_of_order_markers_are_rejected(self):
+        lines = self._generate_log_stream(self.sample_qpa)
+        complete = lines.pop()
+        end_index = next(i for i, line in enumerate(lines) if "UPSTREAM_CTS_END" in line)
+        lines.insert(end_index, complete)
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            parse_upstream_log_lines(lines)
+        self.assertIn("out of order", str(ctx.exception))
+
+    def test_chunk_outside_marker_window_is_rejected(self):
+        lines = self._generate_log_stream(self.sample_qpa)
+        chunk = lines.pop(1)
+        lines.append(chunk)
+        with self.assertRaises(UpstreamVerificationError) as ctx:
+            parse_upstream_log_lines(lines)
+        self.assertIn("outside the start/end marker window", str(ctx.exception))
 
     def test_selection_manifest_is_wellformed(self):
         manifest = json.loads(MANIFEST_PATH.read_text())

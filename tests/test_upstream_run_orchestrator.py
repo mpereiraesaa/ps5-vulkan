@@ -6,17 +6,57 @@ covers the whole host-side acceptance path except the console itself.
 """
 import base64
 import hashlib
+import importlib.util
+import io
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "cts/upstream/manifest.json"
 ORCHESTRATOR = ROOT / "tools/run_upstream_cts.py"
 TITLE = "PPSA99994"
+
+
+def load_orchestrator():
+    spec = importlib.util.spec_from_file_location("run_upstream_cts", ORCHESTRATOR)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class FakeConsole:
+    """Stands in for tools/control.py while exercising the lifecycle logic."""
+
+    def __init__(self, runs_dir, capture_text, title=TITLE, stop_on_close=True):
+        self.runs_dir = runs_dir
+        self.capture_text = capture_text
+        self.title = title
+        self.running = "none"
+        self.stop_on_close = stop_on_close
+        self.launches = 0
+        self.closes = 0
+
+    def __call__(self, action, host, timeout=30.0):
+        if action == "status":
+            return (f"bigapp-control action=status target={self.title} "
+                    f"app_id=-1 identify_rc=-1 running={self.running}")
+        if action == "launch":
+            self.launches += 1
+            self.running = self.title
+            (self.runs_dir / f"20260912T010101000Z_{self.title}_upstream-cts_0xabc.log"
+             ).write_text(self.capture_text)
+            return "launched"
+        if action == "close":
+            self.closes += 1
+            if self.stop_on_close:
+                self.running = "none"
+            return "closed"
+        raise AssertionError(f"unexpected control action {action!r}")
 
 
 def build_qpa(paths, status="Pass"):
@@ -128,6 +168,76 @@ class TestRunOrchestrator(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         receipt = json.loads(self.out_json.read_text())
         self.assertIn(self.cases[-1], receipt["missing"])
+
+
+class TestLifecycleIsPartOfAcceptance(unittest.TestCase):
+    """A failed Close Game must fail the run even when every case passed."""
+
+    def setUp(self):
+        self.module = load_orchestrator()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.runs = Path(self.tmp.name) / "runs"
+        self.runs.mkdir()
+        self.dist = Path(self.tmp.name) / "dist"
+        self.dist.mkdir()
+
+        cases = [case["path"] for case in json.loads(MANIFEST.read_text())["cases"]]
+        self.capture = build_capture(build_qpa(cases), "run-1",
+                                     hashlib.sha256(("\n".join(cases) + "\n").encode()).hexdigest(),
+                                     "a" * 64)
+        self.selection_hash = hashlib.sha256(("\n".join(cases) + "\n").encode()).hexdigest()
+        (self.dist / "selection_hash.txt").write_text(self.selection_hash + "\n")
+        (self.dist / "eboot_sha256.txt").write_text("a" * 64 + "\n")
+        self.out_json = Path(self.tmp.name) / "receipt.json"
+
+    def invoke(self, console, extra=()):
+        argv = [
+            "run_upstream_cts", "--host", "192.0.2.1", "--runs-dir", str(self.runs),
+            "--dist", str(self.dist), "--out-json", str(self.out_json),
+            "--timeout", "10", "--close-attempts", "2", "--close-settle", "0.2",
+            *extra,
+        ]
+        stdout = io.StringIO()
+        with mock.patch.object(self.module, "control", console), \
+                mock.patch.object(sys, "argv", argv), \
+                mock.patch("sys.stdout", stdout):
+            code = self.module.main()
+        return code, stdout.getvalue()
+
+    def test_successful_run_and_close_passes(self):
+        console = FakeConsole(self.runs, self.capture)
+        code, output = self.invoke(console)
+        self.assertEqual(code, 0, output)
+        self.assertIn("UPSTREAM ACCEPTANCE PASSED", output)
+        self.assertEqual(console.launches, 1)
+        receipt = json.loads(self.out_json.read_text())
+        self.assertTrue(receipt["cts_verified"])
+        self.assertTrue(receipt["lifecycle_ok"])
+
+    def test_failed_close_fails_the_run_despite_passing_cases(self):
+        console = FakeConsole(self.runs, self.capture, stop_on_close=False)
+        code, output = self.invoke(console)
+        self.assertEqual(code, self.module.EXIT_LIFECYCLE)
+        self.assertNotIn("UPSTREAM ACCEPTANCE PASSED", output)
+        receipt = json.loads(self.out_json.read_text())
+        self.assertTrue(receipt["cts_verified"])
+        self.assertFalse(receipt["lifecycle_ok"])
+        self.assertGreaterEqual(console.closes, 2)
+
+    def test_launch_is_refused_while_title_runs(self):
+        console = FakeConsole(self.runs, self.capture)
+        console.running = TITLE
+        with self.assertRaises(self.module.RunIncomplete):
+            self.invoke(console)
+        self.assertEqual(console.launches, 0)
+
+    def test_no_close_skips_lifecycle_requirement(self):
+        console = FakeConsole(self.runs, self.capture, stop_on_close=False)
+        code, output = self.invoke(console, extra=["--no-close"])
+        self.assertEqual(code, 0, output)
+        receipt = json.loads(self.out_json.read_text())
+        self.assertIsNone(receipt["lifecycle_ok"])
 
 
 if __name__ == "__main__":

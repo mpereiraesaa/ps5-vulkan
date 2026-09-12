@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Strict upstream VK-GL-CTS runner and verifier for PS5 execution."""
+"""Strict upstream VK-GL-CTS runner and verifier for PS5 execution.
+
+The parser below models the exact QPA grammar emitted by the pinned framework
+(framework/qphelper/qpTestLog.c) and fails closed on anything it does not fully
+understand. There is deliberately no "best effort" recovery path: a report that
+cannot be parsed structurally is a verification failure, never a pass.
+"""
 import argparse
 import base64
 import hashlib
@@ -13,80 +19,265 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "cts/upstream/manifest.json"
 
+# Status tokens the pinned framework can emit (qpTestLog.c s_qpTestResultMap).
+QPA_STATUS_TOKENS = frozenset({
+    "Pass", "Fail", "QualityWarning", "CompatibilityWarning", "Pending",
+    "NotSupported", "ResourceError", "InternalError", "Crash", "Timeout",
+    "Waiver", "DeviceLost",
+})
+
+MARKER_BEGIN_SESSION = "#beginSession"
+MARKER_END_SESSION = "#endSession"
+MARKER_BEGIN_CASE = "#beginTestCaseResult"
+MARKER_END_CASE = "#endTestCaseResult"
+MARKER_TERMINATE_CASE = "#terminateTestCaseResult"
+MARKER_BEGIN_TIMING = "#beginTestsCasesTime"
+MARKER_END_TIMING = "#endTestsCasesTime"
+
+
 class UpstreamVerificationError(Exception):
     """Raised when log integrity or acceptance verification fails."""
     pass
 
+
+def _parse_case_block(case_path: str, block_lines: List[str]) -> Dict[str, Any]:
+    """Parse the XML payload of one normally-terminated test case result."""
+    text = "\n".join(block_lines)
+
+    if text.count("<TestCaseResult") != 1:
+        raise UpstreamVerificationError(
+            f"case {case_path!r}: expected exactly one <TestCaseResult> element")
+
+    start = text.find("<TestCaseResult")
+    close = "</TestCaseResult>"
+    end = text.rfind(close)
+    if end == -1:
+        raise UpstreamVerificationError(
+            f"case {case_path!r}: <TestCaseResult> is never closed")
+
+    xml_text = text[start:end + len(close)]
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as error:
+        # No regex fallback: malformed XML can never be salvaged into a status.
+        raise UpstreamVerificationError(
+            f"case {case_path!r}: malformed result XML ({error})")
+
+    if root.tag != "TestCaseResult":
+        raise UpstreamVerificationError(
+            f"case {case_path!r}: result root element is {root.tag!r}")
+
+    declared_path = root.get("CasePath")
+    if declared_path != case_path:
+        raise UpstreamVerificationError(
+            f"case {case_path!r}: CasePath attribute says {declared_path!r}")
+
+    result_elements = root.findall("Result")
+    if len(result_elements) != 1:
+        raise UpstreamVerificationError(
+            f"case {case_path!r}: expected exactly one <Result>, found {len(result_elements)}")
+
+    status = result_elements[0].get("StatusCode")
+    if not status:
+        raise UpstreamVerificationError(
+            f"case {case_path!r}: <Result> has no StatusCode")
+
+    details = "".join(result_elements[0].itertext()).strip()
+    return {"case_path": case_path, "status": status, "details": details,
+            "terminated": False}
+
+
+def parse_qpa_results(qpa_text: str) -> List[Dict[str, Any]]:
+    """Parse the upstream QPA session into per-case results.
+
+    Structural rules enforced (all fatal, none recoverable):
+
+      * exactly one #beginSession and one #endSession, in that order;
+      * every #beginTestCaseResult is closed by #endTestCaseResult before the
+        session ends, or replaced by #terminateTestCaseResult (crash/timeout);
+      * no nested or orphaned case markers;
+      * each closed case carries exactly one well-formed <TestCaseResult>
+        document whose CasePath matches its marker and whose <Result> carries a
+        StatusCode.
+    """
+    lines = qpa_text.splitlines()
+
+    begin_session = [i for i, line in enumerate(lines)
+                     if line.strip() == MARKER_BEGIN_SESSION]
+    end_session = [i for i, line in enumerate(lines)
+                   if line.strip() == MARKER_END_SESSION]
+
+    if len(begin_session) != 1:
+        raise UpstreamVerificationError(
+            f"expected exactly one {MARKER_BEGIN_SESSION}, found {len(begin_session)}")
+    if len(end_session) != 1:
+        raise UpstreamVerificationError(
+            f"expected exactly one {MARKER_END_SESSION}, found {len(end_session)}")
+    if end_session[0] < begin_session[0]:
+        raise UpstreamVerificationError(
+            f"{MARKER_END_SESSION} appears before {MARKER_BEGIN_SESSION}")
+
+    results: List[Dict[str, Any]] = []
+    open_case: Optional[Dict[str, Any]] = None
+    in_timing = False
+
+    for index in range(begin_session[0] + 1, end_session[0]):
+        line = lines[index].strip()
+
+        if line == MARKER_BEGIN_TIMING:
+            if in_timing:
+                raise UpstreamVerificationError("nested case timing section")
+            if open_case is not None:
+                raise UpstreamVerificationError("case timing section inside a case result")
+            in_timing = True
+            continue
+
+        if line == MARKER_END_TIMING:
+            if not in_timing:
+                raise UpstreamVerificationError(
+                    f"{MARKER_END_TIMING} without {MARKER_BEGIN_TIMING}")
+            in_timing = False
+            continue
+
+        if line.startswith(MARKER_BEGIN_CASE):
+            if in_timing:
+                raise UpstreamVerificationError(
+                    "case result inside the case timing section")
+            if open_case is not None:
+                raise UpstreamVerificationError(
+                    f"case {open_case['case_path']!r} was never terminated before {line!r}")
+            case_path = line[len(MARKER_BEGIN_CASE):].strip()
+            if not case_path or len(case_path.split()) != 1:
+                raise UpstreamVerificationError(f"malformed case path in {line!r}")
+            open_case = {"case_path": case_path, "lines": []}
+            continue
+
+        if line.startswith(MARKER_TERMINATE_CASE):
+            if open_case is None:
+                raise UpstreamVerificationError(
+                    f"{MARKER_TERMINATE_CASE} without an open case result")
+            status = line[len(MARKER_TERMINATE_CASE):].strip()
+            if not status:
+                raise UpstreamVerificationError(
+                    f"{MARKER_TERMINATE_CASE} without a result code")
+            # An abruptly terminated case never emitted a result: keep it visible
+            # as a failure instead of dropping it from the report entirely.
+            results.append({"case_path": open_case["case_path"], "status": status,
+                            "details": "case terminated abruptly", "terminated": True})
+            open_case = None
+            continue
+
+        if line == MARKER_END_CASE:
+            if open_case is None:
+                raise UpstreamVerificationError(f"{MARKER_END_CASE} without an open case")
+            results.append(_parse_case_block(open_case["case_path"], open_case["lines"]))
+            open_case = None
+            continue
+
+        if open_case is not None:
+            open_case["lines"].append(lines[index])
+
+    if open_case is not None:
+        raise UpstreamVerificationError(
+            f"case {open_case['case_path']!r} has no terminator before {MARKER_END_SESSION}")
+    if in_timing:
+        raise UpstreamVerificationError(
+            f"{MARKER_BEGIN_TIMING} is never closed before {MARKER_END_SESSION}")
+
+    return results
+
+
 def parse_upstream_log_lines(lines: List[str]) -> Tuple[Dict[str, Any], bytes]:
+    """Reassemble the verbatim QPA report from the ps5log/1 stream.
+
+    Marker uniqueness and ordering are enforced here; chunks are only legal
+    between the start and end markers.
     """
-    Parse ps5log stream lines, reconstruct the verbatim QPA report from base64 chunks,
-    and verify chunk sequence and cryptographic checksums.
-    """
-    start_meta = None
-    end_meta = None
-    chunks = {}
-    completed_status = None
+    chunks: Dict[int, bytes] = {}
+    chunk_index: Dict[int, int] = {}
+    starts: List[Tuple[int, Dict[str, str]]] = []
+    ends: List[Tuple[int, Dict[str, Any]]] = []
+    completes: List[Tuple[int, int]] = []
 
     re_start = re.compile(r'UPSTREAM_CTS_START\s+run_id=(\S+)\s+selection_hash=(\S+)\s+eboot_sha256=(\S+)')
     re_chunk = re.compile(r'CHUNK\s+seq=(\d+)\s+size=(\d+)\s+data=(\S+)')
     re_end = re.compile(r'UPSTREAM_CTS_END\s+chunks=(\d+)\s+total_bytes=(\d+)\s+sha256=([0-9a-fA-F]+)')
     re_complete = re.compile(r'UPSTREAM_CTS_COMPLETE\s+status=(-?\d+)')
 
-    for raw_line in lines:
+    for index, raw_line in enumerate(lines):
         line = raw_line.strip()
-        # Look for markers
-        m_start = re_start.search(line)
-        if m_start:
-            start_meta = {
-                "run_id": m_start.group(1),
-                "selection_hash": m_start.group(2),
-                "eboot_sha256": m_start.group(3)
-            }
+
+        match = re_start.search(line)
+        if match:
+            starts.append((index, {
+                "run_id": match.group(1),
+                "selection_hash": match.group(2),
+                "eboot_sha256": match.group(3),
+            }))
             continue
 
-        m_chunk = re_chunk.search(line)
-        if m_chunk:
-            seq = int(m_chunk.group(1))
-            size = int(m_chunk.group(2))
-            b64_data = m_chunk.group(3)
+        match = re_chunk.search(line)
+        if match:
+            seq = int(match.group(1))
+            size = int(match.group(2))
             try:
-                raw_bytes = base64.b64decode(b64_data)
-            except Exception as e:
-                raise UpstreamVerificationError(f"Corrupted base64 in chunk seq={seq}: {e}")
+                raw_bytes = base64.b64decode(match.group(3))
+            except Exception as error:
+                raise UpstreamVerificationError(
+                    f"Corrupted base64 in chunk seq={seq}: {error}")
             if len(raw_bytes) != size:
-                raise UpstreamVerificationError(f"Chunk seq={seq} size mismatch: expected {size} bytes, got {len(raw_bytes)}")
+                raise UpstreamVerificationError(
+                    f"Chunk seq={seq} size mismatch: expected {size} bytes, got {len(raw_bytes)}")
             if seq in chunks:
                 raise UpstreamVerificationError(f"Duplicate chunk seq={seq} received")
             chunks[seq] = raw_bytes
+            chunk_index[seq] = index
             continue
 
-        m_end = re_end.search(line)
-        if m_end:
-            end_meta = {
-                "chunks": int(m_end.group(1)),
-                "total_bytes": int(m_end.group(2)),
-                "sha256": m_end.group(3).lower()
-            }
+        match = re_end.search(line)
+        if match:
+            ends.append((index, {
+                "chunks": int(match.group(1)),
+                "total_bytes": int(match.group(2)),
+                "sha256": match.group(3).lower(),
+            }))
             continue
 
-        m_comp = re_complete.search(line)
-        if m_comp:
-            completed_status = int(m_comp.group(1))
+        match = re_complete.search(line)
+        if match:
+            completes.append((index, int(match.group(1))))
             continue
 
-    if not start_meta:
-        raise UpstreamVerificationError("Missing UPSTREAM_CTS_START marker in log stream")
-    if not end_meta:
-        raise UpstreamVerificationError("Missing UPSTREAM_CTS_END marker in log stream")
-    if completed_status is None:
-        raise UpstreamVerificationError("Missing UPSTREAM_CTS_COMPLETE marker; execution did not finalize cleanly")
+    if len(starts) != 1:
+        raise UpstreamVerificationError(
+            f"expected exactly one UPSTREAM_CTS_START marker, found {len(starts)}")
+    if len(ends) != 1:
+        raise UpstreamVerificationError(
+            f"expected exactly one UPSTREAM_CTS_END marker, found {len(ends)}")
+    if len(completes) != 1:
+        raise UpstreamVerificationError(
+            f"expected exactly one UPSTREAM_CTS_COMPLETE marker, found {len(completes)}; "
+            "execution did not finalize cleanly")
 
-    # Verify chunk sequence
+    start_index, start_meta = starts[0]
+    end_index, end_meta = ends[0]
+    complete_index, exit_code = completes[0]
+
+    if not start_index < end_index < complete_index:
+        raise UpstreamVerificationError(
+            "upstream markers are out of order "
+            f"(start={start_index}, end={end_index}, complete={complete_index})")
+
+    for seq, index in chunk_index.items():
+        if not start_index < index < end_index:
+            raise UpstreamVerificationError(
+                f"chunk seq={seq} appears outside the start/end marker window")
+
     expected_chunk_count = end_meta["chunks"]
     if len(chunks) != expected_chunk_count:
         raise UpstreamVerificationError(
-            f"Chunk count mismatch: expected {expected_chunk_count}, received {len(chunks)}"
-        )
+            f"Chunk count mismatch: expected {expected_chunk_count}, received {len(chunks)}")
 
     qpa_bytes = bytearray()
     for seq in range(expected_chunk_count):
@@ -96,82 +287,30 @@ def parse_upstream_log_lines(lines: List[str]) -> Tuple[Dict[str, Any], bytes]:
 
     if len(qpa_bytes) != end_meta["total_bytes"]:
         raise UpstreamVerificationError(
-            f"Total bytes mismatch: expected {end_meta['total_bytes']}, reassembled {len(qpa_bytes)}"
-        )
+            f"Total bytes mismatch: expected {end_meta['total_bytes']}, reassembled {len(qpa_bytes)}")
 
     actual_sha256 = hashlib.sha256(qpa_bytes).hexdigest().lower()
     if actual_sha256 != end_meta["sha256"]:
         raise UpstreamVerificationError(
-            f"SHA-256 mismatch for reassembled QPA report: expected {end_meta['sha256']}, got {actual_sha256}"
-        )
+            f"SHA-256 mismatch for reassembled QPA report: "
+            f"expected {end_meta['sha256']}, got {actual_sha256}")
 
     metadata = {
         "start": start_meta,
         "end": end_meta,
-        "exit_code": completed_status,
+        "exit_code": exit_code,
         "qpa_sha256": actual_sha256,
         "qpa_bytes_count": len(qpa_bytes),
     }
-
     return metadata, bytes(qpa_bytes)
 
 
-def parse_qpa_results(qpa_text: str) -> List[Dict[str, str]]:
-    """
-    Parse test case results from reconstructed QPA stream.
-    QPA encapsulates each test inside #beginTestCaseResult <path> ... #endTestCaseResult.
-    Within each block, an XML <TestCaseResult> structure is parsed.
-    """
-    results = []
-    blocks = re.findall(r'#beginTestCaseResult\s+(\S+)(.*?)(?:#endTestCaseResult|\Z)', qpa_text, re.DOTALL)
-
-    for case_path, block_content in blocks:
-        case_path = case_path.strip()
-        # Find XML block inside
-        xml_start = block_content.find("<TestCaseResult")
-        xml_end = block_content.rfind("</TestCaseResult>")
-        status = "Unknown"
-        details = ""
-
-        if xml_start != -1 and xml_end != -1:
-            xml_str = block_content[xml_start : xml_end + len("</TestCaseResult>")]
-            try:
-                root = ET.fromstring(xml_str)
-                res_elem = root.find("Result")
-                if res_elem is not None:
-                    status = res_elem.get("StatusCode", "Unknown")
-                    details = (res_elem.text or "").strip()
-            except ET.ParseError as e:
-                # If XML snippet cannot be parsed directly, regex fallback on <Result StatusCode="...">
-                m_res = re.search(r'<Result\s+StatusCode="([^"]+)"[^>]*>(.*?)</Result>', block_content, re.DOTALL)
-                if m_res:
-                    status = m_res.group(1)
-                    details = m_res.group(2).strip()
-                else:
-                    details = f"XML Parse Error: {e}"
-        else:
-            # Fallback regex search
-            m_res = re.search(r'<Result\s+StatusCode="([^"]+)"[^>]*>(.*?)</Result>', block_content, re.DOTALL)
-            if m_res:
-                status = m_res.group(1)
-                details = m_res.group(2).strip()
-
-        results.append({
-            "case_path": case_path,
-            "status": status,
-            "details": details
-        })
-
-    return results
-
-
 def verify_run_identity(metadata: Dict[str, Any], expected: Dict[str, Optional[str]]) -> None:
-    """
-    Tie a parsed report to the run/build that was supposed to produce it.
+    """Tie a parsed report to the run/build that was supposed to produce it.
 
-    A report that was produced by a different selection or a stale executable may
-    still be internally consistent, so the expected identity has to be supplied
-    out of band (the deployed package's own metadata) and checked here.
+    A report produced by a different selection or a stale executable may still be
+    internally consistent, so the expected identity has to be supplied out of
+    band (the deployed package's own metadata) and checked here.
     """
     start = metadata["start"]
     problems = []
@@ -188,21 +327,19 @@ def verify_run_identity(metadata: Dict[str, Any], expected: Dict[str, Optional[s
 def verify_upstream_acceptance(
     manifest_data: Dict[str, Any],
     metadata: Dict[str, Any],
-    results: List[Dict[str, str]]
+    results: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
+    """Validate results against the frozen selection manifest.
+
+    Strict acceptance requires a declared and non-empty selection, a zero exit
+    status, exactly the declared cases (no missing, extra or duplicate) and a
+    ``Pass`` from the upstream oracle for every one of them. An empty selection
+    can never be vacuously satisfied.
     """
-    Validate test results against frozen selection manifest.
-    Strict acceptance enforces:
-    - Exit code must be 0
-    - All expected cases must be present
-    - No unexpected cases
-    - No duplicate cases
-    - Every case must have status == "Pass" (case-insensitive "pass" accepted as match)
-    """
-    expected_cases = [c["path"] for c in manifest_data["cases"]]
+    expected_cases = [case["path"] for case in manifest_data.get("cases", [])]
     expected_set = set(expected_cases)
 
-    reported_names = [r["case_path"] for r in results]
+    reported_names = [result["case_path"] for result in results]
     seen = set()
     duplicates = []
     for name in reported_names:
@@ -211,45 +348,48 @@ def verify_upstream_acceptance(
         seen.add(name)
 
     reported_set = set(reported_names)
-    missing = sorted(list(expected_set - reported_set))
-    unexpected = sorted(list(reported_set - expected_set))
+    missing = sorted(expected_set - reported_set)
+    unexpected = sorted(reported_set - expected_set)
 
     pass_count = 0
     fail_count = 0
     not_supported_count = 0
     other_count = 0
     acceptance_failures = []
+    policy_failures = []
 
-    for r in results:
-        path = r["case_path"]
-        st = r["status"]
-        if st.lower() == "pass":
+    if not expected_cases:
+        policy_failures.append("selection manifest declares no cases")
+
+    for result in results:
+        path = result["case_path"]
+        status = result["status"]
+        if status == "Pass":
             pass_count += 1
-        elif st.lower() in ("notsupported", "not_supported"):
+        elif status in ("NotSupported", "Not_Supported"):
             not_supported_count += 1
-            acceptance_failures.append({"case": path, "expected": "Pass", "actual": st})
-        elif st.lower() == "fail":
+            acceptance_failures.append({"case": path, "expected": "Pass", "actual": status})
+        elif status == "Fail":
             fail_count += 1
-            acceptance_failures.append({"case": path, "expected": "Pass", "actual": st})
+            acceptance_failures.append({"case": path, "expected": "Pass", "actual": status})
         else:
             other_count += 1
-            acceptance_failures.append({"case": path, "expected": "Pass", "actual": st})
+            acceptance_failures.append({"case": path, "expected": "Pass", "actual": status})
 
     exit_code = metadata.get("exit_code", -1)
     report_valid = (
         exit_code == 0
-        and len(missing) == 0
-        and len(unexpected) == 0
-        and len(duplicates) == 0
+        and not missing
+        and not unexpected
+        and not duplicates
+        and not policy_failures
     )
 
     all_required_passed = (
         report_valid
-        and len(acceptance_failures) == 0
+        and not acceptance_failures
         and pass_count == len(expected_cases)
-        and not_supported_count == 0
-        and fail_count == 0
-        and other_count == 0
+        and len(results) == len(expected_cases)
     )
 
     return {
@@ -265,14 +405,15 @@ def verify_upstream_acceptance(
         "other_count": other_count,
         "missing": missing,
         "unexpected": unexpected,
-        "duplicates": sorted(list(set(duplicates))),
+        "duplicates": sorted(set(duplicates)),
         "acceptance_failures": acceptance_failures,
+        "policy_failures": policy_failures,
         "metadata": metadata,
         "case_results": results,
     }
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Strict Upstream CTS Runner & Verifier")
     parser.add_argument("--log", type=Path, help="Path to raw ps5log stream output file (or stdin if omitted)")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST, help="Path to selection manifest.json")
@@ -293,34 +434,28 @@ def main():
 
     try:
         metadata, qpa_bytes = parse_upstream_log_lines(lines)
-    except UpstreamVerificationError as e:
-        print(f"VERIFICATION FAILURE: {e}", file=sys.stderr)
-        sys.exit(2)
-
-    try:
         verify_run_identity(metadata, {
             "run_id": args.expect_run_id,
             "selection_hash": args.expect_selection_hash,
             "eboot_sha256": args.expect_eboot_sha256,
         })
-    except UpstreamVerificationError as e:
-        print(f"VERIFICATION FAILURE: {e}", file=sys.stderr)
-        sys.exit(3)
+        results = parse_qpa_results(qpa_bytes.decode("utf-8", errors="replace"))
+    except UpstreamVerificationError as error:
+        print(f"VERIFICATION FAILURE: {error}", file=sys.stderr)
+        sys.exit(2)
 
     if args.out_qpa:
         args.out_qpa.parent.mkdir(parents=True, exist_ok=True)
         args.out_qpa.write_bytes(qpa_bytes)
         print(f"Reconstructed QPA written to {args.out_qpa} ({len(qpa_bytes)} bytes)")
 
-    qpa_text = qpa_bytes.decode("utf-8", errors="replace")
-    results = parse_qpa_results(qpa_text)
     verification = verify_upstream_acceptance(manifest_data, metadata, results)
 
     if args.out_json:
         args.out_json.parent.mkdir(parents=True, exist_ok=True)
         args.out_json.write_text(json.dumps(verification, indent=2) + "\n")
 
-    print(f"Upstream CTS Verification Summary:")
+    print("Upstream CTS Verification Summary:")
     print(f"  Run ID:           {metadata['start']['run_id']}")
     print(f"  Selection Hash:   {metadata['start']['selection_hash']}")
     print(f"  Eboot SHA256:     {metadata['start']['eboot_sha256']}")
@@ -334,18 +469,16 @@ def main():
     print(f"  Strict Verified:  {verification['strict_verified']}")
 
     if not verification["strict_verified"]:
-        if verification["missing"]:
-            print(f"  Missing: {verification['missing']}", file=sys.stderr)
-        if verification["unexpected"]:
-            print(f"  Unexpected: {verification['unexpected']}", file=sys.stderr)
-        if verification["duplicates"]:
-            print(f"  Duplicates: {verification['duplicates']}", file=sys.stderr)
-        if verification["acceptance_failures"]:
-            print(f"  Acceptance Failures: {verification['acceptance_failures']}", file=sys.stderr)
+        for label, key in (("Missing", "missing"), ("Unexpected", "unexpected"),
+                           ("Duplicates", "duplicates"), ("Policy", "policy_failures"),
+                           ("Acceptance Failures", "acceptance_failures")):
+            if verification[key]:
+                print(f"  {label}: {verification[key]}", file=sys.stderr)
         if args.strict:
             sys.exit(1)
 
     print("ALL SELECTED UPSTREAM TESTS VERIFIED AND PASSED STRICT ACCEPTANCE.")
+
 
 if __name__ == "__main__":
     main()

@@ -232,7 +232,7 @@ native-bootstrap:
 # never require the console, so CI can run them.
 check-upstream-cts:
 	$(PYTHON) tools/check_upstream_selection.py
-	$(PYTHON) -m unittest tests.test_upstream_runner -v
+	$(PYTHON) -m unittest tests.test_upstream_runner tests.test_upstream_run_orchestrator -v
 upstream-cts:
 	$(PYTHON) tools/build_upstream_cts.py
 # One native acceptance run against the console. Both values are lab-specific,

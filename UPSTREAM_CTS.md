@@ -33,9 +33,30 @@ selection is intentionally small and is frozen in a committed manifest.
 
 The integration only supplies platform adaptation (threading, time, assets,
 logging, static Vulkan dispatch) and the payload entry point. It does not
-replace test bodies or oracles: the selected cases run their upstream
-implementations, including the reference rasterizer comparison used by the
-graphics smoke test.
+replace test bodies or oracles: every selected case runs its upstream
+implementation and its upstream result path.
+
+### Linked versus selected versus executed
+
+These are different claims and the selection below must not be read as if they
+were the same thing:
+
+* **Linked**: the upstream framework, modules and oracles are compiled into the
+  payload, including the reference rasterizer and image-comparison machinery
+  (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
+  map proves they are present, not that they run.
+* **Selected**: the seven cases frozen in `cts/upstream/manifest.json`. Only
+  these are registered by `cts/upstream/package_ps5.cpp` and shipped in the
+  packaged case list.
+* **Executed**: what a given report actually contains, which the strict verifier
+  checks case by case.
+
+The current selection contains no draw or pixel-comparison case. The graphics
+entry is `dEQP-VK.api.smoke.create_shader`, which compiles a vertex shader at
+runtime and validates the `vkCreateShaderModule` / `vkDestroyShaderModule`
+lifecycle; it does not rasterise, so **no image oracle is executed**. Claiming a
+reference-renderer comparison would require adding such a case to the manifest
+and executing it, and neither has been done.
 
 ## Pinned inputs
 
@@ -130,6 +151,9 @@ correctness.
 * This is a focused selection, not the complete CTS and not conformance.
 * The pinned revision is a 1.3-era CTS; it does not establish Vulkan 1.4
   coverage.
+* No selected case exercises a rendering or pixel-comparison oracle. The
+  reference rasterizer is linked but unexecuted, so this integration does not
+  demonstrate rasterisation correctness.
 * Cases that require API the driver does not implement are reported as failures
   or unsupported results, not silently converted into passes.
 * `tcuImageIO` (libpng) and the generated EGL wrapper (`gluRenderConfig`) are

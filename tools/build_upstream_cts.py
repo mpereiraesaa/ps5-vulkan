@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from typing import Any, Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -59,16 +60,117 @@ def check_external_pins(expected: dict, actual: dict) -> None:
         "or set PS5VK_ALLOW_UNPINNED_DEPS=1 to build anyway.")
 
 
-def compile_worker(args):
-    cmd, src, obj, env = args
-    obj.parent.mkdir(parents=True, exist_ok=True)
-    # Check if up to date
-    if obj.is_file() and obj.stat().st_mtime >= src.stat().st_mtime:
-        return src.name, True, None
+def verify_cts_checkout(cts_root: Path, expected_commit: str,
+                        expected_tag: Optional[str] = None) -> Dict[str, Any]:
+    """Verify the main CTS checkout really is the declared, unmodified revision.
+
+    The build manifest used to write the CTS commit as a constant without ever
+    looking at the tree, so a different or patched checkout could be compiled
+    while being reported as the pin. Check the revision and tracked-file
+    cleanliness here instead. Set PS5VK_ALLOW_DIRTY_UPSTREAM=1 when a deliberate
+    adaptation patch is applied to the CTS tree.
+    """
+    actual = git_head(cts_root)
+    if actual == "unknown":
+        raise SystemExit(f"not a git checkout, cannot verify CTS pin: {cts_root}")
+
+    dirty = subprocess.run(
+        ["git", "-C", str(cts_root), "status", "--porcelain", "--untracked-files=no"],
+        capture_output=True, text=True, check=True).stdout.strip()
+
+    problems = []
+    if actual != expected_commit:
+        problems.append(f"revision is {actual}, expected {expected_commit}")
+    if expected_tag:
+        try:
+            tag_commit = subprocess.run(
+                ["git", "-C", str(cts_root), "rev-parse", f"{expected_tag}^{{commit}}"],
+                capture_output=True, text=True, check=True).stdout.strip()
+        except subprocess.CalledProcessError:
+            tag_commit = ""
+        if tag_commit != expected_commit:
+            problems.append(
+                f"tag {expected_tag} resolves to {tag_commit or '<missing>'}, "
+                f"expected {expected_commit}")
+    if dirty:
+        problems.append("tracked files are locally modified:\n" + dirty)
+
+    if problems:
+        for problem in problems:
+            print(f"[build_upstream_cts] upstream checkout problem: {problem}",
+                  file=sys.stderr)
+        if os.environ.get("PS5VK_ALLOW_DIRTY_UPSTREAM") == "1":
+            print("[build_upstream_cts] PS5VK_ALLOW_DIRTY_UPSTREAM=1: continuing with "
+                  "a non-standard upstream tree", file=sys.stderr)
+        else:
+            raise SystemExit(
+                "Refusing to build from a CTS checkout that does not match the "
+                "declared pin and is free of local modifications. Restore the "
+                "checkout, or set PS5VK_ALLOW_DIRTY_UPSTREAM=1 to build anyway.")
+
+    return {"commit": actual, "dirty": bool(dirty)}
+
+
+def parse_depfile(path: Path) -> List[str]:
+    """Header dependencies recorded by the compiler (-MMD)."""
+    text = path.read_text(encoding="utf-8", errors="replace").replace("\\\n", " ")
+    deps: List[str] = []
+    for line in text.splitlines():
+        if ":" not in line:
+            continue
+        _, _, right = line.partition(":")
+        deps.extend(token for token in right.split() if token)
+    return deps
+
+
+def object_is_current(obj: Path, dep_file: Path, stamp: Path,
+                      fingerprint: str) -> bool:
+    """Reuse an object only when its command, sources and headers are unchanged.
+
+    Compiler-generated dependency files replace the old mtime-of-the-.cpp test,
+    which silently ignored header and flag changes.
+    """
+    if not (obj.is_file() and dep_file.is_file() and stamp.is_file()):
+        return False
+    if stamp.read_text(encoding="utf-8").strip() != fingerprint:
+        return False
+
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        obj_mtime = obj.stat().st_mtime
+    except OSError:
+        return False
+
+    for dep in parse_depfile(dep_file):
+        try:
+            if Path(dep).stat().st_mtime >= obj_mtime:
+                return False
+        except OSError:
+            return False
+    return True
+
+
+def compile_worker(task):
+    cmd, src, obj, env = task
+    obj.parent.mkdir(parents=True, exist_ok=True)
+    dep_file = Path(str(obj) + ".d")
+    stamp = Path(str(obj) + ".cmd")
+
+    # The fingerprint covers the full compile command (compiler, flags, include
+    # paths, source) plus the pinned-input signature, so a flag or pin change
+    # invalidates the object even when the .cpp itself is untouched.
+    fingerprint = hashlib.sha256(
+        ("\x00".join(cmd) + "\x00" + env.get("PS5VK_BUILD_SIGNATURE", "")).encode()
+    ).hexdigest()
+
+    if object_is_current(obj, dep_file, stamp, fingerprint):
+        return src.name, True, None
+
+    try:
+        res = subprocess.run(cmd + ["-MMD", "-MF", str(dep_file)],
+                             capture_output=True, text=True, env=env)
         if res.returncode != 0:
             return src.name, False, res.stderr + "\n" + res.stdout
+        stamp.write_text(fingerprint + "\n", encoding="utf-8")
         return src.name, True, None
     except Exception as e:
         return src.name, False, str(e)
@@ -96,6 +198,8 @@ def main():
     spirv_headers_root = cts_root / "external/spirv-headers/src"
 
     selection_manifest = json.loads(SELECTION_MANIFEST.read_text())
+    cts_pin = selection_manifest["cts_pin"]
+    cts_state = verify_cts_checkout(cts_root, cts_pin["commit"], cts_pin.get("tag"))
     check_external_pins(selection_manifest.get("external_pins", {}), {
         "glslang": git_head(glslang_root),
         "spirv-tools": git_head(spirv_tools_root),
@@ -128,8 +232,18 @@ def main():
     spirv_tools_build = out / "spirv-tools"
     spirv_libs = [spirv_tools_build / "source/libSPIRV-Tools.a",
                   spirv_tools_build / "source/opt/libSPIRV-Tools-opt.a"]
-    if not all(p.is_file() for p in spirv_libs):
-        print("[build_upstream_cts] Building SPIRV-Tools for x86_64-sie-ps5 (one-off)...")
+    spirv_stamp = spirv_tools_build / ".pins"
+    spirv_pin_signature = json.dumps({
+        "spirv-tools": git_head(spirv_tools_root),
+        "spirv-headers": git_head(spirv_headers_root),
+    }, sort_keys=True)
+    spirv_stale = (
+        not all(p.is_file() for p in spirv_libs)
+        or not spirv_stamp.is_file()
+        or spirv_stamp.read_text(encoding="utf-8").strip() != spirv_pin_signature
+    )
+    if spirv_stale:
+        print("[build_upstream_cts] Building SPIRV-Tools for x86_64-sie-ps5...")
         cmake_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
         subprocess.run(["cmake", "-S", str(spirv_tools_root), "-B", str(spirv_tools_build),
                         "-G", "Ninja",
@@ -142,18 +256,37 @@ def main():
                        check=True, env=cmake_env)
         subprocess.run(["cmake", "--build", str(spirv_tools_build),
                         "--target", "SPIRV-Tools-static", "SPIRV-Tools-opt",
+                        "--clean-first",
                         "-j", str(os.cpu_count())],
                        check=True, env=cmake_env)
+        spirv_stamp.parent.mkdir(parents=True, exist_ok=True)
+        spirv_stamp.write_text(spirv_pin_signature + "\n", encoding="utf-8")
 
-    # 1. Build SDK archives if missing
+    # 1. Restage the ps5vk SDK from the current sources. The payload links these
+    # archives, so a driver fix must never be skipped just because archives with
+    # the right names already exist: build_sdk.py recompiles them and re-runs the
+    # public SDK consumer validation.
+    print("[build_upstream_cts] Restaging ps5vk SDK archives from current sources...")
+    subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")], check=True)
     libps5vk = ROOT / "dist-sdk/lib/libps5vk.a"
     libpsbc = ROOT / "dist-sdk/lib/libpsbc.a"
-    if not (libps5vk.is_file() and libpsbc.is_file()):
-        print("[build_upstream_cts] Staging ps5vk SDK archives...")
-        subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")], check=True)
+    for lib in (libps5vk, libpsbc):
+        if not lib.is_file():
+            raise SystemExit(f"SDK archive missing after staging: {lib}")
+    sdk_lib_hashes = {lib.name: sha256_file(lib) for lib in (libps5vk, libpsbc)}
 
+    # Pinned inputs participate in every object fingerprint: changing the CTS or
+    # dependency revision invalidates cached objects instead of silently reusing
+    # code compiled against the previous revision.
     env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk),
                PATH=f"{sdk}/bin:{os.environ.get('PATH', '')}")
+    env["PS5VK_BUILD_SIGNATURE"] = hashlib.sha256(json.dumps({
+        "cts": git_head(cts_root),
+        "glslang": git_head(glslang_root),
+        "spirv-tools": git_head(spirv_tools_root),
+        "spirv-headers": git_head(spirv_headers_root),
+        "amber": git_head(amber_root),
+    }, sort_keys=True).encode()).hexdigest()
 
     clang_sh = foundation / "tooling/prospero-clang18"
     linker = sdk / "bin/prospero-lld"
@@ -639,9 +772,13 @@ def main():
         },
         "upstream_pin": {
             "repo": "third_party/vk-gl-cts",
-            "tag": "vulkan-cts-1.3.8.4",
-            "commit": "a0270c1897597e6c77679870e10415398a13001c"
+            "tag": cts_pin.get("tag", ""),
+            # Verified against the checkout, not assumed.
+            "commit": cts_state["commit"],
+            "verified": True,
+            "locally_modified": cts_state["dirty"],
         },
+        "sdk_archives": sdk_lib_hashes,
         # Commits actually compiled into this payload. These are recorded rather
         # than assumed, because the CTS external/ manifest can lag the checkout.
         "dependency_commits": {
