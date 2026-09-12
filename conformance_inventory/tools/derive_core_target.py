@@ -119,22 +119,123 @@ def list_items(fragment: str, depth: int) -> list[str]:
     return items
 
 
-def parse_entry(fragment: str) -> list[dict]:
+def parse_trigger(text: str) -> dict | None:
+    """Parse an "if ..." clause into an explicit condition tree.
+
+    Kinds: feature, extension, not, any-of, all-of, text. Negations and
+    alternatives stay explicit; they are never flattened into a plain string.
+    """
+    clause = text.strip()
+    if clause.lower().startswith("if "):
+        clause = clause[3:].strip()
+    clause = clause.strip(" .,")
+    if not clause:
+        return None
+    if clause.lower().endswith("is not advertised"):
+        name = clause[: -len("is not advertised")].strip().strip(",")
+        return {"kind": "not", "operand": {"kind": "extension", "name": name, "state": "advertised"}}
+    clause = re.sub(r"\s+(is|are)\s+supported$", "", clause).strip()
+    clause = re.sub(r"\s+is supported$", "", clause).strip()
+    parts = [part.strip() for part in re.split(r",|\bor\b", clause) if part.strip()]
+    operands = []
+    for part in parts:
+        part = re.sub(r"^the\s+", "", part).strip()
+        part = re.sub(r"\s+feature$", "", part).strip().strip("`* ")
+        if part:
+            operands.append({"kind": "extension" if part.startswith("VK_") else "feature", "name": part})
+    if not operands:
+        return {"kind": "text", "text": clause}
+    if len(operands) == 1:
+        return operands[0]
+    return {"kind": "any-of", "operands": operands}
+
+
+def condition_explanation(condition: dict | None) -> str:
+    if condition is None:
+        return ""
+    kind = condition.get("kind")
+    if kind == "feature":
+        return "when feature %s is supported" % condition["name"]
+    if kind == "extension":
+        return "when extension %s is supported" % condition["name"]
+    if kind == "not":
+        return "unless %s is advertised" % condition["operand"].get("name")
+    if kind == "any-of":
+        return "when any of these holds: " + ", ".join(condition_explanation(part) or part.get("name", "") for part in condition["operands"])
+    if kind == "all-of":
+        return "when all of these hold: " + ", ".join(condition_explanation(part) or part.get("name", "") for part in condition["operands"])
+    return condition.get("text", "")
+
+
+def parse_requirement(fragment: str) -> dict | None:
+    """Return {"kind": feature|any-of, "features": [...]} for a requirement clause."""
     text = clean(fragment)
     features = ANCHOR_FEATURE_RE.findall(fragment)
     if not features:
-        return []
-    at_least_one = "at least one" in text.lower()
-    condition = None
-    selected = features
-    if not at_least_one and " if " in text:
+        return None
+    if "at least one" in text.lower() and len(features) > 1:
+        return {"kind": "any-of", "features": features}
+    return {"kind": "feature", "features": [features[0]]}
+
+
+def parse_entry(fragment: str) -> list[dict]:
+    """Parse one requirement entry, preserving any-of semantics.
+
+    A single entry is returned per clause. "at least one of A, B or C" stays one
+    any-of obligation instead of becoming three simultaneous requirements.
+    """
+    text = clean(fragment)
+    nested = list_items(fragment, 1)
+    if nested and "following features" in text.lower():
+        trigger = parse_trigger(text.split("must be supported")[0])
+        items = []
+        for child in nested:
+            items.extend(parse_entry(child))
+        if not items:
+            return []
+        return [
+            {
+                "requirement": {"kind": "all-of", "items": [item["requirement"] for item in items]},
+                "features": sorted({name for item in items for name in item["features"]}),
+                "condition": items[0]["condition"],
+                "trigger": trigger,
+                "at_least_one": False,
+                "text": text,
+                "explanation": "All of the listed feature obligations apply" + ((" " + condition_explanation(trigger)) if trigger else ""),
+            }
+        ]
+    if " if " in text:
         head, _, tail = text.partition(" if ")
+        requirement = parse_requirement(fragment)
+        if requirement is not None:
+            head_features = [name for name in requirement["features"] if name in head]
+            if head_features:
+                requirement["features"] = head_features
+            elif requirement["kind"] == "any-of":
+                requirement = {"kind": "feature", "features": [requirement["features"][0]]}
+        trigger = parse_trigger(tail)
         condition = tail.strip()
-        head_features = [name for name in features if name in head]
-        selected = head_features or [features[0]]
-    elif not at_least_one:
-        selected = [features[0]]
-    return [{"features": selected, "condition": condition, "at_least_one": at_least_one, "text": text}]
+    else:
+        requirement = parse_requirement(fragment)
+        trigger = None
+        condition = None
+    if requirement is None:
+        return []
+    explanation = (
+        ("At least one of these features must be supported" if requirement["kind"] == "any-of" else "This feature must be supported")
+        + ((" " + condition_explanation(trigger)) if trigger else "")
+    )
+    return [
+        {
+            "requirement": requirement,
+            "features": list(requirement["features"]),
+            "condition": condition,
+            "trigger": trigger,
+            "at_least_one": requirement["kind"] == "any-of",
+            "text": text,
+            "explanation": explanation,
+        }
+    ]
 
 
 def parse_feature_requirements(html: str) -> dict:
@@ -164,9 +265,12 @@ def parse_feature_requirements(html: str) -> dict:
             by_version[version] = entries
             continue
         if text.lower().startswith("if ") and ANCHOR_EXT_RE.search(item):
-            features = ANCHOR_FEATURE_RE.findall(item)
-            extensions = [name for name in ANCHOR_EXT_RE.findall(item) if name not in features]
-            conditional_features.append({"extensions": sorted(set(extensions)), "features": features, "text": text})
+            parsed = parse_entry(item)
+            if not parsed:
+                continue
+            entry = parsed[0]
+            entry["extensions"] = sorted({name for name in ANCHOR_EXT_RE.findall(item) if name not in entry["features"]})
+            conditional_features.append(entry)
             continue
         entries = parse_entry(item)
         if entries:
@@ -189,12 +293,14 @@ def parse_vk_xml(xml_text: str) -> dict:
     root = ET.fromstring(xml_text)
     version_features: dict[str, list[str]] = {}
     profile_surface: dict[str, dict[str, dict[str, list[str]]]] = {}
+    depends: dict[str, str | None] = {}
     for feature in root.findall("feature"):
         name = feature.get("name") or ""
         version_match = re.match(r"VK_VERSION_(1_[0-9])$", name)
         profile_match = re.match(r"VK_(BASE|COMPUTE|GRAPHICS)_VERSION_(1_[0-9])$", name)
         if not version_match and not profile_match:
             continue
+        depends[name] = feature.get("depends")
         parts = (version_match or profile_match).group(0).split("_")[-2:]
         version = "%s.%s" % (parts[0], parts[1])
         bucket = {"commands": set(), "types": set(), "enums": set(), "features": set()}
@@ -253,8 +359,57 @@ def parse_vk_xml(xml_text: str) -> dict:
     graphics = cumulative("graphics")
     base = cumulative("base")
     compute = cumulative("compute")
-    combined_commands = sorted(set(graphics["cumulative"]["commands"]) | set(base["cumulative"]["commands"]))
-    combined_types = sorted(set(graphics["cumulative"]["types"]) | set(base["cumulative"]["types"]))
+
+    def dependencies_of(name: str) -> list[str]:
+        declared = depends.get(name)
+        if declared:
+            return [part.strip() for part in re.split(r"[,+]", declared) if part.strip()]
+        # The 1.x graphics/compute blocks do not always repeat `depends`; fall
+        # back to the versioned chain the registry uses elsewhere.
+        match = re.match(r"VK_(GRAPHICS|COMPUTE|BASE)_VERSION_(1_[0-9])$", name)
+        if not match:
+            return []
+        family, version = match.group(1), match.group(2)
+        if family == "GRAPHICS":
+            return ["VK_COMPUTE_VERSION_%s" % version]
+        if family == "COMPUTE":
+            return ["VK_BASE_VERSION_%s" % version]
+        return []
+
+    def resolve(root_name: str) -> dict:
+        seen: list[str] = []
+        pending = [root_name]
+        while pending:
+            name = pending.pop(0)
+            if name in seen:
+                continue
+            seen.append(name)
+            for dependency in dependencies_of(name):
+                if dependency not in seen:
+                    pending.append(dependency)
+        commands: set[str] = set()
+        types: set[str] = set()
+        enums: set[str] = set()
+        for name in seen:
+            family_match = re.match(r"VK_(GRAPHICS|COMPUTE|BASE)_VERSION_(1_[0-9])$", name)
+            if not family_match:
+                continue
+            entry = profile_surface.get(family_match.group(1).lower(), {}).get(family_match.group(2).replace("_", "."))
+            if not entry:
+                continue
+            commands.update(entry["commands"])
+            types.update(entry["types"])
+            enums.update(entry["enums"])
+        return {
+            "roots": seen,
+            "commands": sorted(commands),
+            "types": sorted(types),
+            "enums": sorted(enums),
+            "commands_total": len(commands),
+            "types_total": len(types),
+        }
+
+    graphics_resolved = resolve("VK_GRAPHICS_VERSION_1_4")
     return {
         "versions": versions,
         "mandatory_feature_bits_by_version": version_features,
@@ -262,14 +417,184 @@ def parse_vk_xml(xml_text: str) -> dict:
             "graphics": graphics,
             "base": base,
             "compute": compute,
+            "graphics_resolved": {
+                "resolution_rule": "transitive walk of the registry `depends` chain (graphics -> compute -> base) per core version, not a manual sum of categories",
+                "roots": graphics_resolved["roots"],
+                "commands": graphics_resolved["commands"],
+                "types": graphics_resolved["types"],
+                "enums_count": len(graphics_resolved["enums"]),
+                "commands_total": graphics_resolved["commands_total"],
+                "types_total": graphics_resolved["types_total"],
+            },
             "graphics_including_base": {
-                "commands_total": len(combined_commands),
-                "types_total": len(combined_types),
-                "commands": combined_commands,
-                "types": combined_types,
+                "commands_total": graphics_resolved["commands_total"],
+                "types_total": graphics_resolved["types_total"],
+                "commands": graphics_resolved["commands"],
+                "types": graphics_resolved["types"],
             },
         },
     }
+
+
+def adoc_table_block(text: str, anchor: str) -> str:
+    start = text.find("[[%s]]" % anchor)
+    if start < 0:
+        raise SystemExit("pinned specification has no %s table" % anchor)
+    open_at = text.find("|====", start)
+    close_at = text.find("|====", open_at + 5)
+    if open_at < 0 or close_at < 0:
+        raise SystemExit("could not bound the %s table" % anchor)
+    return text[open_at + 5:close_at]
+
+
+VALUE_RE = re.compile(r"(?P<value>[0-9][0-9A-Za-z_^{}.,^]*(?:\s*\.\.\s*[0-9^]+)?|[0-9]+\^[0-9]+\^|-\s*[0-9]+)\s*\((?P<tags>[^)]*)\)")
+TAG_RE_SPLIT = re.compile(r"[,\s]+")
+
+
+def parse_limits_table(adoc: str) -> list[dict]:
+    """Parse the 'Required Limits' table into machine-readable rows.
+
+    Values keep their version tags, so a core 1.4 requirement is never confused
+    with a roadmap-only value (`{limit2022}` and friends). Continuation lines in
+    the AsciiDoc table are folded into the row they belong to.
+    """
+    rows: list[list[str]] = []
+    previous_continues = False
+    for raw in adoc_table_block(adoc, "limits-required").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if previous_continues and not line.startswith("|"):
+            parts = [part.strip() for part in line.split("|")]
+            if rows:
+                rows[-1][2] = (rows[-1][2] + " " + parts[0]).strip()
+                if len(parts) > 1 and parts[1]:
+                    rows[-1][3] = parts[1]
+            previous_continues = line.endswith("+")
+            continue
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.split("|")[1:]]
+        previous_continues = line.endswith("+")
+        if previous_continues and cells:
+            cells[-1] = cells[-1][:-1].strip()
+        while len(cells) < 4:
+            cells.append("")
+        rows.append(cells)
+
+    parsed: dict[str, dict] = {}
+    for cells in rows:
+        if len(cells) < 4 or "pname:" not in cells[0]:
+            continue
+        name = re.sub(r"^.*pname:", "", cells[0]).strip().split()[0]
+        values = []
+        for match in VALUE_RE.finditer(cells[2]):
+            tags = [tag.strip("{}").replace("limit", "") for tag in TAG_RE_SPLIT.split(match.group("tags")) if tag.strip("{}")]
+            values.append({"value": match.group("value").strip(), "tags": tags})
+        if not values:
+            values = [{"value": re.sub(r"\s+", " ", cells[2]).strip(), "tags": []}]
+        limit_type = cells[3].strip().strip("*^") or "unspecified"
+        core_values = [entry for entry in values if not entry["tags"] or {"core", "1_4"} & set(entry["tags"])]
+
+        def numeric(entry: dict):
+            digits = re.sub(r"[^0-9]", "", entry["value"].split("^")[0])
+            return int(digits) if digits else None
+
+        numbers = [number for number in (numeric(entry) for entry in core_values) if number is not None]
+        required = None
+        if numbers:
+            required = max(numbers) if limit_type.startswith("min") else min(numbers)
+        elif core_values:
+            required = core_values[-1]["value"]
+        record = {
+            "limit": name,
+            "limit_type": limit_type,
+            "required_for_core_1_4": required,
+            "values": values,
+            "roadmap_only_values": [entry for entry in values if set(entry["tags"]) & {"2022", "2024", "2026"}],
+        }
+        existing = parsed.get(name)
+        if existing is None:
+            parsed[name] = record
+            continue
+        # The table can mention a limit more than once; merge instead of
+        # silently keeping whichever row happened to be parsed last.
+        if len(record["values"]) > len(existing["values"]):
+            merged = dict(record)
+            parsed[name] = merged
+        else:
+            merged = existing
+        if merged["required_for_core_1_4"] is None:
+            merged["required_for_core_1_4"] = record["required_for_core_1_4"]
+    return [parsed[name] for name in sorted(parsed)]
+
+
+def parse_formats_tables(adoc: str) -> list[dict]:
+    """Parse the mandatory format support tables into format x feature-bit rows."""
+    tables = []
+    for match in re.finditer(r"\[\[(formats-mandatory-features-[a-z0-9-]+)\]\][\s\S]{0,4000}?\|====([\s\S]*?)\|====", adoc):
+        anchor, block = match.group(1), match.group(2)
+        title = re.search(r"^\.(.+)$", adoc[match.start(): match.start() + 200], re.M)
+        columns = []
+        for line in block.splitlines():
+            column = re.match(r"\s*(\d+)\+>.*ename:(VK_FORMAT_FEATURE[A-Z0-9_]*)", line)
+            if column:
+                columns.append((int(column.group(1)), column.group(2)))
+        columns.sort()
+        rows = []
+        for line in block.splitlines():
+            row = re.match(r"\s*\|\s*ename:(VK_FORMAT_[A-Z0-9_]+)\s*\|(.*)$", line)
+            if not row:
+                continue
+            cells = [cell.strip() for cell in row.group(2).split("|")]
+            features = [
+                feature
+                for index, (_, feature) in enumerate(columns)
+                if index < len(cells) and cells[index]
+            ]
+            rows.append({"format": row.group(1), "required_feature_bits": features})
+        if rows:
+            tables.append(
+                {
+                    "anchor": anchor,
+                    "title": title.group(1).strip() if title else anchor,
+                    "columns": [feature for _, feature in columns],
+                    "rows": rows,
+                }
+            )
+    return tables
+
+
+COMMAND_AREAS = [
+    ("instance-device", ("vkCreateInstance", "vkDestroyInstance", "vkEnumerateInstance", "vkEnumeratePhysicalDevice", "vkGetPhysicalDevice", "vkCreateDevice", "vkDestroyDevice", "vkGetDevice")),
+    ("memory", ("vkAllocateMemory", "vkFreeMemory", "vkMapMemory", "vkUnmapMemory", "vkFlushMappedMemory", "vkInvalidateMappedMemory")),
+    ("buffers", ("vkCreateBuffer", "vkDestroyBuffer", "vkBindBufferMemory", "vkGetBufferMemoryRequirements", "vkCreateBufferView")),
+    ("images", ("vkCreateImage", "vkDestroyImage", "vkBindImageMemory", "vkGetImageMemoryRequirements", "vkCreateImageView", "vkGetImageSubresource")),
+    ("samplers", ("vkCreateSampler", "vkDestroySampler")),
+    ("descriptors", ("vkCreateDescriptor", "vkDestroyDescriptor", "vkResetDescriptor", "vkAllocateDescriptor", "vkFreeDescriptor", "vkUpdateDescriptor", "vkCreatePipelineLayout", "vkDestroyPipelineLayout")),
+    ("pipelines-and-shaders", ("vkCreateShaderModule", "vkDestroyShaderModule", "vkCreatePipelineCache", "vkDestroyPipelineCache", "vkCreateComputePipelines", "vkCreateGraphicsPipelines", "vkDestroyPipeline")),
+    ("command-buffers", ("vkCreateCommandPool", "vkDestroyCommandPool", "vkResetCommandPool", "vkAllocateCommandBuffers", "vkFreeCommandBuffers", "vkBeginCommandBuffer", "vkEndCommandBuffer", "vkResetCommandBuffer")),
+    ("synchronization", ("vkCreateFence", "vkDestroyFence", "vkResetFences", "vkGetFenceStatus", "vkWaitForFences", "vkCreateSemaphore", "vkDestroySemaphore", "vkCreateEvent", "vkDestroyEvent", "vkSetEvent", "vkResetEvent", "vkQueueSubmit", "vkQueueWaitIdle", "vkDeviceWaitIdle")),
+    ("queries", ("vkCreateQueryPool", "vkDestroyQueryPool", "vkGetQueryPoolResults")),
+]
+
+
+def classify_commands(commands: list[str]) -> dict:
+    """Group the resolved core command surface into differentiable contracts."""
+    contracts: dict[str, list[str]] = {name: [] for name, _ in COMMAND_AREAS}
+    contracts["command-recording"] = []
+    contracts["other"] = []
+    for command in commands:
+        if command.startswith("vkCmd"):
+            contracts["command-recording"].append(command)
+            continue
+        for name, prefixes in COMMAND_AREAS:
+            if any(command.startswith(prefix) for prefix in prefixes):
+                contracts[name].append(command)
+                break
+        else:
+            contracts["other"].append(command)
+    return {name: value for name, value in contracts.items() if value}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -278,6 +603,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--spec-html", help="local copy of the pinned specification HTML")
     parser.add_argument("--vk-xml", help="local copy of the pinned registry vk.xml")
+    parser.add_argument("--limits-adoc", help="local copy of the pinned chapters/limits.adoc")
+    parser.add_argument("--formats-adoc", help="local copy of the pinned chapters/formats.adoc")
     args = parser.parse_args(argv)
 
     sources = load_sources(args.sources)
@@ -285,6 +612,8 @@ def main(argv: list[str] | None = None) -> int:
     registry = find_source(sources, REGISTRY_SOURCE_ID)
     alias = spec["document_alias"]
     vk_xml_artifact = next(a for a in registry["artifacts"] if a["path"] == "registry/vk.xml")
+    limits_artifact = next(a for a in spec["artifacts"] if a["path"] == "chapters/limits.adoc")
+    formats_artifact = next(a for a in spec["artifacts"] if a["path"] == "chapters/formats.adoc")
 
     html = read_input(args.spec_html, alias["url"], alias["sha256"], "specification").decode("utf-8", "replace")
     title = re.search(r"<title>([^<]*)</title>", html, re.IGNORECASE)
@@ -299,6 +628,22 @@ def main(argv: list[str] | None = None) -> int:
 
     features = parse_feature_requirements(html)
     surface = parse_vk_xml(xml_bytes.decode("utf-8"))
+    limits_bytes = read_input(
+        args.limits_adoc,
+        "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/%s/%s" % (spec["commit"], limits_artifact["path"]),
+        limits_artifact["sha256"],
+        "limits chapter",
+    )
+    formats_bytes = read_input(
+        args.formats_adoc,
+        "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/%s/%s" % (spec["commit"], formats_artifact["path"]),
+        formats_artifact["sha256"],
+        "formats chapter",
+    )
+    limits_table = parse_limits_table(limits_bytes.decode("utf-8"))
+    formats_tables = parse_formats_tables(formats_bytes.decode("utf-8"))
+    resolved_commands = surface["surface_by_profile"]["graphics_resolved"]["commands"]
+    contracts = classify_commands(resolved_commands)
 
     spec_by_version = {}
     unconditional: list[dict] = []
@@ -331,17 +676,32 @@ def main(argv: list[str] | None = None) -> int:
                 unconditional.append(dict(record, version=version))
         spec_by_version[version] = {"unconditional": bits, "conditional": conditional_bits}
     conditional_on_optional_extension = []
-    for entry in features["conditional_features"]:
-        for feature in entry["features"]:
-            conditional_on_optional_extension.append(
-                {
-                    "features": [feature],
-                    "condition": " or ".join(entry["extensions"]) + " is supported",
-                    "at_least_one": False,
-                    "text": entry["text"],
-                    "version": None,
-                }
-            )
+    any_of_groups = 0
+    for entry in features["conditional_features"] + features.get("by_version", {}).get("__none__", []):
+        if not isinstance(entry, dict) or "features" not in entry:
+            continue
+        trigger = entry.get("trigger") or parse_trigger(" or ".join(entry.get("extensions", [])) + " is supported")
+        record = {
+            "features": list(entry["features"]),
+            "requirement": entry.get("requirement") or (
+                {"kind": "any-of", "features": list(entry["features"])}
+                if entry.get("at_least_one") and len(entry["features"]) > 1
+                else {"kind": "feature", "features": list(entry["features"][:1])}
+            ),
+            "trigger": trigger,
+            "condition": entry.get("condition") or condition_explanation(trigger),
+            "at_least_one": bool(entry.get("at_least_one")),
+            "text": entry["text"],
+            "explanation": entry.get("explanation") or "",
+            "version": None,
+        }
+        if record["at_least_one"]:
+            any_of_groups += 1
+        conditional_on_optional_extension.append(record)
+    # Any-of alternatives must not be re-expanded into separate obligations.
+    expanded = [entry for entry in conditional_on_optional_extension if len(entry["features"]) == 1 and entry["at_least_one"]]
+    if expanded:
+        raise SystemExit("any-of group was expanded into single-feature obligations: %r" % expanded[:2])
 
     # Cross-check the two primary sources: the specification's per-version
     # unconditional feature lists must agree with the registry's per-version
@@ -405,6 +765,21 @@ def main(argv: list[str] | None = None) -> int:
             "extension_rules_not_core_classification": features["unclassified"],
         },
         "api_surface": surface,
+        "limits": {
+            "source_anchor": "limits-required",
+            "resolution_rule": "values tagged {core} or {limit1_4} apply to the core target; {limit2022}/{limit2024}/{limit2026} values are roadmap-only and are recorded separately",
+            "raised_in_1_4": sorted({row["limit"] for row in limits_table if any("1_4" in value["tags"] for value in row["values"])}),
+            "rows": limits_table,
+        },
+        "formats": {
+            "source_anchors": [table["anchor"] for table in formats_tables],
+            "resolution_rule": "each row is a format plus the feature bits the specification requires for it; an empty marker means the feature is not mandatory for that format",
+            "tables": formats_tables,
+        },
+        "command_contracts": {
+            "resolution_rule": "the resolved core command surface grouped into differentiable contracts by API area; one requirement row per contract",
+            "contracts": contracts,
+        },
         "roadmap_comparison": {
             "file": "roadmap_comparison.json",
             "note": "Khronos roadmap profiles are recorded separately as a comparison. They are not the definition of core conformance and must not drive classification.",

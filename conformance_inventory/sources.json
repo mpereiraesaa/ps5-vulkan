@@ -144,6 +144,27 @@
           "kind": "tree",
           "entry_count": 495,
           "note": "extension appendices plus version/glossary/credits appendices"
+        },
+        {
+          "path": "chapters/features.adoc",
+          "kind": "file",
+          "size_bytes": 479899,
+          "sha256": "dd8f3651641145126c1a5905811005b411986cae67cbf0c0eb027141b3e926ea",
+          "git_blob_sha1": "be2c171886520fae42807274483918092074590a"
+        },
+        {
+          "path": "chapters/limits.adoc",
+          "kind": "file",
+          "size_bytes": 439522,
+          "sha256": "9b643939ac929098f653d1db23be60acb40d4e7b9200039185170c73d2221942",
+          "git_blob_sha1": "25b69e2171d6f22c6a5d3a90802e644d8f4649df"
+        },
+        {
+          "path": "chapters/formats.adoc",
+          "kind": "file",
+          "size_bytes": 257891,
+          "sha256": "5db6ad993f9d01139a236064eab9023fe37f5bc40a6fc601ebd1851e7a7a68da",
+          "git_blob_sha1": "5c96a49e4046f858a71ddc68cf9d10518c0f0596"
         }
       ],
       "document_alias": {

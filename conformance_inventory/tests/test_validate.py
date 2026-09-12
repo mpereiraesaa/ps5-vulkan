@@ -22,6 +22,7 @@ generated.
 from __future__ import annotations
 
 import copy
+import json
 import os
 import sys
 import unittest
@@ -723,6 +724,50 @@ class CheckedInInventoryTests(unittest.TestCase):
             self.assertIn(bit, mandatory)
             self.assertNotIn(bit, conditional)
             self.assertEqual(rows[row_id]["classification"], "mandatory", row_id)
+
+    def test_resolved_core_surface_is_a_dependency_walk(self):
+        """Regression: the compute surface must not be dropped by summing categories."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        resolved = bundle.target["api_surface"]["surface_by_profile"]["graphics_resolved"]
+        roots = resolved["roots"]
+        for family in ("VK_GRAPHICS_VERSION_1_0", "VK_COMPUTE_VERSION_1_0", "VK_BASE_VERSION_1_0"):
+            self.assertIn(family, roots)
+        for command in ("vkCmdDispatch", "vkCreateComputePipelines", "vkCmdDrawIndexed", "vkCreateImage"):
+            self.assertIn(command, resolved["commands"])
+        self.assertGreater(len(resolved["commands"]), 200)
+
+    def test_any_of_obligations_are_not_expanded(self):
+        """Regression: 'at least one of A, B or C' must stay one disjunctive obligation."""
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        entries = bundle.target["mandatory_feature_bits"]["conditional_on_optional_extension"]
+        any_of = [entry for entry in entries if entry.get("requirement", {}).get("kind") == "any-of"]
+        self.assertGreater(len(any_of), 0)
+        for entry in any_of:
+            self.assertGreater(len(entry["features"]), 1, entry)
+            self.assertTrue(entry.get("at_least_one"))
+        by_trigger = {}
+        for entry in entries:
+            key = (json.dumps(entry.get("trigger"), sort_keys=True), entry.get("condition"))
+            by_trigger.setdefault(key, []).append(entry.get("requirement", {}).get("kind"))
+        for key, kinds in by_trigger.items():
+            if "any-of" in kinds:
+                self.assertEqual(kinds.count("any-of"), 1, "any-of group duplicated for %r" % (key,))
+
+    def test_limits_table_separates_core_from_roadmap(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        rows = {row["limit"]: row for row in bundle.target["limits"]["rows"]}
+        self.assertEqual(rows["maxImageDimension1D"]["required_for_core_1_4"], 8192)
+        self.assertEqual(rows["maxPushConstantsSize"]["required_for_core_1_4"], 256)
+        self.assertEqual(rows["bufferImageGranularity"]["required_for_core_1_4"], 4096)
+        self.assertGreater(len(bundle.target["limits"]["raised_in_1_4"]), 20)
+
+    def test_format_tables_are_machine_readable(self):
+        bundle = validate.Bundle.load(INVENTORY_DIR)
+        tables = bundle.target["formats"]["tables"]
+        self.assertGreaterEqual(len(tables), 8)
+        rows = [row for table in tables for row in table["rows"]]
+        self.assertGreater(len(rows), 100)
+        self.assertTrue(all("required_feature_bits" in row for row in rows))
 
     def test_wsi_is_not_a_core_requirement(self):
         bundle = validate.Bundle.load(INVENTORY_DIR)
