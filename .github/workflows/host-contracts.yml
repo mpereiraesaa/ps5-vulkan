@@ -1,0 +1,48 @@
+name: Host contracts
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  host-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out ps5-vulkan
+        uses: actions/checkout@v4
+        with:
+          path: homebrew_ps5/projects/ps5-vulkan
+
+      - name: Check out pinned graphics support
+        uses: actions/checkout@v4
+        with:
+          repository: mpereiraesaa/ps5-agc-gears
+          ref: 8f035b73fab6713f015b46010c22330cf1579311
+          path: homebrew_ps5/projects/ps5-agc-gears
+
+      - name: Check out pinned telemetry support
+        uses: actions/checkout@v4
+        with:
+          repository: mpereiraesaa/ps5-homebrew-lab
+          ref: 62c63455b561ef4ab45d2d24923bdfadbc2200ce
+          path: lab-reference
+
+      - name: Link telemetry client
+        run: ln -s "$GITHUB_WORKSPACE/lab-reference/projects/logging_server" "$GITHUB_WORKSPACE/homebrew_ps5/projects/logging_server"
+
+      - name: Install host-test dependencies
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Prepare pinned Vulkan headers
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make vulkan-headers
+
+      - name: Run host contracts
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make check

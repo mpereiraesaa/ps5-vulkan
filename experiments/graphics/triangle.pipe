@@ -1,0 +1,32 @@
+[Version]
+version = 65
+
+[VsGlsl]
+#version 450
+layout(location = 0) out vec3 shade;
+void main() {
+    const vec2 positions[3] = vec2[3](vec2(-0.7, -0.6), vec2(0.7, -0.6), vec2(0.0, 0.7));
+    const vec3 colors[3] = vec3[3](vec3(1, 0, 0), vec3(0, 1, 0), vec3(0, 0, 1));
+    gl_Position = vec4(positions[gl_VertexIndex], 0.4, 1.0);
+    shade = colors[gl_VertexIndex];
+}
+
+[VsInfo]
+entryPoint = main
+
+[FsGlsl]
+#version 450
+layout(location = 0) in vec3 shade;
+layout(location = 0) out vec4 color;
+void main() { color = vec4(shade, 1.0); }
+
+[FsInfo]
+entryPoint = main
+
+[GraphicsPipelineState]
+topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+nggState.enableNgg = 1
+nggState.enableGsUse = 0
+colorBuffer[0].format = VK_FORMAT_B8G8R8A8_UNORM
+colorBuffer[0].channelWriteMask = 15
+colorBuffer[0].blendEnable = 0

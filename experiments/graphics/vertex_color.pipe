@@ -1,0 +1,45 @@
+[Version]
+version = 65
+
+[VsGlsl]
+#version 450
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 vertexColor;
+layout(location = 0) out vec3 shade;
+void main() {
+    gl_Position = vec4(position, 1.0);
+    shade = vertexColor;
+}
+
+[VsInfo]
+entryPoint = main
+
+[FsGlsl]
+#version 450
+layout(location = 0) in vec3 shade;
+layout(location = 0) out vec4 color;
+void main() { color = vec4(shade, 1.0); }
+
+[FsInfo]
+entryPoint = main
+
+[GraphicsPipelineState]
+topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+nggState.enableNgg = 1
+nggState.enableGsUse = 0
+colorBuffer[0].format = VK_FORMAT_B8G8R8A8_UNORM
+colorBuffer[0].channelWriteMask = 15
+colorBuffer[0].blendEnable = 0
+
+[VertexInputState]
+binding[0].binding = 0
+binding[0].stride = 24
+binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+attribute[0].location = 0
+attribute[0].binding = 0
+attribute[0].format = VK_FORMAT_R32G32B32_SFLOAT
+attribute[0].offset = 0
+attribute[1].location = 1
+attribute[1].binding = 0
+attribute[1].format = VK_FORMAT_R32G32B32_SFLOAT
+attribute[1].offset = 12

@@ -1,0 +1,185 @@
+#include "vk_internal.h"
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct mock {
+    unsigned allocations, releases, flushes, invalidates;
+    VkDeviceSize offset, size;
+    VkResult allocation_result, sync_result;
+};
+static VkResult allocate(void *ctx, VkDeviceSize bytes, void **address, void **backing)
+{
+    struct mock *m = ctx;
+    if (m->allocation_result) return m->allocation_result;
+    *address = calloc(1, bytes); *backing = *address;
+    if (!*address) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    ++m->allocations; return VK_SUCCESS;
+}
+static void release(void *ctx, void *backing)
+{ ++((struct mock *)ctx)->releases; free(backing); }
+static VkResult flush(void *ctx, void *backing, VkDeviceSize offset, VkDeviceSize size)
+{
+    assert(backing);
+    struct mock *m = ctx; ++m->flushes; m->offset = offset; m->size = size;
+    return m->sync_result;
+}
+static VkResult invalidate(void *ctx, void *backing, VkDeviceSize offset, VkDeviceSize size)
+{
+    assert(backing);
+    struct mock *m = ctx; ++m->invalidates; m->offset = offset; m->size = size;
+    return m->sync_result;
+}
+static struct VkDevice_T device(struct mock *mock)
+{
+    return (struct VkDevice_T){
+        .memory = {mock, allocate, release, flush, invalidate},
+        .buffer_alignment = 256, .noncoherent_atom = 64, .max_allocation = 65536
+    };
+}
+static VkDeviceMemory memory(VkDevice d, VkDeviceSize size)
+{
+    VkMemoryAllocateInfo info = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                                .allocationSize = size};
+    VkDeviceMemory m;
+    assert(vkAllocateMemory(d, &info, NULL, &m) == VK_SUCCESS);
+    return m;
+}
+static VkBuffer buffer(VkDevice d, VkDeviceSize size)
+{
+    VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer b;
+    assert(vkCreateBuffer(d, &info, NULL, &b) == VK_SUCCESS);
+    return b;
+}
+static void test_binding(void)
+{
+    struct mock mock = {0}; struct VkDevice_T d = device(&mock), other = device(&mock);
+    VkDeviceMemory m = memory(&d, 4096);
+    VkBuffer b = buffer(&d, 257);
+    VkMemoryRequirements req;
+    vkGetBufferMemoryRequirements(&d, b, &req);
+    assert(req.size == 512 && req.alignment == 256 && req.memoryTypeBits == 1);
+    assert(vkBindBufferMemory(&other, b, m, 0) != VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, b, m, UINT64_MAX - 255) != VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, b, m, 3840) != VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, b, m, 1) != VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, b, m, 512) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, b, m, 1024) != VK_SUCCESS);
+    void *map, *span; VkDeviceSize size;
+    assert(vkMapMemory(&d, m, 0, VK_WHOLE_SIZE, 0, &map) == VK_SUCCESS);
+    assert(ps5vk_buffer_span(&d, b, 12, VK_WHOLE_SIZE, &span, &size) == VK_SUCCESS);
+    assert(span == (unsigned char *)map + 524 && size == 245);
+    assert(ps5vk_buffer_span(&d, b, 0, 258, &span, &size) != VK_SUCCESS);
+    assert(!span && !size);
+    assert(ps5vk_buffer_span(&d, b, 257, VK_WHOLE_SIZE, &span, &size) != VK_SUCCESS);
+    assert(ps5vk_buffer_span(&d, b, UINT64_MAX, 1, &span, &size) != VK_SUCCESS);
+    vkFreeMemory(&d, m, NULL); /* Also releases an active mapping, no flush. */
+    assert(mock.releases == 1 && !mock.flushes);
+    assert(ps5vk_buffer_span(&d, b, 0, 1, &span, &size) != VK_SUCCESS);
+    m = memory(&d, 4096);
+    assert(vkBindBufferMemory(&d, b, m, 0) != VK_SUCCESS); /* No rebind after free. */
+    vkDestroyBuffer(&d, b, NULL); vkFreeMemory(&d, m, NULL);
+    assert(!d.buffers && !d.memories && mock.allocations == mock.releases);
+}
+static void test_mapping(void)
+{
+    struct mock mock = {0}; struct VkDevice_T d = device(&mock);
+    VkDeviceMemory m = memory(&d, 1000); void *map;
+    VkMappedMemoryRange r = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                             .memory = m, .size = VK_WHOLE_SIZE};
+    assert(vkFlushMappedMemoryRanges(&d, 1, &r) != VK_SUCCESS);
+    assert(vkMapMemory(&d, m, 1000, VK_WHOLE_SIZE, 0, &map) != VK_SUCCESS);
+    assert(vkMapMemory(&d, m, 1, UINT64_MAX - 1, 0, &map) != VK_SUCCESS);
+    assert(vkMapMemory(&d, m, 64, 128, 0, &map) == VK_SUCCESS);
+    void *second;
+    assert(vkMapMemory(&d, m, 0, 1, 0, &second) != VK_SUCCESS && !second);
+    assert(vkFlushMappedMemoryRanges(&d, 1, &r) != VK_SUCCESS); /* Beyond mapped range. */
+    r.offset = 64; r.size = 128;
+    assert(vkFlushMappedMemoryRanges(&d, 1, &r) == VK_SUCCESS);
+    assert(mock.offset == 64 && mock.size == 128 && mock.flushes == 1);
+    r.offset = 65; r.size = 64;
+    assert(vkFlushMappedMemoryRanges(&d, 1, &r) != VK_SUCCESS);
+    r.offset = 64; r.size = 63;
+    assert(vkInvalidateMappedMemoryRanges(&d, 1, &r) != VK_SUCCESS);
+    r.size = 64;
+    assert(vkInvalidateMappedMemoryRanges(&d, 1, &r) == VK_SUCCESS);
+    assert(mock.invalidates == 1 && mock.offset == 64 && mock.size == 64);
+    r.offset = 128; r.size = VK_WHOLE_SIZE;
+    assert(vkInvalidateMappedMemoryRanges(&d, 1, &r) == VK_SUCCESS);
+    assert(mock.invalidates == 2 && mock.offset == 128 && mock.size == 64);
+    r.offset = 64;
+    assert(vkInvalidateMappedMemoryRanges(&d, 1, &r) == VK_SUCCESS);
+    assert(mock.size == 128); /* Mapping ends at 192, allocation ends at 1000. */
+    r.size = 64;
+    VkMappedMemoryRange ranges[2] = {r, r}; ranges[1].offset = 960;
+    assert(vkFlushMappedMemoryRanges(&d, 2, ranges) != VK_SUCCESS && mock.flushes == 1);
+    vkUnmapMemory(&d, m); assert(mock.flushes == 1);
+    assert(vkMapMemory(&d, m, 64, 127, 0, &map) == VK_SUCCESS);
+    r.offset = 64; r.size = VK_WHOLE_SIZE;
+    assert(vkInvalidateMappedMemoryRanges(&d, 1, &r) != VK_SUCCESS); /* Non-atom mapping end. */
+    vkUnmapMemory(&d, m);
+    assert(vkMapMemory(&d, m, 0, VK_WHOLE_SIZE, 0, &map) == VK_SUCCESS);
+    r.offset = 960; r.size = VK_WHOLE_SIZE;
+    assert(vkFlushMappedMemoryRanges(&d, 1, &r) == VK_SUCCESS);
+    assert(mock.size == 40); /* Final non-atom-sized allocation tail is legal. */
+    mock.sync_result = VK_ERROR_DEVICE_LOST;
+    assert(vkInvalidateMappedMemoryRanges(&d, 1, &r) == VK_ERROR_DEVICE_LOST);
+    vkFreeMemory(&d, m, NULL);
+    assert(!d.memories && mock.allocations == mock.releases);
+}
+struct allocator_state { unsigned allocated, freed; int fail; };
+static void *VKAPI_CALL host_alloc(void *ctx, size_t size, size_t alignment,
+                                   VkSystemAllocationScope scope)
+{
+    struct allocator_state *s = ctx;
+    assert(scope == VK_SYSTEM_ALLOCATION_SCOPE_OBJECT && alignment <= _Alignof(max_align_t));
+    if (s->fail) return NULL;
+    ++s->allocated; return malloc(size);
+}
+static void *VKAPI_CALL host_realloc(void *ctx, void *p, size_t size, size_t alignment,
+                                     VkSystemAllocationScope scope)
+{ (void)ctx; (void)alignment; (void)scope; return realloc(p, size); }
+static void VKAPI_CALL host_free(void *ctx, void *p)
+{ ++((struct allocator_state *)ctx)->freed; free(p); }
+static void test_failures_and_allocators(void)
+{
+    struct mock mock = {0}; struct VkDevice_T d = device(&mock);
+    struct allocator_state state = {0};
+    d.custom_allocator = VK_TRUE;
+    d.allocator = (VkAllocationCallbacks){.pUserData = &state, .pfnAllocation = host_alloc,
+        .pfnReallocation = host_realloc, .pfnFree = host_free};
+    VkMemoryAllocateInfo info = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                                .allocationSize = 512};
+    VkDeviceMemory m;
+    state.fail = 1;
+    assert(vkAllocateMemory(&d, &info, NULL, &m) == VK_ERROR_OUT_OF_HOST_MEMORY && !m);
+    state.fail = 0; mock.allocation_result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    assert(vkAllocateMemory(&d, &info, NULL, &m) == VK_ERROR_OUT_OF_DEVICE_MEMORY && !m);
+    assert(state.allocated == state.freed && !d.memories && !mock.allocations);
+    mock.allocation_result = VK_SUCCESS;
+    m = memory(&d, 512); VkBuffer b = buffer(&d, 256);
+    vkDestroyBuffer(&d, b, NULL); vkFreeMemory(&d, m, NULL);
+    assert(state.allocated == state.freed && mock.allocations == mock.releases);
+    info.allocationSize = UINT64_MAX;
+    assert(vkAllocateMemory(&d, &info, NULL, &m) == VK_ERROR_OUT_OF_DEVICE_MEMORY);
+    info.allocationSize = 512; info.memoryTypeIndex = 1;
+    assert(vkAllocateMemory(&d, &info, NULL, &m) != VK_SUCCESS);
+    info.memoryTypeIndex = 0; info.pNext = &info;
+    assert(vkAllocateMemory(&d, &info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT);
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 256, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
+    assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_FEATURE_NOT_PRESENT && !b);
+    bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; bi.size = UINT64_MAX;
+    assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_OUT_OF_DEVICE_MEMORY);
+}
+int main(void)
+{
+    test_binding(); test_mapping(); test_failures_and_allocators();
+    puts("Vulkan memory contracts: pass (host mock only, no GPU evidence)");
+    return 0;
+}
