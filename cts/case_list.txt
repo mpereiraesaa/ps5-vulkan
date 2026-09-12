@@ -1,0 +1,29 @@
+# Pinned Khronos Vulkan CTS Focused Selection
+# Upstream Tag: vulkan-cts-1.3.8.4 (commit a0270c1897597e6c77679870e10415398a13001c)
+# Upstream Mustpass: external/vulkancts/mustpass/main/vk-default/
+dEQP-VK.info.build
+dEQP-VK.info.device
+dEQP-VK.info.platform
+dEQP-VK.info.memory_limits
+dEQP-VK.info.device_properties
+dEQP-VK.info.device_features
+dEQP-VK.info.device_memory_properties
+dEQP-VK.info.device_queue_family_properties
+dEQP-VK.info.instance_extensions
+dEQP-VK.info.instance_layers
+dEQP-VK.info.device_extensions
+dEQP-VK.info.physical_devices
+dEQP-VK.api.device_init.create_device.basic
+dEQP-VK.api.smoke.create_sampler
+dEQP-VK.api.smoke.create_shader
+dEQP-VK.api.smoke.triangle
+dEQP-VK.memory.allocation.basic.size_256.forward.count_1
+dEQP-VK.memory.allocation.basic.size_1KiB.forward.count_1
+dEQP-VK.memory.mapping.suballocation.full.257.simple
+dEQP-VK.memory.mapping.suballocation.full.257.flush
+dEQP-VK.memory.mapping.suballocation.full.257.invalidate
+dEQP-VK.compute.pipeline.basic.copy_ssbo_single_invocation
+dEQP-VK.compute.pipeline.basic.empty_shader
+dEQP-VK.synchronization.basic.fence.one
+dEQP-VK.synchronization.basic.fence.one_signaled
+dEQP-VK.synchronization.basic.empty_submit

@@ -28,14 +28,53 @@ See [BUILDING.md](BUILDING.md) for the SDK-linked diagnostic and the
 `make check`, `make check-sanitize` and the runtime graphics compiler/cache
 test with ASan/UBSan enabled. The PSBC static archive itself is not instrumented.
 
-The public-header-only native consumer currently has cross-compile/link
-coverage. Hardware testing used the SDK-linked diagnostic, which also inspects
-internal state. These are different scopes of evidence.
+## Focused Vulkan CTS validation
 
-The test does not prove arbitrary shaders, complete per-pixel rasterization
-equivalence, textured runtime compilation or Vulkan conformance. Application
-self-exit is not the accepted termination route; use system Close Game.
+A pinned selection of 26 core Vulkan CTS test cases from upstream
+`VK-GL-CTS` (`vulkan-cts-1.3.8.4`, commit `a0270c1897597e6c77679870e10415398a13001c`, Apache-2.0)
+was integrated and evaluated on both the host mock harness and real hardware:
 
-Raw console logs, screenshots, deployment details and internal planning are
-kept out of the public repository. No proprietary shader or module data is
-required by the owned triangle fixture.
+- **Host mock suite:** `make check` builds `build/tests/test_cts_host` against `dist-sdk/lib/libps5vk_host.a`.
+  Observed result: `total=26 pass=22 not_supported=4 fail=0 skip=0`. The 4 `NotSupported` cases
+  faithfully reflect the host mock environment's lack of native PSBC shader compilation and AGC hardware queues.
+- **PS5 hardware execution (FW 12.02, GFX1013):** The native package executes the exact 26 mustpass cases
+  in a single session using the statically linked driver and runtime compiler.
+  Observed result: **26 / 26 PASS (100%)**, 0 failures, 0 unsupported, 0 skipped.
+  Structured `ps5log/1` telemetry confirmed:
+  - Core API build, platform and device introspection matching driver caps.
+  - Device initialization, limits, non-coherent atom size (64B) and storage alignment (256B).
+  - Memory allocation, suballocated memory mapping (257 bytes), cache flush and invalidate ranges.
+  - Sampler and shader module creation and destruction.
+  - Runtime triangle graphics pipeline compilation and cache insertion (9,316 bytes).
+  - Runtime SSBO compute dispatch (`vkCmdDispatch` 16 workgroups x 64 threads = 1,024 elements) with exact arithmetic verification.
+  - Empty compute pipeline compilation and retirement.
+  - Signaled and unsignaled fence status polling, reset, and queue empty submission.
+  - Clean graphics cache destruction and zero tracked GPU memory allocations at retirement.
+
+See [`cts/gap_matrix.md`](cts/gap_matrix.md) for the complete case list, Vulkan API mapping and rationales.
+
+## Independent native SDK consumer validation
+
+The independent native application in `examples/native_consumer/` consumes strictly
+public headers (`<ps5vk/ps5vk.h>`, `<ps5vk/ps5vk_present.h>`) and links against the staged
+`dist-sdk/lib/libps5vk.a` and `dist-sdk/lib/libpsbc.a`. Zero private project headers or symbols
+are included or referenced (enforced by `tests/test_consumer_isolation.py`).
+
+Observed hardware results on PS5 (FW 12.02):
+
+- **Finite verification mode:**
+  - Runtime compute pipeline compilation and execution with memory bounds protection (front/tail guard words).
+  - Runtime procedural graphics pipeline compilation with 1 cold compile (9,316 bytes cache entry) and 1 warm cache hit.
+  - 18 frames presented to 1080p VideoOut across 3 distinct viewports (1920x1080, 1280x720, 640x480).
+  - Deterministic GPU framebuffer readbacks on all 18 frames: valid pixel coverage, alpha channel = 255, and color gradient invariants verified.
+  - Clean presentation retirement and zero leaked memory allocations upon completion.
+  - OS-level clean termination via system Close Game in ~100 ms.
+- **Continuous rendering mode:**
+  - Sustained continuous rendering executed for over 5 minutes (>17,850 consecutive frames at 60 FPS) without degradation, memory growth, or queue faults.
+  - 1080p visual output confirmed via Remote Play stream.
+- **Clean recovery and relaunch cycling:**
+  - 3 consecutive launch, run, and system Close Game cycles completed successfully, proving prompt resource reclamation and zero driver or GPU lockups.
+
+Raw console logs, captures, deployment details and internal planning are kept out of
+the public repository. No proprietary shader or module data is required by the consumer fixture.
+

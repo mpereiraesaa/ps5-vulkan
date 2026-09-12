@@ -79,3 +79,40 @@ negative paths and generated-program invariants. A successful host build alone
 does not prove GPU execution. Native evidence additionally requires exact
 artifact identity, structured `ps5log/1` telemetry, GPU completion/readback and
 VideoOut ownership; screenshots are only supporting visual evidence.
+
+## Focused Vulkan CTS
+
+A pinned set of 26 core Vulkan CTS test cases is maintained in `cts/case_list.txt`
+and documented in `cts/gap_matrix.md`:
+
+```sh
+# Host CTS test execution (part of make check)
+./build/tests/test_cts_host --json
+./build/tests/test_cts_host --tap
+
+# CTS runner and gap matrix unit tests
+python3 -m unittest discover -s tests -p "test_cts*.py"
+
+# Package native CTS title for console execution
+python3 tools/build_cts_native.py
+```
+
+## Independent native SDK consumer
+
+The standalone native consumer demonstrates SDK usage using strictly public headers
+(`<ps5vk/ps5vk.h>`, `<ps5vk/ps5vk_present.h>`):
+
+```sh
+# Stage public SDK
+python3 tools/build_sdk.py
+
+# Build native consumer, verify zero private includes/symbols, and package
+python3 tools/build_consumer.py
+
+# For continuous rendering demonstration (60 FPS looped stream)
+python3 tools/build_consumer.py --continuous
+
+# Consumer header and symbol isolation tests
+python3 -m unittest tests/test_consumer_isolation.py
+```
+
