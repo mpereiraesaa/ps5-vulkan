@@ -45,9 +45,10 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the sixteen cases frozen in `cts/upstream/manifest.json`
-  (seven API, synchronization and memory cases, six compute cases and three
-  resource cases). Only these are registered by `cts/upstream/package_ps5.cpp`
+* **Selected**: the twenty cases frozen in `cts/upstream/manifest.json`
+  (the previously accepted API, synchronization, memory, compute and resource
+  cases plus two pipeline/push-constant cases). Only these are registered by
+  `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
   `diagnostics` list: upstream cases that are compiled and registered but are
   known not to pass yet. They are never part of strict acceptance.
@@ -252,6 +253,34 @@ Game. Both newly promoted cases passed their original upstream oracles.
 - Selection SHA-256: `4a1d671a7ca64e3b9e0dfa7b26dff8efe2ed54ad3829d1781a610a40a99072e8`
 - QPA A SHA-256: `274c9de7cfca7e57b74170a9793ab73731d9351558bd618ef0667dd89d2e5bfe`
 - QPA B SHA-256: `0de915028da2a6c7b7b336c62154f208d64dc222c6dcb3343de030b145bda7d2`
+
+### Push and scalar-specialization expansion (2026-09-12)
+
+Two additional genuine upstream Vulkan 1.0 cases now exercise the bounded
+push/specialization implementation without changing their bodies or oracles:
+
+| Case | Upstream shape | What the oracle establishes |
+| --- | --- | --- |
+| `dEQP-VK.pipeline.push_constant.compute_pipeline.simple_test` | one 16-byte compute push range, eight invocations | all eight output `vec4` values byte-compare with `(1,0,0,1)` |
+| `dEQP-VK.api.pipeline.pipeline_layout.lifetime.destroy_after_end` | scalar `uint32` specialization value 1, scalar push value 75, 100 invocations; pipeline layout destroyed after recording and before submit | all 100 SSBO words equal `50 + 75 + invocation`, proving the recorded command owns the required state |
+
+Two independent launches of the identical final payload completed the strict
+twenty-case selection with **20 Pass, 0 Fail, 0 NotSupported**, exit code zero,
+matching executable/selection identities, complete QPA reconstruction and a
+stopped title after system Close Game.
+
+- Executable SHA-256: `3cd38c3a7ed6b26384a82151eb9d08618473fd24f1a685299a87b2872fb62c83`
+- Selection SHA-256: `8db6098fc129cc43e0238ebfeb1f70b812d8e0ca4a116195b569f33a16318d8b`
+- QPA A SHA-256: `91f85420972e2bf40eb3824b7da9feeb7dd14e7f77316c13e06fd397b4049140`
+- QPA B SHA-256: `4388f15c334d3e4870cbb3511d27143e72553cabfadb3393cece9376164839ae`
+
+The four nearby `pipeline.spec_constant.compute.basic.*` leaves are deliberately
+not selected. This pinned CTS revision requests SPIR-V 1.3 for those shaders,
+while ps5vk currently advertises Vulkan 1.0 and no compatible SPIR-V extension;
+the upstream framework correctly reports them unsupported before compilation.
+The driver version is not inflated to turn that guard into a pass. Cases using
+`LocalSizeId` also remain excluded because specialization-dependent workgroup
+dimensions are not implemented.
 
 ### Heap and driver fixes
 
