@@ -13,6 +13,9 @@
 #include "graphics_pipeline_ps5.h"
 void ps5vk_native_graphics_queue_configure(VkDevice);
 #endif
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER
+#include "ps5vk_compiler.h"
+#endif
 
 /* A deliberately bounded implementation heap, NOT measured physical RAM or
  * Vulkan conformance limits. Memory allocations and internal shader arenas
@@ -75,6 +78,9 @@ static void close_backend(struct ps5vk_memory_backend *memory)
 static void configure(VkDevice d)
 {
     ps5vk_native_queue_configure(d);
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER
+    d->runtime_compiler_enabled = VK_TRUE;
+#endif
 #ifdef PS5VK_GRAPHICS_API
     /* Experimental graphics objects; real submission is separately enabled by
      * PS5VK_GRAPHICS_DRAW. A complete graphics queue profile is not yet advertised. */
@@ -101,7 +107,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->format_properties = ps5vk_graphics_format_properties;
     platform->image_properties = ps5vk_graphics_image_properties;
 #endif
-    platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve};
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER
+    platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, ps5vk_compiler_adapter_compile};
+#else
+    platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
+#endif
     platform->max_allocation = HEAP_BYTES;
     VkPhysicalDeviceProperties *p = &platform->properties;
     p->apiVersion = VK_API_VERSION_1_0; p->driverVersion = 1;

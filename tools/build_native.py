@@ -63,7 +63,13 @@ def main():
                                    "rev-parse", "HEAD"], text=True).strip()
     if pin != "37dd53602bdead63936f718004555ba10154be48":
         raise SystemExit("Native foundation changed; review before building")
-    sdk = foundation / ".deps/native/ps5-payload-sdk"
+    sdk_env = os.environ.get("PS5_PAYLOAD_SDK")
+    if sdk_env:
+        sdk = Path(sdk_env).resolve()
+        if not ((sdk / "bin/prospero-lld").is_file() and (sdk / "target/lib").is_dir()):
+            raise SystemExit(f"PS5_PAYLOAD_SDK={sdk_env} is not a valid payload SDK (missing prospero-lld or target/lib)")
+    else:
+        sdk = foundation / ".deps/native/ps5-payload-sdk"
     native = foundation / "tooling/native"
     builder = foundation / "build/host/ps5-native-tool"
     gears = lab / "projects/ps5-agc-gears"
@@ -119,14 +125,24 @@ def main():
         ("log", logger / "ps5log.c", ["-include", logger / "ps5log_ps5_net.h"]),
         ("net", logger / "ps5log_ps5_net.c", []),
     ]
+    use_runtime_compiler = compute and os.environ.get("PS5VK_RUNTIME_COMPILER") != "0"
     if compute:
         common += ["-I" + str(ROOT / "third_party/vulkan-headers/include"),
                    "-I" + str(ROOT / "build/program-library")]
+        if use_runtime_compiler:
+            common += ["-I" + str(ROOT / "third_party/psbc-reference"),
+                       "-I" + str(ROOT / "third_party/psbc-reference/src"),
+                       "-I" + str(ROOT / "third_party/psbc-reference/libpsbc"),
+                       "-I" + str(ROOT / "third_party/opengnm/include"),
+                       "-DPS5VK_RUNTIME_COMPILER=1"]
         sources = [(p.stem, p, []) for p in sorted((ROOT / "src").glob("vk_*.c"))]
-        sources += [(p.stem, p, []) for p in [ROOT / "native/compute_main.c",
+        compute_srcs = [ROOT / "native/compute_main.c",
             ROOT / "src/graphics_program.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_layout.c",
             ROOT / "native/platform_ps5.c", ROOT / "native/memory_ps5.c", ROOT / "native/queue_ps5.c",
-            ROOT / "src/compute_commands.c", ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c"]]
+            ROOT / "src/compute_commands.c", ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c"]
+        if use_runtime_compiler:
+            compute_srcs += [ROOT / "src/compilation_cache.c", ROOT / "src/ps5vk_compiler.c", ROOT / "src/ps5_compiler_shims.c"]
+        sources += [(p.stem, p, []) for p in compute_srcs]
         sources += [("log", logger / "ps5log.c", ["-include", logger / "ps5log_ps5_net.h"]),
                     ("net", logger / "ps5log_ps5_net.c", [])]
     if graphics:
@@ -184,7 +200,8 @@ def main():
                 gears / "src/ps5_pipeline.c", gears / "src/ps5_color_target.c", gears / "src/ps5_depth_target.c",
                 gears / "src/ps5_agc_writer.c", gears / "src/ps5_gpu_span.c",
                 ROOT / "src/graphics_program.c", ROOT / "src/compute_commands.c",
-                ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c")]
+                ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c",
+                ROOT / "src/compilation_cache.c")]
     for name, source, extra in sources:
         obj = out / (name + ".o")
         run(*cc, "-std=c11", *common, *extra, "-c", source, "-o", obj, env=env)
@@ -202,9 +219,24 @@ def main():
     run(*cc, "-fPIC", "-I" + str(gears / "include"), "-c",
         gears / "native/stubs/libSceAgcDriver.c", "-o", out / "driver.o", env=env)
     run(linker, "--shared", "-soname", "libSceAgcDriver.prx", "-o", driver, out / "driver.o")
-    run(linker, "-T", native / "ps5-pie.ld", "--eh-frame-hdr",
-        "--version-script", native / "app-symbols.map", "-e", "_start",
-        "-o", out / "pie.elf", crt, *objects, "--as-needed",
+    extra_libs = []
+    if use_runtime_compiler:
+        psbc_lib = ROOT / "build/libpsbc.ps5.a"
+        if not psbc_lib.is_file():
+            run("python3", "tools/build_psbc.py", "--target=ps5")
+        extra_libs += [
+            str(psbc_lib),
+            str(sdk / "target/lib/libc++.a"),
+            str(sdk / "target/lib/libc++abi.a"),
+            str(sdk / "target/lib/libunwind.a"),
+            str(sdk / "target/lib/libpthread.a"),
+            str(sdk / "target/lib/libc.a"),
+        ]
+    pie_ld = (ROOT / "native/ps5-pie.ld") if (ROOT / "native/ps5-pie.ld").is_file() else (native / "ps5-pie.ld")
+    syms_map = (ROOT / "native/app-symbols.map") if (ROOT / "native/app-symbols.map").is_file() else (native / "app-symbols.map")
+    run(linker, "-L" + str(sdk / "target/lib"), "-T", pie_ld, "--eh-frame-hdr",
+        "--version-script", syms_map, "-e", "_start",
+        "-o", out / "pie.elf", crt, *objects, *extra_libs, "--as-needed",
         *sorted((sdk / "target/lib").glob("*.so")), stub, driver)
     run(builder, "link", "--in", out / "pie.elf", "--out", out / "eboot.elf",
         "--stub-dir", sdk / "target/lib", "--module-sdk", "0x02000009",
@@ -229,6 +261,7 @@ def main():
                 "foundation": pin, "files": {}}
     if compute:
         manifest.update(stage="compute-api", submit_enabled=True,
+                        compiler="runtime-psbc-aco" if use_runtime_compiler else "offline-exact-library",
                         dma_only=False, inspection_hold=False,
                         program_library=json.loads((ROOT / "build/program-library/manifest.json").read_text()))
     if graphics:

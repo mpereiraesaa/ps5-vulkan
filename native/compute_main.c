@@ -17,8 +17,61 @@ static void fail(const char *operation, int rc)
 #define CHECK(call) do { VkResult r_ = (call); if (r_ != VK_SUCCESS) fail(#call, r_); } while (0)
 static uint32_t source(unsigned i, unsigned round)
 { return (i * UINT32_C(2654435761)) ^ (UINT32_C(0x79bd2468) + round * 9137u); }
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER && !defined(PS5VK_GRAPHICS_API)
+#include "compilation_cache.h"
+#include "vk_internal.h"
+static const uint32_t unregistered_program_spirv[] = {
+    0x07230203u,0x00010600u,0x0008000bu,0x0000002fu,0x00000000u,0x00020011u,0x00000001u,0x0006000bu,
+    0x00000001u,0x4c534c47u,0x6474732eu,0x3035342eu,0x00000000u,0x0003000eu,0x00000000u,0x00000001u,
+    0x0008000fu,0x00000005u,0x00000004u,0x6e69616du,0x00000000u,0x0000000bu,0x00000019u,0x00000020u,
+    0x00060010u,0x00000004u,0x00000011u,0x00000040u,0x00000001u,0x00000001u,0x00030003u,0x00000002u,
+    0x000001c2u,0x00040005u,0x00000004u,0x6e69616du,0x00000000u,0x00030005u,0x00000008u,0x00000069u,
+    0x00080005u,0x0000000bu,0x475f6c67u,0x61626f6cu,0x766e496cu,0x7461636fu,0x496e6f69u,0x00000044u,
+    0x00040005u,0x00000017u,0x7074754fu,0x00007475u,0x00050006u,0x00000017u,0x00000000u,0x756c6176u,
+    0x00007365u,0x00030005u,0x00000019u,0x00747364u,0x00040005u,0x0000001eu,0x75706e49u,0x00000074u,
+    0x00050006u,0x0000001eu,0x00000000u,0x756c6176u,0x00007365u,0x00030005u,0x00000020u,0x00637273u,
+    0x00040047u,0x0000000bu,0x0000000bu,0x0000001cu,0x00040047u,0x00000016u,0x00000006u,0x00000004u,
+    0x00030047u,0x00000017u,0x00000002u,0x00040048u,0x00000017u,0x00000000u,0x00000019u,0x00050048u,
+    0x00000017u,0x00000000u,0x00000023u,0x00000000u,0x00030047u,0x00000019u,0x00000019u,0x00040047u,
+    0x00000019u,0x00000021u,0x00000001u,0x00040047u,0x00000019u,0x00000022u,0x00000000u,0x00040047u,
+    0x0000001du,0x00000006u,0x00000004u,0x00030047u,0x0000001eu,0x00000002u,0x00040048u,0x0000001eu,
+    0x00000000u,0x00000018u,0x00050048u,0x0000001eu,0x00000000u,0x00000023u,0x00000000u,0x00030047u,
+    0x00000020u,0x00000018u,0x00040047u,0x00000020u,0x00000021u,0x00000000u,0x00040047u,0x00000020u,
+    0x00000022u,0x00000000u,0x00020013u,0x00000002u,0x00030021u,0x00000003u,0x00000002u,0x00040015u,
+    0x00000006u,0x00000020u,0x00000000u,0x00040020u,0x00000007u,0x00000007u,0x00000006u,0x00040017u,
+    0x00000009u,0x00000006u,0x00000003u,0x00040020u,0x0000000au,0x00000001u,0x00000009u,0x0004003bu,
+    0x0000000au,0x0000000bu,0x00000001u,0x0004002bu,0x00000006u,0x0000000cu,0x00000000u,0x00040020u,
+    0x0000000du,0x00000001u,0x00000006u,0x0004002bu,0x00000006u,0x00000011u,0x00000400u,0x00020014u,
+    0x00000012u,0x0003001du,0x00000016u,0x00000006u,0x0003001eu,0x00000017u,0x00000016u,0x00040020u,
+    0x00000018u,0x0000000cu,0x00000017u,0x0004003bu,0x00000018u,0x00000019u,0x0000000cu,0x00040015u,
+    0x0000001au,0x00000020u,0x00000001u,0x0004002bu,0x0000001au,0x0000001bu,0x00000000u,0x0003001du,
+    0x0000001du,0x00000006u,0x0003001eu,0x0000001eu,0x0000001du,0x00040020u,0x0000001fu,0x0000000cu,
+    0x0000001eu,0x0004003bu,0x0000001fu,0x00000020u,0x0000000cu,0x00040020u,0x00000022u,0x0000000cu,
+    0x00000006u,0x0004002bu,0x00000006u,0x00000025u,0x00001337u,0x0004002bu,0x00000006u,0x00000028u,
+    0x0000001fu,0x0004002bu,0x00000006u,0x0000002cu,0x00000040u,0x0004002bu,0x00000006u,0x0000002du,
+    0x00000001u,0x0006002cu,0x00000009u,0x0000002eu,0x0000002cu,0x0000002du,0x0000002du,0x00050036u,
+    0x00000002u,0x00000004u,0x00000000u,0x00000003u,0x000200f8u,0x00000005u,0x0004003bu,0x00000007u,
+    0x00000008u,0x00000007u,0x00050041u,0x0000000du,0x0000000eu,0x0000000bu,0x0000000cu,0x0004003du,
+    0x00000006u,0x0000000fu,0x0000000eu,0x0003003eu,0x00000008u,0x0000000fu,0x0004003du,0x00000006u,
+    0x00000010u,0x00000008u,0x000500b0u,0x00000012u,0x00000013u,0x00000010u,0x00000011u,0x000300f7u,
+    0x00000015u,0x00000000u,0x000400fau,0x00000013u,0x00000014u,0x00000015u,0x000200f8u,0x00000014u,
+    0x0004003du,0x00000006u,0x0000001cu,0x00000008u,0x0004003du,0x00000006u,0x00000021u,0x00000008u,
+    0x00060041u,0x00000022u,0x00000023u,0x00000020u,0x0000001bu,0x00000021u,0x0004003du,0x00000006u,
+    0x00000024u,0x00000023u,0x00050080u,0x00000006u,0x00000026u,0x00000024u,0x00000025u,0x0004003du,
+    0x00000006u,0x00000027u,0x00000008u,0x00050084u,0x00000006u,0x00000029u,0x00000027u,0x00000028u,
+    0x000500c6u,0x00000006u,0x0000002au,0x00000026u,0x00000029u,0x00060041u,0x00000022u,0x0000002bu,
+    0x00000019u,0x0000001bu,0x0000001cu,0x0003003eu,0x0000002bu,0x0000002au,0x000200f9u,0x00000015u,
+    0x000200f8u,0x00000015u,0x000100fdu,0x00010038u
+};
+#endif
 static uint32_t result(unsigned program, uint32_t input, unsigned i)
-{ return program ? (input ^ UINT32_C(0xa5c39e71)) + i * 17u : input * 3u + 7u; }
+{
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER && !defined(PS5VK_GRAPHICS_API)
+    return program ? (input + 0x1337u) ^ (i * 31u) : input * 3u + 7u;
+#else
+    return program ? (input ^ UINT32_C(0xa5c39e71)) + i * 17u : input * 3u + 7u;
+#endif
+}
 static void barrier(VkCommandBuffer cb, VkPipelineStageFlags src, VkPipelineStageFlags dst,
                     VkAccessFlags from, VkAccessFlags to)
 {
@@ -40,7 +93,11 @@ int main(void)
     if (ps5log_load_config(paths, 1, &cfg, &loaded)) _exit(0);
     cfg.udp = 0;
     if (ps5log_init(&cfg, "PPSA99994", "ps5vk", boot)) _exit(0);
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER
+    ps5log_line(PS5LOG_MARK, "PS5VK_BOOT stage=compute api=compute compiler=runtime-psbc-aco");
+#else
     ps5log_line(PS5LOG_MARK, "PS5VK_BOOT stage=compute api=compute compiler=offline-exact-library");
+#endif
     VkInstance instance;
     VkInstanceCreateInfo ici = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     CHECK(vkCreateInstance(&ici, NULL, &instance));
@@ -52,6 +109,9 @@ int main(void)
     VkDeviceCreateInfo dci = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci};
     VkDevice device; CHECK(vkCreateDevice(physical, &dci, NULL, &device));
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER
+    ps5vk_device_enable_runtime_compiler(device);
+#endif
 #endif
     VkQueue queue; vkGetDeviceQueue(device, 0, 0, &queue);
     VkDescriptorSetLayoutBinding bindings[2] = {
@@ -64,6 +124,66 @@ int main(void)
         .setLayoutCount = 1, .pSetLayouts = &sl};
     VkPipelineLayout layout; CHECK(vkCreatePipelineLayout(device, &plci, NULL, &layout));
     VkPipeline pipelines[2];
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER && !defined(PS5VK_GRAPHICS_API)
+    /* Verify unregistered program is absent from the embedded library */
+    const struct ps5vk_compiled_program *absent_check = NULL;
+    VkResult abs_rc = ps5vk_program_resolve(&ps5vk_compiled_library,
+        unregistered_program_spirv, sizeof(unregistered_program_spirv)/4, "main", &absent_check);
+    if (abs_rc != VK_ERROR_FEATURE_NOT_PRESENT) fail("unregistered-present", abs_rc);
+    ps5log_line(PS5LOG_MARK, "PS5VK_UNREGISTERED_ABSENT checked=1 rc=feature-not-present");
+
+    for (unsigned p = 0; p < 2; ++p) {
+        const uint32_t *spv_code = (p == 0) ? ps5vk_compiled_library.programs[0].spirv : unregistered_program_spirv;
+        size_t spv_size = (p == 0) ? (ps5vk_compiled_library.programs[0].spirv_words * 4) : sizeof(unregistered_program_spirv);
+        VkShaderModuleCreateInfo smci = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = spv_size, .pCode = spv_code};
+        VkShaderModule module; CHECK(vkCreateShaderModule(device, &smci, NULL, &module));
+        VkComputePipelineCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .layout = layout, .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = module, .pName = "main"}};
+        CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pci, NULL, &pipelines[p]));
+        vkDestroyShaderModule(device, module, NULL);
+        ps5log_printf(PS5LOG_MARK, "PS5VK_PIPELINE_CREATE program=%u mode=%s rc=0",
+                      p, p ? "cold-compile-unregistered" : "cold-compile");
+    }
+    struct ps5vk_cache_stats cstats;
+    ps5vk_compilation_cache_get_stats(device->pipeline_cache, &cstats);
+    ps5log_printf(PS5LOG_MARK, "PS5VK_CACHE_STATS entries=%u hits=%llu misses=%llu compiles=%llu evictions=%llu",
+                  (unsigned)cstats.current_entries, (unsigned long long)cstats.hits,
+                  (unsigned long long)cstats.misses, (unsigned long long)cstats.compiles,
+                  (unsigned long long)cstats.evictions);
+
+    /* Warm cache test: recreate pipeline 0 and verify cache hit */
+    VkShaderModuleCreateInfo warm_smci = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = ps5vk_compiled_library.programs[0].spirv_words * 4,
+        .pCode = ps5vk_compiled_library.programs[0].spirv};
+    VkShaderModule warm_module; CHECK(vkCreateShaderModule(device, &warm_smci, NULL, &warm_module));
+    VkComputePipelineCreateInfo warm_pci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .layout = layout, .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = warm_module, .pName = "main"}};
+    VkPipeline warm_pipe; CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &warm_pci, NULL, &warm_pipe));
+    vkDestroyPipeline(device, warm_pipe, NULL);
+    vkDestroyShaderModule(device, warm_module, NULL);
+    ps5vk_compilation_cache_get_stats(device->pipeline_cache, &cstats);
+    ps5log_printf(PS5LOG_MARK, "PS5VK_CACHE_WARM_HIT program=0 hits=%llu compiles=%llu",
+                  (unsigned long long)cstats.hits, (unsigned long long)cstats.compiles);
+
+    /* Test invalid / unsupported shader rejection */
+    uint32_t bad_spv[16] = {0x07230203, 0x00010000, 0, 10, 0};
+    VkShaderModuleCreateInfo bad_smci = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(bad_spv), .pCode = bad_spv};
+    VkShaderModule bad_module;
+    if (vkCreateShaderModule(device, &bad_smci, NULL, &bad_module) == VK_SUCCESS) {
+        VkComputePipelineCreateInfo bad_pci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .layout = layout, .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = bad_module, .pName = "main"}};
+        VkPipeline bad_pipe;
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &bad_pci, NULL, &bad_pipe) == VK_SUCCESS)
+            fail("bad-shader-succeeded", -1);
+        vkDestroyShaderModule(device, bad_module, NULL);
+    }
+    ps5log_line(PS5LOG_MARK, "PS5VK_UNSUPPORTED_REJECTED checked=1 rc=rejected-clean");
+#else
     for (unsigned p = 0; p < 2; ++p) {
         const struct ps5vk_compiled_program *program = &ps5vk_compiled_library.programs[p];
         VkShaderModuleCreateInfo smci = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -75,6 +195,7 @@ int main(void)
         CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pci, NULL, &pipelines[p]));
         vkDestroyShaderModule(device, module, NULL);
     }
+#endif
     VkDescriptorPoolSize size = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4};
     VkDescriptorPoolCreateInfo dpci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .maxSets = 2, .poolSizeCount = 1, .pPoolSizes = &size};
@@ -162,6 +283,13 @@ int main(void)
         vkUnmapMemory(device, memories[b]); vkDestroyBuffer(device, buffers[b], NULL);
         vkFreeMemory(device, memories[b], NULL);
     }
+#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER && !defined(PS5VK_GRAPHICS_API)
+    ps5vk_compilation_cache_get_stats(device->pipeline_cache, &cstats);
+    ps5log_printf(PS5LOG_MARK, "PS5VK_CACHE_FINAL entries=%u hits=%llu misses=%llu compiles=%llu evictions=%llu",
+                  (unsigned)cstats.current_entries, (unsigned long long)cstats.hits,
+                  (unsigned long long)cstats.misses, (unsigned long long)cstats.compiles,
+                  (unsigned long long)cstats.evictions);
+#endif
 #ifndef PS5VK_GRAPHICS_API
     vkDestroyDevice(device, NULL); vkDestroyInstance(instance, NULL);
 #endif

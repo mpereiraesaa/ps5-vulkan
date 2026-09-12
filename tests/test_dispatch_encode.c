@@ -39,5 +39,25 @@ int main(void)
     d.addresses.code = 0x100004000; d.addresses.readback = d.addresses.completion;
     assert(!ps5vk_dispatch_encode(result, 96, &d));
     assert(!memcmp(saved, result, sizeof(saved)));
+
+    /* Verify PSBC / ACO GFX10.3 ABI: user_sgprs = 3, wgp_mode = 1 */
+    p.user_sgprs = 3;
+    p.wgp_mode = 1;
+    d.addresses.readback = 0x200000040;
+    d.completion_value = PS5VK_COMPLETION_VALUE;
+    uint32_t psbc_result[96] = {0};
+    size_t n_psbc = ps5vk_dispatch_encode(psbc_result, 96, &d);
+    assert(n_psbc == n + 1);
+    assert((psbc_result[16] & (1u << 29)) != 0); /* wgp_mode enabled */
+    assert((psbc_result[17] & 0x7e) == (3u << 1)); /* user_sgprs = 3 */
+    assert(psbc_result[24] == 0xc0037600); /* sh 0xb900 count 3 */
+    assert(psbc_result[25] == 0x240);
+    assert(psbc_result[26] == 0); /* s0 */
+    assert(psbc_result[27] == 0); /* s1 */
+    assert(psbc_result[28] == (uint32_t)d.addresses.descriptor_table); /* s2 */
+    /* Check completion value and trailer */
+    assert(psbc_result[n_psbc - 3] == (uint32_t)PS5VK_COMPLETION_VALUE);
+    assert(psbc_result[n_psbc - 2] == (uint32_t)(PS5VK_COMPLETION_VALUE >> 32));
+
     puts("Parameterized dispatch encoding: pass (host packets only)");
 }

@@ -13,13 +13,24 @@ PROFILE_TITLE = "PPSA99994"
 PROFILE_APP = "ps5vk"
 
 
-def expected_messages(suspend_points=True):
-    messages = ["PS5VK_BOOT stage=compute api=compute compiler=offline-exact-library",
-                "PS5VK_PLATFORM_LOAD rc=0", "PS5VK_PLATFORM_INIT rc=0"]
+def expected_messages(suspend_points=True, compiler="offline-exact-library"):
+    if compiler == "runtime-psbc-aco":
+        messages = ["PS5VK_BOOT stage=compute api=compute compiler=runtime-psbc-aco",
+                    "PS5VK_PLATFORM_LOAD rc=0", "PS5VK_PLATFORM_INIT rc=0",
+                    "PS5VK_UNREGISTERED_ABSENT checked=1 rc=feature-not-present",
+                    "PS5VK_PIPELINE_CREATE program=0 mode=cold-compile rc=0",
+                    "PS5VK_PIPELINE_CREATE program=1 mode=cold-compile-unregistered rc=0",
+                    "PS5VK_CACHE_STATS entries=2 hits=0 misses=2 compiles=2 evictions=0",
+                    "PS5VK_CACHE_WARM_HIT program=0 hits=1 compiles=2",
+                    "PS5VK_UNSUPPORTED_REJECTED checked=1 rc=rejected-clean"]
+    else:
+        messages = ["PS5VK_BOOT stage=compute api=compute compiler=offline-exact-library",
+                    "PS5VK_PLATFORM_LOAD rc=0", "PS5VK_PLATFORM_INIT rc=0"]
     messages += ["PS5VK_MEMORY_ALLOC requested=16384 mapped=65536"] * 3
     for round_number in range(6):
         serial = round_number + 1
-        messages += ["PS5VK_MEMORY_ALLOC requested=1024 mapped=65536"] * 2
+        dispatch_alloc = 768 if compiler == "runtime-psbc-aco" else 1024
+        messages += [f"PS5VK_MEMORY_ALLOC requested={dispatch_alloc} mapped=65536"] * 2
         messages.append(f"PS5VK_QUEUE_PREPARED serial={serial} dispatches=2")
         for index in range(2):
             messages.append(f"PS5VK_QUEUE_SUBMIT serial={serial} index={index} rc=0")
@@ -32,6 +43,8 @@ def expected_messages(suspend_points=True):
                         f"descriptor_offset={256 * serial} binding_offset=256 "
                         "checked=3072 outputs=0 guards=0")
     messages += ["PS5VK_MEMORY_RELEASE mapped=65536"] * 3
+    if compiler == "runtime-psbc-aco":
+        messages.append("PS5VK_CACHE_FINAL entries=2 hits=1 misses=2 compiles=2 evictions=0")
     return messages + ["PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0",
                        "PS5VK_COMPUTE_END rounds=6 dispatches=12"]
 
@@ -67,11 +80,14 @@ def validate(log, manifest, artifact):
         previous_time = timestamp
         require(fields[2] in ("MARK", "INFO"), "unexpected severity")
         messages.append(fields[3])
-    require(messages == expected_messages(suspend_points=True), "workload/lifecycle mismatch")
+    compiler = artifact.get("compiler", "offline-exact-library")
+    require(compiler in ("runtime-psbc-aco", "offline-exact-library"), "unknown compiler profile")
+    require(messages == expected_messages(suspend_points=True, compiler=compiler), "workload/lifecycle mismatch")
     require(manifest.get("last_seq") == len(messages), "manifest sequence")
     require(lines[-1] == f"BYE seq={len(messages)} reason=compute-end", "bye")
     return {"run_id": manifest["run_id"], "boot": identity["boot"],
             "log_sha256": manifest["sha256"], "deployment_self_sha256": eboot,
+            "compiler": compiler,
             "rounds": 6, "dispatches": 12, "data_words_checked": 18432,
             "guard_words_checked": 55296, "clean_tcp": True}
 

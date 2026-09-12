@@ -5,7 +5,7 @@ VULKAN_CFLAGS ?= -Ithird_party/vulkan-headers/include
 VK_MEMORY_SOURCES = src/vk_alloc.c src/vk_memory.c
 VK_IMAGE_TEST_SOURCES = $(VK_MEMORY_SOURCES) src/vk_image_view.c src/vk_render_pass.c src/vk_framebuffer.c
 VK_DESCRIPTOR_SOURCES = $(VK_MEMORY_SOURCES) src/vk_descriptor.c
-VK_PIPELINE_SOURCES = $(VK_DESCRIPTOR_SOURCES) src/vk_pipeline.c
+VK_PIPELINE_SOURCES = $(VK_DESCRIPTOR_SOURCES) src/vk_pipeline.c src/compilation_cache.c
 VK_COMMAND_SOURCES = $(VK_PIPELINE_SOURCES) src/vk_command.c
 VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_queue.c src/vk_queue_router.c
 VK_GRAPHICS_SOURCES = src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c src/texture_copy.c src/texture_layout.c
@@ -163,6 +163,13 @@ check:
 	./build/tests/test_vk_fence
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_queue.c -o build/tests/test_vk_queue
 	./build/tests/test_vk_queue
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache
+	./build/tests/test_compilation_cache
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_compiler
+	./build/tests/test_runtime_compiler
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_pipeline_cache.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_pipeline_cache
+	./build/tests/test_runtime_pipeline_cache
+	$(PYTHON) tools/build_sdk.py
 doctor:
 	$(PYTHON) tools/lab.py doctor
 compiler-control:
