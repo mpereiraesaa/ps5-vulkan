@@ -1,0 +1,15 @@
+build/
+dist/
+dist-compute/
+dist-graphics-link/
+third_party/
+private-captures/
+.env
+dev.conf
+dist-graphics-api/
+__pycache__/
+*.pyc
+*.log
+*.elf
+*.bin
+*.prx
