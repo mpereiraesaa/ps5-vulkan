@@ -1,29 +1,28 @@
-# Pinned Khronos Vulkan CTS Focused Selection
-# Upstream Tag: vulkan-cts-1.3.8.4 (commit a0270c1897597e6c77679870e10415398a13001c)
-# Upstream Mustpass: external/vulkancts/mustpass/main/vk-default/
-dEQP-VK.info.build
-dEQP-VK.info.device
-dEQP-VK.info.platform
-dEQP-VK.info.memory_limits
-dEQP-VK.info.device_properties
-dEQP-VK.info.device_features
-dEQP-VK.info.device_memory_properties
-dEQP-VK.info.device_queue_family_properties
-dEQP-VK.info.instance_extensions
-dEQP-VK.info.instance_layers
-dEQP-VK.info.device_extensions
-dEQP-VK.info.physical_devices
-dEQP-VK.api.device_init.create_device.basic
-dEQP-VK.api.smoke.create_sampler
-dEQP-VK.api.smoke.create_shader
-dEQP-VK.api.smoke.triangle
-dEQP-VK.memory.allocation.basic.size_256.forward.count_1
-dEQP-VK.memory.allocation.basic.size_1KiB.forward.count_1
-dEQP-VK.memory.mapping.suballocation.full.257.simple
-dEQP-VK.memory.mapping.suballocation.full.257.flush
-dEQP-VK.memory.mapping.suballocation.full.257.invalidate
-dEQP-VK.compute.pipeline.basic.copy_ssbo_single_invocation
-dEQP-VK.compute.pipeline.basic.empty_shader
-dEQP-VK.synchronization.basic.fence.one
-dEQP-VK.synchronization.basic.fence.one_signaled
-dEQP-VK.synchronization.basic.empty_submit
+# Vulkan API Contract Tests (modeled after Khronos VK-GL-CTS 1.3.8.4 mustpass selection)
+# Contract Test Name                                        # Upstream dEQP-VK Reference
+contract.info.build                                          # ref: dEQP-VK.info.build
+contract.info.device                                         # ref: dEQP-VK.info.device
+contract.info.platform                                       # ref: dEQP-VK.info.platform
+contract.info.memory_limits                                  # ref: dEQP-VK.info.memory_limits
+contract.info.device_properties                              # ref: dEQP-VK.info.device_properties
+contract.info.device_features                                # ref: dEQP-VK.info.device_features
+contract.info.device_memory_properties                       # ref: dEQP-VK.info.device_memory_properties
+contract.info.device_queue_family_properties                 # ref: dEQP-VK.info.device_queue_family_properties
+contract.info.instance_extensions                            # ref: dEQP-VK.info.instance_extensions
+contract.info.instance_layers                                # ref: dEQP-VK.info.instance_layers
+contract.info.device_extensions                              # ref: dEQP-VK.info.device_extensions
+contract.info.physical_devices                               # ref: dEQP-VK.info.physical_devices
+contract.api.device_init.create_device                       # ref: dEQP-VK.api.device_init.create_device.basic
+contract.api.smoke.create_sampler                            # ref: dEQP-VK.api.smoke.create_sampler
+contract.api.smoke.create_shader                             # ref: dEQP-VK.api.smoke.create_shader
+contract.api.smoke.triangle                                  # ref: dEQP-VK.api.smoke.triangle
+contract.memory.allocation.size_256                          # ref: dEQP-VK.memory.allocation.basic.size_256.forward.count_1
+contract.memory.allocation.size_1KiB                         # ref: dEQP-VK.memory.allocation.basic.size_1KiB.forward.count_1
+contract.memory.mapping.suballocation_257_simple             # ref: dEQP-VK.memory.mapping.suballocation.full.257.simple
+contract.memory.mapping.suballocation_257_flush              # ref: dEQP-VK.memory.mapping.suballocation.full.257.flush
+contract.memory.mapping.suballocation_257_invalidate         # ref: dEQP-VK.memory.mapping.suballocation.full.257.invalidate
+contract.compute.pipeline.copy_ssbo_single_invocation        # ref: dEQP-VK.compute.pipeline.basic.copy_ssbo_single_invocation
+contract.compute.pipeline.empty_shader                       # ref: dEQP-VK.compute.pipeline.basic.empty_shader
+contract.synchronization.fence_unsignaled                    # ref: dEQP-VK.synchronization.basic.fence.one
+contract.synchronization.fence_signaled                      # ref: dEQP-VK.synchronization.basic.fence.one_signaled
+contract.synchronization.empty_submit                        # ref: dEQP-VK.synchronization.basic.empty_submit

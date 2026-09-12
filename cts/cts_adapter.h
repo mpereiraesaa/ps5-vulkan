@@ -17,6 +17,7 @@ typedef enum cts_status {
 
 typedef struct cts_result {
     const char *case_name;
+    const char *deqp_ref;
     cts_status_t status;
     char details[512];
 } cts_result_t;

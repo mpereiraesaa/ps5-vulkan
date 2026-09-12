@@ -8,10 +8,10 @@
  * Direct upstream VK-GL-CTS framework porting remains pending.
  *
  * Lifecycle note:
- * PS5 AGC runtime constraints limit repeated initialization and teardown of AGC
- * modules within a single process. Therefore, these contract tests execute against
- * a process-scoped session device (initialized once on startup, released on shutdown).
- * Independent device creation/destruction cycles per test case are not validated.
+ * Restricción del backend/harness actual; reinicialización independiente no validada.
+ * Therefore, these contract tests execute against a process-scoped session device
+ * (initialized once on startup, released on shutdown). Independent device
+ * creation/destruction cycles per test case are not validated.
  *
  * Rasterization note:
  * The triangle test verifies vertex/fragment SPIR-V compiler integration, render
@@ -365,7 +365,7 @@ static cts_result_t case_api_create_device_basic(void)
         return r;
     }
     helper_destroy_device(inst, dev);
-    snprintf(r.details, sizeof(r.details), "Logical device and queue created cleanly (session device; repeated reinitialization restricted on PS5)");
+    snprintf(r.details, sizeof(r.details), "Logical device and queue created cleanly (session device; restricción del backend/harness actual, reinicialización independiente no validada)");
     return r;
 }
 
@@ -1192,34 +1192,35 @@ typedef cts_result_t (*cts_test_fn)(void);
 
 static const struct {
     const char *name;
+    const char *deqp_ref;
     cts_test_fn fn;
 } CTS_CASES[] = {
-    { "dEQP-VK.info.build", case_info_build },
-    { "dEQP-VK.info.device", case_info_device },
-    { "dEQP-VK.info.platform", case_info_platform },
-    { "dEQP-VK.info.memory_limits", case_info_memory_limits },
-    { "dEQP-VK.info.device_properties", case_info_device_properties },
-    { "dEQP-VK.info.device_features", case_info_device_features },
-    { "dEQP-VK.info.device_memory_properties", case_info_device_memory_properties },
-    { "dEQP-VK.info.device_queue_family_properties", case_info_device_queue_family_properties },
-    { "dEQP-VK.info.instance_extensions", case_info_instance_extensions },
-    { "dEQP-VK.info.instance_layers", case_info_instance_layers },
-    { "dEQP-VK.info.device_extensions", case_info_device_extensions },
-    { "dEQP-VK.info.physical_devices", case_info_physical_devices },
-    { "dEQP-VK.api.device_init.create_device.basic", case_api_create_device_basic },
-    { "dEQP-VK.api.smoke.create_sampler", case_api_smoke_create_sampler },
-    { "dEQP-VK.api.smoke.create_shader", case_api_smoke_create_shader },
-    { "dEQP-VK.api.smoke.triangle", case_api_smoke_triangle },
-    { "dEQP-VK.memory.allocation.basic.size_256.forward.count_1", case_memory_alloc_256 },
-    { "dEQP-VK.memory.allocation.basic.size_1KiB.forward.count_1", case_memory_alloc_1kib },
-    { "dEQP-VK.memory.mapping.suballocation.full.257.simple", case_memory_mapping_simple },
-    { "dEQP-VK.memory.mapping.suballocation.full.257.flush", case_memory_mapping_flush },
-    { "dEQP-VK.memory.mapping.suballocation.full.257.invalidate", case_memory_mapping_invalidate },
-    { "dEQP-VK.compute.pipeline.basic.copy_ssbo_single_invocation", case_compute_ssbo_copy },
-    { "dEQP-VK.compute.pipeline.basic.empty_shader", case_compute_empty_shader },
-    { "dEQP-VK.synchronization.basic.fence.one", case_sync_fence_one },
-    { "dEQP-VK.synchronization.basic.fence.one_signaled", case_sync_fence_one_signaled },
-    { "dEQP-VK.synchronization.basic.empty_submit", case_sync_empty_submit },
+    { "contract.info.build", "dEQP-VK.info.build", case_info_build },
+    { "contract.info.device", "dEQP-VK.info.device", case_info_device },
+    { "contract.info.platform", "dEQP-VK.info.platform", case_info_platform },
+    { "contract.info.memory_limits", "dEQP-VK.info.memory_limits", case_info_memory_limits },
+    { "contract.info.device_properties", "dEQP-VK.info.device_properties", case_info_device_properties },
+    { "contract.info.device_features", "dEQP-VK.info.device_features", case_info_device_features },
+    { "contract.info.device_memory_properties", "dEQP-VK.info.device_memory_properties", case_info_device_memory_properties },
+    { "contract.info.device_queue_family_properties", "dEQP-VK.info.device_queue_family_properties", case_info_device_queue_family_properties },
+    { "contract.info.instance_extensions", "dEQP-VK.info.instance_extensions", case_info_instance_extensions },
+    { "contract.info.instance_layers", "dEQP-VK.info.instance_layers", case_info_instance_layers },
+    { "contract.info.device_extensions", "dEQP-VK.info.device_extensions", case_info_device_extensions },
+    { "contract.info.physical_devices", "dEQP-VK.info.physical_devices", case_info_physical_devices },
+    { "contract.api.device_init.create_device", "dEQP-VK.api.device_init.create_device.basic", case_api_create_device_basic },
+    { "contract.api.smoke.create_sampler", "dEQP-VK.api.smoke.create_sampler", case_api_smoke_create_sampler },
+    { "contract.api.smoke.create_shader", "dEQP-VK.api.smoke.create_shader", case_api_smoke_create_shader },
+    { "contract.api.smoke.triangle", "dEQP-VK.api.smoke.triangle", case_api_smoke_triangle },
+    { "contract.memory.allocation.size_256", "dEQP-VK.memory.allocation.basic.size_256.forward.count_1", case_memory_alloc_256 },
+    { "contract.memory.allocation.size_1KiB", "dEQP-VK.memory.allocation.basic.size_1KiB.forward.count_1", case_memory_alloc_1kib },
+    { "contract.memory.mapping.suballocation_257_simple", "dEQP-VK.memory.mapping.suballocation.full.257.simple", case_memory_mapping_simple },
+    { "contract.memory.mapping.suballocation_257_flush", "dEQP-VK.memory.mapping.suballocation.full.257.flush", case_memory_mapping_flush },
+    { "contract.memory.mapping.suballocation_257_invalidate", "dEQP-VK.memory.mapping.suballocation.full.257.invalidate", case_memory_mapping_invalidate },
+    { "contract.compute.pipeline.copy_ssbo_single_invocation", "dEQP-VK.compute.pipeline.basic.copy_ssbo_single_invocation", case_compute_ssbo_copy },
+    { "contract.compute.pipeline.empty_shader", "dEQP-VK.compute.pipeline.basic.empty_shader", case_compute_empty_shader },
+    { "contract.synchronization.fence_unsignaled", "dEQP-VK.synchronization.basic.fence.one", case_sync_fence_one },
+    { "contract.synchronization.fence_signaled", "dEQP-VK.synchronization.basic.fence.one_signaled", case_sync_fence_one_signaled },
+    { "contract.synchronization.empty_submit", "dEQP-VK.synchronization.basic.empty_submit", case_sync_empty_submit },
 };
 
 static const size_t CTS_CASE_COUNT = sizeof(CTS_CASES) / sizeof(CTS_CASES[0]);
@@ -1227,15 +1228,19 @@ static const size_t CTS_CASE_COUNT = sizeof(CTS_CASES) / sizeof(CTS_CASES[0]);
 cts_result_t cts_run_case(const char *case_name)
 {
     for (size_t i = 0; i < CTS_CASE_COUNT; i++) {
-        if (!strcmp(CTS_CASES[i].name, case_name)) {
-            return CTS_CASES[i].fn();
+        if (!strcmp(CTS_CASES[i].name, case_name) || !strcmp(CTS_CASES[i].deqp_ref, case_name)) {
+            cts_result_t r = CTS_CASES[i].fn();
+            r.case_name = CTS_CASES[i].name;
+            r.deqp_ref = CTS_CASES[i].deqp_ref;
+            return r;
         }
     }
     cts_result_t r = {
         .case_name = case_name,
+        .deqp_ref = "none",
         .status = CTS_STATUS_SKIP
     };
-    snprintf(r.details, sizeof(r.details), "Unknown CTS case name");
+    snprintf(r.details, sizeof(r.details), "Unknown contract test case name");
     return r;
 }
 
@@ -1257,11 +1262,13 @@ int cts_run_all(int format_json, int format_tap)
     if (format_tap) {
         printf("1..%zu\n", CTS_CASE_COUNT);
     } else if (format_json) {
-        printf("{\n  \"upstream_pin\": \"vulkan-cts-1.3.8.4\",\n  \"results\": [\n");
+        printf("{\n  \"upstream_pin\": \"vulkan-cts-1.3.8.4\",\n  \"suite\": \"contract-tests\",\n  \"results\": [\n");
     }
 
     for (size_t i = 0; i < CTS_CASE_COUNT; i++) {
         cts_result_t res = CTS_CASES[i].fn();
+        res.case_name = CTS_CASES[i].name;
+        res.deqp_ref = CTS_CASES[i].deqp_ref;
         switch (res.status) {
         case CTS_STATUS_PASS: pass_count++; break;
         case CTS_STATUS_NOT_SUPPORTED: not_supported_count++; break;
@@ -1270,30 +1277,30 @@ int cts_run_all(int format_json, int format_tap)
         }
 
 #if defined(PS5VK_TARGET_PS5) || defined(__prospero__)
-        ps5log_printf(PS5LOG_MARK, "PS5VK_CTS_CASE name=%s result=%s details=%s",
-                     res.case_name, status_to_string(res.status), res.details);
+        ps5log_printf(PS5LOG_MARK, "PS5VK_CONTRACT_CASE name=%s ref=%s result=%s details=%s",
+                     res.case_name, res.deqp_ref, status_to_string(res.status), res.details);
 #endif
 
         if (format_tap) {
             if (res.status == CTS_STATUS_PASS) {
-                printf("ok %zu - %s\n", i + 1, res.case_name);
+                printf("ok %zu - %s (ref: %s)\n", i + 1, res.case_name, res.deqp_ref);
             } else if (res.status == CTS_STATUS_NOT_SUPPORTED) {
-                printf("ok %zu - %s # SKIP (NotSupported: %s)\n", i + 1, res.case_name, res.details);
+                printf("ok %zu - %s (ref: %s) # SKIP (NotSupported: %s)\n", i + 1, res.case_name, res.deqp_ref, res.details);
             } else {
-                printf("not ok %zu - %s # %s\n", i + 1, res.case_name, res.details);
+                printf("not ok %zu - %s (ref: %s) # %s\n", i + 1, res.case_name, res.deqp_ref, res.details);
             }
         } else if (format_json) {
-            printf("    {\"name\": \"%s\", \"status\": \"%s\", \"details\": \"%s\"}%s\n",
-                   res.case_name, status_to_string(res.status), res.details,
+            printf("    {\"name\": \"%s\", \"deqp_ref\": \"%s\", \"status\": \"%s\", \"details\": \"%s\"}%s\n",
+                   res.case_name, res.deqp_ref, status_to_string(res.status), res.details,
                    (i + 1 < CTS_CASE_COUNT) ? "," : "");
         } else {
-            printf("[CTS] CASE: %-58s RESULT: %-12s details=%s\n",
-                   res.case_name, status_to_string(res.status), res.details);
+            printf("[CONTRACT] CASE: %-52s REF: %-56s RESULT: %-12s details=%s\n",
+                   res.case_name, res.deqp_ref, status_to_string(res.status), res.details);
         }
     }
 
 #if defined(PS5VK_TARGET_PS5) || defined(__prospero__)
-    ps5log_printf(PS5LOG_MARK, "PS5VK_CTS_SUMMARY total=%zu pass=%d not_supported=%d fail=%d skip=%d",
+    ps5log_printf(PS5LOG_MARK, "PS5VK_CONTRACT_SUMMARY total=%zu pass=%d not_supported=%d fail=%d skip=%d",
                  CTS_CASE_COUNT, pass_count, not_supported_count, fail_count, skip_count);
 #endif
 
@@ -1301,7 +1308,7 @@ int cts_run_all(int format_json, int format_tap)
         printf("  ],\n  \"summary\": {\"total\": %zu, \"pass\": %d, \"not_supported\": %d, \"fail\": %d, \"skip\": %d}\n}\n",
                CTS_CASE_COUNT, pass_count, not_supported_count, fail_count, skip_count);
     } else if (!format_tap) {
-        printf("[CTS] SUMMARY: total=%zu pass=%d not_supported=%d fail=%d skip=%d\n",
+        printf("[CONTRACT] SUMMARY: total=%zu pass=%d not_supported=%d fail=%d skip=%d\n",
                CTS_CASE_COUNT, pass_count, not_supported_count, fail_count, skip_count);
     }
 

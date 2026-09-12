@@ -43,7 +43,7 @@ Khronos VK-GL-CTS framework porting remains pending.
   Observed result: **26 / 26 PASS** within the single session device context, 0 failures.
   Structured `ps5log/1` telemetry confirmed:
   - Core API build, platform and device introspection matching driver caps.
-  - Device initialization within session context (note: independent per-test create/destroy cycles are not tested due to PS5 AGC driver reinit limits).
+  - Device initialization within session context (restricción del backend/harness actual; reinicialización independiente no validada).
   - Device limits, non-coherent atom size (64B) and storage alignment (256B).
   - Memory allocation, suballocated memory mapping (257 bytes), cache flush and invalidate ranges.
   - Sampler and shader module creation and destruction.
