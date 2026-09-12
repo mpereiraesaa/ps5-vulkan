@@ -1,0 +1,266 @@
+{
+  "schema_version": "1.0",
+  "inventory": "consumer requirement overlays",
+  "join_notes": [
+    "Each overlay row carries `related_requirement_ids`, which are ids in requirements.json. That is the join key a downstream CTS workstream can use to move from a consumer need to a core obligation.",
+    "Overlay rows are consumer requirements, not Khronos obligations. They are deliberately kept in a separate file so that a consumer need is never reported as a core 1.4 requirement or as a CTS result.",
+    "Classification here uses the same vocabulary as requirements.json: mandatory (for this consumer), conditional, optional."
+  ],
+  "core_conformance_is_not_enough": {
+    "summary": "A driver can satisfy every mandatory core obligation and still fail these consumers, because both depend on optional feature bits, optional extensions and platform integration that core does not require.",
+    "examples": [
+      "DXVK requires the VK_KHR_maintenance5 and VK_KHR_maintenance6 extensions, descriptor indexing bits, robustness2, depth clip enable and a 256-byte push constant limit. None of those are core-mandatory obligations, and maintenance5/6 are required by name even though 1.4 promotes them.",
+      "ParaLLEl-RDP requires 8/16-bit storage access, at least three descriptor sets with UBO and texel-buffer bindings, push constants and specialization constants, and shared-memory/barrier/atomic compute kernels. Core conformance does not imply any of those.",
+      "Neither consumer is validated by core CTS results alone; both need their own acceptance runs, and both are named here as targets, not as supported configurations."
+    ]
+  },
+  "consumers": [
+    {
+      "id": "parallel-rdp",
+      "title": "ParaLLEl-RDP (N64 RDP renderer)",
+      "source_id": "parallel-rdp",
+      "revision": {
+        "commit": "1cecd042b2619bc505c12bfdc713808386f2b54d",
+        "kind": "commit",
+        "note": "Carried over from an earlier project-level RDP audit and re-verified as an existing upstream commit; it is also the master head at retrieval time."
+      },
+      "dependency_pins": [
+        {"source_id": "granite", "commit": "cf71dee71fb00110749a9a3fcbd87b0297e49b6a", "note": "Most Vulkan usage lives in Granite rather than in parallel-rdp itself."}
+      ],
+      "evidence_basis": "Static source reading only. No PS5 execution, no compiler build and no performance measurement. Every row below is a requirement derived from the pinned source, not a measured failure.",
+      "scopes": [
+        {"id": "rdp-commands", "description": "RDP command stream producing RDRAM and hidden RDRAM output; the next concrete target."},
+        {"id": "vi-scanout", "description": "Video interface scanout, filtering and presentation; separate stage."},
+        {"id": "emulator-integration", "description": "Integration into a complete N64 emulator; out of scope for this inventory."}
+      ],
+      "requirements": [
+        {
+          "id": "RDP-001", "classification": "mandatory",
+          "summary": "A Vulkan 1.1-or-newer context contract, including extension and pNext feature negotiation, before any rendering starts.",
+          "evidence": "Granite context/device initialisation queries version and chains feature structs; the audit pinned Granite context.cpp around the version/property selection path.",
+          "references": ["https://github.com/Themaister/Granite/blob/cf71dee71fb00110749a9a3fcbd87b0297e49b6a/vulkan/context.cpp"],
+          "related_requirement_ids": ["VK14-INSTANCE-001", "VK14-INSTANCE-002", "VK14-INSTANCE-006", "VK14-INSTANCE-007", "VK14-INSTANCE-012", "VK14-INSTANCE-014"],
+          "baseline_observation": "The pinned baseline rejects non-1.0 apiVersion requests and does not export the 1.1+ pNext query surface."
+        },
+        {
+          "id": "RDP-002", "classification": "mandatory",
+          "summary": "8-bit and 16-bit storage buffer access are required; they are not removable by the small-arithmetic option.",
+          "evidence": "rdp_renderer.cpp rejects a device that lacks storageBuffer16BitAccess and storageBuffer8BitAccess; the shader ABI aliases 8/16/32-bit views of the same buffers.",
+          "references": [
+            "https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/rdp_renderer.cpp#L168",
+            "https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/shaders/data_structures_buffers.h#L28"
+          ],
+          "related_requirement_ids": ["VK14-SHADERS-004", "VK14-INSTANCE-008", "VK14-DESCRIPTORS-004"],
+          "baseline_observation": "Not advertised or validated end to end at the baseline."
+        },
+        {
+          "id": "RDP-003", "classification": "mandatory",
+          "summary": "At least three descriptor sets: set 0 with VRAM views, set 1 with setup/state/LUT/texel-buffer bindings, set 2 with a uniform buffer.",
+          "evidence": "The pinned shader descriptor ABI declares set 0 bindings 0-2, set 1 bindings 0-12 including a uniform texel buffer, and set 2 binding 0 as a std140 uniform block.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/shaders/data_structures_buffers.h#L28"],
+          "related_requirement_ids": ["VK14-DESCRIPTORS-001", "VK14-DESCRIPTORS-005", "VK14-DESCRIPTORS-007"],
+          "baseline_observation": "Runtime compute accepts a single set-0 scalar storage-buffer profile."
+        },
+        {
+          "id": "RDP-004", "classification": "mandatory",
+          "summary": "Uniform buffers and uniform texel buffer views with exact view formats.",
+          "evidence": "The RDP shader set uses a std140 uniform block and a readonly utextureBuffer for a divider LUT.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/shaders/data_structures_buffers.h#L117"],
+          "related_requirement_ids": ["VK14-FORMATS-007", "VK14-DESCRIPTORS-003", "VK14-DESCRIPTORS-004"],
+          "baseline_observation": "Uniform buffers and texel-buffer views are absent from the supported compute descriptors."
+        },
+        {
+          "id": "RDP-005", "classification": "mandatory",
+          "summary": "Push constants with correct storage, command snapshot and cache-key participation.",
+          "evidence": "The renderer records push constants around dispatch and the shader modules declare them.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/rdp_renderer.cpp"],
+          "related_requirement_ids": ["VK14-DESCRIPTORS-003"],
+          "baseline_observation": "Pipeline layouts reject push constants at the baseline."
+        },
+        {
+          "id": "RDP-006", "classification": "mandatory",
+          "summary": "Specialization constants, including workgroup-size specialization.",
+          "evidence": "Shaders use specialization constants for local sizes and pipeline creation passes specialization info.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/rdp_renderer.cpp"],
+          "related_requirement_ids": ["VK14-PIPELINES-001"],
+          "baseline_observation": "vkCreateComputePipelines rejects pSpecializationInfo at the baseline."
+        },
+        {
+          "id": "RDP-007", "classification": "mandatory",
+          "summary": "Compute kernels using shared (local) memory, barriers and atomics for tile binning.",
+          "evidence": "The non-subgroup binning kernel uses shared memory, barriers and atomics; disabling subgroup support does not remove that requirement.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/shaders/tile_binning_combined.comp#L130"],
+          "related_requirement_ids": ["VK14-SHADERS-004", "VK14-DESCRIPTORS-005"],
+          "baseline_observation": "The current compiler adapter rejects workgroup-shared memory requirements."
+        },
+        {
+          "id": "RDP-008", "classification": "optional",
+          "summary": "Indirect compute dispatch for the optimized rasterization path; deferrable by selecting the ubershader path.",
+          "evidence": "The optimized path issues indirect dispatch; the ubershader path avoids it.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/rdp_renderer.cpp"],
+          "related_requirement_ids": ["VK14-COMMANDS-008"],
+          "baseline_observation": "No indirect command entry points are exposed."
+        },
+        {
+          "id": "RDP-009", "classification": "conditional",
+          "summary": "External host memory import is not mandatory: an upstream staging/write-mask fallback exists when VK_EXT_external_memory_host is absent.",
+          "evidence": "The command processor has a staging fallback; the earlier README wording that suggested host-import was mandatory is not what the audited implementation requires.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/rdp_device.cpp#L74"],
+          "related_requirement_ids": ["VK14-EXTENSIONS-004", "VK14-RESOURCES-007"],
+          "baseline_observation": "Not advertised; the fallback costs copying and coherency work."
+        },
+        {
+          "id": "RDP-010", "classification": "conditional",
+          "summary": "Synchronization: binary semaphores and fences, or an explicitly serialized adapter that preserves upstream ordering; timeline semaphores are not proven mandatory.",
+          "evidence": "The command processor tracks worker/fence progress on the CPU timeline; Granite has optional timeline semaphores and a synchronization2-to-1 conversion path.",
+          "references": [
+            "https://github.com/Themaister/Granite/blob/cf71dee71fb00110749a9a3fcbd87b0297e49b6a/vulkan/device.cpp#L1049",
+            "https://github.com/Themaister/Granite/blob/cf71dee71fb00110749a9a3fcbd87b0297e49b6a/vulkan/command_buffer.cpp#L465"
+          ],
+          "related_requirement_ids": ["VK14-SYNC-005", "VK14-SYNC-006", "VK14-SYNC-008", "VK14-SYNC-009"],
+          "baseline_observation": "A single serial native queue exists; semaphore submissions are rejected."
+        },
+        {
+          "id": "RDP-011", "classification": "conditional",
+          "summary": "Transfers and precise visibility between host, transfer and compute stages for staging buffers and masked resolve paths.",
+          "evidence": "The renderer performs staging uploads and a masked resolve path with explicit barriers.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/rdp_renderer.cpp"],
+          "related_requirement_ids": ["VK14-COMMANDS-007", "VK14-SYNC-001", "VK14-SYNC-003"],
+          "baseline_observation": "The existing image-upload path is not general transfer coverage."
+        },
+        {
+          "id": "RDP-012", "classification": "conditional",
+          "summary": "VI scanout needs storage images and textured graphics passes with integer and normalized targets, beyond a descriptor-free BGRA8 triangle profile.",
+          "evidence": "The video interface uses R8G8B8A8_UINT storage/color images, RGBA8_UNORM targets, texel buffers and sampled graphics inputs across multiple passes.",
+          "references": ["https://github.com/Themaister/parallel-rdp/blob/1cecd042b2619bc505c12bfdc713808386f2b54d/parallel-rdp/video_interface.cpp"],
+          "related_requirement_ids": ["VK14-RESOURCES-003", "VK14-RESOURCES-004", "VK14-DESCRIPTORS-007", "VK14-PIPELINES-002", "VK14-RENDERPASS-003"],
+          "baseline_observation": "Separate later stage; recorded so that headless RDP progress is not mistaken for VI support."
+        },
+        {
+          "id": "RDP-013", "classification": "mandatory",
+          "summary": "Platform integration: static dispatch or loader negotiation, C++ threads, shader asset/SPIR-V bank loading and error reporting in a headless environment.",
+          "evidence": "Granite/context/device construction and the renderer's worker threads and shader bank paths assume a desktop-style host layer.",
+          "references": ["https://github.com/Themaister/Granite/blob/cf71dee71fb00110749a9a3fcbd87b0297e49b6a/vulkan/context.cpp"],
+          "related_requirement_ids": ["VK14-INSTANCE-011", "VK14-INSTANCE-014"],
+          "baseline_observation": "No public port layer exists; desktop WSI is not required for headless RDP tests."
+        }
+      ],
+      "unmeasured": [
+        "Peak persistent, in-flight and transient compiler memory for the selected shader variants.",
+        "Scratch/LDS demand and workgroup occupancy for the binning kernel.",
+        "Whether compiler lowering for 8/16-bit accesses is correct and visible through direct memory.",
+        "Descriptor maxima actually required across the reachable shader variants."
+      ],
+      "limits": [
+        "This overlay authorises no API change and no emulator port.",
+        "Initial acceptance is limited to the RDP command scope; VI and emulator integration are separate.",
+        "The 256 MiB design budget in the SDK is a software policy, not evidence that this workload fits or fails."
+      ]
+    },
+    {
+      "id": "dxvk",
+      "title": "DXVK (D3D9/10/11 translation layer)",
+      "source_id": "dxvk",
+      "revision": {
+        "commit": "70d7508c01201ed3d4bfb33da42ba834eafe3857",
+        "tag": "v3.1",
+        "release_published_utc": "2026-08-28T16:23:29Z",
+        "project_version": "3.1.0"
+      },
+      "api_version_finding": {
+        "declared_api_version": "1.3.0",
+        "evidence": "src/dxvk/dxvk_instance.h defines DxvkVulkanApiVersion = VK_API_VERSION_1_3 and dxvk_instance.cpp uses it for VkApplicationInfo.apiVersion and the capability warning.",
+        "profile_files": "VP_DXVK_requirements.json ships machine-readable Vulkan Profiles with api-version 1.3.204 and 1.3.224 and capability sets ending at vulkan13requirements; there is no vulkan14requirements capability set at this revision.",
+        "master_check": "The same declaration and the same capability-set names were present on the default branch at retrieval time, so this is not a stale-tag artifact.",
+        "conclusion": "The claim that current DXVK 3.x guidance targets Vulkan 1.4 could not be reproduced from the pinned revision or from the default branch. The reproducible statement is: DXVK requires Vulkan 1.3 plus a named set of extensions and features, some of which 1.4 promotes into core. Implementations must still advertise those extensions by name at this revision."
+      },
+      "requirements": [
+        {
+          "id": "DXVK-001", "classification": "mandatory",
+          "summary": "Vulkan 1.3 core API version, with instance/device creation and 1.1/1.2/1.3 feature chains.",
+          "evidence": "DxvkVulkanApiVersion is VK_API_VERSION_1_3; the device is created with chained feature structs and DXVK fails fast for unsupported required features.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/src/dxvk/dxvk_instance.h"],
+          "related_requirement_ids": ["VK14-INSTANCE-001", "VK14-INSTANCE-002", "VK14-INSTANCE-006", "VK14-INSTANCE-007", "VK14-INSTANCE-012"],
+          "baseline_observation": "Baseline reports 1.0-style behaviour only; this alone blocks an unmodified DXVK start."
+        },
+        {
+          "id": "DXVK-002", "classification": "mandatory",
+          "summary": "Required extensions: VK_KHR_maintenance5, VK_KHR_maintenance6, VK_KHR_load_store_op_none, VK_EXT_depth_clip_enable, VK_EXT_robustness2.",
+          "evidence": "VP_DXVK_requirements.json capability dxvk_common_required lists exactly these extensions; the code enables the same set (khrLoadStoreOpNone, khrMaintenance5, khrMaintenance6, extDepthClipEnable, extRobustness2).",
+          "references": [
+            "https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json",
+            "https://github.com/doitsujin/dxvk/blob/v3.1/src/dxvk/dxvk_device_info.cpp"
+          ],
+          "related_requirement_ids": ["VK14-EXTENSIONS-001", "VK14-PROMOTED-005"],
+          "baseline_observation": "No extension enumeration or advertisement exists at the baseline."
+        },
+        {
+          "id": "DXVK-003", "classification": "mandatory",
+          "summary": "Required 1.0/1.1/1.2 feature bits: fragmentStoresAndAtomics, samplerAnisotropy, shaderInt16, shaderSampledImageArrayDynamicIndexing, storageBuffer16BitAccess, shaderDrawParameters, storageBuffer8BitAccess, shaderInt8, descriptorIndexing and its update-after-bind/partially-bound/unused-while-pending/runtime-array variants, nullDescriptor, robustBufferAccess2, depthClipEnable.",
+          "evidence": "Listed in the dxvk_common_required capability set; the same bits are enabled in the device feature list.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
+          "related_requirement_ids": ["VK14-INSTANCE-008", "VK14-DESCRIPTORS-008", "VK14-SHADERS-004", "VK14-SHADERS-005", "VK14-LIFETIME-003", "VK14-PIPELINES-007"],
+          "baseline_observation": "Several of these bits are documented as unsupported in the current profile."
+        },
+        {
+          "id": "DXVK-004", "classification": "mandatory",
+          "summary": "Vulkan 1.3 capability set: synchronization2, maintenance4, dynamicRendering, pipelineCreationCacheControl, subgroupSizeControl, computeFullSubgroups, inlineUniformBlock, robustImageAccess, shaderTerminateInvocation, shaderZeroInitializeWorkgroupMemory, shaderIntegerDotProduct and shaderDemoteToHelperInvocation.",
+          "evidence": "vulkan13requirements capability set in VP_DXVK_requirements.json.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
+          "related_requirement_ids": ["VK14-SYNC-009", "VK14-RENDERPASS-007", "VK14-PIPELINES-003", "VK14-PROMOTED-003"],
+          "baseline_observation": "None of these are present in the baseline profile."
+        },
+        {
+          "id": "DXVK-005", "classification": "mandatory",
+          "summary": "Vulkan 1.2 capability set: multiview with minMultiviewViewCount 6 and minMultiviewInstanceIndex 134217727, imagelessFramebuffer, timelineSemaphore with maxTimelineSemaphoreValueDifference 2147483647, hostQueryReset, separateDepthStencilLayouts, uniformBufferStandardLayout, subgroupBroadcastDynamicId, shaderSubgroupExtendedTypes, vulkanMemoryModel, vulkanMemoryModelDeviceScope, bufferDeviceAddress.",
+          "evidence": "vulkan12requirements capability set and its property requirements.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
+          "related_requirement_ids": ["VK14-PROMOTED-002", "VK14-RESOURCES-012", "VK14-SYNC-008", "VK14-RENDERPASS-007"],
+          "baseline_observation": "Requires the memory model and buffer device address, which are large implementation feasibility areas."
+        },
+        {
+          "id": "DXVK-006", "classification": "mandatory",
+          "summary": "maxPushConstantsSize of at least 256 bytes.",
+          "evidence": "Required property in dxvk_common_required, alongside the 1.3 requirement that the value is at least 256.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
+          "related_requirement_ids": ["VK14-DESCRIPTORS-003", "VK14-FORMATS-004"],
+          "baseline_observation": "The baseline profile rejects push constants entirely."
+        },
+        {
+          "id": "DXVK-007", "classification": "mandatory",
+          "summary": "D3D11 baseline also requires transform feedback (VK_EXT_transform_feedback) plus geometryShader, imageCubeArray, independentBlend, multiViewport, sampleRateShading, depthClamp, depthBiasClamp, fillModeNonSolid, occlusionQueryPrecise, textureCompressionBC, sparseless feature set.",
+          "evidence": "d3d11_baseline capability set lists VK_EXT_transform_feedback and the enumerated 1.0 feature bits.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
+          "related_requirement_ids": ["VK14-INSTANCE-008", "VK14-PIPELINES-006", "VK14-PIPELINES-007", "VK14-QUERIES-002"],
+          "baseline_observation": "Transform feedback, cubemaps, blending and multisample rate shading are outside the documented profile."
+        },
+        {
+          "id": "DXVK-008", "classification": "optional",
+          "summary": "Level 12_0 optional set adds sparse residency features and samplerFilterMinmax; these matter only for higher D3D feature levels.",
+          "evidence": "d3d11_level12_0 capability set.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
+          "related_requirement_ids": ["VK14-RESOURCES-010", "VK14-DESCRIPTORS-008"],
+          "baseline_observation": "Sparse support is absent and correctly unadvertised."
+        },
+        {
+          "id": "DXVK-009", "classification": "conditional",
+          "summary": "Presentation: DXVK is a display-oriented consumer and expects a real swapchain/surface path where it presents.",
+          "evidence": "The presenter uses VK_KHR_swapchain with optional swapchain-maintenance1 alias handling.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/src/dxvk/dxvk_presenter.cpp"],
+          "related_requirement_ids": ["VK14-EXTENSIONS-002"],
+          "baseline_observation": "The baseline has a native VideoOut path but no Vulkan WSI; this row records the gap without requiring a desktop port."
+        }
+      ],
+      "unmeasured": [
+        "Whether any single gfx1013 configuration can satisfy the whole required feature set at once.",
+        "Cost of descriptor indexing and update-after-bind emulation if the hardware path is narrower.",
+        "Transform feedback and geometry-stage feasibility."
+      ],
+      "limits": [
+        "No port or compatibility claim is made here.",
+        "The overlay describes DXVK v3.1 exactly; later revisions must be re-pinned and re-read.",
+        "DXVK itself does not define core Vulkan obligations, so its requirement sets must not be copied into the core inventory as mandatory core rows."
+      ]
+    }
+  ]
+}

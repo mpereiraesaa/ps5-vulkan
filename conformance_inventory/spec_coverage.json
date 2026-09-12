@@ -1,0 +1,518 @@
+{
+  "schema_version": "1.0",
+  "source_id": "khronos-vulkan-spec",
+  "spec_version": "1.4.362",
+  "how_built": "The chapter and appendix inventories were enumerated from the pinned Vulkan-Docs tree (chapters/, appendices/) through the GitHub contents API. `review_state` records how that section was treated while writing requirements.json, not how well any implementation satisfies it. `rows` lists the requirement ids derived from that section, and validate.py checks that the two files agree in both directions.",
+  "review_states": {
+    "reviewed": "Section read at the pinned revision and converted into one or more requirement rows.",
+    "partially-reviewed": "Only the parts relevant to mandatory core behaviour or to a named consumer were read; the rest of the section was not reviewed.",
+    "not-reviewed": "Section was enumerated but not read. Requirements that live only here are absent from requirements.json."
+  },
+  "core_chapters": [
+    {
+      "path": "chapters/introduction.adoc",
+      "review_state": "partially-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/fundamentals.adoc",
+      "review_state": "partially-reviewed",
+      "rows": [
+        "VK14-INSTANCE-007",
+        "VK14-LIFETIME-001",
+        "VK14-LIFETIME-002",
+        "VK14-LIFETIME-003"
+      ]
+    },
+    {
+      "path": "chapters/initialization.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-106",
+        "VK14-INSTANCE-001",
+        "VK14-INSTANCE-002",
+        "VK14-INSTANCE-004",
+        "VK14-INSTANCE-011",
+        "VK14-INSTANCE-014"
+      ]
+    },
+    {
+      "path": "chapters/devsandqueues.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-INSTANCE-005",
+        "VK14-INSTANCE-006",
+        "VK14-INSTANCE-009",
+        "VK14-INSTANCE-010",
+        "VK14-INSTANCE-012"
+      ]
+    },
+    {
+      "path": "chapters/features.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-001",
+        "VK14-CORE-002",
+        "VK14-CORE-003",
+        "VK14-CORE-004",
+        "VK14-CORE-005",
+        "VK14-CORE-012",
+        "VK14-INSTANCE-008",
+        "VK14-CORE-007",
+        "VK14-CORE-006",
+        "VK14-CORE-008",
+        "VK14-CORE-009",
+        "VK14-PROMOTED-001",
+        "VK14-PROMOTED-002",
+        "VK14-PROMOTED-003",
+        "VK14-PROMOTED-004",
+        "VK14-PROMOTED-005",
+        "VK14-PROMOTED-006",
+        "VK14-PROMOTED-007",
+        "VK14-PROMOTED-008",
+        "VK14-CORE-010",
+        "VK14-CORE-150"
+      ]
+    },
+    {
+      "path": "chapters/limits.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-120",
+        "VK14-FORMATS-003",
+        "VK14-QUERIES-003"
+      ]
+    },
+    {
+      "path": "chapters/formats.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-131",
+        "VK14-CORE-132",
+        "VK14-CORE-133",
+        "VK14-CORE-134",
+        "VK14-CORE-135",
+        "VK14-CORE-136",
+        "VK14-CORE-137",
+        "VK14-CORE-138",
+        "VK14-CORE-139",
+        "VK14-CORE-140",
+        "VK14-CORE-141",
+        "VK14-FORMATS-001",
+        "VK14-FORMATS-002",
+        "VK14-FORMATS-005",
+        "VK14-FORMATS-006",
+        "VK14-FORMATS-007",
+        "VK14-FORMATS-009"
+      ]
+    },
+    {
+      "path": "chapters/resources.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-101",
+        "VK14-CORE-105",
+        "VK14-RESOURCES-001",
+        "VK14-RESOURCES-002",
+        "VK14-RESOURCES-004",
+        "VK14-RESOURCES-008",
+        "VK14-RESOURCES-009",
+        "VK14-RESOURCES-011",
+        "VK14-RESOURCES-012"
+      ]
+    },
+    {
+      "path": "chapters/memory.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-107",
+        "VK14-RESOURCES-005",
+        "VK14-RESOURCES-006",
+        "VK14-RESOURCES-007"
+      ]
+    },
+    {
+      "path": "chapters/images.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-RESOURCES-003"
+      ]
+    },
+    {
+      "path": "chapters/samplers.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-111",
+        "VK14-DESCRIPTORS-007"
+      ]
+    },
+    {
+      "path": "chapters/descriptorsets.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-104",
+        "VK14-DESCRIPTORS-001",
+        "VK14-DESCRIPTORS-002",
+        "VK14-DESCRIPTORS-003",
+        "VK14-DESCRIPTORS-005",
+        "VK14-DESCRIPTORS-006",
+        "VK14-DESCRIPTORS-008"
+      ]
+    },
+    {
+      "path": "chapters/descriptors.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-DESCRIPTORS-004",
+        "VK14-DESCRIPTORS-009"
+      ]
+    },
+    {
+      "path": "chapters/shaders.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-SHADERS-001",
+        "VK14-SHADERS-004",
+        "VK14-SHADERS-005"
+      ]
+    },
+    {
+      "path": "chapters/interfaces.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-SHADERS-003"
+      ]
+    },
+    {
+      "path": "chapters/pipelines.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-109",
+        "VK14-PIPELINES-001",
+        "VK14-PIPELINES-002",
+        "VK14-PIPELINES-003",
+        "VK14-PIPELINES-004"
+      ]
+    },
+    {
+      "path": "chapters/renderpass.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-RENDERPASS-001",
+        "VK14-RENDERPASS-002",
+        "VK14-RENDERPASS-003",
+        "VK14-RENDERPASS-005",
+        "VK14-RENDERPASS-006",
+        "VK14-RENDERPASS-010"
+      ]
+    },
+    {
+      "path": "chapters/framebuffer.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-RENDERPASS-004",
+        "VK14-RENDERPASS-009"
+      ]
+    },
+    {
+      "path": "chapters/commandbuffers.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-COMMANDS-001",
+        "VK14-COMMANDS-002",
+        "VK14-COMMANDS-003",
+        "VK14-COMMANDS-005",
+        "VK14-CORE-102"
+      ]
+    },
+    {
+      "path": "chapters/drawing.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-COMMANDS-004",
+        "VK14-COMMANDS-008",
+        "VK14-CORE-103"
+      ]
+    },
+    {
+      "path": "chapters/dispatch.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-COMMANDS-006"
+      ]
+    },
+    {
+      "path": "chapters/copies.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-COMMANDS-007",
+        "VK14-CORE-108"
+      ]
+    },
+    {
+      "path": "chapters/clears.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-COMMANDS-009"
+      ]
+    },
+    {
+      "path": "chapters/synchronization.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-112",
+        "VK14-SYNC-001",
+        "VK14-SYNC-002",
+        "VK14-SYNC-003",
+        "VK14-SYNC-004",
+        "VK14-SYNC-005",
+        "VK14-SYNC-006",
+        "VK14-SYNC-007"
+      ]
+    },
+    {
+      "path": "chapters/queries.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-CORE-110",
+        "VK14-QUERIES-001",
+        "VK14-QUERIES-002"
+      ]
+    },
+    {
+      "path": "chapters/extensions.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-EXTENSIONS-001",
+        "VK14-EXTENSIONS-002",
+        "VK14-EXTENSIONS-004"
+      ]
+    },
+    {
+      "path": "chapters/capabilities.adoc",
+      "review_state": "partially-reviewed",
+      "rows": [
+        "VK14-INSTANCE-003"
+      ]
+    },
+    {
+      "path": "chapters/fragops.adoc",
+      "review_state": "partially-reviewed",
+      "rows": [
+        "VK14-PIPELINES-006"
+      ]
+    },
+    {
+      "path": "chapters/primsrast.adoc",
+      "review_state": "partially-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/vertexpostproc.adoc",
+      "review_state": "partially-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/fxvertex.adoc",
+      "review_state": "partially-reviewed",
+      "rows": [
+        "VK14-FORMATS-008",
+        "VK14-PIPELINES-005"
+      ]
+    },
+    {
+      "path": "chapters/tessellation.adoc",
+      "review_state": "partially-reviewed",
+      "rows": [
+        "VK14-PIPELINES-007"
+      ]
+    },
+    {
+      "path": "chapters/geometry.adoc",
+      "review_state": "partially-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/textures.adoc",
+      "review_state": "partially-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/sparsemem.adoc",
+      "review_state": "partially-reviewed",
+      "rows": [
+        "VK14-RESOURCES-010"
+      ]
+    },
+    {
+      "path": "chapters/accelstructures.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/raytracing.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/raytraversal.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/descriptorbuffers.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/descriptorheaps.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/executiongraphs.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/videocoding.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/memory_decompression.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/fragmentdensitymapops.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/gpa_interface.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/private_data.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/debugging.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "chapters/preamble.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    }
+  ],
+  "appendices": [
+    {
+      "path": "appendices/versions.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-FORMATS-004"
+      ]
+    },
+    {
+      "path": "appendices/spirvenv.adoc",
+      "review_state": "reviewed",
+      "rows": [
+        "VK14-SHADERS-002"
+      ]
+    },
+    {
+      "path": "appendices/memorymodel.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "appendices/roadmap.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "appendices/glossary.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "appendices/invariance.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "appendices/compressedtex.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "appendices/legacy.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "appendices/boilerplate.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "appendices/credits.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    },
+    {
+      "path": "appendices/vulkanscdeviations.adoc",
+      "review_state": "not-reviewed",
+      "rows": []
+    }
+  ],
+  "extension_appendices": {
+    "path_prefix": "appendices/",
+    "total_extension_files": 483,
+    "review_state": "not-reviewed",
+    "reviewed_exceptions": [
+      {
+        "path": "appendices/VK_KHR_dynamic_rendering_local_read.adoc",
+        "review_state": "reviewed",
+        "rows": [
+          "VK14-RENDERPASS-008"
+        ]
+      },
+      {
+        "path": "appendices/VK_EXT_host_image_copy.adoc",
+        "review_state": "reviewed",
+        "rows": [
+          "VK14-EXTENSIONS-003"
+        ]
+      },
+      {
+        "path": "appendices/VK_KHR_dynamic_rendering.adoc",
+        "review_state": "reviewed",
+        "rows": [
+          "VK14-RENDERPASS-007"
+        ]
+      },
+      {
+        "path": "appendices/VK_KHR_synchronization2.adoc",
+        "review_state": "reviewed",
+        "rows": [
+          "VK14-SYNC-009"
+        ]
+      },
+      {
+        "path": "appendices/VK_KHR_timeline_semaphore.adoc",
+        "review_state": "reviewed",
+        "rows": [
+          "VK14-SYNC-008"
+        ]
+      }
+    ],
+    "promotion_lists_note": "Every appendices/VK_*.adoc file carries a promotedto attribute in the pinned registry; the 1.1/1.2/1.3/1.4 promotion rows were generated from that metadata instead of reading 483 files, so they are recorded as reviewed through vk.xml automation, not through per-file reading."
+  },
+  "summary_note": "Reviewed/partial/not-reviewed counts and per-chapter row lists are computed by validate.py; no hand-maintained totals are kept here."
+}

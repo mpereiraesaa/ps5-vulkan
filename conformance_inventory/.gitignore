@@ -1,0 +1,3 @@
+# Downloaded third-party source/listing caches. Regenerate with
+# tools/collect_cts_listing.py and tools/extract_spec_anchors.py.
+.cache/
