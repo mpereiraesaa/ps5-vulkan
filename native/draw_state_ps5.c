@@ -20,13 +20,21 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const struct ps5vk_target_registe
     struct ps5vk_native_graphics_pipeline *native = p->graphics_state;
     if (native->device != p->device || !native->pair || !native->pair->ready) return VK_ERROR_UNKNOWN;
     struct ps5vk_graphics_pair *pair = native->pair;
+    int runtime=pair->runtime_arguments.enabled!=0;
+    const struct ps5vk_runtime_shader *vs=&pair->runtime_vertex,*fs=&pair->runtime_fragment;
+    if(runtime && (vs->header.num_cx_registers>PS5VK_RUNTIME_CX_MAX ||
+        fs->header.num_cx_registers>PS5VK_RUNTIME_CX_MAX ||
+        !vs->header.num_sh_registers || !fs->header.num_sh_registers ||
+        vs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX ||
+        fs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX))return VK_ERROR_UNKNOWN;
     if (pair->vertex_quantization != 0x2d) return VK_ERROR_FEATURE_NOT_PRESENT;
     ps5_agc_register viewport[PS5VK_VIEWPORT_REGISTERS];
     VkResult rc = ps5vk_native_viewport(&p->viewport, &p->scissor, area, viewport);
     if (rc != VK_SUCCESS) return rc;
     struct ps5_pipeline_registers base;
     if (ps5_pipeline_build(&base, color->registers, &pair->cx, &pair->uc,
-        pair->gs.cx, pair->ps.cx, pair->gs.sh, pair->ps.sh, width, height)) return VK_ERROR_UNKNOWN;
+        runtime?vs->context:pair->gs.cx, runtime?fs->context:pair->ps.cx,
+        runtime?vs->shader:pair->gs.sh,runtime?fs->shader:pair->ps.sh,width,height)) return VK_ERROR_UNKNOWN;
     for (unsigned j = 0; j < PS5VK_VIEWPORT_REGISTERS; ++j) {
         if(viewport[j].offset==0x094 || viewport[j].offset==0x095)continue;
         unsigned replaced = 0;
@@ -37,6 +45,13 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const struct ps5vk_target_registe
     }
     struct ps5vk_draw_state result = {0};
     memcpy(result.cx, base.cx, sizeof(base.cx)); result.cx_count = PS5_PIPELINE_CX_REGISTERS;
+    if(runtime) {
+        result.cx_count=PS5_PIPELINE_RT_REGISTERS+PS5_PIPELINE_VIEWPORT_REGISTERS+PS5_PIPELINE_LINKED_CX_REGISTERS;
+        memcpy(result.cx+result.cx_count,vs->context,vs->header.num_cx_registers*sizeof(*result.cx));
+        result.cx_count+=vs->header.num_cx_registers;
+        memcpy(result.cx+result.cx_count,fs->context,fs->header.num_cx_registers*sizeof(*result.cx));
+        result.cx_count+=fs->header.num_cx_registers;
+    }
     if (depth) {
         memcpy(result.cx + result.cx_count, depth->registers, depth->count * sizeof(ps5_agc_register));
         result.cx_count += depth->count;
@@ -70,6 +85,15 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const struct ps5vk_target_registe
     result.cx[result.cx_count++] = (ps5_agc_register){0x2f9, pair->vertex_quantization};
     memcpy(result.sh, base.sh, sizeof(base.sh)); memcpy(result.uc, base.uc, sizeof(base.uc));
     result.modifier = pair->gs.specials.draw_modifier;
+    if(runtime) {
+        result.sh_count=vs->header.num_sh_registers+fs->header.num_sh_registers;
+        memcpy(result.sh,vs->shader,vs->header.num_sh_registers*sizeof(*result.sh));
+        memcpy(result.sh+vs->header.num_sh_registers,fs->shader,fs->header.num_sh_registers*sizeof(*result.sh));
+        result.runtime=pair->runtime_arguments;
+        /* This is the lab's audited draw-auto command modifier, not compiler
+         * metadata. PSBC headers do not populate the legacy PAL field. */
+        result.modifier=5;
+    }
     if (!result.modifier) return VK_ERROR_UNKNOWN;
     *out = result; return VK_SUCCESS;
 }

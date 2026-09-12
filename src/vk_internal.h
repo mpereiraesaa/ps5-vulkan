@@ -21,6 +21,7 @@ VkResult ps5vk_native_image_requirements(VkDevice, const VkImageCreateInfo *, Vk
 struct ps5vk_native_memory_budget { uint64_t limit, used; };
 void ps5vk_native_queue_configure(VkDevice device);
 struct ps5vk_compiled_program;
+struct ps5vk_graphics_key;
 struct ps5vk_compiler {
     void *context;
     VkResult (*resolve)(void *, const uint32_t *, size_t, const char *,
@@ -101,6 +102,12 @@ struct VkDevice_T {
      * Object creation or shader linking alone does not enable submission. */
     VkBool32 graphics_submit_enabled;
     const struct ps5vk_graphics_library *graphics_library;
+    /* Runtime result lease: create copies everything it needs into owned GPU
+     * state before release. Acquire may compile or return a cached result.
+     * Both callbacks are required; no implicit offline fallback on failure. */
+    void *graphics_compiler_context;
+    VkResult (*graphics_acquire)(void *,const struct ps5vk_graphics_key *,const void **);
+    void (*graphics_compiled_release)(void *,const void *);
     VkResult (*graphics_create)(VkDevice, const void *program_data, void **owned_state);
     void (*graphics_release)(VkDevice, void *owned_state);
     VkResult (*image_requirements)(VkDevice, const VkImageCreateInfo *, VkMemoryRequirements *);

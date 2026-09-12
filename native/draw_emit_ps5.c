@@ -32,13 +32,19 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
         !ps5_gpu_span_visible(mapping, mapping_bytes, state, sizeof(*state))) return VK_ERROR_UNKNOWN;
     /* Vulkan zero-count draws have no rasterization side effects. */
     if (!(indices?op->index_count:op->vertex_count) || !op->instance_count) return VK_SUCCESS;
+    uint32_t runtime_vertex[16],runtime_pixel[16];
+    uint32_t sh_count=state->sh_count?state->sh_count:12;
+    if(sh_count>16)return VK_ERROR_UNKNOWN;
+    if(state->runtime.enabled && (vertex_input || indices || texture_low ||
+        ps5vk_runtime_draw_values(&state->runtime,op->first_vertex,op->first_instance,
+                                 runtime_vertex,runtime_pixel))) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (capacity < 13) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;
     if (ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->cx, state->cx_count,
             mapping, mapping_bytes, sceAgcDcbSetCxRegistersIndirect) ||
         ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->uc, 3,
             mapping, mapping_bytes, sceAgcDcbSetUcRegistersIndirect) ||
-        ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->sh, 12,
+        ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->sh, sh_count,
             mapping, mapping_bytes, sceAgcDcbSetShRegistersIndirect)) return VK_ERROR_UNKNOWN;
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
     VkResult scissor_rc=ps5vk_native_emit_scissor_replay(&next,(uint32_t)(end-next),state);
@@ -48,7 +54,13 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     const uint32_t vertex[4] = {global_table_low, vertex_table_low,
         indices?(uint32_t)op->vertex_offset:op->first_vertex, op->first_instance};
     const uint32_t fragment[2]={global_table_low,texture_low?*texture_low:0};
-    if (ps5_agc_writer_set_sh_direct(&next, (uint32_t)(end-next), 0x8c,
+    if(state->runtime.enabled) {
+        if(ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x8c,
+              runtime_vertex,state->runtime.vertex_count,sceAgcCbSetShRegisterRangeDirect) ||
+           (state->runtime.fragment_count && ps5_agc_writer_set_sh_direct(&next,
+              (uint32_t)(end-next),0xc,runtime_pixel,state->runtime.fragment_count,
+              sceAgcCbSetShRegisterRangeDirect))) return VK_ERROR_UNKNOWN;
+    } else if (ps5_agc_writer_set_sh_direct(&next, (uint32_t)(end-next), 0x8c,
             vertex_input ? vertex : procedural, vertex_input ? 4 : 3,
             sceAgcCbSetShRegisterRangeDirect) ||
         ps5_agc_writer_set_sh_direct(&next, (uint32_t)(end-next), 0xc, fragment, texture_low?2:1,

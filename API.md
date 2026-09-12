@@ -56,9 +56,23 @@ scratch and workgroup-shared memory are rejected. Cache keys
 include the complete SPIR-V digest, entry point, compiler/ABI versions and
 pipeline-layout state, and entries are constrained by count and byte budgets.
 
-Graphics shaders continue to use the pinned offline compiler path. Their SPIR-V
-input, compiler output, metadata, relocations and pipeline-relevant state form
-an exact program identity represented in the generated program library.
+Runtime graphics uses the same pinned PSBC/NIR/ACO stack for vertex and
+fragment SPIR-V. The current profile supports procedural triangle lists,
+smooth float32 scalar/vector interfaces at matching whole locations 0–31,
+one vec4 fragment output at location 0, BGRA8 UNORM/sample1 and full color
+writes. VertexIndex is supported; vertex buffers, graphics descriptors,
+push constants, blending, additional targets and other interpolation modes
+are rejected. Interface reflection is bounded to 65,536 IDs and is not a
+complete SPIR-V validator; use developer-owned valid shader modules.
+
+Pair-cache identity includes both complete modules, both entrypoints and
+compiler/profile options. Cache leases protect metadata and ISA while the
+native backend copies them into direct memory. The native SDK retains at most
+32 pairs / 4 MiB; transient compilation allocations are outside that retained
+budget. No persistent Vulkan pipeline-cache format is provided.
+
+The existing textured scene retains its offline exact-program path. Its
+capabilities must not be inferred for the narrower runtime graphics profile.
 
 ## Memory and presentation
 

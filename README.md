@@ -21,6 +21,7 @@ results; visual output is not the sole correctness signal.
 - Host-visible buffers and images backed by native direct memory
 - Command pools and command buffers with explicit recording state
 - Runtime-compiled compute pipelines, storage buffers, dispatch and fences
+- Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list draws
 - One BGRA8 color attachment and an optional D32 depth attachment
 - Single-level RGBA8 sampled textures with GPU upload transitions
@@ -30,6 +31,7 @@ results; visual output is not the sole correctness signal.
 
 The exact supported profile is documented in [API.md](API.md). Build and test
 requirements are in [BUILDING.md](BUILDING.md).
+Runtime graphics test results and their limits are summarized in [VALIDATION.md](VALIDATION.md).
 
 ## Important boundaries
 
@@ -37,9 +39,11 @@ This is not a Vulkan-conformant driver or ICD, and it does not yet provide WSI,
 swapchains, broad format coverage, multiple queues,
 semaphores, blending, MSAA, mipmaps, anisotropy or arbitrary shader programs.
 Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
-backend and cached under a bounded in-memory policy. Graphics programs remain
-offline-compiled and accepted only when their complete identity and pipeline
-contract match the audited native program library.
+backend and cached under a bounded in-memory policy. Runtime vertex/fragment
+compilation now supports procedural triangles with matching smooth float32
+interfaces, a BGRA8 color target and no graphics descriptors. Compiled pairs
+reuse the bounded cache. The textured scene still uses its audited offline
+program library; it does not imply textured runtime-shader support.
 
 ## Development
 
@@ -55,6 +59,7 @@ make check-sanitize
 Native compilation also requires the PS5 payload SDK and the companion
 `ps5-agc-gears` support library; see [BUILDING.md](BUILDING.md).
 
-This repository currently carries no license grant. Dependency and licensing
+This repository currently carries no project-wide license grant; individual
+file license notices remain applicable. Dependency and licensing
 choices must be audited before redistribution or incorporation into another
 project.

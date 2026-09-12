@@ -4,11 +4,14 @@
 #include "graphics_pipeline_ps5.h"
 #include "targets_ps5.h"
 #include "ps5_pipeline.h"
-enum { PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + PS5_DEPTH_REGISTER_COUNT + 8 };
+#include "runtime_draw_abi.h"
+enum { PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 13 + PS5_DEPTH_REGISTER_COUNT + 8 };
 struct ps5vk_draw_state {
-    ps5_agc_register cx[PS5VK_DRAW_CX_CAPACITY], sh[12], uc[3];
+    ps5_agc_register cx[PS5VK_DRAW_CX_CAPACITY], sh[16], uc[3];
     uint32_t cx_count;
+    uint32_t sh_count; /* Zero preserves the legacy 12-register LLPC path. */
     uint64_t modifier;
+    struct ps5vk_runtime_draw_abi runtime;
 };
 /* Caller must keep the resulting register block in published GPU-visible
  * storage through retirement. No init-context, clear, cache or draw emitted. */

@@ -55,6 +55,13 @@ jobs:
         with:
           path: homebrew_ps5/projects/ps5-vulkan
 
+      - name: Check out pinned graphics ABI support
+        uses: actions/checkout@v4
+        with:
+          repository: mpereiraesaa/ps5-agc-gears
+          ref: 8f035b73fab6713f015b46010c22330cf1579311
+          path: homebrew_ps5/projects/ps5-agc-gears
+
       - name: Install host-test dependencies
         run: sudo apt-get update && sudo apt-get install -y glslang-tools
 
@@ -88,3 +95,7 @@ jobs:
       - name: Run runtime compiler tests
         working-directory: homebrew_ps5/projects/ps5-vulkan
         run: make test-compiler
+
+      - name: Check runtime graphics adapter with sanitizers
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make test-runtime-graphics-compiler RUNTIME_HEADER_SANITIZERS=-fsanitize=address,undefined

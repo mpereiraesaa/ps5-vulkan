@@ -15,6 +15,8 @@ extern "C" {
  * - Target: AMD RDNA2 / GFX10.3 (gfx1013, PS5)
  * - Native compute dispatch and pipeline execution
  * - Native runtime SPIR-V compute compilation and bounded compilation cache
+ * - Experimental runtime vertex/fragment compilation for procedural triangles;
+ *   matching smooth float32 interfaces, BGRA8/sample1, no graphics descriptors
  * - Storage buffers, single-level textures, depth testing, VideoOut presentation
  */
 

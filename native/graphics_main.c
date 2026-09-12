@@ -1,6 +1,9 @@
 /* Experimental integration through API-owned objects. Draw/presentation are
  * opt-in build stages; no complete graphics queue profile or conformance claim. */
 #include "graphics_library.h"
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+#include "runtime_graphics_spirv.h"
+#endif
 #include "draw_prepare_ps5.h"
 #include "command_arena_ps5.h"
 #include "graphics_sync.h"
@@ -510,12 +513,27 @@ int main(void)
     VkAttachmentReference depthref={1,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
     VkSubpassDescription subpass={.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,.colorAttachmentCount=1,.pColorAttachments=&colorref};
     int use_depth=graphics_library.programs[0].key.descriptor_set_count!=0;
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+    use_depth=0;
+#endif
     if(use_depth)subpass.pDepthStencilAttachment=&depthref;
     VkRenderPassCreateInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,.attachmentCount=use_depth?2:1,.pAttachments=attachments,
         .subpassCount=1,.pSubpasses=&subpass};
     VkRenderPass pass; CHECK(vkCreateRenderPass(device,&ri,NULL,&pass));
     VkPipelineLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     const struct ps5vk_graphics_key *key=&graphics_library.programs[0].key;
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+    const struct ps5vk_graphics_key runtime_key={
+        .vertex={ps5vk_runtime_vertex,sizeof(ps5vk_runtime_vertex)/4,"main"},
+        .fragment={ps5vk_runtime_fragment,sizeof(ps5vk_runtime_fragment)/4,"main"},
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    key=&runtime_key;
+    const struct ps5vk_graphics_program *unexpected=NULL;
+    if(ps5vk_graphics_resolve(&graphics_library,key,&unexpected)!=VK_ERROR_FEATURE_NOT_PRESENT)
+        fail("runtime-graphics-not-independent",-1);
+    ps5log_line(PS5LOG_MARK,"PS5VK_RUNTIME_GRAPHICS_INPUT absent_from_offline_library=1");
+#endif
     VkDescriptorSetLayout set_layout=VK_NULL_HANDLE;
     if(key->descriptor_set_count) {
         VkDescriptorSetLayoutBinding binding={.binding=0,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,

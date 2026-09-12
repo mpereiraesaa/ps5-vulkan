@@ -82,15 +82,30 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
         .vertex_bindings=v->pVertexBindingDescriptions,.vertex_attributes=v->pVertexAttributeDescriptions,
         .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets};
-    const struct ps5vk_graphics_program *program;
-    VkResult rc=ps5vk_graphics_resolve(d->graphics_library,&key,&program);
-    if (rc != VK_SUCCESS) return rc;
+    const void *data=NULL;
+    const struct ps5vk_graphics_program *program=NULL;
+    VkResult rc;
+    if(d->graphics_acquire) {
+        rc=d->graphics_acquire(d->graphics_compiler_context,&key,&data);
+        if(rc!=VK_SUCCESS || !data) {
+            if(data)d->graphics_compiled_release(d->graphics_compiler_context,data);
+            return rc==VK_SUCCESS?VK_ERROR_INITIALIZATION_FAILED:rc;
+        }
+    } else {
+        rc=ps5vk_graphics_resolve(d->graphics_library,&key,&program);
+        if(rc!=VK_SUCCESS)return rc;
+        data=program->backend_data;
+    }
     VkAllocationCallbacks saved={0}; VkBool32 custom=VK_FALSE;
     VkPipeline p=ps5vk_object_alloc(d->custom_allocator ? &d->allocator : NULL,allocator,
         sizeof(*p),VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,&saved,&custom);
-    if (!p) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (!p) {
+        if(d->graphics_acquire)d->graphics_compiled_release(d->graphics_compiler_context,data);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     memset(p,0,sizeof(*p));
-    rc=d->graphics_create(d,program->backend_data,&p->graphics_state);
+    rc=d->graphics_create(d,data,&p->graphics_state);
+    if(d->graphics_acquire)d->graphics_compiled_release(d->graphics_compiler_context,data);
     if (rc != VK_SUCCESS || !p->graphics_state) {
         if (p->graphics_state) d->graphics_release(d,p->graphics_state);
         ps5vk_object_free(p,&saved,custom);
@@ -119,7 +134,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineC
     if (!out) return VK_ERROR_UNKNOWN;
     for (uint32_t i=0;i<count;++i) out[i]=VK_NULL_HANDLE;
     if (!d || !count || !infos) return VK_ERROR_UNKNOWN;
-    if (cache || !d->graphics_enabled || !d->graphics_library || !d->graphics_create || !d->graphics_release)
+    if (cache || !d->graphics_enabled || (!d->graphics_library && !d->graphics_acquire) ||
+        (!!d->graphics_acquire != !!d->graphics_compiled_release) ||
+        !d->graphics_create || !d->graphics_release)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkResult rc=VK_SUCCESS;
     for (uint32_t i=0;i<count;++i) {

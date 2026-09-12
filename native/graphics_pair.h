@@ -3,6 +3,8 @@
 #include "ps5_shader_header.h"
 #include "ps5_agc_registers.h"
 #include "shader_relocate.h"
+#include "runtime_shader_storage.h"
+#include "runtime_draw_abi.h"
 
 struct ps5vk_graphics_pair {
     struct ps5_shader_arena gs, ps;
@@ -10,6 +12,8 @@ struct ps5vk_graphics_pair {
     struct ps5_agc_linked_uc uc;
     unsigned ready;
     uint32_t vertex_quantization;
+    struct ps5vk_runtime_shader runtime_vertex,runtime_fragment;
+    struct ps5vk_runtime_draw_abi runtime_arguments;
 };
 struct ps5vk_graphics_stage_extent { uint32_t offset, isa_bytes; };
 struct ps5vk_graphics_pair_input {
