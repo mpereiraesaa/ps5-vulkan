@@ -117,6 +117,12 @@ def validate_results(
         else:
             invalid_statuses.append({"name": r.get("name"), "status": st})
 
+    ALLOWED_PROFILES = {"host", "ps5", "relaxed"}
+    if profile not in ALLOWED_PROFILES:
+        raise ValueError(
+            f"Unknown validation profile '{profile}'. Allowed profiles: {sorted(ALLOWED_PROFILES)}"
+        )
+
     # 1. Report integrity: the report itself is structurally complete, uncorrupted and legitimate
     report_valid = (
         exit_code == 0
@@ -129,7 +135,7 @@ def validate_results(
 
     # 2. Acceptance expectations: explicit expectations per target backend/profile
     acceptance_failures = []
-    if profile in ("ps5", "native-ps5", "acceptance"):
+    if profile == "ps5":
         # On native PS5 hardware acceptance, all 26 contract cases must PASS (0 NotSupported, 0 SKIP)
         for r in results:
             if r["status"] != "PASS":
@@ -145,6 +151,7 @@ def validate_results(
             and (not_supported_count == 0)
             and (skip_count == 0)
         )
+        ok = report_valid and all_required_passed
     elif profile == "host":
         # On host mock, exactly the 4 GPU-dependent cases must be NotSupported and 22 PASS
         for r in results:
@@ -163,11 +170,14 @@ def validate_results(
             and (not_supported_count == len(HOST_UNSUPPORTED_CASES))
             and (skip_count == 0)
         )
+        ok = report_valid and all_required_passed
+    elif profile == "relaxed":
+        # Relaxed mode: checks report integrity without affirming profile acceptance
+        all_required_passed = False
+        ok = report_valid
     else:
-        # Relaxed mode: report validity without profile-specific constraints
-        all_required_passed = report_valid and (fail_count == 0)
-
-    ok = report_valid and all_required_passed
+        all_required_passed = False
+        ok = False
 
     return {
         "profile": profile,

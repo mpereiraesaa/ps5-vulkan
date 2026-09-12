@@ -43,21 +43,25 @@ class TestCTSRunner(unittest.TestCase):
         self.assertEqual(parsed[1]["status"], "FAIL")
         self.assertEqual(parsed[2]["status"], "NotSupported")
 
-    def test_validate_results_complete_host(self):
+    def test_validate_results_relaxed_informs_integrity_without_acceptance(self):
         cases = ["case.a", "case.b"]
         results = [
-            {"name": "case.a", "status": "PASS", "details": ""},
-            {"name": "case.b", "status": "PASS", "details": ""},
+            {"name": "case.a", "status": "SKIP", "details": ""},
+            {"name": "case.b", "status": "SKIP", "details": ""},
         ]
         val = validate_results(cases, results, profile="relaxed")
-        self.assertTrue(val["report_valid"])
-        self.assertTrue(val["all_required_passed"])
-        self.assertTrue(val["ok"])
-        self.assertEqual(val["pass"], 2)
-        self.assertEqual(val["not_supported"], 0)
-        self.assertEqual(val["fail"], 0)
-        self.assertEqual(len(val["missing"]), 0)
-        self.assertEqual(len(val["unexpected"]), 0)
+        self.assertTrue(val["report_valid"], "Expected report integrity to be valid in relaxed mode")
+        self.assertFalse(val["all_required_passed"], "Relaxed mode must not affirm acceptance")
+        self.assertTrue(val["ok"], "Overall status for relaxed mode reflects report integrity")
+        self.assertEqual(val["skip"], 2)
+
+    def test_validate_results_unknown_profile_rejected(self):
+        cases = ["case.a"]
+        results = [{"name": "case.a", "status": "PASS", "details": ""}]
+        with self.assertRaises(ValueError):
+            validate_results(cases, results, profile="native_ps5")
+        with self.assertRaises(ValueError):
+            validate_results(cases, results, profile="unknown_profile")
 
     def test_validate_results_missing_case(self):
         cases = ["case.a", "case.b", "case.c"]
