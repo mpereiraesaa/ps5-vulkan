@@ -41,6 +41,7 @@ struct VkCommandBuffer_T {
     VkCommandPool pool;
     struct VkCommandBuffer_T *next;
     enum ps5vk_command_state state;
+    uint32_t pending_count;
     VkCommandBufferUsageFlags usage;
     VkPipeline pipeline;
     VkDescriptorSet sets[PS5VK_MAX_SETS];

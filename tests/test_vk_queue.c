@@ -13,6 +13,7 @@ static VkResult memory_sync(void *ctx, void *b, VkDeviceSize offset, VkDeviceSiz
 
 struct fixture {
     unsigned prepares, launches, polls, releases;
+    unsigned fail_prepare_at;
     VkResult prepare_result, launch_result, poll_result;
     uint64_t serial, now;
     int complete, wrong;
@@ -21,6 +22,8 @@ static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **job
 {
     struct fixture *f = d->progress.context; ++f->prepares;
     assert(s->buffers[0]->state == PS5VK_EXECUTABLE);
+    if (f->fail_prepare_at && f->prepares == f->fail_prepare_at)
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (f->prepare_result) return f->prepare_result;
     f->serial = s->serial; *job = f; return VK_SUCCESS;
 }
@@ -39,7 +42,8 @@ static VkResult poll_backend(VkDevice d, void *job, uint64_t *completed)
 static void release(VkDevice d, void *job)
 {
     struct fixture *f = job; ++f->releases;
-    assert(d->submission && d->submission->buffers[0]->state == PS5VK_PENDING);
+    if (d->submission)
+        assert(d->submission->buffers[0]->state == PS5VK_PENDING);
 }
 static uint64_t clock_ns(void *ctx) { return ((struct fixture *)ctx)->now; }
 static void pause_wait(void *ctx, uint64_t remaining)
@@ -131,6 +135,65 @@ int main(void)
     assert(vkGetFenceStatus(&d, fence) == VK_ERROR_DEVICE_LOST);
     assert(d.lost && d.submission && fence->pending_serial && !fence->signaled);
     recover_fixture(&d, &f);
+
+    /* Every native job is prepared transactionally before the first launch.
+     * A later prepare failure releases earlier jobs and publishes no state. */
+    record_empty(c, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    VkSubmitInfo prepare_chain[] = {
+        {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1,
+         .pCommandBuffers = &c},
+        {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1,
+         .pCommandBuffers = &c},
+    };
+    uint64_t prepare_serial = d.queue.next_serial;
+    unsigned prepare_releases = f.releases;
+    f.fail_prepare_at = f.prepares + 2;
+    assert(vkQueueSubmit(&d.queue, 2, prepare_chain, NULL) == VK_ERROR_OUT_OF_HOST_MEMORY);
+    assert(!d.submission && d.queue.next_serial == prepare_serial &&
+        c->state == PS5VK_EXECUTABLE && !c->pending_count &&
+        f.releases == prepare_releases + 1);
+    f.fail_prepare_at = 0;
+
+    /* Binary semaphore transitions are ordered by submit record. A signal is
+     * visible only at retirement and a wait consumes it exactly once. */
+    VkSemaphoreCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VkSemaphore semaphore;
+    assert(vkCreateSemaphore(&d, &si, NULL, &semaphore) == VK_SUCCESS);
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    VkSubmitInfo signal_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &c,
+        .signalSemaphoreCount = 1, .pSignalSemaphores = &semaphore};
+    assert(vkQueueSubmit(&d.queue, 1, &signal_submit, fence) == VK_SUCCESS);
+    assert(!semaphore->signaled && semaphore->pending == 1 && !fence->signaled);
+    unsigned lifetime_before = d.lifetime_errors;
+    vkDestroySemaphore(&d, semaphore, NULL);
+    assert(d.semaphores == semaphore && d.lifetime_errors == lifetime_before + 1);
+    f.complete = 1;
+    assert(vkGetFenceStatus(&d, fence) == VK_SUCCESS);
+    assert(semaphore->signaled && !semaphore->pending);
+
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkSubmitInfo wait_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1, .pWaitSemaphores = &semaphore,
+        .pWaitDstStageMask = &wait_stage};
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    assert(vkQueueSubmit(&d.queue, 1, &wait_submit, fence) == VK_SUCCESS);
+    assert(!semaphore->signaled && !semaphore->pending && fence->signaled);
+
+    VkSubmitInfo ordered[] = {
+        {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .signalSemaphoreCount = 1,
+         .pSignalSemaphores = &semaphore},
+        {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .waitSemaphoreCount = 1,
+         .pWaitSemaphores = &semaphore, .pWaitDstStageMask = &wait_stage},
+    };
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    assert(vkQueueSubmit(&d.queue, 2, ordered, fence) == VK_SUCCESS);
+    assert(!semaphore->signaled && !semaphore->pending && fence->signaled);
+    uint64_t unchanged_serial = d.queue.next_serial;
+    assert(vkQueueSubmit(&d.queue, 1, &wait_submit, NULL) != VK_SUCCESS);
+    assert(d.queue.next_serial == unchanged_serial && !semaphore->signaled);
+    vkDestroySemaphore(&d, semaphore, NULL); assert(!d.semaphores);
+
     /* Graphics ownership fixture: real image binding, synthetic render objects
      * and control backend only. This never produces or executes GPU commands. */
     d.graphics_enabled = VK_TRUE; d.image_requirements = image_requirements;
