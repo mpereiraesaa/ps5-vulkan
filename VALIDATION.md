@@ -506,11 +506,10 @@ public query paths rather than from a copied table:
 
 Result on the shipped profiles: 120 mandatory limits satisfied, 78 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
-to a Vulkan 1.0 `VkPhysicalDeviceLimits`, 82 feature bits consistent with the
-code path that enforces them with 28 rows not audited, 13 format class rules
-satisfied with 649 documented per-format blockers, and six narrow-storage
-SPIR-V capability gates plus four shader-precision rows, of which two are
-consistent with what `vkGetPhysicalDeviceFeatures2KHR` advertises and two are
+to a Vulkan 1.0 `VkPhysicalDeviceLimits`, 84 feature rows consistent with the
+code path that enforces them with 26 rows not audited, 13 format class rules
+satisfied with 649 documented per-format blockers, 60 format-query consistency
+checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
 
