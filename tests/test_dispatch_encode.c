@@ -57,5 +57,18 @@ int main(void)
     assert(!ps5vk_dispatch_encode(words,128,&d));
     d.push_constants=0x10000c000;
     assert(!ps5vk_dispatch_encode(words,128,&d));
+    struct ps5vk_compiled_program legacy=p;
+    legacy.user_sgprs=2;legacy.descriptor_set_mask=1;
+    legacy.descriptor_set_sgpr[0]=1;legacy.descriptor_set_sgpr[2]=0;
+    legacy.descriptor_count=1;legacy.descriptors[0].set=0;
+    legacy.grid_size_sgpr=0;legacy.push_constant_size=0;legacy.push_constant_sgpr=0;
+    d.program=&legacy;d.descriptor_tables[2]=0;d.push_constants=0;
+    d.addresses.descriptor_table=d.descriptor_tables[0];
+    n=ps5vk_dispatch_encode(words,128,&d);assert(n);
+    user=find_sh(words,n,0xb900);assert(user<n);
+    assert(words[user+2]==0 && words[user+3]==(uint32_t)d.descriptor_tables[0]);
+    legacy.descriptor_set_sgpr[0]=2;assert(!ps5vk_dispatch_encode(words,128,&d));
+    legacy.descriptor_set_sgpr[0]=1;d.addresses.descriptor_table+=16;
+    assert(!ps5vk_dispatch_encode(words,128,&d));
     puts("Multi-set dispatch SGPR encoding: pass (host packets only)");
 }

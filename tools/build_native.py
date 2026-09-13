@@ -31,8 +31,8 @@ def main():
     if observe_scene not in ("0", "1") or (observe_scene == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_OBSERVE requires graphics profile API and must be 0 or 1")
     scissor_probe = os.environ.get("PS5VK_GRAPHICS_SCISSOR_PROBE", "0")
-    if scissor_probe not in ("0", "1", "2", "3", "4", "5") or (scissor_probe != "0" and not graphics_api):
-        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0 off, 1 tile, 2 cube quadrants, 3 planar quadrants, 4 sampler UV ladder, 5 RGB presentation")
+    if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6") or (scissor_probe != "0" and not graphics_api):
+        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0 off, 1 tile, 2 cube quadrants, 3 planar quadrants, 4 sampler UV ladder, 5 RGB presentation, 6 core sampler addressing")
     scene_split = os.environ.get("PS5VK_GRAPHICS_SCENE_SPLIT", "0")
     if scene_split not in ("0", "1") or (scene_split == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_SCENE_SPLIT requires graphics profile API and must be 0 or 1")
@@ -194,7 +194,7 @@ def main():
                        "-I" + str(ROOT / "build/program-library")]
             sources += [(p.stem, p, []) for p in sorted((ROOT / "src").glob("vk_*.c"))]
             sources += [(p.stem, p, []) for p in (
-                ROOT / "native/graphics_main.c", ROOT / "native/compute_main.c", ROOT / "native/platform_ps5.c", ROOT / "src/scene_geometry.c", ROOT / "src/scene_region.c", ROOT / "src/color_clear.c", ROOT / "src/color_detile.c",
+                ROOT / "native/graphics_main.c", ROOT / "native/compute_main.c", ROOT / "native/platform_ps5.c", ROOT / "src/scene_geometry.c", ROOT / "src/scene_region.c", ROOT / "src/sampler_core_probe.c", ROOT / "src/color_clear.c", ROOT / "src/color_detile.c",
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
                 ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
@@ -209,7 +209,7 @@ def main():
                 gears / "src/ps5_agc_writer.c", gears / "src/ps5_gpu_span.c",
                 ROOT / "src/graphics_program.c", ROOT / "src/compute_commands.c",
                 ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c",
-                ROOT / "src/compilation_cache.c", ROOT / "src/vk_pipeline_cache.c")]
+                ROOT / "src/compilation_cache.c")]
     if use_runtime_graphics:
         run(sys.executable,ROOT / "tools/prepare_runtime_graphics.py","--out",out / "runtime_graphics_spirv.h")
         common += ["-DPS5VK_RUNTIME_GRAPHICS=1", "-I" + str(ROOT / "third_party/psbc-reference")]
@@ -225,6 +225,10 @@ def main():
         application_sources = {"graphics_main", "compute_main", "scene_geometry",
                                "scene_region", "triangle_readback"}
         sources = [item for item in sources if item[0] in application_sources]
+    source_names = [name for name, _, _ in sources]
+    if len(source_names) != len(set(source_names)):
+        duplicates = sorted({name for name in source_names if source_names.count(name) > 1})
+        raise SystemExit("Duplicate native object stems: " + ", ".join(duplicates))
     for name, source, extra in sources:
         obj = out / (name + ".o")
         run(*cc, "-std=c11", *common, *extra, "-c", source, "-o", obj, env=env)
@@ -304,7 +308,7 @@ def main():
                             scene="two-cubes" if scene else "triangle-controls",
                             scissor_probe=int(scissor_probe),
                             scissor_depth_comparison=scissor_probe in ("2", "3"),
-                            geometry_fixture="sampler-uv-ladder" if scissor_probe == "4" else ("planar-triangle" if int(scissor_probe)>=3 else "source-default"),
+                            geometry_fixture="sampler-uv-ladder" if scissor_probe == "4" else ("sampler-core-addressing" if scissor_probe == "6" else ("planar-triangle" if int(scissor_probe)>=3 else "source-default")),
                             visual_hold_seconds=10 if scissor_probe in ("3", "5") else 0,
                             observation_frame_pause_us=60000 if observe_scene == "1" else 0,
                             exact_interior_witnesses=int(witnesses),

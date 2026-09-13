@@ -24,7 +24,8 @@ class LicensePolicyTests(unittest.TestCase):
     def test_ps5_opengl_provenance_is_pinned_and_reaches_derived_files(self):
         policy = (ROOT / "LICENSING.md").read_text()
         self.assertIn(PS5_OPENGL_COMMIT, policy)
-        for relative in ("native/runtime_shader.c", "src/color_detile.c"):
+        for relative in ("native/runtime_shader.c", "src/color_detile.c",
+                         "src/vk_sampler.c"):
             self.assertIn(f"`{relative}`", policy)
             source = (ROOT / relative).read_text()
             self.assertIn("Copyright (C) 2026 BlackBearReloaded", source)

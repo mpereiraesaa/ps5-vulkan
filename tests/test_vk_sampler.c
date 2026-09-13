@@ -20,28 +20,37 @@ int main(void)
     assert(vkCreateSampler(&d,&info,&failed_allocator,&sampler)==VK_ERROR_OUT_OF_HOST_MEMORY);
     assert(allocation_attempts==1 && !sampler && !d.sampler_objects && !d.graphics_objects);
     assert(vkCreateSampler(&d,&info,NULL,&sampler)==VK_SUCCESS);
-    assert(d.sampler_objects==1 && d.graphics_objects==1 && !sampler->words[0] && !sampler->words[1] && !sampler->words[2] && !sampler->words[3]);
+    assert(d.sampler_objects==1 && d.graphics_objects==1 && !sampler->words[0] && !sampler->words[1] &&
+        sampler->words[2]==(1u<<26) && !sampler->words[3]);
     sampler->pending=1;vkDestroySampler(&d,sampler,NULL);assert(d.graphics_objects==1);
     sampler->pending=0;allow=VK_FALSE;vkDestroySampler(&d,sampler,NULL);assert(d.graphics_objects==1);
     assert(d.sampler_objects==1);
     allow=VK_TRUE;vkDestroySampler(&d,sampler,NULL);assert(!d.sampler_objects && !d.graphics_objects && d.lifetime_errors==2);
     info.magFilter=VK_FILTER_LINEAR;info.addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     assert(vkCreateSampler(&d,&info,NULL,&sampler)==VK_SUCCESS);
-    assert(sampler->words[0]==16 && sampler->words[2]==(1u<<20));
+    assert(sampler->words[0]==16 && sampler->words[2]==((1u<<20)|(1u<<26)));
     vkDestroySampler(&d,sampler,NULL);
     info.magFilter=VK_FILTER_NEAREST;info.minFilter=VK_FILTER_LINEAR;
     info.addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;info.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     assert(vkCreateSampler(&d,&info,NULL,&sampler)==VK_SUCCESS);
-    assert(sampler->words[0]==146 && sampler->words[2]==(1u<<22));
+    assert(sampler->words[0]==146 && sampler->words[2]==((1u<<22)|(1u<<26)));
+    vkDestroySampler(&d,sampler,NULL);
+    info.addressModeU=VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    info.addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    info.addressModeW=VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    info.mipmapMode=VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    info.borderColor=VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+    assert(vkCreateSampler(&d,&info,NULL,&sampler)==VK_SUCCESS);
+    assert(sampler->words[0]==49 && sampler->words[2]==((1u<<22)|(2u<<26)) &&
+        sampler->words[3]==(2u<<30));
     vkDestroySampler(&d,sampler,NULL);
 #define BAD(field,value) do { VkSamplerCreateInfo bad=info;bad.field=value;sampler=(VkSampler)(uintptr_t)1; \
     assert(vkCreateSampler(&d,&bad,NULL,&sampler)!=VK_SUCCESS && !sampler && !d.graphics_objects); } while(0)
     BAD(pNext,&info);BAD(flags,1);BAD(anisotropyEnable,VK_TRUE);BAD(compareEnable,VK_TRUE);
     BAD(unnormalizedCoordinates,VK_TRUE);BAD(mipLodBias,NAN);BAD(minLod,-1);BAD(maxLod,INFINITY);
     BAD(magFilter,VK_FILTER_CUBIC_EXT);BAD(minFilter,VK_FILTER_CUBIC_EXT);
-    BAD(addressModeU,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
-    BAD(addressModeV,VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT);
     BAD(addressModeW,VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE);
+    BAD(borderColor,(VkBorderColor)99);
     BAD(mipmapMode,(VkSamplerMipmapMode)99);
     VkSampler slots[PS5VK_MAX_SAMPLERS];
     for(unsigned i=0;i<PS5VK_MAX_SAMPLERS;++i)

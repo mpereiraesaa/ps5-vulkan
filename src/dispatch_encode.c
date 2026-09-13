@@ -40,30 +40,40 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
                  (p->descriptors[k].binding == b->binding && p->descriptors[k].element == b->element)))
                 return 0;
     }
-    uint32_t next_sgpr = 2;
-    for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set) {
-        if (!(p->descriptor_set_mask & (1u << set))) {
+    VkBool32 legacy = p->user_sgprs == 2 && p->descriptor_set_mask == 1 &&
+        p->descriptor_set_sgpr[0] == 1 && !p->push_constant_size &&
+        !p->push_constant_sgpr && !p->grid_size_sgpr;
+    if (legacy) {
+        if (!d->descriptor_tables[0] || d->descriptor_tables[0] != a->descriptor_table ||
+            d->push_constants) return 0;
+        for (uint32_t set = 1; set < PS5VK_MAX_SETS; ++set)
             if (p->descriptor_set_sgpr[set] || d->descriptor_tables[set]) return 0;
-            continue;
+    } else {
+        uint32_t next_sgpr = 2;
+        for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set) {
+            if (!(p->descriptor_set_mask & (1u << set))) {
+                if (p->descriptor_set_sgpr[set] || d->descriptor_tables[set]) return 0;
+                continue;
+            }
+            if (p->descriptor_set_sgpr[set] != next_sgpr++ || !d->descriptor_tables[set] ||
+                (d->descriptor_tables[set] & 15u) || (d->descriptor_tables[set] >> 32) != 2 ||
+                d->descriptor_tables[set] > (UINT64_C(1) << 48) - table_bytes[set] ||
+                (d->descriptor_tables[set] >> 32) !=
+                    ((d->descriptor_tables[set] + table_bytes[set] - 1) >> 32)) return 0;
         }
-        if (p->descriptor_set_sgpr[set] != next_sgpr++ || !d->descriptor_tables[set] ||
-            (d->descriptor_tables[set] & 15u) || (d->descriptor_tables[set] >> 32) != 2 ||
-            d->descriptor_tables[set] > (UINT64_C(1) << 48) - table_bytes[set] ||
-            (d->descriptor_tables[set] >> 32) !=
-                ((d->descriptor_tables[set] + table_bytes[set] - 1) >> 32)) return 0;
+        if (p->push_constant_size) {
+            if (p->push_constant_sgpr != next_sgpr++ || !d->push_constants ||
+                (d->push_constants & 3u) || (d->push_constants >> 32) != 2 ||
+                d->push_constants > (UINT64_C(1) << 48) - p->push_constant_size ||
+                (d->push_constants >> 32) !=
+                    ((d->push_constants + p->push_constant_size - 1) >> 32)) return 0;
+        } else if (p->push_constant_sgpr || d->push_constants) return 0;
+        if (p->grid_size_sgpr) {
+            if (p->grid_size_sgpr != next_sgpr) return 0;
+            next_sgpr += 3;
+        }
+        if (p->user_sgprs != next_sgpr) return 0;
     }
-    if (p->push_constant_size) {
-        if (p->push_constant_sgpr != next_sgpr++ || !d->push_constants ||
-            (d->push_constants & 3u) || (d->push_constants >> 32) != 2 ||
-            d->push_constants > (UINT64_C(1) << 48) - p->push_constant_size ||
-            (d->push_constants >> 32) !=
-                ((d->push_constants + p->push_constant_size - 1) >> 32)) return 0;
-    } else if (p->push_constant_sgpr || d->push_constants) return 0;
-    if (p->grid_size_sgpr) {
-        if (p->grid_size_sgpr != next_sgpr) return 0;
-        next_sgpr += 3;
-    }
-    if (p->user_sgprs != next_sgpr) return 0;
     uint64_t code_bytes = p->code_words * 4;
     if (a->code > (UINT64_C(1) << 48) - code_bytes ||
         a->completion > (UINT64_C(1) << 48) - 8 || a->readback > (UINT64_C(1) << 48) - 16 ||
@@ -115,7 +125,7 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
                 words[out] = packet[i]; words[out + 1] = packet[i + 1];
                 words[out + 2] = rsrc1; words[out + 3] = rsrc2;
                 out += 4; found |= 2;
-            } else if (reg == 0xb900 && p->user_sgprs >= 3) {
+            } else if (reg == 0xb900 && !legacy) {
                 size_t count = p->user_sgprs + 2;
                 if (total != 4 || (found & 16) || out + count > capacity) return 0;
                 words[out] = UINT32_C(0xc0007600) | (p->user_sgprs << 16);
@@ -156,7 +166,7 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         }
         i += total;
     }
-    unsigned expected_mask = 31;
+    unsigned expected_mask = legacy ? 15 : 31;
     if (found != expected_mask) return 0;
     return out;
 }

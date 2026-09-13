@@ -34,23 +34,33 @@ int main(void)
     assert(!memcmp(words+8,sampler->words,16));
     /* All accepted axis/filter combinations must survive API creation and
      * descriptor assembly independently. Encoding is not sampling accuracy. */
-    for(unsigned axes=0;axes<8;++axes)for(unsigned filters=0;filters<4;++filters)
-        for(unsigned mip=0;mip<2;++mip) {
+    static const VkSamplerAddressMode modes[4]={VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER};
+    static const unsigned native_modes[4]={0,1,2,6};
+    static const VkBorderColor borders[6]={VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+        VK_BORDER_COLOR_INT_TRANSPARENT_BLACK,VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        VK_BORDER_COLOR_INT_OPAQUE_BLACK,VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+        VK_BORDER_COLOR_INT_OPAQUE_WHITE};
+    for(unsigned axes=0;axes<64;++axes)for(unsigned filters=0;filters<4;++filters)
+        for(unsigned mip=0;mip<2;++mip)for(unsigned border=0;border<6;++border) {
+            unsigned ui=axes&3,vi=(axes>>2)&3,wi=(axes>>4)&3;
             VkSamplerCreateInfo variant={.sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                 .magFilter=(filters&1)?VK_FILTER_LINEAR:VK_FILTER_NEAREST,
                 .minFilter=(filters&2)?VK_FILTER_LINEAR:VK_FILTER_NEAREST,
                 .mipmapMode=mip?VK_SAMPLER_MIPMAP_MODE_LINEAR:VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                .addressModeU=(axes&1)?VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE:VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                .addressModeV=(axes&2)?VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE:VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                .addressModeW=(axes&4)?VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE:VK_SAMPLER_ADDRESS_MODE_REPEAT};
+                .addressModeU=modes[ui],.addressModeV=modes[vi],.addressModeW=modes[wi],
+                .borderColor=borders[border]};
             VkSampler candidate;
             assert(vkCreateSampler(&d,&variant,NULL,&candidate)==VK_SUCCESS);
             uint32_t descriptor[12];
             assert(ps5vk_texture_descriptor(&d,view,candidate,descriptor)==VK_SUCCESS);
             assert(!memcmp(descriptor,words,8*sizeof(uint32_t)));
-            assert(descriptor[8]==((axes&1?2u:0u)|(axes&2?16u:0u)|(axes&4?128u:0u)));
-            assert(!descriptor[9] && !descriptor[11]);
-            assert(descriptor[10]==((filters&1?1u<<20:0u)|(filters&2?1u<<22:0u)));
+            assert(descriptor[8]==(native_modes[ui]|(native_modes[vi]<<3)|(native_modes[wi]<<6)));
+            assert(!descriptor[9]);
+            assert(descriptor[10]==((filters&1?1u<<20:0u)|(filters&2?1u<<22:0u)|
+                ((mip?2u:1u)<<26)));
+            assert(descriptor[11]==((border/2u)<<30));
             vkDestroySampler(&d,candidate,NULL);
             assert(d.sampler_objects==1); /* Original fixture stays alive. */
         }

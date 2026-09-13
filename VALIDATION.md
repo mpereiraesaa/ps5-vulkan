@@ -550,6 +550,33 @@ conformant: the documented blockers include the mandatory image-type, attachment
 count, descriptor-count, multisample and format-family gaps. No console run was
 performed for this increment, so no new hardware claim is made.
 
+## Core sampler addressing and fixed borders (2026-09-13)
+
+The sampler implementation now encodes core repeat, mirrored-repeat,
+clamp-to-edge and clamp-to-border modes independently for U/V/W. Its native
+GFX10.3 encodings are adapted under GPL-3.0-or-later from the pinned
+`blackbearreloaded/ps5-opengl` revision recorded in `LICENSING.md`.
+
+Two runs used the byte-identical SELF SHA-256
+`6e33efe473cf7d150d7fe21132413496203348261d83b95159ad5a95f60b234d`:
+
+- `20260913T195835833Z_PPSA99994_ps5vk_0x57f4cbddf1f2`, log SHA-256
+  `4fed9e38cbc37dcf582af1da45ba3754a2d2d911a7829fb43a856062ddcdba25`
+- `20260913T195933454Z_PPSA99994_ps5vk_0x5802365bfd81`, log SHA-256
+  `333a80f2bea6e81ed18397ec2bf72686d11ff89d04f756fdf1486a0ef1e0d804`
+
+Each ps5log/1 stream contained 1,840 ordered records and cleanly ended after
+API teardown with native allocation accounting at zero. Four ordered GPU draws
+and detiled readbacks each produced exactly 373,248 expected pixels and zero
+other pixels: mirrored repeat at UV -0.25, then transparent black, opaque black
+and opaque white with clamp-to-border at UV -2.0. The compute regression also
+completed before and after every draw. Close Game was confirmed after each run,
+with `PPSA99994` absent from the running-title query.
+
+This evidence covers these single-mip nearest-filter cases only. It does not
+establish linear filtering, mip chains, anisotropy, custom border colors,
+mirror-clamp extension support or Vulkan conformance.
+
 The subsequent dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,

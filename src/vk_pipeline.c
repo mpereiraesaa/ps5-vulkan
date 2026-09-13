@@ -143,24 +143,37 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
         p->descriptor_count > PS5VK_MAX_DESCRIPTORS ||
         (p->descriptor_set_mask & ~((1u << PS5VK_MAX_SETS) - 1)) ||
         (!!p->descriptor_count != !!p->descriptor_set_mask)) return 0;
-    uint32_t expected_user_sgprs = 2;
-    for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set) {
-        VkBool32 used = (p->descriptor_set_mask & (1u << set)) != 0;
-        if (used) {
-            if (set >= layout->set_count || p->descriptor_set_sgpr[set] != expected_user_sgprs++) return 0;
-        } else if (p->descriptor_set_sgpr[set]) return 0;
+    /* The original amdllpc offline fixture has a separately validated ABI:
+     * s0 is the PAL internal pointer and the sole descriptor table is s1.
+     * PSBC's reusable ABI reserves s0..s1 and starts direct set pointers at
+     * s2.  Keep the legacy shape deliberately narrow instead of relabelling
+     * its compiler metadata as the newer ABI. */
+    VkBool32 legacy = p->user_sgprs == 2 && p->descriptor_set_mask == 1 &&
+        p->descriptor_set_sgpr[0] == 1 && !p->push_constant_size &&
+        !p->push_constant_sgpr && !p->grid_size_sgpr;
+    if (legacy) {
+        for (uint32_t set = 1; set < PS5VK_MAX_SETS; ++set)
+            if (p->descriptor_set_sgpr[set]) return 0;
+    } else {
+        uint32_t expected_user_sgprs = 2;
+        for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set) {
+            VkBool32 used = (p->descriptor_set_mask & (1u << set)) != 0;
+            if (used) {
+                if (set >= layout->set_count || p->descriptor_set_sgpr[set] != expected_user_sgprs++) return 0;
+            } else if (p->descriptor_set_sgpr[set]) return 0;
+        }
+        if (p->push_constant_size) {
+            if (p->push_constant_size > layout->push_constant_size ||
+                p->push_constant_sgpr != expected_user_sgprs++) return 0;
+            for (uint32_t j = 0; j < (p->push_constant_size + 3u) / 4u; ++j)
+                if (!(layout->push_constant_stages[j] & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
+        } else if (p->push_constant_sgpr) return 0;
+        if (p->grid_size_sgpr) {
+            if (p->grid_size_sgpr != expected_user_sgprs) return 0;
+            expected_user_sgprs += 3;
+        }
+        if (p->user_sgprs != expected_user_sgprs) return 0;
     }
-    if (p->push_constant_size) {
-        if (p->push_constant_size > layout->push_constant_size ||
-            p->push_constant_sgpr != expected_user_sgprs++) return 0;
-        for (uint32_t j = 0; j < (p->push_constant_size + 3u) / 4u; ++j)
-            if (!(layout->push_constant_stages[j] & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
-    } else if (p->push_constant_sgpr) return 0;
-    if (p->grid_size_sgpr) {
-        if (p->grid_size_sgpr != expected_user_sgprs) return 0;
-        expected_user_sgprs += 3;
-    }
-    if (p->user_sgprs != expected_user_sgprs) return 0;
     uint64_t invocations = 1;
     for (unsigned j = 0; j < 3; ++j) {
         if (!dims[j] || dims[j] > 1024 || p->tgid[j] > 1) return 0;

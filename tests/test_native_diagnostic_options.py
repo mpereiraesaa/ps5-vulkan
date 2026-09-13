@@ -42,6 +42,10 @@ class NativeDiagnosticOptions(unittest.TestCase):
     def test_observation_rejects_unknown_mode(self):
         self.rejected({"PS5VK_GRAPHICS_OBSERVE": "2"}, "must be 0 or 1")
 
+    def test_core_sampler_probe_is_a_scene_diagnostic(self):
+        self.rejected({"PS5VK_GRAPHICS_SCISSOR_PROBE": "6"},
+                      "requires graphics profile API")
+
     def rejected(self, options, message):
         env = {k: v for k, v in os.environ.items() if not k.startswith("PS5VK_")}
         env.update(options)

@@ -62,6 +62,8 @@ check-sanitize:
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_sanitized
 	./build/tests/test_vk_sampler_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/sampler_core_probe.c tests/test_sampler_core_probe.c -o build/tests/test_sampler_core_probe_sanitized
+	./build/tests/test_sampler_core_probe_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Isrc src/color_detile.c tests/test_color_detile.c -o build/tests/test_color_detile_sanitized
 	./build/tests/test_color_detile_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_vk_image.c -o build/tests/test_vk_image_sanitized
@@ -126,6 +128,8 @@ check:
 	./build/tests/test_color_detile
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/scene_geometry.c tests/test_scene_geometry.c -o build/tests/test_scene_geometry
 	./build/tests/test_scene_geometry
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/sampler_core_probe.c tests/test_sampler_core_probe.c -o build/tests/test_sampler_core_probe
+	./build/tests/test_sampler_core_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state
 	./build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy

@@ -17,6 +17,13 @@ static void *VKAPI_CALL reallocate(void *ctx, void *p, size_t n, size_t a, VkSys
 { (void)ctx; (void)a; (void)s; return realloc(p, n); }
 static void VKAPI_CALL release(void *ctx, void *p)
 { struct counts *c = ctx; assert(c->live); --c->live; free(p); }
+static void *VKAPI_CALL poison_allocate(void *ctx, size_t size, size_t alignment,
+                                        VkSystemAllocationScope scope)
+{
+    void *p=allocate(ctx,size,alignment,scope);
+    if(p)memset(p,0xa5,size);
+    return p;
+}
 static VkDescriptorSetLayout layout(VkDevice d)
 {
     VkDescriptorSetLayoutBinding bindings[] = {
@@ -139,6 +146,16 @@ static void negative(void)
 static void push_constant_layouts(void)
 {
     struct VkDevice_T d={0};
+    struct counts counts={.remaining=-1};
+    VkAllocationCallbacks poisoned={.pUserData=&counts,.pfnAllocation=poison_allocate,
+        .pfnReallocation=reallocate,.pfnFree=release};
+    VkPipelineLayoutCreateInfo empty={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPipelineLayout clean;
+    assert(vkCreatePipelineLayout(&d,&empty,&poisoned,&clean)==VK_SUCCESS);
+    assert(clean->set_count==0 && clean->push_constant_size==0);
+    for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
+        assert(clean->push_constant_stages[i]==0);
+    vkDestroyPipelineLayout(&d,clean,&poisoned);assert(!counts.live);
     VkPushConstantRange ranges[]={
         {VK_SHADER_STAGE_COMPUTE_BIT,0,16},
         {VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,16,16}};

@@ -373,6 +373,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(VkDevice d,
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkPipelineLayout layout = alloc(d, a, sizeof(*layout), &saved, &custom);
     if (!layout) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    memset(layout, 0, sizeof(*layout));
     layout->device = d; layout->allocator = saved; layout->custom_allocator = custom;
     layout->set_count = info->setLayoutCount;
     for (uint32_t j = 0; j < info->setLayoutCount; ++j)

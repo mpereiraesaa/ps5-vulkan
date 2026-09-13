@@ -86,11 +86,16 @@ layout transitions are bookkeeping and are validated against the image's
 committed layout. Anything outside the padded linear geometry stays refused
 rather than being approximated with a linear write.
 
-Nearest sampling has native visual and deterministic readback evidence. Linear
-filter, address-mode and mipmap-mode encodings have host-contract coverage, but
-linear filtering is not advertised as a hardware-supported format feature.
-Mip chains, anisotropy, image arrays and general descriptor arrays are not
-supported.
+Nearest sampling has native visual and deterministic readback evidence. Core
+`REPEAT`, `MIRRORED_REPEAT`, `CLAMP_TO_EDGE` and `CLAMP_TO_BORDER` are encoded
+per axis. Two byte-identical hardware runs deterministically verified mirrored
+repeat and transparent-black, opaque-black and opaque-white border results;
+both float and integer variants of the six fixed `VkBorderColor` enums map to
+those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
+unadvertised and rejected. Linear filter and mipmap-mode encodings retain host
+contract coverage, but linear filtering is not advertised as a hardware-
+supported format feature. Mip chains, anisotropy, image arrays and general
+descriptor arrays are not supported.
 
 ## Compute
 

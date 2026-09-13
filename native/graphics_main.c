@@ -10,6 +10,7 @@
 #include "triangle_readback.h"
 #include "scene_geometry.h"
 #include "scene_region.h"
+#include "sampler_core_probe.h"
 #include "scene_clock.h"
 #include "scene_witnesses.h"
 #include "present_ps5.h"
@@ -36,7 +37,7 @@ struct texture_fixture {
     VkImage image;VkImageView view;VkSampler sampler;VkDeviceMemory memory,upload_memory;
     VkBuffer upload;VkDescriptorPool pool;VkDescriptorSet set;
 };
-static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout layout)
+static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout layout,unsigned probe_case)
 {
     struct texture_fixture t={0};
     VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.imageType=VK_IMAGE_TYPE_2D,
@@ -52,6 +53,12 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     VkSamplerCreateInfo si={.sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,.addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
+        struct ps5vk_sampler_core_case c;
+        if(ps5vk_sampler_core_case(probe_case,&c))fail("sampler-core-case",-1);
+        si.addressModeU=si.addressModeV=si.addressModeW=c.address_mode;
+        si.borderColor=c.border_color;
+    }
     CHECK(vkCreateSampler(d,&si,NULL,&t.sampler));
     VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=16,.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
     CHECK(vkCreateBuffer(d,&bi,NULL,&t.upload));vkGetBufferMemoryRequirements(d,t.upload,&req);
@@ -128,7 +135,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         CHECK(vkCreateImageView(d,&dv,NULL,&depth_view));
     }
     struct texture_fixture texture={0};
-    if(set_layout)texture=texture_create(d,set_layout);
+    if(set_layout)texture=texture_create(d,set_layout,witness_index);
     VkBuffer vertex_buffer=VK_NULL_HANDLE;VkDeviceMemory vertex_memory=VK_NULL_HANDLE;
     VkBuffer index_buffer=VK_NULL_HANDLE;VkDeviceMemory index_memory=VK_NULL_HANDLE;
     VkDeviceSize index_memory_offset=0;
@@ -202,6 +209,12 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
                 if(ps5vk_scene_sampler_uv(frame,&u,&numerator))fail("sampler-probe-input",-1);
                 for(unsigned v=0;v<3;++v){scene_vertices[v].uv_angle[0]=u;scene_vertices[v].uv_angle[1]=.25f;}
                 ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_PROBE_INPUT frame=%u u_numerator=%d denominator=8192 v_numerator=2048",frame,numerator);
+            } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
+                struct ps5vk_sampler_core_case c;
+                if(ps5vk_sampler_core_case(witness_index,&c))fail("sampler-core-case",-1);
+                for(unsigned v=0;v<3;++v)scene_vertices[v].uv_angle[0]=scene_vertices[v].uv_angle[1]=c.uv;
+                ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_INPUT case=%u name=%s uv_milli=%d expected_bgra=%08x",
+                    witness_index,c.name,(int)(c.uv*1000.0f),c.expected_bgra);
             }
             memcpy((unsigned char *)vertices+vertex_memory_offset+48,scene_vertices,sizeof(scene_vertices));
             ps5log_printf(PS5LOG_MARK,"PS5VK_SCENE_INPUT frame=%u angle_milliradians=%u vertices=%u indices=%u fixture=%s",
@@ -259,6 +272,8 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     VkRenderPassBeginInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,.renderPass=pass,
         .framebuffer=fb,.renderArea={{0,0},{1920,1080}}};
     VkClearValue clears[2]={0};clears[1].depthStencil.depth=1.0f;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==6)
+        clears[0].color.float32[0]=clears[0].color.float32[1]=clears[0].color.float32[2]=0.25f;
     clears[0].color.float32[3]=1.0f;
     if(depth_image || PS5VK_GRAPHICS_SCENE){ri.clearValueCount=depth_image?2:1;ri.pClearValues=clears;}
     vkCmdBeginRenderPass(cb,&ri,VK_SUBPASS_CONTENTS_INLINE);
@@ -300,7 +315,8 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
        (depth_image && depth_image->layout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
         fail("render-pass-layout-commit",-1);
     CHECK(vkInvalidateMappedMemoryRanges(d,1,&range));
-    const uint32_t background=PS5VK_GRAPHICS_SCENE?0xff000000:0x55aa11ee;
+    const uint32_t background=PS5VK_GRAPHICS_SCISSOR_PROBE==6?0xff404040:
+        (PS5VK_GRAPHICS_SCENE?0xff000000:0x55aa11ee);
     struct ps5vk_triangle_readback stats=ps5vk_triangle_scan(pixels,words,background);
     int far_visible=depth_image && !pipeline->depth_test && !(frame&1);
     int valid=(far_visible?ps5vk_triangle_coverage_valid:ps5vk_triangle_readback_valid)(&stats,(uint32_t)pipeline->viewport.width*scale_quarters/4,
@@ -321,7 +337,17 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     }
     /* An empty scissor intersection is diagnostic evidence, not scene success.
      * Preserve the ordinary scene gate; permit this control to report and retire. */
-    if(PS5VK_GRAPHICS_SCISSOR_PROBE)valid=stats.changed<=
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
+        struct ps5vk_sampler_core_case c;size_t expected=0,other=0;
+        if(ps5vk_sampler_core_case(witness_index,&c))fail("sampler-core-case",-1);
+        for(size_t i=0;i<words;++i) {
+            if(pixels[i]==c.expected_bgra)++expected;
+            else if(pixels[i]!=background)++other;
+        }
+        valid=expected>1000 && expected<words && !other;
+        ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_READBACK case=%u name=%s expected_bgra=%08x expected=%zu other=%zu valid=%d",
+            witness_index,c.name,c.expected_bgra,expected,other,valid);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE)valid=stats.changed<=
         (uint64_t)pipeline->scissor.extent.width*pipeline->scissor.extent.height && !stats.bad_alpha && !stats.bad_sum;
     ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_API_READBACK changed_words=%llu total_words=%zu bad_alpha=%llu bad_sum=%llu viewport=%ux%u valid=%d",
         (unsigned long long)stats.changed,words,(unsigned long long)stats.bad_alpha,(unsigned long long)stats.bad_sum,
@@ -344,7 +370,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         /* Report discrepancies without hiding blocks or replacing GPU output.
          * This diagnostic still follows the normal retirement/close path. */
     }
-    if(PS5VK_GRAPHICS_SCENE && !PS5VK_GRAPHICS_CONTINUOUS && !PS5VK_GRAPHICS_WITNESSES && frame%45==0) {
+    if(PS5VK_GRAPHICS_SCENE && PS5VK_GRAPHICS_SCISSOR_PROBE!=6 && !PS5VK_GRAPHICS_CONTINUOUS && !PS5VK_GRAPHICS_WITNESSES && frame%45==0) {
         for(unsigned ty=2;ty<6;++ty)for(unsigned tx=6;tx<10;++tx) {
             struct ps5vk_scene_region region;
             if(ps5vk_scene_region_scan(pixels,words,tx,ty,&region))fail("region-range",-1);
@@ -353,7 +379,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
             if(region.unexpected)fail("region-color",-1);
         }
     }
-    if(set_layout) {
+    if(set_layout && PS5VK_GRAPHICS_SCISSOR_PROBE!=6) {
         size_t histogram[3]={0},unexpected=0;
         for(size_t i=0;i<words;++i) {
             uint32_t p=pixels[i];if(p==background)continue;
@@ -571,7 +597,7 @@ int main(void)
     VkPipelineDepthStencilStateCreateInfo depth={.sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable=VK_TRUE,.depthWriteEnable=VK_TRUE,.depthCompareOp=VK_COMPARE_OP_LESS};
     if(use_depth)pi.pDepthStencilState=&depth;
-    for (unsigned iteration=0;iteration<(PS5VK_GRAPHICS_WITNESSES?(PS5VK_GRAPHICS_WITNESSES==2?4u:6u):((PS5VK_GRAPHICS_SCISSOR_PROBE==2 || PS5VK_GRAPHICS_SCISSOR_PROBE==3)?10u:(PS5VK_GRAPHICS_SCENE?1u:3u)));++iteration) {
+    for (unsigned iteration=0;iteration<(PS5VK_GRAPHICS_WITNESSES?(PS5VK_GRAPHICS_WITNESSES==2?4u:6u):(PS5VK_GRAPHICS_SCISSOR_PROBE==6?PS5VK_SAMPLER_CORE_CASES:((PS5VK_GRAPHICS_SCISSOR_PROBE==2 || PS5VK_GRAPHICS_SCISSOR_PROBE==3)?10u:(PS5VK_GRAPHICS_SCENE?1u:3u))));++iteration) {
         unsigned witness_index=PS5VK_GRAPHICS_WITNESSES==2 && iteration==3?5:iteration;
 #if PS5VK_GRAPHICS_DRAW
         ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_COMPUTE_CONTROL phase=before-graphics iteration=%u",iteration);
@@ -581,7 +607,7 @@ int main(void)
             depth.depthTestEnable=PS5VK_GRAPHICS_WITNESSES==2?VK_FALSE:VK_TRUE;
             viewport.width=1920;viewport.height=1080;
             scissor=(VkRect2D){{(int32_t)ps5vk_scene_witnesses[witness_index].x,(int32_t)ps5vk_scene_witnesses[witness_index].y},{1,1}};
-        } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==4 || PS5VK_GRAPHICS_SCISSOR_PROBE==5) {
+        } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==4 || PS5VK_GRAPHICS_SCISSOR_PROBE==5 || PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
             depth.depthTestEnable=VK_FALSE;
             scissor=(VkRect2D){{0,0},{1920,1080}};
         } else if(PS5VK_GRAPHICS_SCISSOR_PROBE>=2) {

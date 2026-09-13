@@ -1,10 +1,33 @@
+/*
+ * Copyright (C) 2026 Manuel Pereira
+ * Copyright (C) 2026 BlackBearReloaded
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * The GFX10.3 clamp and fixed-border encodings are adapted from
+ * blackbearreloaded/ps5-opengl, src/gallium/ps5/ps5_screen.c at
+ * 7f9bfabdddb187a11e4401058eba8c9e55194d0a.
+ */
 #include "vk_sampler.h"
 #include "graphics_limits.h"
 static int address_mode(VkSamplerAddressMode mode)
 {
     switch(mode) {
     case VK_SAMPLER_ADDRESS_MODE_REPEAT:return 0;
+    case VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT:return 1;
     case VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE:return 2;
+    case VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER:return 6;
+    default:return -1;
+    }
+}
+static int border_color(VkBorderColor color)
+{
+    switch(color) {
+    case VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK:
+    case VK_BORDER_COLOR_INT_TRANSPARENT_BLACK:return 0;
+    case VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK:
+    case VK_BORDER_COLOR_INT_OPAQUE_BLACK:return 1;
+    case VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE:
+    case VK_BORDER_COLOR_INT_OPAQUE_WHITE:return 2;
     default:return -1;
     }
 }
@@ -23,7 +46,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
         (info->magFilter!=VK_FILTER_NEAREST && info->magFilter!=VK_FILTER_LINEAR) ||
         (info->minFilter!=VK_FILTER_NEAREST && info->minFilter!=VK_FILTER_LINEAR))return VK_ERROR_FEATURE_NOT_PRESENT;
     int u=address_mode(info->addressModeU),v=address_mode(info->addressModeV),w=address_mode(info->addressModeW);
-    if(u<0 || v<0 || w<0)return VK_ERROR_FEATURE_NOT_PRESENT;
+    int border=border_color(info->borderColor);
+    if(u<0 || v<0 || w<0 || border<0)return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Defensive handling beyond the advertised valid-usage budget. Do not
      * count failed allocations or release slots while ownership is retained. */
     if(d->sampler_objects>=PS5VK_MAX_SAMPLERS)return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -36,7 +60,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
      * Xash3D's ps5_gfx1013_build_ssharp, with independent axis/filter inputs. */
     s->words[0]=(uint32_t)u|((uint32_t)v<<3)|((uint32_t)w<<6);
     s->words[2]=((info->magFilter==VK_FILTER_LINEAR?1u:0u)<<20)|
-        ((info->minFilter==VK_FILTER_LINEAR?1u:0u)<<22);
+        ((info->minFilter==VK_FILTER_LINEAR?1u:0u)<<22)|
+        ((info->mipmapMode==VK_SAMPLER_MIPMAP_MODE_LINEAR?2u:1u)<<26);
+    s->words[3]=(uint32_t)border<<30;
     ++d->graphics_objects;++d->sampler_objects;*out=s;return VK_SUCCESS;
 }
 VKAPI_ATTR void VKAPI_CALL vkDestroySampler(VkDevice d,VkSampler s,const VkAllocationCallbacks *a)
