@@ -25032,7 +25032,7 @@
         "note": "the selected storage-width cases exercise the accepted capabilities",
         "status": "not-selected"
       },
-      "capability": "StorageUniformBufferBlock16",
+      "capability": "StorageBuffer16BitAccess",
       "detail": "accepted only when PS5VK_FEATURE_STORAGE_BUFFER_16BIT is advertised (advertised=False), so the gate and the advertisement cannot disagree",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
@@ -25080,7 +25080,7 @@
         "note": "the selected storage-width cases exercise the accepted capabilities",
         "status": "not-selected"
       },
-      "capability": "StorageUniformBufferBlock16",
+      "capability": "StorageBuffer16BitAccess",
       "detail": "accepted only when PS5VK_FEATURE_STORAGE_BUFFER_16BIT is advertised (advertised=True), so the gate and the advertisement cannot disagree",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",

@@ -717,16 +717,34 @@ def _load_sample_count_bits() -> dict[str, int]:
 SAMPLE_COUNT_BITS = _load_sample_count_bits()
 
 
-def _load_spirv_capabilities() -> dict[int, str]:
-    """SPIR-V capability enumerants from the pinned compiler dependency."""
+# SPIR-V capability enumerants handled by the narrow-storage gate. These are
+# stable SPIR-V registry values; the names are confirmed against the pinned
+# compiler header when that optional checkout is present (it is absent in CI,
+# where a hard dependency would make the gate environment-dependent).
+SPIRV_CAPABILITY_NAMES = {
+    22: "Int16",
+    39: "Int8",
+    4433: "StorageBuffer16BitAccess",
+    4434: "UniformAndStorageBuffer16BitAccess",
+    4448: "StorageBuffer8BitAccess",
+    4449: "UniformAndStorageBuffer8BitAccess",
+}
+
+
+def _verify_spirv_capabilities() -> None:
+    """Fail if the pinned enumerants are not real, when the header is present."""
     header = ROOT / "third_party/psbc-reference/src/compiler/spirv/spirv.h"
     if not header.is_file():
-        raise SystemExit(f"{header} is missing; cannot map SPIR-V capability numbers")
-    return {int(value): name[len("SpvCapability"):] for name, value in
-            re.findall(r"\n\s*(SpvCapability[A-Za-z0-9_]+)\s*=\s*(\d+)\s*,", header.read_text())}
+        return
+    present = {int(value) for _name, value in
+               re.findall(r"\n\s*(SpvCapability[A-Za-z0-9_]+)\s*=\s*(\d+)\s*,", header.read_text())}
+    missing = sorted(number for number in SPIRV_CAPABILITY_NAMES if number not in present)
+    if missing:
+        raise SystemExit(f"SPIR-V capability numbers {missing} are not in {header}")
 
 
-SPIRV_CAPABILITIES = _load_spirv_capabilities()
+SPIRV_CAPABILITIES = dict(SPIRV_CAPABILITY_NAMES)
+_verify_spirv_capabilities()
 
 # The SPIR-V capabilities the frontend's narrow-storage gate handles, and the
 # advertisement each one corresponds to. Anything not listed here has no
