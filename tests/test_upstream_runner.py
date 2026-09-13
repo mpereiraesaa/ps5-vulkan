@@ -15,6 +15,7 @@ from cts.upstream_runner import (
 )
 from tools.build_upstream_cts import (
     write_focused_buffer_copy_source,
+    write_focused_robust_buffer_source,
     write_focused_storage_source,
 )
 from tools.check_upstream_selection import (
@@ -377,6 +378,12 @@ class TestUpstreamRunner(unittest.TestCase):
     PUSH_SPECIALIZATION_CASES = {
         "dEQP-VK.pipeline.push_constant.compute_pipeline.simple_test",
         "dEQP-VK.api.pipeline.pipeline_layout.lifetime.destroy_after_end",
+    }
+
+    ROBUST_BUFFER_CASES = {
+        f"dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.{access}.range_{size}"
+        for access in ("oob_storage_read", "oob_storage_write", "oob_uniform_read")
+        for size in ("1_byte", "3_bytes", "4_bytes", "32_bytes")
     }
 
     DEFERRED_SPIRV13_SPECIALIZATION_CASES = {
@@ -825,6 +832,58 @@ void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
         self.assertNotIn('createTestGroup(testCtx, "dedicated_allocation"', generated)
         self.assertIn("CopyBufferToBuffer::iterate", generated)
         self.assertIn("deMemCmp(referenceData, resultData, bufferSize)", generated)
+
+    def test_robust_buffer_selection_and_upstream_factory_are_exact(self):
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        selected = {case["path"] for case in manifest["cases"]
+                    if ".robustness.buffer_access." in case["path"]}
+        self.assertEqual(self.ROBUST_BUFFER_CASES, selected)
+        for case in manifest["cases"]:
+            if case["path"] in selected:
+                self.assertEqual(["robustBufferAccess"], case["features_required"])
+                self.assertEqual("robust-buffer-access", case["category"])
+
+        build = (REPO_ROOT / "tools/build_upstream_cts.py").read_text(encoding="utf-8")
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text(encoding="utf-8")
+        self.assertIn("write_focused_robust_buffer_source", build)
+        self.assertIn("vktRobustnessUtil.cpp", build)
+        self.assertIn("createBufferAccessTests", package)
+
+    def test_robust_buffer_pruning_changes_registration_only_and_fails_closed(self):
+        upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                    "modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp")
+        if not upstream.is_file():
+            self.skipTest("pinned upstream CTS checkout is not present")
+        original = upstream.read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "focused.cpp"
+            write_focused_robust_buffer_source(upstream, destination)
+            generated = destination.read_text(encoding="utf-8")
+            self.assertIn("stage != VK_SHADER_STAGE_COMPUTE_BIT", generated)
+            self.assertIn("shaderTypeNdx != SHADER_TYPE_SCALAR_COPY", generated)
+            self.assertIn("bufferFormat != VK_FORMAT_R32_UINT", generated)
+            # Representative shader and oracle text is not replaced.
+            for needle in ("RobustBufferReadTest::initPrograms",
+                           "RobustBufferWriteTest::createInstance"):
+                self.assertEqual(original.count(needle), generated.count(needle))
+
+            drifted = Path(directory) / "drifted.cpp"
+            drifted.write_text(original.replace(
+                "const VkShaderStageFlagBits stage = bufferAccessStages[stageNdx];",
+                "const VkShaderStageFlagBits chosenStage = bufferAccessStages[stageNdx];",
+                1), encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                write_focused_robust_buffer_source(drifted, destination)
+
+    def test_native_platform_supports_concurrent_logical_device_sessions(self):
+        source = (REPO_ROOT / "native/platform_ps5.c").read_text(encoding="utf-8")
+        self.assertNotIn("if (opened) return VK_ERROR_INITIALIZATION_FAILED", source)
+        self.assertIn("PS5VK_PLATFORM_JOIN users=%u", source)
+        self.assertIn("PS5VK_PLATFORM_LEAVE users=%u", source)
+        self.assertIn("if (opened > 1)", source)
+        self.assertIn("atomic_flag_test_and_set_explicit", source)
+        self.assertLess(source.index("if (opened > 1)"),
+                        source.index("if (budget.used)"))
 
     def test_indirect_dispatch_upstream_factory_body_and_selection_are_pinned(self):
         """Keep the two original indirect compute oracles linked and selected."""

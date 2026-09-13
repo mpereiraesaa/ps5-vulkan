@@ -15,10 +15,16 @@ hardware acceptance.
   use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
   the bound buffer span. This is the implementation basis for the feature, not
   an inference from the GPU name.
-- The original upstream `device_mandatory_features` reporting oracle is in the
-  focused selection and passed twice on PS5 in the exact 94-case build.
-  Executable out-of-bounds robustness cases remain required before the complete
-  access semantics are considered validated.
+- The focused suite contains the original upstream
+  `device_mandatory_features` oracle plus 12 executable compute scalar
+  `R32_UINT` robustness cases: UBO/SSBO OOB reads and SSBO OOB writes over
+  1-, 3-, 4- and 32-byte descriptor ranges. Two exact 106/106 hardware runs
+  passed. Wider scalar/vector formats and vertex-fetch robustness remain
+  separate coverage work; they are not inferred from these cases.
+- Multiple logical devices share one serialized process-level AGC session and
+  direct-memory budget. The module and shared graphics compiler cache are
+  released only after the final device closes; each device still owns and must
+  destroy its Vulkan objects independently.
 
 ## Graphics
 

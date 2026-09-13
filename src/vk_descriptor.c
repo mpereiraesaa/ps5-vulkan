@@ -11,6 +11,19 @@ static void *alloc(VkDevice d, const VkAllocationCallbacks *a, size_t size,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, saved, custom);
 }
 
+static VkBool32 valid_descriptor_stages(VkShaderStageFlags stages)
+{
+    const VkShaderStageFlags core = VK_SHADER_STAGE_VERTEX_BIT |
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+        VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
+        VK_SHADER_STAGE_COMPUTE_BIT;
+    /* VK_SHADER_STAGE_ALL is a reserved convenience value rather than the OR
+     * of today's bits.  Layout visibility does not create a shader stage and
+     * may name stages that no pipeline ultimately consumes. */
+    return stages == VK_SHADER_STAGE_ALL || (stages && !(stages & ~core));
+}
+
 static int indices(VkDescriptorSet set, uint32_t binding, uint32_t element,
                    uint32_t count, uint32_t out[PS5VK_MAX_DESCRIPTORS])
 {
@@ -146,13 +159,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         VkBool32 buffer=b->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
             b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         VkBool32 texel=b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+        if (b->descriptorCount && !valid_descriptor_stages(b->stageFlags))
+            return INVALID;
         if (b->descriptorCount && b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
             !d->uniform_buffer_alignment)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount && (image ? (!d->graphics_enabled || b->pImmutableSamplers ||
                 b->stageFlags!=VK_SHADER_STAGE_FRAGMENT_BIT) :
-                (!(buffer||texel) || b->pImmutableSamplers ||
-                 (b->stageFlags & ~VK_SHADER_STAGE_COMPUTE_BIT))))
+                (!(buffer||texel) || b->pImmutableSamplers)))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount > PS5VK_MAX_DESCRIPTORS - signature.count)
             return VK_ERROR_FEATURE_NOT_PRESENT;

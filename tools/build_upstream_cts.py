@@ -207,6 +207,49 @@ def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
         old_factory, new_factory), encoding="utf-8")
 
 
+def write_focused_robust_buffer_source(source: Path, destination: Path) -> None:
+    """Prune robust-buffer registration to the audited Vulkan 1.0 subset.
+
+    The selected cases retain upstream's shaders, resource setup, support
+    checks and result oracles.  Only the three registration loops are guarded
+    so the PS5 title does not construct the complete robustness tree before
+    the command-line case filter is applied.
+    """
+    text = source.read_text(encoding="utf-8")
+    replacements = {
+        """        const VkShaderStageFlagBits stage = bufferAccessStages[stageNdx];
+        de::MovePtr<tcu::TestCaseGroup> stageTests""":
+        """        const VkShaderStageFlagBits stage = bufferAccessStages[stageNdx];
+        if (stage != VK_SHADER_STAGE_COMPUTE_BIT)
+            continue;
+        de::MovePtr<tcu::TestCaseGroup> stageTests""",
+        """        for (int shaderTypeNdx = 0; shaderTypeNdx < SHADER_TYPE_COUNT; shaderTypeNdx++)
+        {
+            const VkFormat *formats;""":
+        """        for (int shaderTypeNdx = 0; shaderTypeNdx < SHADER_TYPE_COUNT; shaderTypeNdx++)
+        {
+            if ((ShaderType)shaderTypeNdx != SHADER_TYPE_SCALAR_COPY)
+                continue;
+            const VkFormat *formats;""",
+        """                const VkFormat bufferFormat = formats[formatNdx];
+
+                rangeMultiplier""":
+        """                const VkFormat bufferFormat = formats[formatNdx];
+                if (bufferFormat != VK_FORMAT_R32_UINT)
+                    continue;
+
+                rangeMultiplier""",
+    }
+    for old, new in replacements.items():
+        if text.count(old) != 1:
+            raise SystemExit(
+                f"focused robust-buffer registration layout drift in {source}: "
+                f"expected one registration site, found {text.count(old)}")
+        text = text.replace(old, new)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(text, encoding="utf-8")
+
+
 def object_is_current(obj: Path, dep_file: Path, stamp: Path,
                       fingerprint: str) -> bool:
     """Reuse an object only when its command, sources and headers are unchanged.
@@ -316,6 +359,9 @@ def main():
     write_focused_buffer_copy_source(
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp",
         focused_sources / "vktApiCopiesAndBlittingTests.cpp")
+    write_focused_robust_buffer_source(
+        cts_root / "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp",
+        focused_sources / "vktRobustnessBufferAccessTests.cpp")
 
     # Amber's Vulkan engine includes generated function wrappers. Regenerate them
     # from the pinned Vulkan registry so the amber objects match the CTS headers.
@@ -725,6 +771,10 @@ def main():
         # is compiled directly from the pinned checkout; no body or oracle is
         # copied into the integration.
         cts_root / "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp",
+        # Original Vulkan 1.0 robustBufferAccess bodies and oracles, with only
+        # registration pruned to compute/scalar_copy/R32_UINT.
+        focused_sources / "vktRobustnessBufferAccessTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/robustness/vktRobustnessUtil.cpp",
         # Genuine upstream push-constant factory. The focused package registers
         # the complete group and cases.txt selects only the audited compute leaf.
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelinePushConstantTests.cpp",

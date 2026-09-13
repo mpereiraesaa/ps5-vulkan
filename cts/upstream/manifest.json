@@ -772,6 +772,78 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Original upstream multi-state transfer non-interference body records all core dynamic setters after each operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_1_byte",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1782",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-read body and result oracle, with a one-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_3_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1782",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-read body and result oracle, with a three-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_4_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1782",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-read body and result oracle, with one complete uint descriptor element."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_32_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1782",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-read body and result oracle, with a 32-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_1_byte",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1786",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-write body and guard-region oracle, with a one-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_3_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1786",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-write body and guard-region oracle, with a three-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_4_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1786",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-write body and guard-region oracle, with one complete uint descriptor element."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_32_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1786",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-write body and guard-region oracle, with a 32-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_1_byte",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with a one-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_3_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with a three-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_4_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with one complete uint descriptor element."
+    },
+    {
+      "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_32_bytes",
+      "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
+      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with a 32-byte descriptor range."
     }
   ],
   "diagnostics": [

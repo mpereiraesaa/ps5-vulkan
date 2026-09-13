@@ -13,6 +13,7 @@ static struct ps5vk_program_library ps5vk_compiled_library={0};
 #include "device_profile_report.h"
 #include "vk_queue.h"
 #include <string.h>
+#include <stdatomic.h>
 #include <unistd.h>
 #ifdef PS5VK_GRAPHICS_API
 #if !defined(PS5VK_RUNTIME_GRAPHICS) || !PS5VK_RUNTIME_GRAPHICS
@@ -54,7 +55,20 @@ void ps5vk_native_graphics_queue_configure(VkDevice);
 #define HEAP_BYTES (UINT64_C(64) * 1024 * 1024)
 #endif
 static struct ps5vk_native_memory_budget budget = {HEAP_BYTES, 0};
+/* AGC and its direct-memory budget are process resources, while Vulkan permits
+ * more than one logical device for a physical device.  Serialize the short
+ * process-session transitions and keep the native module alive until the last
+ * VkDevice releases it. */
+static atomic_flag session_lock = ATOMIC_FLAG_INIT;
 static unsigned opened;
+static void lock_session(void)
+{
+    while (atomic_flag_test_and_set_explicit(&session_lock, memory_order_acquire)) {}
+}
+static void unlock_session(void)
+{
+    atomic_flag_clear_explicit(&session_lock, memory_order_release);
+}
 static void retain(const char *reason)
 {
     ps5log_printf(PS5LOG_ERR, "PS5VK_PLATFORM_RETAIN reason=%s", reason);
@@ -64,21 +78,39 @@ static void retain(const char *reason)
 static VkResult open_backend(void *unused, struct ps5vk_memory_backend *memory)
 {
     (void)unused;
-    if (opened) return VK_ERROR_INITIALIZATION_FAILED;
+    lock_session();
+    if (opened) {
+        ++opened;
+        *memory =
+#ifdef PS5VK_GRAPHICS_API
+            ps5vk_native_graphics_memory_backend();
+#else
+            ps5vk_native_memory_backend();
+#endif
+        memory->context = &budget;
+        ps5log_printf(PS5LOG_INFO, "PS5VK_PLATFORM_JOIN users=%u", opened);
+        unlock_session();
+        return VK_SUCCESS;
+    }
     int rc = sceSysmoduleLoadModuleInternal(0x80000094u);
     ps5log_printf(PS5LOG_INFO, "PS5VK_PLATFORM_LOAD rc=%d", rc);
-    if (rc) return VK_ERROR_INITIALIZATION_FAILED;
+    if (rc) {
+        unlock_session();
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
     uint64_t state = 0;
     rc = sceAgcInit(&state, sizeof(state));
     ps5log_printf(PS5LOG_INFO, "PS5VK_PLATFORM_INIT rc=%d", rc);
     if (rc) {
         if (sceSysmoduleUnloadModuleInternal(0x80000094u)) retain("init-rollback-unload");
+        unlock_session();
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
     graphics_cache=ps5vk_compilation_cache_create(32,4u*1024u*1024u);
     if(!graphics_cache) {
         if(sceSysmoduleUnloadModuleInternal(0x80000094u))retain("cache-rollback-unload");
+        unlock_session();
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 #endif
@@ -90,11 +122,27 @@ static VkResult open_backend(void *unused, struct ps5vk_memory_backend *memory)
         ps5vk_native_memory_backend();
 #endif
     memory->context = &budget;
+    unlock_session();
     return VK_SUCCESS;
 }
 static void close_backend(struct ps5vk_memory_backend *memory)
 {
-    if (!opened || memory->context != &budget || budget.used) retain("live-memory-on-close");
+    lock_session();
+    if (!opened || memory->context != &budget) {
+        unlock_session();
+        retain("invalid-session-close");
+    }
+    if (opened > 1) {
+        --opened;
+        memset(memory, 0, sizeof(*memory));
+        ps5log_printf(PS5LOG_MARK, "PS5VK_PLATFORM_LEAVE users=%u", opened);
+        unlock_session();
+        return;
+    }
+    if (budget.used) {
+        unlock_session();
+        retain("live-memory-on-close");
+    }
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
     ps5vk_compilation_cache_destroy(graphics_cache);graphics_cache=NULL;
     ps5log_line(PS5LOG_MARK,"PS5VK_RUNTIME_GRAPHICS_CACHE_DESTROYED");
@@ -111,6 +159,7 @@ static void close_backend(struct ps5vk_memory_backend *memory)
     if (rc) retain("unload");
 #endif
     opened = 0; memset(memory, 0, sizeof(*memory));
+    unlock_session();
 }
 static void configure(VkDevice d)
 {

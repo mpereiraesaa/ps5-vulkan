@@ -484,9 +484,33 @@ Two independent native runs were captured:
 
 Each passed 94/94 genuine upstream cases with zero failures, unsupported cases
 or skips, complete QPA reconstruction, exit code zero and verified Close Game.
-The new case proves mandatory feature reporting and negotiation. Buffer SRD
-bounds are the implementation basis, but executable out-of-bounds CTS remains
-required before claiming complete robustness semantics.
+That earlier case proves mandatory feature reporting and negotiation. It did
+not by itself establish executable semantics; the next subsection records the
+selected executable buffer coverage added afterward.
+
+### Executable buffer robustness
+
+The next exact payload added 12 original upstream compute scalar `R32_UINT`
+robust-buffer cases, covering UBO/SSBO OOB reads and SSBO OOB writes at 1-, 3-,
+4- and 32-byte descriptor ranges. The unchanged upstream tests initially found
+two pre-execution defects: only one native logical device could join the AGC
+session, and descriptor layouts rejected `VK_SHADER_STAGE_ALL`. Both defects
+are now covered by host regressions and native CTS execution.
+
+The corrected candidate used SELF SHA-256
+`43dd8803a47028ac5086434771d668e119aa662b4483581e72bc3e7ce571a175`
+and selection SHA-256
+`344a278e325846f6918903e48b3262e2551178aab2caa022c67e8dd3539f5b62`:
+
+- `20260913T183926998Z_PPSA99994_upstream-cts_0x53a3233107e6`, QPA SHA-256
+  `8137f2254731850c9b70d59119875df82c12db16815a8b544fe2f1f5847161da`
+- `20260913T183952333Z_PPSA99994_upstream-cts_0x53a909315ae1`, QPA SHA-256
+  `046002260dfa35dd7bf3db02349368eac110a253f44ef8c7a2f587712220b4f0`
+
+Each reconstructed a complete report and passed 106/106 with zero failures,
+unsupported cases or skips, exit code zero and verified Close Game. This closes
+the selected scalar compute buffer semantics only; vector, other-format and
+vertex-access permutations remain unclaimed until selected and measured.
 
 ## Vulkan 1.0 device-reporting audit (2026-09-13)
 

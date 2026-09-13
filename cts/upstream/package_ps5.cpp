@@ -16,6 +16,7 @@
 #include "vktPipelineCacheTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
+#include "vktRobustnessBufferAccessTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -126,6 +127,16 @@ void FocusedVkTestPackage::init(void)
         de::MovePtr<tcu::TestCaseGroup> memGroup(new tcu::TestCaseGroup(m_testCtx, "memory"));
         memGroup->addChild(vkt::memory::createMappingTests(m_testCtx));
         addChild(memGroup.release());
+    }
+
+    // robustness.buffer_access: original upstream Vulkan 1.0 robust-buffer
+    // bodies and result oracles.  The generated build copy prunes registration
+    // to compute/scalar_copy/R32_UINT; cases.txt remains the leaf filter.
+    {
+        de::MovePtr<tcu::TestCaseGroup> robustnessGroup(
+            new tcu::TestCaseGroup(m_testCtx, "robustness"));
+        robustnessGroup->addChild(vkt::robustness::createBufferAccessTests(m_testCtx));
+        addChild(robustnessGroup.release());
     }
 
     // compute.basic group

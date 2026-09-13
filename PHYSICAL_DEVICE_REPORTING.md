@@ -131,9 +131,11 @@ creation path accepts that bit through either Vulkan 1.0 feature input form and
 rejects every feature it did not report. Buffer SRDs encode the descriptor's
 real byte extent with GFX10 raw OOB selection, and vertex SRDs remain bounded by
 the bound buffer span. The focused upstream `device_mandatory_features` case
-checks the mandatory reporting rule and passed in two exact 94/94 native runs.
-Reporting alone is not treated as proof of the complete robustness semantics,
-which still require selected executable CTS cases for out-of-bounds accesses.
+checks the mandatory reporting rule. Twelve original executable upstream cases
+also validate compute scalar `R32_UINT` UBO/SSBO OOB reads and SSBO OOB writes
+at 1-, 3-, 4- and 32-byte ranges. Two exact 106/106 native runs passed that
+combined selection. This evidence does not silently generalize to unselected
+vector, format or vertex-fetch cases.
 
 The current graphics format matrix is deliberately small:
 

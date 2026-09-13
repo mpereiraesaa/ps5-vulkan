@@ -102,8 +102,10 @@ static void negative(void)
 {
     struct VkDevice_T d = {0};
     VkDescriptorSetLayoutBinding bindings[2] = {
-        {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1},
-        {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1}
+        {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1,
+         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+        {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1,
+         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT}
     };
     VkDescriptorSetLayoutCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount = 2, .pBindings = bindings}; VkDescriptorSetLayout l;
@@ -115,7 +117,17 @@ static void negative(void)
     assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &l) == VK_ERROR_FEATURE_NOT_PRESENT);
     bindings[0].descriptorCount = 0;
     assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &l) == VK_SUCCESS);
-    assert(!l->signature.count); vkDestroyDescriptorSetLayout(&d, l, NULL);
+    vkDestroyDescriptorSetLayout(&d, l, NULL);
+    bindings[0].descriptorCount = 1;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[0].stageFlags = VK_SHADER_STAGE_ALL;
+    assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &l) == VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(&d, l, NULL);
+    bindings[0].stageFlags = 0;
+    assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &l) != VK_SUCCESS && !l);
+    bindings[0].stageFlags = UINT32_C(0x40000000);
+    assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &l) != VK_SUCCESS && !l);
+    bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     bindings[0]=(VkDescriptorSetLayoutBinding){0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,
         VK_SHADER_STAGE_COMPUTE_BIT,NULL};
     assert(vkCreateDescriptorSetLayout(&d,&ci,NULL,&l)==VK_ERROR_FEATURE_NOT_PRESENT && !l);

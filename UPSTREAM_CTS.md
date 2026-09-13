@@ -675,5 +675,37 @@ Two independent launches produced these ps5log/1 runs:
 Both reconstructed complete QPA reports, passed 94/94 with zero `Fail`,
 `NotSupported` or `Skip`, returned exit code zero and stopped through verified
 Close Game. This proves the reported mandatory bit and its device-creation
-contract on the exact build. It does not prove every out-of-bounds access
-semantic; original executable robustness cases are the next required step.
+contract on that exact build. At that stage it did not prove out-of-bounds
+execution; the following expansion closes the selected scalar buffer subset.
+
+## Executable robust-buffer expansion
+
+The current manifest contains 106 acceptance cases. It adds 12 unchanged
+upstream `robustness.buffer_access.compute.scalar_copy.r32_uint` leaves:
+out-of-bounds UBO and SSBO reads plus SSBO writes, each at 1-, 3-, 4- and
+32-byte descriptor ranges. Registration alone is pruned to this bounded family;
+the Khronos shaders, device/resource setup, support checks and result oracles
+remain unchanged.
+
+The first diagnostic exposed two independent driver gaps before shader
+execution: the native backend rejected the CTS auxiliary logical device, then
+descriptor layouts rejected the valid `VK_SHADER_STAGE_ALL` visibility mask.
+The backend now reference-counts a serialized process AGC session across
+logical devices, and descriptor layouts accept valid core stage masks while
+pipeline creation remains responsible for executable-stage support.
+
+Two independent launches of the corrected candidate used SELF SHA-256
+`43dd8803a47028ac5086434771d668e119aa662b4483581e72bc3e7ce571a175`
+and selection SHA-256
+`344a278e325846f6918903e48b3262e2551178aab2caa022c67e8dd3539f5b62`:
+
+- `20260913T183926998Z_PPSA99994_upstream-cts_0x53a3233107e6`
+- `20260913T183952333Z_PPSA99994_upstream-cts_0x53a909315ae1`
+
+Both reconstructed all 106 results, reported 106 `Pass` with zero `Fail`,
+`NotSupported` or `Skip`, returned exit code zero and stopped through verified
+Close Game. Their QPA SHA-256 values are
+`8137f2254731850c9b70d59119875df82c12db16815a8b544fe2f1f5847161da`
+and `046002260dfa35dd7bf3db02349368eac110a253f44ef8c7a2f587712220b4f0`.
+This is executable evidence for the selected scalar buffer family, not a Vulkan
+conformance claim or evidence for every robustness permutation.
