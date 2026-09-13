@@ -184,9 +184,31 @@ static void test_failures_and_allocators(void)
     bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; bi.size = UINT64_MAX;
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_OUT_OF_DEVICE_MEMORY);
 }
+static void test_commitment(void)
+{
+    struct mock mock = {0}; struct VkDevice_T d = device(&mock);
+    VkDeviceMemory m = memory(&d, 1024);
+    VkDeviceSize committed = 1024;
+    /* The physical profile exposes no lazily allocated memory type;
+     * verify ordinary allocations are never reported as lazily committed. */
+    vkGetDeviceMemoryCommitment(&d, m, &committed);
+    assert(committed == 0);
+    vkGetDeviceMemoryCommitment(&d, m, NULL); /* no crash */
+    committed = 999;
+    vkGetDeviceMemoryCommitment(NULL, m, &committed);
+    assert(committed == 0);
+    committed = 999;
+    vkGetDeviceMemoryCommitment(&d, NULL, &committed);
+    assert(committed == 0);
+    struct VkDevice_T other_d = device(&mock);
+    committed = 999;
+    vkGetDeviceMemoryCommitment(&other_d, m, &committed);
+    assert(committed == 0);
+    vkFreeMemory(&d, m, NULL);
+}
 int main(void)
 {
-    test_binding(); test_mapping(); test_failures_and_allocators();
+    test_binding(); test_mapping(); test_failures_and_allocators(); test_commitment();
     puts("Vulkan memory contracts: pass (host mock only, no GPU evidence)");
     return 0;
 }

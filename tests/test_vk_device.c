@@ -270,6 +270,30 @@ static void lifecycle(void)
     CHECK_GRAPHICS(vkCmdCopyBufferToImage);
     CHECK_GRAPHICS(vkCmdCopyImageToBuffer);
 #undef CHECK_GRAPHICS
+    /* Vulkan 1.0 bookkeeping discovery: identity, scopes, and availability */
+#define CHECK_BOOKKEEPING_DEV(name) do { \
+    assert(vkGetInstanceProcAddr(i, #name) == (PFN_vkVoidFunction)name); \
+    assert(vkGetDeviceProcAddr(d, #name) == (PFN_vkVoidFunction)name); \
+    assert(!vkGetInstanceProcAddr(NULL, #name)); \
+    assert(!vkGetDeviceProcAddr(NULL, #name)); \
+} while (0)
+    CHECK_BOOKKEEPING_DEV(vkGetImageSubresourceLayout);
+    CHECK_BOOKKEEPING_DEV(vkGetRenderAreaGranularity);
+    CHECK_BOOKKEEPING_DEV(vkGetDeviceMemoryCommitment);
+    CHECK_BOOKKEEPING_DEV(vkResetDescriptorPool);
+#undef CHECK_BOOKKEEPING_DEV
+    assert(vkGetInstanceProcAddr(i, "vkEnumerateDeviceLayerProperties") == (PFN_vkVoidFunction)vkEnumerateDeviceLayerProperties);
+    assert(!vkGetDeviceProcAddr(d, "vkEnumerateDeviceLayerProperties"));
+    assert(!vkGetInstanceProcAddr(NULL, "vkEnumerateDeviceLayerProperties"));
+
+    uint32_t layer_count = 10;
+    assert(vkEnumerateDeviceLayerProperties(NULL, &layer_count, NULL) == VK_ERROR_UNKNOWN);
+    assert(vkEnumerateDeviceLayerProperties(p, NULL, NULL) == VK_ERROR_UNKNOWN);
+    assert(vkEnumerateDeviceLayerProperties(p, &layer_count, NULL) == VK_SUCCESS && layer_count == 0);
+    VkLayerProperties layer_props[2];
+    layer_count = 2;
+    assert(vkEnumerateDeviceLayerProperties(p, &layer_count, layer_props) == VK_SUCCESS && layer_count == 0);
+
     assert(!vkGetDeviceProcAddr(d, "vkCreateSwapchainKHR"));
     assert(!vkGetDeviceProcAddr(d, "vkGetPhysicalDeviceProperties"));
     PFN_vkCreateSampler create_sampler = (PFN_vkCreateSampler)vkGetDeviceProcAddr(d, "vkCreateSampler");

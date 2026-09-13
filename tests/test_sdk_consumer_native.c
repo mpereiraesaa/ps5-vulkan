@@ -53,6 +53,22 @@ int main(void)
     VkPipeline pipeline=VK_NULL_HANDLE;
     assert(vkCreateGraphicsPipelines(VK_NULL_HANDLE,VK_NULL_HANDLE,0,NULL,NULL,&pipeline)!=VK_SUCCESS);
 
+    /* Force linkage of the newly exposed Vulkan 1.0 bookkeeping entry points. */
+    uint32_t layer_count = 0;
+    assert(vkEnumerateDeviceLayerProperties(dev, &layer_count, NULL) == VK_SUCCESS);
+    assert(layer_count == 0);
+    VkDeviceSize committed = 1234;
+    vkGetDeviceMemoryCommitment(VK_NULL_HANDLE, VK_NULL_HANDLE, &committed);
+    assert(committed == 0);
+    VkExtent2D granularity = {99, 99};
+    vkGetRenderAreaGranularity(VK_NULL_HANDLE, VK_NULL_HANDLE, &granularity);
+    assert(granularity.width == 0 && granularity.height == 0);
+    VkSubresourceLayout layout = {.rowPitch = 1234};
+    VkImageSubresource sub = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    vkGetImageSubresourceLayout(VK_NULL_HANDLE, VK_NULL_HANDLE, &sub, &layout);
+    assert(layout.rowPitch == 0);
+    assert(vkResetDescriptorPool(VK_NULL_HANDLE, VK_NULL_HANDLE, 0) != VK_SUCCESS);
+
     /* 3. Verify public presentation API functions from <ps5vk/ps5vk_present.h> */
     struct ps5vk_present_config pconfig = {
         .width = 1920,

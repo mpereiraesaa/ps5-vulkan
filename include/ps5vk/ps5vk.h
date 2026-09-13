@@ -124,6 +124,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(
     uint32_t* pPropertyCount,
     VkExtensionProperties* pProperties);
 
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(
+    VkPhysicalDevice physicalDevice,
+    uint32_t* pPropertyCount,
+    VkLayerProperties* pProperties);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(
     VkPhysicalDevice physicalDevice,
     const VkDeviceCreateInfo* pCreateInfo,
@@ -186,6 +191,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkInvalidateMappedMemoryRanges(
     uint32_t memoryRangeCount,
     const VkMappedMemoryRange* pMemoryRanges);
 
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryCommitment(
+    VkDevice device,
+    VkDeviceMemory memory,
+    VkDeviceSize* pCommittedMemoryInBytes);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateBuffer(
     VkDevice device,
     const VkBufferCreateInfo* pCreateInfo,
@@ -234,6 +244,12 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements(
     VkDevice device,
     VkImage image,
     VkMemoryRequirements* pMemoryRequirements);
+
+VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(
+    VkDevice device,
+    VkImage image,
+    const VkImageSubresource* pSubresource,
+    VkSubresourceLayout* pLayout);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(
     VkDevice device,
@@ -307,6 +323,11 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyRenderPass(
     VkRenderPass renderPass,
     const VkAllocationCallbacks* pAllocator);
 
+VKAPI_ATTR void VKAPI_CALL vkGetRenderAreaGranularity(
+    VkDevice device,
+    VkRenderPass renderPass,
+    VkExtent2D* pGranularity);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(
     VkDevice device,
     const VkFramebufferCreateInfo* pCreateInfo,
@@ -349,6 +370,11 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorPool(
     VkDevice device,
     VkDescriptorPool descriptorPool,
     const VkAllocationCallbacks* pAllocator);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkResetDescriptorPool(
+    VkDevice device,
+    VkDescriptorPool descriptorPool,
+    VkDescriptorPoolResetFlags flags);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(
     VkDevice device,

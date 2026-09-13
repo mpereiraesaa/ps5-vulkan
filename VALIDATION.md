@@ -285,3 +285,20 @@ streams and were confirmed absent after Close Game. This evidence covers only
 the two advertised storage-buffer feature bits. It does not establish
 `shaderInt8`, `shaderInt16`, float16, uniform/push/input-output narrow storage,
 general Vulkan 1.1 support or Vulkan conformance.
+
+## Core Vulkan 1.0 command surface parity gate
+
+To prevent regressions and enforce parity with the Khronos Vulkan 1.0 core specification,
+`tools/check_command_surface.py` validates the public driver surface against the pinned
+Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
+
+- Derives the 137 mandatory Vulkan 1.0 core commands.
+- Audits 1:1 symmetry across public headers (`include/ps5vk/ps5vk.h`), static dispatch
+  tables (`src/vk_dispatch.c`), and implementation symbols (`src/*.c`).
+- Fails closed on any unexpected drift, asymmetry (e.g. declared in public header but un-dispatched,
+  or dispatched without implementation), or regression in fully wired commands (91 fully wired
+  commands, with all 46 unimplemented commands cataloged into strict categorical deficit buckets).
+- Enforced on host test runs via `make check` and verified by unit tests in
+  `tests/test_command_surface.py` (which includes negative test fixtures asserting failure on
+  missing dispatch entries, omitted declarations, or bookkeeping regressions).
+
