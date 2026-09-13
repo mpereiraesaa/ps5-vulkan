@@ -242,7 +242,8 @@ reach the AGC backend, signals publish only on retirement, and the fence belongs
 only to the final segment.
 
 Two independent launches of the identical upstream payload passed **48/48**
-original cases, including `binary_semaphore.one_queue`, the 32,768-link
+original cases in the synchronization validation selection, including
+`binary_semaphore.one_queue`, the 32,768-link
 `binary_semaphore.chain`, all four selected event cases and the previous
 42-case selection. Both reconstructed complete QPA reports, reported exit zero
 and zero live platform allocations, and passed system Close Game.
@@ -263,7 +264,9 @@ set→wait→reset chain, a two-record binary signal/wait/consume submission and
 the existing deterministic compute/graphics readbacks. Run IDs
 `20260913T073253015Z_PPSA99994_ps5vk_0x2f437088c857` and
 `20260913T073307544Z_PPSA99994_ps5vk_0x2f46d27bd3a1` passed the strict verifier
-and independent Close Game checks. This is focused native evidence, not a full
+and independent Close Game checks. The 48-case receipt predates the separately
+validated pipeline-cache case; the combined 49-case manifest has not yet been
+run as one hardware selection. This is focused native evidence, not a full
 synchronization or Vulkan conformance claim.
 
 ## Independent native SDK consumer validation

@@ -44,8 +44,8 @@ class TestCommandSurfaceParity(unittest.TestCase):
             self.assertIn(cmd, fully_wired, f"Required bookkeeping command {cmd} is not in fully wired surface")
 
     def test_sync_objects_are_fully_wired(self):
-        supported = set(audit_command_surface(REPO_ROOT)["supported"])
-        self.assertTrue(REQUIRED_SYNC_OBJECT_COMMANDS <= supported)
+        fully_wired = set(audit_command_surface(REPO_ROOT)["fully_wired"])
+        self.assertTrue(REQUIRED_SYNC_OBJECT_COMMANDS <= fully_wired)
 
 
 class TestCommandSurfaceNegativeFixtures(unittest.TestCase):
@@ -122,12 +122,12 @@ class TestCommandSurfaceNegativeFixtures(unittest.TestCase):
         """Simulate adding an unimplemented command to the public header."""
         header_path = self.mock_root / "include/ps5vk/ps5vk.h"
         content = header_path.read_text()
-        content += "\nVKAPI_ATTR VkResult VKAPI_CALL vkCreateQueryPool(VkDevice d, const VkQueryPoolCreateInfo* i, const VkAllocationCallbacks* a, VkQueryPool* q);\n"
+        content += "\nVKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(VkQueue q, uint32_t n, const VkBindSparseInfo* i, VkFence f);\n"
         header_path.write_text(content)
 
         result = audit_command_surface(self.mock_root)
         self.assertFalse(result["passed"])
-        self.assertIn("vkCreateQueryPool", result["public_not_dispatch"])
+        self.assertIn("vkQueueBindSparse", result["public_not_dispatch"])
 
 
 if __name__ == "__main__":

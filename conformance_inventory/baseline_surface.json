@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "29d39048908277090295ece534c001cfd7b24729",
-  "inspected_commit": "29d39048908277090295ece534c001cfd7b24729",
+  "baseline_commit": "0fe1da67605e84c4f286bfebec773382f7caa878",
+  "inspected_commit": "a3b4d30dc2414fa33d0353e9965698efbf4ffb9d",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 106,
-    "dispatched": 106,
-    "public_header": 106,
+    "entry_points": 116,
+    "dispatched": 116,
+    "public_header": 116,
     "implementation_only": 0
   },
   "entry_points": [
@@ -184,6 +184,24 @@
       "observed": null
     },
     {
+      "name": "vkCmdResetEvent",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetEvent",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCmdSetScissor",
       "files": [
         "src/vk_command.c"
@@ -200,6 +218,15 @@
       "dispatch_scope": "DEVICE",
       "public_header": true,
       "observed": null
+    },
+    {
+      "name": "vkCmdWaitEvents",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Records validated event execution and memory dependencies; queue segmentation retires frontend event transitions around native jobs. Evidence: src/vk_command.c, src/vk_queue.c."
     },
     {
       "name": "vkCreateBuffer",
@@ -263,6 +290,15 @@
       "dispatch_scope": "INSTANCE",
       "public_header": true,
       "observed": "Accepts only the enumerated narrow-storage extensions and exact supported feature structs; unsupported features, unknown chains and invalid booleans fail closed. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkCreateEvent",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Creates a device-parented Vulkan 1.0 event with separate host and recorded device transitions. Evidence: src/vk_sync.c, src/vk_command.c, src/vk_queue.c."
     },
     {
       "name": "vkCreateFence",
@@ -364,6 +400,15 @@
       "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_sampler.c, include/ps5vk/ps5vk.h."
     },
     {
+      "name": "vkCreateSemaphore",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Creates a device-parented Vulkan 1.0 binary semaphore; queue wait/signal semantics are implemented in src/vk_queue.c. Evidence: src/vk_sync.c, src/vk_queue.c."
+    },
+    {
       "name": "vkCreateShaderModule",
       "files": [
         "src/vk_pipeline.c"
@@ -421,6 +466,15 @@
       "name": "vkDestroyDevice",
       "files": [
         "src/vk_device.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyEvent",
+      "files": [
+        "src/vk_sync.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -520,6 +574,15 @@
       "name": "vkDestroySampler",
       "files": [
         "src/vk_sampler.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroySemaphore",
+      "files": [
+        "src/vk_sync.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -664,6 +727,15 @@
       "name": "vkGetDeviceQueue",
       "files": [
         "src/vk_device.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetEventStatus",
+      "files": [
+        "src/vk_sync.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -931,9 +1003,27 @@
       "observed": null
     },
     {
+      "name": "vkResetEvent",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkResetFences",
       "files": [
         "src/vk_fence.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkSetEvent",
+      "files": [
+        "src/vk_sync.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,

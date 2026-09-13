@@ -496,10 +496,7 @@ class TestUpstreamRunner(unittest.TestCase):
         self.assertIn("vktSynchronizationBasicSemaphoreTests.cpp", builder)
 
     def test_synchronization_evidence_digests_do_not_drift(self):
-        """Keep public evidence summaries tied to the selection and local receipts."""
-        manifest = json.loads(MANIFEST_PATH.read_text())
-        case_list = "\n".join(case["path"] for case in manifest["cases"]) + "\n"
-        selection_hash = hashlib.sha256(case_list.encode("utf-8")).hexdigest()
+        """Keep the historical synchronization evidence tied to its receipts."""
 
         upstream = (REPO_ROOT / "UPSTREAM_CTS.md").read_text(encoding="utf-8")
         upstream = upstream.split(
@@ -509,8 +506,13 @@ class TestUpstreamRunner(unittest.TestCase):
         validation = validation.split(
             "### Vulkan 1.0 binary semaphores and events", 1)[1]
         validation = validation.split("\n## ", 1)[0]
-        self.assertIn(selection_hash, upstream)
-        self.assertIn(selection_hash, validation)
+        digest_pattern = r"Selection SHA-256:\s*`([0-9a-f]{64})`"
+        upstream_match = re.search(digest_pattern, upstream)
+        validation_match = re.search(digest_pattern, validation)
+        self.assertIsNotNone(upstream_match)
+        self.assertIsNotNone(validation_match)
+        selection_hash = upstream_match.group(1)
+        self.assertEqual(selection_hash, validation_match.group(1))
 
         receipts = REPO_ROOT / "private-captures/events-semaphores"
         if not receipts.is_dir():

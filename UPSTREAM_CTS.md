@@ -200,8 +200,9 @@ require a `D16_UNORM` depth attachment this profile does not support; their
 oracles are reproduced as host tests in `tests/test_pipeline_cache.c`.
 ### Binary semaphore and event expansion (2026-09-13)
 
-The current selection contains **48 original upstream cases**. Six new cases
-retain their pinned factories, bodies and oracles: host and device event
+The synchronization validation selection contained **48 original upstream
+cases**. Six new cases retained their pinned factories, bodies and oracles:
+host and device event
 set/reset, event dependencies inside one submit and across submissions, a
 two-record one-queue binary semaphore signal/wait, and the 32,768-link binary
 semaphore chain.
@@ -216,7 +217,10 @@ identity and complete QPA reconstruction, reached exit code zero and
 - QPA SHA-256: `c8ac547bd58b28d20c65558bbdaae29046aef883543ca91f7d472de875c24c31`
   and `685714b9a80d6fd289ee0cfff206d7e2d04d968b63cd9f9170d9d7ca687a2fe2`
 
-The selected cases establish only the single-queue Vulkan 1.0 paths they run.
+That 48-case receipt predates the independently validated pipeline-cache case.
+The combined manifest now contains 49 cases, but no 49-case hardware run is
+claimed. The selected synchronization cases establish only the single-queue
+Vulkan 1.0 paths they ran.
 Multi-queue, secondary command buffers, typed/timeline semaphores and
 synchronization2 remain excluded and are not inferred from these results.
 
