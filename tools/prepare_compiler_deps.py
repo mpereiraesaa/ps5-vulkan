@@ -12,7 +12,7 @@ DEPS = [
         "name": "opengnm-psbc",
         "dest": ROOT / "third_party/psbc-reference",
         "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
-        "pin": "ccd03e00aee48978d9afdcf1cb1da2cbfd9a4cd4",
+        "pin": "97b38cf040bb1ea8a0e3b3764e49d0be1b37e296",
     },
     {
         "name": "opengnm",

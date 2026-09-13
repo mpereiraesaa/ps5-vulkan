@@ -123,6 +123,29 @@ def parse_depfile(path: Path) -> List[str]:
     return deps
 
 
+def write_focused_storage_source(source: Path, destination: Path,
+                                 allowed_names: tuple[str, ...],
+                                 expected_sites: int) -> None:
+    """Generate a registration-pruned copy of one pinned upstream module.
+
+    Shader assembly, resource construction and oracle code remain byte-for-byte
+    upstream.  Only the final addChild site is guarded, so cases outside the
+    audited storage-only subset are destroyed after construction instead of
+    accumulating in the title's small application heap while dEQP enumerates
+    the package tree.
+    """
+    text = source.read_text(encoding="utf-8")
+    needle = "group->addChild(new SpvAsmComputeShaderCase(testCtx, testName.c_str(), spec));"
+    if text.count(needle) != expected_sites:
+        raise SystemExit(
+            f"focused storage registration layout drift in {source}: "
+            f"expected {expected_sites} addChild sites, found {text.count(needle)}")
+    condition = " || ".join(f'testName == "{name}"' for name in allowed_names)
+    replacement = f"if ({condition})\n                {needle}"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(text.replace(needle, replacement), encoding="utf-8")
+
+
 def object_is_current(obj: Path, dep_file: Path, stamp: Path,
                       fingerprint: str) -> bool:
     """Reuse an object only when its command, sources and headers are unchanged.
@@ -215,6 +238,21 @@ def main():
     for d in (out, obj_dir, dist / "sce_sys", dist / "sce_module", out / "stubs"):
         d.mkdir(parents=True, exist_ok=True)
 
+    focused_sources = out / "focused-storage-sources"
+    storage_module = cts_root / "external/vulkancts/modules/vulkan/spirv_assembly"
+    write_focused_storage_source(
+        storage_module / "vktSpvAsm8bitStorageTests.cpp",
+        focused_sources / "vktSpvAsm8bitStorageTests.cpp",
+        ("storage_buffer_scalar_sint", "storage_buffer_scalar_uint",
+         "storage_buffer_vector_sint", "storage_buffer_vector_uint"),
+        7)
+    write_focused_storage_source(
+        storage_module / "vktSpvAsm16bitStorageTests.cpp",
+        focused_sources / "vktSpvAsm16bitStorageTests.cpp",
+        ("uniform_buffer_block_scalar_sint", "uniform_buffer_block_scalar_uint",
+         "uniform_buffer_block_vector_sint", "uniform_buffer_block_vector_uint"),
+        12)
+
     # Amber's Vulkan engine includes generated function wrappers. Regenerate them
     # from the pinned Vulkan registry so the amber objects match the CTS headers.
     amber_gen.mkdir(parents=True, exist_ok=True)
@@ -303,6 +341,7 @@ def main():
         "-DDISABLE_SHADERCACHE_IPC=1", "-DENABLE_HLSL=0",
         "-ffunction-sections", "-fdata-sections",
         "-I" + str(ROOT / "cts/upstream"),
+        "-I" + str(focused_sources),
         "-I" + str(ROOT / "cts/upstream/glslang"),
         "-I" + str(ROOT / "third_party/vulkan-headers/include"),
         "-I" + str(cts_root / "framework/delibs/debase"),
@@ -349,6 +388,7 @@ def main():
         "-DDISABLE_SHADERCACHE_IPC=1", "-DENABLE_HLSL=0",
         "-ffunction-sections", "-fdata-sections",
         "-I" + str(ROOT / "cts/upstream"),
+        "-I" + str(focused_sources),
         "-I" + str(ROOT / "cts/upstream/glslang"),
         "-I" + str(ROOT / "third_party/vulkan-headers/include"),
         "-I" + str(cts_root / "framework/delibs/debase"),
@@ -613,6 +653,17 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineVertexUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineReferenceRenderer.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMakeUtil.cpp",
+        # VK_KHR_8bit_storage / VK_KHR_16bit_storage focused groups. The build
+        # generates registration-pruned copies from the pinned modules; selected
+        # shader bodies, support checks and oracles remain upstream. Registering
+        # the modules' complete trees exceeds the PS5 title heap before the
+        # case-list filter runs.
+        ROOT / "cts/upstream/storage8_focus.cpp",
+        ROOT / "cts/upstream/storage16_focus.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmComputeShaderCase.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmComputeShaderTestUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmGraphicsShaderTestUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmUtils.cpp",
     ]
     for src in test_cpp:
         obj = obj_dir / "modules" / (src.stem + ".o")

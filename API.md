@@ -43,6 +43,18 @@ supported.
 
 ## Compute
 
+- The reported core API remains Vulkan 1.0. Narrow storage is negotiated through
+  `VK_KHR_get_physical_device_properties2`,
+  `VK_KHR_storage_buffer_storage_class`, `VK_KHR_8bit_storage` and
+  `VK_KHR_16bit_storage`.
+- `vkGetPhysicalDeviceFeatures2KHR` reports and `vkCreateDevice` accepts exactly
+  `storageBuffer8BitAccess` and `storageBuffer16BitAccess` for this slice.
+  `uniformAndStorageBuffer8BitAccess`, `storagePushConstant8`,
+  `uniformAndStorageBuffer16BitAccess`, `storagePushConstant16` and
+  `storageInputOutput16` remain false.
+- `shaderInt8`, `shaderInt16` and float16 arithmetic are not advertised. The
+  supported shaders may load, convert and store narrow scalar/vector values in
+  storage buffers, but this does not expose general narrow arithmetic.
 - Compute pipelines compiled from SPIR-V at runtime through PSBC/ACO for
   GFX1013, with a bounded in-memory compilation cache.
 - Up to four descriptor sets in the compute ABI. The native acceptance fixture
@@ -77,7 +89,9 @@ compute-visible layout binding in execution metadata, so applications must
 define those bindings even when static shader use could eliminate one.
 Compiler LDS allocation (up to 64 KiB) and the pinned inline workgroup-count ABI
 are preserved during dispatch. Focused upstream shared-variable, barrier and
-shared-atomic cases pass on hardware; this is not broad compute conformance.
+shared-atomic cases pass on hardware. Focused upstream 8/16-bit conversions also
+pass for the advertised storage-buffer bits; neither result establishes broad
+compute conformance or support for narrow arithmetic and other storage classes.
 Cache keys include the complete SPIR-V digest, entry point, compiler/ABI
 versions and pipeline-layout state, and entries are constrained by count and
 byte budgets. Cache identity includes canonical specialization values and the

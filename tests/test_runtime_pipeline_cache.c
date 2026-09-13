@@ -166,6 +166,50 @@ int main(void)
     assert(stats.compiles == 1);
     assert(stats.hits == 2);
 
+    /* Narrow storage is rejected before compiler/cache access unless the exact
+     * device feature is enabled. The feature mask also partitions cache keys. */
+    size_t narrow_bytes = 0;
+    uint32_t *narrow_spv = read_file("build/test-shaders/storage8.spv", &narrow_bytes);
+    assert(narrow_spv);
+    smci.codeSize = narrow_bytes; smci.pCode = narrow_spv;
+    VkShaderModule narrow_module;
+    assert(vkCreateShaderModule(device, &smci, NULL, &narrow_module) == VK_SUCCESS);
+    cpci.stage.module = narrow_module;
+    VkPipeline narrow_pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                    &narrow_pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!narrow_pipeline);
+    ps5vk_compilation_cache_get_stats(device->pipeline_cache, &stats);
+    assert(stats.compiles == 1 && stats.current_entries == 1);
+
+    device->enabled_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT;
+    assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                    &narrow_pipeline) == VK_SUCCESS);
+    ps5vk_compilation_cache_get_stats(device->pipeline_cache, &stats);
+    assert(stats.compiles == 2 && stats.current_entries == 2);
+    vkDestroyPipeline(device, narrow_pipeline, NULL);
+
+    device->enabled_features = PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
+    assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                    &narrow_pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+    vkDestroyShaderModule(device, narrow_module, NULL);
+    free(narrow_spv);
+
+    narrow_spv = read_file("build/test-shaders/storage16.spv", &narrow_bytes);
+    assert(narrow_spv);
+    smci.codeSize = narrow_bytes; smci.pCode = narrow_spv;
+    assert(vkCreateShaderModule(device, &smci, NULL, &narrow_module) == VK_SUCCESS);
+    cpci.stage.module = narrow_module;
+    assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                    &narrow_pipeline) == VK_SUCCESS);
+    ps5vk_compilation_cache_get_stats(device->pipeline_cache, &stats);
+    assert(stats.compiles == 3 && stats.current_entries == 3);
+    vkDestroyPipeline(device, narrow_pipeline, NULL);
+    vkDestroyShaderModule(device, narrow_module, NULL);
+    free(narrow_spv);
+    device->enabled_features = 0;
+    cpci.stage.module = module;
+
     /* Teardown */
     vkDestroyPipeline(device, pipeline3, NULL);
     vkDestroyShaderModule(device, module, NULL);

@@ -73,7 +73,7 @@ void Ps5Platform::Ps5VulkanPlatform::describePlatform(std::ostream &dst) const
     dst << "Target: Sony PlayStation 5 (x86_64-sie-ps5)\n";
     dst << "Firmware: 12.02\n";
     dst << "GPU Architecture: AMD GFX1013 (RDNA2)\n";
-    dst << "Driver: ps5vk (Vulkan 1.3 focused native)\n";
+    dst << "Driver: ps5vk (focused Vulkan 1.0 API subset)\n";
 }
 
 Ps5Platform::Ps5Platform(void)

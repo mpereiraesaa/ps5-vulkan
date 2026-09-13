@@ -5,12 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-VkResult ps5vk_runtime_compile_compute(
+VkResult ps5vk_runtime_compile_compute_features(
     const uint32_t *spirv,
     size_t spirv_words,
     const char *entry_name,
     VkPipelineLayout layout,
     const VkSpecializationInfo *specialization,
+    uint32_t feature_mask,
     struct ps5vk_compiled_program *out_program,
     uint32_t **out_code)
 {
@@ -53,6 +54,13 @@ VkResult ps5vk_runtime_compile_compute(
     opts.optimise = true;
     opts.address32_hi = 2;
     opts.force_indirect_push_constants = layout->push_constant_size != 0;
+    if (feature_mask & ~(PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                         PS5VK_FEATURE_STORAGE_BUFFER_16BIT))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    opts.enable_storage_buffer_8bit_access =
+        !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
+    opts.enable_storage_buffer_16bit_access =
+        !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_16BIT);
 
     if (specialization) {
         if (specialization->mapEntryCount > PSBC_MAX_SPECIALIZATION_CONSTANTS ||
@@ -115,7 +123,8 @@ VkResult ps5vk_runtime_compile_compute(
     PsbcResult res = psbc_compile_shader(spirv, spirv_words * sizeof(uint32_t), &opts, &out);
     if (res != PSBC_RESULT_OK || !out.machine_code || !out.machine_code_size || (out.machine_code_size % 4) != 0) {
         if (out.machine_code) psbc_free_output(&out);
-        return VK_ERROR_UNKNOWN;
+        return res == PSBC_RESULT_UNSUPPORTED_CAPABILITY ?
+            VK_ERROR_FEATURE_NOT_PRESENT : VK_ERROR_UNKNOWN;
     }
 
     /* Inspect PSSL/GNM header to extract hardware compute registers */
@@ -211,6 +220,15 @@ VkResult ps5vk_runtime_compile_compute(
     return VK_SUCCESS;
 }
 
+VkResult ps5vk_runtime_compile_compute(
+    const uint32_t *spirv, size_t spirv_words, const char *entry_name,
+    VkPipelineLayout layout, const VkSpecializationInfo *specialization,
+    struct ps5vk_compiled_program *out_program, uint32_t **out_code)
+{
+    return ps5vk_runtime_compile_compute_features(spirv, spirv_words, entry_name,
+        layout, specialization, 0, out_program, out_code);
+}
+
 VkResult ps5vk_compiler_adapter_compile(
     void *context,
     const uint32_t *spirv,
@@ -218,10 +236,11 @@ VkResult ps5vk_compiler_adapter_compile(
     const char *entry_name,
     VkPipelineLayout layout,
     const VkSpecializationInfo *specialization,
+    uint32_t feature_mask,
     struct ps5vk_compiled_program *out_program,
     uint32_t **out_code)
 {
     (void)context;
-    return ps5vk_runtime_compile_compute(spirv, spirv_words, entry_name, layout,
-                                         specialization, out_program, out_code);
+    return ps5vk_runtime_compile_compute_features(spirv, spirv_words, entry_name,
+        layout, specialization, feature_mask, out_program, out_code);
 }

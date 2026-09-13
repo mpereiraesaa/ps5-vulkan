@@ -22,12 +22,16 @@ struct ps5vk_native_memory_budget { uint64_t limit, used; };
 void ps5vk_native_queue_configure(VkDevice device);
 struct ps5vk_compiled_program;
 struct ps5vk_graphics_key;
+enum ps5vk_feature_bits {
+    PS5VK_FEATURE_STORAGE_BUFFER_8BIT = 1u << 0,
+    PS5VK_FEATURE_STORAGE_BUFFER_16BIT = 1u << 1,
+};
 struct ps5vk_compiler {
     void *context;
     VkResult (*resolve)(void *, const uint32_t *, size_t, const char *,
                         const struct ps5vk_compiled_program **);
     VkResult (*compile)(void *, const uint32_t *, size_t, const char *,
-                        VkPipelineLayout, const VkSpecializationInfo *,
+                        VkPipelineLayout, const VkSpecializationInfo *, uint32_t,
                         struct ps5vk_compiled_program *, uint32_t **);
 };
 struct ps5vk_progress {
@@ -60,6 +64,9 @@ struct ps5vk_platform {
     VkPhysicalDeviceProperties properties;
     VkPhysicalDeviceMemoryProperties memory_properties;
     VkDeviceSize max_allocation;
+    /* Platform opt-in only. A frontend symbol or compiler path is not enough
+     * to advertise a Vulkan feature without a native backend contract. */
+    uint32_t supported_features;
     void *context;
     VkResult (*open)(void *, struct ps5vk_memory_backend *);
     void (*close)(struct ps5vk_memory_backend *);
@@ -75,6 +82,7 @@ struct VkInstance_T {
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
     struct VkPhysicalDevice_T physical;
+    VkBool32 features2_extension_enabled;
     unsigned devices, lifetime_errors;
 };
 struct VkQueue_T {
@@ -92,6 +100,7 @@ struct VkDevice_T {
     VkDeviceSize uniform_buffer_alignment;
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
+    uint32_t enabled_features;
     struct VkDeviceMemory_T *memories;
     struct VkBuffer_T *buffers;
     struct VkBufferView_T *buffer_views;

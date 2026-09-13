@@ -18,7 +18,8 @@ CFLAGS = -std=c11 -O2 -g -Wall -Wextra -Werror \
          -ffunction-sections -fdata-sections \
          -MD -MP -MF $(DEP_FILE) \
          -I$(SDK_DIR)/include \
-         -I.
+         -I. \
+         -I$(BUILD_DIR)
 
 ifneq ($(CONSUMER_CONTINUOUS),)
 CFLAGS += -DCONSUMER_CONTINUOUS=1
@@ -52,7 +53,14 @@ all: $(TARGET_PIE)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h | $(BUILD_DIR)
+$(BUILD_DIR)/storage_width_shaders.h: ../../tools/prepare_consumer_storage_shaders.py \
+                                     ../../tools/prepare_test_shaders.py \
+                                     ../../experiments/compute/storage8.comp \
+                                     ../../experiments/compute/storage16.comp | $(BUILD_DIR)
+	python3 ../../tools/prepare_consumer_storage_shaders.py --out $@
+
+$(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h \
+                     $(BUILD_DIR)/storage_width_shaders.h | $(BUILD_DIR)
 	PS5_PAYLOAD_SDK=$(PS5_PAYLOAD_SDK) sh $(CLANG_WRAPPER) $(CFLAGS) -c $< -o $@
 
 $(TARGET_PIE): $(BUILD_DIR)/main.o

@@ -81,7 +81,10 @@ manifest must identify the deployed SELF and profile; the verifier requires
 three sets, two storage buffers, one uniform buffer, one uniform texel buffer,
 two non-default scalar specialization values, one pushed 32-bit word, 64 exact
 results, 128 intact guard words, complete queue witnesses and a clean TCP
-`BYE`. System Close Game remains a separate lifecycle check.
+`BYE`. The same verifier also requires the extension-negotiated 8/16-bit
+storage witness: 64 byte results, 64 16-bit results, fixed checksums and 8,000
+intact surrounding guard bytes. `tools/run_consumer.py` combines strict log
+verification with a separately confirmed system Close Game.
 
 Host checks validate API state machines, encoder contracts, resource ownership,
 negative paths and generated-program invariants. A successful host build alone
@@ -128,4 +131,8 @@ python3 -m unittest tests/test_consumer_isolation.py
 
 # Strict verifier regression tests for the multi-set resource witness
 python3 -m unittest tests/test_consumer_resource_abi.py
+
+# After an exact deployment, capture, verify and close one hardware run
+python3 tools/run_consumer.py --host <console> \
+  --runs-dir ../logging_server/runs --out <private-receipt.json>
 ```

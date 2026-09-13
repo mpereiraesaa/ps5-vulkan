@@ -49,6 +49,15 @@ static VkInstance instance(void)
     assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS);
     return i;
 }
+static VkInstance features2_instance(void)
+{
+    const char *extension = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+    VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 1, .ppEnabledExtensionNames = &extension};
+    VkInstance i;
+    assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS);
+    return i;
+}
 static VkPhysicalDevice physical(VkInstance i)
 {
     uint32_t count = 0;
@@ -284,7 +293,11 @@ static void negative(void)
     ii.enabledLayerCount = 1;
     assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_LAYER_NOT_PRESENT); ii.enabledLayerCount = 0;
     ii.enabledExtensionCount = 1;
-    assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_EXTENSION_NOT_PRESENT); ii.enabledExtensionCount = 0;
+    assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_UNKNOWN);
+    const char *unknown_instance_extension = "VK_EXT_not_real";
+    ii.ppEnabledExtensionNames = &unknown_instance_extension;
+    assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_EXTENSION_NOT_PRESENT);
+    ii.enabledExtensionCount = 0; ii.ppEnabledExtensionNames = NULL;
     VkApplicationInfo ai = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .apiVersion = VK_API_VERSION_1_1};
     ii.pApplicationInfo = &ai;
     assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_INCOMPATIBLE_DRIVER); ii.pApplicationInfo = NULL;
@@ -292,8 +305,11 @@ static void negative(void)
     VkDeviceQueueCreateInfo q; float priority; VkDeviceCreateInfo info = device_info(&q, &priority);
     VkDevice d; unsigned before = opened;
     info.enabledExtensionCount = 1;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    const char *unknown_device_extension = "VK_EXT_not_real";
+    info.ppEnabledExtensionNames = &unknown_device_extension;
     assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
-    info.enabledExtensionCount = 0;
+    info.enabledExtensionCount = 0; info.ppEnabledExtensionNames = NULL;
     VkPhysicalDeviceFeatures features = {.shaderInt64 = VK_TRUE}; info.pEnabledFeatures = &features;
     assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT);
     /* The profile advertises no optional core features. Verify every field,
@@ -316,6 +332,183 @@ static void negative(void)
     malformed = 2;
     assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_INITIALIZATION_FAILED && !d);
     malformed = 0; assert(opened == closed && !i->devices);
+    vkDestroyInstance(i, NULL);
+}
+static void narrow_storage_features(void)
+{
+    uint32_t count = 0;
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, NULL) == VK_SUCCESS && count == 1);
+    VkExtensionProperties instance_properties[2] = {0};
+    count = 0;
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_INCOMPLETE && count == 0);
+    count = 2;
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_SUCCESS && count == 1);
+    assert(!strcmp(instance_properties[0].extensionName,
+                   VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
+    assert(instance_properties[0].specVersion == VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION);
+    assert(vkEnumerateInstanceExtensionProperties("layer", &count, NULL) == VK_ERROR_LAYER_NOT_PRESENT);
+    assert(vkEnumerateInstanceExtensionProperties(NULL, NULL, NULL) == VK_ERROR_UNKNOWN);
+
+    VkInstance plain = instance();
+    const char *gpdp2_commands[] = {
+        "vkGetPhysicalDeviceFeatures2KHR",
+        "vkGetPhysicalDeviceProperties2KHR",
+        "vkGetPhysicalDeviceFormatProperties2KHR",
+        "vkGetPhysicalDeviceImageFormatProperties2KHR",
+        "vkGetPhysicalDeviceQueueFamilyProperties2KHR",
+        "vkGetPhysicalDeviceMemoryProperties2KHR",
+        "vkGetPhysicalDeviceSparseImageFormatProperties2KHR",
+    };
+    for (size_t n = 0; n < sizeof(gpdp2_commands) / sizeof(gpdp2_commands[0]); ++n) {
+        assert(!vkGetInstanceProcAddr(plain, gpdp2_commands[n]));
+        assert(!vkGetInstanceProcAddr(NULL, gpdp2_commands[n]));
+    }
+    vkDestroyInstance(plain, NULL);
+
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    for (size_t n = 0; n < sizeof(gpdp2_commands) / sizeof(gpdp2_commands[0]); ++n)
+        assert(vkGetInstanceProcAddr(i, gpdp2_commands[n]));
+    assert(vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceFeatures2KHR") ==
+           (PFN_vkVoidFunction)vkGetPhysicalDeviceFeatures2KHR);
+    p->platform.supported_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                                     PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
+    p->platform.format_properties = ps5vk_graphics_format_properties;
+    p->platform.image_properties = ps5vk_graphics_image_properties;
+
+    VkBaseOutStructure query_unknown = {.sType = VK_STRUCTURE_TYPE_MAX_ENUM};
+    VkPhysicalDeviceProperties2 properties2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &query_unknown};
+    vkGetPhysicalDeviceProperties2KHR(p, &properties2);
+    assert(properties2.properties.apiVersion == VK_API_VERSION_1_0);
+    assert(query_unknown.sType == VK_STRUCTURE_TYPE_MAX_ENUM && !query_unknown.pNext);
+
+    VkPhysicalDeviceMemoryProperties2 memory2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+        .pNext = &query_unknown};
+    vkGetPhysicalDeviceMemoryProperties2KHR(p, &memory2);
+    assert(memory2.memoryProperties.memoryTypeCount == 1);
+
+    VkFormatProperties2 format2 = {.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
+                                   .pNext = &query_unknown};
+    vkGetPhysicalDeviceFormatProperties2KHR(p, VK_FORMAT_R32_UINT, &format2);
+    assert(format2.formatProperties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
+
+    VkQueueFamilyProperties2 queue2 = {.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2,
+                                       .pNext = &query_unknown};
+    count = 1;
+    vkGetPhysicalDeviceQueueFamilyProperties2KHR(p, &count, &queue2);
+    assert(count == 1 && queue2.queueFamilyProperties.queueCount == 1);
+
+    VkPhysicalDeviceImageFormatInfo2 image_info2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+        .format = VK_FORMAT_B8G8R8A8_UNORM, .type = VK_IMAGE_TYPE_2D,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
+    VkImageFormatProperties2 image2 = {.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+                                       .pNext = &query_unknown};
+    assert(vkGetPhysicalDeviceImageFormatProperties2KHR(p, &image_info2, &image2) == VK_SUCCESS);
+    assert(image2.imageFormatProperties.maxExtent.width);
+
+    VkPhysicalDeviceSparseImageFormatInfo2 sparse_info2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2,
+        .format = VK_FORMAT_B8G8R8A8_UNORM, .type = VK_IMAGE_TYPE_2D,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL};
+    count = 99;
+    vkGetPhysicalDeviceSparseImageFormatProperties2KHR(p, &sparse_info2, &count, NULL);
+    assert(count == 0);
+
+    VkExtensionProperties device_properties[4] = {0};
+    count = 0;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS && count == 3);
+    count = 2;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, device_properties) == VK_INCOMPLETE && count == 2);
+    count = 4;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, device_properties) == VK_SUCCESS && count == 3);
+    assert(!strcmp(device_properties[0].extensionName, VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME));
+    assert(!strcmp(device_properties[1].extensionName, VK_KHR_8BIT_STORAGE_EXTENSION_NAME));
+    assert(!strcmp(device_properties[2].extensionName, VK_KHR_16BIT_STORAGE_EXTENSION_NAME));
+
+    VkBaseOutStructure unknown = {.sType = VK_STRUCTURE_TYPE_MAX_ENUM};
+    VkPhysicalDeviceShaderDrawParametersFeatures shader_draw_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES,
+        .pNext = &unknown, .shaderDrawParameters = VK_TRUE};
+    VkPhysicalDeviceProtectedMemoryFeatures protected_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES,
+        .pNext = &shader_draw_features, .protectedMemory = VK_TRUE};
+    VkPhysicalDevice16BitStorageFeatures feature16 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
+        .pNext = &protected_features, .storagePushConstant16 = VK_TRUE,
+        .storageInputOutput16 = VK_TRUE};
+    VkPhysicalDevice8BitStorageFeatures feature8 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES,
+        .pNext = &feature16, .uniformAndStorageBuffer8BitAccess = VK_TRUE,
+        .storagePushConstant8 = VK_TRUE};
+    VkPhysicalDeviceFeatures2 feature_query = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &feature8};
+    vkGetPhysicalDeviceFeatures2KHR(p, &feature_query);
+    VkPhysicalDeviceFeatures zero = {0};
+    assert(!memcmp(&feature_query.features, &zero, sizeof(zero)));
+    assert(feature8.storageBuffer8BitAccess && !feature8.uniformAndStorageBuffer8BitAccess &&
+           !feature8.storagePushConstant8);
+    assert(feature16.storageBuffer16BitAccess && !feature16.uniformAndStorageBuffer16BitAccess &&
+           !feature16.storagePushConstant16 && !feature16.storageInputOutput16);
+    assert(!protected_features.protectedMemory && !shader_draw_features.shaderDrawParameters);
+    assert(unknown.sType == VK_STRUCTURE_TYPE_MAX_ENUM && !unknown.pNext);
+
+    const char *extensions[] = {
+        VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME,
+        VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_16BIT_STORAGE_EXTENSION_NAME};
+    VkDeviceQueueCreateInfo queue_info; float priority;
+    VkDeviceCreateInfo info = device_info(&queue_info, &priority);
+    info.enabledExtensionCount = 3; info.ppEnabledExtensionNames = extensions;
+    feature8.pNext = &feature16;
+    feature8.storageBuffer8BitAccess = VK_TRUE;
+    protected_features.pNext = &shader_draw_features;
+    shader_draw_features.pNext = NULL;
+    feature16.pNext = &protected_features;
+    feature16.storageBuffer16BitAccess = VK_TRUE;
+    feature_query.pNext = &feature8;
+    info.pNext = &feature_query;
+    VkDevice device = VK_NULL_HANDLE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features == (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT));
+    vkDestroyDevice(device, NULL);
+
+    protected_features.protectedMemory = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    protected_features.protectedMemory = 2;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+    protected_features.protectedMemory = VK_FALSE;
+    shader_draw_features.shaderDrawParameters = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    shader_draw_features.shaderDrawParameters = 2;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+    shader_draw_features.shaderDrawParameters = VK_FALSE;
+
+    info.enabledExtensionCount = 2;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    info.enabledExtensionCount = 3;
+    feature8.uniformAndStorageBuffer8BitAccess = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    feature8.uniformAndStorageBuffer8BitAccess = VK_FALSE;
+    feature16.storageBuffer16BitAccess = 2;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+    feature16.storageBuffer16BitAccess = VK_TRUE;
+    info.ppEnabledExtensionNames = NULL;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+
+    VkInstance no_gpdp2 = instance();
+    VkPhysicalDevice no_gpdp2_physical = physical(no_gpdp2);
+    no_gpdp2_physical->platform.supported_features = p->platform.supported_features;
+    info.ppEnabledExtensionNames = extensions;
+    assert(vkCreateDevice(no_gpdp2_physical, &info, NULL, &device) ==
+           VK_ERROR_EXTENSION_NOT_PRESENT && !device);
+    vkDestroyInstance(no_gpdp2, NULL);
     vkDestroyInstance(i, NULL);
 }
 struct allocation_counts { unsigned live, instance, device, object; int fail; };
@@ -362,6 +555,6 @@ static void allocator_lifetimes(void)
 }
 int main(void)
 {
-    lifecycle(); negative(); allocator_lifetimes();
+    lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

@@ -295,7 +295,11 @@ libraries. Graphics currently supports procedural triangle-list pipelines,
 one BGRA8 UNORM color target at sample count 1, full color writes and no
 blending. Vertex/fragment interfaces use matching smooth float32 scalar/vector
 locations. Push constants and scalar specialization constants are supported;
-vertex buffers, graphics descriptors and additional render targets are not
+Vulkan 1.0 applications may negotiate storage-buffer-only 8/16-bit access
+through VK_KHR_get_physical_device_properties2,
+VK_KHR_storage_buffer_storage_class, VK_KHR_8bit_storage and
+VK_KHR_16bit_storage. Narrow arithmetic and other narrow storage classes are
+not advertised. Vertex buffers, graphics descriptors and additional render targets are not
 supported by this runtime compiler profile. A bounded
 in-process cache retains compiled pairs. This is not a Vulkan-conformant driver.
 

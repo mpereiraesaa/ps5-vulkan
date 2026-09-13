@@ -22,6 +22,72 @@ UPSTREAM = ROOT / "third_party/vk-gl-cts"
 INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
 
 
+def _source_function_at_line(text: str, line_number: int) -> str:
+    """Return the C++ function beginning at the cited source line.
+
+    Some upstream SPIR-V assembly factories build leaf names from two static
+    tables rather than spelling the final name as one literal.  Keep that
+    derivation bounded to the function cited by the manifest instead of
+    accepting unrelated tokens from the entire (very large) module.
+    """
+    lines = text.splitlines(keepends=True)
+    if line_number < 1 or line_number > len(lines):
+        return ""
+    start = sum(len(line) for line in lines[:line_number - 1])
+    open_brace = text.find("{", start)
+    if open_brace < 0:
+        return ""
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for offset in range(open_brace, len(text)):
+        char = text[offset]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:offset + 1]
+    return ""
+
+
+def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
+    """Derive leaves of the exact CAPABILITIES-name + cTypes-name form."""
+    if not re.search(
+        r"string\s*\(CAPABILITIES\[[^\]]+\]\.name\)\s*\+\s*\"_\"\s*\+\s*"
+        r"cTypes\[[^\]]+\](?:\[[^\]]+\])?\.name",
+        function_text,
+    ):
+        return set()
+
+    capabilities_match = re.search(
+        r"static\s+const\s+Capability\s+CAPABILITIES\s*\[\]\s*=\s*\{(.*?)\n\};",
+        text,
+        re.DOTALL,
+    )
+    if not capabilities_match:
+        return set()
+    capabilities = re.findall(r"\{\s*\"([a-z0-9_]+)\"\s*,", capabilities_match.group(1))
+
+    # The first field of every CompositeType initializer is its generated name.
+    # Restrict this to the cited function; shader assembly string literals do
+    # not match because they are not brace-initializer fields.
+    type_names = re.findall(r"\{+\s*\"([a-z0-9_]+)\"\s*,", function_text)
+    return {f"{capability}_{type_name}"
+            for capability in capabilities for type_name in type_names}
+
+
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     # Diagnostics are frozen upstream cases that are executed but are known not
@@ -39,7 +105,12 @@ def main() -> int:
     for case in cases:
         path = case["path"]
         source_ref = case["source"]
-        source_path = UPSTREAM / source_ref.split(":", 1)[0]
+        source_parts = source_ref.rsplit(":", 1)
+        source_path = UPSTREAM / source_parts[0]
+        try:
+            source_line = int(source_parts[1]) if len(source_parts) == 2 else 1
+        except ValueError:
+            source_line = 1
         segments = path.split(".")
         leaf = segments[-1]
 
@@ -63,9 +134,14 @@ def main() -> int:
                     f"{path}: group segment {segment!r} not produced by the "
                     f"integration or {module_root}")
 
-        # The leaf must be a literal name in the cited file, or a number produced
+        function_text = _source_function_at_line(text, source_line)
+
+        # The leaf must be a literal name in the cited function/file, a bounded
+        # table-derived name, or a number produced
         # by an instance factory whose parent group is a literal in that file.
         if re.search(r'"' + re.escape(leaf) + r'"', text):
+            continue
+        if leaf in _table_composed_leaf_names(text, function_text):
             continue
         if leaf.isdigit():
             continue

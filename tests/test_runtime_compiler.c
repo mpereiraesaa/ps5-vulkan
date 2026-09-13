@@ -131,9 +131,37 @@ int main(void)
         memcmp(parameterized_code_a,parameterized_code_b,common_parameterized*4));
     free(parameterized_code_a);free(parameterized_code_b);free(parameterized);
 
+    /* Narrow storage fails closed without the matching device feature and
+     * succeeds only when that exact storage-only bit is forwarded to PSBC. */
+    const char *narrow_names[] = {"storage8", "storage16"};
+    const uint32_t narrow_features[] = {PS5VK_FEATURE_STORAGE_BUFFER_8BIT,
+                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT};
+    for (size_t narrow_index = 0; narrow_index < 2; ++narrow_index) {
+        char narrow_path[96];
+        snprintf(narrow_path, sizeof(narrow_path), "build/test-shaders/%s.spv",
+                 narrow_names[narrow_index]);
+        size_t narrow_bytes = 0;
+        uint32_t *narrow_spv = read_file(narrow_path, &narrow_bytes);
+        assert(narrow_spv);
+        struct ps5vk_compiled_program narrow_program = {0};
+        uint32_t *narrow_code = NULL;
+        assert(ps5vk_runtime_compile_compute(narrow_spv, narrow_bytes / 4, "main",
+            &layout, NULL, &narrow_program, &narrow_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+        assert(!narrow_code);
+        assert(ps5vk_runtime_compile_compute_features(narrow_spv, narrow_bytes / 4,
+            "main", &layout, NULL, narrow_features[narrow_index],
+            &narrow_program, &narrow_code) == VK_SUCCESS);
+        assert(narrow_code && narrow_program.code_words > 0);
+        assert(narrow_program.gfx == 1013 && narrow_program.wave_size == 32);
+        assert(narrow_program.descriptor_count == 2);
+        free(narrow_code);
+        free(narrow_spv);
+    }
     /* 4. Test error handling */
     struct ps5vk_compiled_program bad_prog;
     uint32_t *bad_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+        NULL, UINT32_C(0x80000000), &bad_prog, &bad_code) == VK_ERROR_FEATURE_NOT_PRESENT);
 
     /* Corrupted SPIR-V header */
     uint32_t bad_spv[16] = {0x12345678, 0, 0, 0};

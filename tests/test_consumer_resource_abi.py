@@ -6,6 +6,8 @@ from tools.verify_consumer_resource_abi import APP, TITLE, validate
 
 MESSAGES = [
     "PS5VK_CONSUMER_BOOT mode=finite sdk_version=0.1",
+    "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=3 "
+    "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0",
     "PS5VK_CONSUMER_COMPUTE_START",
     "PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED",
     "PS5VK_QUEUE_PREPARED serial=1 dispatches=1",
@@ -15,6 +17,20 @@ MESSAGES = [
     "PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS sets=3 storage=2 uniform=1 texel=1 "
     "push_bytes=4 spec_constants=2 multiplier=5 extra_bias=11 addend=19 "
     "elements=64 mismatches=0 guard_words=128 guard_mismatches=0",
+    "PS5VK_CONSUMER_STORAGE_WIDTH_START",
+    "PS5VK_CONSUMER_STORAGE_WIDTH_PIPELINES_CREATED count=2",
+    "PS5VK_QUEUE_PREPARED serial=2 dispatches=2",
+    "PS5VK_QUEUE_SUBMIT serial=2 index=0 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=0 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=2 index=0 token=100000002 gcr=0070f528",
+    "PS5VK_QUEUE_SUBMIT serial=2 index=1 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=1 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=2 index=1 token=100000003 gcr=0070f528",
+    "PS5VK_CONSUMER_STORAGE_WIDTH_SUCCESS storage8=1 storage16=1 "
+    "elements8=64 elements16=64 checksum8=9575e8c5 checksum16=603ddade "
+    "mismatches8=0 mismatches16=0 guard_bytes8=4032 guard_bytes16=3968 "
+    "guard_mismatches8=0 guard_mismatches16=0",
+    "PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED",
     "PS5VK_CONSUMER_TEST_SUCCESS",
     "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1",
     "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1",
@@ -39,6 +55,14 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         artifact = {
             "title": TITLE, "profile": "public-consumer-resource-abi",
             "submit_enabled": True, "files": {"eboot.bin": "a" * 64},
+            "storage_width": {
+                "storageBuffer8BitAccess": True,
+                "storageBuffer16BitAccess": True,
+                "shaderInt8": False,
+                "shaderInt16": False,
+                "storage8_spirv_sha256": "b" * 64,
+                "storage16_spirv_sha256": "c" * 64,
+            },
         }
         return log, receipt, artifact
 
@@ -48,6 +72,9 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         self.assertEqual(result["guard_words_checked"], 128)
         self.assertEqual(result["push_constant_bytes"], 4)
         self.assertEqual(result["specialization_constants"], 2)
+        self.assertEqual(result["storage8_elements_checked"], 64)
+        self.assertEqual(result["storage16_elements_checked"], 64)
+        self.assertEqual(result["narrow_guard_bytes_checked"], 8000)
 
     def test_every_witness_is_required(self):
         for index in range(len(MESSAGES)):
@@ -58,7 +85,9 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         replacements = (("mismatches=0", "mismatches=1"),
                         ("guard_mismatches=0", "guard_mismatches=1"),
                         ("sets=3", "sets=1"), ("rc=0", "rc=-1"),
-                        ("dispatches=1", "dispatches=2"),
+                        ("serial=1 dispatches=1", "serial=1 dispatches=3"),
+                        ("checksum8=9575e8c5", "checksum8=00000000"),
+                        ("checksum16=603ddade", "checksum16=00000000"),
                         ("allocations=1", "allocations=0"))
         for old, new in replacements:
             with self.subTest(old=old), self.assertRaises(ValueError):
@@ -71,6 +100,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             lambda log, receipt, artifact: receipt.update(clean=False),
             lambda log, receipt, artifact: artifact.update(profile="other"),
             lambda log, receipt, artifact: artifact["files"].update({"eboot.bin": "bad"}),
+            lambda log, receipt, artifact: artifact["storage_width"].update(shaderInt8=True),
+            lambda log, receipt, artifact: artifact["storage_width"].update(storage8_spirv_sha256="bad"),
         ):
             args = list(self.fixture())
             mutate(*args)
