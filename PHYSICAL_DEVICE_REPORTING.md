@@ -117,6 +117,17 @@ pipeline gate validates them, but they are not exposed as device capabilities.
 The compiler's behaviour for each individual SPIR-V precision mode is not
 measured here and is recorded as not-audited.
 
+### Tiling scopes
+
+The audit evaluates every scope the pinned mandatory tables carry. At the pinned
+revision those tables define `optimalTilingFeatures` and `bufferFeatures` rules
+only; there is no mandatory `linearTilingFeatures` cell. This profile reports
+zero `linearTilingFeatures` for every format and rejects `VK_IMAGE_TILING_LINEAR`
+in `vkGetPhysicalDeviceImageFormatProperties`, which the format-query
+consistency section verifies against the reported feature words rather than
+assuming. Linear tiling is therefore documented as unsupported, not reported as
+a supported scope.
+
 ## Query contract
 
 The public API exposes the Vulkan 1.0 queries and the enabled
