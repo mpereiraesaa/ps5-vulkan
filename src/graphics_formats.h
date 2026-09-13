@@ -16,7 +16,8 @@ static inline uint32_t ps5vk_vertex_format_size(VkFormat format)
 }
 
 /* Native executable image roles. RGBA8 is a bounded off-screen color target
- * with transfer-source readback; BGRA8 remains the VideoOut target. */
+ * with transfer-source readback, a sampled/upload target, and a pure
+ * transfer role; BGRA8 remains the VideoOut target. */
 static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags usage)
 {
     switch(format) {
@@ -25,6 +26,15 @@ static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags 
     case VK_FORMAT_D32_SFLOAT:
         return usage == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     case VK_FORMAT_R8G8B8A8_UNORM:
+        /* Pure transfer role: the padded linear layout used by the upload path,
+         * which also serves vkCmdCopyImage, vkCmdClearColorImage and the
+         * buffer transfers without pretending the tiled colour-attachment
+         * layout is linear. The role is host-visible memory that no GPU stage
+         * touches, so a copy source alone is a real (if write-less) role. */
+        if (usage && !(usage & ~(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
+            return 1;
+        /* Sampled role: the same padded linear layout, uploaded by the GPU
+         * prelude and read by shader descriptors. */
         return (usage &&
             !(usage & ~(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))) ||
             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
@@ -65,8 +75,12 @@ static inline void ps5vk_graphics_format_properties(VkFormat format,
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         break;
     case VK_FORMAT_R8G8B8A8_UNORM:
+        /* TRANSFER_DST is real for the transfer-only role implemented by the
+         * image-copy/clear slice (padded linear layout), not a claim about the
+         * tiled colour-attachment layout. */
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-            VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+            VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+            VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
         break;
     case VK_FORMAT_D32_SFLOAT:
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;

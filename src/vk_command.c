@@ -1,5 +1,6 @@
 #include "vk_command.h"
 #include "vk_query_pool.h"
+#include "vk_image.h"
 #include "vk_sync.h"
 #include <float.h>
 #include <string.h>
@@ -138,6 +139,8 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_destination==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->indirect_buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->copy_image==object)return 1;
+        if(type==VK_OBJECT_TYPE_IMAGE && op->image_source==object)return 1;
+        if(type==VK_OBJECT_TYPE_IMAGE && op->image_destination==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->image_barrier.image==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->indices.buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER)for(unsigned k=0;k<PS5VK_MAX_VERTEX_BINDINGS;++k)
@@ -719,6 +722,19 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
          b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT);
+    /* Pure transfer role: host-visible memory that no GPU stage samples or
+     * renders into, so every transition among the transfer layouts is honest
+     * bookkeeping. Only transfer dependencies can order such an image. */
+    if(ps5vk_pure_transfer_image(image))
+        return !((b->srcAccessMask|b->dstAccessMask) &
+                 ~(VkAccessFlags)(VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
+            (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED ||
+             b->oldLayout==VK_IMAGE_LAYOUT_GENERAL ||
+             b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+             b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) &&
+            (b->newLayout==VK_IMAGE_LAYOUT_GENERAL ||
+             b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+             b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     return 0;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineStageFlags src, VkPipelineStageFlags dst,

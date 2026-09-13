@@ -2,6 +2,7 @@
 #include "vk_buffer_transfer.h"
 #include "vk_indirect.h"
 #include "vk_query_pool.h"
+#include "vk_image_transfer.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -112,6 +113,16 @@ static VkResult start_submission(VkDevice d)
                     }
                     if (ps5vk_query_operation(op->type) &&
                         ps5vk_query_operation_execute(d, op) != VK_SUCCESS) {
+                        d->lost = VK_TRUE;
+                        return VK_ERROR_DEVICE_LOST;
+                    }
+                    if (ps5vk_image_transfer_operation(op->type) &&
+                        ps5vk_image_transfer_execute(d, op) != VK_SUCCESS) {
+                        d->lost = VK_TRUE;
+                        return VK_ERROR_DEVICE_LOST;
+                    }
+                    if (ps5vk_image_linear_operation(op) &&
+                        ps5vk_image_linear_execute(d, op) != VK_SUCCESS) {
                         d->lost = VK_TRUE;
                         return VK_ERROR_DEVICE_LOST;
                     }
@@ -236,12 +247,27 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             continue;
         }
         if (active) return 0;
+        if (ps5vk_image_transfer_operation(op->type)) {
+            /* Submit-time validation of the recorded image operation; execution
+             * re-validates at the head. Lifetime is protected by
+             * invalidate_resource, which sees op->image_source/_destination. */
+            if (ps5vk_image_transfer_validate(d, op) != VK_SUCCESS) return 0;
+            continue;
+        }
         if (ps5vk_buffer_transfer_operation(op->type)) {
             if (ps5vk_buffer_transfer_validate(d, op) != VK_SUCCESS) return 0;
             continue;
         }
         if (ps5vk_query_operation(op->type)) {
             if (ps5vk_query_operation_validate(d, op) != VK_SUCCESS) return 0;
+            continue;
+        }
+        if (ps5vk_image_linear_operation(op)) {
+            /* Host copies over the padded linear transfer role: no graphics
+             * backend submit is involved, so only the role, the resources and
+             * the region mapping are validated here. Recorded-order layout
+             * state is checked when the segment reaches the head. */
+            if (ps5vk_image_linear_validate(d, op) != VK_SUCCESS) return 0;
             continue;
         }
         if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE ||
@@ -333,7 +359,17 @@ static int frontend_operation(int type)
 {
     return event_operation(type) ||
         ps5vk_buffer_transfer_operation((enum ps5vk_operation_type)type) ||
-        ps5vk_query_operation((enum ps5vk_operation_type)type);
+        ps5vk_query_operation((enum ps5vk_operation_type)type) ||
+        ps5vk_image_transfer_operation((enum ps5vk_operation_type)type);
+}
+
+/* Frontend work of one recorded operation: the type-level frontend families plus
+ * the pure transfer role's image <-> buffer transfers and layout bookkeeping,
+ * which are host copies over the same padded linear layout. The tiled
+ * render-target readback and the sampled upload keep their GPU path. */
+static int frontend_record(const struct ps5vk_operation *op)
+{
+    return frontend_operation(op->type) || ps5vk_image_linear_operation(op);
 }
 
 static int deferred_boundary(int type)
@@ -357,7 +393,7 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
         VkBool32 contains_special = VK_FALSE;
         for (uint32_t b = 0; b < record->count; ++b)
             for (uint32_t k = 0; k < record->buffers[b]->operation_count; ++k)
-                contains_special |= frontend_operation(record->buffers[b]->operations[k].type) ||
+                contains_special |= frontend_record(&record->buffers[b]->operations[k]) ||
                     ps5vk_indirect_operation(record->buffers[b]->operations[k].type);
         struct ps5vk_submission *first = NULL, *last = NULL;
         if (!contains_special) {
@@ -385,12 +421,12 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
                 uint32_t operation = 0;
                 while (operation < command->operation_count) {
                     uint32_t begin = operation;
-                    VkBool32 frontend = frontend_operation(command->operations[operation].type);
+                    VkBool32 frontend = frontend_record(&command->operations[operation]);
                     VkBool32 deferred = deferred_boundary(command->operations[operation].type);
                     if (frontend) ++operation;
                     else if (deferred) ++operation;
                     else while (operation < command->operation_count &&
-                        !frontend_operation(command->operations[operation].type) &&
+                        !frontend_record(&command->operations[operation]) &&
                         !deferred_boundary(command->operations[operation].type)) ++operation;
                     last = allocate_submission(d, refs, &result); if (!last) goto fail;
                     last->count = 1; last->buffers[0] = command;
@@ -521,8 +557,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
         result = INVALID; goto fail;
     }
     uint32_t segment = 0;
+    VkBool32 seen_frontend = VK_FALSE;
     for (struct ps5vk_submission *s = head; s; s = s->next, ++segment) {
         s->serial = d->queue.next_serial + segment;
+        if (s->frontend_only) seen_frontend = VK_TRUE;
+        else if (seen_frontend) s->deferred_prepare = VK_TRUE;
         if (s->count && !s->frontend_only && !s->deferred_prepare) {
             if (!d->submit_backend.prepare || !d->submit_backend.launch ||
                 !d->submit_backend.poll || !d->submit_backend.release) {

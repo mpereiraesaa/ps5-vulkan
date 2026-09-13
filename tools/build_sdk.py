@@ -93,6 +93,8 @@ def main():
             (ROOT / "src/vk_query_pool.c", []),
             (ROOT / "src/vk_sync.c", []),
             (ROOT / "src/vk_buffer_transfer.c", []),
+            (ROOT / "src/vk_image_transfer.c", []),
+            (ROOT / "src/color_clear.c", []),
             (ROOT / "src/vk_queue.c", []),
             (ROOT / "src/vk_queue_router.c", []),
             (ROOT / "src/vk_image_view.c", []),
@@ -256,10 +258,10 @@ def main():
     host_sources = [
         "src/vk_alloc.c", "src/vk_memory.c", "src/vk_descriptor.c",
         "src/vk_pipeline.c", "src/compilation_cache.c", "src/vk_pipeline_cache.c", "src/vk_command.c", "src/vk_indirect.c",
-        "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
+        "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
         "src/vk_image_view.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/graphics_program.c",
-        "src/vk_transfer.c", "src/texture_copy.c", "src/texture_layout.c",
+        "src/vk_transfer.c", "src/texture_copy.c", "src/texture_layout.c", "src/color_clear.c",
         "src/vk_device.c", "src/vk_dispatch.c", "src/platform_host.c",
         "src/ps5vk_present.c"
     ]

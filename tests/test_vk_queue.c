@@ -23,7 +23,7 @@ struct mock_job { struct fixture *fixture; uint64_t serial; };
 static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **job)
 {
     struct fixture *f = d->progress.context; ++f->prepares;
-    assert(s->buffers[0]->state == PS5VK_EXECUTABLE);
+    assert(s->buffers[0]->state == (d->submission == s ? PS5VK_PENDING : PS5VK_EXECUTABLE));
     for (uint32_t b = 0; b < s->count; ++b) {
         uint32_t first = ps5vk_submission_first_operation(s, b);
         uint32_t count = ps5vk_submission_operation_count(s, b);
@@ -314,9 +314,10 @@ int main(void)
     assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && fence->signaled &&
         !event->pending && !event->pending_waits);
 
-    /* A mixed GPU -> SET -> GPU command is prepared transactionally as two
-     * independent backend jobs.  A late prepare failure publishes no event,
-     * semaphore, fence, serial or command-buffer state. */
+    /* A mixed GPU -> SET -> GPU command prepares only the leading GPU segment
+     * eagerly.  The trailing segment must be prepared at queue head, after the
+     * frontend event effect, so backend preparation cannot snapshot stale
+     * layout or memory state. */
     assert(vkResetEvent(&d, event) == VK_SUCCESS);
     assert(vkResetCommandBuffer(c2, 0) == VK_SUCCESS);
     assert(vkBeginCommandBuffer(c2, &event_begin) == VK_SUCCESS);
@@ -330,20 +331,37 @@ int main(void)
     assert(vkCreateSemaphore(&d, &si, NULL, &segment_semaphore) == VK_SUCCESS);
     event_submit.signalSemaphoreCount = 1;
     event_submit.pSignalSemaphores = &segment_semaphore;
-    uint64_t mixed_serial = d.queue.next_serial;
-    unsigned mixed_releases = f.releases;
+    unsigned mixed_launches = f.launches;
     f.fail_prepare_at = f.prepares + 2;
     assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
-    assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_ERROR_OUT_OF_HOST_MEMORY);
-    assert(!d.submission && d.queue.next_serial == mixed_serial &&
-        c2->state == PS5VK_EXECUTABLE && !c2->pending_count &&
-        vkGetEventStatus(&d, event) == VK_EVENT_RESET && !event->pending &&
-        !segment_semaphore->pending && !segment_semaphore->signaled &&
-        !fence->pending_serial && !fence->signaled &&
-        f.releases == mixed_releases + 1 && !f.event_ops_seen);
+    assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
+    assert(f.launches == mixed_launches + 1 && d.submission &&
+        d.submission->next && d.submission->next->frontend_only &&
+        d.submission->next->next && d.submission->next->next->deferred_prepare &&
+        c2->state == PS5VK_PENDING && c2->pending_count == 3 &&
+        vkGetEventStatus(&d, event) == VK_EVENT_RESET && event->pending &&
+        segment_semaphore->pending && !segment_semaphore->signaled &&
+        fence->pending_serial && !fence->signaled && !f.event_ops_seen);
+    f.complete = 1;
+    assert(ps5vk_queue_poll(&d) == VK_ERROR_DEVICE_LOST);
+    assert(d.lost && f.launches == mixed_launches + 1 && d.submission &&
+        !d.submission->frontend_only && d.submission->deferred_prepare &&
+        event->device_signaled && event->pending &&
+        !segment_semaphore->signaled && !fence->signaled);
+    /* A real device remains lost after a deferred-prepare failure.  The host
+     * fixture has no recovery API, so install and launch a replacement mock
+     * job explicitly only to release the synthetic submission graph. */
+    f.fail_prepare_at = 0; d.lost = VK_FALSE;
+    assert(prepare(&d, d.submission, &d.submission->backend_job) == VK_SUCCESS);
+    assert(d.submission->backend_job && launch(&d, d.submission->backend_job) == VK_SUCCESS);
+    f.complete = 1;
+    assert(ps5vk_queue_poll(&d) == VK_SUCCESS && !d.submission);
+    assert(segment_semaphore->signaled && fence->signaled);
 
-    f.fail_prepare_at = 0;
-    unsigned mixed_launches = f.launches;
+    assert(vkResetEvent(&d, event) == VK_SUCCESS);
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    segment_semaphore->signaled = VK_FALSE;
+    mixed_launches = f.launches;
     assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
     assert(f.launches == mixed_launches + 1 && d.submission &&
         d.submission->next && d.submission->next->frontend_only &&

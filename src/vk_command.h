@@ -9,7 +9,10 @@ enum ps5vk_operation_type {
     PS5VK_IMAGE_BARRIER, PS5VK_COPY_IMAGE_BUFFER, PS5VK_EVENT_SET,
     PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT, PS5VK_COPY_BUFFER,
     PS5VK_UPDATE_BUFFER, PS5VK_FILL_BUFFER, PS5VK_DISPATCH_INDIRECT,
-    PS5VK_DRAW_INDIRECT, PS5VK_DRAW_INDEXED_INDIRECT, PS5VK_QUERY_RESET
+    PS5VK_DRAW_INDIRECT, PS5VK_DRAW_INDEXED_INDIRECT, PS5VK_QUERY_RESET,
+    /* Frontend image domain: executed in submission order by start_submission
+     * when the segment reaches the head, like the buffer transfers. */
+    PS5VK_COPY_IMAGE, PS5VK_CLEAR_COLOR_IMAGE
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -41,6 +44,12 @@ struct ps5vk_operation {
     VkQueryPool query_pool;
     uint32_t query_first;
     uint32_t query_count;
+    /* Image copy / colour clear domain. Region and range arrays live in
+     * owned_payload; the clear value is stored as canonical RGBA8 bytes. */
+    VkImage image_source, image_destination;
+    VkImageLayout image_source_layout, image_destination_layout;
+    uint32_t image_region_count;
+    uint32_t clear_word;
     VkImage copy_image;
     VkImageLayout copy_layout;
     VkBufferImageCopy copy_region;

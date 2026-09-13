@@ -41,7 +41,7 @@ draws.
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
 | `VK_FORMAT_D32_SFLOAT` | Depth attachment |
-| `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled/upload image, or off-screen color attachment plus transfer-source readback |
+| `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled/upload image, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
 
@@ -54,7 +54,16 @@ The off-screen readback profile requires a full single-mip RGBA8 image with
 `COLOR_ATTACHMENT_OPTIMAL -> TRANSFER_SRC_OPTIMAL` dependency and one full
 `vkCmdCopyImageToBuffer` region. The native queue detiles 64KB_R_X color data
 only after GPU completion. Partial regions and general image-copy support remain
-fail-closed.
+fail-closed for that tiled role.
+
+A second RGBA8 role is real and independent of the tiled one: an image created
+with `TRANSFER_SRC` and/or `TRANSFER_DST` alone is backed by the padded linear
+layout the upload path already uses, so no GPU stage samples, renders into or
+detiles it. Copy, clear and the buffer transfers over that role are host copies
+whose destination range is flushed through the memory backend in recorded order;
+layout transitions are bookkeeping and are validated against the image's
+committed layout. Anything outside the padded linear geometry stays refused
+rather than being approximated with a linear write.
 
 Nearest sampling has native visual and deterministic readback evidence. Linear
 filter, address-mode and mipmap-mode encodings have host-contract coverage, but
@@ -131,9 +140,52 @@ supported.
   later segment is prepared or launched. Destination ranges are flushed through
   the memory backend before following GPU use.
 
-The transfer family remains partial. Existing bounded buffer/image upload and
-readback paths do not imply general `vkCmdCopyImage`, `vkCmdBlitImage` or
-`vkCmdResolveImage` support; those commands remain absent.
+The transfer family remains deliberately bounded. The image-copy profile below
+does not imply general image formats, tiling, blit or resolve support; blit and
+resolve remain fail-closed entry points.
+
+## Image copy and colour clear
+
+- `vkCmdCopyImage` copies one or more base-level RGBA8 regions between two
+  images of the transfer-only role. Both images must be single-mip, single-layer
+  2D images whose usage is drawn from `TRANSFER_SRC`/`TRANSFER_DST`, the source
+  must carry `TRANSFER_SRC` and the destination `TRANSFER_DST`, the regions must
+  stay inside both extents, and each image must already be in the layout the
+  call declares. Self-copy, depth/stencil aspects, mip or layer selection,
+  multi-layer regions and 3D extents are refused.
+- `vkCmdClearColorImage` writes one RGBA8 word to every pixel of a transfer-
+  destination image. The clear value is converted with the same encoder the
+  render-pass clear path uses, so a value outside the finite `[0,1]` range is
+  refused instead of being clamped silently. A subresource range may name the
+  single level/layer explicitly or use `VK_REMAINING_MIP_LEVELS` /
+  `VK_REMAINING_ARRAY_LAYERS`; nothing else is accepted.
+- The observable path for that role is the buffer transfer:
+  `vkCmdCopyBufferToImage` uploads and `vkCmdCopyImageToBuffer` reads back, with
+  bounded pitched rows: zero means the region width/height, otherwise
+  `bufferRowLength` and `bufferImageHeight` must be at least the copied
+  width/height. `bufferOffset` is four-byte aligned and every addressed row is
+  bounds-checked before recording. These are frontend host copies over the
+  padded rows. A source buffer is invalidated before CPU reads; a partially
+  written destination buffer is invalidated before CPU stores so adjacent
+  GPU-produced bytes survive, then flushed afterward. CPU-written image and
+  buffer destinations are flushed before later GPU use.
+- All of it is ordered like the buffer transfers: an operation runs when its
+  segment reaches the head of the queue chain, after any earlier GPU segment
+  retired and before any later backend segment is prepared. Every backend
+  segment following a frontend operation is prepared lazily at queue head.
+  Recording is transactional; a
+  rejected call leaves no partial operation behind, and referenced images and
+  buffers stay alive until the owning command buffer retires. Distinct handles
+  that resolve to overlapping image/image or buffer/image backing spans are
+  rejected before mutation.
+- The tiled colour-attachment role is deliberately not copyable or clearable
+  here, because 64KB_R_X has no linear addressing in this codebase.
+  `vkCmdClearDepthStencilImage` and `vkCmdClearAttachments` are structurally
+  exposed and always invalidate recording: the depth role has no pixel
+  addressing and a mid-render-pass attachment clear would need a DCB clear path
+  that does not exist yet. `vkCmdBlitImage` and `vkCmdResolveImage` likewise
+  always invalidate recording because no proven scaling/filter or multisample
+  contract exists.
 
 ## Indirect commands
 

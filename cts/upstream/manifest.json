@@ -92,6 +92,38 @@
       "rationale": "Original upstream byte-comparison oracle copies the complete source buffer."
     },
     {
+      "path": "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_pot_same_format_clear",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp:9235",
+      "category": "image-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream oracle copies a 32x32 RGBA8_UNORM region and compares bit-exact destination readback. It also records a red clear, but the destination was initialized to the same red value, so this case is evidence for vkCmdCopyImage and non-corruption only, not an independent clear-colour oracle."
+    },
+    {
+      "path": "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_pot_same_format_noclear",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp:9235",
+      "category": "image-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Companion of the pot clear case without the pre-copy clear: it proves vkCmdCopyImage preserves the untouched destination gradient bytes as well as the copied region."
+    },
+    {
+      "path": "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_npot_same_format_clear",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp:9235",
+      "category": "image-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "The 65x63 non-power-of-two variant exercises the upstream copy oracle across a row pitch that is not a multiple of the region width. Its redundant red clear is non-corruption coverage, not an independent clear-colour oracle."
+    },
+    {
+      "path": "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_npot_same_format_noclear",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp:9235",
+      "category": "image-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Companion of the npot clear case without the pre-copy clear, covering the non-power-of-two destination preservation path."
+    },
+    {
       "path": "dEQP-VK.api.fill_and_update_buffer.suballocation.fill_buffer_whole",
       "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:682",
       "category": "buffer-transfer",

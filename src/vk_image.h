@@ -26,4 +26,10 @@ struct VkImageView_T {
     unsigned pending, framebuffers;
 };
 VkResult ps5vk_image_span(VkDevice, VkImage, void **address, VkDeviceSize *bytes);
+/* The host-visible padded-linear transfer role: RGBA8, one mip/layer/sample,
+ * optimal tiling, usage drawn from the two transfer bits only. No GPU stage can
+ * sample, render into or read such an image, so its transfers and layout
+ * transitions are frontend work over the same padded layout the upload path
+ * uses. */
+VkBool32 ps5vk_pure_transfer_image(VkImage);
 #endif

@@ -48,10 +48,10 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 55 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 93 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
-  pipeline, push-constant, storage-width, fixed-function and buffer-transfer
-  cases). Only these
+  pipeline, push-constant, storage-width, fixed-function, buffer-transfer and
+  image-copy cases). Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -604,3 +604,56 @@ Fail/NotSupported/Skip, complete QPA reconstruction and clean Close Game:
 This evidence proves the unchanged upstream compute/transfer oracles and that
 recording these setters does not interfere with those operations. It does not
 exercise their graphical effects and makes no Vulkan conformance claim.
+
+## Image copy and colour clear (2026-09-13)
+
+Four leaves of the pinned `api.copy_and_blit.core.image_to_image.simple_tests`
+factory are selected: `partial_image_pot_same_format_clear`,
+`partial_image_pot_same_format_noclear`,
+`partial_image_npot_same_format_clear` and
+`partial_image_npot_same_format_noclear`
+(`vktApiCopiesAndBlittingTests.cpp:9235`). They are the leaves whose source and
+destination images are `VK_FORMAT_R8G8B8A8_UNORM` with exactly
+`TRANSFER_SRC | TRANSFER_DST` usage, which is the only image role this driver
+implements byte-exactly. Every variant compares the bit-exact readback of the
+destination image, so the selection judges `vkCmdCopyImage` with upstream's own
+oracle and not with a substituted one. The clear variants also record
+`vkCmdClearColorImage` with `(1, 0, 0, 1)`, but their destination is already
+initialized to that same red value. They therefore prove that the extra clear
+does not corrupt the copy result; they are not an independent clear-colour
+oracle. Deterministic clear-colour coverage remains in the host suite unless a
+native consumer uses a distinct pre-clear value and verifies the readback.
+
+The remaining leaves of the same factory are deliberately not selected:
+`whole_image`, `whole_image_diff_format` and `partial_image` use
+`VK_FORMAT_R8G8B8A8_UINT`, the `diff_format` leaves mix `R32_UINT` with RGBA8,
+and the `depth` and `stencil` leaves use `D32_SFLOAT` and `S8_UINT`. None of
+those roles is advertised, so selecting them would be a capability claim rather
+than evidence.
+
+The focused copy-module generator registers the group through upstream's own
+`addImageToImageTestsSimpleOnly` factory from the rewritten
+`addCoreCopiesAndBlittingTests`. That keeps the packaged tree bounded (no
+all-formats, 3D, cube, array, sparse or blit/resolve registration) while the
+selected bodies, support checks and comparison oracles stay byte-for-byte
+upstream. Both the rewrite and the derived leaf names are host-checked: the
+generator refuses to run if the factory or the pinned registration block drifts,
+and `tools/check_upstream_selection.py` derives
+`partial_image_<extent>_<format>_<clear>` only from the exact composition
+expression and the three table names inside the cited function.
+
+The final hardened implementation was rebuilt and deployed from commit
+`002743f`. Two independent launches used the identical SELF SHA-256
+`310c662777e6b4ab31a68fd8ae0ad6bb666b09471c2654bd1d909d72fb2754a8`
+and selection SHA-256
+`4181af6a7032b15fd27d42fcb6eb8aa178d717d3cd66e03607d85e6aecf9c272`:
+
+- `20260913T133316202Z_PPSA99994_upstream-cts_0x42ede9683184`
+- `20260913T133335878Z_PPSA99994_upstream-cts_0x42f27e4c8467`
+
+Each reconstructed the complete QPA, passed all 93 selected upstream cases
+with zero `Fail`, `NotSupported` or `Skip`, and ended with verified system
+Close Game. The image-transfer contribution to those runs is the four bounded
+RGBA8 copy leaves described above; the 93-case total also protects the existing
+compute, graphics, synchronization, memory and buffer-transfer oracles from
+regression. It does not widen the image profile or establish conformance.

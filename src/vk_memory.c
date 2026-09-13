@@ -295,6 +295,15 @@ VkResult ps5vk_buffer_span(VkDevice d, VkBuffer b, VkDeviceSize offset,
     return VK_SUCCESS;
 }
 
+VkResult ps5vk_image_flush_range(VkDevice d, VkImage image, VkDeviceSize offset, VkDeviceSize size)
+{
+    void *address = NULL; VkDeviceSize bytes = 0;
+    if (ps5vk_image_span(d, image, &address, &bytes) != VK_SUCCESS) return INVALID;
+    if (!image->memory || offset > bytes || size > bytes - offset) return INVALID;
+    if (!d->memory.flush) return VK_SUCCESS;
+    return d->memory.flush(d->memory.context, image->memory->backing, image->offset + offset, size);
+}
+
 VkResult ps5vk_buffer_cache(VkDevice d, VkBuffer b, VkDeviceSize offset,
     VkDeviceSize range, VkBool32 invalidate)
 {
@@ -423,4 +432,16 @@ VkResult ps5vk_image_span(VkDevice d, VkImage image, void **address, VkDeviceSiz
     *address = (unsigned char *)image->memory->address + image->offset;
     *bytes = image->requirements.size;
     return VK_SUCCESS;
+}
+
+VkBool32 ps5vk_pure_transfer_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL && image->info.usage &&
+        !(image->info.usage &
+          ~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
 }

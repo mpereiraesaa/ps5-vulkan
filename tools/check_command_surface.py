@@ -25,8 +25,8 @@ EXPECTED_VULKAN10_TOTAL = 137
 # prototype, a dispatch entry and an implementation. This is not a semantic
 # support claim; see the report's advertised-obligation table for what each
 # command may actually be used for.
-EXPECTED_FULLY_WIRED_TOTAL = 131
-EXPECTED_MISSING_TOTAL = 6
+EXPECTED_FULLY_WIRED_TOTAL = 137
+EXPECTED_MISSING_TOTAL = 0
 
 REQUIRED_DYNAMIC_STATE_COMMANDS = {
     "vkCmdSetLineWidth", "vkCmdSetDepthBias", "vkCmdSetDepthBounds",
@@ -64,6 +64,8 @@ REQUIRED_QUERY_COMMANDS = {
 
 REQUIRED_FAIL_CLOSED_COMMANDS = {
     "vkCmdNextSubpass", "vkCmdExecuteCommands", "vkQueueBindSparse",
+    "vkCmdBlitImage", "vkCmdResolveImage", "vkCmdClearDepthStencilImage",
+    "vkCmdClearAttachments",
 }
 
 EXPECTED_MISSING_CATEGORIES = {
@@ -84,20 +86,7 @@ EXPECTED_MISSING_CATEGORIES = {
     },
     # The four pipeline-cache commands moved to the fully wired surface with the
     # header-only cache slice; they are no longer deficits.
-    "Transfer/Clear/Indirect": {
-        "vkCmdCopyBuffer",
-        "vkCmdCopyImage",
-        "vkCmdBlitImage",
-        "vkCmdResolveImage",
-        "vkCmdUpdateBuffer",
-        "vkCmdFillBuffer",
-        "vkCmdClearColorImage",
-        "vkCmdClearDepthStencilImage",
-        "vkCmdClearAttachments",
-        "vkCmdDrawIndirect",
-        "vkCmdDrawIndexedIndirect",
-        "vkCmdDispatchIndirect",
-    },
+    "Transfer/Clear/Indirect": set(),
     "Subpass/Secondary": set(),
     "Dynamic State": set(),
     "Sparse": set(),
