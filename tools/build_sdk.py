@@ -310,6 +310,13 @@ not advertised. Vertex buffers, graphics descriptors and additional render targe
 supported by this runtime compiler profile. A bounded
 in-process cache retains compiled pairs. This is not a Vulkan-conformant driver.
 
+## License
+This SDK is licensed under GPL-3.0-or-later. `libps5vk.a` is a static library;
+an application distributed after linking it must comply with the GNU GPL and
+provide the corresponding source of the combined work. See the included
+`LICENSE` file. Separately supplied console system modules are not part of this
+SDK.
+
 ## Usage
 Include `<ps5vk/ps5vk.h>` and `<ps5vk/ps5vk_present.h>` and compile with:
 ```sh
@@ -328,6 +335,7 @@ does not certify GPU output. If no native toolchain is available, libps5vk.a
 contains the host validation backend instead; no native capability is implied.
 """
     (DIST_SDK / "README.md").write_text(readme_text)
+    shutil.copyfile(ROOT / "LICENSE", DIST_SDK / "LICENSE")
 
     # 6. Build and run host consumer test
     consumer_bin = ROOT / "build/tests/test_sdk_consumer"

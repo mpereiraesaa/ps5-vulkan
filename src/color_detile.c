@@ -1,7 +1,9 @@
-/* SPDX-License-Identifier: GPL-3.0-or-later
+/* Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * The 32-bpp SW_64K_R_X affine equation is derived from BlackBearReloaded's
- * PS5 OpenGL ps5_tiled_color_offset implementation (GPL-3.0-or-later), whose
+ * ps5-opengl ps5_tiled_color_offset implementation (GPL-3.0-or-later), whose
  * coordinate-ramp receipt identifies the PS5 swizzle-27 layout. */
 #include "color_detile.h"
 #include <limits.h>
