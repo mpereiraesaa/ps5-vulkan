@@ -13,10 +13,12 @@ int main(void)
     assert(rg->selectors[0]==4 && rg->selectors[1]==5 && rg->selectors[2]==0 && rg->selectors[3]==1);
     assert(rgba && rgba->bytes_per_texel==4 && rgba->descriptor_format_word==0x03800000u);
     assert(srgb && srgb->bytes_per_texel==4 && srgb->descriptor_format_word==0x08200000u);
-    assert(rgba->validated && !r->validated && !rg->validated && !srgb->validated);
+    assert(r->validated && rg->validated && rgba->validated && srgb->validated);
+    assert(!r->linear_filter_validated && !rg->linear_filter_validated &&
+        rgba->linear_filter_validated && !srgb->linear_filter_validated);
     assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8B8A8_UNORM));
-    assert(!ps5vk_texture_format_supported(VK_FORMAT_R8_UNORM));
-    assert(!ps5vk_texture_format_supported(VK_FORMAT_R8G8_UNORM));
-    assert(!ps5vk_texture_format_supported(VK_FORMAT_R8G8B8A8_SRGB));
+    assert(ps5vk_texture_format_supported(VK_FORMAT_R8_UNORM));
+    assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8_UNORM));
+    assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8B8A8_SRGB));
     assert(!ps5vk_texture_format_lookup(VK_FORMAT_B8G8R8A8_UNORM));
 }

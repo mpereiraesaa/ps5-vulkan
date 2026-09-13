@@ -134,14 +134,14 @@ check:
 	./build/tests/test_scene_geometry
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/sampler_core_probe.c tests/test_sampler_core_probe.c -o build/tests/test_sampler_core_probe
 	./build/tests/test_sampler_core_probe
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/sampled_format_probe.c tests/test_sampled_format_probe.c -o build/tests/test_sampled_format_probe
+	./build/tests/test_sampled_format_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state
 	./build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy
 	./build/tests/test_texture_copy
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format.c -o build/tests/test_texture_format
 	./build/tests/test_texture_format
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_ENABLE_TEXTURE_FORMAT_CANDIDATES=1 $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format_candidates.c -o build/tests/test_texture_format_candidates
-	./build/tests/test_texture_format_candidates
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/texture_format.c src/vk_image_view.c src/vk_sampler.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_descriptor.c -o build/tests/test_texture_descriptor
 	./build/tests/test_texture_descriptor
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_layout.c -o build/tests/test_texture_layout

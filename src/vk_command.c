@@ -818,7 +818,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
             !texture_layout_supported(b->newLayout) ||
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
-            !image || image->device!=c->pool->device || image->info.format!=VK_FORMAT_R8G8B8A8_UNORM ||
+            !image || image->device!=c->pool->device ||
             image->info.mipLevels!=1 || image->info.arrayLayers!=1 || !image_barrier_profile(b) ||
             b->subresourceRange.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
             b->subresourceRange.baseMipLevel || b->subresourceRange.baseArrayLayer ||

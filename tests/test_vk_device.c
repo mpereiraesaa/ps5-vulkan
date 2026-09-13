@@ -238,8 +238,9 @@ static void lifecycle(void)
         VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,0,&ip)
         ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     p->platform.image_properties=ps5vk_graphics_image_properties;
-    const VkFormat image_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_D32_SFLOAT};
-    for(unsigned f=0;f<3;++f)for(unsigned usage=0;usage<256;++usage) {
+    const VkFormat image_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_D32_SFLOAT,VK_FORMAT_R8_UNORM,VK_FORMAT_R8G8_UNORM,VK_FORMAT_R8G8B8A8_SRGB};
+    for(unsigned f=0;f<6;++f)for(unsigned usage=0;usage<256;++usage) {
         memset(&ip,0xff,sizeof(ip));
         VkResult result=vkGetPhysicalDeviceImageFormatProperties(p,image_formats[f],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,usage,0,&ip);
@@ -260,13 +261,17 @@ static void lifecycle(void)
             ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     }
     const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
-        VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT};
+        VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM,
+        VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT};
     const VkFormatFeatureFlags bits[] = {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
             VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
             VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, 0, 0};
-    for (unsigned n=0; n<5; ++n) {
+        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT, 0};
+    for (unsigned n=0; n<7; ++n) {
         memset(&fp, 0xff, sizeof(fp));
         vkGetPhysicalDeviceFormatProperties(p, formats[n], &fp);
         assert(!fp.linearTilingFeatures && !fp.bufferFeatures && fp.optimalTilingFeatures==bits[n]);
@@ -614,15 +619,14 @@ static void narrow_storage_features(void)
     assert(vkGetPhysicalDeviceImageFormatProperties2KHR(
         p, &image_info2, &wrong_image2) == VK_ERROR_UNKNOWN);
     assert(!memcmp(&wrong_image2, &saved_wrong_image2, sizeof(wrong_image2)));
-    VkPhysicalDeviceImageFormatInfo2 unsupported_info2 = image_info2;
-    unsupported_info2.format = VK_FORMAT_R8G8B8A8_SRGB;
+    VkPhysicalDeviceImageFormatInfo2 supported_srgb_info2 = image_info2;
+    supported_srgb_info2.format = VK_FORMAT_R8G8B8A8_SRGB;
     memset(&image2.imageFormatProperties, 0xa5,
            sizeof(image2.imageFormatProperties));
+    supported_srgb_info2.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     assert(vkGetPhysicalDeviceImageFormatProperties2KHR(
-        p, &unsupported_info2, &image2) == VK_ERROR_FORMAT_NOT_SUPPORTED);
-    VkImageFormatProperties zero_image_properties = {0};
-    assert(!memcmp(&image2.imageFormatProperties, &zero_image_properties,
-                   sizeof(zero_image_properties)));
+        p, &supported_srgb_info2, &image2) == VK_SUCCESS);
+    assert(image2.imageFormatProperties.maxExtent.width == PS5VK_MAX_IMAGE_2D);
 
     VkPhysicalDeviceSparseImageFormatInfo2 sparse_info2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2,

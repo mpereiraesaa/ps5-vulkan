@@ -82,7 +82,7 @@ static inline void ps5vk_graphics_format_properties(VkFormat format,
     if(sampled && ps5vk_texture_format_supported(format)) {
         out->optimalTilingFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
             VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-        if(sampled->linear_filter_candidate)
+        if(sampled->linear_filter_validated)
             out->optimalTilingFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
     }
     switch (format) {

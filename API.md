@@ -58,20 +58,21 @@ draws.
 
 ## Images and sampling
 
-The internal GFX1013 texture-format table also records exact descriptor
-encodings, identity component completion and texel sizes for `R8_UNORM`,
-`R8G8_UNORM` and `R8G8B8A8_SRGB`, adapted from the pinned GPLv3
-`ps5-opengl` reference. These rows are diagnostic candidates, not public
-support: the normal SDK keeps them disabled until image creation, upload,
-descriptor sampling and deterministic readback all pass on PS5 hardware.
-Candidate knowledge never changes `vkGetPhysicalDeviceFormatProperties` by
-itself.
+The GFX1013 texture-format table records exact descriptor encodings, identity
+component completion and texel sizes for `R8_UNORM`, `R8G8_UNORM`,
+`R8G8B8A8_UNORM` and `R8G8B8A8_SRGB`, adapted from the pinned GPLv3
+`ps5-opengl` reference. All four rows are public sampled/upload formats after
+two byte-identical PS5 runs validated image creation, transfer upload,
+descriptor sampling and deterministic readback. Each format query exposes only
+the operations that were actually established.
 
 | Format | Supported role |
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
 | `VK_FORMAT_D32_SFLOAT` | Depth attachment |
+| `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8G8_UNORM` | Single-level sampled/upload image with nearest filtering |
 | `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled/upload image, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
+| `VK_FORMAT_R8G8B8A8_SRGB` | Single-level sampled/upload image with hardware sRGB decode and nearest filtering |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
 
@@ -95,8 +96,11 @@ layout transitions are bookkeeping and are validated against the image's
 committed layout. Anything outside the padded linear geometry stays refused
 rather than being approximated with a linear write.
 
-Nearest and linear sampling have native deterministic readback evidence for
-single-level `VK_FORMAT_R8G8B8A8_UNORM` images. Core
+Nearest sampling has native deterministic readback evidence for all four
+sampled formats. R8 and RG8 also verify Vulkan identity completion of missing
+components, while RGBA8 sRGB verifies nonlinear-to-linear decode before the
+fragment result is written. Nearest and linear sampling have separate evidence
+for single-level `VK_FORMAT_R8G8B8A8_UNORM` images. Core
 `REPEAT`, `MIRRORED_REPEAT`, `CLAMP_TO_EDGE` and `CLAMP_TO_BORDER` are encoded
 per axis. Two byte-identical hardware runs deterministically verified mirrored
 repeat, transparent-black, opaque-black and opaque-white border results, then

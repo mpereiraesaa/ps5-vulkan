@@ -547,7 +547,7 @@ static void image_barriers(void)
     VkMemoryAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=256};
     assert(vkAllocateMemory(&d,&ai,NULL,&memory)==VK_SUCCESS);
     struct VkImage_T image={.device=&d,.memory=memory,.requirements={.size=256},
-        .info={.format=VK_FORMAT_R8G8B8A8_UNORM,.mipLevels=1,.arrayLayers=1,
+        .info={.format=VK_FORMAT_R8_UNORM,.mipLevels=1,.arrayLayers=1,
             .usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT}};
     d.images=&image;
     VkCommandPool p=pool(&d,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -601,6 +601,7 @@ static void image_barriers(void)
     /* The unchanged upstream smoke triangle records one memory dependency and
      * one image transition in the same call. Accept the exact bounded profile
      * transactionally; a bad member must append neither operation. */
+    image.info.format=VK_FORMAT_R8G8B8A8_UNORM;
     image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     VkMemoryBarrier host_vertex={.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .srcAccessMask=VK_ACCESS_HOST_WRITE_BIT,

@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 124 mandatory limits satisfied, 74 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 14 format class rules
-satisfied with 648 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 16 format class rules
+satisfied with 646 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -594,33 +594,42 @@ streams ended cleanly with zero native allocation bytes, and Close Game was
 verified after each run.
 
 This establishes nearest and linear magnification/minification for the
-single-level RGBA8 sampled-image path. It does not establish mip chains,
-anisotropy, custom border colors, mirror-clamp extension support, other sampled
-formats or Vulkan conformance.
+single-level RGBA8 UNORM sampled-image path. It does not establish mip chains,
+anisotropy, custom border colors, mirror-clamp extension support, filtering for
+the additional formats below or Vulkan conformance.
 
-### GPL texture-format staging
+### GPL texture formats promoted by hardware evidence
 
-The driver now has one internal sampled-format table derived from the exact
-GPLv3 `ps5-opengl` revision pinned in `LICENSING.md`. It centralizes texel size,
-GFX10.3 descriptor-format word and Vulkan identity component completion for the
-already validated `R8G8B8A8_UNORM` path and three next candidates:
-`R8_UNORM`, `R8G8_UNORM` and `R8G8B8A8_SRGB`. Texture layout and buffer-upload
-planning no longer assume four bytes per texel.
+The sampled-format table derived from the exact GPLv3 `ps5-opengl` revision
+pinned in `LICENSING.md` now publicly supports `R8_UNORM`, `R8G8_UNORM`,
+`R8G8B8A8_UNORM` and `R8G8B8A8_SRGB`. Texture layout and buffer-upload planning
+use each format's 1/2/4-byte texel width rather than assuming four bytes.
 
-This is host-validated preparation, not new hardware evidence. The regular SDK
-continues to enable and report only `R8G8B8A8_UNORM`; a separate build-time
-candidate gate exists solely for bounded native diagnostics. Tests require the
-gate to be off by default, preserve the exact native words and swizzles, cover
-1/2/4-byte row arithmetic and reject unknown formats. No matrix count changes
-until a candidate passes creation, upload, sampling and deterministic readback
-on the owned PS5.
+Two runs used byte-identical SELF SHA-256
+`666e441796ae90c1cb06b3dcbacac121f246356235f1525a77c9ffef99dc7e32`:
+
+- `20260913T212518327Z_PPSA99994_ps5vk_0x5cb014618428`, log SHA-256
+  `f7b427cc393add2b802d4d85f15e12484d7fa6e97532a5b2f1ed5c900ce970ce`
+- `20260913T212630352Z_PPSA99994_ps5vk_0x5cc0d96c574c`, log SHA-256
+  `063be2d9a994e36a92be3823088d181d0796ff8c16fbe3672896dd31db53e2c1`
+
+Each complete 1,029-record ps5log/1 stream performed creation, GPU upload,
+layout transitions, descriptor sampling and exact detiled readback for the
+three newly enabled formats. Every case produced exactly 373,248 expected
+pixels and zero others. R8 yielded `(R,0,0,1)`, RG8 yielded `(R,G,0,1)`, and
+the sRGB input `0x80,0x40,0x20` decoded to linear UNORM8 `0x37,0x0d,0x04`.
+Thirty-six compute rounds surrounded the three graphics cases, resource
+accounting returned to zero, both streams ended with BYE and Close Game stopped
+the title in 100 ms. Linear filtering remains advertised only for RGBA8 UNORM;
+the new formats were validated with nearest sampling. This is bounded format
+evidence, not general format coverage or Vulkan conformance.
 
 The earlier dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
 alignment validation and native descriptor-address adjustment with checked
 ranges. The reporting matrix now records 124 satisfied mandatory limit rows,
-74 limit blockers and 722 blockers overall.
+74 limit blockers and 720 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

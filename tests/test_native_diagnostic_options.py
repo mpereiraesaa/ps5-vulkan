@@ -46,6 +46,13 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.rejected({"PS5VK_GRAPHICS_SCISSOR_PROBE": "6"},
                       "requires graphics profile API")
 
+    def test_sampled_format_probe_is_a_scene_diagnostic(self):
+        self.rejected({"PS5VK_GRAPHICS_SCISSOR_PROBE": "7"},
+                      "requires graphics profile API")
+        source = (ROOT / "native/graphics_main.c").read_text()
+        self.assertIn("PS5VK_GRAPHICS_SCISSOR_PROBE!=7 && !PS5VK_GRAPHICS_CONTINUOUS",
+                      source)
+
     def rejected(self, options, message):
         env = {k: v for k, v in os.environ.items() if not k.startswith("PS5VK_")}
         env.update(options)

@@ -35,9 +35,10 @@ results; visual output is not the sole correctness signal.
 - Vertex and index buffers, indexed and non-indexed triangle-list draws
 - One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
   plus an optional D32 depth attachment
-- Single-level RGBA8 sampled textures with GPU upload transitions, core repeat,
-  mirrored-repeat, edge/border clamp, the six fixed border-color enums and
-  nearest/linear magnification and minification
+- Single-level R8, RG8, RGBA8 UNORM and RGBA8 sRGB sampled textures with GPU
+  upload transitions and deterministic hardware readback; core repeat,
+  mirrored-repeat, edge/border clamp and the six fixed border-color enums are
+  implemented, with nearest/linear filtering validated for RGBA8 UNORM
 - One static or dynamic viewport/scissor pair, depth testing and face culling
 - Recording support for all Vulkan 1.0 dynamic-state setters; only dynamic
   viewport/scissor currently participate in native draws

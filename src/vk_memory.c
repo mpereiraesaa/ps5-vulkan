@@ -330,9 +330,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     if (info->pNext || info->flags || info->imageType != VK_IMAGE_TYPE_2D ||
         info->arrayLayers != 1 || info->samples != VK_SAMPLE_COUNT_1_BIT ||
         info->sharingMode != VK_SHARING_MODE_EXCLUSIVE || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
-        info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED ||
-        (info->format != VK_FORMAT_R8G8B8A8_UNORM && info->format != VK_FORMAT_B8G8R8A8_UNORM &&
-         info->format != VK_FORMAT_D32_SFLOAT)) return VK_ERROR_FEATURE_NOT_PRESENT;
+        info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED) return VK_ERROR_FEATURE_NOT_PRESENT;
     const VkImageUsageFlags supported = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     if (!info->usage || info->usage & ~supported || !info->extent.width || !info->extent.height ||
@@ -342,6 +340,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     if (info->mipLevels > levels ||
         (info->format == VK_FORMAT_D32_SFLOAT ? (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
          (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) return INVALID;
+    /* The backend owns format/usage support. Keeping a second format whitelist
+     * here made newly validated native formats impossible to create even when
+     * the query and requirements paths accepted them. */
     VkMemoryRequirements requirements = {0};
     VkResult rc = d->image_requirements(d, info, &requirements);
     if (rc != VK_SUCCESS) return rc;
