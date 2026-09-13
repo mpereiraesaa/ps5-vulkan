@@ -15,6 +15,7 @@ from tools.check_command_surface import (
     EXPECTED_FULLY_WIRED_TOTAL,
     EXPECTED_MISSING_TOTAL,
     REQUIRED_BOOKKEEPING_COMMANDS,
+    REQUIRED_SYNC_OBJECT_COMMANDS,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +42,10 @@ class TestCommandSurfaceParity(unittest.TestCase):
         fully_wired = set(result["fully_wired"])
         for cmd in REQUIRED_BOOKKEEPING_COMMANDS:
             self.assertIn(cmd, fully_wired, f"Required bookkeeping command {cmd} is not in fully wired surface")
+
+    def test_sync_objects_are_fully_wired(self):
+        fully_wired = set(audit_command_surface(REPO_ROOT)["fully_wired"])
+        self.assertTrue(REQUIRED_SYNC_OBJECT_COMMANDS <= fully_wired)
 
 
 class TestCommandSurfaceNegativeFixtures(unittest.TestCase):
@@ -117,12 +122,12 @@ class TestCommandSurfaceNegativeFixtures(unittest.TestCase):
         """Simulate adding an unimplemented command to the public header."""
         header_path = self.mock_root / "include/ps5vk/ps5vk.h"
         content = header_path.read_text()
-        content += "\nVKAPI_ATTR VkResult VKAPI_CALL vkCreateEvent(VkDevice d, const VkEventCreateInfo* i, const VkAllocationCallbacks* a, VkEvent* e);\n"
+        content += "\nVKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(VkQueue q, uint32_t n, const VkBindSparseInfo* i, VkFence f);\n"
         header_path.write_text(content)
 
         result = audit_command_surface(self.mock_root)
         self.assertFalse(result["passed"])
-        self.assertIn("vkCreateEvent", result["public_not_dispatch"])
+        self.assertIn("vkQueueBindSparse", result["public_not_dispatch"])
 
 
 if __name__ == "__main__":

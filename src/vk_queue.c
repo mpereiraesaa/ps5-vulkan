@@ -1,8 +1,14 @@
 #include "vk_queue.h"
+#include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
+static int event_operation(int type);
 static void free_submission(struct ps5vk_submission *s)
 {
+    if (s->reserved) {
+        for (uint32_t j = 0; j < s->wait_count; ++j) --s->waits[j]->pending;
+        for (uint32_t j = 0; j < s->signal_count; ++j) --s->signals[j]->pending;
+    }
     VkAllocationCallbacks a = s->allocator; VkBool32 custom = s->custom_allocator;
     ps5vk_object_free(s, &a, custom);
 }
@@ -10,8 +16,23 @@ static void pin(struct ps5vk_submission *s, int acquire)
 {
     for (unsigned j = 0; j < s->count; ++j) {
         VkCommandBuffer c = s->buffers[j];
-        for (unsigned k = 0; k < c->operation_count; ++k) {
+        /* Event host-transition valid usage and lifetime are expressed in
+         * terms of a command buffer remaining pending, not merely the short
+         * segment that executes the event opcode.  Pin all event references
+         * on the 0 -> 1 transition and release them only on 1 -> 0. */
+        if (acquire && !c->pending_count) {
+            for (uint32_t k = 0; k < c->operation_count; ++k) {
+                struct ps5vk_operation *op = &c->operations[k];
+                if (!event_operation(op->type)) continue;
+                ++op->event->pending;
+                if (op->type == PS5VK_EVENT_WAIT) ++op->event->pending_waits;
+            }
+        }
+        uint32_t first = ps5vk_submission_first_operation(s, j);
+        uint32_t end = first + ps5vk_submission_operation_count(s, j);
+        for (uint32_t k = first; k < end; ++k) {
             struct ps5vk_operation *op = &c->operations[k];
+            if (event_operation(op->type)) continue;
             if (op->type == PS5VK_BEGIN_RENDER_PASS) {
                 if (acquire) { ++op->render_pass->pending; ++op->framebuffer->pending; }
                 else { --op->render_pass->pending; --op->framebuffer->pending; }
@@ -32,30 +53,90 @@ static void pin(struct ps5vk_submission *s, int acquire)
                 if(acquire)++op->sets[set]->pending;else --op->sets[set]->pending;
             }
         }
-        c->state = acquire ? PS5VK_PENDING :
-            (c->usage & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT ? PS5VK_INVALID : PS5VK_EXECUTABLE);
+        if (acquire) {
+            ++c->pending_count;
+            c->state = PS5VK_PENDING;
+        } else {
+            --c->pending_count;
+            if (!c->pending_count) {
+                for (uint32_t k = 0; k < c->operation_count; ++k) {
+                    struct ps5vk_operation *op = &c->operations[k];
+                    if (!event_operation(op->type)) continue;
+                    --op->event->pending;
+                    if (op->type == PS5VK_EVENT_WAIT) --op->event->pending_waits;
+                }
+                c->state = c->usage & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT ?
+                    PS5VK_INVALID : PS5VK_EXECUTABLE;
+            }
+        }
     }
 }
+
+static VkResult start_submission(VkDevice d)
+{
+    while (d->submission) {
+        struct ps5vk_submission *s = d->submission;
+        if (!s->waits_consumed) {
+            for (uint32_t j = 0; j < s->wait_count; ++j) {
+                if (!s->waits[j]->signaled) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
+                s->waits[j]->signaled = VK_FALSE;
+            }
+            s->waits_consumed = VK_TRUE;
+        }
+        if (s->frontend_only) {
+            for (uint32_t b = 0; b < s->count; ++b) {
+                VkCommandBuffer command = s->buffers[b];
+                uint32_t first = ps5vk_submission_first_operation(s, b);
+                uint32_t end = first + ps5vk_submission_operation_count(s, b);
+                for (uint32_t k = first; k < end; ++k) {
+                    struct ps5vk_operation *op = &command->operations[k];
+                    if (op->type == PS5VK_EVENT_WAIT &&
+                        !(op->event->host_signaled || op->event->device_signaled)) {
+                        return VK_SUCCESS;
+                    }
+                    if (op->type == PS5VK_EVENT_SET) op->event->device_signaled = VK_TRUE;
+                    if (op->type == PS5VK_EVENT_RESET) {
+                        op->event->host_signaled = VK_FALSE;
+                        op->event->device_signaled = VK_FALSE;
+                    }
+                }
+            }
+            pin(s, 0);
+        } else if (s->count) {
+            VkResult result = d->submit_backend.launch(d, s->backend_job);
+            if (result != VK_SUCCESS) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
+            return VK_SUCCESS;
+        }
+        d->queue.completed_serial = s->serial;
+        for (uint32_t j = 0; j < s->signal_count; ++j) s->signals[j]->signaled = VK_TRUE;
+        if (s->fence) { s->fence->pending_serial = 0; s->fence->signaled = VK_TRUE; }
+        d->submission = s->next; free_submission(s);
+    }
+    return VK_SUCCESS;
+}
+
 VkResult ps5vk_queue_poll(VkDevice d)
 {
     if (!d) return INVALID;
     if (d->lost) return VK_ERROR_DEVICE_LOST;
     struct ps5vk_submission *s = d->submission;
     if (!s) return VK_SUCCESS;
+    if (s->frontend_only) return start_submission(d);
     if (!d->submit_backend.poll || !d->submit_backend.release) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
     uint64_t completed = 0;
     VkResult result = d->submit_backend.poll(d, s->backend_job, &completed);
     if (result != VK_SUCCESS) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
     if (!completed) return VK_SUCCESS;
     if (completed != s->serial) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
-    /* The backend contract includes visibility and exact completion. Release
-     * its private GPU allocations before reporting successful retirement. */
+    /* The backend contract includes visibility and exact completion. */
     d->submit_backend.release(d, s->backend_job);
     pin(s, 0);
     d->queue.completed_serial = s->serial;
+    for (uint32_t j = 0; j < s->signal_count; ++j) s->signals[j]->signaled = VK_TRUE;
     if (s->fence) { s->fence->pending_serial = 0; s->fence->signaled = VK_TRUE; }
-    d->submission = NULL; free_submission(s);
-    return VK_SUCCESS;
+    d->submission = s->next; free_submission(s);
+
+    return start_submission(d);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue)
 {
@@ -81,6 +162,12 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     VkFramebuffer framebuffer = NULL;
     for (unsigned j = 0; j < c->operation_count; ++j) {
         const struct ps5vk_operation *op = &c->operations[j];
+        if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
+            op->type == PS5VK_EVENT_WAIT) {
+            if (active || !op->event || op->event->device != d ||
+                !op->src_stage || !op->dst_stage) return 0;
+            continue;
+        }
         if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_END_RENDER_PASS) {
             if (!d->graphics_enabled || !d->graphics_submit_enabled || !op->render_pass || !op->framebuffer ||
                 op->render_pass->device != d || op->framebuffer->device != d) return 0;
@@ -140,73 +227,251 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     }
     return active == NULL;
 }
-VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo *infos, VkFence fence)
+struct semaphore_state { VkSemaphore semaphore; VkBool32 signaled; };
+
+static void discard_chain(VkDevice d, struct ps5vk_submission *head)
+{
+    while (head) {
+        struct ps5vk_submission *next = head->next;
+        if (head->backend_job && d->submit_backend.release)
+            d->submit_backend.release(d, head->backend_job);
+        free_submission(head); head = next;
+    }
+}
+
+static struct semaphore_state *find_state(struct semaphore_state *states,
+    uint32_t *count, VkSemaphore semaphore)
+{
+    for (uint32_t j = 0; j < *count; ++j)
+        if (states[j].semaphore == semaphore) return &states[j];
+    states[*count].semaphore = semaphore;
+    states[*count].signaled = semaphore->signaled;
+    return &states[(*count)++];
+}
+
+static struct ps5vk_submission *allocate_submission(VkDevice d, size_t refs,
+    VkResult *result)
+{
+    if (refs > (SIZE_MAX - sizeof(struct ps5vk_submission)) / sizeof(VkSemaphore)) {
+        *result = VK_ERROR_OUT_OF_HOST_MEMORY; return NULL;
+    }
+    VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
+    struct ps5vk_submission *submission = ps5vk_object_alloc(
+        d->custom_allocator ? &d->allocator : NULL, NULL,
+        sizeof(*submission) + refs * sizeof(VkSemaphore),
+        VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &saved, &custom);
+    if (!submission) { *result = VK_ERROR_OUT_OF_HOST_MEMORY; return NULL; }
+    submission->allocator = saved; submission->custom_allocator = custom;
+    submission->waits = (VkSemaphore *)(submission + 1);
+    submission->signals = submission->waits;
+    return submission;
+}
+
+static int event_operation(int type)
+{
+    return type == PS5VK_EVENT_SET || type == PS5VK_EVENT_RESET ||
+        type == PS5VK_EVENT_WAIT;
+}
+
+static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
+    struct ps5vk_submission **expanded, uint32_t *segment_count)
+{
+    struct ps5vk_submission *head = NULL, **tail = &head;
+    VkResult result = VK_SUCCESS;
+    for (struct ps5vk_submission *record = original; record; record = record->next) {
+        size_t refs = (size_t)record->wait_count + record->signal_count;
+        VkBool32 contains_event = VK_FALSE;
+        for (uint32_t b = 0; b < record->count; ++b)
+            for (uint32_t k = 0; k < record->buffers[b]->operation_count; ++k)
+                contains_event |= event_operation(record->buffers[b]->operations[k].type);
+        struct ps5vk_submission *first = NULL, *last = NULL;
+        if (!contains_event) {
+            last = allocate_submission(d, refs, &result);
+            if (!last) goto fail;
+            last->count = record->count;
+            for (uint32_t b = 0; b < record->count; ++b) last->buffers[b] = record->buffers[b];
+            if (*segment_count == UINT32_MAX) {
+                free_submission(last); result = VK_ERROR_OUT_OF_HOST_MEMORY; goto fail;
+            }
+            first = last; *tail = last; tail = &last->next; ++*segment_count;
+        } else {
+            for (uint32_t b = 0; b < record->count; ++b) {
+                VkCommandBuffer command = record->buffers[b];
+                if (!command->operation_count) {
+                    last = allocate_submission(d, refs, &result); if (!last) goto fail;
+                    last->count = 1; last->buffers[0] = command; last->frontend_only = VK_TRUE;
+                    if (!first) first = last;
+                    if (*segment_count == UINT32_MAX) {
+                        free_submission(last); result = VK_ERROR_OUT_OF_HOST_MEMORY; goto fail;
+                    }
+                    *tail = last; tail = &last->next; ++*segment_count;
+                    continue;
+                }
+                uint32_t operation = 0;
+                while (operation < command->operation_count) {
+                    uint32_t begin = operation;
+                    VkBool32 frontend = event_operation(command->operations[operation].type);
+                    if (frontend) ++operation;
+                    else while (operation < command->operation_count &&
+                        !event_operation(command->operations[operation].type)) ++operation;
+                    last = allocate_submission(d, refs, &result); if (!last) goto fail;
+                    last->count = 1; last->buffers[0] = command;
+                    last->first_operation[0] = (uint16_t)begin;
+                    last->operation_count[0] = (uint16_t)(operation - begin);
+                    last->frontend_only = frontend;
+                    if (!first) first = last;
+                    if (*segment_count == UINT32_MAX) {
+                        free_submission(last); result = VK_ERROR_OUT_OF_HOST_MEMORY; goto fail;
+                    }
+                    *tail = last; tail = &last->next; ++*segment_count;
+                }
+            }
+            if (!first) {
+                last = allocate_submission(d, refs, &result); if (!last) goto fail;
+                if (*segment_count == UINT32_MAX) {
+                    free_submission(last); result = VK_ERROR_OUT_OF_HOST_MEMORY; goto fail;
+                }
+                first = last; *tail = last; tail = &last->next; ++*segment_count;
+            }
+        }
+        first->wait_count = record->wait_count;
+        memcpy(first->waits, record->waits, record->wait_count * sizeof(VkSemaphore));
+        last->signal_count = record->signal_count;
+        last->signals = (VkSemaphore *)(last + 1) + last->wait_count;
+        memcpy(last->signals, record->signals, record->signal_count * sizeof(VkSemaphore));
+    }
+    *expanded = head; return VK_SUCCESS;
+fail:
+    discard_chain(d, head); return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
+    const VkSubmitInfo *infos, VkFence fence)
 {
     if (!queue || !queue->device || (count && !infos)) return INVALID;
     VkDevice d = queue->device;
     if (d->lost) return VK_ERROR_DEVICE_LOST;
     if (fence && (fence->device != d || fence->signaled || fence->pending_serial)) return INVALID;
-    unsigned buffers = 0;
+
+    uint32_t records = count ? count : 1, reference_count = 0;
     for (uint32_t j = 0; j < count; ++j) {
         const VkSubmitInfo *info = &infos[j];
         if (info->sType != VK_STRUCTURE_TYPE_SUBMIT_INFO || info->pNext ||
-            info->waitSemaphoreCount || info->signalSemaphoreCount ||
+            (info->waitSemaphoreCount && (!info->pWaitSemaphores || !info->pWaitDstStageMask)) ||
+            (info->signalSemaphoreCount && !info->pSignalSemaphores) ||
             (info->commandBufferCount && !info->pCommandBuffers) ||
-            info->commandBufferCount > PS5VK_MAX_SUBMITTED_BUFFERS - buffers) return INVALID;
-        buffers += info->commandBufferCount;
+            info->commandBufferCount > PS5VK_MAX_SUBMITTED_BUFFERS ||
+            UINT32_MAX - reference_count < info->waitSemaphoreCount ||
+            UINT32_MAX - reference_count - info->waitSemaphoreCount < info->signalSemaphoreCount)
+            return INVALID;
+        reference_count += info->waitSemaphoreCount + info->signalSemaphoreCount;
+        for (uint32_t k = 0; k < info->waitSemaphoreCount; ++k)
+            if (!info->pWaitDstStageMask[k]) return INVALID;
         for (uint32_t k = 0; k < info->commandBufferCount; ++k) {
-            VkCommandBuffer c = info->pCommandBuffers[k];
-            /* This backend serializes batches. Simultaneous reuse is legal,
-             * but retire the previous batch before validating/preparing reuse.
-             * Never reset or release pending ownership merely from the flag. */
-            if (c && c->pool->device == d && c->state == PS5VK_PENDING &&
-                (c->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
-                VkResult wait = vkQueueWaitIdle(queue);
-                if (wait != VK_SUCCESS) return wait;
-            }
-            if (!command_valid(d, c)) return INVALID;
+            VkCommandBuffer command = info->pCommandBuffers[k];
+            if (command && command->pool && command->pool->device == d &&
+                command->state == PS5VK_PENDING &&
+                !(command->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))
+                return INVALID;
         }
     }
-    if (buffers && (!d->submit_backend.prepare || !d->submit_backend.launch ||
-                    !d->submit_backend.poll || !d->submit_backend.release)) return INVALID;
-    if (!d->queue.next_serial || d->queue.next_serial == UINT64_MAX) return INVALID;
-    VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
-    struct ps5vk_submission *s = ps5vk_object_alloc(d->custom_allocator ? &d->allocator : NULL, NULL,
-        sizeof(*s), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &saved, &custom);
-    if (!s) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    s->allocator = saved; s->custom_allocator = custom; s->fence = fence;
-    for (uint32_t j = 0; j < count; ++j) for (uint32_t k = 0; k < infos[j].commandBufferCount; ++k) {
-        VkCommandBuffer c = infos[j].pCommandBuffers[k];
-        for (unsigned n = 0; n < s->count; ++n)
-            if (s->buffers[n] == c && !(c->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
-                free_submission(s); return INVALID;
-            }
-        s->buffers[s->count++] = c;
-    }
-    /* One backend batch in flight. QueueSubmit may block to preserve ordering;
-     * simultaneous reuse does not imply parallel GPU execution. Semaphores
-     * remain unsupported in this profile. */
+    if (!d->queue.next_serial) return INVALID;
+
+    /* This implementation has one native batch in flight. Retire the previous
+     * call before validating this call, preserving queue order. */
     VkResult result = vkQueueWaitIdle(queue);
-    if (result != VK_SUCCESS) { free_submission(s); return result; }
-    s->serial = d->queue.next_serial;
-    if (!buffers) {
-        /* No commands and all previous work retired: an empty fence submission
-         * requires no fabricated GPU job or callback success. */
-        ++d->queue.next_serial; d->queue.completed_serial = s->serial;
-        if (fence) fence->signaled = VK_TRUE;
-        free_submission(s); return VK_SUCCESS;
+    if (result != VK_SUCCESS) return result;
+
+    size_t state_bytes = (size_t)reference_count * sizeof(struct semaphore_state);
+    if (reference_count && state_bytes / sizeof(struct semaphore_state) != reference_count)
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    VkAllocationCallbacks state_allocator = {0}; VkBool32 state_custom = VK_FALSE;
+    struct semaphore_state *states = reference_count ? ps5vk_object_alloc(
+        d->custom_allocator ? &d->allocator : NULL, NULL, state_bytes,
+        VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, &state_allocator, &state_custom) : NULL;
+    if (reference_count && !states) return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+    struct ps5vk_submission *head = NULL, **tail = &head;
+    uint32_t state_count = 0;
+    for (uint32_t j = 0; j < records; ++j) {
+        const VkSubmitInfo *info = count ? &infos[j] : NULL;
+        uint32_t waits = info ? info->waitSemaphoreCount : 0;
+        uint32_t signals = info ? info->signalSemaphoreCount : 0;
+        size_t refs = (size_t)waits + signals;
+        struct ps5vk_submission *s = allocate_submission(d, refs, &result);
+        if (!s) goto fail;
+        s->wait_count = waits; s->signal_count = signals;
+        s->waits = (VkSemaphore *)(s + 1); s->signals = s->waits + waits;
+        *tail = s; tail = &s->next;
+        if (!info) continue;
+
+        for (uint32_t k = 0; k < waits; ++k) {
+            VkSemaphore semaphore = info->pWaitSemaphores[k];
+            if (!semaphore || semaphore->device != d) { result = INVALID; goto fail; }
+            struct semaphore_state *state = find_state(states, &state_count, semaphore);
+            if (!state->signaled) { result = INVALID; goto fail; }
+            state->signaled = VK_FALSE; s->waits[k] = semaphore;
+        }
+        for (uint32_t k = 0; k < signals; ++k) {
+            VkSemaphore semaphore = info->pSignalSemaphores[k];
+            if (!semaphore || semaphore->device != d) { result = INVALID; goto fail; }
+            struct semaphore_state *state = find_state(states, &state_count, semaphore);
+            if (state->signaled) { result = INVALID; goto fail; }
+            state->signaled = VK_TRUE; s->signals[k] = semaphore;
+        }
+        for (uint32_t k = 0; k < info->commandBufferCount; ++k) {
+            VkCommandBuffer command = info->pCommandBuffers[k];
+            if (!command_valid(d, command)) { result = INVALID; goto fail; }
+            for (struct ps5vk_submission *prior = head; prior; prior = prior->next)
+                for (uint32_t n = 0; n < prior->count; ++n)
+                    if (prior->buffers[n] == command &&
+                        !(command->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
+                        result = INVALID; goto fail;
+                    }
+            s->buffers[s->count++] = command;
+        }
     }
-    result = d->submit_backend.prepare(d, s, &s->backend_job);
-    if (result != VK_SUCCESS) { free_submission(s); return result < 0 ? result : INVALID; }
-    if (!s->backend_job) { free_submission(s); return INVALID; }
-    pin(s, 1); d->submission = s; ++d->queue.next_serial;
-    if (fence) fence->pending_serial = s->serial;
+
+    struct ps5vk_submission *expanded = NULL;
+    uint32_t segments = 0;
+    result = expand_records(d, head, &expanded, &segments);
+    if (result != VK_SUCCESS) goto fail;
+    discard_chain(d, head); head = expanded;
+    if (!segments || segments > UINT64_MAX - d->queue.next_serial) {
+        result = INVALID; goto fail;
+    }
+    uint32_t segment = 0;
+    for (struct ps5vk_submission *s = head; s; s = s->next, ++segment) {
+        s->serial = d->queue.next_serial + segment;
+        if (s->count && !s->frontend_only) {
+            if (!d->submit_backend.prepare || !d->submit_backend.launch ||
+                !d->submit_backend.poll || !d->submit_backend.release) {
+                result = INVALID; goto fail;
+            }
+            result = d->submit_backend.prepare(d, s, &s->backend_job);
+            if (result != VK_SUCCESS) { if (result >= 0) result = INVALID; goto fail; }
+            if (!s->backend_job) { result = INVALID; goto fail; }
+        }
+    }
+    if (states) { ps5vk_object_free(states, &state_allocator, state_custom); states = NULL; }
+
+    struct ps5vk_submission *last = head;
+    while (last->next) last = last->next;
+    last->fence = fence;
+    for (struct ps5vk_submission *s = head; s; s = s->next) {
+        for (uint32_t j = 0; j < s->wait_count; ++j) ++s->waits[j]->pending;
+        for (uint32_t j = 0; j < s->signal_count; ++j) ++s->signals[j]->pending;
+        s->reserved = VK_TRUE;
+        pin(s, 1);
+    }
+    d->queue.next_serial += segments;
+    d->submission = head;
+    if (fence) fence->pending_serial = last->serial;
     d->progress.poll = ps5vk_queue_poll;
-    result = d->submit_backend.launch(d, s->backend_job);
-    if (result != VK_SUCCESS) {
-        /* After launch is attempted ownership is ambiguous. No unpin/free or
-         * misleading fence signal: exact-title closure may be needed. */
-        d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST;
-    }
-    return VK_SUCCESS;
+    return start_submission(d);
+
+fail:
+    if (states) ps5vk_object_free(states, &state_allocator, state_custom);
+    discard_chain(d, head);
+    return result;
 }

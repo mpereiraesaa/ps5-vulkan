@@ -56,16 +56,21 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * bounded to the full render area until a rectangular clear path exists. */
     if(s->count!=1 || !s->serial)return VK_ERROR_FEATURE_NOT_PRESENT;
     VkCommandBuffer cb=s->buffers[0];
-    unsigned first=0;
-    while(first<cb->operation_count && cb->operations[first].type!=PS5VK_BEGIN_RENDER_PASS) {
+    uint32_t range_first=ps5vk_submission_first_operation(s,0);
+    uint32_t range_count=ps5vk_submission_operation_count(s,0);
+    if(range_first>cb->operation_count || range_count>cb->operation_count-range_first)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t range_end=range_first+range_count;
+    unsigned first=range_first;
+    while(first<range_end && cb->operations[first].type!=PS5VK_BEGIN_RENDER_PASS) {
         unsigned type=cb->operations[first].type;
         if(type!=PS5VK_BARRIER && type!=PS5VK_IMAGE_BARRIER && type!=PS5VK_COPY_BUFFER_IMAGE)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         ++first;
     }
     unsigned last=first+1;
-    while(last<cb->operation_count && cb->operations[last].type!=PS5VK_END_RENDER_PASS)++last;
-    if(first>=cb->operation_count || last>=cb->operation_count || last<first+2)
+    while(last<range_end && cb->operations[last].type!=PS5VK_END_RENDER_PASS)++last;
+    if(first>=range_end || last>=range_end || last<first+2)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_operation *begin=&cb->operations[first]; VkRenderPass pass=begin->render_pass;
     int depth=pass->depth.attachment!=VK_ATTACHMENT_UNUSED;
@@ -152,7 +157,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
     }
     phase="prelude";
-    for(unsigned i=0;i<first;++i) {
+    for(unsigned i=range_first;i<first;++i) {
         const struct ps5vk_operation *op=&cb->operations[i];
         if(op->type==PS5VK_BARRIER) {
             if(op->buffer_barrier.buffer || op->src_stage!=VK_PIPELINE_STAGE_HOST_BIT ||
@@ -255,8 +260,8 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         if(rc!=VK_SUCCESS)goto fail;
     }
     phase="postlude";
-    if(last+1<cb->operation_count) {
-        if(cb->operation_count!=last+5 ||
+    if(last+1<range_end) {
+        if(range_end!=last+5 ||
            cb->operations[last+1].type!=PS5VK_IMAGE_BARRIER ||
            cb->operations[last+2].type!=PS5VK_COPY_IMAGE_BUFFER ||
            cb->operations[last+3].type!=PS5VK_BARRIER ||

@@ -5,6 +5,8 @@
 #include "vktApiPipelineTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
+#include "vktSynchronizationBasicEventTests.hpp"
+#include "vktSynchronizationBasicSemaphoreTests.hpp"
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
@@ -62,11 +64,17 @@ void FocusedVkTestPackage::init(void)
         addChild(bindingModelGroup.release());
     }
 
-    // synchronization.basic.fence group
+    // synchronization.basic: original legacy event, fence and binary-semaphore
+    // factories. cases.txt remains the only leaf filter, so timeline,
+    // synchronization2, secondary-command-buffer and multi-queue variants are
+    // not silently substituted for the audited Vulkan 1.0 cases.
     {
         de::MovePtr<tcu::TestCaseGroup> syncGroup(new tcu::TestCaseGroup(m_testCtx, "synchronization"));
         de::MovePtr<tcu::TestCaseGroup> syncBasicGroup(new tcu::TestCaseGroup(m_testCtx, "basic"));
+        syncBasicGroup->addChild(vkt::synchronization::createBasicEventTests(m_testCtx, 0));
         syncBasicGroup->addChild(vkt::synchronization::createBasicFenceTests(m_testCtx, 0));
+        syncBasicGroup->addChild(vkt::synchronization::createBasicBinarySemaphoreTests(
+            m_testCtx, vkt::synchronization::SynchronizationType::LEGACY, 0));
         syncGroup->addChild(syncBasicGroup.release());
         addChild(syncGroup.release());
     }

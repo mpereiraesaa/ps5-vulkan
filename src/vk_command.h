@@ -8,7 +8,11 @@ enum { PS5VK_MAX_VERTEX_BINDINGS = 16 };
 struct ps5vk_vertex_binding { VkBuffer buffer; VkDeviceSize offset; };
 struct ps5vk_index_binding { VkBuffer buffer; VkDeviceSize offset; VkIndexType type; };
 struct ps5vk_operation {
-    enum { PS5VK_DISPATCH, PS5VK_BARRIER, PS5VK_BEGIN_RENDER_PASS, PS5VK_DRAW, PS5VK_END_RENDER_PASS, PS5VK_DRAW_INDEXED, PS5VK_COPY_BUFFER_IMAGE, PS5VK_IMAGE_BARRIER, PS5VK_COPY_IMAGE_BUFFER } type;
+    enum { PS5VK_DISPATCH, PS5VK_BARRIER, PS5VK_BEGIN_RENDER_PASS, PS5VK_DRAW,
+        PS5VK_END_RENDER_PASS, PS5VK_DRAW_INDEXED, PS5VK_COPY_BUFFER_IMAGE,
+        PS5VK_IMAGE_BARRIER, PS5VK_COPY_IMAGE_BUFFER, PS5VK_EVENT_SET,
+        PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT } type;
+    VkEvent event;
     VkImageMemoryBarrier image_barrier;
     VkBuffer copy_source;
     VkBuffer copy_destination;
@@ -41,6 +45,7 @@ struct VkCommandBuffer_T {
     VkCommandPool pool;
     struct VkCommandBuffer_T *next;
     enum ps5vk_command_state state;
+    uint32_t pending_count;
     VkCommandBufferUsageFlags usage;
     VkPipeline pipeline;
     VkDescriptorSet sets[PS5VK_MAX_SETS];

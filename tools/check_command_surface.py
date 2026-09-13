@@ -25,8 +25,8 @@ EXPECTED_VULKAN10_TOTAL = 137
 # prototype, a dispatch entry and an implementation. This is not a semantic
 # support claim; see the report's advertised-obligation table for what each
 # command may actually be used for.
-EXPECTED_FULLY_WIRED_TOTAL = 99
-EXPECTED_MISSING_TOTAL = 38
+EXPECTED_FULLY_WIRED_TOTAL = 109
+EXPECTED_MISSING_TOTAL = 28
 
 REQUIRED_BOOKKEEPING_COMMANDS = {
     "vkGetImageSubresourceLayout",
@@ -34,6 +34,13 @@ REQUIRED_BOOKKEEPING_COMMANDS = {
     "vkGetDeviceMemoryCommitment",
     "vkEnumerateDeviceLayerProperties",
     "vkResetDescriptorPool",
+}
+
+REQUIRED_SYNC_OBJECT_COMMANDS = {
+    "vkCreateSemaphore", "vkDestroySemaphore",
+    "vkCreateEvent", "vkDestroyEvent", "vkGetEventStatus",
+    "vkSetEvent", "vkResetEvent",
+    "vkCmdSetEvent", "vkCmdResetEvent", "vkCmdWaitEvents",
 }
 
 EXPECTED_MISSING_CATEGORIES = {
@@ -162,7 +169,9 @@ def audit_command_surface(repo_root: Path) -> dict:
     public_not_dispatch = sorted(core_public - core_dispatch)
     dispatch_not_impl = sorted(core_dispatch - core_impl)
 
-    missing_required = sorted(REQUIRED_BOOKKEEPING_COMMANDS - fully_wired)
+    missing_required = sorted(
+        (REQUIRED_BOOKKEEPING_COMMANDS | REQUIRED_SYNC_OBJECT_COMMANDS) - fully_wired
+    )
 
     errors = []
     if len(core_commands) != EXPECTED_VULKAN10_TOTAL:
@@ -226,7 +235,7 @@ def main():
     print(f"Mandatory Vulkan 1.0 core commands : {result['core_total']}")
     print(f"Fully wired (structural) commands  : {result['fully_wired_total']}")
     print(f"Known missing commands             : {result['missing_total']}")
-    print(f"Required bookkeeping commands      : {'ALL PRESENT' if not result['missing_required'] else result['missing_required']}")
+    print(f"Required landed command families  : {'ALL PRESENT' if not result['missing_required'] else result['missing_required']}")
     print(f"Dispatched not public              : {result['dispatch_not_public'] or 'NONE'}")
     print(f"Implemented not public             : {result['impl_not_public'] or 'NONE'}")
     print(f"Public not dispatched              : {result['public_not_dispatch'] or 'NONE'}")

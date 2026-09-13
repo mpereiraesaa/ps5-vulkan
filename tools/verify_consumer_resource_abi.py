@@ -38,6 +38,9 @@ def validate(log, receipt, artifact):
     require(sync_artifact.get("api") == "Vulkan 1.0" and
             sync_artifact.get("local_size") == 128 and
             sync_artifact.get("wave_size") == 32 and
+            sync_artifact.get("binary_semaphore") is True and
+            sync_artifact.get("host_event") is True and
+            sync_artifact.get("device_event") is True and
             all(len(sync_artifact.get(key, "")) == 64 for key in
                 ("sync_producer_spirv_sha256", "sync_consumer_spirv_sha256",
                  "shared_atomic_multiwave_spirv_sha256")),
@@ -108,6 +111,7 @@ def validate(log, receipt, artifact):
     width_witness = one("PS5VK_CONSUMER_STORAGE_WIDTH_SUCCESS ")
     width_retired = one("PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED")
     sync_start = one("PS5VK_CONSUMER_SYNC_START")
+    sync_objects = one("PS5VK_CONSUMER_SYNC_OBJECTS_SUCCESS ")
     sync_witness = one("PS5VK_CONSUMER_SYNC_SUCCESS ")
     sync_retired = one("PS5VK_CONSUMER_SYNC_RETIRED")
     graphics_start = one("PS5VK_CONSUMER_GRAPHICS_START ")
@@ -127,7 +131,7 @@ def validate(log, receipt, artifact):
     retired = one("PS5VK_CONSUMER_RESOURCES_RETIRED ")
     ready = one("PS5VK_READY_FOR_SHELL_CLOSE ")
 
-    require(len(prepared) == 3 and
+    require(len(prepared) == 4 and
             all(len(rows) == 6 for rows in (submitted, suspended, completed)),
             "resource, narrow and synchronization submit records")
     ordered = [boot, physical, physical_queries, negotiated, start, pipeline,
@@ -135,11 +139,11 @@ def validate(log, receipt, artifact):
                width_start, width_pipelines,
                prepared[1], submitted[1], suspended[1], completed[1],
                submitted[2], suspended[2], completed[2],
-               width_witness, width_retired, sync_start, prepared[2],
+               width_witness, width_retired, sync_start, prepared[2], prepared[3],
                submitted[3], suspended[3], completed[3],
                submitted[4], suspended[4], completed[4],
                submitted[5], suspended[5], completed[5],
-               sync_witness, sync_retired, success, retired, ready]
+               sync_objects, sync_witness, sync_retired, success, retired, ready]
     require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
             "resource witness ordering")
     require(graphics_start[0] > sync_retired[0] and
@@ -166,25 +170,26 @@ def validate(log, receipt, artifact):
         "narrow storage negotiation")
     require(prepared[0][1].endswith("serial=1 dispatches=1"), "one resource dispatch")
     require(prepared[1][1].endswith("serial=2 dispatches=2"), "two narrow dispatches")
-    require(prepared[2][1].endswith("serial=3 dispatches=3"), "three synchronization dispatches")
+    require(prepared[2][1].endswith("serial=4 dispatches=3"), "three synchronization dispatches")
+    require(prepared[3][1].endswith("serial=6 dispatches=0"), "event dependency segment")
     require([row[1].rsplit(" ", 1)[0] for row in submitted] == [
                 "PS5VK_QUEUE_SUBMIT serial=1 index=0",
                 "PS5VK_QUEUE_SUBMIT serial=2 index=0",
                 "PS5VK_QUEUE_SUBMIT serial=2 index=1",
-                "PS5VK_QUEUE_SUBMIT serial=3 index=0",
-                "PS5VK_QUEUE_SUBMIT serial=3 index=1",
-                "PS5VK_QUEUE_SUBMIT serial=3 index=2"] and
+                "PS5VK_QUEUE_SUBMIT serial=4 index=0",
+                "PS5VK_QUEUE_SUBMIT serial=4 index=1",
+                "PS5VK_QUEUE_SUBMIT serial=4 index=2"] and
             all(row[1].endswith("rc=0") for row in submitted), "submits")
     require([row[1].rsplit(" ", 1)[0] for row in suspended] == [
                 "PS5VK_QUEUE_SUSPEND_POINT serial=1 index=0",
                 "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=0",
                 "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=1",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=0",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=1",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=2"] and
+                "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=0",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=1",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=2"] and
             all(row[1].endswith("rc=0") for row in suspended), "suspend points")
     expected_completion = ((1, 0), (2, 0), (2, 1),
-                           (3, 0), (3, 1), (3, 2))
+                           (4, 0), (4, 1), (4, 2))
     require(all(f"serial={serial} index={index}" in row[1]
                 for row, (serial, index) in zip(completed, expected_completion)),
             "completion identities")
@@ -204,6 +209,10 @@ def validate(log, receipt, artifact):
         "guard_mismatches8=0", "guard_mismatches16=0"],
         "narrow storage oracle")
     sync_fields = sync_witness[1].split()[1:]
+    require(sync_objects[1].split()[1:] == [
+        "host_set_reset=1", "device_set_wait_reset=1",
+        "binary_signal_wait=1", "semaphore_consumed=1"],
+        "binary semaphore and event oracle")
     require(sync_fields[:8] == [
         "producer_consumer=1", "host_compute_host=1", "local_size=128",
         "waves32=4", "lds_atomic=1", "permutation=1", "counter=128",

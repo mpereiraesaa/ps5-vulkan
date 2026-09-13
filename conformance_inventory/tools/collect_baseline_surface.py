@@ -74,6 +74,9 @@ OBSERVED = {
     "vkCreateRenderPass": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_render_pass.c, include/ps5vk/ps5vk.h.",
     "vkCreateGraphicsPipelines": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_graphics_pipeline.c, include/ps5vk/ps5vk.h.",
     "vkCmdDraw": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_command.c, include/ps5vk/ps5vk.h.",
+    "vkCreateSemaphore": "Creates a device-parented Vulkan 1.0 binary semaphore; queue wait/signal semantics are implemented in src/vk_queue.c. Evidence: src/vk_sync.c, src/vk_queue.c.",
+    "vkCreateEvent": "Creates a device-parented Vulkan 1.0 event with separate host and recorded device transitions. Evidence: src/vk_sync.c, src/vk_command.c, src/vk_queue.c.",
+    "vkCmdWaitEvents": "Records validated event execution and memory dependencies; queue segmentation retires frontend event transitions around native jobs. Evidence: src/vk_command.c, src/vk_queue.c.",
 }
 
 

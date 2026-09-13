@@ -41,16 +41,19 @@ MESSAGES = [
     "guard_mismatches8=0 guard_mismatches16=0",
     "PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED",
     "PS5VK_CONSUMER_SYNC_START",
-    "PS5VK_QUEUE_PREPARED serial=3 dispatches=3",
-    "PS5VK_QUEUE_SUBMIT serial=3 index=0 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=0 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=3 index=0 token=100000004 gcr=0070f528",
-    "PS5VK_QUEUE_SUBMIT serial=3 index=1 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=1 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=3 index=1 token=100000005 gcr=0070f528",
-    "PS5VK_QUEUE_SUBMIT serial=3 index=2 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=2 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=3 index=2 token=100000006 gcr=0070f528",
+    "PS5VK_QUEUE_PREPARED serial=4 dispatches=3",
+    "PS5VK_QUEUE_PREPARED serial=6 dispatches=0",
+    "PS5VK_QUEUE_SUBMIT serial=4 index=0 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=0 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=4 index=0 token=400000001 gcr=0070f528",
+    "PS5VK_QUEUE_SUBMIT serial=4 index=1 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=1 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=4 index=1 token=400000002 gcr=0070f528",
+    "PS5VK_QUEUE_SUBMIT serial=4 index=2 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=2 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=4 index=2 token=400000003 gcr=0070f528",
+    "PS5VK_CONSUMER_SYNC_OBJECTS_SUCCESS host_set_reset=1 "
+    "device_set_wait_reset=1 binary_signal_wait=1 semaphore_consumed=1",
     "PS5VK_CONSUMER_SYNC_SUCCESS producer_consumer=1 host_compute_host=1 "
     "local_size=128 waves32=4 lds_atomic=1 permutation=1 counter=128 "
     "sync_hash=467e2acd atomic_hash=1234abcd mismatches=0 guard_mismatches=0",
@@ -70,7 +73,7 @@ FIXED_FUNCTION_MESSAGES = [
 ]
 for frame in range(18):
     for phase in range(2):
-        serial = 4 + frame * 2 + phase
+        serial = 9 + frame * 2 + phase
         FIXED_FUNCTION_MESSAGES.extend([
             f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
             f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
@@ -116,6 +119,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             },
             "synchronization": {
                 "api": "Vulkan 1.0", "local_size": 128, "wave_size": 32,
+                "binary_semaphore": True, "host_event": True,
+                "device_event": True,
                 "sync_producer_spirv_sha256": "d" * 64,
                 "sync_consumer_spirv_sha256": "e" * 64,
                 "shared_atomic_multiwave_spirv_sha256": "f" * 64,

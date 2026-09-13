@@ -630,10 +630,27 @@ static void run_synchronization_compute(VkDevice device, VkQueue queue)
     };
     VkCommandBuffer command = VK_NULL_HANDLE;
     CHECK(vkAllocateCommandBuffers(device, &command_info, &command));
+    VkEventCreateInfo event_info = {.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO};
+    VkSemaphoreCreateInfo semaphore_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    VkEvent event = VK_NULL_HANDLE;
+    VkSemaphore semaphore = VK_NULL_HANDLE;
+    CHECK(vkCreateEvent(device, &event_info, NULL, &event));
+    CHECK(vkCreateSemaphore(device, &semaphore_info, NULL, &semaphore));
+    REQUIRE(vkGetEventStatus(device, event) == VK_EVENT_RESET,
+            "event initially reset");
+    CHECK(vkSetEvent(device, event));
+    REQUIRE(vkGetEventStatus(device, event) == VK_EVENT_SET,
+            "host event set");
+    CHECK(vkResetEvent(device, event));
+    REQUIRE(vkGetEventStatus(device, event) == VK_EVENT_RESET,
+            "host event reset");
     VkCommandBufferBeginInfo begin = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
     };
     CHECK(vkBeginCommandBuffer(command, &begin));
+    vkCmdSetEvent(command, event, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
 
     VkBufferMemoryBarrier host_barriers[3] = {{
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -700,17 +717,32 @@ static void run_synchronization_compute(VkDevice device, VkQueue queue)
     host_result.size = ATOMIC_WORDS * 4;
     vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 1, &host_result, 0, NULL);
+    vkCmdWaitEvents(command, 1, &event,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+        0, NULL, 0, NULL, 0, NULL);
+    vkCmdResetEvent(command, event, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     CHECK(vkEndCommandBuffer(command));
 
     VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     VkFence fence = VK_NULL_HANDLE;
     CHECK(vkCreateFence(device, &fence_info, NULL, &fence));
-    VkSubmitInfo submit = {
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkSubmitInfo submits[2] = {{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1, .pCommandBuffers = &command,
-    };
-    CHECK(vkQueueSubmit(queue, 1, &submit, fence));
+        .signalSemaphoreCount = 1, .pSignalSemaphores = &semaphore,
+    }, {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1, .pWaitSemaphores = &semaphore,
+        .pWaitDstStageMask = &wait_stage,
+    }};
+    CHECK(vkQueueSubmit(queue, 2, submits, fence));
     CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+    REQUIRE(vkGetEventStatus(device, event) == VK_EVENT_RESET,
+            "device event set-wait-reset order");
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_CONSUMER_SYNC_OBJECTS_SUCCESS host_set_reset=1 "
+        "device_set_wait_reset=1 binary_signal_wait=1 semaphore_consumed=1");
 
     uint32_t *sync = NULL, *atomic = NULL;
     CHECK(vkMapMemory(device, memories[1], 0, BUFFER_BYTES, 0, (void **)&sync));
@@ -758,6 +790,8 @@ static void run_synchronization_compute(VkDevice device, VkQueue queue)
         "sync_hash=%08x atomic_hash=%08x mismatches=0 guard_mismatches=0",
         sync_hash, atomic_hash);
 
+    vkDestroySemaphore(device, semaphore, NULL);
+    vkDestroyEvent(device, event, NULL);
     vkDestroyFence(device, fence, NULL);
     vkFreeCommandBuffers(device, command_pool, 1, &command);
     vkDestroyCommandPool(device, command_pool, NULL);

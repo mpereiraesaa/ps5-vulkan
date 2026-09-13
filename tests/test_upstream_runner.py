@@ -397,6 +397,12 @@ class TestUpstreamRunner(unittest.TestCase):
         "dEQP-VK.synchronization.basic.fence.multi_waitall_false",
         "dEQP-VK.synchronization.basic.fence.one_signaled",
         "dEQP-VK.synchronization.basic.fence.multiple_signaled",
+        "dEQP-VK.synchronization.basic.event.host_set_reset",
+        "dEQP-VK.synchronization.basic.event.device_set_reset",
+        "dEQP-VK.synchronization.basic.event.single_submit_multi_command_buffer",
+        "dEQP-VK.synchronization.basic.event.multi_submit_multi_command_buffer",
+        "dEQP-VK.synchronization.basic.binary_semaphore.one_queue",
+        "dEQP-VK.synchronization.basic.binary_semaphore.chain",
     }
 
     NONCOHERENT_RANGE_CASES = {
@@ -445,6 +451,10 @@ class TestUpstreamRunner(unittest.TestCase):
                       "vulkan/compute/vktComputeBasicComputeShaderTests.cpp")
         workgroup_path = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
                           "vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp")
+        event_path = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                      "vulkan/synchronization/vktSynchronizationBasicEventTests.cpp")
+        semaphore_path = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                          "vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp")
         # The large pinned CTS checkout is deliberately absent from the normal
         # GitHub host runner.  When present, freeze the original bodies/oracles;
         # otherwise the manifest provenance and package/build registration below
@@ -462,6 +472,15 @@ class TestUpstreamRunner(unittest.TestCase):
             self.assertIn("OpMemoryBarrier", workgroup)
             self.assertIn("OpControlBarrier", workgroup)
             self.assertIn('SpvAsmComputeShaderCase(testCtx, "uint32", spec)', workgroup)
+
+            event = event_path.read_text()
+            self.assertIn('"host_set_reset"', event)
+            self.assertIn('"device_set_reset"', event)
+            self.assertIn('"single_submit_multi_command_buffer"', event)
+            self.assertIn('"multi_submit_multi_command_buffer"', event)
+            semaphore = semaphore_path.read_text()
+            self.assertIn('"one_queue" + createName', semaphore)
+            self.assertIn('"chain"', semaphore)
         else:
             for path in self.SYNCHRONIZATION_CASES:
                 self.assertTrue(by_path[path]["source"].startswith("external/vulkancts/"))
@@ -470,7 +489,59 @@ class TestUpstreamRunner(unittest.TestCase):
         builder = (REPO_ROOT / "tools/build_upstream_cts.py").read_text()
         self.assertIn("createBasicComputeShaderTests", package)
         self.assertIn("createWorkgroupMemoryComputeGroup", package)
+        self.assertIn("createBasicEventTests", package)
+        self.assertIn("createBasicBinarySemaphoreTests", package)
         self.assertIn("vktSpvAsmWorkgroupMemoryTests.cpp", builder)
+        self.assertIn("vktSynchronizationBasicEventTests.cpp", builder)
+        self.assertIn("vktSynchronizationBasicSemaphoreTests.cpp", builder)
+
+    def test_synchronization_evidence_digests_do_not_drift(self):
+        """Keep the historical synchronization evidence tied to its receipts."""
+
+        upstream = (REPO_ROOT / "UPSTREAM_CTS.md").read_text(encoding="utf-8")
+        upstream = upstream.split(
+            "### Binary semaphore and event expansion (2026-09-13)", 1)[1]
+        upstream = upstream.split("\n### ", 1)[0]
+        validation = (REPO_ROOT / "VALIDATION.md").read_text(encoding="utf-8")
+        validation = validation.split(
+            "### Vulkan 1.0 binary semaphores and events", 1)[1]
+        validation = validation.split("\n## ", 1)[0]
+        digest_pattern = r"Selection SHA-256:\s*`([0-9a-f]{64})`"
+        upstream_match = re.search(digest_pattern, upstream)
+        validation_match = re.search(digest_pattern, validation)
+        self.assertIsNotNone(upstream_match)
+        self.assertIsNotNone(validation_match)
+        selection_hash = upstream_match.group(1)
+        self.assertEqual(selection_hash, validation_match.group(1))
+
+        receipts = REPO_ROOT / "private-captures/events-semaphores"
+        if not receipts.is_dir():
+            return
+
+        upstream_runs = [
+            json.loads((receipts / f"upstream-run{run}.json").read_text())
+            for run in (1, 2)
+        ]
+        executable_hashes = {
+            run["metadata"]["start"]["eboot_sha256"] for run in upstream_runs
+        }
+        selection_hashes = {
+            run["metadata"]["start"]["selection_hash"] for run in upstream_runs
+        }
+        qpa_hashes = {run["metadata"]["qpa_sha256"] for run in upstream_runs}
+        self.assertEqual(1, len(executable_hashes))
+        self.assertEqual({selection_hash}, selection_hashes)
+        for digest in executable_hashes | selection_hashes | qpa_hashes:
+            self.assertIn(digest, upstream)
+            self.assertIn(digest, validation)
+
+        consumer_runs = [
+            json.loads((receipts / f"consumer-run{run}.json").read_text())
+            for run in (1, 2)
+        ]
+        consumer_hashes = {run["deployment_self_sha256"] for run in consumer_runs}
+        self.assertEqual(1, len(consumer_hashes))
+        self.assertIn(next(iter(consumer_hashes)), validation)
 
     def test_noncoherent_range_cases_are_original_and_not_gpu_evidence(self):
         manifest = json.loads(MANIFEST_PATH.read_text())
