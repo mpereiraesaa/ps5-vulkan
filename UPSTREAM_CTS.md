@@ -615,10 +615,14 @@ factory are selected: `partial_image_pot_same_format_clear`,
 (`vktApiCopiesAndBlittingTests.cpp:9235`). They are the leaves whose source and
 destination images are `VK_FORMAT_R8G8B8A8_UNORM` with exactly
 `TRANSFER_SRC | TRANSFER_DST` usage, which is the only image role this driver
-implements byte-exactly. The clear variants record `vkCmdClearColorImage` with
-`(1, 0, 0, 1)` before `vkCmdCopyImage`; every variant compares the bit-exact
-readback of the destination image, so the selection judges the implementation
-with upstream's own oracle and not with a substituted one.
+implements byte-exactly. Every variant compares the bit-exact readback of the
+destination image, so the selection judges `vkCmdCopyImage` with upstream's own
+oracle and not with a substituted one. The clear variants also record
+`vkCmdClearColorImage` with `(1, 0, 0, 1)`, but their destination is already
+initialized to that same red value. They therefore prove that the extra clear
+does not corrupt the copy result; they are not an independent clear-colour
+oracle. Deterministic clear-colour coverage remains in the host suite unless a
+native consumer uses a distinct pre-clear value and verifies the readback.
 
 The remaining leaves of the same factory are deliberately not selected:
 `whole_image`, `whole_image_diff_format` and `partial_image` use

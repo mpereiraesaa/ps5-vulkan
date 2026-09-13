@@ -110,6 +110,8 @@ static const struct entry entries[] = {
     ENTRY(vkCmdUpdateBuffer, DEVICE),
     ENTRY(vkCmdFillBuffer, DEVICE),
     ENTRY(vkCmdCopyImage, DEVICE),
+    ENTRY(vkCmdBlitImage, DEVICE),
+    ENTRY(vkCmdResolveImage, DEVICE),
     ENTRY(vkCmdClearColorImage, DEVICE),
     ENTRY(vkCmdClearDepthStencilImage, DEVICE),
     ENTRY(vkCmdClearAttachments, DEVICE),

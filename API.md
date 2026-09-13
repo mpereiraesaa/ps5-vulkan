@@ -140,9 +140,9 @@ supported.
   later segment is prepared or launched. Destination ranges are flushed through
   the memory backend before following GPU use.
 
-The buffer transfer family remains partial. Existing bounded buffer/image upload
-and readback paths do not imply general `vkCmdCopyImage`, `vkCmdBlitImage` or
-`vkCmdResolveImage` support; blit and resolve remain fail-closed entry points.
+The transfer family remains deliberately bounded. The image-copy profile below
+does not imply general image formats, tiling, blit or resolve support; blit and
+resolve remain fail-closed entry points.
 
 ## Image copy and colour clear
 
@@ -161,23 +161,31 @@ and readback paths do not imply general `vkCmdCopyImage`, `vkCmdBlitImage` or
   `VK_REMAINING_ARRAY_LAYERS`; nothing else is accepted.
 - The observable path for that role is the buffer transfer:
   `vkCmdCopyBufferToImage` uploads and `vkCmdCopyImageToBuffer` reads back, with
-  a tightly described row (`bufferRowLength`/`bufferImageHeight` zero or exactly
-  the region width/height) and a four-byte-aligned `bufferOffset`. These are
-  frontend host copies over the padded rows, so they need no GPU segment and
-  their exact destination range is flushed or invalidated through the memory
-  backend.
+  bounded pitched rows: zero means the region width/height, otherwise
+  `bufferRowLength` and `bufferImageHeight` must be at least the copied
+  width/height. `bufferOffset` is four-byte aligned and every addressed row is
+  bounds-checked before recording. These are frontend host copies over the
+  padded rows. A source buffer is invalidated before CPU reads; a partially
+  written destination buffer is invalidated before CPU stores so adjacent
+  GPU-produced bytes survive, then flushed afterward. CPU-written image and
+  buffer destinations are flushed before later GPU use.
 - All of it is ordered like the buffer transfers: an operation runs when its
   segment reaches the head of the queue chain, after any earlier GPU segment
-  retired and before the next one is prepared. Recording is transactional; a
+  retired and before any later backend segment is prepared. Every backend
+  segment following a frontend operation is prepared lazily at queue head.
+  Recording is transactional; a
   rejected call leaves no partial operation behind, and referenced images and
-  buffers stay alive until the owning command buffer retires.
+  buffers stay alive until the owning command buffer retires. Distinct handles
+  that resolve to overlapping image/image or buffer/image backing spans are
+  rejected before mutation.
 - The tiled colour-attachment role is deliberately not copyable or clearable
   here, because 64KB_R_X has no linear addressing in this codebase.
-  `vkCmdClearDepthStencilImage` and `vkCmdClearAttachments` are exposed and
-  validated but fail closed: the depth role has no pixel addressing and a
-  mid-render-pass attachment clear would need a DCB clear path that does not
-  exist yet. `vkCmdBlitImage` and `vkCmdResolveImage` remain fail-closed entry
-  points.
+  `vkCmdClearDepthStencilImage` and `vkCmdClearAttachments` are structurally
+  exposed and always invalidate recording: the depth role has no pixel
+  addressing and a mid-render-pass attachment clear would need a DCB clear path
+  that does not exist yet. `vkCmdBlitImage` and `vkCmdResolveImage` likewise
+  always invalidate recording because no proven scaling/filter or multisample
+  contract exists.
 
 ## Indirect commands
 

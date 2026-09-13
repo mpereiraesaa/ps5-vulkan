@@ -11,6 +11,7 @@
  */
 #include "vk_internal.h"
 #include "vk_command.h"
+#include "vk_framebuffer.h"
 #include "vk_image_transfer.h"
 #include "physical_device_profile.h"
 #include "texture_copy.h"
@@ -26,12 +27,20 @@ static VkResult alloc_memory(void *ctx, VkDeviceSize size, void **address, void 
     return *address ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 static void free_memory(void *ctx, void *backing) { (void)ctx; free(backing); }
-static VkResult cache_sync(void *ctx, void *backing, VkDeviceSize offset, VkDeviceSize size)
-{ (void)ctx; (void)backing; (void)offset; (void)size; return VK_SUCCESS; }
+static unsigned flush_calls, invalidate_calls;
+static int fail_next_invalidate;
+static VkResult flush_sync(void *ctx, void *backing, VkDeviceSize offset, VkDeviceSize size)
+{ (void)ctx; (void)backing; (void)offset; (void)size; ++flush_calls; return VK_SUCCESS; }
+static VkResult invalidate_sync(void *ctx, void *backing, VkDeviceSize offset, VkDeviceSize size)
+{
+    (void)ctx; (void)backing; (void)offset; (void)size; ++invalidate_calls;
+    if (fail_next_invalidate) { fail_next_invalidate = 0; return VK_ERROR_MEMORY_MAP_FAILED; }
+    return VK_SUCCESS;
+}
 static VkResult open_backend(void *ctx, struct ps5vk_memory_backend *backend)
 {
     (void)ctx;
-    *backend = (struct ps5vk_memory_backend){NULL, alloc_memory, free_memory, cache_sync, cache_sync};
+    *backend = (struct ps5vk_memory_backend){NULL, alloc_memory, free_memory, flush_sync, invalidate_sync};
     return VK_SUCCESS;
 }
 static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend; }
@@ -248,6 +257,7 @@ int main(void)
     assert(command->state == PS5VK_RECORDING && command->operation_count == 3);
     submit_and_wait(command);
     assert(memcmp(readback_map, upload_map, (size_t)pixels) == 0);
+    assert(invalidate_calls >= 2 && flush_calls >= 3);
     {
         /* The upload writes only the described pixels, never the row padding. */
         const uint8_t *image = destination_map;
@@ -331,8 +341,8 @@ int main(void)
     bad = begin();
     {
         VkImageCopy oversize = region;
-        oversize.extent.width = WIDTH;
-        oversize.srcOffset.x = 1;
+        oversize.extent.width = WIDTH + 1u; /* catches unsigned bound underflow */
+        oversize.srcOffset.x = 0;
         vkCmdCopyImage(bad, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &oversize);
     }
@@ -343,6 +353,69 @@ int main(void)
     assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
     bad = begin();
     vkCmdClearColorImage(bad, source, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, NULL);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+
+    /* Submit/head validation owns and revalidates the clear range payload. */
+    bad = begin();
+    vkCmdClearColorImage(bad, destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         &clear, 1, &range);
+    assert(bad->state == PS5VK_RECORDING && bad->operation_count == 1);
+    bad->operations[0].owned_payload_size--;
+    assert(ps5vk_image_transfer_validate(device, &bad->operations[0]) != VK_SUCCESS);
+
+    /* Failed invalidation happens before any CPU store. */
+    destination->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    uint8_t *snapshot = malloc((size_t)layout.bytes);
+    assert(snapshot);
+    memcpy(snapshot, destination_map, (size_t)layout.bytes);
+    bad = begin();
+    vkCmdCopyBufferToImage(bad, upload, destination,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &whole);
+    assert(bad->state == PS5VK_RECORDING && bad->operation_count == 1);
+    fail_next_invalidate = 1;
+    assert(ps5vk_image_linear_execute(device, &bad->operations[0]) == VK_ERROR_DEVICE_LOST);
+    assert(memcmp(snapshot, destination_map, (size_t)layout.bytes) == 0);
+
+    destination->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    memcpy(snapshot, readback_map, (size_t)pixels);
+    bad = begin();
+    vkCmdCopyImageToBuffer(bad, destination, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           readback, 1, &whole);
+    assert(bad->state == PS5VK_RECORDING && bad->operation_count == 1);
+    fail_next_invalidate = 1;
+    assert(ps5vk_image_linear_execute(device, &bad->operations[0]) == VK_ERROR_DEVICE_LOST);
+    assert(memcmp(snapshot, readback_map, (size_t)pixels) == 0);
+    free(snapshot);
+
+    /* Distinct resource handles backed by overlapping memory fail closed. */
+    VkImage alias_source = make_image(VK_FORMAT_R8G8B8A8_UNORM, transfer_usage, NULL);
+    VkImage alias_destination = make_image(VK_FORMAT_R8G8B8A8_UNORM, transfer_usage, NULL);
+    alias_destination->memory = alias_source->memory;
+    alias_destination->offset = alias_source->offset;
+    bad = begin();
+    vkCmdCopyImage(bad, alias_source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   alias_destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+
+    VkBufferCreateInfo alias_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = pixels, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer alias_buffer;
+    assert(vkCreateBuffer(device, &alias_info, NULL, &alias_buffer) == VK_SUCCESS);
+    assert(vkBindBufferMemory(device, alias_buffer, alias_source->memory, 0) == VK_SUCCESS);
+    bad = begin();
+    vkCmdCopyBufferToImage(bad, alias_buffer, alias_source,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &whole);
+    assert(bad->state == PS5VK_RECORDING && bad->operation_count == 1);
+    assert(ps5vk_image_linear_validate(device, &bad->operations[0]) != VK_SUCCESS);
+
+    bad = begin();
+    vkCmdBlitImage(bad, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, NULL, VK_FILTER_NEAREST);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+    bad = begin();
+    vkCmdResolveImage(bad, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, NULL);
     assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
 
     /* the tiled colour-attachment role is refused rather than cleared linearly */
@@ -364,6 +437,30 @@ int main(void)
                           1, &(VkClearRect){.rect = {{0, 0}, {WIDTH, HEIGHT}}, .baseArrayLayer = 0, .layerCount = 1});
     assert(bad->state == PS5VK_INVALID && bad->operation_count == 0); /* no active render pass */
 
+    /* Closest otherwise-valid boundary: an active one-subpass render pass. */
+    struct VkImageView_T active_view = {.device = device, .image = attachment};
+    struct VkRenderPass_T active_pass = {.device = device, .attachment_count = 1,
+        .color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED},
+        .attachments = {{.format = VK_FORMAT_R8G8B8A8_UNORM,
+            .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE}}};
+    struct VkFramebuffer_T active_fb = {.device = device, .width = WIDTH, .height = HEIGHT,
+        .attachment_count = 1, .attachments = {&active_view},
+        .formats = {VK_FORMAT_R8G8B8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
+        .color_attachment = 0, .depth_attachment = VK_ATTACHMENT_UNUSED};
+    VkRenderPassBeginInfo rp = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = &active_pass, .framebuffer = &active_fb,
+        .renderArea = {.extent = {WIDTH, HEIGHT}}};
+    VkClearAttachment ca = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .colorAttachment = 0};
+    VkClearRect cr = {.rect = {.extent = {WIDTH, HEIGHT}}, .layerCount = 1};
+    bad = begin();
+    vkCmdBeginRenderPass(bad, &rp, VK_SUBPASS_CONTENTS_INLINE);
+    assert(bad->state == PS5VK_RECORDING && bad->render_pass == &active_pass);
+    vkCmdClearAttachments(bad, 1, &ca, 1, &cr);
+    assert(bad->state == PS5VK_INVALID);
+
+    vkDestroyBuffer(device, alias_buffer, NULL);
+    vkDestroyImage(device, alias_destination, NULL);
+    vkDestroyImage(device, alias_source, NULL);
     vkDestroyImage(device, attachment, NULL);
     vkDestroyImage(device, depth, NULL);
     vkDestroyImage(device, destination, NULL);

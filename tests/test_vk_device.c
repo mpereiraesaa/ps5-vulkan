@@ -269,6 +269,12 @@ static void lifecycle(void)
     CHECK_GRAPHICS(vkCmdBindIndexBuffer);
     CHECK_GRAPHICS(vkCmdDraw);
     CHECK_GRAPHICS(vkCmdDrawIndexed);
+    CHECK_GRAPHICS(vkCmdCopyImage);
+    CHECK_GRAPHICS(vkCmdBlitImage);
+    CHECK_GRAPHICS(vkCmdResolveImage);
+    CHECK_GRAPHICS(vkCmdClearColorImage);
+    CHECK_GRAPHICS(vkCmdClearDepthStencilImage);
+    CHECK_GRAPHICS(vkCmdClearAttachments);
     CHECK_GRAPHICS(vkCmdCopyBufferToImage);
     CHECK_GRAPHICS(vkCmdCopyImageToBuffer);
     CHECK_GRAPHICS(vkCmdSetLineWidth);

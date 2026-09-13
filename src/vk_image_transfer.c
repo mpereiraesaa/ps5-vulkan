@@ -10,9 +10,23 @@
 #include "vk_image_transfer.h"
 #include "vk_image.h"
 #include "color_clear.h"
+#include <stdint.h>
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
+
+/* Return non-zero for overlap or an address-range representation failure.  The
+ * implementation conservatively rejects distinct Vulkan resources backed by
+ * overlapping allocation spans; its row copies may therefore use memcpy. */
+static int spans_overlap(const void *a, VkDeviceSize a_bytes,
+    const void *b, VkDeviceSize b_bytes)
+{
+    const uintptr_t a0 = (uintptr_t)a, b0 = (uintptr_t)b;
+    if (!a || !b || !a_bytes || !b_bytes ||
+        a_bytes > UINTPTR_MAX - a0 || b_bytes > UINTPTR_MAX - b0)
+        return 1;
+    return a0 < b0 + (uintptr_t)b_bytes && b0 < a0 + (uintptr_t)a_bytes;
+}
 
 /* Padded linear layout of the advertised transfer role. Kept local so this
  * module does not depend on the graphics source group; tests/test_image_copy_clear.c
@@ -128,7 +142,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
         !layout_is_transfer_destination(destination_layout) ||
         source == destination ||
         ps5vk_image_span(d, source, &source_address, &source_bytes) != VK_SUCCESS ||
-        ps5vk_image_span(d, destination, &destination_address, &destination_bytes) != VK_SUCCESS) {
+        ps5vk_image_span(d, destination, &destination_address, &destination_bytes) != VK_SUCCESS ||
+        spans_overlap(source_address, source_bytes, destination_address, destination_bytes)) {
         ps5vk_command_invalidate(c);
         return;
     }
@@ -143,6 +158,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
             !r->extent.width || !r->extent.height || r->extent.depth != 1 ||
             r->srcOffset.x < 0 || r->srcOffset.y < 0 || r->srcOffset.z ||
             r->dstOffset.x < 0 || r->dstOffset.y < 0 || r->dstOffset.z ||
+            r->extent.width > source->info.extent.width ||
+            r->extent.height > source->info.extent.height ||
+            r->extent.width > destination->info.extent.width ||
+            r->extent.height > destination->info.extent.height ||
             (uint32_t)r->srcOffset.x > source->info.extent.width - r->extent.width ||
             (uint32_t)r->srcOffset.y > source->info.extent.height - r->extent.height ||
             (uint32_t)r->dstOffset.x > destination->info.extent.width - r->extent.width ||
@@ -205,6 +224,26 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
     op->image_region_count = range_count;
 }
 
+VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage(VkCommandBuffer c, VkImage source,
+    VkImageLayout source_layout, VkImage destination, VkImageLayout destination_layout,
+    uint32_t region_count, const VkImageBlit *regions, VkFilter filter)
+{
+    (void)source; (void)source_layout; (void)destination; (void)destination_layout;
+    (void)region_count; (void)regions; (void)filter;
+    /* Scaling/filtering has no proven GFX1013 packet or bounded CPU contract. */
+    ps5vk_command_invalidate(c);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage(VkCommandBuffer c, VkImage source,
+    VkImageLayout source_layout, VkImage destination, VkImageLayout destination_layout,
+    uint32_t region_count, const VkImageResolve *regions)
+{
+    (void)source; (void)source_layout; (void)destination; (void)destination_layout;
+    (void)region_count; (void)regions;
+    /* The advertised image roles are single-sampled; no resolve is supported. */
+    ps5vk_command_invalidate(c);
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdClearDepthStencilImage(VkCommandBuffer c, VkImage image,
     VkImageLayout image_layout, const VkClearDepthStencilValue *value,
     uint32_t range_count, const VkImageSubresourceRange *ranges)
@@ -247,6 +286,8 @@ VkResult ps5vk_image_transfer_execute(VkDevice d, const struct ps5vk_operation *
             return VK_ERROR_DEVICE_LOST;
         if (ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
             ps5vk_image_span(d, op->image_destination, &destination_address, &destination_bytes) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+        if (spans_overlap(source_address, source_bytes, destination_address, destination_bytes))
             return VK_ERROR_DEVICE_LOST;
         uint32_t source_pitch = 0, destination_pitch = 0;
         VkDeviceSize source_size = 0, destination_size = 0;
@@ -305,6 +346,8 @@ VkResult ps5vk_image_transfer_validate(VkDevice d, const struct ps5vk_operation 
     VkDeviceSize bytes = 0;
     if (op->type == PS5VK_COPY_IMAGE) {
         const VkImageCopy *regions = (const VkImageCopy *)op->owned_payload;
+        void *source_address = NULL, *destination_address = NULL;
+        VkDeviceSize source_bytes = 0, destination_bytes = 0;
         if (!op->image_region_count || !regions ||
             op->owned_payload_size != (size_t)op->image_region_count * sizeof(*regions) ||
             !transfer_role_source(op->image_source) ||
@@ -312,8 +355,9 @@ VkResult ps5vk_image_transfer_validate(VkDevice d, const struct ps5vk_operation 
             op->image_source == op->image_destination ||
             !layout_is_transfer_source(op->image_source_layout) ||
             !layout_is_transfer_destination(op->image_destination_layout) ||
-            ps5vk_image_span(d, op->image_source, &address, &bytes) != VK_SUCCESS ||
-            ps5vk_image_span(d, op->image_destination, &address, &bytes) != VK_SUCCESS)
+            ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->image_destination, &destination_address, &destination_bytes) != VK_SUCCESS ||
+            spans_overlap(source_address, source_bytes, destination_address, destination_bytes))
             return INVALID;
         for (uint32_t i = 0; i < op->image_region_count; ++i) {
             const VkImageCopy *r = &regions[i];
@@ -325,6 +369,10 @@ VkResult ps5vk_image_transfer_validate(VkDevice d, const struct ps5vk_operation 
                 !r->extent.width || !r->extent.height || r->extent.depth != 1 ||
                 r->srcOffset.x < 0 || r->srcOffset.y < 0 || r->srcOffset.z ||
                 r->dstOffset.x < 0 || r->dstOffset.y < 0 || r->dstOffset.z ||
+                r->extent.width > op->image_source->info.extent.width ||
+                r->extent.height > op->image_source->info.extent.height ||
+                r->extent.width > op->image_destination->info.extent.width ||
+                r->extent.height > op->image_destination->info.extent.height ||
                 (uint32_t)r->srcOffset.x > op->image_source->info.extent.width - r->extent.width ||
                 (uint32_t)r->srcOffset.y > op->image_source->info.extent.height - r->extent.height ||
                 (uint32_t)r->dstOffset.x > op->image_destination->info.extent.width - r->extent.width ||
@@ -333,10 +381,22 @@ VkResult ps5vk_image_transfer_validate(VkDevice d, const struct ps5vk_operation 
         }
         return VK_SUCCESS;
     }
-    if (!transfer_role_destination(op->image_destination) ||
+    const VkImageSubresourceRange *ranges =
+        (const VkImageSubresourceRange *)op->owned_payload;
+    if (!op->image_region_count || !ranges ||
+        op->owned_payload_size != (size_t)op->image_region_count * sizeof(*ranges) ||
+        !transfer_role_destination(op->image_destination) ||
         !layout_is_transfer_destination(op->image_destination_layout) ||
         ps5vk_image_span(d, op->image_destination, &address, &bytes) != VK_SUCCESS)
         return INVALID;
+    for (uint32_t i = 0; i < op->image_region_count; ++i) {
+        const VkImageSubresourceRange *r = &ranges[i];
+        if (r->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT || r->baseMipLevel ||
+            (r->levelCount != 1 && r->levelCount != VK_REMAINING_MIP_LEVELS) ||
+            r->baseArrayLayer ||
+            (r->layerCount != 1 && r->layerCount != VK_REMAINING_ARRAY_LAYERS))
+            return INVALID;
+    }
     return VK_SUCCESS;
 }
 
@@ -380,8 +440,10 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
      * RGBA8 base-level 2D area between a tightly described buffer row and the
      * padded image row. */
     VkDeviceSize source_bytes = 0, destination_bytes = 0;
-    if (ps5vk_buffer_span(d, buffer, 0, VK_WHOLE_SIZE, &address, &source_bytes) != VK_SUCCESS ||
-        ps5vk_image_span(d, op->copy_image, &address, &destination_bytes) != VK_SUCCESS)
+    void *buffer_address = NULL, *image_address = NULL;
+    if (ps5vk_buffer_span(d, buffer, 0, VK_WHOLE_SIZE, &buffer_address, &source_bytes) != VK_SUCCESS ||
+        ps5vk_image_span(d, op->copy_image, &image_address, &destination_bytes) != VK_SUCCESS ||
+        spans_overlap(buffer_address, source_bytes, image_address, destination_bytes))
         return INVALID;
     struct linear_copy plan;
     if (linear_region_plan(op->copy_image->info.extent.width,
@@ -436,6 +498,10 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         return VK_ERROR_DEVICE_LOST;
     unsigned char *image = (unsigned char *)image_address + plan.image_offset;
     unsigned char *buffer = (unsigned char *)buffer_address + plan.buffer_offset;
+    VkResult result = ps5vk_buffer_cache(d,
+        op->type == PS5VK_COPY_BUFFER_IMAGE ? op->copy_source : op->copy_destination,
+        plan.buffer_offset, buffer_span, VK_TRUE);
+    if (result != VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
     for (uint32_t y = 0; y < plan.rows; ++y) {
         unsigned char *image_row = image + (VkDeviceSize)y * plan.image_pitch;
         unsigned char *buffer_row = buffer + (VkDeviceSize)y * plan.buffer_pitch;
@@ -444,7 +510,6 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         else
             memcpy(buffer_row, image_row, plan.row_bytes);
     }
-    VkResult result;
     if (op->type == PS5VK_COPY_BUFFER_IMAGE)
         result = ps5vk_image_flush_range(d, op->copy_image, plan.image_offset, image_span);
     else

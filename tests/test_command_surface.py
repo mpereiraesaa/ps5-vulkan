@@ -72,6 +72,11 @@ class TestCommandSurfaceParity(unittest.TestCase):
         fully_wired = set(audit_command_surface(REPO_ROOT)["fully_wired"])
         self.assertTrue(REQUIRED_FAIL_CLOSED_COMMANDS <= fully_wired)
 
+    def test_vulkan10_surface_has_no_structural_holes(self):
+        result = audit_command_surface(REPO_ROOT)
+        self.assertEqual(137, result["fully_wired_total"])
+        self.assertEqual([], result["missing"])
+
 
 class TestCommandSurfaceNegativeFixtures(unittest.TestCase):
     """Negative fixtures simulating drift, regressions, and omissions."""

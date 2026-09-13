@@ -732,6 +732,25 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(
     uint32_t regionCount,
     const VkImageCopy* pRegions);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageBlit* pRegions,
+    VkFilter filter);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageResolve* pRegions);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(
     VkCommandBuffer commandBuffer,
     VkImage image,

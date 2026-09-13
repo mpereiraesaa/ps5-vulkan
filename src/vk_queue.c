@@ -557,8 +557,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
         result = INVALID; goto fail;
     }
     uint32_t segment = 0;
+    VkBool32 seen_frontend = VK_FALSE;
     for (struct ps5vk_submission *s = head; s; s = s->next, ++segment) {
         s->serial = d->queue.next_serial + segment;
+        if (s->frontend_only) seen_frontend = VK_TRUE;
+        else if (seen_frontend) s->deferred_prepare = VK_TRUE;
         if (s->count && !s->frontend_only && !s->deferred_prepare) {
             if (!d->submit_backend.prepare || !d->submit_backend.launch ||
                 !d->submit_backend.poll || !d->submit_backend.release) {

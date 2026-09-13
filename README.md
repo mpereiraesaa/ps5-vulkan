@@ -56,7 +56,7 @@ verifiers; neither is a claim of Vulkan conformance.
 ## Important boundaries
 
 This is not a Vulkan-conformant driver or ICD, and it does not yet provide WSI,
-swapchains, broad format coverage, general image copy/blit/resolve, multiple queues,
+swapchains, broad format coverage, general image transfer/blit/resolve, multiple queues,
 timeline semaphores, blending, MSAA, mipmaps, anisotropy or arbitrary shader
 programs. The single-queue Vulkan 1.0 profile includes binary semaphores and
 host/device events; it does not imply multi-queue or synchronization2 support.

@@ -365,9 +365,10 @@ Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
 - Derives the 137 mandatory Vulkan 1.0 core commands.
 - Audits 1:1 symmetry across public headers (`include/ps5vk/ps5vk.h`), static dispatch
   tables (`src/vk_dispatch.c`), and implementation symbols (`src/*.c`).
-- Fails closed on any unexpected drift, asymmetry (e.g. declared in public header but un-dispatched,
-  or dispatched without implementation), or regression in fully wired commands (131 fully wired
-  commands, with the six image-transfer/clear commands cataloged as deficits).
+- Fails closed on any unexpected drift, asymmetry (e.g. declared in public header but un-dispatched),
+  or regression from the 137/137 structurally wired commands. This is symbol and
+  dispatch parity, not a semantic-support or Vulkan-conformance count; explicitly
+  unsupported commands remain present as tested fail-closed entry points.
 - Enforced on host test runs via `make check` and verified by unit tests in
   `tests/test_command_surface.py` (which includes negative test fixtures asserting failure on
   missing dispatch entries, omitted declarations, or bookkeeping regressions).
@@ -383,7 +384,7 @@ seven states can yet be enabled for drawing, so this establishes structural
 recording and compute/transfer non-interference, not dynamic blending, stencil,
 depth-bounds or depth-bias effects on rendered pixels.
 
-The next structural slice adds all six query commands plus
+The following structural slice added all six query commands plus
 `vkCmdNextSubpass`, `vkCmdExecuteCommands` and `vkQueueBindSparse`. Host tests
 prove ordered query reset, the reset-but-unavailable 32/64-bit availability
 layout, preservation of result sentinels, query-pool command lifetime, function
@@ -410,8 +411,7 @@ complete `ps5log/1` and clean Close Game:
 - `20260913T090553746Z_PPSA99994_ps5vk_0x3456c96c63e4`
 
 This closes the three named buffer commands at the bounded profile. It does
-not establish general image copy, blit or resolve, the full Vulkan transfer
-family, or conformance.
+not establish the full Vulkan transfer family or conformance.
 
 ## Deferred indirect execution (2026-09-13)
 
