@@ -279,8 +279,48 @@ static void uniform_resources(void)
     vkDestroyBufferView(&d,view,NULL);vkDestroyBuffer(&d,buffer,NULL);vkFreeMemory(&d,memory,NULL);
     assert(!d.buffer_views && !d.buffers && !d.memories && !d.descriptor_objects);
 }
+static void dynamic_buffer_resources(void)
+{
+    struct VkDevice_T d={.memory={NULL,backing_alloc,backing_free,cache,cache},
+        .buffer_alignment=256,.uniform_buffer_alignment=256,.noncoherent_atom=64,
+        .max_allocation=4096};
+    VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=1024,
+        .usage=VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
+    VkBuffer buffer;assert(vkCreateBuffer(&d,&bi,NULL,&buffer)==VK_SUCCESS);
+    VkMemoryAllocateInfo mi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=1024};
+    VkDeviceMemory memory;assert(vkAllocateMemory(&d,&mi,NULL,&memory)==VK_SUCCESS);
+    assert(vkBindBufferMemory(&d,buffer,memory,0)==VK_SUCCESS);
+    VkDescriptorSetLayoutBinding bindings[]={
+        {0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL},
+        {1,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL}};
+    VkDescriptorSetLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount=2,.pBindings=bindings};VkDescriptorSetLayout layout;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,1},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,1}};
+    VkDescriptorPoolCreateInfo pi={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets=1,.poolSizeCount=2,.pPoolSizes=sizes};VkDescriptorPool pool;
+    assert(vkCreateDescriptorPool(&d,&pi,NULL,&pool)==VK_SUCCESS);
+    VkDescriptorSetAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool=pool,.descriptorSetCount=1,.pSetLayouts=&layout};VkDescriptorSet set;
+    assert(vkAllocateDescriptorSets(&d,&ai,&set)==VK_SUCCESS);
+    assert(pool->dynamic_storage_used==1 && pool->dynamic_uniform_used==1 &&
+        !pool->storage_used && !pool->uniform_used);
+    VkDescriptorBufferInfo info={buffer,0,256};
+    VkWriteDescriptorSet writes[]={
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=0,
+         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,.pBufferInfo=&info},
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=1,
+         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,.pBufferInfo=&info}};
+    vkUpdateDescriptorSets(&d,2,writes,0,NULL);
+    assert(!d.lifetime_errors && set->defined[0] && set->defined[1]);
+    assert(vkResetDescriptorPool(&d,pool,0)==VK_SUCCESS &&
+        !pool->dynamic_storage_used && !pool->dynamic_uniform_used);
+    vkDestroyDescriptorPool(&d,pool,NULL);vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    vkDestroyBuffer(&d,buffer,NULL);vkFreeMemory(&d,memory,NULL);
+}
 int main(void)
 {
-    lifecycle(); rollback(); negative(); push_constant_layouts(); updates(); image_pool_types(); uniform_resources();
+    lifecycle(); rollback(); negative(); push_constant_layouts(); updates(); image_pool_types(); uniform_resources(); dynamic_buffer_resources();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }

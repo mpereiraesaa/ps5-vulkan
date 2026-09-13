@@ -50,10 +50,26 @@ struct VkDescriptorPool_T {
     uint32_t max_sets, used_sets;
     uint64_t storage_capacity, storage_used;
     uint64_t uniform_capacity, uniform_used;
+    uint64_t dynamic_storage_capacity, dynamic_storage_used;
+    uint64_t dynamic_uniform_capacity, dynamic_uniform_used;
     uint64_t texel_capacity, texel_used;
     uint64_t image_capacity, image_used;
     VkDescriptorSet sets;
 };
+
+static inline VkBool32 ps5vk_dynamic_descriptor_type(VkDescriptorType type)
+{
+    return type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
+           type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+}
+
+static inline VkDescriptorType ps5vk_base_buffer_descriptor_type(VkDescriptorType type)
+{
+    return type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ?
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER :
+        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ?
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : type;
+}
 struct VkPipelineLayout_T {
     VkDevice device;
     VkAllocationCallbacks allocator;

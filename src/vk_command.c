@@ -38,8 +38,10 @@ static void clear(VkCommandBuffer c)
     c->stencil_compare_faces = c->stencil_write_faces =
         c->stencil_reference_faces = 0;
     memset(c->sets, 0, sizeof(c->sets)); memset(c->set_signatures, 0, sizeof(c->set_signatures));
+    memset(c->set_dynamic_offsets,0,sizeof(c->set_dynamic_offsets));
     memset(c->graphics_sets,0,sizeof(c->graphics_sets));
     memset(c->graphics_set_signatures,0,sizeof(c->graphics_set_signatures));
+    memset(c->graphics_set_dynamic_offsets,0,sizeof(c->graphics_set_dynamic_offsets));
     c->push_constants_valid=VK_FALSE;
     memset(c->push_constant_stages,0,sizeof(c->push_constant_stages));
     memset(c->push_constants,0,sizeof(c->push_constants));
@@ -382,22 +384,44 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilReference(VkCommandBuffer c,
 VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(VkCommandBuffer c, VkPipelineBindPoint point, VkPipelineLayout layout,
     uint32_t first, uint32_t count, const VkDescriptorSet *sets, uint32_t dynamic_count, const uint32_t *offsets)
 {
-    (void)offsets;
     if (!c || c->state != PS5VK_RECORDING ||
         (point != VK_PIPELINE_BIND_POINT_COMPUTE && point != VK_PIPELINE_BIND_POINT_GRAPHICS) || !layout ||
-        layout->device != c->pool->device || !count || !sets || dynamic_count ||
+        layout->device != c->pool->device || !count || !sets || (dynamic_count && !offsets) ||
         first >= layout->set_count || count > layout->set_count - first) { invalid(c); return; }
+    uint32_t expected_dynamic=0;
     for (uint32_t j = 0; j < count; ++j)
         if (!sets[j] || sets[j]->pool->device != c->pool->device ||
             memcmp(&layout->sets[first+j], &sets[j]->signature, sizeof(sets[j]->signature))) {
             invalid(c); return;
+        } else for(uint32_t binding=0;binding<PS5VK_MAX_BINDINGS;++binding)
+            if(ps5vk_dynamic_descriptor_type(sets[j]->signature.type[binding]))
+                expected_dynamic+=sets[j]->signature.binding[binding].count;
+    if(dynamic_count!=expected_dynamic){invalid(c);return;}
+    VkDeviceSize prepared[PS5VK_MAX_SETS][PS5VK_MAX_DESCRIPTORS]={{0}};
+    uint32_t cursor=0;
+    for(uint32_t j=0;j<count;++j) {
+        VkDescriptorSet set=sets[j];
+        for(uint32_t binding=0;binding<PS5VK_MAX_BINDINGS;++binding) {
+            const struct ps5vk_binding *b=&set->signature.binding[binding];
+            if(!ps5vk_dynamic_descriptor_type(set->signature.type[binding]))continue;
+            VkDeviceSize alignment=ps5vk_base_buffer_descriptor_type(set->signature.type[binding])==
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER?c->pool->device->uniform_buffer_alignment:
+                c->pool->device->buffer_alignment;
+            for(uint32_t element=0;element<b->count;++element) {
+                VkDeviceSize offset=offsets[cursor++];
+                if(!alignment || offset%alignment){invalid(c);return;}
+                prepared[j][b->first+element]=offset;
+            }
         }
+    }
     if(point==VK_PIPELINE_BIND_POINT_GRAPHICS) {
         if(!c->pool->device->graphics_enabled){invalid(c);return;}
         for (uint32_t j=0;j<count;++j) { c->graphics_sets[first+j]=sets[j];
-            c->graphics_set_signatures[first+j]=layout->sets[first+j]; }
+            c->graphics_set_signatures[first+j]=layout->sets[first+j];
+            memcpy(c->graphics_set_dynamic_offsets[first+j],prepared[j],sizeof(prepared[j])); }
     } else for (uint32_t j=0;j<count;++j) { c->sets[first+j]=sets[j];
-        c->set_signatures[first+j]=layout->sets[first+j]; }
+        c->set_signatures[first+j]=layout->sets[first+j];
+        memcpy(c->set_dynamic_offsets[first+j],prepared[j],sizeof(prepared[j])); }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants(VkCommandBuffer c, VkPipelineLayout layout,
     VkShaderStageFlags stages, uint32_t offset, uint32_t size, const void *values)
@@ -443,6 +467,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t
     if(op->push_constant_size)memcpy(op->push_constants,c->push_constants,op->push_constant_size);
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set)) {
         op->sets[set]=c->sets[set];op->generations[set]=c->sets[set]->generation;
+    }
+    for(uint32_t j=0;j<p->descriptor_count;++j) {
+        const struct ps5vk_program_descriptor *binding=&p->descriptors[j];
+        uint32_t index=c->sets[binding->set]->signature.binding[binding->binding].first+
+            binding->element;
+        op->descriptor_dynamic_offsets[j]=c->set_dynamic_offsets[binding->set][index];
     }
 }
 static VkBool32 indirect_buffer_valid(VkCommandBuffer c, VkBuffer buffer,
@@ -578,6 +608,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if(p->set_count) {
         op->sets[0]=c->graphics_sets[0];
         op->generations[0]=c->graphics_sets[0]->generation;
+    }
+    for(uint32_t j=0;j<p->program.descriptor_count;++j) {
+        const struct ps5vk_program_descriptor *binding=&p->program.descriptors[j];
+        uint32_t index=c->graphics_sets[binding->set]->signature.binding[binding->binding].first+
+            binding->element;
+        op->descriptor_dynamic_offsets[j]=c->graphics_set_dynamic_offsets[binding->set][index];
     }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer c,uint32_t count,uint32_t instances,

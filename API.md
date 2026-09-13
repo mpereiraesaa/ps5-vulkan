@@ -115,6 +115,15 @@ supported.
 - Storage buffers, uniform buffers and uniform texel buffers. The validated
   texel format is `VK_FORMAT_R32_UINT`, including Vulkan's `(R,0,0,1)`
   one-component completion; broader format support is not implied.
+- Dynamic storage and uniform-buffer descriptors use the same executable
+  compiler ABI as their static forms. `vkCmdBindDescriptorSets` consumes one
+  offset for every dynamic descriptor in increasing set, binding and array
+  element order; the offsets are immutable snapshots of the recorded dispatch.
+  Counts, alignments, integer overflow and the final base-plus-dynamic range are
+  checked fail-closed. The reported per-set floors are four dynamic storage
+  buffers and eight dynamic uniform buffers. Host contracts currently prove
+  this API state machine; hardware evidence is stated only when a corresponding
+  native receipt is listed in `VALIDATION.md`.
 - Partial descriptor-set binding is accepted, but every set and descriptor used
   by the compiled shader must be bound and defined before dispatch.
 - Pipeline layouts expose up to 256 bytes of 4-byte-aligned push constants.

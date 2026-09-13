@@ -528,7 +528,7 @@ public query paths rather than from a copied table:
   `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
   report fails the gate; only documented blockers are accepted.
 
-Result on the shipped profiles: 120 mandatory limits satisfied, 78 documented
+Result on the shipped profiles: 124 mandatory limits satisfied, 74 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, 84 feature rows consistent with the
 code path that enforces them with 26 rows not audited, 13 format class rules
@@ -549,3 +549,26 @@ hardware behaviour behind those limits and it does not make the profile
 conformant: the documented blockers include the mandatory image-type, attachment
 count, descriptor-count, multisample and format-family gaps. No console run was
 performed for this increment, so no new hardware claim is made.
+
+The subsequent dynamic-buffer descriptor increment removes four of those
+limit blockers across the compute and graphics profiles. It implements distinct
+dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
+alignment validation and native descriptor-address adjustment with checked
+ranges. The reporting matrix now records 124 satisfied mandatory limit rows,
+74 limit blockers and 723 blockers overall.
+
+Two byte-identical public-SDK consumer runs then exercised that path on the
+owned PS5. Runs
+`20260913T192239874Z_PPSA99994_ps5vk_0x55fed4aef4a8` and
+`20260913T192252217Z_PPSA99994_ps5vk_0x5601b45b2478` used executable SELF
+SHA-256 `2f90929ff30eb069cc66bfdb86d991b0ebaf08c07d1878be2ee522e02c95e0d7`.
+Each strictly verified three descriptor sets, two dynamic storage buffers, one
+dynamic uniform buffer, offsets `256,256,256`, an independently non-zero
+update-time base plus dynamic offset, 64 deterministic compute results and 192
+intact guard words. The existing graphics/readback tail also completed, the
+`ps5log/1` transcript was complete, and Close Game was verified after both
+runs. Transcript SHA-256 values are
+`05296089284398c4377224943904a26e3c466808352a441fd5b8cbd9788be77a` and
+`cf7f31e5815b9e03a9bebca3627fc578231130e38ce66bdf5ccd29ec0fe29f3a`.
+This evidence validates that exact bounded path; it is not blanket coverage of
+every descriptor array, pipeline layout or shader combination.

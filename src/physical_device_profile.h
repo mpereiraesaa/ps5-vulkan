@@ -146,6 +146,11 @@ static inline void ps5vk_physical_profile_init(
     limits->maxDescriptorSetStorageBuffers = PS5VK_MAX_DESCRIPTORS;
     limits->maxPerStageDescriptorUniformBuffers = PS5VK_MAX_DESCRIPTORS;
     limits->maxDescriptorSetUniformBuffers = PS5VK_MAX_DESCRIPTORS;
+    /* Dynamic UBO/SSBO descriptors share the same compiler table and exact
+     * bind-time range validation as their static forms.  Report the Vulkan
+     * 1.0 floors conservatively even though the table can hold more. */
+    limits->maxDescriptorSetUniformBuffersDynamic = 8;
+    limits->maxDescriptorSetStorageBuffersDynamic = 4;
     /* Uniform texel buffers consume the sampled-image accounting class. */
     limits->maxPerStageDescriptorSampledImages = 1;
     limits->maxDescriptorSetSampledImages = 1;

@@ -34,6 +34,11 @@ def validate(log, receipt, artifact):
         "api": "Vulkan 1.0", "groups": [1, 1, 1], "offset": 512,
         "result_elements": 64,
     }, "indirect-dispatch artifact contract")
+    require(artifact.get("dynamic_descriptors") == {
+        "storage_buffers": 2, "uniform_buffers": 1,
+        "offsets": [256, 256, 256], "base_plus_dynamic": True,
+        "result_elements": 64, "guard_words": 192,
+    }, "dynamic-descriptor artifact contract")
     width_artifact = artifact.get("storage_width", {})
     require(width_artifact.get("storageBuffer8BitAccess") is True and
             width_artifact.get("storageBuffer16BitAccess") is True and
@@ -153,10 +158,11 @@ def validate(log, receipt, artifact):
                width_start, width_pipelines,
                prepared[1], submitted[1], suspended[1], completed[1],
                submitted[2], suspended[2], completed[2],
-               width_witness, width_retired, sync_start, prepared[2], prepared[3],
+               width_witness, width_retired, sync_start, prepared[2],
                submitted[3], suspended[3], completed[3],
                submitted[4], suspended[4], completed[4],
                submitted[5], suspended[5], completed[5],
+               prepared[3],
                sync_objects, sync_witness, sync_retired, success, retired, ready]
     require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
             "resource witness ordering")
@@ -180,7 +186,8 @@ def validate(log, receipt, artifact):
         "physical-device query witnesses")
     require(negotiated[1].split()[1:] == [
         "instance_ext=1", "device_exts=3", "storageBuffer8BitAccess=1",
-        "storageBuffer16BitAccess=1", "narrow_arithmetic=0"],
+        "storageBuffer16BitAccess=1", "narrow_arithmetic=0",
+        "robustBufferAccess=1"],
         "narrow storage negotiation")
     require(transfer_witness[1].split()[1:] == [
         "copy_bytes=7", "update_bytes=8", "fill_bytes=20",
@@ -217,9 +224,11 @@ def validate(log, receipt, artifact):
             "completion")
     require(witness[1].split()[1:] == [
         "sets=3", "storage=2", "uniform=1", "texel=1",
+        "dynamic_ssbo=2", "dynamic_ubo=1", "offsets=256,256,256",
+        "base_plus_dynamic=1",
         "push_bytes=4", "spec_constants=2", "multiplier=5",
         "extra_bias=11", "addend=19", "elements=64", "mismatches=0",
-        "guard_words=128", "guard_mismatches=0"],
+        "guard_words=192", "guard_mismatches=0"],
         "resource oracle")
     require(width_pipelines[1].endswith("count=2"), "narrow pipelines")
     require(width_witness[1].split()[1:] == [
@@ -282,11 +291,14 @@ def validate(log, receipt, artifact):
         "descriptor_sets": 3,
         "storage_buffers": 2,
         "uniform_buffers": 1,
+        "dynamic_storage_buffers": 2,
+        "dynamic_uniform_buffers": 1,
+        "dynamic_offsets": [256, 256, 256],
         "uniform_texel_buffers": 1,
         "push_constant_bytes": 4,
         "specialization_constants": 2,
         "elements_checked": 64,
-        "guard_words_checked": 128,
+        "guard_words_checked": 192,
         "buffer_transfer_bytes_checked": 67,
         "buffer_transfer_hash_fnv1a32": "9a158222",
         "indirect_dispatches_checked": 1,

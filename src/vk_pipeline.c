@@ -173,7 +173,8 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
             b->binding >= PS5VK_MAX_BINDINGS || b->table_dword >= 128 || b->table_dword % 4) return 0;
         const struct ps5vk_binding *binding = &layout->sets[b->set].binding[b->binding];
         if (layout->sets[b->set].type[b->binding] != b->type ||
-            (b->type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && b->type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+            (ps5vk_base_buffer_descriptor_type(b->type) != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER &&
+             ps5vk_base_buffer_descriptor_type(b->type) != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
              b->type != VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) ||
             binding->count <= b->element || !(binding->stages & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
         for (uint32_t k = 0; k < j; ++k)

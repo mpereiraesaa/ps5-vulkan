@@ -16049,12 +16049,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 0 must be >= 4; blocker: dynamic-offset descriptor types are not accepted",
+      "detail": "untagged-core: reported 4 must be >= 4",
       "kind": "limit",
       "limit": "maxDescriptorSetStorageBuffersDynamic",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 4,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -16064,12 +16064,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 0 must be >= 4; blocker: dynamic-offset descriptor types are not accepted",
+      "detail": "untagged-core: reported 4 must be >= 4",
       "kind": "limit",
       "limit": "maxDescriptorSetStorageBuffersDynamic",
       "profile": "compute",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 4,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -16289,12 +16289,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 0 must be >= 8; blocker: dynamic-offset descriptor types are not accepted",
+      "detail": "untagged-core: reported 8 must be >= 8",
       "kind": "limit",
       "limit": "maxDescriptorSetUniformBuffersDynamic",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 8,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -16304,12 +16304,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 0 must be >= 8; blocker: dynamic-offset descriptor types are not accepted",
+      "detail": "untagged-core: reported 8 must be >= 8",
       "kind": "limit",
       "limit": "maxDescriptorSetUniformBuffersDynamic",
       "profile": "compute",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 8,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -25981,9 +25981,9 @@
       "satisfied": 13
     },
     "limits": {
-      "blocker": 78,
+      "blocker": 74,
       "not-applicable": 656,
-      "satisfied": 120
+      "satisfied": 124
     },
     "shader_capabilities": {
       "not-audited": 2,

@@ -81,12 +81,23 @@ case:
 | Image type/layers: `maxImageDimension1D`, `maxImageDimension3D`, `maxImageDimensionCube`, `maxImageArrayLayers` | 0 / 0 / 0 / 1 | 4096 / 256 / 4096 / 256 |
 | Attachments: `maxColorAttachments`, `maxFragmentOutputAttachments`, `maxFragmentCombinedOutputResources` | 1 | 4 |
 | Vertex input: `maxVertexInputBindings` | 1 | 16 |
-| Descriptors: `maxPerStageDescriptorSamplers`, `maxPerStageDescriptorSampledImages`, `maxPerStageDescriptorStorageImages`, `maxPerStageDescriptorInputAttachments`, `maxDescriptorSetSamplers`, `maxDescriptorSetSampledImages`, `maxDescriptorSetStorageImages`, `maxDescriptorSetInputAttachments`, `maxDescriptorSet*Dynamic` | 0-1 | 4-96 |
+| Descriptors: `maxPerStageDescriptorSamplers`, `maxPerStageDescriptorSampledImages`, `maxPerStageDescriptorStorageImages`, `maxPerStageDescriptorInputAttachments`, `maxDescriptorSetSamplers`, `maxDescriptorSetSampledImages`, `maxDescriptorSetStorageImages`, `maxDescriptorSetInputAttachments` | 0-1 | 4-96 |
 | Sampling: `maxSamplerLodBias`, `sampledImage*SampleCounts`, `framebuffer*SampleCounts`, `storageImageSampleCounts`, `sampledImageIntegerSampleCounts` | 0-1 | 2 / 1+4 / 1 |
 | Other: `discreteQueuePriorities`, `maxMemoryAllocationCount`, `minTexelOffset`, `maxTexelOffset` | 0 / 2048 / 0 / 0 | 2 / 4096 / -8 / 7 |
 
 The compute-only profile additionally leaves every graphics-object limit at
 zero because `ps5vk_graphics_limits` is applied only by the graphics build.
+
+Dynamic uniform and storage-buffer descriptors are no longer exceptions. Both
+shipped profiles report the Vulkan 1.0 floors of eight dynamic uniform buffers
+and four dynamic storage buffers per descriptor set. Bind-time offsets are
+consumed in Vulkan binding-number and array-element order, checked against the
+reported alignment, snapshotted into recorded operations and added to the
+descriptor's update-time base offset before the native range check. A reporting
+regression below either floor is therefore a violation, not a documented
+blocker. Host contracts cover ordering, pool accounting, alignment and range
+rejection; executable PS5 evidence is tracked separately and is not implied by
+these host checks.
 
 ### Still not audited
 

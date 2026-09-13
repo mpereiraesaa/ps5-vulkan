@@ -32,6 +32,8 @@ class TestReportingMatrix(unittest.TestCase):
         verdict, _ = matrix.evaluate_limit(row, 127, {})
         self.assertEqual(verdict, "violation")
         self.assertNotIn("maxPushConstantsSize", matrix.KNOWN_BLOCKERS)
+        self.assertNotIn("maxDescriptorSetUniformBuffersDynamic", matrix.KNOWN_BLOCKERS)
+        self.assertNotIn("maxDescriptorSetStorageBuffersDynamic", matrix.KNOWN_BLOCKERS)
         # Documented blockers are the accepted way to stay below the floor; the
         # mapping happens once, after evaluation, and an unlisted limit would
         # keep its "violation" verdict and fail the gate.

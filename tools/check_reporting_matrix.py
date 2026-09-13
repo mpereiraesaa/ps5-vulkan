@@ -259,8 +259,6 @@ KNOWN_BLOCKERS = {
     "maxDescriptorSetStorageImages": "no storage image descriptor type is accepted",
     "maxPerStageDescriptorInputAttachments": "no input attachment support (subpass dependencies rejected)",
     "maxDescriptorSetInputAttachments": "no input attachment support (subpass dependencies rejected)",
-    "maxDescriptorSetUniformBuffersDynamic": "dynamic-offset descriptor types are not accepted",
-    "maxDescriptorSetStorageBuffersDynamic": "dynamic-offset descriptor types are not accepted",
     "discreteQueuePriorities": "single serial queue; priority-based scheduling is not implemented",
     "maxMemoryAllocationCount": "allocator policy: heap size divided by the minimum allocation charge",
     "maxSamplerLodBias": "vkCreateSampler rejects mipLodBias/minLod/maxLod",

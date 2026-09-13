@@ -219,6 +219,14 @@ def main():
             "offset": 512,
             "result_elements": 64,
         },
+        "dynamic_descriptors": {
+            "storage_buffers": 2,
+            "uniform_buffers": 1,
+            "offsets": [256, 256, 256],
+            "base_plus_dynamic": True,
+            "result_elements": 64,
+            "guard_words": 192,
+        },
         "storage_width": {
             "storageBuffer8BitAccess": True,
             "storageBuffer16BitAccess": True,

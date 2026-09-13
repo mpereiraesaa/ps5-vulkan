@@ -142,7 +142,8 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
                 if(program->descriptor_set_mask&(1u<<set)) {
                     uint32_t *table=tables+set*128;
-                    result=ps5vk_descriptor_encode(device,program,set,op->sets[set],table,128);
+                    result=ps5vk_descriptor_encode(device,program,set,op->sets[set],
+                        op->descriptor_dynamic_offsets,table,128);
                     if(result!=VK_SUCCESS)goto fail;
                     encoding.descriptor_tables[set]=(uintptr_t)table;
                     if(!encoding.addresses.descriptor_table)

@@ -430,6 +430,45 @@ static void graphics_recording(void)
     vkDestroyBuffer(&d,indices[1],NULL);vkFreeMemory(&d,memory,NULL);
     vkDestroyCommandPool(&d, p, NULL);
 }
+static void dynamic_descriptor_recording(void)
+{
+    struct VkDevice_T d={.buffer_alignment=256,.uniform_buffer_alignment=256};
+    struct VkDescriptorPool_T descriptor_pool={.device=&d};
+    struct VkDescriptorSet_T set={.pool=&descriptor_pool,.generation=9,
+        .defined={VK_TRUE,VK_TRUE,VK_TRUE}};
+    set.signature.binding[1]=(struct ps5vk_binding){2,0,VK_SHADER_STAGE_COMPUTE_BIT};
+    set.signature.binding[7]=(struct ps5vk_binding){1,2,VK_SHADER_STAGE_COMPUTE_BIT};
+    set.signature.type[1]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    set.signature.type[7]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+    set.signature.count=3;
+    struct VkPipelineLayout_T layout={.device=&d,.set_count=1,.sets={set.signature}};
+    struct VkPipeline_T pipeline={.device=&d,.set_count=1,.sets={set.signature},
+        .program={.descriptor_set_mask=1,.descriptor_count=3,
+            .descriptors={{0,7,0,0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
+                          {0,1,1,4,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC},
+                          {0,1,0,8,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC}}}};
+    VkCommandPool p=pool(&d,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c=command(&d,p);VkDescriptorSet handle=&set;
+    uint32_t offsets[]={256,512,768};
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
+    vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_COMPUTE,&layout,0,1,&handle,3,offsets);
+    vkCmdDispatch(c,1,1,1);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+    assert(c->operations[0].descriptor_dynamic_offsets[0]==768 &&
+        c->operations[0].descriptor_dynamic_offsets[1]==512 &&
+        c->operations[0].descriptor_dynamic_offsets[2]==256);
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
+        !c->set_dynamic_offsets[0][0] && !c->set_dynamic_offsets[0][2]);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_COMPUTE,&layout,0,1,&handle,2,offsets);
+    assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    offsets[1]=257;
+    vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_COMPUTE,&layout,0,1,&handle,3,offsets);
+    assert(c->state==PS5VK_INVALID);
+    vkDestroyCommandPool(&d,p,NULL);
+}
 static void vertex_binding_lifetime(void)
 {
     struct VkDevice_T d={.memory={NULL,allocate,release,cache,cache},
@@ -683,4 +722,4 @@ static void core_dynamic_state_recording(void)
     vkDestroyCommandPool(&d,p,NULL);
 }
 int main(void)
-{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }

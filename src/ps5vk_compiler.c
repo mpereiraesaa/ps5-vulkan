@@ -94,7 +94,9 @@ VkResult ps5vk_runtime_compile_compute_features(
                 PsbcDescriptorType type;
                 switch (sig->type[b]) {
                 case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
                 default:
                     return VK_ERROR_FEATURE_NOT_PRESENT;

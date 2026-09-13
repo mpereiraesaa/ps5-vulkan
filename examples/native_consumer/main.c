@@ -145,7 +145,8 @@ static void report_physical_device_contract(VkInstance instance,
             rgba.optimalTilingFeatures ==
                 (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                  VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) &&
+                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT) &&
             !depth.linearTilingFeatures && !depth.bufferFeatures &&
             depth.optimalTilingFeatures ==
                 VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT &&
@@ -190,6 +191,8 @@ static void report_physical_device_contract(VkInstance instance,
             limits->minTexelBufferOffsetAlignment == 4 &&
             limits->minUniformBufferOffsetAlignment == 256 &&
             limits->minStorageBufferOffsetAlignment == 256 &&
+            limits->maxDescriptorSetUniformBuffersDynamic == 8 &&
+            limits->maxDescriptorSetStorageBuffersDynamic == 4 &&
             limits->nonCoherentAtomSize == 64 &&
             limits->maxComputeSharedMemorySize == 65536 &&
             limits->maxComputeWorkGroupInvocations == 1024,
@@ -985,13 +988,13 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     VkDescriptorSetLayoutBinding bindings[2] = {
         {
             .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
         },
         {
             .binding = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
         }
@@ -1004,7 +1007,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     VkDescriptorSetLayout set_layouts[3] = {VK_NULL_HANDLE};
     CHECK(vkCreateDescriptorSetLayout(device, &dslci, NULL, &set_layouts[0]));
     VkDescriptorSetLayoutBinding uniform_binding = {
-        0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL
+        0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL
     };
     dslci.bindingCount = 1;
     dslci.pBindings = &uniform_binding;
@@ -1064,6 +1067,10 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     /* 5. Create storage buffers: 64 words input (binding 0) and 64 words output with boundary guards (binding 1) */
     const uint32_t element_count = 64;
     const uint32_t guard_count = 64; /* 256 bytes = minStorageBufferOffsetAlignment */
+    const uint32_t dynamic_offset = 256;
+    const uint32_t output_base_offset = 256;
+    const uint32_t output_word_offset =
+        (output_base_offset + dynamic_offset) / sizeof(uint32_t);
     const VkDeviceSize buffer_bytes = 4096; /* ample alignment and guard room */
 
     VkBufferCreateInfo bci = {
@@ -1123,14 +1130,14 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     CHECK(vkMapMemory(device, mem_texel, 0, buffer_bytes, 0, (void **)&map_texel));
 
     for (uint32_t i = 0; i < element_count; ++i) {
-        map_in[i] = i * 100u + 42u;
+        map_in[dynamic_offset / sizeof(uint32_t) + i] = i * 100u + 42u;
         map_texel[i] = i * 31u;
     }
     const VkDeviceSize dispatch_indirect_offset = 512;
     VkDispatchIndirectCommand *dispatch_indirect =
         (VkDispatchIndirectCommand *)((unsigned char *)map_in + dispatch_indirect_offset);
     *dispatch_indirect = (VkDispatchIndirectCommand){1, 1, 1};
-    map_uniform[0] = 0x1337u;
+    map_uniform[dynamic_offset / sizeof(uint32_t)] = 0x1337u;
     /* Guard words in destination buffer */
     for (uint32_t i = 0; i < buffer_bytes / 4; ++i) {
         map_out[i] = 0xdeadbeefu;
@@ -1150,8 +1157,8 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
 
     /* 7. Descriptor pool and allocation */
     VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,2},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,2},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,1},
         {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,1}};
     VkDescriptorPoolCreateInfo dpci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -1178,7 +1185,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     };
     VkDescriptorBufferInfo dbi_out = {
         .buffer = buffer_out,
-        .offset = guard_count * sizeof(uint32_t), /* store output after front guards */
+        .offset = output_base_offset,
         .range = element_count * sizeof(uint32_t)
     };
     VkDescriptorBufferInfo dbi_uniform = {buffer_uniform, 0, 256};
@@ -1197,7 +1204,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
             .dstSet = desc_sets[0],
             .dstBinding = 0,
             .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
             .pBufferInfo = &dbi_in
         },
         {
@@ -1205,11 +1212,11 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
             .dstSet = desc_sets[0],
             .dstBinding = 1,
             .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
             .pBufferInfo = &dbi_out
         },
         {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=desc_sets[1],.dstBinding=0,
-         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.pBufferInfo=&dbi_uniform},
+         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,.pBufferInfo=&dbi_uniform},
         {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=desc_sets[2],.dstBinding=0,
          .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,.pTexelBufferView=&texel_view}
     };
@@ -1235,7 +1242,12 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     VkCommandBufferBeginInfo cbbi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     CHECK(vkBeginCommandBuffer(cmd_buf, &cbbi));
     vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
-    vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 3, desc_sets, 0, NULL);
+    const uint32_t dynamic_offsets[3] = {
+        dynamic_offset, dynamic_offset, dynamic_offset
+    };
+    vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipeline_layout, 0, 3, desc_sets, 3,
+                            dynamic_offsets);
     const uint32_t push_addend = 19u;
     vkCmdPushConstants(cmd_buf, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT,
                        0, sizeof(push_addend), &push_addend);
@@ -1269,7 +1281,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
 
     /* Check front guards */
     int guards_intact = 1;
-    for (uint32_t i = 0; i < guard_count; ++i) {
+    for (uint32_t i = 0; i < output_word_offset; ++i) {
         if (map_out[i] != 0xdeadbeefu) {
             guards_intact = 0;
             ps5log_printf(PS5LOG_ERR, "Compute front guard corrupted at index %u: 0x%08x", i, map_out[i]);
@@ -1278,7 +1290,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
 
     /* Check non-default specialization values and the pushed word together. */
     int results_correct = 1;
-    uint32_t *results = map_out + guard_count;
+    uint32_t *results = map_out + output_word_offset;
     for (uint32_t i = 0; i < element_count; ++i) {
         uint32_t src_val = i * 100u + 42u;
         uint32_t expected =
@@ -1291,7 +1303,8 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     }
 
     /* Check tail guards */
-    for (uint32_t i = guard_count + element_count; i < guard_count + element_count + guard_count; ++i) {
+    for (uint32_t i = output_word_offset + element_count;
+         i < output_word_offset + element_count + guard_count; ++i) {
         if (map_out[i] != 0xdeadbeefu) {
             guards_intact = 0;
             ps5log_printf(PS5LOG_ERR, "Compute tail guard corrupted at index %u: 0x%08x", i, map_out[i]);
@@ -1306,9 +1319,11 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     }
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS sets=3 storage=2 uniform=1 texel=1 "
+        "dynamic_ssbo=2 dynamic_ubo=1 offsets=256,256,256 base_plus_dynamic=1 "
         "push_bytes=4 spec_constants=2 multiplier=%u extra_bias=%u addend=%u "
         "elements=%u mismatches=0 guard_words=%u guard_mismatches=0",
-        multiplier, extra_bias, push_addend, element_count, guard_count * 2);
+        multiplier, extra_bias, push_addend, element_count,
+        output_word_offset + guard_count);
 
     /* Clean up compute resources in reverse order */
     vkDestroyFence(device, fence, NULL);
