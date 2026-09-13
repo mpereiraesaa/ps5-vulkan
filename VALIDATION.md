@@ -434,3 +434,45 @@ The genuine upstream payload passed 57/57 twice, including both original
 indirect compute cases. This is native evidence for indirect dispatch and its
 compute-write visibility dependency. It is not indirect-draw pixel evidence,
 multi-draw support, or a conformance claim.
+
+## Vulkan 1.0 image copy and colour clear (2026-09-13)
+
+`vkCmdCopyImage`, `vkCmdClearColorImage`, `vkCmdCopyBufferToImage` and
+`vkCmdCopyImageToBuffer` are implemented for the padded-linear transfer role,
+and the whole family is validated transactionally and executed in recorded order
+when the segment reaches the queue head. `tests/test_image_copy_clear.c` covers
+the clear-then-copy sequence with guard bytes inside the row padding, the
+upstream oracle's buffer -> image -> copy -> buffer shape with tight row
+descriptions, a cross-check that the queue-group-local region planner agrees
+with the graphics-group planner over 81 regions, and the fail-closed matrix
+(wrong layout, self-copy, oversize region, out-of-range clear value, null
+ranges, tiled-attachment clear, depth clear, attachment clear, roles outside the
+advertised usage).
+
+The four `api.copy_and_blit.core.image_to_image.simple_tests` leaves selected in
+`cts/upstream/manifest.json` are the genuine upstream oracle for this family:
+each creates two optimal-tiling `R8G8B8A8_UNORM` images with transfer-only
+usage, uploads them through the upstream path, clears the destination with
+`(1, 0, 0, 1)` where the case says so, records `vkCmdCopyImage` for a 32x32 or
+31x29 region and compares the bit-exact readback. Two launches of the identical
+payload (executable SHA-256
+`c75292cdab255bb709d9c2e8ddc0bbc1ca310c828c14b20f016becbc4846640d`,
+selection SHA-256
+`4181af6a7032b15fd27d42fcb6eb8aa178d717d3cd66e03607d85e6aecf9c272`) passed
+93/93 with zero Fail/NotSupported/Skip, identical executable and selection
+identity, complete `ps5log/1` + QPA reconstruction, exit code zero and clean
+Close Game:
+
+- `20260913T125815575Z_PPSA99994_upstream-cts_0x4104d39635f8`
+- `20260913T125952496Z_PPSA99994_upstream-cts_0x411b64e8cc61`
+
+- QPA SHA-256 values:
+  `1efa74663c1eab4e553a698d345aeb8a435bd767a2c1ff63a357accdf9017c93`
+  and `d987d13d0fa489a00402fa5f432fcaed578c8994cf514db2af1e1aa4bb091f04`
+
+This is native, upstream-judged evidence for copy and colour clear on the
+transfer-only RGBA8 role, and it is the first hardware evidence for
+`vkCmdCopyImageToBuffer` outside the render-target prelude. It does not
+establish the tiled colour-attachment role, `vkCmdBlitImage`,
+`vkCmdResolveImage`, `vkCmdClearDepthStencilImage`, `vkCmdClearAttachments`,
+other formats, or Vulkan conformance.

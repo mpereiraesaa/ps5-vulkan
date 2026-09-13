@@ -637,3 +637,23 @@ generator refuses to run if the factory or the pinned registration block drifts,
 and `tools/check_upstream_selection.py` derives
 `partial_image_<extent>_<format>_<clear>` only from the exact composition
 expression and the three table names inside the cited function.
+
+Two launches of the byte-identical payload (executable SHA-256
+`c75292cdab255bb709d9c2e8ddc0bbc1ca310c828c14b20f016becbc4846640d`,
+selection SHA-256
+`4181af6a7032b15fd27d42fcb6eb8aa178d717d3cd66e03607d85e6aecf9c272`) passed all
+**93/93** selected cases, including the four image-copy leaves, with zero
+Fail/NotSupported/Skip, complete QPA reconstruction, exit code zero and
+independent Close Game checks:
+
+- `20260913T125815575Z_PPSA99994_upstream-cts_0x4104d39635f8`
+- `20260913T125952496Z_PPSA99994_upstream-cts_0x411b64e8cc61`
+
+- QPA SHA-256 values:
+  `1efa74663c1eab4e553a698d345aeb8a435bd767a2c1ff63a357accdf9017c93`
+  and `d987d13d0fa489a00402fa5f432fcaed578c8994cf514db2af1e1aa4bb091f04`
+
+That is native evidence for `vkCmdCopyImage` and `vkCmdClearColorImage` on the
+advertised transfer-only RGBA8 role, judged by the unchanged upstream
+bit-comparison oracle. It is not evidence for the tiled colour-attachment role,
+blit, resolve, depth or stencil clears, or any unadvertised format.
