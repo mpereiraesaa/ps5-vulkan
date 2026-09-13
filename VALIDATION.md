@@ -178,22 +178,22 @@ unsupported or skipped cases, complete QPA reconstruction, zero live platform
 allocations at teardown and clean system Close Game:
 
 - Executable SHA-256:
-  `d2564c96b1a512d73b703ef13a0c8f43a8567815221e655b394517af442bfcb7`
+  `2b8ff02a5a0906c4496f8795d9c7eabd8a0af20199b05d9d2261ad1393eb6d2d`
 - Selection SHA-256:
   `b2b74ed43427d2fb0feeab07ab3ad4527643dbc125d41aadc8cee92f7200a515`
 - QPA SHA-256 values:
-  `484eedd7c43dfce7938256d0f7e15e44f1e42c0668590f1c7e3c94d4ac645ee1`
-  and `8228ad3106c788e77eac2e4f842d62e43e37bbbabec1c09117ba9ea1d970eb68`
+  `757efc735d3d77b0b6019535dd8760016ca1f935c02bfa5c34f7579fa486eba5`
+  and `88d5d6aff8d7e7fcfd2f4f2ef28acff70914f6d5f0477957ef65c28deb8c85ad`
 
 The public-header-only consumer independently passed twice with executable
 SHA-256
-`e9d08892453cf8ff2edcfc83ce3f6bbfa283716425972c71469ed77580f946ea`.
+`7209dd80a3a3431dd6f26d54420d3f91bba15b5d98773050916f91f13395c500`.
 Each run verified 18 fixed-function frames and 36 graphics submissions,
 including exact color/depth results, dynamic viewport/scissor state,
 attachment `LOAD` preservation, negative depth controls, strict `ps5log/1`
 validation and clean Close Game. Transcript SHA-256 values were
-`ea2335b2ea65d67a68e0c714be7709a0d140ec44095a54d5173e15700c75fbb9`
-and `70ab4fc2d563d70a2cf04b1f9064a8dd23a3e653776c9da678d8c8510182641b`.
+`5fba873ebe85d478ab8caf279c2e15b156771a43062a3054da8d965b2750dfbf`
+and `dc638572e4785c9c2dad9a4654f2bfb6e0a959f7c0a1be6f1e2a438023cb7528`.
 
 This evidence covers only the enumerated profile. It does not establish general
 rasterization, blending, multisampling, stencil, secondary command buffers,

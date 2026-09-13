@@ -164,10 +164,10 @@ strict identity and QPA reconstruction, included the original upstream triangle
 pixel comparison, reached `allocations_bytes=0`, and the title stopped after
 system Close Game.
 
-- Executable SHA-256: `d2564c96b1a512d73b703ef13a0c8f43a8567815221e655b394517af442bfcb7`
+- Executable SHA-256: `2b8ff02a5a0906c4496f8795d9c7eabd8a0af20199b05d9d2261ad1393eb6d2d`
 - Selection SHA-256: `b2b74ed43427d2fb0feeab07ab3ad4527643dbc125d41aadc8cee92f7200a515`
-- QPA SHA-256: `484eedd7c43dfce7938256d0f7e15e44f1e42c0668590f1c7e3c94d4ac645ee1`
-  and `8228ad3106c788e77eac2e4f842d62e43e37bbbabec1c09117ba9ea1d970eb68`
+- QPA SHA-256: `757efc735d3d77b0b6019535dd8760016ca1f935c02bfa5c34f7579fa486eba5`
+  and `88d5d6aff8d7e7fcfd2f4f2ef28acff70914f6d5f0477957ef65c28deb8c85ad`
 
 The native implementation used here is intentionally narrow: one subpass, one
 single-sample RGBA8 off-screen attachment, a full-image readback, and the exact
