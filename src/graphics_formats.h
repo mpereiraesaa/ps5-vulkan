@@ -84,6 +84,7 @@ static inline void ps5vk_graphics_format_properties(VkFormat format,
          * image-copy/clear slice (padded linear layout), not a claim about the
          * tiled colour-attachment layout. */
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+            VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
             VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
             VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
         break;

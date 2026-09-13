@@ -9,11 +9,12 @@ class SamplerCoreVerifier(unittest.TestCase):
     def fixture(self):
         messages=[]
         for case,(name,uv,expected) in enumerate(CASES):
+            count=1 if case>=6 else 373248
             messages += [
-                f"PS5VK_SAMPLER_CORE_INPUT case={case} name={name} uv_milli={uv} expected_bgra={expected}",
+                f"PS5VK_SAMPLER_CORE_INPUT case={case} name={name} uv_milli={uv} minification={int(case>=6)} expected_bgra={expected}",
                 f"PS5VK_GRAPHICS_SUBMIT serial={case+1} rc=0",
                 f"PS5VK_GRAPHICS_COMPLETED serial={case+1} image_bytes=8912896",
-                f"PS5VK_SAMPLER_CORE_READBACK case={case} name={name} expected_bgra={expected} expected=12000 other=0 valid=1",
+                f"PS5VK_SAMPLER_CORE_READBACK case={case} name={name} expected_bgra={expected} expected={count} other=0 valid=1",
                 f"PS5VK_VIDEO_PRESENTED token={case+1} fence=0 matching_event=1",
                 f"PS5VK_GRAPHICS_REUSE_END frame=0 slot=0 displayed=0",
             ]
@@ -33,12 +34,24 @@ class SamplerCoreVerifier(unittest.TestCase):
 
     def test_accepts_complete_gpu_witness(self):
         result=validate(*self.fixture())
-        self.assertEqual(result["cases"],4)
+        self.assertEqual(result["cases"],8)
         self.assertEqual(result["fixed_border_colors"],3)
+        self.assertTrue(result["nearest_linear_discriminator"])
+        self.assertTrue(result["minification_discriminator"])
 
     def test_rejects_wrong_border_output(self):
         log,meta,artifact=self.fixture()
-        log=log.replace(b"expected=12000 other=0 valid=1",b"expected=12000 other=1 valid=1",1)
+        log=log.replace(b"expected=373248 other=0 valid=1",b"expected=373248 other=1 valid=1",1)
+        meta["sha256"]=hashlib.sha256(log).hexdigest()
+        with self.assertRaisesRegex(ValueError,"GPU sampler oracle"):
+            validate(log,meta,artifact)
+
+    def test_rejects_full_screen_result_for_minification_witness(self):
+        log,meta,artifact=self.fixture()
+        needle=b"name=nearest-minification-control expected_bgra=ff000000 expected=1 other=0 valid=1"
+        replacement=needle.replace(b"expected=1",b"expected=373248")
+        self.assertIn(needle,log)
+        log=log.replace(needle,replacement,1)
         meta["sha256"]=hashlib.sha256(log).hexdigest()
         with self.assertRaisesRegex(ValueError,"GPU sampler oracle"):
             validate(log,meta,artifact)

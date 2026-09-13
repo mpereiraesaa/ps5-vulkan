@@ -93,8 +93,6 @@ FEATURE_GATES = {
                            "only the FragCoord builtin is accepted"),
     "shaderCullDistance": ("src/spirv_graphics_interface.c", "d->builtin!=42",
                            "only the FragCoord builtin is accepted"),
-    "shaderResourceMinLod": ("src/vk_sampler.c", "info->minLod!=0",
-                             "sampler minLod is rejected"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",

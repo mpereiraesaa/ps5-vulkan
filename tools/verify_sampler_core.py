@@ -11,6 +11,10 @@ CASES = (
     ("transparent-black-border", -2000, "00000000"),
     ("opaque-black-border", -2000, "ff000000"),
     ("opaque-white-border", -2000, "ffffffff"),
+    ("nearest-center-control", 500, "ff000000"),
+    ("linear-magnification", 500, "ff808080"),
+    ("nearest-minification-control", 500, "ff000000"),
+    ("linear-minification", 500, "ff808080"),
 )
 
 
@@ -57,7 +61,7 @@ def validate(log, metadata, artifact):
     presents=matching("PS5VK_VIDEO_PRESENTED")
     ends=matching("PS5VK_GRAPHICS_REUSE_END")
     require(all(len(group)==len(CASES) for group in
-                (inputs,results,submits,completes,presents,ends)),"four GPU cases")
+                (inputs,results,submits,completes,presents,ends)),"eight GPU cases")
     last=-1
     pixels=[]
     for case,(name,uv,expected) in enumerate(CASES):
@@ -68,10 +72,11 @@ def validate(log, metadata, artifact):
         require(source.get("case")==result.get("case")==str(case) and
                 source.get("name")==result.get("name")==name and
                 int(source.get("uv_milli","999999"))==uv and
+                source.get("minification")==str(int(case>=6)) and
                 source.get("expected_bgra")==result.get("expected_bgra")==expected,
                 "case identity")
         count=int(result.get("expected","0"))
-        require(count>1000 and int(result.get("other","-1"))==0 and
+        require(count==(1 if case>=6 else 373248) and int(result.get("other","-1"))==0 and
                 result.get("valid")=="1" and submits[case][1].get("rc")=="0",
                 "GPU sampler oracle")
         pixels.append(count)
@@ -82,6 +87,8 @@ def validate(log, metadata, artifact):
             "API cleanup")
     return {"self_sha256":identity,"cases":len(CASES),"pixels":pixels,
             "mirrored_repeat":True,"fixed_border_colors":3,
+            "nearest_linear_discriminator":True,
+            "minification_discriminator":True,
             "gpu_readback":True,"process_exit_verified":False}
 
 

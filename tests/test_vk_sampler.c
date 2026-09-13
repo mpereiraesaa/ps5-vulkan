@@ -30,6 +30,10 @@ int main(void)
     assert(vkCreateSampler(&d,&info,NULL,&sampler)==VK_SUCCESS);
     assert(sampler->words[0]==16 && sampler->words[2]==((1u<<20)|(1u<<26)));
     vkDestroySampler(&d,sampler,NULL);
+    info.minLod=0.5f;info.maxLod=17.0f;
+    assert(vkCreateSampler(&d,&info,NULL,&sampler)==VK_SUCCESS);
+    assert(sampler->words[1]==(128u|(15u<<20)));vkDestroySampler(&d,sampler,NULL);
+    info.minLod=0;info.maxLod=0;
     info.magFilter=VK_FILTER_NEAREST;info.minFilter=VK_FILTER_LINEAR;
     info.addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;info.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     assert(vkCreateSampler(&d,&info,NULL,&sampler)==VK_SUCCESS);
@@ -47,11 +51,12 @@ int main(void)
 #define BAD(field,value) do { VkSamplerCreateInfo bad=info;bad.field=value;sampler=(VkSampler)(uintptr_t)1; \
     assert(vkCreateSampler(&d,&bad,NULL,&sampler)!=VK_SUCCESS && !sampler && !d.graphics_objects); } while(0)
     BAD(pNext,&info);BAD(flags,1);BAD(anisotropyEnable,VK_TRUE);BAD(compareEnable,VK_TRUE);
-    BAD(unnormalizedCoordinates,VK_TRUE);BAD(mipLodBias,NAN);BAD(minLod,-1);BAD(maxLod,INFINITY);
+    BAD(unnormalizedCoordinates,VK_TRUE);BAD(mipLodBias,NAN);BAD(minLod,NAN);BAD(maxLod,INFINITY);
     BAD(magFilter,VK_FILTER_CUBIC_EXT);BAD(minFilter,VK_FILTER_CUBIC_EXT);
     BAD(addressModeW,VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE);
     BAD(borderColor,(VkBorderColor)99);
-    BAD(mipmapMode,(VkSamplerMipmapMode)99);
+    BAD(mipmapMode,(VkSamplerMipmapMode)99);BAD(minLod,-1.0f);BAD(maxLod,-1.0f);
+    BAD(minLod,1.0f); /* maxLod remains zero. */
     VkSampler slots[PS5VK_MAX_SAMPLERS];
     for(unsigned i=0;i<PS5VK_MAX_SAMPLERS;++i)
         assert(vkCreateSampler(&d,&info,NULL,&slots[i])==VK_SUCCESS);

@@ -91,6 +91,20 @@ class TestReportingMatrix(unittest.TestCase):
         self.assertIn(22, matrix.SHADER_CAPABILITY_ADVERTISEMENT)
         self.assertIn(4433, matrix.SHADER_CAPABILITY_ADVERTISEMENT)
 
+    def test_rgba8_linear_filter_claim_is_exactly_scoped(self):
+        """The proven RGBA8 filter bit must not turn unsupported formats green."""
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        rows = [row for row in data["formats"]
+                if row.get("feature") == "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT"]
+        rgba8 = [row for row in rows
+                 if row.get("profile") == "graphics" and
+                 row.get("format") == "VK_FORMAT_R8G8B8A8_UNORM"]
+        self.assertEqual(len(rgba8), 1)
+        self.assertEqual(rgba8[0]["verdict"], "satisfied")
+        self.assertTrue(any(row.get("verdict") == "blocker" and
+                            row.get("format") != "VK_FORMAT_R8G8B8A8_UNORM"
+                            for row in rows))
+
 
 if __name__ == "__main__":
     unittest.main()

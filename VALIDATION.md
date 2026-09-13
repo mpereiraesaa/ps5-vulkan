@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 124 mandatory limits satisfied, 74 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 13 format class rules
-satisfied with 649 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 14 format class rules
+satisfied with 648 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -550,7 +550,7 @@ conformant: the documented blockers include the mandatory image-type, attachment
 count, descriptor-count, multisample and format-family gaps. No console run was
 performed for this increment, so no new hardware claim is made.
 
-## Core sampler addressing and fixed borders (2026-09-13)
+## Core sampler addressing, fixed borders and linear filtering (2026-09-13)
 
 The sampler implementation now encodes core repeat, mirrored-repeat,
 clamp-to-edge and clamp-to-border modes independently for U/V/W. Its native
@@ -573,16 +573,37 @@ and opaque white with clamp-to-border at UV -2.0. The compute regression also
 completed before and after every draw. Close Game was confirmed after each run,
 with `PPSA99994` absent from the running-title query.
 
-This evidence covers these single-mip nearest-filter cases only. It does not
-establish linear filtering, mip chains, anisotropy, custom border colors,
-mirror-clamp extension support or Vulkan conformance.
+The follow-up linear-filter payload had exact SELF SHA-256
+`cb59949794ab13fefb2381c01faaa8b6188d93e2e9c4b7628d9e2214fabe000c`.
+Two byte-identical executions produced complete 3,668-record ps5log/1 streams:
 
-The subsequent dynamic-buffer descriptor increment removes four of those
+- `20260913T202952199Z_PPSA99994_ps5vk_0x59a9aaa3c9de`, log SHA-256
+  `69425e45dbca66a347d782969bad3622e5598aed58d21c9ec302833a654b69d3`
+- `20260913T203035331Z_PPSA99994_ps5vk_0x59b3b575cbf6`, log SHA-256
+  `48b8040c94ed2561cb7afeddd699827184d3a78bacb6c7ee39306691444d977f`
+
+Each repeated the four addressing/border oracles and added four checkerboard
+oracles. At UV 0.5, nearest magnification produced opaque black while linear
+magnification produced exact 50% gray (`0xff808080`) across 373,248 pixels.
+A one-pixel high-derivative witness then used opposite `magFilter`/`minFilter`
+pairs: nearest minification produced opaque black and linear minification
+produced the same exact gray, proving that the minification selector—not the
+magnification selector—controlled the result. Every case had zero unexpected
+pixels, the compute regression completed before and after each draw, both
+streams ended cleanly with zero native allocation bytes, and Close Game was
+verified after each run.
+
+This establishes nearest and linear magnification/minification for the
+single-level RGBA8 sampled-image path. It does not establish mip chains,
+anisotropy, custom border colors, mirror-clamp extension support, other sampled
+formats or Vulkan conformance.
+
+The earlier dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
 alignment validation and native descriptor-address adjustment with checked
 ranges. The reporting matrix now records 124 satisfied mandatory limit rows,
-74 limit blockers and 723 blockers overall.
+74 limit blockers and 722 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

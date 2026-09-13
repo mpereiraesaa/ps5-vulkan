@@ -3000,7 +3000,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 13 class rules satisfied and 649 per-format blockers recorded.",
+        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 14 class rules satisfied and 648 per-format blockers recorded.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt, vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
@@ -5639,7 +5639,7 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/image/sample-texture.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
-      "implementation_state": "implemented-unvalidated",
+      "implementation_state": "native-evidence",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -5653,7 +5653,7 @@
       },
       "evidence": {
         "source": {
-          "state": "implemented-unvalidated",
+          "state": "host-only-evidence",
           "refs": [
             "src/vk_sampler.c",
             "tests/test_vk_sampler.c",
@@ -5663,7 +5663,7 @@
         "runtime": {
           "state": "native-evidence",
           "refs": [
-            "VALIDATION.md#core-sampler-addressing-and-fixed-borders-2026-09-13"
+            "VALIDATION.md#core-sampler-addressing-fixed-borders-and-linear-filtering-2026-09-13"
           ]
         },
         "conformance": {
@@ -5674,7 +5674,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Core Vulkan 1.0 repeat, mirrored-repeat, edge/border clamp and all six fixed border-color enums are implemented. Hardware evidence covers nearest-filter mirrored repeat and the three fixed border values; linear filtering, mip chains and anisotropy remain outside this evidence. samplerAnisotropy and samplerMirrorClampToEdge become mandatory in 1.4.",
+      "review_notes": "Core Vulkan 1.0 repeat, mirrored-repeat, edge/border clamp and all six fixed border-color enums are implemented. Two byte-identical hardware runs cover nearest and linear magnification/minification for single-level RGBA8, mirrored repeat and the three fixed border values. Mip chains and anisotropy remain outside this evidence. samplerAnisotropy and samplerMirrorClampToEdge become mandatory in 1.4.",
       "classification_basis": "core-cumulative-required"
     },
     {
