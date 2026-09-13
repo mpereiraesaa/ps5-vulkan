@@ -16,6 +16,7 @@ from tools.check_command_surface import (
     EXPECTED_MISSING_TOTAL,
     REQUIRED_BOOKKEEPING_COMMANDS,
     REQUIRED_SYNC_OBJECT_COMMANDS,
+    REQUIRED_BUFFER_TRANSFER_COMMANDS,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +47,10 @@ class TestCommandSurfaceParity(unittest.TestCase):
     def test_sync_objects_are_fully_wired(self):
         fully_wired = set(audit_command_surface(REPO_ROOT)["fully_wired"])
         self.assertTrue(REQUIRED_SYNC_OBJECT_COMMANDS <= fully_wired)
+
+    def test_buffer_transfer_commands_are_fully_wired(self):
+        fully_wired = set(audit_command_surface(REPO_ROOT)["fully_wired"])
+        self.assertTrue(REQUIRED_BUFFER_TRANSFER_COMMANDS <= fully_wired)
 
 
 class TestCommandSurfaceNegativeFixtures(unittest.TestCase):

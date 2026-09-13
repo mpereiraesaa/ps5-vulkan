@@ -2,6 +2,115 @@
 #include <ps5vk/ps5vk_present.h>
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
+
+static void test_public_buffer_transfers(VkPhysicalDevice physical)
+{
+    float priority = 1.0f;
+    VkDeviceQueueCreateInfo queue_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueCount = 1,
+        .pQueuePriorities = &priority,
+    };
+    VkDeviceCreateInfo device_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queue_info,
+    };
+    VkDevice device = VK_NULL_HANDLE;
+    assert(vkCreateDevice(physical, &device_info, NULL, &device) == VK_SUCCESS);
+    VkQueue queue = VK_NULL_HANDLE;
+    vkGetDeviceQueue(device, 0, 0, &queue);
+    assert(queue != VK_NULL_HANDLE);
+
+    VkMemoryAllocateInfo allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = 256,
+        .memoryTypeIndex = 0,
+    };
+    VkDeviceMemory source_memory = VK_NULL_HANDLE;
+    VkDeviceMemory destination_memory = VK_NULL_HANDLE;
+    assert(vkAllocateMemory(device, &allocation, NULL, &source_memory) == VK_SUCCESS);
+    assert(vkAllocateMemory(device, &allocation, NULL, &destination_memory) == VK_SUCCESS);
+    VkBufferCreateInfo source_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 32,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VkBufferCreateInfo destination_info = source_info;
+    destination_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    VkBuffer source = VK_NULL_HANDLE;
+    VkBuffer destination = VK_NULL_HANDLE;
+    assert(vkCreateBuffer(device, &source_info, NULL, &source) == VK_SUCCESS);
+    assert(vkCreateBuffer(device, &destination_info, NULL, &destination) == VK_SUCCESS);
+    assert(vkBindBufferMemory(device, source, source_memory, 0) == VK_SUCCESS);
+    assert(vkBindBufferMemory(device, destination, destination_memory, 0) == VK_SUCCESS);
+
+    unsigned char *source_bytes = NULL;
+    unsigned char *destination_bytes = NULL;
+    assert(vkMapMemory(device, source_memory, 0, VK_WHOLE_SIZE, 0,
+        (void **)&source_bytes) == VK_SUCCESS);
+    assert(vkMapMemory(device, destination_memory, 0, VK_WHOLE_SIZE, 0,
+        (void **)&destination_bytes) == VK_SUCCESS);
+    for (unsigned j = 0; j < 32; ++j) source_bytes[j] = (unsigned char)(j + 1);
+    memset(destination_bytes, 0x5a, 32);
+    VkMappedMemoryRange source_range = {
+        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory = source_memory,
+        .offset = 0,
+        .size = VK_WHOLE_SIZE,
+    };
+    assert(vkFlushMappedMemoryRanges(device, 1, &source_range) == VK_SUCCESS);
+
+    VkCommandPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+    };
+    VkCommandPool pool = VK_NULL_HANDLE;
+    assert(vkCreateCommandPool(device, &pool_info, NULL, &pool) == VK_SUCCESS);
+    VkCommandBufferAllocateInfo command_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    assert(vkAllocateCommandBuffers(device, &command_info, &command) == VK_SUCCESS);
+    VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    VkBufferCopy copy = {.srcOffset = 1, .dstOffset = 0, .size = 7};
+    const uint32_t update = 0x11223344u;
+    vkCmdCopyBuffer(command, source, destination, 1, &copy);
+    vkCmdUpdateBuffer(command, destination, 8, sizeof(update), &update);
+    vkCmdFillBuffer(command, destination, 12, 4, 0xaabbccddu);
+    assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    VkSubmitInfo submit = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command,
+    };
+    assert(vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(vkQueueWaitIdle(queue) == VK_SUCCESS);
+
+    VkMappedMemoryRange destination_range = source_range;
+    destination_range.memory = destination_memory;
+    assert(vkInvalidateMappedMemoryRanges(device, 1, &destination_range) == VK_SUCCESS);
+    assert(!memcmp(destination_bytes, (unsigned char[]){2, 3, 4, 5, 6, 7, 8}, 7));
+    assert(destination_bytes[7] == 0x5a);
+    assert(*(uint32_t *)(destination_bytes + 8) == update);
+    assert(*(uint32_t *)(destination_bytes + 12) == 0xaabbccddu);
+    assert(destination_bytes[16] == 0x5a);
+
+    vkDestroyCommandPool(device, pool, NULL);
+    vkUnmapMemory(device, source_memory);
+    vkUnmapMemory(device, destination_memory);
+    vkDestroyBuffer(device, source, NULL);
+    vkDestroyBuffer(device, destination, NULL);
+    vkFreeMemory(device, source_memory, NULL);
+    vkFreeMemory(device, destination_memory, NULL);
+    vkDestroyDevice(device, NULL);
+}
 
 int main(void)
 {
@@ -53,6 +162,7 @@ int main(void)
             assert(layout.rowPitch == 0);
 
             assert(vkResetDescriptorPool(VK_NULL_HANDLE, VK_NULL_HANDLE, 0) != VK_SUCCESS);
+            test_public_buffer_transfers(dev);
         }
         vkDestroyInstance(instance, NULL);
     }

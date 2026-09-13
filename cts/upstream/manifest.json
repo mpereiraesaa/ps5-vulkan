@@ -60,6 +60,54 @@
       "rationale": "Original upstream draw and pixel oracle creates an R8G8B8A8 color attachment, render pass, framebuffer and static viewport/scissor pipeline, clears and draws one triangle, copies the image to a host buffer, and compares it against the CTS reference rasterizer."
     },
     {
+      "path": "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.partial",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp:16926",
+      "category": "buffer-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream byte-comparison oracle copies a bounded partial buffer region."
+    },
+    {
+      "path": "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.regions",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp:16926",
+      "category": "buffer-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream oracle copies multiple non-overlapping regions in one vkCmdCopyBuffer call."
+    },
+    {
+      "path": "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.unaligned_regions",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp:16926",
+      "category": "buffer-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream oracle proves Vulkan 1.0 buffer copies are byte-granular rather than incorrectly imposing four-byte alignment."
+    },
+    {
+      "path": "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.whole",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp:16926",
+      "category": "buffer-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream byte-comparison oracle copies the complete source buffer."
+    },
+    {
+      "path": "dEQP-VK.api.fill_and_update_buffer.suballocation.fill_buffer_whole",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:682",
+      "category": "buffer-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream host-readback oracle validates a complete vkCmdFillBuffer over a suballocation."
+    },
+    {
+      "path": "dEQP-VK.api.fill_and_update_buffer.suballocation.update_buffer_whole",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:682",
+      "category": "buffer-transfer",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream host-readback oracle validates a complete vkCmdUpdateBuffer over a suballocation."
+    },
+    {
       "path": "dEQP-VK.synchronization.basic.fence.one",
       "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp:46",
       "category": "synchronization",
@@ -413,6 +461,22 @@
     }
   ],
   "diagnostics": [
+    {
+      "path": "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.update_buffer_second_part",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:682",
+      "category": "buffer-transfer-dedicated-allocation-gap",
+      "expected_status": "NotSupported",
+      "features_required": ["VK_KHR_dedicated_allocation"],
+      "rationale": "Measured unchanged upstream result: the dedicated allocator requires VK_KHR_dedicated_allocation, which the Vulkan 1.0 profile does not advertise. The equivalent suballocation update oracle is strict acceptance; this leaf remains an explicit diagnostic rather than being silently dropped."
+    },
+    {
+      "path": "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_3_extra_bytes_offset_12",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:752",
+      "category": "buffer-transfer-dedicated-allocation-gap",
+      "expected_status": "NotSupported",
+      "features_required": ["VK_KHR_dedicated_allocation"],
+      "rationale": "Measured unchanged upstream result: the dedicated allocator requires VK_KHR_dedicated_allocation, which the Vulkan 1.0 profile does not advertise. VK_WHOLE_SIZE tail rounding is independently covered by the native public consumer and remains diagnostic here until that extension is implemented."
+    },
     {
       "path": "dEQP-VK.info.device_properties",
       "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3147",

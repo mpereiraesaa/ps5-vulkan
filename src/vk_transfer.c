@@ -1,6 +1,100 @@
 #include "vk_command.h"
 #include "texture_copy.h"
+#include <stdint.h>
 #define invalid ps5vk_command_invalidate
+
+static int overlaps(uintptr_t a, VkDeviceSize a_size,
+    uintptr_t b, VkDeviceSize b_size)
+{
+    return a < b ? a_size > b - a : b_size > a - b;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(VkCommandBuffer c, VkBuffer source,
+    VkBuffer destination, uint32_t count, const VkBufferCopy *regions)
+{
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !count || !regions ||
+        c->operation_count > PS5VK_MAX_OPERATIONS ||
+        count > PS5VK_MAX_OPERATIONS - c->operation_count ||
+        !ps5vk_buffer_usage(c->pool->device, source, VK_BUFFER_USAGE_TRANSFER_SRC_BIT) ||
+        !ps5vk_buffer_usage(c->pool->device, destination, VK_BUFFER_USAGE_TRANSFER_DST_BIT)) {
+        invalid(c); return;
+    }
+    uintptr_t src[PS5VK_MAX_OPERATIONS], dst[PS5VK_MAX_OPERATIONS];
+    VkDeviceSize sizes[PS5VK_MAX_OPERATIONS];
+    for (uint32_t j = 0; j < count; ++j) {
+        void *src_address, *dst_address;
+        VkDeviceSize bytes;
+        if (!regions[j].size ||
+            ps5vk_buffer_span(c->pool->device, source, regions[j].srcOffset,
+                regions[j].size, &src_address, &bytes) != VK_SUCCESS ||
+            ps5vk_buffer_span(c->pool->device, destination, regions[j].dstOffset,
+                regions[j].size, &dst_address, &bytes) != VK_SUCCESS) {
+            invalid(c); return;
+        }
+        src[j] = (uintptr_t)src_address;
+        dst[j] = (uintptr_t)dst_address;
+        sizes[j] = regions[j].size;
+    }
+    for (uint32_t j = 0; j < count; ++j)
+        for (uint32_t k = 0; k < count; ++k) {
+            if (overlaps(src[j], sizes[j], dst[k], sizes[k]) ||
+                (j != k && overlaps(dst[j], sizes[j], dst[k], sizes[k]))) {
+                invalid(c); return;
+            }
+        }
+    struct ps5vk_operation *ops = ps5vk_command_reserve_operations(c,
+        PS5VK_COPY_BUFFER, PS5VK_OPERATION_OUTSIDE_RENDER_PASS, count);
+    if (!ops) return;
+    for (uint32_t j = 0; j < count; ++j) {
+        ops[j].copy_source = source;
+        ops[j].copy_destination = destination;
+        ops[j].buffer_copy = regions[j];
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdUpdateBuffer(VkCommandBuffer c, VkBuffer destination,
+    VkDeviceSize offset, VkDeviceSize size, const void *data)
+{
+    void *address;
+    VkDeviceSize bytes;
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !data || !size ||
+        size > 65536 || (offset & 3u) || (size & 3u) ||
+        !ps5vk_buffer_usage(c->pool->device, destination, VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
+        ps5vk_buffer_span(c->pool->device, destination, offset, size,
+            &address, &bytes) != VK_SUCCESS) {
+        invalid(c); return;
+    }
+    struct ps5vk_operation *op = ps5vk_command_reserve_operation_with_payload(c,
+        PS5VK_UPDATE_BUFFER, PS5VK_OPERATION_OUTSIDE_RENDER_PASS, data, (size_t)size);
+    if (!op) return;
+    op->copy_destination = destination;
+    op->buffer_offset = offset;
+    op->buffer_size = size;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdFillBuffer(VkCommandBuffer c, VkBuffer destination,
+    VkDeviceSize offset, VkDeviceSize size, uint32_t data)
+{
+    void *address;
+    VkDeviceSize bytes;
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || (offset & 3u) ||
+        (size != VK_WHOLE_SIZE && (!size || (size & 3u))) ||
+        !ps5vk_buffer_usage(c->pool->device, destination, VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
+        ps5vk_buffer_span(c->pool->device, destination, offset, size,
+            &address, &bytes) != VK_SUCCESS) {
+        invalid(c); return;
+    }
+    if (size == VK_WHOLE_SIZE) bytes &= ~(VkDeviceSize)3;
+    if (!bytes) return;
+    struct ps5vk_operation *op = ps5vk_command_reserve_operations(c,
+        PS5VK_FILL_BUFFER, PS5VK_OPERATION_OUTSIDE_RENDER_PASS, 1);
+    if (!op) return;
+    op->copy_destination = destination;
+    op->buffer_offset = offset;
+    op->buffer_size = bytes;
+    op->fill_data = data;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer source,VkImage image,
     VkImageLayout layout,uint32_t count,const VkBufferImageCopy *regions)
 {

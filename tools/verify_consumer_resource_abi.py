@@ -26,6 +26,10 @@ def validate(log, receipt, artifact):
     require(len(digest) == 64 and
             all(c in "0123456789abcdef" for c in digest.lower()),
             "artifact identity")
+    require(artifact.get("buffer_transfer") == {
+        "api": "Vulkan 1.0", "copy_bytes": 7, "update_bytes": 8,
+        "fill_bytes": 20, "whole_tail_bytes": 3,
+    }, "buffer-transfer artifact contract")
     width_artifact = artifact.get("storage_width", {})
     require(width_artifact.get("storageBuffer8BitAccess") is True and
             width_artifact.get("storageBuffer16BitAccess") is True and
@@ -99,6 +103,9 @@ def validate(log, receipt, artifact):
     physical = one("PS5VK_CONSUMER_PHYSICAL_DEVICE ")
     physical_queries = one("PS5VK_CONSUMER_PHYSICAL_QUERIES ")
     negotiated = one("PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED ")
+    transfer_start = one("PS5VK_CONSUMER_BUFFER_TRANSFER_START")
+    transfer_witness = one("PS5VK_CONSUMER_BUFFER_TRANSFER_SUCCESS ")
+    transfer_retired = one("PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED")
     start = one("PS5VK_CONSUMER_COMPUTE_START")
     pipeline = one("PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED")
     prepared = matching("PS5VK_QUEUE_PREPARED ")
@@ -134,7 +141,9 @@ def validate(log, receipt, artifact):
     require(len(prepared) == 4 and
             all(len(rows) == 6 for rows in (submitted, suspended, completed)),
             "resource, narrow and synchronization submit records")
-    ordered = [boot, physical, physical_queries, negotiated, start, pipeline,
+    ordered = [boot, physical, physical_queries, negotiated,
+               transfer_start, transfer_witness, transfer_retired,
+               start, pipeline,
                prepared[0], submitted[0], suspended[0], completed[0], witness,
                width_start, width_pipelines,
                prepared[1], submitted[1], suspended[1], completed[1],
@@ -168,32 +177,36 @@ def validate(log, receipt, artifact):
         "instance_ext=1", "device_exts=3", "storageBuffer8BitAccess=1",
         "storageBuffer16BitAccess=1", "narrow_arithmetic=0"],
         "narrow storage negotiation")
-    require(prepared[0][1].endswith("serial=1 dispatches=1"), "one resource dispatch")
-    require(prepared[1][1].endswith("serial=2 dispatches=2"), "two narrow dispatches")
-    require(prepared[2][1].endswith("serial=4 dispatches=3"), "three synchronization dispatches")
-    require(prepared[3][1].endswith("serial=6 dispatches=0"), "event dependency segment")
+    require(transfer_witness[1].split()[1:] == [
+        "copy_bytes=7", "update_bytes=8", "fill_bytes=20",
+        "whole_tail_bytes=3", "guard_mismatches=0", "hash=9a158222"],
+        "buffer-transfer oracle")
+    require(prepared[0][1].endswith("serial=5 dispatches=1"), "one resource dispatch")
+    require(prepared[1][1].endswith("serial=6 dispatches=2"), "two narrow dispatches")
+    require(prepared[2][1].endswith("serial=8 dispatches=3"), "three synchronization dispatches")
+    require(prepared[3][1].endswith("serial=10 dispatches=0"), "event dependency segment")
     require([row[1].rsplit(" ", 1)[0] for row in submitted] == [
-                "PS5VK_QUEUE_SUBMIT serial=1 index=0",
-                "PS5VK_QUEUE_SUBMIT serial=2 index=0",
-                "PS5VK_QUEUE_SUBMIT serial=2 index=1",
-                "PS5VK_QUEUE_SUBMIT serial=4 index=0",
-                "PS5VK_QUEUE_SUBMIT serial=4 index=1",
-                "PS5VK_QUEUE_SUBMIT serial=4 index=2"] and
+                "PS5VK_QUEUE_SUBMIT serial=5 index=0",
+                "PS5VK_QUEUE_SUBMIT serial=6 index=0",
+                "PS5VK_QUEUE_SUBMIT serial=6 index=1",
+                "PS5VK_QUEUE_SUBMIT serial=8 index=0",
+                "PS5VK_QUEUE_SUBMIT serial=8 index=1",
+                "PS5VK_QUEUE_SUBMIT serial=8 index=2"] and
             all(row[1].endswith("rc=0") for row in submitted), "submits")
     require([row[1].rsplit(" ", 1)[0] for row in suspended] == [
-                "PS5VK_QUEUE_SUSPEND_POINT serial=1 index=0",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=0",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=1",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=0",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=1",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=2"] and
+                "PS5VK_QUEUE_SUSPEND_POINT serial=5 index=0",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=6 index=0",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=6 index=1",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=0",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=1",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=2"] and
             all(row[1].endswith("rc=0") for row in suspended), "suspend points")
-    expected_completion = ((1, 0), (2, 0), (2, 1),
-                           (4, 0), (4, 1), (4, 2))
+    expected_completion = ((5, 0), (6, 0), (6, 1),
+                           (8, 0), (8, 1), (8, 2))
     require(all(f"serial={serial} index={index}" in row[1]
                 for row, (serial, index) in zip(completed, expected_completion)),
             "completion identities")
-    require("serial=1 index=0 token=100000001 gcr=0070f528" in completed[0][1],
+    require("serial=5 index=0 token=500000001 gcr=0070f528" in completed[0][1],
             "completion")
     require(witness[1].split()[1:] == [
         "sets=3", "storage=2", "uniform=1", "texel=1",
@@ -267,6 +280,8 @@ def validate(log, receipt, artifact):
         "specialization_constants": 2,
         "elements_checked": 64,
         "guard_words_checked": 128,
+        "buffer_transfer_bytes_checked": 67,
+        "buffer_transfer_hash_fnv1a32": "9a158222",
         "storage8_elements_checked": 64,
         "storage16_elements_checked": 64,
         "narrow_guard_bytes_checked": 8000,

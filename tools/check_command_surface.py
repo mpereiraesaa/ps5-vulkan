@@ -25,8 +25,8 @@ EXPECTED_VULKAN10_TOTAL = 137
 # prototype, a dispatch entry and an implementation. This is not a semantic
 # support claim; see the report's advertised-obligation table for what each
 # command may actually be used for.
-EXPECTED_FULLY_WIRED_TOTAL = 109
-EXPECTED_MISSING_TOTAL = 28
+EXPECTED_FULLY_WIRED_TOTAL = 112
+EXPECTED_MISSING_TOTAL = 25
 
 REQUIRED_BOOKKEEPING_COMMANDS = {
     "vkGetImageSubresourceLayout",
@@ -41,6 +41,10 @@ REQUIRED_SYNC_OBJECT_COMMANDS = {
     "vkCreateEvent", "vkDestroyEvent", "vkGetEventStatus",
     "vkSetEvent", "vkResetEvent",
     "vkCmdSetEvent", "vkCmdResetEvent", "vkCmdWaitEvents",
+}
+
+REQUIRED_BUFFER_TRANSFER_COMMANDS = {
+    "vkCmdCopyBuffer", "vkCmdUpdateBuffer", "vkCmdFillBuffer",
 }
 
 EXPECTED_MISSING_CATEGORIES = {

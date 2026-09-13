@@ -146,6 +146,56 @@ def write_focused_storage_source(source: Path, destination: Path,
     destination.write_text(text.replace(needle, replacement), encoding="utf-8")
 
 
+def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
+    """Keep the original buffer-copy bodies/oracles but prune registration.
+
+    The complete copies/blits module builds a very large test tree before the
+    case-list filter runs.  On PS5 that consumes the bounded application heap
+    for image/blit/resolve families that are not selected.  Replace only the
+    two pinned registration functions; every selected test implementation and
+    result oracle remains byte-for-byte upstream.
+    """
+    text = source.read_text(encoding="utf-8")
+    old_core = """void addCoreCopiesAndBlittingTests(tcu::TestCaseGroup *group)
+{
+    uint32_t extensionFlags = 0;
+    addCopiesAndBlittingTests(group, ALLOCATION_KIND_SUBALLOCATED, extensionFlags);
+    addBufferCopyOffsetTests(group);
+}"""
+    new_core = """void addCoreCopiesAndBlittingTests(tcu::TestCaseGroup *group)
+{
+    const uint32_t extensionFlags = 0;
+    TestGroupParamsPtr universalGroupParams(new TestGroupParams{
+        ALLOCATION_KIND_SUBALLOCATED,
+        extensionFlags,
+        QueueSelectionOptions::Universal,
+        false,
+        false,
+    });
+    addTestGroup(group, \"buffer_to_buffer\", addBufferToBufferTests,
+                 universalGroupParams);
+}"""
+    old_factory = """    copiesAndBlittingTests->addChild(createTestGroup(testCtx, \"core\", addCoreCopiesAndBlittingTests, cleanupGroup));
+    copiesAndBlittingTests->addChild(
+        createTestGroup(testCtx, \"dedicated_allocation\", addDedicatedAllocationCopiesAndBlittingTests, cleanupGroup));
+    copiesAndBlittingTests->addChild(createTestGroup(
+        testCtx, \"copy_commands2\",
+        [](tcu::TestCaseGroup *group) { addCopiesAndBlittingTests(group, ALLOCATION_KIND_DEDICATED, COPY_COMMANDS_2); },
+        cleanupGroup));
+    copiesAndBlittingTests->addChild(createTestGroup(
+        testCtx, \"sparse\",
+        [](tcu::TestCaseGroup *group)
+        { addSparseCopyTests(group, ALLOCATION_KIND_DEDICATED, COPY_COMMANDS_2 | SPARSE_BINDING); },
+        cleanupGroup));"""
+    new_factory = """    copiesAndBlittingTests->addChild(createTestGroup(
+        testCtx, \"core\", addCoreCopiesAndBlittingTests, cleanupGroup));"""
+    if text.count(old_core) != 1 or text.count(old_factory) != 1:
+        raise SystemExit(f"focused buffer-copy registration layout drift in {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(text.replace(old_core, new_core).replace(
+        old_factory, new_factory), encoding="utf-8")
+
+
 def object_is_current(obj: Path, dep_file: Path, stamp: Path,
                       fingerprint: str) -> bool:
     """Reuse an object only when its command, sources and headers are unchanged.
@@ -252,6 +302,9 @@ def main():
         ("uniform_buffer_block_scalar_sint", "uniform_buffer_block_scalar_uint",
          "uniform_buffer_block_vector_sint", "uniform_buffer_block_vector_uint"),
         12)
+    write_focused_buffer_copy_source(
+        cts_root / "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp",
+        focused_sources / "vktApiCopiesAndBlittingTests.cpp")
 
     # Amber's Vulkan engine includes generated function wrappers. Regenerate them
     # from the pinned Vulkan registry so the amber objects match the CTS headers.
@@ -637,6 +690,8 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferAndImageAllocationUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiPipelineTests.cpp",
+        focused_sources / "vktApiCopiesAndBlittingTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp",
         # Pipeline cache module: only the compute case is selected (the graphics
         # cache cases need a D16_UNORM depth attachment this profile lacks), but
         # the module registers both families. Its helper definitions already

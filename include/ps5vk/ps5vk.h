@@ -599,6 +599,27 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(
     int32_t vertexOffset,
     uint32_t firstInstance);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(
+    VkCommandBuffer commandBuffer,
+    VkBuffer srcBuffer,
+    VkBuffer dstBuffer,
+    uint32_t regionCount,
+    const VkBufferCopy* pRegions);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdUpdateBuffer(
+    VkCommandBuffer commandBuffer,
+    VkBuffer dstBuffer,
+    VkDeviceSize dstOffset,
+    VkDeviceSize dataSize,
+    const void* pData);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdFillBuffer(
+    VkCommandBuffer commandBuffer,
+    VkBuffer dstBuffer,
+    VkDeviceSize dstOffset,
+    VkDeviceSize size,
+    uint32_t data);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
     VkCommandBuffer commandBuffer,
     VkBuffer srcBuffer,

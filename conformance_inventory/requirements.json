@@ -8264,51 +8264,67 @@
           "vk-default/image/queue-transfer.txt"
         ],
         "cases": [
-          "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_first_one",
+          "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.partial",
+          "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.regions",
+          "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.unaligned_regions",
+          "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.whole",
+          "dEQP-VK.api.fill_and_update_buffer.suballocation.fill_buffer_whole",
+          "dEQP-VK.api.fill_and_update_buffer.suballocation.update_buffer_whole",
           "dEQP-VK.image.queue_transfer.2d.16x15x1.a1b5g5r5_unorm_pack16"
         ],
-        "note": "Transfer coverage spans api.* and image/queue-transfer.txt.",
+        "note": "Six original api.* buffer-transfer cases pass the focused native selection. Image-copy, blit and resolve coverage remains separate and incomplete.",
         "coverage_quality": "representative-case",
-        "coverage_note": "Transfer coverage is split across api.* and image groups; blit/resolve format matrices are much larger than the two cases named."
+        "coverage_note": "Direct evidence exists for buffer copy, update and fill only. Image-copy, blit and resolve format matrices are not closed by these cases."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "missing",
       "baseline": {
-        "surface_state": "symbol-present",
+        "surface_state": "native-demonstrated",
         "entry_points": [
+          "vkCmdCopyBuffer",
+          "vkCmdUpdateBuffer",
+          "vkCmdFillBuffer",
           "vkCmdCopyBufferToImage",
           "vkCmdCopyImageToBuffer"
         ],
         "absent_entry_points": [
-          "vkCmdCopyBuffer",
-          "vkCmdUpdateBuffer",
-          "vkCmdFillBuffer",
           "vkCmdCopyImage",
           "vkCmdBlitImage",
           "vkCmdResolveImage"
         ],
         "refs": [
-          "src/vk_transfer.c"
+          "src/vk_transfer.c",
+          "src/vk_buffer_transfer.c",
+          "tests/test_buffer_transfer.c"
         ],
-        "note": "Baseline surface: 2 of 8 named entry points exist; 2 are dispatched; 2 are declared in the public header."
+        "note": "Partial surface: 5 of 8 entry points exist and are dispatched. Buffer copy/update/fill have host, public-consumer and focused upstream hardware evidence; image copy/blit/resolve remain incomplete or absent."
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_transfer.c",
+            "src/vk_buffer_transfer.c",
+            "tests/test_buffer_transfer.c"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md#ordered-buffer-transfer-slice-2026-09-13",
+            "docs/HARDWARE_VALIDATION.md#ordered-vulkan-10-buffer-transfer-2026-09-13"
+          ]
         },
         "conformance": {
           "state": "not-established",
-          "refs": []
+          "refs": [
+            "UPSTREAM_CTS.md#buffer-copy-update-and-fill-2026-09-13"
+          ]
         }
       },
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Transfer breadth is a ParaLLEl-RDP requirement area (staging and masked resolve paths).",
+      "review_notes": "Partial implementation only: buffer copy/update/fill are audited and hardware-validated. vkCmdCopyImage, vkCmdBlitImage and vkCmdResolveImage are absent, and the bounded existing buffer/image commands do not establish the full transfer row. Dedicated-allocation CTS leaves remain diagnostic because VK_KHR_dedicated_allocation is not advertised.",
       "classification_basis": "core-cumulative-required"
     },
     {

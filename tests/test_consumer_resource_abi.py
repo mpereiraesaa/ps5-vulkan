@@ -17,41 +17,45 @@ MESSAGES = [
     "image_rejected=1",
     "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=3 "
     "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0",
+    "PS5VK_CONSUMER_BUFFER_TRANSFER_START",
+    "PS5VK_CONSUMER_BUFFER_TRANSFER_SUCCESS copy_bytes=7 update_bytes=8 "
+    "fill_bytes=20 whole_tail_bytes=3 guard_mismatches=0 hash=9a158222",
+    "PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED",
     "PS5VK_CONSUMER_COMPUTE_START",
     "PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED",
-    "PS5VK_QUEUE_PREPARED serial=1 dispatches=1",
-    "PS5VK_QUEUE_SUBMIT serial=1 index=0 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=1 index=0 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=1 index=0 token=100000001 gcr=0070f528",
+    "PS5VK_QUEUE_PREPARED serial=5 dispatches=1",
+    "PS5VK_QUEUE_SUBMIT serial=5 index=0 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=5 index=0 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=5 index=0 token=500000001 gcr=0070f528",
     "PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS sets=3 storage=2 uniform=1 texel=1 "
     "push_bytes=4 spec_constants=2 multiplier=5 extra_bias=11 addend=19 "
     "elements=64 mismatches=0 guard_words=128 guard_mismatches=0",
     "PS5VK_CONSUMER_STORAGE_WIDTH_START",
     "PS5VK_CONSUMER_STORAGE_WIDTH_PIPELINES_CREATED count=2",
-    "PS5VK_QUEUE_PREPARED serial=2 dispatches=2",
-    "PS5VK_QUEUE_SUBMIT serial=2 index=0 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=0 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=2 index=0 token=100000002 gcr=0070f528",
-    "PS5VK_QUEUE_SUBMIT serial=2 index=1 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=1 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=2 index=1 token=100000003 gcr=0070f528",
+    "PS5VK_QUEUE_PREPARED serial=6 dispatches=2",
+    "PS5VK_QUEUE_SUBMIT serial=6 index=0 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=6 index=0 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=6 index=0 token=100000002 gcr=0070f528",
+    "PS5VK_QUEUE_SUBMIT serial=6 index=1 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=6 index=1 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=6 index=1 token=100000003 gcr=0070f528",
     "PS5VK_CONSUMER_STORAGE_WIDTH_SUCCESS storage8=1 storage16=1 "
     "elements8=64 elements16=64 checksum8=9575e8c5 checksum16=603ddade "
     "mismatches8=0 mismatches16=0 guard_bytes8=4032 guard_bytes16=3968 "
     "guard_mismatches8=0 guard_mismatches16=0",
     "PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED",
     "PS5VK_CONSUMER_SYNC_START",
-    "PS5VK_QUEUE_PREPARED serial=4 dispatches=3",
-    "PS5VK_QUEUE_PREPARED serial=6 dispatches=0",
-    "PS5VK_QUEUE_SUBMIT serial=4 index=0 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=0 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=4 index=0 token=400000001 gcr=0070f528",
-    "PS5VK_QUEUE_SUBMIT serial=4 index=1 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=1 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=4 index=1 token=400000002 gcr=0070f528",
-    "PS5VK_QUEUE_SUBMIT serial=4 index=2 rc=0",
-    "PS5VK_QUEUE_SUSPEND_POINT serial=4 index=2 rc=0",
-    "PS5VK_QUEUE_COMPLETED serial=4 index=2 token=400000003 gcr=0070f528",
+    "PS5VK_QUEUE_PREPARED serial=8 dispatches=3",
+    "PS5VK_QUEUE_PREPARED serial=10 dispatches=0",
+    "PS5VK_QUEUE_SUBMIT serial=8 index=0 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=0 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=8 index=0 token=400000001 gcr=0070f528",
+    "PS5VK_QUEUE_SUBMIT serial=8 index=1 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=1 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=8 index=1 token=400000002 gcr=0070f528",
+    "PS5VK_QUEUE_SUBMIT serial=8 index=2 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=2 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=8 index=2 token=400000003 gcr=0070f528",
     "PS5VK_CONSUMER_SYNC_OBJECTS_SUCCESS host_set_reset=1 "
     "device_set_wait_reset=1 binary_signal_wait=1 semaphore_consumed=1",
     "PS5VK_CONSUMER_SYNC_SUCCESS producer_consumer=1 host_compute_host=1 "
@@ -73,7 +77,7 @@ FIXED_FUNCTION_MESSAGES = [
 ]
 for frame in range(18):
     for phase in range(2):
-        serial = 9 + frame * 2 + phase
+        serial = 13 + frame * 2 + phase
         FIXED_FUNCTION_MESSAGES.extend([
             f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
             f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
@@ -109,6 +113,11 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         artifact = {
             "title": TITLE, "profile": "public-consumer-resource-abi",
             "submit_enabled": True, "files": {"eboot.bin": "a" * 64},
+            "buffer_transfer": {
+                "api": "Vulkan 1.0", "copy_bytes": 7,
+                "update_bytes": 8, "fill_bytes": 20,
+                "whole_tail_bytes": 3,
+            },
             "storage_width": {
                 "storageBuffer8BitAccess": True,
                 "storageBuffer16BitAccess": True,
@@ -158,7 +167,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         replacements = (("mismatches=0", "mismatches=1"),
                         ("guard_mismatches=0", "guard_mismatches=1"),
                         ("sets=3", "sets=1"), ("rc=0", "rc=-1"),
-                        ("serial=1 dispatches=1", "serial=1 dispatches=3"),
+                        ("serial=5 dispatches=1", "serial=5 dispatches=3"),
+                        ("hash=9a158222", "hash=00000000"),
                         ("checksum8=9575e8c5", "checksum8=00000000"),
                         ("checksum16=603ddade", "checksum16=00000000"),
                         ("sync_hash=467e2acd", "sync_hash=00000000"),

@@ -48,9 +48,10 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 43 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 55 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
-  pipeline and push-constant cases plus nine storage-width cases). Only these
+  pipeline, push-constant, storage-width, fixed-function and buffer-transfer
+  cases). Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -498,9 +499,8 @@ oracle, or selection was replaced to obtain these results.
   at most 30 invocations; multi-wave shared atomics are instead covered by the
   independent public-SDK consumer's deterministic permutation/counter oracle.
   This does not imply arbitrary workgroup shapes or a complete memory model.
-* No selected case exercises a rendering or pixel-comparison oracle. The
-  reference rasterizer is linked but unexecuted, so this integration does not
-  demonstrate rasterisation correctness.
+* The selected smoke triangle supplies one bounded upstream render/pixel oracle;
+  it does not establish general rasterization correctness or format coverage.
 * Application heap mode removes the measured internal-mode ceiling; this run
   does not establish the maximum safe heap size for arbitrary applications.
 * Cases that require API the driver does not implement are reported as failures
@@ -514,3 +514,31 @@ oracle, or selection was replaced to obtain these results.
   does not execute its shader on this non-coherent memory profile.
 * `tcuImageIO` (libpng) and the generated EGL wrapper (`gluRenderConfig`) are
   not part of this focused build; no selected case uses them.
+
+## Buffer copy, update and fill (2026-09-13)
+
+The strict selection now contains **55 original upstream cases**. Six additions
+exercise the unchanged upstream buffer-transfer bodies and byte-comparison
+oracles: four `api.copy_and_blit.core.buffer_to_buffer` leaves (`partial`,
+`regions`, `unaligned_regions`, `whole`) and the suballocation
+`fill_buffer_whole` / `update_buffer_whole` leaves.
+
+Two launches of the identical payload passed **55/55**, with no Fail,
+NotSupported, Skip, missing or unexpected cases. Both passed executable and
+selection identity, complete QPA reconstruction, exit code zero and independent
+Close Game checks.
+
+- Executable SHA-256:
+  `08ef1da0ba1db2ace235944f5c8b14bcc08bce3bdf83ea97bb9db19d2bec69e9`
+- Selection SHA-256:
+  `6e18c46753ef098174ce05f84a2e0a2cfcd46aa222dc961c7f6711666a6ddcc5`
+- QPA SHA-256 values:
+  `a78264069e91b86e1c04bd7436a47c9d920cf6b93cf6e661927fb540d7c116da`
+  and `3f93179e01caaa3561d5b81e04f216fb44dbecd2084f832375baaaef425ead2d`
+
+The focused copy-module generator changes registration only: the original
+`CopyBufferToBuffer::iterate` workload and comparison remain compiled and run.
+Two dedicated-allocation leaves are preserved in the diagnostic manifest and
+return `NotSupported` because `VK_KHR_dedicated_allocation` is not advertised;
+they are not counted as acceptance. No image-copy, blit or resolve claim follows
+from this buffer-only increment.

@@ -13,7 +13,11 @@ from cts.upstream_runner import (
     verify_run_identity,
     UpstreamVerificationError
 )
-from tools.build_upstream_cts import write_focused_storage_source
+from tools.build_upstream_cts import (
+    write_focused_buffer_copy_source,
+    write_focused_storage_source,
+)
+from tools.check_upstream_selection import _fill_update_generated_leaf_names
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "cts/upstream/manifest.json"
@@ -578,6 +582,75 @@ class TestUpstreamRunner(unittest.TestCase):
                      "vktImageTestsUtil.cpp",
                      "vktBindingShaderAccessTests.cpp"):
             self.assertIn(name, build, f"{name} is not compiled into the payload")
+
+    def test_buffer_transfer_selection_and_diagnostics_are_explicit(self):
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        accepted = {case["path"] for case in manifest["cases"]}
+        diagnostics = {case["path"]: case for case in manifest["diagnostics"]}
+        required = {
+            "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.partial",
+            "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.regions",
+            "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.unaligned_regions",
+            "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.whole",
+            "dEQP-VK.api.fill_and_update_buffer.suballocation.fill_buffer_whole",
+            "dEQP-VK.api.fill_and_update_buffer.suballocation.update_buffer_whole",
+        }
+        self.assertTrue(required <= accepted)
+        for path in (
+            "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.update_buffer_second_part",
+            "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc."
+            "fill_buffer_vk_whole_size_3_extra_bytes_offset_12",
+        ):
+            self.assertNotIn(path, accepted)
+            self.assertEqual("NotSupported", diagnostics[path]["expected_status"])
+            self.assertIn("VK_KHR_dedicated_allocation",
+                          diagnostics[path]["features_required"])
+
+    def test_buffer_transfer_upstream_factories_are_linked(self):
+        build = (REPO_ROOT / "tools/build_upstream_cts.py").read_text()
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        self.assertIn("vktApiCopiesAndBlittingTests.cpp", build)
+        self.assertIn("vktApiFillBufferTests.cpp", build)
+        self.assertIn("createCopiesAndBlittingTests", package)
+        self.assertIn("createFillAndUpdateBufferTests", package)
+
+    def test_fill_update_dynamic_names_are_derived_fail_closed(self):
+        source = r'''
+        tcu::TestCaseGroup *createFillAndUpdateBufferTests()
+        {
+            const std::string testName("buffer_second_part");
+            group->addChild(new FillBufferTestCase(testCtx, "fill_" + testName, params));
+            group->addChild(new UpdateBufferTestCase(testCtx, "update_" + testName, params));
+            for (VkDeviceSize i = 0; i < sizeof(uint32_t); ++i)
+            for (VkDeviceSize j = 0; j < sizeof(uint32_t); ++j) {
+                params.dstOffset = j * sizeof(uint32_t);
+                const std::string name = "fill_buffer_vk_whole_size_" + de::toString(extraBytes) +
+                    "_extra_bytes_offset_" + de::toString(params.dstOffset);
+            }
+        }
+        '''
+        leaves = _fill_update_generated_leaf_names(source)
+        self.assertIn("fill_buffer_second_part", leaves)
+        self.assertIn("update_buffer_second_part", leaves)
+        self.assertIn("fill_buffer_vk_whole_size_3_extra_bytes_offset_12", leaves)
+        self.assertNotIn("update_buffer_vk_whole_size_3_extra_bytes_offset_12", leaves)
+        degraded = _fill_update_generated_leaf_names(
+            source.replace('"fill_" + testName', 'makeName(testName)', 1))
+        self.assertNotIn("fill_buffer_second_part", degraded)
+        self.assertNotIn("update_buffer_second_part", degraded)
+        self.assertIn("fill_buffer_vk_whole_size_3_extra_bytes_offset_12", degraded)
+
+    def test_buffer_copy_pruning_changes_registration_only(self):
+        upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                    "modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp")
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "focused.cpp"
+            write_focused_buffer_copy_source(upstream, destination)
+            generated = destination.read_text()
+        self.assertIn('addTestGroup(group, "buffer_to_buffer",', generated)
+        self.assertNotIn('createTestGroup(testCtx, "dedicated_allocation"', generated)
+        self.assertIn("CopyBufferToBuffer::iterate", generated)
+        self.assertIn("deMemCmp(referenceData, resultData, bufferSize)", generated)
 
     def test_push_specialization_selection_is_frozen_and_bounded(self):
         """Keep the audited Vulkan 1.0 cases and reject unsupported variants."""
