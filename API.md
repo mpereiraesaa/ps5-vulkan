@@ -124,6 +124,30 @@ The transfer family remains partial. Existing bounded buffer/image upload and
 readback paths do not imply general `vkCmdCopyImage`, `vkCmdBlitImage` or
 `vkCmdResolveImage` support; those commands remain absent.
 
+## Indirect commands
+
+- `vkCmdDispatchIndirect`, `vkCmdDrawIndirect` and
+  `vkCmdDrawIndexedIndirect` are exposed through the public SDK and native
+  queue backends.
+- Indirect arguments are resolved only when their queue segment reaches the
+  head. This preserves compute-write -> barrier -> indirect-consume ordering;
+  the exact non-coherent argument range is invalidated before the CPU-side
+  command snapshot is read and encoded.
+- Recorded operations remain immutable. Resolution produces a local direct-op
+  snapshot whose dimensions, counts and `firstInstance` are validated again
+  after visibility is established.
+- The profile reports `maxDrawIndirectCount = 1`,
+  `multiDrawIndirect = VK_FALSE` and
+  `drawIndirectFirstInstance = VK_FALSE`. A draw count of zero is a legal
+  no-op; multi-draw and indirect-count extension commands are unsupported.
+- Pending command-buffer ownership protects referenced indirect buffers from
+  destruction until every segment retires. A deferred prepare failure marks
+  the device lost and does not signal the submission fence.
+
+The original upstream compute upload and compute-generated indirect-dispatch
+oracles pass on hardware. Indirect graphics commands have native encoding and
+host-contract coverage, but no separate indirect-draw pixel oracle is claimed.
+
 ## Programs and compilation
 
 Compute shaders are compiled at runtime using a pinned PSBC/NIR/ACO fork. The

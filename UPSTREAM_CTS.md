@@ -542,3 +542,34 @@ Two dedicated-allocation leaves are preserved in the diagnostic manifest and
 return `NotSupported` because `VK_KHR_dedicated_allocation` is not advertised;
 they are not counted as acceptance. No image-copy, blit or resolve claim follows
 from this buffer-only increment.
+
+## Indirect compute dispatch (2026-09-13)
+
+The strict selection now contains **57 original upstream cases**. The two new
+leaves come directly from
+`vktComputeIndirectComputeDispatchTests.cpp`:
+
+- `dEQP-VK.compute.indirect_dispatch.upload_buffer.single_invocation`
+- `dEQP-VK.compute.indirect_dispatch.gen_in_compute.single_invocation`
+
+The first uploads one `VkDispatchIndirectCommand` and validates the complete
+storage-buffer result. The second writes the command from compute, inserts the
+upstream buffer dependency, dispatches indirectly and checks the same final
+oracle. The factory and original body are linked; the integration does not
+replace either oracle.
+
+Two byte-identical launches passed **57/57**, with no Fail, NotSupported,
+Skip, missing or unexpected cases. Both passed executable/selection identity,
+complete QPA reconstruction, exit code zero and independent Close Game checks.
+
+- Executable SHA-256:
+  `d5e2d3476b4ba241b95ffe62361a9508df596d0305d4c2ef54c0b2e3f6818b13`
+- Selection SHA-256:
+  `c48990694f33d3deec76d3ed7e32740e4302e09fde047330532f6dcd17d63da9`
+- QPA SHA-256 values:
+  `637e5a4c1c64ccd1e3f6d7aab2698eeb934117fde1e75de838ff9caf5b14ffbd`
+  and `a7f591579691bccfa78f06f322c53720abaffb3bacb1d9bd745264af0d79bbf3`
+
+This establishes the selected single-dispatch compute paths only. The
+selection contains no indirect graphics draw oracle, and the implementation
+does not advertise multi-draw or `VK_KHR_draw_indirect_count`.

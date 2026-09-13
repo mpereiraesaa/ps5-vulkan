@@ -8045,15 +8045,14 @@
         "surface_state": "symbol-present",
         "entry_points": [
           "vkCmdDraw",
-          "vkCmdDrawIndexed"
-        ],
-        "absent_entry_points": [
+          "vkCmdDrawIndexed",
           "vkCmdDrawIndexedIndirect"
         ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8190,15 +8189,14 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
-          "vkCmdDispatch"
-        ],
-        "absent_entry_points": [
+          "vkCmdDispatch",
           "vkCmdDispatchIndirect"
         ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8369,48 +8367,61 @@
         "mapping": "mapped",
         "basis": "static-source-listing",
         "groups": [
-          "vk-default/draw.txt"
+          "vk-default/draw.txt",
+          "vk-default/compute.txt"
         ],
         "cases": [
-          "dEQP-VK.draw.renderpass.ahb.triangle_list"
+          "dEQP-VK.draw.renderpass.ahb.triangle_list",
+          "dEQP-VK.compute.indirect_dispatch.upload_buffer.single_invocation",
+          "dEQP-VK.compute.indirect_dispatch.gen_in_compute.single_invocation"
         ],
-        "note": "Group-level join to the draw family; indirect cases are a subset of that group.",
+        "note": "The two original compute indirect-dispatch bodies pass on hardware. The draw-family join remains representative only; no indirect-draw pixel oracle is claimed.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/draw.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCmdDrawIndirect",
           "vkCmdDrawIndexedIndirect",
-          "vkCmdDrawIndirectCount",
           "vkCmdDispatchIndirect"
+        ],
+        "absent_entry_points": [
+          "vkCmdDrawIndirectCount"
         ],
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: 0 of 4 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 3 of 4 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_indirect.c",
+            "tests/test_vk_indirect.c",
+            "tests/test_indirect_queue.c"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md#deferred-indirect-execution-2026-09-13",
+            "docs/HARDWARE_VALIDATION.md#deferred-vulkan-10-indirect-dispatch-2026-09-13"
+          ]
         },
         "conformance": {
           "state": "not-established",
-          "refs": []
+          "refs": [
+            "UPSTREAM_CTS.md#indirect-compute-dispatch-2026-09-13"
+          ]
         }
       },
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "RDP's optimized rasterization path uses indirect dispatch; the audited plan defers it behind an ubershader path.",
+      "review_notes": "Partial audited implementation: the three Vulkan 1.0 indirect entry points are wired with queue-head resolution, exact cache invalidation and single-draw bounds. Two original indirect-compute CTS cases and a public-SDK consumer pass twice on hardware. maxDrawIndirectCount is 1, multiDrawIndirect and drawIndirectFirstInstance are false, VK_KHR_draw_indirect_count is not advertised, and indirect graphics has no pixel-oracle evidence; the full row therefore remains not-audited.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -8710,8 +8721,11 @@
           "vkCmdCopyBufferToImage",
           "vkCmdCopyImageToBuffer",
           "vkCmdDispatch",
+          "vkCmdDispatchIndirect",
           "vkCmdDraw",
           "vkCmdDrawIndexed",
+          "vkCmdDrawIndexedIndirect",
+          "vkCmdDrawIndirect",
           "vkCmdEndRenderPass",
           "vkCmdFillBuffer",
           "vkCmdPipelineBarrier",
@@ -8742,10 +8756,7 @@
           "vkCmdCopyImageToBuffer2",
           "vkCmdCopyQueryPoolResults",
           "vkCmdDispatchBase",
-          "vkCmdDispatchIndirect",
-          "vkCmdDrawIndexedIndirect",
           "vkCmdDrawIndexedIndirectCount",
-          "vkCmdDrawIndirect",
           "vkCmdDrawIndirectCount",
           "vkCmdEndQuery",
           "vkCmdEndRenderPass2",
@@ -8797,7 +8808,7 @@
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 21 of 89 named entry points exist; 21 are dispatched; 21 are declared in the public header."
+        "note": "Baseline surface: 24 of 89 named entry points exist; 24 are dispatched; 24 are declared in the public header."
       },
       "evidence": {
         "source": {

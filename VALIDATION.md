@@ -366,8 +366,8 @@ Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
 - Audits 1:1 symmetry across public headers (`include/ps5vk/ps5vk.h`), static dispatch
   tables (`src/vk_dispatch.c`), and implementation symbols (`src/*.c`).
 - Fails closed on any unexpected drift, asymmetry (e.g. declared in public header but un-dispatched,
-  or dispatched without implementation), or regression in fully wired commands (112 fully wired
-  commands, with all 25 unimplemented commands cataloged into strict categorical deficit buckets).
+  or dispatched without implementation), or regression in fully wired commands (115 fully wired
+  commands, with all 22 unimplemented commands cataloged into strict categorical deficit buckets).
 - Enforced on host test runs via `make check` and verified by unit tests in
   `tests/test_command_surface.py` (which includes negative test fixtures asserting failure on
   missing dispatch entries, omitted declarations, or bookkeeping regressions).
@@ -392,3 +392,25 @@ complete `ps5log/1` and clean Close Game:
 This closes the three named buffer commands at the bounded profile. It does
 not establish general image copy, blit or resolve, the full Vulkan transfer
 family, or conformance.
+
+## Deferred indirect execution (2026-09-13)
+
+The three Vulkan 1.0 indirect entry points are structurally present, and host
+tests cover recording valid usage, zero-draw behavior, queue-head resolution,
+exact invalidation, compute-producer ordering, resource lifetime and the
+device-lost failure path. The public-SDK consumer records its existing
+deterministic 64-element compute workload with `vkCmdDispatchIndirect`; its
+strict verifier requires the exact recording marker and unchanged result and
+guard oracles.
+
+Two independent consumer launches used the identical SELF
+`c17bb2f7c389be6bc889401936dc8e8ae86cfc96c1cc705dab8799960ee8eb2a`
+and passed the hardened verifier plus independent Close Game checks:
+
+- `20260913T101540775Z_PPSA99994_ps5vk_0x3825a44d1f8c`
+- `20260913T101550407Z_PPSA99994_ps5vk_0x3827e255bc2d`
+
+The genuine upstream payload passed 57/57 twice, including both original
+indirect compute cases. This is native evidence for indirect dispatch and its
+compute-write visibility dependency. It is not indirect-draw pixel evidence,
+multi-draw support, or a conformance claim.
