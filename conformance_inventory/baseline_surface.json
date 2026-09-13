@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "71902ea0943948eed8f0fb678eea9ebc7e6aff78",
-  "inspected_commit": "71902ea0943948eed8f0fb678eea9ebc7e6aff78",
+  "baseline_commit": "5ce754113cb2ec1bdd83330f15d07335276c25a2",
+  "inspected_commit": "5ce754113cb2ec1bdd83330f15d07335276c25a2",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 102,
-    "dispatched": 102,
-    "public_header": 102,
+    "entry_points": 107,
+    "dispatched": 107,
+    "public_header": 107,
     "implementation_only": 0
   },
   "entry_points": [
@@ -337,6 +337,15 @@
       "observed": null
     },
     {
+      "name": "vkCreateQueryPool",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCreateRenderPass",
       "files": [
         "src/vk_render_pass.c"
@@ -484,6 +493,15 @@
       "name": "vkDestroyPipelineLayout",
       "files": [
         "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyQueryPool",
+      "files": [
+        "src/vk_query_pool.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -670,6 +688,15 @@
       "observed": null
     },
     {
+      "name": "vkGetImageSparseMemoryRequirements",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkGetImageSubresourceLayout",
       "files": [
         "src/vk_memory.c"
@@ -796,6 +823,15 @@
       "observed": "Reports the single queue family through VkQueueFamilyProperties2. Evidence: src/vk_device.c."
     },
     {
+      "name": "vkGetPhysicalDeviceSparseImageFormatProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkGetPhysicalDeviceSparseImageFormatProperties2KHR",
       "files": [
         "src/vk_device.c"
@@ -808,6 +844,15 @@
       "name": "vkGetPipelineCacheData",
       "files": [
         "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetQueryPoolResults",
+      "files": [
+        "src/vk_query_pool.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,

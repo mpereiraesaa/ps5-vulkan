@@ -674,7 +674,8 @@
           "vkGetPhysicalDeviceImageFormatProperties",
           "vkGetPhysicalDeviceMemoryProperties",
           "vkGetPhysicalDeviceProperties",
-          "vkGetPhysicalDeviceQueueFamilyProperties"
+          "vkGetPhysicalDeviceQueueFamilyProperties",
+          "vkGetPhysicalDeviceSparseImageFormatProperties"
         ],
         "absent_entry_points": [
           "vkEnumerateInstanceVersion",
@@ -695,7 +696,6 @@
           "vkGetPhysicalDeviceMemoryProperties2",
           "vkGetPhysicalDeviceProperties2",
           "vkGetPhysicalDeviceQueueFamilyProperties2",
-          "vkGetPhysicalDeviceSparseImageFormatProperties",
           "vkGetPhysicalDeviceSparseImageFormatProperties2",
           "vkGetPhysicalDeviceToolProperties"
         ],
@@ -703,7 +703,7 @@
           "src/vk_device.c",
           "src/vk_dispatch.c"
         ],
-        "note": "Baseline surface: 16 of 37 named entry points exist; 16 are dispatched; 16 are declared in the public header."
+        "note": "Baseline surface: 17 of 37 named entry points exist; 17 are dispatched; 17 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8881,6 +8881,7 @@
           "vkDestroyRenderPass",
           "vkEnumerateDeviceExtensionProperties",
           "vkEnumerateDeviceLayerProperties",
+          "vkGetImageSparseMemoryRequirements",
           "vkGetInstanceProcAddr",
           "vkGetPipelineCacheData",
           "vkGetRenderAreaGranularity",
@@ -8897,7 +8898,6 @@
           "vkGetBufferOpaqueCaptureAddress",
           "vkGetDescriptorSetLayoutSupport",
           "vkGetEventStatus",
-          "vkGetImageSparseMemoryRequirements",
           "vkGetImageSparseMemoryRequirements2",
           "vkGetPrivateData",
           "vkGetRenderingAreaGranularity",
@@ -8916,7 +8916,7 @@
           "src/vk_framebuffer.c",
           "src/vk_render_pass.c"
         ],
-        "note": "Baseline surface: 10 of 32 named entry points exist; 10 are dispatched; 10 are declared in the public header."
+        "note": "Baseline surface: 11 of 32 named entry points exist; 11 are dispatched; 11 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9795,15 +9795,15 @@
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCreateQueryPool",
           "vkDestroyQueryPool",
           "vkGetQueryPoolResults"
         ],
+        "absent_entry_points": [],
         "refs": [],
-        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9867,18 +9867,19 @@
       },
       "implementation_state": "missing",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCreateQueryPool",
-          "vkGetQueryPoolResults",
+          "vkGetQueryPoolResults"
+        ],
+        "absent_entry_points": [
           "vkCmdBeginQuery",
           "vkCmdEndQuery"
         ],
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: 0 of 4 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 4 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
