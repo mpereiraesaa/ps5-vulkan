@@ -641,3 +641,19 @@ generator refuses to run if the factory or the pinned registration block drifts,
 and `tools/check_upstream_selection.py` derives
 `partial_image_<extent>_<format>_<clear>` only from the exact composition
 expression and the three table names inside the cited function.
+
+The final hardened implementation was rebuilt and deployed from commit
+`002743f`. Two independent launches used the identical SELF SHA-256
+`310c662777e6b4ab31a68fd8ae0ad6bb666b09471c2654bd1d909d72fb2754a8`
+and selection SHA-256
+`4181af6a7032b15fd27d42fcb6eb8aa178d717d3cd66e03607d85e6aecf9c272`:
+
+- `20260913T133316202Z_PPSA99994_upstream-cts_0x42ede9683184`
+- `20260913T133335878Z_PPSA99994_upstream-cts_0x42f27e4c8467`
+
+Each reconstructed the complete QPA, passed all 93 selected upstream cases
+with zero `Fail`, `NotSupported` or `Skip`, and ended with verified system
+Close Game. The image-transfer contribution to those runs is the four bounded
+RGBA8 copy leaves described above; the 93-case total also protects the existing
+compute, graphics, synchronization, memory and buffer-transfer oracles from
+regression. It does not widen the image profile or establish conformance.

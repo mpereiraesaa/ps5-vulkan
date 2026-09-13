@@ -434,3 +434,35 @@ The genuine upstream payload passed 57/57 twice, including both original
 indirect compute cases. This is native evidence for indirect dispatch and its
 compute-write visibility dependency. It is not indirect-draw pixel evidence,
 multi-draw support, or a conformance claim.
+
+## Final Vulkan 1.0 structural command slice (2026-09-13)
+
+The command-surface gate now derives all 137 mandatory Vulkan 1.0 core commands
+from the pinned registry and reports 137/137 public, dispatched and implemented
+symbols with zero asymmetries. Unsupported semantics are not counted as
+supported: blit, resolve, depth/stencil clear, attachment clear, real queries,
+multi-subpass execution, secondary command buffers and sparse binding retain
+explicit host-tested fail-closed behavior.
+
+The final image slice adds bounded RGBA8 transfer-role image copy and colour
+clear, pitched buffer/image copies, conservative backing-alias rejection,
+transactional payload validation and explicit cache maintenance. Queue tests
+prove that every backend segment after a frontend transfer is prepared only
+when it reaches queue head; preparation failure device-loses without launching
+or signaling. `make check`, the ASan/UBSan gate and the regenerated conformance
+inventory pass on commit `002743f`.
+
+Two independent native runs used the same SELF SHA-256
+`310c662777e6b4ab31a68fd8ae0ad6bb666b09471c2654bd1d909d72fb2754a8`
+and selection SHA-256
+`4181af6a7032b15fd27d42fcb6eb8aa178d717d3cd66e03607d85e6aecf9c272`:
+
+- `20260913T133316202Z_PPSA99994_upstream-cts_0x42ede9683184`
+- `20260913T133335878Z_PPSA99994_upstream-cts_0x42f27e4c8467`
+
+Both passed 93/93 selected genuine upstream cases, reconstructed a complete QPA
+with matching identity, and returned through verified Close Game. The four new
+image leaves independently judge bounded `vkCmdCopyImage`. Their clear variant
+uses the same red value as the destination initializer, so `vkCmdClearColorImage`
+still has deterministic host evidence rather than an independent native pixel
+oracle. The 137/137 result remains structural coverage, not Vulkan conformance.
