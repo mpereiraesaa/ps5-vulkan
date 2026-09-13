@@ -17,6 +17,7 @@ CASES = (
     ("rgba32-uint", "107", "uint", "4", "16", "ffffffff"),
     ("rgba8-unorm", "37", "unorm", "4", "4", "ffaa5511"),
     ("bgra8-unorm", "44", "unorm", "4", "4", "ffaa5511"),
+    ("a2b10g10r10-unorm", "64", "unorm", "4", "4", "bffaa955"),
 )
 
 

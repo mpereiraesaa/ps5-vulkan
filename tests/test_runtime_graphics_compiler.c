@@ -186,8 +186,8 @@ int main(void)
         .vertex_bindings=&binding,.vertex_attributes=&attribute};
     binding.stride=4;
     const VkFormat packed_formats[]={VK_FORMAT_R8G8B8A8_UNORM,
-        VK_FORMAT_B8G8R8A8_UNORM};
-    for(unsigned i=0;i<2;++i) {
+        VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_A2B10G10R10_UNORM_PACK32};
+    for(unsigned i=0;i<3;++i) {
         attribute.format=packed_formats[i];
         assert(ps5vk_spirv_graphics_interface(&packed_input));
         assert(ps5vk_runtime_graphics_compile(NULL,&packed_input,&out)==VK_SUCCESS && out);

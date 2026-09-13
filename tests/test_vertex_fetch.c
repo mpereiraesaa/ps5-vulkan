@@ -32,7 +32,8 @@ int main(void)
         VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_SINT,VK_FORMAT_R32G32B32_SINT,
         VK_FORMAT_R32G32B32A32_SINT,VK_FORMAT_R32_UINT,VK_FORMAT_R32G32_UINT,
         VK_FORMAT_R32G32B32_UINT,VK_FORMAT_R32G32B32A32_UINT,
-        VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM};
+        VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32};
     key.vertex_attribute_count=1;
     for(unsigned n=0;n<sizeof(supported)/sizeof(supported[0]);++n) {
         attrs[0].format=supported[n];

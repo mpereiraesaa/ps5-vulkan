@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 
-#define PS5VK_VERTEX_FORMAT_CASES 10u
+#define PS5VK_VERTEX_FORMAT_CASES 11u
 
 enum ps5vk_vertex_probe_numeric {
     PS5VK_VERTEX_PROBE_SINT = 1,

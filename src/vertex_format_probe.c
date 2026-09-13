@@ -16,6 +16,9 @@ int ps5vk_vertex_format_case(unsigned index,
             UINT32_C(0xffaa5511), {17.0f/255.0f,85.0f/255.0f,170.0f/255.0f,1.0f}},
         {"bgra8-unorm", VK_FORMAT_B8G8R8A8_UNORM, 4, PS5VK_VERTEX_PROBE_UNORM,
             UINT32_C(0xffaa5511), {170.0f/255.0f,85.0f/255.0f,17.0f/255.0f,1.0f}},
+        {"a2b10g10r10-unorm", VK_FORMAT_A2B10G10R10_UNORM_PACK32, 4,
+            PS5VK_VERTEX_PROBE_UNORM, UINT32_C(0xbffaa955),
+            {341.0f/1023.0f,682.0f/1023.0f,1.0f,2.0f/3.0f}},
     };
     if (!out || index >= sizeof(cases) / sizeof(cases[0])) return -1;
     *out = cases[index];

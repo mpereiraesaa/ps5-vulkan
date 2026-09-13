@@ -284,7 +284,8 @@ static void lifecycle(void)
         VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_SINT,VK_FORMAT_R32G32B32_SINT,
         VK_FORMAT_R32G32B32A32_SINT,VK_FORMAT_R32_UINT,VK_FORMAT_R32G32_UINT,
         VK_FORMAT_R32G32B32_UINT,VK_FORMAT_R32G32B32A32_UINT,
-        VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM};
+        VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32};
     for(unsigned n=0;n<sizeof(vertex_formats)/sizeof(vertex_formats[0]);++n) {
         vkGetPhysicalDeviceFormatProperties(p,vertex_formats[n],&fp);
         VkFormatFeatureFlags expected=VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |

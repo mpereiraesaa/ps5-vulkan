@@ -42,7 +42,7 @@ class VertexFormatVerifier(unittest.TestCase):
 
     def test_accepts_complete_gpu_witness(self):
         result = validate(*self.fixture())
-        self.assertEqual(result["cases"], 10)
+        self.assertEqual(result["cases"], 11)
         self.assertTrue(result["component_completion"])
         self.assertTrue(result["normalized_channel_order"])
 

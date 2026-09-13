@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 26 mandatory format-feature cells satisfied
-with 636 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 27 mandatory format-feature cells satisfied
+with 635 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -668,6 +668,21 @@ the framebuffer result. Resource accounting returned to zero, both streams
 ended with BYE and exact-title Close Game completed in 100 ms. This adds two
 specific packed rows; it does not imply other normalized vertex formats.
 
+The mandatory 10-bit `A2B10G10R10_UNORM_PACK32` vertex row was then added with
+byte-identical SELF SHA-256
+`87b30f8dd5026ce5c37a830ae5c514208d9fe5dc000f363647d99184ab38802b`:
+
+- `20260913T234617293Z_PPSA99994_ps5vk_0x64618f4c3bad`, log SHA-256
+  `85144d4c84a3745999cca8115fb80b662e64aca48a9170687d528be85b4c2dd0`
+- `20260913T234715734Z_PPSA99994_ps5vk_0x646f2aae85da`, log SHA-256
+  `e6fa278609b91995e55aca5f8cda91efb2eceb640e76498a87d2ccf00acfa92a`
+
+Each complete 3,413-record stream executed all eleven vertex cases. The new
+case used raw word `0xbffaa955` and checked logical RGBA values
+`(341/1023,682/1023,1,2/3)`, including the distinct two-bit alpha conversion.
+It again produced exactly 471,744 white pixels and zero others; both runs had
+zero retained allocations, BYE and exact-title Close Game in 100 ms.
+
 The earlier dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
@@ -676,7 +691,7 @@ ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
 reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
-blockers and 708 blockers overall.
+blockers and 707 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

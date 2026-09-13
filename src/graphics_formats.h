@@ -26,9 +26,9 @@ struct ps5vk_vertex_format {
 /* Vertex format metadata is shared by capability queries, SPIR-V interface
  * matching, the PSBC adapter and the bounded fetch descriptor.  The 32-bit
  * integer rows follow the PSBC/Gallium mapping used by the pinned GPL
- * ps5-opengl implementation. RGBA8/BGRA8 UNORM are enabled by their own
- * conversion gate; other narrower integer and normalized rows remain disabled
- * until their complete conversion contract is wired. */
+ * ps5-opengl implementation. RGBA8/BGRA8 and A2B10G10R10 UNORM are enabled by
+ * their own conversion gate; other narrower integer and normalized rows remain
+ * disabled until their complete conversion contract is wired. */
 static inline struct ps5vk_vertex_format ps5vk_vertex_format_info(VkFormat format)
 {
     switch (format) {
@@ -46,6 +46,7 @@ static inline struct ps5vk_vertex_format ps5vk_vertex_format_info(VkFormat forma
     case VK_FORMAT_R32G32B32A32_UINT: return (struct ps5vk_vertex_format){16,4,PS5VK_VERTEX_NUMERIC_UINT};
     case VK_FORMAT_R8G8B8A8_UNORM:
     case VK_FORMAT_B8G8R8A8_UNORM:
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
         return (struct ps5vk_vertex_format){4,4,PS5VK_VERTEX_NUMERIC_FLOAT};
     default: return (struct ps5vk_vertex_format){0};
     }

@@ -3000,7 +3000,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 26 mandatory format-feature cells satisfied and 636 per-format blockers recorded.",
+        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 27 mandatory format-feature cells satisfied and 635 per-format blockers recorded.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt, vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
       },

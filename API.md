@@ -33,12 +33,13 @@ hardware acceptance.
 - One vertex binding at binding 0, per-vertex input, with up to 32 attribute
   locations. Supported attributes are one- through four-component 32-bit
   float, signed-integer and unsigned-integer formats, plus packed
-  `R8G8B8A8_UNORM` and `B8G8R8A8_UNORM`. Ten rows have exact hardware evidence
+  `R8G8B8A8_UNORM`, `B8G8R8A8_UNORM` and
+  `A2B10G10R10_UNORM_PACK32`. Eleven rows have exact hardware evidence
   for fetch and numeric category; the scalar/vector integer cases also cover
-  Vulkan component completion, while an asymmetric packed word covers UNORM
-  conversion and BGRA channel order. Runtime-shader indexed draws remain a
-  separate unsupported combination; indexed draws remain available through the
-  audited offline-program path.
+  Vulkan component completion, while asymmetric 8- and 10-bit packed words
+  cover UNORM conversion, BGRA channel order and the two-bit alpha field.
+  Runtime-shader indexed draws remain a separate unsupported combination;
+  indexed draws remain available through the audited offline-program path.
 - Indexed and non-indexed draws. Index buffers support `uint16` and `uint32`,
   including offsets and signed base vertex.
 - One viewport and scissor, supplied statically at pipeline creation or through
@@ -300,8 +301,8 @@ workgroup dimensions are not yet supported; local size must remain literal.
 
 Runtime graphics uses the same pinned PSBC/NIR/ACO stack for vertex and
 fragment SPIR-V. The current profile supports procedural or single-binding
-32-bit float/signed/unsigned and packed RGBA8/BGRA8 UNORM vertex input for
-triangle lists, smooth float32 scalar/vector interfaces
+32-bit float/signed/unsigned and packed RGBA8/BGRA8/RGB10A2 UNORM vertex input
+for triangle lists, smooth float32 scalar/vector interfaces
 at matching whole locations 0–31, one vec4 fragment output at location 0,
 BGRA8/RGBA8 UNORM sample-1 targets and full color writes. VertexIndex, push
 constants and scalar specialization constants are supported. Graphics

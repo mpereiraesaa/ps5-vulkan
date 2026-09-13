@@ -34,8 +34,9 @@ results; visual output is not the sole correctness signal.
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list draws;
   one- through four-component 32-bit float, signed-integer and unsigned-integer
-  vertex formats plus packed `R8G8B8A8_UNORM` and `B8G8R8A8_UNORM`; the integer
-  and packed rows have exact GPU readback evidence on non-indexed runtime draws
+  vertex formats plus packed `R8G8B8A8_UNORM`, `B8G8R8A8_UNORM` and
+  `A2B10G10R10_UNORM_PACK32`; the integer and packed rows have exact GPU
+  readback evidence on non-indexed runtime draws
 - One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
   plus an optional D32 depth attachment
 - Single-level R8, RG8, RGBA8 UNORM and RGBA8 sRGB sampled textures with GPU

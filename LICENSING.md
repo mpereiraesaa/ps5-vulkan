@@ -33,7 +33,7 @@ Current derived or adapted files are:
 | `src/color_detile.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_tiled_color_offset` | General 1/2/4/8/16-byte `SW_64K_R_X` tiled-address equations and surface sizing |
 | `src/vk_sampler.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_wrap` and fixed-border handling | GFX10.3 repeat, mirrored-repeat, edge/border clamp and fixed border-color encodings |
 | `src/texture_format.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_format`, `ps5_texture_descriptor_swizzle` and `ps5_texture_format_size` | GFX10.3 sampled-image format words, component selectors and texel sizes; unvalidated rows remain disabled candidates |
-| `native/runtime_graphics_compiler.c`, `src/graphics_formats.h` | `src/gallium/ps5/ps5_screen.c`, `ps5_integer_vertex_format`, `ps5_packed_vertex_format` and PSBC vertex-format adaptation | Vulkan-to-PSBC GFX1013 vertex numeric-category mapping, including the hardware-gated integer and RGBA8/BGRA8 UNORM rows; only rows covered by ps5-vulkan's own gates are advertised |
+| `native/runtime_graphics_compiler.c`, `src/graphics_formats.h` | `src/gallium/ps5/ps5_screen.c`, `ps5_integer_vertex_format`, `ps5_packed_vertex_format` and PSBC vertex-format adaptation | Vulkan-to-PSBC GFX1013 vertex numeric-category mapping, including the hardware-gated integer, RGBA8/BGRA8 and A2B10G10R10 UNORM rows; only rows covered by ps5-vulkan's own gates are advertised |
 
 Every future direct adaptation must add an SPDX identifier and identify its
 source file and pinned revision in the file header and this table. Ideas and
