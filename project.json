@@ -1,5 +1,6 @@
 {
   "name": "ps5-vulkan",
+  "license": "GPL-3.0-or-later",
   "title_id": "PPSA99994",
   "package_directory": "/data/homebrew/PPSA99994",
   "identity_status": "deployed-and-hardware-validated-recheck-before-replacement",

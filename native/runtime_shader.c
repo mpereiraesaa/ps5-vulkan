@@ -1,4 +1,6 @@
-/* Compiler metadata adaptation. ABI references: local ps5_shader_header and
+/* Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
+ * Compiler metadata adaptation. ABI references: local ps5_shader_header and
  * BlackBearReloaded's ps5-opengl ps5_agc_package.c (GPL-3.0-or-later).
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include "runtime_shader.h"

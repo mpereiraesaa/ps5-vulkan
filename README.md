@@ -84,7 +84,14 @@ make check-sanitize
 Native compilation also requires the PS5 payload SDK and the companion
 `ps5-agc-gears` support library; see [BUILDING.md](BUILDING.md).
 
-This repository currently carries no project-wide license grant; individual
-file license notices remain applicable. Dependency and licensing
-choices must be audited before redistribution or incorporation into another
-project.
+## License
+
+`ps5-vulkan` is free software licensed under the GNU General Public License,
+version 3 or (at your option) any later version (`GPL-3.0-or-later`). See
+[LICENSE](LICENSE) for the complete terms and [LICENSING.md](LICENSING.md) for
+copyright, contribution, dependency and source-provenance details.
+
+The staged SDK contains a static `libps5vk.a`. Distributing an application that
+links this library creates a combined GPL work and requires providing its
+corresponding source under GPL-compatible terms. Console system modules and
+their link-time import facades are not distributed as part of this repository.
