@@ -26,9 +26,11 @@ results; visual output is not the sole correctness signal.
 - Push constants and scalar specialization constants in compute and runtime graphics
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list draws
-- One BGRA8 color attachment and an optional D32 depth attachment
+- One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
+  plus an optional D32 depth attachment
 - Single-level RGBA8 sampled textures with GPU upload transitions
-- Static viewport/scissor state, depth testing and face culling
+- One static or dynamic viewport/scissor pair, depth testing and face culling
+- Bounded RGBA8 attachment readback through `vkCmdCopyImageToBuffer`
 - Native two-buffer 1920x1080 presentation
 - Explicit completion, retirement and bounded resource accounting
 
@@ -52,9 +54,9 @@ swapchains, broad format coverage, multiple queues,
 semaphores, blending, MSAA, mipmaps, anisotropy or arbitrary shader programs.
 Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
 backend and cached under a bounded in-memory policy. Runtime vertex/fragment
-compilation now supports procedural triangles with matching smooth float32
-interfaces, a BGRA8 color target, push/specialization constants and no graphics
-descriptors. Compiled pairs
+compilation now supports procedural or single-binding float32 triangles with
+matching smooth interfaces, BGRA8/RGBA8 targets, push/specialization constants
+and no graphics descriptors. Compiled pairs
 reuse the bounded cache. The textured scene still uses its audited offline
 program library; it does not imply textured runtime-shader support.
 The 8/16-bit slice covers storage-buffer access only; narrow integer/float

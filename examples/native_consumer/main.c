@@ -142,7 +142,10 @@ static void report_physical_device_contract(VkInstance instance,
     REQUIRE(!bgra.linearTilingFeatures && !bgra.bufferFeatures &&
             bgra.optimalTilingFeatures == VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT &&
             !rgba.linearTilingFeatures && !rgba.bufferFeatures &&
-            rgba.optimalTilingFeatures == VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT &&
+            rgba.optimalTilingFeatures ==
+                (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) &&
             !depth.linearTilingFeatures && !depth.bufferFeatures &&
             depth.optimalTilingFeatures ==
                 VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT &&
@@ -1153,33 +1156,56 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     CHECK(vkCreatePipelineLayout(device, &plci, NULL, &pipeline_layout));
 
-    /* 3. Render Pass: BGRA8 UNORM, 1 sample, clear on load in finite mode, store on end */
-    VkAttachmentDescription color_attachment = {
-        .format = VK_FORMAT_B8G8R8A8_UNORM,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    /* 3. Compatible passes for an exact fixed-function witness.  The first
+     * clears color and depth=0, so LESS rejects the triangle.  The second
+     * LOADs that black color, clears depth=1 and draws through dynamic
+     * viewport/scissor state. */
+    VkAttachmentDescription clear_attachments[2] = {
+        {.format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {.format=VK_FORMAT_D32_SFLOAT,.samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}
+    };
+    VkAttachmentDescription load_attachments[2] = {
+        {.format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_LOAD,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {.format=VK_FORMAT_D32_SFLOAT,.samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,.storeOp=VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}
     };
     VkAttachmentReference color_ref = {
         .attachment = 0,
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
+    VkAttachmentReference depth_ref = {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
     VkSubpassDescription subpass = {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = 1,
-        .pColorAttachments = &color_ref
+        .pColorAttachments = &color_ref,
+        .pDepthStencilAttachment = &depth_ref
     };
     VkRenderPassCreateInfo rpci = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &color_attachment,
+        .attachmentCount = 2,
+        .pAttachments = clear_attachments,
         .subpassCount = 1,
         .pSubpasses = &subpass
     };
-    VkRenderPass render_pass = VK_NULL_HANDLE;
-    CHECK(vkCreateRenderPass(device, &rpci, NULL, &render_pass));
+    VkRenderPass clear_pass = VK_NULL_HANDLE;
+    VkRenderPass load_pass = VK_NULL_HANDLE;
+    CHECK(vkCreateRenderPass(device, &rpci, NULL, &clear_pass));
+    rpci.pAttachments = load_attachments;
+    CHECK(vkCreateRenderPass(device, &rpci, NULL, &load_pass));
 
     /* 4. Graphics pipeline creation */
     VkPipelineShaderStageCreateInfo stages[2] = {
@@ -1228,6 +1254,18 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
         .attachmentCount = 1,
         .pAttachments = &cba
     };
+    VkPipelineDepthStencilStateCreateInfo dsi = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_TRUE,
+        .depthWriteEnable = VK_TRUE,
+        .depthCompareOp = VK_COMPARE_OP_LESS
+    };
+    VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamic = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = 2,
+        .pDynamicStates = dynamic_states
+    };
     VkGraphicsPipelineCreateInfo gpci = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .stageCount = 2,
@@ -1237,9 +1275,10 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
         .pViewportState = &vps,
         .pRasterizationState = &rci,
         .pMultisampleState = &msi,
+        .pDepthStencilState = &dsi,
         .pColorBlendState = &cbi,
         .layout = pipeline_layout,
-        .renderPass = render_pass
+        .renderPass = clear_pass
     };
 
     /* First creation: Cold compilation */
@@ -1255,6 +1294,13 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
     /* Destroy pipeline2 immediately to verify refcount and bounded cache release */
     vkDestroyPipeline(device, pipeline2, NULL);
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_GRAPHICS_PIPELINE_DESTROYED refcount_verified=1");
+
+    vps.pViewports = NULL;
+    vps.pScissors = NULL;
+    gpci.pDynamicState = &dynamic;
+    VkPipeline dynamic_pipeline = VK_NULL_HANDLE;
+    CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &gpci, NULL, &dynamic_pipeline));
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_DYNAMIC_PIPELINE_CREATED viewport=1 scissor=1");
 
     /* 5. Create two 1080p presentation images and bind them in 128 MiB direct memory */
     VkImageCreateInfo ici = {
@@ -1283,9 +1329,34 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
     CHECK(vkBindImageMemory(device, images[0], image_memory, 0));
     CHECK(vkBindImageMemory(device, images[1], image_memory, UINT64_C(0x04000000)));
 
+    VkImageCreateInfo depth_ici = ici;
+    depth_ici.format = VK_FORMAT_D32_SFLOAT;
+    depth_ici.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    VkImage depth_image = VK_NULL_HANDLE;
+    CHECK(vkCreateImage(device, &depth_ici, NULL, &depth_image));
+    VkMemoryRequirements depth_requirements;
+    vkGetImageMemoryRequirements(device, depth_image, &depth_requirements);
+    VkMemoryAllocateInfo depth_mai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = depth_requirements.size,
+        .memoryTypeIndex = 0
+    };
+    VkDeviceMemory depth_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &depth_mai, NULL, &depth_memory));
+    CHECK(vkBindImageMemory(device, depth_image, depth_memory, 0));
+
     /* 6. Create image views and framebuffers */
     VkImageView image_views[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkFramebuffer framebuffers[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkImageViewCreateInfo depth_ivci = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = depth_image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_D32_SFLOAT,
+        .subresourceRange = {.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT,.levelCount=1,.layerCount=1}
+    };
+    VkImageView depth_view = VK_NULL_HANDLE;
+    CHECK(vkCreateImageView(device, &depth_ivci, NULL, &depth_view));
     for (unsigned slot = 0; slot < 2; ++slot) {
         VkImageViewCreateInfo ivci = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -1300,11 +1371,12 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
         };
         CHECK(vkCreateImageView(device, &ivci, NULL, &image_views[slot]));
 
+        VkImageView attachments[2] = {image_views[slot], depth_view};
         VkFramebufferCreateInfo fbci = {
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .renderPass = render_pass,
-            .attachmentCount = 1,
-            .pAttachments = &image_views[slot],
+            .renderPass = clear_pass,
+            .attachmentCount = 2,
+            .pAttachments = attachments,
             .width = 1920,
             .height = 1080,
             .layers = 1
@@ -1373,19 +1445,30 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
             CHECK(vkFlushMappedMemoryRanges(device, 1, &flush_range));
         }
 
-        /* Record draw commands */
+        /* First pass. Finite mode deliberately rejects the triangle with a
+         * depth clear of zero; continuous mode renders directly. */
         CHECK(vkResetCommandBuffer(cmd_buf, 0));
         VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         CHECK(vkBeginCommandBuffer(cmd_buf, &begin_info));
 
+        VkClearValue clear_values[2] = {0};
+        clear_values[0].color.float32[3] = 1.0f;
+        clear_values[1].depthStencil.depth = is_continuous ? 1.0f : 0.0f;
         VkRenderPassBeginInfo rp_begin = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass = render_pass,
+            .renderPass = clear_pass,
             .framebuffer = framebuffers[slot],
-            .renderArea = {{0, 0}, {1920, 1080}}
+            .renderArea = {{0, 0}, {1920, 1080}},
+            .clearValueCount = 2,
+            .pClearValues = clear_values
         };
         vkCmdBeginRenderPass(cmd_buf, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline1);
+        vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            is_continuous ? dynamic_pipeline : pipeline1);
+        if (is_continuous) {
+            vkCmdSetViewport(cmd_buf, 0, 1, &viewport);
+            vkCmdSetScissor(cmd_buf, 0, 1, &scissor);
+        }
         vkCmdDraw(cmd_buf, 3, 1, 0, 0);
         vkCmdEndRenderPass(cmd_buf);
         CHECK(vkEndCommandBuffer(cmd_buf));
@@ -1398,6 +1481,42 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
         };
         CHECK(vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE));
         CHECK(vkQueueWaitIdle(queue));
+
+        if (!is_continuous) {
+            VkMappedMemoryRange blocked_range = {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = image_memory,
+                .offset = slot_offset,
+                .size = word_count * sizeof(uint32_t)
+            };
+            CHECK(vkInvalidateMappedMemoryRanges(device, 1, &blocked_range));
+            uint64_t nonblack = 0;
+            for (size_t w = 0; w < word_count; ++w)
+                nonblack += pixels[w] != 0xff000000u;
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_CONSUMER_DEPTH_REJECT frame=%u nonblack=%llu valid=%u",
+                frame, (unsigned long long)nonblack, nonblack == 0);
+            if (nonblack) {
+                ps5log_close("depth-reject-failed");
+                exit(1);
+            }
+
+            /* Compatible second pass: preserve black outside the triangle,
+             * clear depth to one, and source viewport/scissor dynamically. */
+            CHECK(vkResetCommandBuffer(cmd_buf, 0));
+            CHECK(vkBeginCommandBuffer(cmd_buf, &begin_info));
+            clear_values[1].depthStencil.depth = 1.0f;
+            rp_begin.renderPass = load_pass;
+            vkCmdBeginRenderPass(cmd_buf, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, dynamic_pipeline);
+            vkCmdSetViewport(cmd_buf, 0, 1, &viewport);
+            vkCmdSetScissor(cmd_buf, 0, 1, &scissor);
+            vkCmdDraw(cmd_buf, 3, 1, 0, 0);
+            vkCmdEndRenderPass(cmd_buf);
+            CHECK(vkEndCommandBuffer(cmd_buf));
+            CHECK(vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE));
+            CHECK(vkQueueWaitIdle(queue));
+        }
 
         /* Present frame */
         CHECK(ps5vkPresentFrame(surface, slot, (uint64_t)(frame + 1)));
@@ -1418,7 +1537,7 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
 
             for (size_t w = 0; w < word_count; ++w) {
                 uint32_t p = pixels[w];
-                if (p == sentinel_bg) continue;
+                if (p == 0xff000000u) continue;
                 ++changed;
                 if ((p >> 24) != 255) ++bad_alpha;
                 unsigned sum = (p & 255) + ((p >> 8) & 255) + ((p >> 16) & 255);
@@ -1459,12 +1578,17 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
         vkDestroyImageView(device, image_views[slot], NULL);
         vkDestroyImage(device, images[slot], NULL);
     }
+    vkDestroyImageView(device, depth_view, NULL);
+    vkDestroyImage(device, depth_image, NULL);
+    vkFreeMemory(device, depth_memory, NULL);
     vkFreeMemory(device, image_memory, NULL);
 
     vkFreeCommandBuffers(device, cmd_pool, 1, &cmd_buf);
     vkDestroyCommandPool(device, cmd_pool, NULL);
+    vkDestroyPipeline(device, dynamic_pipeline, NULL);
     vkDestroyPipeline(device, pipeline1, NULL);
-    vkDestroyRenderPass(device, render_pass, NULL);
+    vkDestroyRenderPass(device, load_pass, NULL);
+    vkDestroyRenderPass(device, clear_pass, NULL);
     vkDestroyPipelineLayout(device, pipeline_layout, NULL);
     vkDestroyShaderModule(device, vs_module, NULL);
     vkDestroyShaderModule(device, fs_module, NULL);

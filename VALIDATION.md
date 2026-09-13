@@ -127,7 +127,7 @@ backend truthfully does not report. See
 
 ### Vulkan 1.0 synchronization and non-coherent visibility slice
 
-The focused acceptance selection now contains **41 original upstream cases**.
+The synchronization milestone acceptance selection contained **41 original upstream cases**.
 Ten additions exercise two compute command-buffer barrier cases, three further
 fence states, four non-coherent mapping ranges and
 `dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.uint32`. The last
@@ -162,6 +162,42 @@ release/writeback before the next dispatch. This evidence does not establish
 range-scoped asynchronous execution, binary semaphores, events, mixed
 compute/graphics barriers, queue-family transfers, the Vulkan memory model or
 `synchronization2`.
+
+### Fixed-function and original upstream pixel oracle
+
+The next bounded graphics slice adds one static or dynamic viewport/scissor
+pair, compatible one-subpass render-pass/framebuffer ownership, bounded color
+and depth attachment load/store/clear behavior, and RGBA8 off-screen readback.
+The selection now contains **42 original upstream cases**. The added
+`dEQP-VK.api.smoke.triangle` body records a real draw, copies the rendered image
+to a buffer and compares its pixels with the unchanged upstream reference
+renderer.
+
+Two launches of the identical payload passed **42/42** with zero failures,
+unsupported or skipped cases, complete QPA reconstruction, zero live platform
+allocations at teardown and clean system Close Game:
+
+- Executable SHA-256:
+  `2b8ff02a5a0906c4496f8795d9c7eabd8a0af20199b05d9d2261ad1393eb6d2d`
+- Selection SHA-256:
+  `b2b74ed43427d2fb0feeab07ab3ad4527643dbc125d41aadc8cee92f7200a515`
+- QPA SHA-256 values:
+  `757efc735d3d77b0b6019535dd8760016ca1f935c02bfa5c34f7579fa486eba5`
+  and `88d5d6aff8d7e7fcfd2f4f2ef28acff70914f6d5f0477957ef65c28deb8c85ad`
+
+The public-header-only consumer independently passed twice with executable
+SHA-256
+`7209dd80a3a3431dd6f26d54420d3f91bba15b5d98773050916f91f13395c500`.
+Each run verified 18 fixed-function frames and 36 graphics submissions,
+including exact color/depth results, dynamic viewport/scissor state,
+attachment `LOAD` preservation, negative depth controls, strict `ps5log/1`
+validation and clean Close Game. Transcript SHA-256 values were
+`5fba873ebe85d478ab8caf279c2e15b156771a43062a3054da8d965b2750dfbf`
+and `dc638572e4785c9c2dad9a4654f2bfb6e0a959f7c0a1be6f1e2a438023cb7528`.
+
+This evidence covers only the enumerated profile. It does not establish general
+rasterization, blending, multisampling, stencil, secondary command buffers,
+WSI or Vulkan conformance.
 
 ## Independent native SDK consumer validation
 

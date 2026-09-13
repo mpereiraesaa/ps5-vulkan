@@ -1,4 +1,5 @@
 #include "vk_command.h"
+#include <float.h>
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -7,6 +8,7 @@ static void clear(VkCommandBuffer c)
     c->state = PS5VK_INITIAL; c->usage = 0; c->pipeline = NULL;
     c->operation_count = 0;
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
+    c->viewport_valid = c->scissor_valid = VK_FALSE;
     memset(c->sets, 0, sizeof(c->sets)); memset(c->set_signatures, 0, sizeof(c->set_signatures));
     memset(c->graphics_sets,0,sizeof(c->graphics_sets));
     memset(c->graphics_set_signatures,0,sizeof(c->graphics_set_signatures));
@@ -18,7 +20,9 @@ static void clear(VkCommandBuffer c)
     memset(&c->indices, 0, sizeof(c->indices));
 }
 static void invalid(VkCommandBuffer c)
-{ if (c) { ++c->pool->device->lifetime_errors; if (c->state != PS5VK_PENDING) c->state = PS5VK_INVALID; } }
+{
+    if (c) { ++c->pool->device->lifetime_errors; if (c->state != PS5VK_PENDING) c->state = PS5VK_INVALID; }
+}
 static int set_uses(VkDescriptorSet s, VkObjectType type, const void *object)
 {
     if (!s) return 0;
@@ -50,6 +54,7 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
         const struct ps5vk_operation *op = &c->operations[j];
         if(type==VK_OBJECT_TYPE_BUFFER && op->buffer_barrier.buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_source==object)return 1;
+        if(type==VK_OBJECT_TYPE_BUFFER && op->copy_destination==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->copy_image==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->image_barrier.image==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->indices.buffer==object)return 1;
@@ -163,12 +168,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
         ((info->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) &&
          (info->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))) return INVALID;
     if (c->state != PS5VK_INITIAL && !(c->pool->flags & VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)) return INVALID;
-    clear(c); c->usage = info->flags; c->state = PS5VK_RECORDING; return VK_SUCCESS;
+    clear(c); c->usage = info->flags; c->state = PS5VK_RECORDING;
+    return VK_SUCCESS;
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer c)
 {
     if (!c || c->state != PS5VK_RECORDING || c->render_pass) return INVALID;
-    c->state = PS5VK_EXECUTABLE; return VK_SUCCESS;
+    c->state = PS5VK_EXECUTABLE;
+    return VK_SUCCESS;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(VkCommandBuffer c, VkPipelineBindPoint point, VkPipeline p)
 {
@@ -178,6 +185,34 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(VkCommandBuffer c, VkPipelineBindPo
     }
     if (point != VK_PIPELINE_BIND_POINT_COMPUTE || p->graphics) { invalid(c); return; }
     c->pipeline = p;
+}
+static int valid_viewport(const VkViewport *v)
+{
+    return v && v->x >= -FLT_MAX && v->x <= FLT_MAX &&
+        v->y >= -FLT_MAX && v->y <= FLT_MAX &&
+        v->width > 0 && v->width <= FLT_MAX && v->height > 0 && v->height <= FLT_MAX &&
+        v->minDepth >= 0 && v->minDepth <= 1 && v->maxDepth >= 0 && v->maxDepth <= 1;
+}
+static int valid_scissor(const VkRect2D *s)
+{
+    return s && s->offset.x >= 0 && s->offset.y >= 0 &&
+        s->extent.width && s->extent.height &&
+        (uint64_t)(uint32_t)s->offset.x + s->extent.width <= UINT32_MAX &&
+        (uint64_t)(uint32_t)s->offset.y + s->extent.height <= UINT32_MAX;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetViewport(VkCommandBuffer c, uint32_t first,
+    uint32_t count, const VkViewport *viewports)
+{
+    if (!c || c->state != PS5VK_RECORDING || first || count != 1 ||
+        !valid_viewport(viewports)) { invalid(c); return; }
+    c->viewport = viewports[0]; c->viewport_valid = VK_TRUE;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetScissor(VkCommandBuffer c, uint32_t first,
+    uint32_t count, const VkRect2D *scissors)
+{
+    if (!c || c->state != PS5VK_RECORDING || first || count != 1 ||
+        !valid_scissor(scissors)) { invalid(c); return; }
+    c->scissor = scissors[0]; c->scissor_valid = VK_TRUE;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(VkCommandBuffer c, VkPipelineBindPoint point, VkPipelineLayout layout,
     uint32_t first, uint32_t count, const VkDescriptorSet *sets, uint32_t dynamic_count, const uint32_t *offsets)
@@ -309,6 +344,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if (!c || c->state != PS5VK_RECORDING || !c->render_pass || !c->graphics_pipeline ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkPipeline p = c->graphics_pipeline;
+    const VkViewport *viewport = p->dynamic_viewport ?
+        (c->viewport_valid ? &c->viewport : NULL) : &p->viewport;
+    const VkRect2D *scissor = p->dynamic_scissor ?
+        (c->scissor_valid ? &c->scissor : NULL) : &p->scissor;
+    if (!viewport || !scissor) { invalid(c); return; }
     if(p->push_constant_size && (!c->push_constants_valid ||
         memcmp(p->push_constant_stages,c->push_constant_stages,
                sizeof(c->push_constant_stages)))) {invalid(c);return;}
@@ -322,6 +362,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     }
     c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_DRAW,
         .pipeline = p, .render_pass = pass, .framebuffer = c->framebuffer,
+        .viewport = *viewport, .scissor = *scissor,
         .vertex_count = vertices, .instance_count = instances, .first_vertex = first_vertex,
         .first_instance = first_instance};
     memcpy(c->operations[c->operation_count-1].vertices,c->vertices,sizeof(c->vertices));
@@ -352,18 +393,31 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer c,uint32_t count,uin
 static int texture_layout_supported(VkImageLayout layout)
 {
     return layout==VK_IMAGE_LAYOUT_GENERAL || layout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
+        layout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+        layout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
         layout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
 {
     const VkPipelineStageFlags allowed=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT |
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT |
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    const VkAccessFlags supported=VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_HOST_BIT |
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    const VkAccessFlags supported=VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
+        VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+        VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
         VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
     if(!stages || (stages & ~allowed) || (access & ~supported))return 0;
     if(!access)return 1;
-    if((access & VK_ACCESS_TRANSFER_WRITE_BIT) &&
+    if((access & (VK_ACCESS_HOST_READ_BIT|VK_ACCESS_HOST_WRITE_BIT)) &&
+        !(stages & VK_PIPELINE_STAGE_HOST_BIT))return 0;
+    if((access & VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    if((access & (VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)) &&
+        !(stages & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    if((access & (VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & VK_ACCESS_SHADER_READ_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
@@ -391,51 +445,60 @@ static int compute_scope(VkPipelineStageFlags stages, VkAccessFlags access)
     /* Generic MEMORY_READ/WRITE do not require a more specific stage. */
     return 1;
 }
+static int command_scope(VkPipelineStageFlags stages,VkAccessFlags access)
+{ return texture_scope(stages,access) || compute_scope(stages,access); }
+static int image_barrier_profile(const VkImageMemoryBarrier *b)
+{
+    VkImage image=b->image;
+    const VkImageUsageFlags usage=image->info.usage;
+    const int upload=(usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))==
+        (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+        !(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    const int readback=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT))==
+        (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+        !(usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|
+                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+    if(upload)return
+        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+         b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT);
+    if(readback)return
+        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+         b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+         !b->srcAccessMask &&
+         b->dstAccessMask==(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|
+                           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)) ||
+        (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+         b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+         b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT);
+    return 0;
+}
 VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineStageFlags src, VkPipelineStageFlags dst,
     VkDependencyFlags flags, uint32_t memory_count, const VkMemoryBarrier *memory, uint32_t buffer_count,
     const VkBufferMemoryBarrier *buffers, uint32_t image_count, const VkImageMemoryBarrier *images)
 {
-    if(image_count) {
-        if(!c || c->state!=PS5VK_RECORDING || c->render_pass || flags || memory_count || buffer_count ||
-            !images || !c->pool->device->graphics_enabled ||
-            image_count>PS5VK_MAX_OPERATIONS-c->operation_count) {invalid(c);return;}
-        /* Validate the whole batch before appending. Recording does not execute
-         * transitions: old-layout reconciliation belongs to queue execution. */
-        for(uint32_t j=0;j<image_count;++j) {
-            const VkImageMemoryBarrier *b=&images[j];
-            VkImage image=b->image;void *address;VkDeviceSize bytes;
-            if(b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
-                !texture_scope(src,b->srcAccessMask) || !texture_scope(dst,b->dstAccessMask) ||
-                (!texture_layout_supported(b->oldLayout) && b->oldLayout!=VK_IMAGE_LAYOUT_UNDEFINED) ||
-                !texture_layout_supported(b->newLayout) ||
-                b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
-                (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
-                !image || image->device!=c->pool->device || image->info.format!=VK_FORMAT_R8G8B8A8_UNORM ||
-                image->info.mipLevels!=1 || image->info.arrayLayers!=1 ||
-                (image->info.usage & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))!=
-                    (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
-                (image->info.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) ||
-                b->subresourceRange.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
-                b->subresourceRange.baseMipLevel || b->subresourceRange.baseArrayLayer ||
-                (b->subresourceRange.levelCount!=1 && b->subresourceRange.levelCount!=VK_REMAINING_MIP_LEVELS) ||
-                (b->subresourceRange.layerCount!=1 && b->subresourceRange.layerCount!=VK_REMAINING_ARRAY_LAYERS) ||
-                ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS) {invalid(c);return;}
-        }
-        for(uint32_t j=0;j<image_count;++j)
-            c->operations[c->operation_count++]=(struct ps5vk_operation){.type=PS5VK_IMAGE_BARRIER,
-                .image_barrier=images[j],.src_stage=src,.dst_stage=dst,
-                .src_access=images[j].srcAccessMask,.dst_access=images[j].dstAccessMask};
-        return;
-    }
     if (!c || c->state != PS5VK_RECORDING || c->render_pass || !src || !dst || flags ||
-        image_count || (memory_count && !memory) || (buffer_count && !buffers) ||
-        c->operation_count == PS5VK_MAX_OPERATIONS ||
-        buffer_count > PS5VK_MAX_OPERATIONS - c->operation_count - 1) { invalid(c); return; }
+        (memory_count && !memory) || (buffer_count && !buffers) || (image_count && !images))
+        { invalid(c); return; }
+    /* Preserve the existing compute encoding: calls without image barriers
+     * carry one aggregate dependency in addition to per-buffer lifetime
+     * records. Mixed CTS calls need the aggregate only for memory barriers. */
+    const unsigned aggregate=(memory_count || !image_count)?1u:0u;
+    if(buffer_count>PS5VK_MAX_OPERATIONS || image_count>PS5VK_MAX_OPERATIONS-buffer_count ||
+       aggregate>PS5VK_MAX_OPERATIONS-buffer_count-image_count ||
+       c->operation_count>PS5VK_MAX_OPERATIONS-buffer_count-image_count-aggregate)
+        { invalid(c); return; }
     VkAccessFlags src_access = 0, dst_access = 0;
     for (uint32_t j = 0; j < memory_count; ++j) {
         if (memory[j].sType != VK_STRUCTURE_TYPE_MEMORY_BARRIER || memory[j].pNext ||
-            !compute_scope(src,memory[j].srcAccessMask) ||
-            !compute_scope(dst,memory[j].dstAccessMask)) { invalid(c); return; }
+            !command_scope(src,memory[j].srcAccessMask) ||
+            !command_scope(dst,memory[j].dstAccessMask)) { invalid(c); return; }
         src_access |= memory[j].srcAccessMask; dst_access |= memory[j].dstAccessMask;
     }
     /* A full cache dependency is stronger than a buffer-range dependency.
@@ -445,16 +508,40 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         const VkBufferMemoryBarrier *b = &buffers[j];
         void *address; VkDeviceSize bytes;
         if (b->sType != VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER || b->pNext ||
-            !compute_scope(src,b->srcAccessMask) || !compute_scope(dst,b->dstAccessMask) ||
+            !command_scope(src,b->srcAccessMask) || !command_scope(dst,b->dstAccessMask) ||
             b->srcQueueFamilyIndex != b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED && b->srcQueueFamilyIndex != 0) ||
             ps5vk_buffer_span(c->pool->device, b->buffer, b->offset, b->size,
                 &address, &bytes) != VK_SUCCESS) { invalid(c); return; }
     }
+    for(uint32_t j=0;j<image_count;++j) {
+        const VkImageMemoryBarrier *b=&images[j];
+        VkImage image=b->image;void *address;VkDeviceSize bytes;
+        if(!c->pool->device->graphics_enabled ||
+            b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
+            !command_scope(src,b->srcAccessMask) || !command_scope(dst,b->dstAccessMask) ||
+            (!texture_layout_supported(b->oldLayout) && b->oldLayout!=VK_IMAGE_LAYOUT_UNDEFINED) ||
+            !texture_layout_supported(b->newLayout) ||
+            b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
+            (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
+            !image || image->device!=c->pool->device || image->info.format!=VK_FORMAT_R8G8B8A8_UNORM ||
+            image->info.mipLevels!=1 || image->info.arrayLayers!=1 || !image_barrier_profile(b) ||
+            b->subresourceRange.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
+            b->subresourceRange.baseMipLevel || b->subresourceRange.baseArrayLayer ||
+            (b->subresourceRange.levelCount!=1 && b->subresourceRange.levelCount!=VK_REMAINING_MIP_LEVELS) ||
+            (b->subresourceRange.layerCount!=1 && b->subresourceRange.layerCount!=VK_REMAINING_ARRAY_LAYERS) ||
+            ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS) {invalid(c);return;}
+    }
+    /* Append only after every member validates: a rejected mixed dependency
+     * never leaves a prefix of recorded operations behind. */
     for (uint32_t j = 0; j < buffer_count; ++j)
         c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_BARRIER,
             .src_stage = src, .dst_stage = dst, .src_access = buffers[j].srcAccessMask,
             .dst_access = buffers[j].dstAccessMask, .buffer_barrier = buffers[j]};
-    c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_BARRIER,
+    if(aggregate)c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_BARRIER,
         .src_stage = src, .dst_stage = dst, .src_access = src_access, .dst_access = dst_access};
+    for(uint32_t j=0;j<image_count;++j)
+        c->operations[c->operation_count++]=(struct ps5vk_operation){.type=PS5VK_IMAGE_BARRIER,
+            .image_barrier=images[j],.src_stage=src,.dst_stage=dst,
+            .src_access=images[j].srcAccessMask,.dst_access=images[j].dstAccessMask};
 }

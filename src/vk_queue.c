@@ -105,11 +105,15 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             continue;
         }
         if (active) return 0;
-        if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE) {
+        if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE ||
+           op->type==PS5VK_COPY_IMAGE_BUFFER) {
             VkImage image=op->type==PS5VK_IMAGE_BARRIER?op->image_barrier.image:op->copy_image;
             void *address;VkDeviceSize bytes;
             if(!d->graphics_enabled || !d->graphics_submit_enabled || !image || image->display_busy ||
                 ps5vk_image_span(d,image,&address,&bytes)!=VK_SUCCESS)return 0;
+            if(op->type==PS5VK_COPY_IMAGE_BUFFER &&
+               ps5vk_buffer_span(d,op->copy_destination,0,VK_WHOLE_SIZE,&address,&bytes)!=VK_SUCCESS)
+                return 0;
             continue;
         }
         if (op->type == PS5VK_BARRIER) {

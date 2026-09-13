@@ -52,6 +52,14 @@
       "rationale": "Compiles GLSL vertex shader at runtime via glslang and validates vkCreateShaderModule / vkDestroyShaderModule lifecycle."
     },
     {
+      "path": "dEQP-VK.api.smoke.triangle",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiSmokeTests.cpp:325",
+      "category": "fixed-function-graphics",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream draw and pixel oracle creates an R8G8B8A8 color attachment, render pass, framebuffer and static viewport/scissor pipeline, clears and draws one triangle, copies the image to a host buffer, and compares it against the CTS reference rasterizer."
+    },
+    {
       "path": "dEQP-VK.synchronization.basic.fence.one",
       "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp:46",
       "category": "synchronization",

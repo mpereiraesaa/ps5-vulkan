@@ -1,4 +1,5 @@
 #include "vk_render_pass.h"
+#include "attachment_ops.h"
 #include <assert.h>
 #include <stdio.h>
 int main(void)
@@ -30,6 +31,18 @@ int main(void)
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
     color.attachment=0; attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_LOAD;
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_ERROR_UNKNOWN);
+    struct ps5vk_attachment_plan plan;
+    attachments[0].initialLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    assert(ps5vk_attachment_plan(&attachments[0],VK_FORMAT_B8G8R8A8_UNORM,
+        color.layout,VK_FALSE,&plan)==VK_SUCCESS && plan.load && plan.store && !plan.clear);
+    attachments[0].format=VK_FORMAT_R8G8B8A8_UNORM;
+    assert(ps5vk_attachment_plan(&attachments[0],VK_FORMAT_R8G8B8A8_UNORM,
+        color.layout,VK_FALSE,&plan)==VK_SUCCESS && plan.load && plan.store && !plan.clear);
+    attachments[0].format=VK_FORMAT_B8G8R8A8_UNORM;
+    attachments[0].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+    assert(ps5vk_attachment_plan(&attachments[0],VK_FORMAT_B8G8R8A8_UNORM,
+        color.layout,VK_FALSE,&plan)==VK_ERROR_FEATURE_NOT_PRESENT);
     attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR; attachments[1].samples=VK_SAMPLE_COUNT_4_BIT;
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     attachments[1].samples=VK_SAMPLE_COUNT_1_BIT;

@@ -6,6 +6,8 @@
 #include "texture_copy.h"
 #include "texture_dma.h"
 #include "color_clear.h"
+#include "color_detile.h"
+#include "attachment_ops.h"
 #include "ps5_platform.h"
 #include "ps5_agc_driver.h"
 #include "submit_suspend_ps5.h"
@@ -22,6 +24,8 @@ struct graphics_job {
     unsigned count, words, attempted, complete;
     uint64_t serial, start;
     VkImage color;
+    VkImage readback_image;
+    VkBuffer readback_buffer;
     struct ps5vk_layout_state layouts;
 };
 static uint64_t now(void *unused)
@@ -45,32 +49,41 @@ static void release(VkDevice d,void *opaque)
 }
 static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 {
+    const char *phase="shape";
     *out=NULL;
-    /* One color pass, optional full-frame D32 clear and texture-upload prelude.
-     * Full-target color CLEAR and DONT_CARE are supported; LOAD preservation
-     * and partial clears are not. Reject unsupported semantics rather than
-     * silently skipping their records. */
+    /* One color pass, optional D32 and texture-upload prelude.  LOAD preserves
+     * an attachment only when its tracked initial layout matches.  CLEAR is
+     * bounded to the full render area until a rectangular clear path exists. */
     if(s->count!=1 || !s->serial)return VK_ERROR_FEATURE_NOT_PRESENT;
     VkCommandBuffer cb=s->buffers[0];
     unsigned first=0;
-    while(first<cb->operation_count && (cb->operations[first].type==PS5VK_IMAGE_BARRIER ||
-        cb->operations[first].type==PS5VK_COPY_BUFFER_IMAGE))++first;
-    if(cb->operation_count<first+3 || cb->operations[first].type!=PS5VK_BEGIN_RENDER_PASS ||
-        cb->operations[cb->operation_count-1].type!=PS5VK_END_RENDER_PASS)return VK_ERROR_FEATURE_NOT_PRESENT;
+    while(first<cb->operation_count && cb->operations[first].type!=PS5VK_BEGIN_RENDER_PASS) {
+        unsigned type=cb->operations[first].type;
+        if(type!=PS5VK_BARRIER && type!=PS5VK_IMAGE_BARRIER && type!=PS5VK_COPY_BUFFER_IMAGE)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        ++first;
+    }
+    unsigned last=first+1;
+    while(last<cb->operation_count && cb->operations[last].type!=PS5VK_END_RENDER_PASS)++last;
+    if(first>=cb->operation_count || last>=cb->operation_count || last<first+2)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_operation *begin=&cb->operations[first]; VkRenderPass pass=begin->render_pass;
     int depth=pass->depth.attachment!=VK_ATTACHMENT_UNUSED;
+    VkFormat color_format=begin->framebuffer->attachments[0]->image->info.format;
     if(pass->attachment_count!=(depth?2u:1u) || pass->dependency_count ||
         (depth && pass->depth.attachment!=1) || pass->color.attachment!=0 ||
-        pass->attachments[0].initialLayout!=VK_IMAGE_LAYOUT_UNDEFINED ||
-        (pass->attachments[0].loadOp!=VK_ATTACHMENT_LOAD_OP_DONT_CARE &&
-         pass->attachments[0].loadOp!=VK_ATTACHMENT_LOAD_OP_CLEAR) ||
-        pass->attachments[0].finalLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)return VK_ERROR_FEATURE_NOT_PRESENT;
-    int color_clear=pass->attachments[0].loadOp==VK_ATTACHMENT_LOAD_OP_CLEAR;
+        (color_format!=VK_FORMAT_B8G8R8A8_UNORM && color_format!=VK_FORMAT_R8G8B8A8_UNORM))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    struct ps5vk_attachment_plan color_plan={0},depth_plan={0};
+    if(ps5vk_attachment_plan(&pass->attachments[0],color_format,
+        pass->color.layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t clear_word=0;
-    if(color_clear) {
+    if(color_plan.clear) {
         VkImage image=begin->framebuffer->attachments[0]->image;
-        if(image->info.format!=VK_FORMAT_B8G8R8A8_UNORM || begin->clear_count<1 ||
-           !ps5vk_color_clear_bgra8(begin->clears[0].color.float32,&clear_word) ||
+        int clear_ok=color_format==VK_FORMAT_B8G8R8A8_UNORM ?
+            ps5vk_color_clear_bgra8(begin->clears[0].color.float32,&clear_word) :
+            ps5vk_color_clear_rgba8(begin->clears[0].color.float32,&clear_word);
+        if(image->info.format!=color_format || begin->clear_count<1 || !clear_ok ||
            begin->render_area.offset.x || begin->render_area.offset.y ||
            begin->render_area.extent.width!=image->info.extent.width ||
            begin->render_area.extent.height!=image->info.extent.height)
@@ -79,25 +92,30 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(depth) {
         const VkAttachmentDescription *a=&pass->attachments[1];
         VkImage image=begin->framebuffer->attachments[1]->image;
-        float clear=begin->clears[1].depthStencil.depth;
-        if(a->format!=VK_FORMAT_D32_SFLOAT || a->initialLayout!=VK_IMAGE_LAYOUT_UNDEFINED ||
-            a->loadOp!=VK_ATTACHMENT_LOAD_OP_CLEAR || a->finalLayout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-            begin->clear_count<2 || !(clear>=0 && clear<=1) ||
-            begin->render_area.offset.x || begin->render_area.offset.y ||
-            begin->render_area.extent.width!=begin->framebuffer->width ||
-            begin->render_area.extent.height!=begin->framebuffer->height ||
+        if(ps5vk_attachment_plan(a,VK_FORMAT_D32_SFLOAT,pass->depth.layout,
+            VK_TRUE,&depth_plan)!=VK_SUCCESS ||
             image->info.extent.width!=begin->framebuffer->width ||
             image->info.extent.height!=begin->framebuffer->height)return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(depth_plan.clear) {
+            float clear=begin->clears[1].depthStencil.depth;
+            if(begin->clear_count<2 || !(clear>=0 && clear<=1) ||
+                begin->render_area.offset.x || begin->render_area.offset.y ||
+                begin->render_area.extent.width!=begin->framebuffer->width ||
+                begin->render_area.extent.height!=begin->framebuffer->height)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
     }
-    for(unsigned i=first+1;i+1<cb->operation_count;++i)
+    for(unsigned i=first+1;i<last;++i)
         if(cb->operations[i].type!=PS5VK_DRAW && cb->operations[i].type!=PS5VK_DRAW_INDEXED)return VK_ERROR_FEATURE_NOT_PRESENT;
     struct graphics_job *j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial; j->color=begin->framebuffer->attachments[0]->image;
+    phase="command-arena";
     VkResult rc=ps5vk_command_arena_create(&j->commands);
     if(rc==VK_ERROR_DEVICE_LOST)retain("command-create");
     if(rc!=VK_SUCCESS)goto fail;
     /* Record the scoped render-pass transitions transactionally. Resource
      * state becomes committed only after the exact GPU completion label. */
+    phase="attachment-layout";
     rc=ps5vk_layout_transition(&j->layouts,j->color,
         pass->attachments[0].initialLayout,pass->attachments[0].finalLayout);
     if(rc!=VK_SUCCESS)goto fail;
@@ -110,7 +128,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(ps5_color_select_runtime_defaults(defaults,sceAgcGetRegisterDefaults())) {rc=VK_ERROR_INITIALIZATION_FAILED;goto fail;}
     uint32_t *start=j->commands.address,*cursor=start,*end=start+PS5VK_COMMAND_ARENA_WORDS;
     cursor+=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-    if(color_clear) {
+    if(color_plan.clear) {
         void *address;VkDeviceSize bytes;
         rc=ps5vk_image_span(d,j->color,&address,&bytes);
         if(rc!=VK_SUCCESS)goto fail;
@@ -122,7 +140,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         ps5log_printf(PS5LOG_MARK,"PS5VK_COLOR_CLEAR_PREPARED serial=%llu bgra=%08x bytes=%llu",
             (unsigned long long)j->serial,clear_word,(unsigned long long)bytes);
     }
-    if(depth) {
+    if(depth && depth_plan.clear) {
         void *address;VkDeviceSize bytes;
         rc=ps5vk_image_span(d,begin->framebuffer->attachments[1]->image,&address,&bytes);
         if(rc!=VK_SUCCESS)goto fail;
@@ -133,16 +151,27 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
         if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
     }
+    phase="prelude";
     for(unsigned i=0;i<first;++i) {
         const struct ps5vk_operation *op=&cb->operations[i];
-        if(op->type==PS5VK_IMAGE_BARRIER) {
+        if(op->type==PS5VK_BARRIER) {
+            if(op->buffer_barrier.buffer || op->src_stage!=VK_PIPELINE_STAGE_HOST_BIT ||
+               op->dst_stage!=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT ||
+               op->src_access!=VK_ACCESS_HOST_WRITE_BIT ||
+               op->dst_access!=VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT) {
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+            }
+        } else if(op->type==PS5VK_IMAGE_BARRIER) {
             const VkImageMemoryBarrier *b=&op->image_barrier;
-            /* Scoped dependency profile: discard -> upload -> fragment read.
-             * GENERAL/reverse transitions need additional hazard handling. */
+            /* Scoped upload profiles plus the original CTS triangle's discard
+             * -> color-attachment transition. */
             if(!((b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED && b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
                 !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
                 (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-                b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT && b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT))) {
+                b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT && b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT) ||
+                (b->image==j->color && b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+                b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && !b->srcAccessMask &&
+                b->dstAccessMask==(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)))) {
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
             }
             rc=ps5vk_layout_transition(&j->layouts,op->image_barrier.image,
@@ -150,7 +179,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(rc!=VK_SUCCESS)goto fail;
             size_t n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
             if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
-        } else {
+        } else if(op->type==PS5VK_COPY_BUFFER_IMAGE) {
             if(op->copy_layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
             void *source,*destination;VkDeviceSize source_bytes,destination_bytes;
             struct ps5vk_texture_copy copy;
@@ -166,9 +195,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             cache(source,(size_t)source_bytes);
             size_t n=ps5vk_texture_dma(cursor,(size_t)(end-cursor),(uintptr_t)source,(uintptr_t)destination,&copy);
             if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
-        }
+        } else {rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
     }
-    for(unsigned i=first+1;i+1<cb->operation_count;++i) {
+    phase="draw";
+    for(unsigned i=first+1;i<last;++i) {
         const struct ps5vk_operation *op=&cb->operations[i];
         /* Require the uploaded image's predicted shader-readable layout. */
         if(op->pipeline->set_count) {
@@ -224,6 +254,40 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 (uint32_t)(uintptr_t)p->global_table);
         if(rc!=VK_SUCCESS)goto fail;
     }
+    phase="postlude";
+    if(last+1<cb->operation_count) {
+        if(cb->operation_count!=last+5 ||
+           cb->operations[last+1].type!=PS5VK_IMAGE_BARRIER ||
+           cb->operations[last+2].type!=PS5VK_COPY_IMAGE_BUFFER ||
+           cb->operations[last+3].type!=PS5VK_BARRIER ||
+           cb->operations[last+4].type!=PS5VK_BARRIER) {
+            rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+        }
+        const struct ps5vk_operation *transition=&cb->operations[last+1];
+        const struct ps5vk_operation *copy=&cb->operations[last+2];
+        const struct ps5vk_operation *host=&cb->operations[last+3];
+        const struct ps5vk_operation *aggregate=&cb->operations[last+4];
+        const VkImageMemoryBarrier *b=&transition->image_barrier;
+        if(b->image!=j->color || b->oldLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
+           b->newLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+           b->srcAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
+           b->dstAccessMask!=VK_ACCESS_TRANSFER_READ_BIT ||
+           (transition->src_stage!=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+            transition->src_stage!=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) ||
+           transition->dst_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
+           copy->copy_image!=j->color || copy->copy_layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+           !copy->copy_destination || host->buffer_barrier.buffer!=copy->copy_destination ||
+           host->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT || host->dst_stage!=VK_PIPELINE_STAGE_HOST_BIT ||
+           host->src_access!=VK_ACCESS_TRANSFER_WRITE_BIT || host->dst_access!=VK_ACCESS_HOST_READ_BIT ||
+           aggregate->buffer_barrier.buffer || aggregate->src_access || aggregate->dst_access ||
+           aggregate->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
+           aggregate->dst_stage!=VK_PIPELINE_STAGE_HOST_BIT) {
+            rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+        }
+        rc=ps5vk_layout_transition(&j->layouts,j->color,b->oldLayout,b->newLayout);
+        if(rc!=VK_SUCCESS)goto fail;
+        j->readback_image=j->color;j->readback_buffer=copy->copy_destination;
+    }
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
     _Static_assert(8+PS5VK_GRAPHICS_PROBE_REGISTERS*4<=64,"probe must not overlap command words or leave reserved tail");
     uint32_t *probe=(uint32_t *)(ps5vk_command_arena_label(&j->commands)+1);
@@ -231,12 +295,15 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     size_t probe_words=ps5vk_graphics_register_probe(cursor,(size_t)(end-cursor),(uintptr_t)probe);
     if(!probe_words){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=probe_words;
 #endif
+    phase="release-packet";
     size_t n=ps5vk_graphics_release(cursor,(size_t)(end-cursor),(uintptr_t)ps5vk_command_arena_label(&j->commands),j->serial);
     if(!n){rc=VK_ERROR_UNKNOWN;goto fail;} cursor+=n; j->words=(unsigned)(cursor-start);
     *out=j;
     ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_PREPARED serial=%llu draws=%u words=%u",(unsigned long long)j->serial,j->count,j->words);
     return VK_SUCCESS;
 fail:
+    ps5log_printf(PS5LOG_ERR,"PS5VK_GRAPHICS_PREPARE_FAILED serial=%llu phase=%s rc=%d",
+        (unsigned long long)j->serial,phase,rc);
     release(d,j);return rc;
 }
 static VkResult launch(VkDevice d,void *opaque)
@@ -271,6 +338,23 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
         void *address;VkDeviceSize bytes;
         if(ps5vk_image_span(d,j->color,&address,&bytes)!=VK_SUCCESS)return VK_ERROR_DEVICE_LOST;
         cache(address,(size_t)bytes);
+        if(j->readback_buffer) {
+            void *destination;VkDeviceSize destination_bytes;
+            VkImage image=j->readback_image;
+            if(!image || ps5vk_buffer_span(d,j->readback_buffer,0,VK_WHOLE_SIZE,
+                    &destination,&destination_bytes)!=VK_SUCCESS ||
+               ps5vk_rgba8_64k_rx_detile(destination,(size_t)destination_bytes,address,(size_t)bytes,
+                    image->info.extent.width,image->info.extent.height))
+                return VK_ERROR_DEVICE_LOST;
+            /* This bounded implementation performs the transfer-copy result
+             * publication on the CPU only after exact GPU completion. The
+             * allocation remains non-coherent; the application still calls
+             * vkInvalidateMappedMemoryRanges before host reads. */
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_GRAPHICS_READBACK serial=%llu width=%u height=%u bytes=%llu mode=cpu-detile-after-gpu",
+                (unsigned long long)j->serial,image->info.extent.width,image->info.extent.height,
+                (unsigned long long)destination_bytes);
+        }
         if(ps5vk_layout_commit(&j->layouts)!=VK_SUCCESS)return VK_ERROR_DEVICE_LOST;
         j->complete=1;*completed=j->serial;
         ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_COMPLETED serial=%llu image_bytes=%llu",(unsigned long long)j->serial,(unsigned long long)bytes);

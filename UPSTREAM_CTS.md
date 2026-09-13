@@ -48,7 +48,7 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 41 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 42 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline and push-constant cases plus nine storage-width cases). Only these
   acceptance leaves are registered by
@@ -60,12 +60,11 @@ were the same thing:
 * **Executed**: what a given report actually contains, which the strict verifier
   checks case by case.
 
-The current selection contains no draw or pixel-comparison case. The graphics
-entry is `dEQP-VK.api.smoke.create_shader`, which compiles a vertex shader at
-runtime and validates the `vkCreateShaderModule` / `vkDestroyShaderModule`
-lifecycle; it does not rasterise, so **no image oracle is executed**. Claiming a
-reference-renderer comparison would require adding such a case to the manifest
-and executing it, and neither has been done.
+The selection includes `dEQP-VK.api.smoke.triangle`. Its unchanged upstream
+body creates a graphics pipeline, records a real triangle draw into an RGBA8
+attachment, copies the complete image to a host-visible buffer and compares
+every pixel with the upstream reference renderer. This is a bounded pixel
+oracle for that case, not general rasterization or format conformance.
 
 ## Pinned inputs
 
@@ -156,6 +155,24 @@ identified as such wherever it is reported. Host tests do not establish GPU
 correctness.
 
 ## Limitations
+
+### Fixed-function expansion (2026-09-13)
+
+Two independent launches of the identical final payload completed the current
+42-case selection with **42 Pass, 0 Fail, 0 NotSupported**. Both reports passed
+strict identity and QPA reconstruction, included the original upstream triangle
+pixel comparison, reached `allocations_bytes=0`, and the title stopped after
+system Close Game.
+
+- Executable SHA-256: `2b8ff02a5a0906c4496f8795d9c7eabd8a0af20199b05d9d2261ad1393eb6d2d`
+- Selection SHA-256: `b2b74ed43427d2fb0feeab07ab3ad4527643dbc125d41aadc8cee92f7200a515`
+- QPA SHA-256: `757efc735d3d77b0b6019535dd8760016ca1f935c02bfa5c34f7579fa486eba5`
+  and `88d5d6aff8d7e7fcfd2f4f2ef28acff70914f6d5f0477957ef65c28deb8c85ad`
+
+The native implementation used here is intentionally narrow: one subpass, one
+single-sample RGBA8 off-screen attachment, a full-image readback, and the exact
+barriers used by the case. It does not broaden the project's Vulkan version or
+claim conformance.
 
 ### Native acceptance (2026-09-12)
 

@@ -60,6 +60,33 @@ MESSAGES = [
     "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1",
 ]
 
+FIXED_FUNCTION_MESSAGES = [
+    "PS5VK_CONSUMER_GRAPHICS_START mode=finite",
+    "PS5VK_CONSUMER_GRAPHICS_PIPELINE_COLD_CREATED",
+    "PS5VK_CONSUMER_GRAPHICS_PIPELINE_WARM_CREATED",
+    "PS5VK_CONSUMER_GRAPHICS_PIPELINE_DESTROYED refcount_verified=1",
+    "PS5VK_CONSUMER_DYNAMIC_PIPELINE_CREATED viewport=1 scissor=1",
+    "PS5VK_CONSUMER_PRESENT_SURFACE_CREATED buffers=2",
+]
+for frame in range(18):
+    for phase in range(2):
+        serial = 4 + frame * 2 + phase
+        FIXED_FUNCTION_MESSAGES.extend([
+            f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
+            f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
+            f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0",
+            f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=8388608",
+        ])
+        if phase == 0:
+            FIXED_FUNCTION_MESSAGES.append(
+                f"PS5VK_CONSUMER_DEPTH_REJECT frame={frame} nonblack=0 valid=1")
+        else:
+            FIXED_FUNCTION_MESSAGES.append(
+                f"PS5VK_CONSUMER_READBACK frame={frame} slot={frame & 1} "
+                "changed=471744 bad_alpha=0 bad_sum=0 valid=1")
+FIXED_FUNCTION_MESSAGES.append("PS5VK_CONSUMER_PRESENT_SURFACE_DESTROYED")
+MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
+
 
 class ConsumerResourceAbiTests(unittest.TestCase):
     def fixture(self, edit=None):
@@ -92,6 +119,13 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                 "sync_producer_spirv_sha256": "d" * 64,
                 "sync_consumer_spirv_sha256": "e" * 64,
                 "shared_atomic_multiwave_spirv_sha256": "f" * 64,
+            },
+            "fixed_function": {
+                "api": "Vulkan 1.0", "width": 1920, "height": 1080,
+                "frames": 18, "color_format": "VK_FORMAT_B8G8R8A8_UNORM",
+                "depth_format": "VK_FORMAT_D32_SFLOAT", "samples": 1,
+                "load_preservation": True, "dynamic_viewport": True,
+                "dynamic_scissor": True,
             },
         }
         return log, receipt, artifact

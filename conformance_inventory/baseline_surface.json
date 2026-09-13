@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "7f2d6fa15264082e85948d068a8354d47b29944d",
-  "inspected_commit": "7f2d6fa15264082e85948d068a8354d47b29944d",
+  "baseline_commit": "1edd0c94f2850a1dc66a4da5d219cc7fc8615bd6",
+  "inspected_commit": "1edd0c94f2850a1dc66a4da5d219cc7fc8615bd6",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 91,
-    "dispatched": 91,
-    "public_header": 90,
+    "entry_points": 94,
+    "dispatched": 94,
+    "public_header": 93,
     "implementation_only": 1
   },
   "entry_points": [
@@ -121,6 +121,15 @@
       "observed": null
     },
     {
+      "name": "vkCmdCopyImageToBuffer",
+      "files": [
+        "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCmdDispatch",
       "files": [
         "src/vk_command.c"
@@ -167,6 +176,24 @@
     },
     {
       "name": "vkCmdPushConstants",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetScissor",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetViewport",
       "files": [
         "src/vk_command.c"
       ],

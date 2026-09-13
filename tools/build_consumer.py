@@ -227,6 +227,18 @@ def main():
             "shared_atomic_multiwave_spirv_sha256": hashlib.sha256(
                 (ROOT / "build/test-shaders/shared_atomic_multiwave.spv").read_bytes()).hexdigest(),
         },
+        "fixed_function": {
+            "api": "Vulkan 1.0",
+            "width": 1920,
+            "height": 1080,
+            "frames": 18,
+            "color_format": "VK_FORMAT_B8G8R8A8_UNORM",
+            "depth_format": "VK_FORMAT_D32_SFLOAT",
+            "samples": 1,
+            "load_preservation": True,
+            "dynamic_viewport": True,
+            "dynamic_scissor": True,
+        },
     }
     artifact_path = DIST_DIR.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")

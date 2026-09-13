@@ -411,6 +411,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(
     VkPipelineBindPoint pipelineBindPoint,
     VkPipeline pipeline);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdSetViewport(
+    VkCommandBuffer commandBuffer,
+    uint32_t firstViewport,
+    uint32_t viewportCount,
+    const VkViewport* pViewports);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetScissor(
+    VkCommandBuffer commandBuffer,
+    uint32_t firstScissor,
+    uint32_t scissorCount,
+    const VkRect2D* pScissors);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(
     VkCommandBuffer commandBuffer,
     VkPipelineBindPoint pipelineBindPoint,
@@ -476,6 +488,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
     VkBuffer srcBuffer,
     VkImage dstImage,
     VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkBufferImageCopy* pRegions);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkBuffer dstBuffer,
     uint32_t regionCount,
     const VkBufferImageCopy* pRegions);
 

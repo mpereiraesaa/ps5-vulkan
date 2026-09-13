@@ -21,11 +21,13 @@ static VkResult flush(void *c, void *b, VkDeviceSize o, VkDeviceSize n)
 VkResult ps5vk_native_target(VkDevice d, VkImageView v, const ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT],
     struct ps5vk_target_registers *out)
 { (void)defaults; assert(v->device == d); ++targets; out->count = 16; return target_rc; }
-VkResult ps5vk_native_draw_state(VkPipeline p, const struct ps5vk_target_registers *color,
+VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport,
+    const VkRect2D *scissor, const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
     uint32_t width, uint32_t height, struct ps5vk_draw_state *out)
 {
-    assert(p && color->count == 16 && !depth && area->extent.width == 4 && width == 4 && height == 4);
+    assert(p && viewport->width == 4 && scissor->extent.width == 4 &&
+        color->count == 16 && !depth && area->extent.width == 4 && width == 4 && height == 4);
     *out = (struct ps5vk_draw_state){.cx_count = 87, .modifier = 5}; return VK_SUCCESS;
 }
 int main(void)
@@ -38,7 +40,8 @@ int main(void)
         .attachments = {&v}, .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkRenderPass_T pass = {.device = &d};
     struct VkPipeline_T p = {.device = &d};
-    struct ps5vk_operation op = {.type = PS5VK_DRAW, .pipeline = &p, .framebuffer = &fb, .render_pass = &pass};
+    struct ps5vk_operation op = {.type = PS5VK_DRAW, .pipeline = &p, .framebuffer = &fb,
+        .render_pass = &pass, .viewport = {0,0,4,4,0,1}, .scissor = {{0,0},{4,4}}};
     VkRect2D area = {{0,0},{4,4}};
     struct ps5vk_prepared_draw prepared = {0};
     target_rc = VK_ERROR_FORMAT_NOT_SUPPORTED;

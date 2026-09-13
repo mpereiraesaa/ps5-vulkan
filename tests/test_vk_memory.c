@@ -176,6 +176,11 @@ static void test_failures_and_allocators(void)
     VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = 256, .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT};
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_FEATURE_NOT_PRESENT && !b);
+    bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_SUCCESS && b);
+    assert(ps5vk_buffer_usage(&d, b, VK_BUFFER_USAGE_TRANSFER_DST_BIT));
+    assert(!ps5vk_buffer_usage(&d, b, VK_BUFFER_USAGE_TRANSFER_SRC_BIT));
+    vkDestroyBuffer(&d, b, NULL);
     bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; bi.size = UINT64_MAX;
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_OUT_OF_DEVICE_MEMORY);
 }

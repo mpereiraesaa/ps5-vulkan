@@ -406,6 +406,33 @@ class TestUpstreamRunner(unittest.TestCase):
         "dEQP-VK.memory.mapping.suballocation.sub.4087.offset_129.size_1025.subinvalidate",
     }
 
+    FIXED_FUNCTION_CASES = {
+        "dEQP-VK.api.smoke.triangle",
+    }
+
+    def test_fixed_function_selection_uses_original_pixel_oracle(self):
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        by_path = {case["path"]: case for case in manifest["cases"]}
+        self.assertTrue(self.FIXED_FUNCTION_CASES <= set(by_path))
+        case = by_path["dEQP-VK.api.smoke.triangle"]
+        self.assertEqual("fixed-function-graphics", case["category"])
+        self.assertEqual("Pass", case["expected_status"])
+        self.assertEqual([], case["features_required"])
+
+        source = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                  "vulkan/api/vktApiSmokeTests.cpp")
+        if source.exists():
+            text = source.read_text(encoding="utf-8")
+            self.assertIn("tcu::TestStatus renderTriangleTest", text)
+            self.assertIn("vk.cmdDraw(*cmdBuf, 3u, 1u, 0u, 0u)", text)
+            self.assertIn("copyImageToBuffer(vk, *cmdBuf, *image", text)
+            self.assertIn("intThresholdPositionDeviationCompare", text)
+
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (REPO_ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn("createSmokeTests", package)
+        self.assertIn("vktApiSmokeTests.cpp", builder)
+
     def test_synchronization_selection_keeps_original_upstream_oracles(self):
         manifest = json.loads(MANIFEST_PATH.read_text())
         by_path = {case["path"]: case for case in manifest["cases"]}

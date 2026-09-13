@@ -1,5 +1,6 @@
 #include "vk_command.h"
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -95,7 +96,7 @@ static void stage_access_scopes(void)
     b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,NULL,0,NULL);
-    assert(c->state==PS5VK_INVALID && !c->operation_count);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1);
     vkDestroyCommandPool(&d,p,NULL);
 }
 static void recording_and_invalidation(void)
@@ -259,7 +260,8 @@ static void graphics_recording(void)
         .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T pipeline = {.device = &d, .graphics = VK_TRUE,
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM};
+        .color_format = VK_FORMAT_B8G8R8A8_UNORM,
+        .viewport = {0,0,100,100,0,1}, .scissor = {{0,0},{100,100}}};
     VkClearValue value = {.color = {.float32 = {0.25f, 0, 0, 1}}};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = &pass, .framebuffer = &fb, .renderArea = {.extent = {100, 100}},
@@ -290,6 +292,7 @@ static void graphics_recording(void)
     vkCmdEndRenderPass(c);
     assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->operation_count == 3);
     assert(c->operations[1].first_vertex == 2 && c->operations[1].first_instance == 4);
+    assert(c->operations[1].viewport.width==100 && c->operations[1].scissor.extent.width==100);
     c->state = PS5VK_PENDING;
     assert(!d.invalidate(&d, VK_OBJECT_TYPE_IMAGE, &image));
     assert(!d.invalidate(&d, VK_OBJECT_TYPE_FRAMEBUFFER, &fb));
@@ -303,6 +306,34 @@ static void graphics_recording(void)
     vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
     assert(c->state == PS5VK_INVALID && !c->operation_count);
     ri.clearValueCount = 1;
+    struct VkPipeline_T dynamic_pipeline=pipeline;
+    dynamic_pipeline.dynamic_viewport=dynamic_pipeline.dynamic_scissor=VK_TRUE;
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&dynamic_pipeline);
+    vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdDraw(c,3,1,0,0);
+    assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&dynamic_pipeline);
+    vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+    VkViewport dynamic_viewport={10,20,40,50,0.25f,0.75f};
+    VkRect2D dynamic_scissor={{12,22},{30,32}};
+    vkCmdSetViewport(c,0,1,&dynamic_viewport);
+    vkCmdSetScissor(c,0,1,&dynamic_scissor);
+    vkCmdDraw(c,3,1,0,0);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==2);
+    assert(c->operations[1].viewport.x==10 && c->operations[1].viewport.width==40 &&
+        c->operations[1].scissor.offset.x==12 && c->operations[1].scissor.extent.height==32);
+    dynamic_viewport.x=99;dynamic_scissor.offset.x=99;
+    assert(c->operations[1].viewport.x==10 && c->operations[1].scissor.offset.x==12);
+    vkCmdEndRenderPass(c);assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    dynamic_viewport=(VkViewport){0,0,NAN,1,0,1};
+    vkCmdSetViewport(c,0,1,&dynamic_viewport);assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetScissor(c,1,1,&dynamic_scissor);assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetViewport(c,0,1,NULL);assert(c->state==PS5VK_INVALID);
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
     vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
@@ -474,6 +505,32 @@ static void image_barriers(void)
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         0,0,NULL,0,NULL,2,batch);
     assert(c->state==PS5VK_INVALID && c->operation_count==PS5VK_MAX_OPERATIONS-1);
+
+    /* The unchanged upstream smoke triangle records one memory dependency and
+     * one image transition in the same call. Accept the exact bounded profile
+     * transactionally; a bad member must append neither operation. */
+    image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    VkMemoryBarrier host_vertex={.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_HOST_WRITE_BIT,
+        .dstAccessMask=VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT};
+    b=(VkImageMemoryBarrier){.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask=0,
+        .dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex=0,.dstQueueFamilyIndex=0,.image=&image,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_HOST_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0,1,&host_vertex,0,NULL,1,&b);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==2 &&
+        c->operations[0].type==PS5VK_BARRIER &&
+        c->operations[1].type==PS5VK_IMAGE_BARRIER);
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.subresourceRange.levelCount=2;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_HOST_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0,1,&host_vertex,0,NULL,1,&b);
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
     vkDestroyCommandPool(&d,p,NULL);
     d.images=NULL;vkFreeMemory(&d,memory,NULL);
 }

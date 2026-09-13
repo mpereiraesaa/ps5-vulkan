@@ -24,14 +24,16 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
         if (!(image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         if (ps5_depth_build_d32_no_htile(result.registers, base, width, height)) return VK_ERROR_UNKNOWN;
         result.count = PS5_DEPTH_REGISTER_COUNT;
-    } else if (view->format == VK_FORMAT_B8G8R8A8_UNORM) {
+    } else if (view->format == VK_FORMAT_B8G8R8A8_UNORM ||
+               view->format == VK_FORMAT_R8G8B8A8_UNORM) {
         if (!(image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         if (ps5_color_build_target(result.registers, color_defaults, base, width, height)) return VK_ERROR_UNKNOWN;
         /* Gears' generic builder selects COMP_SWAP=STD (RGBA byte order).
          * Vulkan BGRA requires ZYXW / SWAP_ALT=1 in CB_COLOR0_INFO[12:11].
          * Public Mesa ac_translate_colorswap + gfx10.json; do not change the
          * read-only shared builder or compensate in application shaders. */
-        result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x1800)) | UINT32_C(0x0800);
+        if (view->format == VK_FORMAT_B8G8R8A8_UNORM)
+            result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x1800)) | UINT32_C(0x0800);
         result.count = PS5_COLOR_REGISTER_COUNT;
     } else {
         /* Only the explicitly configured BGRA attachment profile is enabled. */

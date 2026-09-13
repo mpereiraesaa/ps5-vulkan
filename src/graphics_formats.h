@@ -15,9 +15,8 @@ static inline uint32_t ps5vk_vertex_format_size(VkFormat format)
     }
 }
 
-/* Native executable image roles. Do not accept a tiled RGBA attachment merely
- * because its allocation footprint can be calculated: no such target encoder
- * exists in this profile. Transfer source images are not implemented. */
+/* Native executable image roles. RGBA8 is a bounded off-screen color target
+ * with transfer-source readback; BGRA8 remains the VideoOut target. */
 static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags usage)
 {
     switch(format) {
@@ -26,8 +25,9 @@ static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags 
     case VK_FORMAT_D32_SFLOAT:
         return usage == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     case VK_FORMAT_R8G8B8A8_UNORM:
-        return usage &&
-            !(usage & ~(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+        return (usage &&
+            !(usage & ~(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))) ||
+            usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     default: return 0;
     }
 }
@@ -50,7 +50,7 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
 }
 
 /* Bounded execution profile, not all states accepted by host object creation.
- * In particular: no RGBA render targets, BGRA sampling or depth sampling. */
+ * In particular: no BGRA sampling or depth sampling. */
 static inline void ps5vk_graphics_format_properties(VkFormat format,
                                                     VkFormatProperties *out)
 {
@@ -65,7 +65,8 @@ static inline void ps5vk_graphics_format_properties(VkFormat format,
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         break;
     case VK_FORMAT_R8G8B8A8_UNORM:
-        out->optimalTilingFeatures = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+        out->optimalTilingFeatures = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+            VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         break;
     case VK_FORMAT_D32_SFLOAT:
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;

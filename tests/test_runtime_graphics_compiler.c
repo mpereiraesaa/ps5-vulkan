@@ -119,6 +119,30 @@ int main(void)
         p->arguments.vertex_push_slot!=UINT32_MAX &&
         p->arguments.fragment_push_slot!=UINT32_MAX);
     ps5vk_runtime_graphics_free(NULL,out);
+
+    VkVertexInputBindingDescription binding={.binding=0,.stride=16,
+        .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription attribute={.location=0,.binding=0,
+        .format=VK_FORMAT_R32G32B32A32_SFLOAT,.offset=0};
+    struct ps5vk_graphics_key vertex_input={
+        .vertex=read_module("build/runtime-graphics/vertex_input.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/vertex_input.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .vertex_binding_count=1,.vertex_attribute_count=1,
+        .vertex_bindings=&binding,.vertex_attributes=&attribute};
+    assert(ps5vk_spirv_graphics_interface(&vertex_input));
+    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    attribute.format=VK_FORMAT_R32G32B32_SFLOAT;
+    assert(!ps5vk_spirv_graphics_interface(&vertex_input));
+    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    attribute.format=VK_FORMAT_R32G32B32A32_SFLOAT;
+    binding.inputRate=VK_VERTEX_INPUT_RATE_INSTANCE;
+    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)vertex_input.vertex.words);free((void *)vertex_input.fragment.words);
+
     cache=ps5vk_compilation_cache_create(4,1024*1024);
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&parameters,&cold)==VK_SUCCESS);
     vertex_scale=1.25f;

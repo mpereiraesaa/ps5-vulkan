@@ -55,6 +55,7 @@ struct VkPipeline_T {
     void (*graphics_release)(VkDevice, void *);
     VkViewport viewport;
     VkRect2D scissor;
+    VkBool32 dynamic_viewport, dynamic_scissor;
     VkCullModeFlags cull_mode;
     VkFrontFace front_face;
     VkBool32 depth_test, depth_write;
