@@ -2,6 +2,7 @@
 #include "vk_pipeline.h"
 #include "compilation_cache.h"
 #include "ps5vk_compiler.h"
+#include "physical_device_profile.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,13 +46,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
                                  .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT};
-    p->properties.apiVersion = VK_API_VERSION_1_0;
-    strcpy(p->properties.deviceName, "host mock, not a GPU");
-    p->properties.limits.nonCoherentAtomSize = 64;
-    p->properties.limits.minStorageBufferOffsetAlignment = 256;
-    p->memory_properties.memoryTypeCount = p->memory_properties.memoryHeapCount = 1;
-    p->memory_properties.memoryTypes[0].propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    p->memory_properties.memoryHeaps[0].size = 65536;
+    const struct ps5vk_physical_profile_info profile = {
+        .name = "host mock, not a GPU",
+        .heap_size = 65536,
+        .allocation_granularity = 1,
+        .buffer_image_granularity = 1,
+    };
+    ps5vk_physical_profile_init(&p->properties, &p->memory_properties, &profile);
     return VK_SUCCESS;
 }
 

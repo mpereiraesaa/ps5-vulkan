@@ -89,6 +89,42 @@ The four nearby specialization cases that demand SPIR-V 1.3 and every
 `LocalSizeId` workgroup-size case remain outside the selection; no advertised
 API or SPIR-V version was widened to bypass their upstream support checks.
 
+### Physical-device reporting foundation
+
+The current selection subsequently grew from 29 to **31 acceptance cases** by
+adding the original upstream `dEQP-VK.info.physical_devices` and
+`dEQP-VK.info.device_queue_family_properties` cases. Two independent launches
+of the identical final payload passed all 31 cases with zero failures or
+unsupported results, complete QPA reconstruction, exit code zero and clean
+system Close Game:
+
+- Executable SHA-256:
+  `3cf502e0855f2d556b56c3284e440eaf85f3fb0ce1a378aadc696fe6792fba80`
+- Selection SHA-256:
+  `cb59facb407b8c9af78e540edb8dde3f6f6961b43afe9f15260c9f54c9f64d9c`
+- QPA A SHA-256:
+  `27fc8bbe1cba945158523a17af3a2b7951b279b71ba1f9b64cabb8f4f42d5ba3`
+- QPA B SHA-256:
+  `a6a12c61eff27ddb203f3ea56283be0873f6f034b0daa7322e57d3a93b5c833e`
+
+The standalone public-SDK consumer independently queried enumeration,
+properties, limits, memory, queue families, format properties and image-format
+support twice. Both runs used executable SHA-256
+`89849de59f76e97be574323c617e88d01f086482010c0cdcea790dfefaea5a54`,
+produced the same canonical physical-report FNV-1a value `be169e1b`, verified
+the 256 MiB graphics heap and non-coherent host-visible memory contract, and
+closed cleanly. Their `ps5log/1` receipt hashes were
+`06cadb6dab4cd63bf9fba5d21d4f40a175fe3f889b44720d58af0dbba9be6d8e`
+and
+`44321d1d8c11363a4760d61d800d14364666a57496d606d3d353e2d2053fcff6`.
+
+This evidence validates the implemented reporting slice, not every mandatory
+Vulkan 1.0 limit or format. The original upstream `device_properties` and
+`device_memory_properties` cases remain diagnostics: the first exposes known
+minimum-limit gaps and the second requires a host-coherent type that this
+backend truthfully does not report. See
+[PHYSICAL_DEVICE_REPORTING.md](PHYSICAL_DEVICE_REPORTING.md).
+
 ## Independent native SDK consumer validation
 
 The independent native application in `examples/native_consumer/` consumes strictly

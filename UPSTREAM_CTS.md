@@ -48,7 +48,7 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 29 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 31 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline and push-constant cases plus nine storage-width cases). Only these
   acceptance leaves are registered by
@@ -325,6 +325,35 @@ also sets `coherentMemory=true`; the pinned allocator therefore requires a
 `HOST_COHERENT` memory type. ps5vk truthfully exposes one `HOST_VISIBLE`,
 non-coherent type, so the upstream result is `NotSupported` before shader
 execution. The driver does not invent coherence to force a pass.
+
+### Physical-device enumeration and queue reporting (2026-09-13)
+
+The focused acceptance set now also registers the original upstream
+`dEQP-VK.info.physical_devices` and
+`dEQP-VK.info.device_queue_family_properties` factories from
+`vktApiFeatureInfo.cpp`. These cases exercise the upstream enumeration and
+queue-family reporting oracles; they are not local substitutes with upstream
+names.
+
+Two launches of the identical final payload completed the resulting 31-case
+selection with **31 Pass, 0 Fail, 0 NotSupported**, exit code zero, complete
+QPA reconstruction and clean Close Game:
+
+- Executable SHA-256:
+  `3cf502e0855f2d556b56c3284e440eaf85f3fb0ce1a378aadc696fe6792fba80`
+- Selection SHA-256:
+  `cb59facb407b8c9af78e540edb8dde3f6f6961b43afe9f15260c9f54c9f64d9c`
+- QPA A SHA-256:
+  `27fc8bbe1cba945158523a17af3a2b7951b279b71ba1f9b64cabb8f4f42d5ba3`
+- QPA B SHA-256:
+  `a6a12c61eff27ddb203f3ea56283be0873f6f034b0daa7322e57d3a93b5c833e`
+
+The manifest retains `dEQP-VK.info.device_properties` and
+`dEQP-VK.info.device_memory_properties` as diagnostics rather than acceptance.
+The former is expected to expose the documented Vulkan 1.0 graphics minimum
+gaps; the latter requires host-coherent memory, which the current native
+profile does not claim. They are traceable to original upstream sources but
+were not executed as acceptance cases in these two runs.
 
 ### Heap and driver fixes
 

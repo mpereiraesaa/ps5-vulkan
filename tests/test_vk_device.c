@@ -1,7 +1,9 @@
 #include "vk_internal.h"
 #include "graphics_formats.h"
+#include "physical_device_profile.h"
 #include <assert.h>
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,14 +34,20 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
     if (query_result) return query_result;
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
                                .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT};
-    p->properties.apiVersion = VK_API_VERSION_1_0;
-    strcpy(p->properties.deviceName, "host mock, not a GPU");
-    p->properties.limits.nonCoherentAtomSize = 64;
-    p->properties.limits.minStorageBufferOffsetAlignment = 256;
-    p->memory_properties.memoryTypeCount = p->memory_properties.memoryHeapCount = 1;
-    p->memory_properties.memoryTypes[0].propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    p->memory_properties.memoryHeaps[0].size = 65536;
+    const struct ps5vk_physical_profile_info profile = {
+        .name = "host mock, not a GPU",
+        .heap_size = 65536,
+        .allocation_granularity = 1,
+        .buffer_image_granularity = 1,
+    };
+    ps5vk_physical_profile_init(&p->properties, &p->memory_properties, &profile);
     if (malformed == 1) p->properties.limits.nonCoherentAtomSize = 3;
+    if (malformed == 3) p->memory_properties.memoryHeaps[0].flags = 0;
+    if (malformed == 4) p->properties.limits.maxMemoryAllocationCount = 0;
+    if (malformed == 5) p->format_properties = ps5vk_graphics_format_properties;
+    if (malformed == 6) p->properties.limits.maxStorageBufferRange = 65537;
+    if (malformed == 7)
+        memset(p->properties.deviceName, 'x', sizeof(p->properties.deviceName));
     return VK_SUCCESS;
 }
 static VkInstance instance(void)
@@ -131,10 +139,20 @@ static void lifecycle(void)
     assert(memory.memoryHeapCount == 1 && memory.memoryHeaps[0].size == 65536);
     VkPhysicalDeviceFeatures features, zero = {0}; memset(&features, 0xff, sizeof(features));
     vkGetPhysicalDeviceFeatures(p, &features); assert(!memcmp(&features, &zero, sizeof(zero)));
-    VkQueueFamilyProperties queues[2] = {{0}, {0}}; uint32_t count = 2;
+    VkQueueFamilyProperties queues[2];
+    memset(queues, 0xa5, sizeof(queues));
+    uint32_t count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(p, &count, NULL);
+    assert(count == 1);
+    count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(p, &count, queues);
+    for (size_t byte = 0; byte < sizeof(queues); ++byte)
+        assert(((unsigned char *)queues)[byte] == 0xa5);
+    count = 2;
     vkGetPhysicalDeviceQueueFamilyProperties(p, &count, queues);
     assert(count == 1 && queues[0].queueCount == 1 && queues[0].queueFlags == VK_QUEUE_COMPUTE_BIT);
-    assert(queues[1].queueCount == 0);
+    for (size_t byte = sizeof(queues[0]); byte < sizeof(queues); ++byte)
+        assert(((unsigned char *)queues)[byte] == 0xa5);
     VkFormatProperties fp;
     memset(&fp, 0xff, sizeof(fp));
     vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_B8G8R8A8_UNORM, &fp);
@@ -290,6 +308,9 @@ static void negative(void)
     assert(vkCreateInstance(&ii, NULL, &i) == query_result && !i); query_result = VK_SUCCESS;
     malformed = 1;
     assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_INITIALIZATION_FAILED && !i); malformed = 0;
+    for (malformed = 3; malformed <= 7; ++malformed)
+        assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_INITIALIZATION_FAILED && !i);
+    malformed = 0;
     ii.enabledLayerCount = 1;
     assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_LAYER_NOT_PRESENT); ii.enabledLayerCount = 0;
     ii.enabledExtensionCount = 1;
@@ -384,22 +405,58 @@ static void narrow_storage_features(void)
     assert(properties2.properties.apiVersion == VK_API_VERSION_1_0);
     assert(query_unknown.sType == VK_STRUCTURE_TYPE_MAX_ENUM && !query_unknown.pNext);
 
+    VkPhysicalDeviceProperties2 wrong_properties2;
+    memset(&wrong_properties2, 0xa5, sizeof(wrong_properties2));
+    wrong_properties2.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+    VkPhysicalDeviceProperties2 saved_wrong_properties2 = wrong_properties2;
+    vkGetPhysicalDeviceProperties2KHR(p, &wrong_properties2);
+    assert(!memcmp(&wrong_properties2, &saved_wrong_properties2,
+                   sizeof(wrong_properties2)));
+
     VkPhysicalDeviceMemoryProperties2 memory2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
         .pNext = &query_unknown};
     vkGetPhysicalDeviceMemoryProperties2KHR(p, &memory2);
     assert(memory2.memoryProperties.memoryTypeCount == 1);
+    assert(memory2.memoryProperties.memoryHeaps[0].flags ==
+           VK_MEMORY_HEAP_DEVICE_LOCAL_BIT);
+    assert(memory2.memoryProperties.memoryTypes[0].propertyFlags ==
+           (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+    VkPhysicalDeviceMemoryProperties2 wrong_memory2;
+    memset(&wrong_memory2, 0xa5, sizeof(wrong_memory2));
+    wrong_memory2.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+    VkPhysicalDeviceMemoryProperties2 saved_wrong_memory2 = wrong_memory2;
+    vkGetPhysicalDeviceMemoryProperties2KHR(p, &wrong_memory2);
+    assert(!memcmp(&wrong_memory2, &saved_wrong_memory2, sizeof(wrong_memory2)));
 
     VkFormatProperties2 format2 = {.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
                                    .pNext = &query_unknown};
     vkGetPhysicalDeviceFormatProperties2KHR(p, VK_FORMAT_R32_UINT, &format2);
     assert(format2.formatProperties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
+    VkFormatProperties2 wrong_format2;
+    memset(&wrong_format2, 0xa5, sizeof(wrong_format2));
+    wrong_format2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    VkFormatProperties2 saved_wrong_format2 = wrong_format2;
+    vkGetPhysicalDeviceFormatProperties2KHR(p, VK_FORMAT_R32_UINT, &wrong_format2);
+    assert(!memcmp(&wrong_format2, &saved_wrong_format2, sizeof(wrong_format2)));
 
-    VkQueueFamilyProperties2 queue2 = {.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2,
-                                       .pNext = &query_unknown};
-    count = 1;
-    vkGetPhysicalDeviceQueueFamilyProperties2KHR(p, &count, &queue2);
-    assert(count == 1 && queue2.queueFamilyProperties.queueCount == 1);
+    VkQueueFamilyProperties2 queue2[2];
+    memset(queue2, 0xa5, sizeof(queue2));
+    queue2[0].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+    queue2[0].pNext = &query_unknown;
+    count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties2KHR(p, &count, queue2);
+    assert(count == 0);
+    for (size_t byte = offsetof(VkQueueFamilyProperties2, pNext) + sizeof(void *);
+         byte < sizeof(queue2); ++byte)
+        assert(((unsigned char *)queue2)[byte] == 0xa5);
+    count = 2;
+    vkGetPhysicalDeviceQueueFamilyProperties2KHR(p, &count, queue2);
+    assert(count == 1 && queue2[0].queueFamilyProperties.queueCount == 1);
+    assert(queue2[0].pNext == &query_unknown);
+    for (size_t byte = sizeof(queue2[0]); byte < sizeof(queue2); ++byte)
+        assert(((unsigned char *)queue2)[byte] == 0xa5);
 
     VkPhysicalDeviceImageFormatInfo2 image_info2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
@@ -410,6 +467,22 @@ static void narrow_storage_features(void)
                                        .pNext = &query_unknown};
     assert(vkGetPhysicalDeviceImageFormatProperties2KHR(p, &image_info2, &image2) == VK_SUCCESS);
     assert(image2.imageFormatProperties.maxExtent.width);
+    VkImageFormatProperties2 wrong_image2;
+    memset(&wrong_image2, 0xa5, sizeof(wrong_image2));
+    wrong_image2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    VkImageFormatProperties2 saved_wrong_image2 = wrong_image2;
+    assert(vkGetPhysicalDeviceImageFormatProperties2KHR(
+        p, &image_info2, &wrong_image2) == VK_ERROR_UNKNOWN);
+    assert(!memcmp(&wrong_image2, &saved_wrong_image2, sizeof(wrong_image2)));
+    VkPhysicalDeviceImageFormatInfo2 unsupported_info2 = image_info2;
+    unsupported_info2.format = VK_FORMAT_R8G8B8A8_SRGB;
+    memset(&image2.imageFormatProperties, 0xa5,
+           sizeof(image2.imageFormatProperties));
+    assert(vkGetPhysicalDeviceImageFormatProperties2KHR(
+        p, &unsupported_info2, &image2) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+    VkImageFormatProperties zero_image_properties = {0};
+    assert(!memcmp(&image2.imageFormatProperties, &zero_image_properties,
+                   sizeof(zero_image_properties)));
 
     VkPhysicalDeviceSparseImageFormatInfo2 sparse_info2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2,

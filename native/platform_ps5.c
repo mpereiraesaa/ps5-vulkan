@@ -9,6 +9,7 @@ static struct ps5vk_program_library ps5vk_compiled_library={0};
 #include "ps5_agc.h"
 #include "ps5log.h"
 #include "graphics_formats.h"
+#include "physical_device_profile.h"
 #include "vk_queue.h"
 #include <string.h>
 #include <unistd.h>
@@ -159,46 +160,26 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
 #endif
     platform->max_allocation = HEAP_BYTES;
     VkPhysicalDeviceProperties *p = &platform->properties;
-    p->apiVersion = VK_API_VERSION_1_0; p->driverVersion = 1;
-    p->deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
-    strcpy(p->deviceName, "ps5vk gfx1013 experimental compute profile");
+    const VkDeviceSize allocation_granularity =
+#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW
+        131072;
+#else
+        65536;
+#endif
+    const struct ps5vk_physical_profile_info profile = {
+        .name = "ps5vk gfx1013 experimental compute profile",
+        .vendor_id = 0x1002,
+        .heap_size = HEAP_BYTES,
+        .allocation_granularity = allocation_granularity,
+        .buffer_image_granularity = allocation_granularity,
+        .host_coherent = VK_FALSE,
+    };
+    ps5vk_physical_profile_init(p, &platform->memory_properties, &profile);
 #if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW
     strcpy(p->deviceName, "ps5vk gfx1013 experimental graphics profile");
 #endif
-    p->limits.maxStorageBufferRange = (uint32_t)HEAP_BYTES;
-    /* Resource-ABI bounds exercised by the native public consumer.  Keep the
-     * ranges deliberately below the backing heap ceiling; they are advertised
-     * implementation limits, not estimates of physical GPU memory. */
-    p->limits.maxUniformBufferRange = 64 * 1024;
-    p->limits.maxTexelBufferElements = 64 * 1024;
-    p->limits.maxPushConstantsSize = PS5VK_MAX_PUSH_CONSTANT_BYTES;
-    /* Every native allocation charges at least 64 KiB against this heap.
-     * Report that implementation ceiling, not zero or a guessed OS limit. */
-    p->limits.maxMemoryAllocationCount = (uint32_t)(HEAP_BYTES / 65536);
-    p->limits.minStorageBufferOffsetAlignment = 256;
-    p->limits.minUniformBufferOffsetAlignment = 256;
-    p->limits.nonCoherentAtomSize = 64;
-    p->limits.minMemoryMapAlignment = 64;
-    p->limits.maxBoundDescriptorSets = PS5VK_MAX_SETS;
-    p->limits.maxPerStageDescriptorStorageBuffers = PS5VK_MAX_DESCRIPTORS;
-    p->limits.maxDescriptorSetStorageBuffers = PS5VK_MAX_DESCRIPTORS;
-    p->limits.maxPerStageDescriptorUniformBuffers = PS5VK_MAX_DESCRIPTORS;
-    p->limits.maxDescriptorSetUniformBuffers = PS5VK_MAX_DESCRIPTORS;
-    /* Uniform texel buffers count against Vulkan's sampled-image limits. */
-    p->limits.maxPerStageDescriptorSampledImages = 1;
-    p->limits.maxDescriptorSetSampledImages = 1;
-    p->limits.maxPerStageResources = PS5VK_MAX_DESCRIPTORS;
-    p->limits.maxComputeWorkGroupInvocations = 1024;
 #if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW
     ps5vk_graphics_limits(&p->limits);
 #endif
-    for (unsigned i = 0; i < 3; ++i) {
-        p->limits.maxComputeWorkGroupCount[i] = 65535;
-        p->limits.maxComputeWorkGroupSize[i] = 1024;
-    }
-    platform->memory_properties.memoryHeapCount = 1;
-    platform->memory_properties.memoryTypeCount = 1;
-    platform->memory_properties.memoryHeaps[0].size = HEAP_BYTES;
-    platform->memory_properties.memoryTypes[0].propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     return VK_SUCCESS;
 }

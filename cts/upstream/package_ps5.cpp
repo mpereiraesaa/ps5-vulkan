@@ -1,5 +1,6 @@
 #include "package_ps5.hpp"
 #include "vktApiSmokeTests.hpp"
+#include "vktApiFeatureInfo.hpp"
 #include "vktApiBufferViewAccessTests.hpp"
 #include "vktApiPipelineTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
@@ -27,6 +28,17 @@ FocusedVkTestPackage::~FocusedVkTestPackage(void)
 
 void FocusedVkTestPackage::init(void)
 {
+    // info group: original upstream enumeration and physical-device query
+    // bodies. cases.txt remains the execution filter; registering these
+    // factories does not replace their result oracles.
+    {
+        de::MovePtr<tcu::TestCaseGroup> infoGroup(
+            new tcu::TestCaseGroup(m_testCtx, "info"));
+        vkt::api::createFeatureInfoInstanceTests(infoGroup.get());
+        vkt::api::createFeatureInfoDeviceTests(infoGroup.get());
+        addChild(infoGroup.release());
+    }
+
     // api.smoke group
     {
         de::MovePtr<tcu::TestCaseGroup> apiGroup(new tcu::TestCaseGroup(m_testCtx, "api"));

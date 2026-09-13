@@ -126,6 +126,13 @@ alignment and footprint checks. The implementation enforces a 256 MiB budget;
 this is a software safety limit, not a measurement of total console memory.
 Flush, invalidate, completion and retirement operations are explicit.
 
+The graphics profile reports one device-local, host-visible, non-coherent
+memory type and one device-local heap. It does not advertise `HOST_COHERENT`.
+Physical-device limits are derived from allocator, descriptor and command
+encoder bounds and validated fail-closed during instance creation. The exact
+values, query semantics, format matrix and known Vulkan 1.0 deficits are in
+[PHYSICAL_DEVICE_REPORTING.md](PHYSICAL_DEVICE_REPORTING.md).
+
 Presentation uses a project-native VideoOut adapter with two registered BGRA8
 1920x1080 images, matching flip tokens and completion fences. This is not Vulkan
 WSI: `VkSurfaceKHR`, `VkSwapchainKHR` and `PRESENT_SRC_KHR` are not implemented.
