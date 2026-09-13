@@ -201,6 +201,33 @@ The public driver interface exposes standard Vulkan 1.0 bookkeeping entry points
 - `vkGetRenderAreaGranularity`: Returns `(1, 1)` pixel render area granularity for valid render passes (`offset = 0`, full pixel granularity).
 - `vkResetDescriptorPool`: Resets all descriptor sets allocated from a descriptor pool back to the pool, preserving pool allocation state without requiring pool destruction.
 
+## Queries and sparse image queries
+
+Query pools exist as a device-parented object for the one query type this
+profile can honestly create:
+
+- `vkCreateQueryPool` accepts `VK_QUERY_TYPE_OCCLUSION` (mandatory core and
+  ungated) with a bounded `queryCount` (at most 4096). `VK_QUERY_TYPE_TIMESTAMP`
+  and `VK_QUERY_TYPE_PIPELINE_STATISTICS` are refused with
+  `VK_ERROR_FEATURE_NOT_PRESENT` because the corresponding feature bits are
+  reported false, and non-zero `flags` or `pipelineStatistics` on an occlusion
+  pool are rejected.
+- `vkDestroyQueryPool` follows the standard parentage rules, and the device
+  cannot be destroyed while a query pool child remains.
+- `vkGetQueryPoolResults` validates range, flags (`64_BIT` and `WAIT_BIT` only),
+  stride and buffer size, then reports `VK_NOT_READY` and writes nothing.
+  Device-side query writes are not implemented in this profile - the commands
+  that would make a query available belong to the command-recording file - so
+  the call never fabricates a result. A query pool is therefore an honest API
+  surface, not yet a measurement surface.
+
+Sparse binding is not advertised and images cannot be created with sparse flags,
+so the two mandatory sparse queries report an empty list rather than inventing
+requirements: `vkGetImageSparseMemoryRequirements` sets the count to 0 (and
+leaves it at 0 for a foreign or destroyed image), and
+`vkGetPhysicalDeviceSparseImageFormatProperties` reports zero properties for
+every format/type/tiling/usage combination.
+
 ## Compatibility boundary
 
 Object creation can describe some state that the native executor later rejects.

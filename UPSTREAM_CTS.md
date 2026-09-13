@@ -156,6 +156,19 @@ correctness.
 
 ## Limitations
 
+### Query-pool object surface (2026-09-13)
+
+`vkCreateQueryPool`, `vkDestroyQueryPool`, `vkGetQueryPoolResults`,
+`vkGetImageSparseMemoryRequirements` and
+`vkGetPhysicalDeviceSparseImageFormatProperties` are implemented and
+host-tested, but they add **no upstream case** to this selection: every pinned
+`dEQP-VK.query_pool.*` body executes a draw with occlusion query state (the
+device-side query commands are a separate slice), and every sparse case requires
+the `sparseBinding` feature this implementation reports false. Their evidence is
+therefore host-only: `tests/test_query_pool.c` covers lifecycle, the validation
+matrix, the empty sparse reports and the "no fabricated results" rule
+(`VK_NOT_READY` with an untouched destination). No CTS case is claimed for them.
+
 ### Pipeline cache (2026-09-13)
 
 One additional original upstream case joins the selection:
