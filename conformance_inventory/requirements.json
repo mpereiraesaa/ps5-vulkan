@@ -3640,16 +3640,16 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
-          "vkCreateImageView"
+          "vkCreateImageView",
+          "vkCmdCopyImage"
         ],
         "absent_entry_points": [
-          "vkCmdCopyImage",
           "vkCmdBlitImage"
         ],
         "refs": [
           "src/vk_image_view.c"
         ],
-        "note": "Baseline surface: 1 of 3 named entry points exist; 1 are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8265,11 +8265,15 @@
           "dEQP-VK.api.copy_and_blit.core.buffer_to_buffer.whole",
           "dEQP-VK.api.fill_and_update_buffer.suballocation.fill_buffer_whole",
           "dEQP-VK.api.fill_and_update_buffer.suballocation.update_buffer_whole",
-          "dEQP-VK.image.queue_transfer.2d.16x15x1.a1b5g5r5_unorm_pack16"
+          "dEQP-VK.image.queue_transfer.2d.16x15x1.a1b5g5r5_unorm_pack16",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_pot_same_format_clear",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_pot_same_format_noclear",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_npot_same_format_clear",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_npot_same_format_noclear"
         ],
-        "note": "Six original api.* buffer-transfer cases pass the focused native selection. Image-copy, blit and resolve coverage remains separate and incomplete.",
+        "note": "Six original api.* buffer-transfer cases pass the focused native selection. Four RGBA8_UNORM image_to_image simple-test leaves are now selected for the transfer-only image role, so vkCmdCopyImage and the buffer transfers over that role are directly exercised; the tiled render-target role, blit, resolve and the remaining image format matrices are still not covered.",
         "coverage_quality": "representative-case",
-        "coverage_note": "Direct evidence exists for buffer copy, update and fill only. Image-copy, blit and resolve format matrices are not closed by these cases."
+        "coverage_note": "Direct evidence exists for buffer copy, update, fill and the transfer-only RGBA8 image copy/readback path. Blit, resolve, tiled-role image copy and the image format matrices are not closed by these cases."
       },
       "implementation_state": "missing",
       "baseline": {
@@ -8279,10 +8283,10 @@
           "vkCmdUpdateBuffer",
           "vkCmdFillBuffer",
           "vkCmdCopyBufferToImage",
-          "vkCmdCopyImageToBuffer"
+          "vkCmdCopyImageToBuffer",
+          "vkCmdCopyImage"
         ],
         "absent_entry_points": [
-          "vkCmdCopyImage",
           "vkCmdBlitImage",
           "vkCmdResolveImage"
         ],
@@ -8291,7 +8295,7 @@
           "src/vk_buffer_transfer.c",
           "tests/test_buffer_transfer.c"
         ],
-        "note": "Baseline surface: 5 of 8 named entry points exist; 5 are dispatched; 5 are declared in the public header."
+        "note": "Baseline surface: 6 of 8 named entry points exist; 6 are dispatched; 6 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8457,34 +8461,42 @@
           "vk-default/api.txt"
         ],
         "cases": [
-          "dEQP-VK.api.image_clearing.core.clear_color_attachment.cube_layers.a1b5g5r5_unorm_pack16"
+          "dEQP-VK.api.image_clearing.core.clear_color_attachment.cube_layers.a1b5g5r5_unorm_pack16",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_pot_same_format_clear",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_npot_same_format_clear"
         ],
-        "note": "Image-clearing coverage is a large matrix inside api.*.",
+        "note": "Image-clearing coverage is a large matrix inside api.*. Two RGBA8_UNORM image_to_image simple-test leaves now clear the destination with (1,0,0,1) and compare the bit-exact readback on the advertised transfer-only role; the remaining clearing matrices, depth-stencil clears and attachment clears are not covered.",
         "coverage_quality": "representative-case",
-        "coverage_note": "Mapped to a representative case from vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
+        "coverage_note": "The A1B5G5R5 case is a representative mapping from vk-default/api.txt. The two added cases are direct evidence for vkCmdClearColorImage on the transfer-only RGBA8 role only; vkCmdClearDepthStencilImage and vkCmdClearAttachments fail closed and have no execution evidence."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "host-only-evidence",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCmdClearColorImage",
           "vkCmdClearDepthStencilImage",
           "vkCmdClearAttachments"
         ],
+        "absent_entry_points": [],
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_image_transfer.c",
+            "tests/test_image_copy_clear.c"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "cts-pass",
+          "refs": [
+            "UPSTREAM_CTS.md#image-copy-and-colour-clear-2026-09-13",
+            "VALIDATION.md#vulkan-10-image-copy-and-colour-clear-2026-09-13"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -8717,8 +8729,12 @@
           "vkCmdBindIndexBuffer",
           "vkCmdBindPipeline",
           "vkCmdBindVertexBuffers",
+          "vkCmdClearAttachments",
+          "vkCmdClearColorImage",
+          "vkCmdClearDepthStencilImage",
           "vkCmdCopyBuffer",
           "vkCmdCopyBufferToImage",
+          "vkCmdCopyImage",
           "vkCmdCopyImageToBuffer",
           "vkCmdCopyQueryPoolResults",
           "vkCmdDispatch",
@@ -8758,12 +8774,8 @@
           "vkCmdBindVertexBuffers2",
           "vkCmdBlitImage",
           "vkCmdBlitImage2",
-          "vkCmdClearAttachments",
-          "vkCmdClearColorImage",
-          "vkCmdClearDepthStencilImage",
           "vkCmdCopyBuffer2",
           "vkCmdCopyBufferToImage2",
-          "vkCmdCopyImage",
           "vkCmdCopyImage2",
           "vkCmdCopyImageToBuffer2",
           "vkCmdDispatchBase",
@@ -8807,7 +8819,7 @@
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 38 of 89 named entry points exist; 38 are dispatched; 38 are declared in the public header."
+        "note": "Baseline surface: 42 of 89 named entry points exist; 42 are dispatched; 42 are declared in the public header."
       },
       "evidence": {
         "source": {

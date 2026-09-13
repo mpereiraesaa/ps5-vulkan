@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "2c8ef6144ec1b7095e7aa378d8fc08071156bdbf",
-  "inspected_commit": "2c8ef6144ec1b7095e7aa378d8fc08071156bdbf",
+  "baseline_commit": "a9c311b65b6650a3d51ac7122e43fbb584774c84",
+  "inspected_commit": "952d6742bc619c9cd63d6548c4668f09f766c81b",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 138,
-    "dispatched": 138,
-    "public_header": 138,
+    "entry_points": 142,
+    "dispatched": 142,
+    "public_header": 142,
     "implementation_only": 0
   },
   "entry_points": [
@@ -121,6 +121,33 @@
       "observed": null
     },
     {
+      "name": "vkCmdClearAttachments",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdClearColorImage",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdClearDepthStencilImage",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCmdCopyBuffer",
       "files": [
         "src/vk_transfer.c"
@@ -133,6 +160,15 @@
       "name": "vkCmdCopyBufferToImage",
       "files": [
         "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdCopyImage",
+      "files": [
+        "src/vk_image_transfer.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
