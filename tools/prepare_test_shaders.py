@@ -51,7 +51,8 @@ def storage8_vk10_extension_form(target: Path) -> None:
 def main():
     sources = {name: ROOT / f"experiments/compute/{name}.comp" for name in
                ("minimal", "xor", "shared_grid", "resource_abi", "push_specialization",
-                "storage8", "storage16")}
+                "storage8", "storage16", "sync_producer", "sync_consumer",
+                "shared_atomic_multiwave")}
     targets = {name: OUTPUT / f"{name}.spv" for name in sources}
     recipe_mtime = Path(__file__).stat().st_mtime
     if all(target.is_file() and target.stat().st_mtime >= max(sources[name].stat().st_mtime,

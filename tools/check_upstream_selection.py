@@ -88,6 +88,26 @@ def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
             for capability in capabilities for type_name in type_names}
 
 
+def _mapping_group_segment(text: str, segment: str) -> bool:
+    """Recognize numeric mapping groups generated from fixed upstream tables."""
+    table = "allocationSizes"
+    value = segment
+    if segment.startswith("offset_"):
+        table, value = "offsets", segment.removeprefix("offset_")
+    elif segment.startswith("size_"):
+        table, value = "sizes", segment.removeprefix("size_")
+    if not value.isdigit():
+        return False
+    match = re.search(
+        rf"const\s+VkDeviceSize\s+{table}\[\]\s*=\s*\{{(.*?)\}};",
+        text, re.DOTALL)
+    if not match:
+        return False
+    # These focused cases intentionally use only decimal literals from the
+    # pinned arrays; expressions such as 1 * 1024 * 1024 + 1 are not guessed.
+    return int(value) in {int(token) for token in re.findall(r"\b\d+\b", match.group(1))}
+
+
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     # Diagnostics are frozen upstream cases that are executed but are known not
@@ -129,7 +149,9 @@ def main() -> int:
         )
         searchable = integration_text + "\n" + tree_text
         for segment in segments[1:-1]:
-            if not re.search(r'"' + re.escape(segment) + r'"', searchable):
+            if (not re.search(r'"' + re.escape(segment) + r'"', searchable) and
+                    not (source_path.name == "vktMemoryMappingTests.cpp" and
+                         _mapping_group_segment(text, segment))):
                 failures.append(
                     f"{path}: group segment {segment!r} not produced by the "
                     f"integration or {module_root}")

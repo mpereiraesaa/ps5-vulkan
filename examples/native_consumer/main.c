@@ -5,6 +5,7 @@
 #include "shaders.h"
 #include "resource_shader.h"
 #include "storage_width_shaders.h"
+#include "sync_shaders.h"
 #include "ps5log.h"
 
 #include <stdio.h>
@@ -472,6 +473,303 @@ static void run_storage_width_compute(VkDevice device, VkQueue queue)
     vkDestroyPipelineLayout(device, pipeline_layout, NULL);
     vkDestroyDescriptorSetLayout(device, set_layout, NULL);
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED");
+}
+
+static void run_synchronization_compute(VkDevice device, VkQueue queue)
+{
+    enum { BUFFER_BYTES = 4096, WORDS = BUFFER_BYTES / 4,
+           SYNC_WORDS = 64, LANES = 128, ATOMIC_WORDS = LANES * 3 };
+    const uint32_t *shader_words[3] = {
+        consumer_sync_producer_spirv,
+        consumer_sync_consumer_spirv,
+        consumer_shared_atomic_multiwave_spirv,
+    };
+    const size_t shader_bytes[3] = {
+        sizeof(consumer_sync_producer_spirv),
+        sizeof(consumer_sync_consumer_spirv),
+        sizeof(consumer_shared_atomic_multiwave_spirv),
+    };
+    VkShaderModule modules[3] = {VK_NULL_HANDLE};
+    VkPipeline pipelines[3] = {VK_NULL_HANDLE};
+    VkBuffer buffers[3] = {VK_NULL_HANDLE};
+    VkDeviceMemory memories[3] = {VK_NULL_HANDLE};
+    VkDescriptorSet sets[2] = {VK_NULL_HANDLE};
+
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_SYNC_START");
+
+    VkDescriptorSetLayoutBinding bindings[2] = {{
+        .binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+    }, {
+        .binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+    }};
+    VkDescriptorSetLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 2, .pBindings = bindings,
+    };
+    VkDescriptorSetLayout set_layouts[2] = {VK_NULL_HANDLE};
+    CHECK(vkCreateDescriptorSetLayout(device, &layout_info, NULL,
+                                      &set_layouts[0]));
+    layout_info.bindingCount = 1;
+    CHECK(vkCreateDescriptorSetLayout(device, &layout_info, NULL,
+                                      &set_layouts[1]));
+    VkPipelineLayoutCreateInfo pipeline_layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1, .pSetLayouts = &set_layouts[0],
+    };
+    VkPipelineLayout pipeline_layouts[2] = {VK_NULL_HANDLE};
+    CHECK(vkCreatePipelineLayout(device, &pipeline_layout_info, NULL,
+                                 &pipeline_layouts[0]));
+    pipeline_layout_info.pSetLayouts = &set_layouts[1];
+    CHECK(vkCreatePipelineLayout(device, &pipeline_layout_info, NULL,
+                                 &pipeline_layouts[1]));
+
+    for (uint32_t i = 0; i < 3; ++i) {
+        VkShaderModuleCreateInfo module_info = {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = shader_bytes[i], .pCode = shader_words[i],
+        };
+        CHECK(vkCreateShaderModule(device, &module_info, NULL, &modules[i]));
+        VkComputePipelineCreateInfo pipeline_info = {
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .stage = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                .module = modules[i], .pName = "main",
+            },
+            .layout = pipeline_layouts[i == 2 ? 1 : 0],
+        };
+        CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1,
+                                       &pipeline_info, NULL, &pipelines[i]));
+    }
+
+    VkBufferCreateInfo buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = BUFFER_BYTES, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+    };
+    for (uint32_t i = 0; i < 3; ++i) {
+        CHECK(vkCreateBuffer(device, &buffer_info, NULL, &buffers[i]));
+        VkMemoryRequirements requirements;
+        vkGetBufferMemoryRequirements(device, buffers[i], &requirements);
+        VkMemoryAllocateInfo allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = requirements.size, .memoryTypeIndex = 0,
+        };
+        CHECK(vkAllocateMemory(device, &allocation, NULL, &memories[i]));
+        CHECK(vkBindBufferMemory(device, buffers[i], memories[i], 0));
+
+        uint32_t *mapped = NULL;
+        CHECK(vkMapMemory(device, memories[i], 0, BUFFER_BYTES, 0,
+                          (void **)&mapped));
+        for (uint32_t word = 0; word < WORDS; ++word)
+            mapped[word] = 0xdeadbeefu;
+        if (i == 0)
+            for (uint32_t word = 0; word < SYNC_WORDS; ++word)
+                mapped[word] = word * 17u + 5u;
+        VkMappedMemoryRange flush = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = memories[i], .offset = 0, .size = BUFFER_BYTES,
+        };
+        CHECK(vkFlushMappedMemoryRanges(device, 1, &flush));
+        vkUnmapMemory(device, memories[i]);
+    }
+
+    VkDescriptorPoolSize pool_size = {
+        .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 4,
+    };
+    VkDescriptorPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 2, .poolSizeCount = 1, .pPoolSizes = &pool_size,
+    };
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    CHECK(vkCreateDescriptorPool(device, &pool_info, NULL, &descriptor_pool));
+    VkDescriptorSetAllocateInfo allocate_sets = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = 2, .pSetLayouts = set_layouts,
+    };
+    CHECK(vkAllocateDescriptorSets(device, &allocate_sets, sets));
+
+    VkDescriptorBufferInfo infos[3] = {
+        {.buffer = buffers[0], .offset = 0, .range = SYNC_WORDS * 4},
+        {.buffer = buffers[1], .offset = 0, .range = SYNC_WORDS * 4},
+        {.buffer = buffers[2], .offset = 0, .range = ATOMIC_WORDS * 4},
+    };
+    VkWriteDescriptorSet writes[3] = {{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = sets[0], .dstBinding = 0, .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &infos[0],
+    }, {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = sets[0], .dstBinding = 1, .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &infos[1],
+    }, {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = sets[1], .dstBinding = 0, .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &infos[2],
+    }};
+    vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
+
+    VkCommandPoolCreateInfo command_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex = 0,
+    };
+    VkCommandPool command_pool = VK_NULL_HANDLE;
+    CHECK(vkCreateCommandPool(device, &command_pool_info, NULL, &command_pool));
+    VkCommandBufferAllocateInfo command_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = command_pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    CHECK(vkAllocateCommandBuffers(device, &command_info, &command));
+    VkCommandBufferBeginInfo begin = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    CHECK(vkBeginCommandBuffer(command, &begin));
+
+    VkBufferMemoryBarrier host_barriers[3] = {{
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_HOST_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = buffers[0], .offset = 0, .size = SYNC_WORDS * 4,
+    }, {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_HOST_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = buffers[1], .offset = 0, .size = SYNC_WORDS * 4,
+    }, {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_HOST_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = buffers[2], .offset = 0, .size = ATOMIC_WORDS * 4,
+    }};
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_HOST_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL,
+        3, host_barriers, 0, NULL);
+
+    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelines[0]);
+    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipeline_layouts[0], 0, 1, &sets[0], 0, NULL);
+    vkCmdDispatch(command, 1, 1, 1);
+
+    VkBufferMemoryBarrier producer_barrier = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = buffers[0], .offset = 0, .size = SYNC_WORDS * 4,
+    };
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL,
+        1, &producer_barrier, 0, NULL);
+
+    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelines[1]);
+    vkCmdDispatch(command, 1, 1, 1);
+
+    VkBufferMemoryBarrier host_result = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = buffers[1], .offset = 0, .size = SYNC_WORDS * 4,
+    };
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 1, &host_result, 0, NULL);
+
+    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelines[2]);
+    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipeline_layouts[1], 0, 1, &sets[1], 0, NULL);
+    vkCmdDispatch(command, 1, 1, 1);
+    host_result.buffer = buffers[2];
+    host_result.size = ATOMIC_WORDS * 4;
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 1, &host_result, 0, NULL);
+    CHECK(vkEndCommandBuffer(command));
+
+    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence fence = VK_NULL_HANDLE;
+    CHECK(vkCreateFence(device, &fence_info, NULL, &fence));
+    VkSubmitInfo submit = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &command,
+    };
+    CHECK(vkQueueSubmit(queue, 1, &submit, fence));
+    CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+
+    uint32_t *sync = NULL, *atomic = NULL;
+    CHECK(vkMapMemory(device, memories[1], 0, BUFFER_BYTES, 0, (void **)&sync));
+    CHECK(vkMapMemory(device, memories[2], 0, BUFFER_BYTES, 0, (void **)&atomic));
+    VkMappedMemoryRange invalidates[2] = {{
+        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory = memories[1], .offset = 0, .size = BUFFER_BYTES,
+    }, {
+        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory = memories[2], .offset = 0, .size = BUFFER_BYTES,
+    }};
+    CHECK(vkInvalidateMappedMemoryRanges(device, 2, invalidates));
+
+    uint32_t sync_mismatch = 0, atomic_mismatch = 0, guard_mismatch = 0;
+    uint32_t seen[4] = {0, 0, 0, 0};
+    for (uint32_t i = 0; i < SYNC_WORDS; ++i) {
+        const uint32_t expected = ((i * 17u + 5u) * 3u + 7u) ^ 0xa5a55a5au;
+        if (sync[i] != expected) ++sync_mismatch;
+    }
+    for (uint32_t i = SYNC_WORDS; i < WORDS; ++i)
+        if (sync[i] != 0xdeadbeefu) ++guard_mismatch;
+    for (uint32_t lane = 0; lane < LANES; ++lane) {
+        const uint32_t ticket = atomic[lane];
+        if (ticket >= LANES || (seen[ticket / 32] & (1u << (ticket % 32))))
+            ++atomic_mismatch;
+        else
+            seen[ticket / 32] |= 1u << (ticket % 32);
+        if (atomic[LANES + lane] != atomic[LANES - 1u - lane])
+            ++atomic_mismatch;
+        if (atomic[2u * LANES + lane] != LANES)
+            ++atomic_mismatch;
+    }
+    for (uint32_t i = ATOMIC_WORDS; i < WORDS; ++i)
+        if (atomic[i] != 0xdeadbeefu) ++guard_mismatch;
+
+    const uint32_t sync_hash = fnv1a32((const uint8_t *)sync, SYNC_WORDS * 4);
+    const uint32_t atomic_hash = fnv1a32((const uint8_t *)atomic, ATOMIC_WORDS * 4);
+    vkUnmapMemory(device, memories[1]);
+    vkUnmapMemory(device, memories[2]);
+    REQUIRE(!sync_mismatch && !atomic_mismatch && !guard_mismatch,
+            "synchronization and multi-wave atomic oracle");
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_SYNC_SUCCESS producer_consumer=1 host_compute_host=1 "
+        "local_size=128 waves32=4 lds_atomic=1 permutation=1 counter=128 "
+        "sync_hash=%08x atomic_hash=%08x mismatches=0 guard_mismatches=0",
+        sync_hash, atomic_hash);
+
+    vkDestroyFence(device, fence, NULL);
+    vkFreeCommandBuffers(device, command_pool, 1, &command);
+    vkDestroyCommandPool(device, command_pool, NULL);
+    vkDestroyDescriptorPool(device, descriptor_pool, NULL);
+    for (uint32_t i = 0; i < 3; ++i) {
+        vkDestroyBuffer(device, buffers[i], NULL);
+        vkFreeMemory(device, memories[i], NULL);
+        vkDestroyPipeline(device, pipelines[i], NULL);
+        vkDestroyShaderModule(device, modules[i], NULL);
+    }
+    for (uint32_t i = 0; i < 2; ++i) {
+        vkDestroyPipelineLayout(device, pipeline_layouts[i], NULL);
+        vkDestroyDescriptorSetLayout(device, set_layouts[i], NULL);
+    }
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_SYNC_RETIRED");
 }
 
 static void run_runtime_compute(VkDevice device, VkQueue queue)
@@ -1286,7 +1584,10 @@ int main(void)
     /* 5. Run byte- and word-exact 8/16-bit storage-buffer witnesses. */
     run_storage_width_compute(device, queue);
 
-    /* 6. Run runtime procedural graphics and presentation */
+    /* 6. Run explicit host/compute barriers and multi-wave LDS atomics. */
+    run_synchronization_compute(device, queue);
+
+    /* 7. Run runtime procedural graphics and presentation */
     run_consumer(device, queue, is_continuous);
 
     /* Orderly destroy device and instance if ever returned */

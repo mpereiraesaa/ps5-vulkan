@@ -86,6 +86,7 @@ def main():
     dep_file = BUILD_DIR / "main.d"
     obj_file = BUILD_DIR / "main.o"
     storage_shader_header = BUILD_DIR / "storage_width_shaders.h"
+    sync_shader_header = BUILD_DIR / "sync_shaders.h"
     pie_elf = BUILD_DIR / "consumer_pie.elf"
     eboot_elf = BUILD_DIR / "eboot.elf"
     eboot_bin = DIST_DIR / "eboot.bin"
@@ -99,6 +100,10 @@ def main():
     subprocess.run([
         sys.executable, str(ROOT / "tools/prepare_consumer_storage_shaders.py"),
         "--out", str(storage_shader_header),
+    ], check=True)
+    subprocess.run([
+        sys.executable, str(ROOT / "tools/prepare_consumer_sync_shaders.py"),
+        "--out", str(sync_shader_header),
     ], check=True)
 
     # 1. Compile consumer main.c
@@ -210,6 +215,17 @@ def main():
                 (ROOT / "build/test-shaders/storage8.spv").read_bytes()).hexdigest(),
             "storage16_spirv_sha256": hashlib.sha256(
                 (ROOT / "build/test-shaders/storage16.spv").read_bytes()).hexdigest(),
+        },
+        "synchronization": {
+            "api": "Vulkan 1.0",
+            "local_size": 128,
+            "wave_size": 32,
+            "sync_producer_spirv_sha256": hashlib.sha256(
+                (ROOT / "build/test-shaders/sync_producer.spv").read_bytes()).hexdigest(),
+            "sync_consumer_spirv_sha256": hashlib.sha256(
+                (ROOT / "build/test-shaders/sync_consumer.spv").read_bytes()).hexdigest(),
+            "shared_atomic_multiwave_spirv_sha256": hashlib.sha256(
+                (ROOT / "build/test-shaders/shared_atomic_multiwave.spv").read_bytes()).hexdigest(),
         },
     }
     artifact_path = DIST_DIR.parent / "artifact.json"

@@ -34,6 +34,14 @@ def validate(log, receipt, artifact):
             all(len(width_artifact.get(key, "")) == 64 for key in
                 ("storage8_spirv_sha256", "storage16_spirv_sha256")),
             "storage-width artifact contract")
+    sync_artifact = artifact.get("synchronization", {})
+    require(sync_artifact.get("api") == "Vulkan 1.0" and
+            sync_artifact.get("local_size") == 128 and
+            sync_artifact.get("wave_size") == 32 and
+            all(len(sync_artifact.get(key, "")) == 64 for key in
+                ("sync_producer_spirv_sha256", "sync_consumer_spirv_sha256",
+                 "shared_atomic_multiwave_spirv_sha256")),
+            "synchronization artifact contract")
     require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"),
             "log hash")
     require(receipt.get("protocol") == "ps5log/1" and
@@ -91,19 +99,26 @@ def validate(log, receipt, artifact):
     width_pipelines = one("PS5VK_CONSUMER_STORAGE_WIDTH_PIPELINES_CREATED ")
     width_witness = one("PS5VK_CONSUMER_STORAGE_WIDTH_SUCCESS ")
     width_retired = one("PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED")
+    sync_start = one("PS5VK_CONSUMER_SYNC_START")
+    sync_witness = one("PS5VK_CONSUMER_SYNC_SUCCESS ")
+    sync_retired = one("PS5VK_CONSUMER_SYNC_RETIRED")
     success = one("PS5VK_CONSUMER_TEST_SUCCESS")
     retired = one("PS5VK_CONSUMER_RESOURCES_RETIRED ")
     ready = one("PS5VK_READY_FOR_SHELL_CLOSE ")
 
-    require(len(prepared) == 2 and
-            all(len(rows) == 3 for rows in (submitted, suspended, completed)),
-            "one resource submit and two narrow submit records")
+    require(len(prepared) == 3 and
+            all(len(rows) == 6 for rows in (submitted, suspended, completed)),
+            "resource, narrow and synchronization submit records")
     ordered = [boot, physical, physical_queries, negotiated, start, pipeline,
                prepared[0], submitted[0], suspended[0], completed[0], witness,
                width_start, width_pipelines,
                prepared[1], submitted[1], suspended[1], completed[1],
                submitted[2], suspended[2], completed[2],
-               width_witness, width_retired, success, retired, ready]
+               width_witness, width_retired, sync_start, prepared[2],
+               submitted[3], suspended[3], completed[3],
+               submitted[4], suspended[4], completed[4],
+               submitted[5], suspended[5], completed[5],
+               sync_witness, sync_retired, success, retired, ready]
     require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
             "resource witness ordering")
     require("mode=finite" in boot[1], "finite mode")
@@ -126,18 +141,28 @@ def validate(log, receipt, artifact):
         "narrow storage negotiation")
     require(prepared[0][1].endswith("serial=1 dispatches=1"), "one resource dispatch")
     require(prepared[1][1].endswith("serial=2 dispatches=2"), "two narrow dispatches")
+    require(prepared[2][1].endswith("serial=3 dispatches=3"), "three synchronization dispatches")
     require([row[1].rsplit(" ", 1)[0] for row in submitted] == [
                 "PS5VK_QUEUE_SUBMIT serial=1 index=0",
                 "PS5VK_QUEUE_SUBMIT serial=2 index=0",
-                "PS5VK_QUEUE_SUBMIT serial=2 index=1"] and
+                "PS5VK_QUEUE_SUBMIT serial=2 index=1",
+                "PS5VK_QUEUE_SUBMIT serial=3 index=0",
+                "PS5VK_QUEUE_SUBMIT serial=3 index=1",
+                "PS5VK_QUEUE_SUBMIT serial=3 index=2"] and
             all(row[1].endswith("rc=0") for row in submitted), "submits")
     require([row[1].rsplit(" ", 1)[0] for row in suspended] == [
                 "PS5VK_QUEUE_SUSPEND_POINT serial=1 index=0",
                 "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=0",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=1"] and
+                "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=1",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=0",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=1",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=2"] and
             all(row[1].endswith("rc=0") for row in suspended), "suspend points")
-    require(all(f"serial={1 if index == 0 else 2} index={0 if index < 2 else 1}" in row[1]
-                for index, row in enumerate(completed)), "completion identities")
+    expected_completion = ((1, 0), (2, 0), (2, 1),
+                           (3, 0), (3, 1), (3, 2))
+    require(all(f"serial={serial} index={index}" in row[1]
+                for row, (serial, index) in zip(completed, expected_completion)),
+            "completion identities")
     require("serial=1 index=0 token=100000001 gcr=0070f528" in completed[0][1],
             "completion")
     require(witness[1].split()[1:] == [
@@ -153,6 +178,15 @@ def validate(log, receipt, artifact):
         "mismatches16=0", "guard_bytes8=4032", "guard_bytes16=3968",
         "guard_mismatches8=0", "guard_mismatches16=0"],
         "narrow storage oracle")
+    sync_fields = sync_witness[1].split()[1:]
+    require(sync_fields[:8] == [
+        "producer_consumer=1", "host_compute_host=1", "local_size=128",
+        "waves32=4", "lds_atomic=1", "permutation=1", "counter=128",
+        "sync_hash=467e2acd"] and len(sync_fields) == 11 and
+        sync_fields[8].startswith("atomic_hash=") and
+        len(sync_fields[8].split("=", 1)[1]) == 8 and
+        sync_fields[9:] == ["mismatches=0", "guard_mismatches=0"],
+        "synchronization oracle")
     require(retired[1].endswith("zero_tracked_allocations=1") and
             ready[1].endswith("resources_retired=1"), "resource retirement")
 
@@ -177,6 +211,9 @@ def validate(log, receipt, artifact):
         "reported_heap_bytes": 268435456,
         "reported_memory_type_flags": "DEVICE_LOCAL|HOST_VISIBLE",
         "reported_host_coherent": False,
+        "synchronization_words_checked": 64,
+        "multiwave_atomic_lanes_checked": 128,
+        "wave32_count": 4,
         "clean_tcp": True,
         "os_close": "requires independent lifecycle evidence",
     }

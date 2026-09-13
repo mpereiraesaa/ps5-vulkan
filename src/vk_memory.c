@@ -153,7 +153,7 @@ static int sync_range(VkDevice d, const VkMappedMemoryRange *r, VkDeviceSize *si
 static VkResult sync_ranges(VkDevice d, uint32_t count,
                             const VkMappedMemoryRange *ranges, int invalidate)
 {
-    if (!d || (count && !ranges)) return INVALID;
+    if (!d || !count || !ranges) return INVALID;
     VkDeviceSize size;
     /* Validate the whole array before any backend effect. A backend runtime
      * error can still occur after earlier ranges were processed. */

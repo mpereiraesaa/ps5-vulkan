@@ -390,6 +390,77 @@ class TestUpstreamRunner(unittest.TestCase):
         "uniform_16_to_32.uniform_buffer_block_scalar_sint",
     }
 
+    SYNCHRONIZATION_CASES = {
+        "dEQP-VK.compute.basic.ssbo_cmd_barrier_single",
+        "dEQP-VK.compute.basic.ssbo_cmd_barrier_multiple",
+        "dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.uint32",
+        "dEQP-VK.synchronization.basic.fence.multi_waitall_false",
+        "dEQP-VK.synchronization.basic.fence.one_signaled",
+        "dEQP-VK.synchronization.basic.fence.multiple_signaled",
+    }
+
+    NONCOHERENT_RANGE_CASES = {
+        "dEQP-VK.memory.mapping.suballocation.full.257.flush",
+        "dEQP-VK.memory.mapping.suballocation.full.257.invalidate",
+        "dEQP-VK.memory.mapping.suballocation.sub.4087.offset_129.size_1025.subflush",
+        "dEQP-VK.memory.mapping.suballocation.sub.4087.offset_129.size_1025.subinvalidate",
+    }
+
+    def test_synchronization_selection_keeps_original_upstream_oracles(self):
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        by_path = {case["path"]: case for case in manifest["cases"]}
+        self.assertTrue(self.SYNCHRONIZATION_CASES <= set(by_path))
+        for path in self.SYNCHRONIZATION_CASES:
+            self.assertEqual("synchronization", by_path[path]["category"])
+            self.assertEqual("Pass", by_path[path]["expected_status"])
+
+        basic_path = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                      "vulkan/compute/vktComputeBasicComputeShaderTests.cpp")
+        workgroup_path = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                          "vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp")
+        # The large pinned CTS checkout is deliberately absent from the normal
+        # GitHub host runner.  When present, freeze the original bodies/oracles;
+        # otherwise the manifest provenance and package/build registration below
+        # remain mandatory instead of turning checkout absence into a false red.
+        if basic_path.exists() and workgroup_path.exists():
+            basic = basic_path.read_text()
+            self.assertIn("class SSBOBarrierTestInstance", basic)
+            self.assertIn("VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT", basic)
+            self.assertIn("VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT", basic)
+            self.assertIn("VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT", basic)
+            self.assertIn("atomicAdd", basic)
+
+            workgroup = workgroup_path.read_text()
+            self.assertIn("OpExecutionMode %main LocalSize 16 4 2", workgroup)
+            self.assertIn("OpMemoryBarrier", workgroup)
+            self.assertIn("OpControlBarrier", workgroup)
+            self.assertIn('SpvAsmComputeShaderCase(testCtx, "uint32", spec)', workgroup)
+        else:
+            for path in self.SYNCHRONIZATION_CASES:
+                self.assertTrue(by_path[path]["source"].startswith("external/vulkancts/"))
+
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (REPO_ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn("createBasicComputeShaderTests", package)
+        self.assertIn("createWorkgroupMemoryComputeGroup", package)
+        self.assertIn("vktSpvAsmWorkgroupMemoryTests.cpp", builder)
+
+    def test_noncoherent_range_cases_are_original_and_not_gpu_evidence(self):
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        by_path = {case["path"]: case for case in manifest["cases"]}
+        self.assertTrue(self.NONCOHERENT_RANGE_CASES <= set(by_path))
+        for path in self.NONCOHERENT_RANGE_CASES:
+            self.assertEqual("host-memory", by_path[path]["category"])
+            self.assertTrue(by_path[path]["source"].startswith(
+                "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp:"))
+            self.assertNotIn("GPU", by_path[path]["rationale"].replace(
+                "not a GPU visibility claim", ""))
+
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (REPO_ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn("createMappingTests", package)
+        self.assertIn("vktMemoryMappingTests.cpp", builder)
+
     def test_resource_family_cannot_be_silently_removed(self):
         """The resource expansion cases are part of the frozen acceptance set."""
         manifest = json.loads(MANIFEST_PATH.read_text())

@@ -48,7 +48,7 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 31 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 41 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline and push-constant cases plus nine storage-width cases). Only these
   acceptance leaves are registered by
@@ -355,6 +355,33 @@ gaps; the latter requires host-coherent memory, which the current native
 profile does not claim. They are traceable to original upstream sources but
 were not executed as acceptance cases in these two runs.
 
+### Synchronization, non-coherent ranges and multi-wave LDS (2026-09-13)
+
+The current selection adds ten original upstream leaves to the earlier 31:
+
+- `compute.basic.ssbo_cmd_barrier_single` and `_multiple`;
+- `synchronization.basic.fence.multi_waitall_false`, `.one_signaled` and
+  `.multiple_signaled`;
+- four `memory.mapping.suballocation` flush/invalidate leaves covering full and
+  offset subranges;
+- `spirv_assembly.instruction.compute.workgroup_memory.uint32`.
+
+The two SSBO cases exercise recorded compute dependencies with their original
+sum oracles. The mapping cases exercise upstream mapped-range rules and data
+checks but, by themselves, do not prove GPU visibility. The workgroup-memory
+case executes 128 invocations (`16x4x2`), four wave32 waves, LDS barriers and
+the original exact reverse-copy oracle.
+
+Two independent launches of the identical final payload completed **41 Pass,
+0 Fail, 0 NotSupported**, with executable SHA-256
+`be494b38483e5a174f40dfe063d967a722267daa4a78affb26143fd0b93335f9`,
+selection SHA-256
+`c2a630cba690c471bad479425d47d79754cbb82d63133c3a4d5d956c5dbdeca2`
+and QPA SHA-256 values
+`e613c39592b107d7e915693d3197ff7972ce21e685beafacdd4da53931e4d613`
+and `e9106bf707866a9ecf33a4a8384b28b6abcbf129317d9f1d3a52cdaf79c887f7`.
+Both runs exited zero and passed system Close Game.
+
 ### Heap and driver fixes
 
 The original roughly 13 MiB ceiling belonged to the foundation's **internal
@@ -381,12 +408,11 @@ oracle, or selection was replaced to obtain these results.
 * This is a focused selection, not the complete CTS and not conformance.
 * The pinned revision is a 1.3-era CTS; it does not establish Vulkan 1.4
   coverage.
-* Every selected shared-memory and atomic case uses at most 30 invocations per
-  workgroup, i.e. a single wave32. The selection therefore does not establish
-  multi-wave LDS barrier semantics. The upstream cases that would
-  (`dEQP-VK.compute.basic.max_local_size_*`) size their workgroups from
-  specialization constants through `local_size_x_id`, which this runtime
-  compute profile does not implement, so they are outside this change.
+* The selected `workgroup_memory.uint32` case establishes one exact multi-wave
+  LDS barrier shape at 128 invocations. The selected shared-atomic cases remain
+  at most 30 invocations; multi-wave shared atomics are instead covered by the
+  independent public-SDK consumer's deterministic permutation/counter oracle.
+  This does not imply arbitrary workgroup shapes or a complete memory model.
 * No selected case exercises a rendering or pixel-comparison oracle. The
   reference rasterizer is linked but unexecuted, so this integration does not
   demonstrate rasterisation correctness.

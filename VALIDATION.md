@@ -125,6 +125,44 @@ minimum-limit gaps and the second requires a host-coherent type that this
 backend truthfully does not report. See
 [PHYSICAL_DEVICE_REPORTING.md](PHYSICAL_DEVICE_REPORTING.md).
 
+### Vulkan 1.0 synchronization and non-coherent visibility slice
+
+The focused acceptance selection now contains **41 original upstream cases**.
+Ten additions exercise two compute command-buffer barrier cases, three further
+fence states, four non-coherent mapping ranges and
+`dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.uint32`. The last
+case uses `LocalSize 16x4x2` (128 invocations, four wave32 waves) and its original
+exact reverse-copy oracle.
+
+Two independent launches of the identical payload passed **41/41** with zero
+failures or unsupported results, complete QPA reconstruction, exit code zero
+and clean system Close Game:
+
+- Executable SHA-256:
+  `be494b38483e5a174f40dfe063d967a722267daa4a78affb26143fd0b93335f9`
+- Selection SHA-256:
+  `c2a630cba690c471bad479425d47d79754cbb82d63133c3a4d5d956c5dbdeca2`
+- QPA SHA-256 values:
+  `e613c39592b107d7e915693d3197ff7972ce21e685beafacdd4da53931e4d613`
+  and `e9106bf707866a9ecf33a4a8384b28b6abcbf129317d9f1d3a52cdaf79c887f7`
+
+The consumer that includes only public SDK headers independently passed twice
+with executable SHA-256
+`18feb46fc7e4a8972949541ece619270b891c77711f9d172aadef4f72036b9d6`.
+It verifies a host-write/compute-read-write/host-read chain, an explicit
+shader-write to shader-read buffer barrier, non-coherent flush/invalidate,
+64 exact output words and guards, and a 128-lane LDS atomic permutation with a
+final counter of 128. Its ps5log/1 receipt hashes are
+`ff4094fed0ab44d70c49e08d5f16d63cc9cce511c4b3518ba215a4301b28ac98`
+and `f0ec40048f397a3425b7b3a87ff454b1ad67752b4e69d8d1bff9242ed2c00d19`.
+
+The native queue implements a conservative dependency stronger than the
+recorded buffer range: every compute dispatch reaches completion and performs
+release/writeback before the next dispatch. This evidence does not establish
+range-scoped asynchronous execution, binary semaphores, events, mixed
+compute/graphics barriers, queue-family transfers, the Vulkan memory model or
+`synchronization2`.
+
 ## Independent native SDK consumer validation
 
 The independent native application in `examples/native_consumer/` consumes strictly

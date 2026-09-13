@@ -359,12 +359,36 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
     const VkPipelineStageFlags allowed=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT |
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT |
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    if(!stages || (stages & ~allowed) ||
-        (access & ~(VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
-        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT)))return 0;
-    if(stages & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)return 1;
-    if((access & VK_ACCESS_TRANSFER_WRITE_BIT) && !(stages & VK_PIPELINE_STAGE_TRANSFER_BIT))return 0;
-    if((access & VK_ACCESS_SHADER_READ_BIT) && !(stages & VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT))return 0;
+    const VkAccessFlags supported=VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
+        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+    if(!stages || (stages & ~allowed) || (access & ~supported))return 0;
+    if(!access)return 1;
+    if((access & VK_ACCESS_TRANSFER_WRITE_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    if((access & VK_ACCESS_SHADER_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* MEMORY_READ/WRITE select every read/write access available in the stage
+     * mask and are valid with any non-empty supported stage mask. */
+    return 1;
+}
+static int compute_scope(VkPipelineStageFlags stages, VkAccessFlags access)
+{
+    const VkPipelineStageFlags allowed=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT |
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_HOST_BIT |
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    const VkAccessFlags supported=VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
+        VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
+        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+    if(!stages || (stages & ~allowed) || (access & ~supported))return 0;
+    if(!access)return 1;
+    /* ALL_COMMANDS expands queue commands, not host operations. */
+    if((access & (VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT)) &&
+        !(stages & VK_PIPELINE_STAGE_HOST_BIT))return 0;
+    if((access & (VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
+                  VK_ACCESS_SHADER_WRITE_BIT)) &&
+        !(stages & (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* Generic MEMORY_READ/WRITE do not require a more specific stage. */
     return 1;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineStageFlags src, VkPipelineStageFlags dst,
@@ -403,19 +427,15 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
                 .src_access=images[j].srcAccessMask,.dst_access=images[j].dstAccessMask};
         return;
     }
-    const VkPipelineStageFlags stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT |
-        VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    const VkAccessFlags accesses = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
-        VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
-        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !src || !dst || (src & ~stages) || (dst & ~stages) || flags ||
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !src || !dst || flags ||
         image_count || (memory_count && !memory) || (buffer_count && !buffers) ||
         c->operation_count == PS5VK_MAX_OPERATIONS ||
         buffer_count > PS5VK_MAX_OPERATIONS - c->operation_count - 1) { invalid(c); return; }
     VkAccessFlags src_access = 0, dst_access = 0;
     for (uint32_t j = 0; j < memory_count; ++j) {
         if (memory[j].sType != VK_STRUCTURE_TYPE_MEMORY_BARRIER || memory[j].pNext ||
-            ((memory[j].srcAccessMask | memory[j].dstAccessMask) & ~accesses)) { invalid(c); return; }
+            !compute_scope(src,memory[j].srcAccessMask) ||
+            !compute_scope(dst,memory[j].dstAccessMask)) { invalid(c); return; }
         src_access |= memory[j].srcAccessMask; dst_access |= memory[j].dstAccessMask;
     }
     /* A full cache dependency is stronger than a buffer-range dependency.
@@ -425,7 +445,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         const VkBufferMemoryBarrier *b = &buffers[j];
         void *address; VkDeviceSize bytes;
         if (b->sType != VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER || b->pNext ||
-            ((b->srcAccessMask | b->dstAccessMask) & ~accesses) ||
+            !compute_scope(src,b->srcAccessMask) || !compute_scope(dst,b->dstAccessMask) ||
             b->srcQueueFamilyIndex != b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED && b->srcQueueFamilyIndex != 0) ||
             ps5vk_buffer_span(c->pool->device, b->buffer, b->offset, b->size,
