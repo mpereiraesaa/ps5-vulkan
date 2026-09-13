@@ -982,7 +982,7 @@
       },
       "implementation_state": "cts-pass",
       "baseline": {
-        "surface_state": "native-demonstrated",
+        "surface_state": "symbol-present",
         "entry_points": [
           "vkEnumeratePhysicalDevices"
         ],
@@ -1387,7 +1387,7 @@
       },
       "implementation_state": "native-evidence",
       "baseline": {
-        "surface_state": "native-demonstrated",
+        "surface_state": "symbol-present",
         "entry_points": [
           "vkGetPhysicalDeviceQueueFamilyProperties",
           "vkCreateDevice",
@@ -6736,18 +6736,19 @@
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCmdSetViewport",
-          "vkCmdSetScissor",
+          "vkCmdSetScissor"
+        ],
+        "absent_entry_points": [
           "vkCmdSetBlendConstants",
           "vkCmdSetDepthBias"
         ],
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: 0 of 4 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 4 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8263,13 +8264,13 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
-          "vkCmdCopyBufferToImage"
+          "vkCmdCopyBufferToImage",
+          "vkCmdCopyImageToBuffer"
         ],
         "absent_entry_points": [
           "vkCmdCopyBuffer",
           "vkCmdUpdateBuffer",
           "vkCmdFillBuffer",
-          "vkCmdCopyImageToBuffer",
           "vkCmdCopyImage",
           "vkCmdBlitImage",
           "vkCmdResolveImage"
@@ -8277,7 +8278,7 @@
         "refs": [
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 1 of 8 named entry points exist; 1 are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 2 of 8 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8679,12 +8680,15 @@
           "vkCmdBindPipeline",
           "vkCmdBindVertexBuffers",
           "vkCmdCopyBufferToImage",
+          "vkCmdCopyImageToBuffer",
           "vkCmdDispatch",
           "vkCmdDraw",
           "vkCmdDrawIndexed",
           "vkCmdEndRenderPass",
           "vkCmdPipelineBarrier",
-          "vkCmdPushConstants"
+          "vkCmdPushConstants",
+          "vkCmdSetScissor",
+          "vkCmdSetViewport"
         ],
         "absent_entry_points": [
           "vkCmdBeginQuery",
@@ -8703,7 +8707,6 @@
           "vkCmdCopyBufferToImage2",
           "vkCmdCopyImage",
           "vkCmdCopyImage2",
-          "vkCmdCopyImageToBuffer",
           "vkCmdCopyImageToBuffer2",
           "vkCmdCopyQueryPoolResults",
           "vkCmdDispatchBase",
@@ -8750,14 +8753,12 @@
           "vkCmdSetRasterizerDiscardEnable",
           "vkCmdSetRenderingAttachmentLocations",
           "vkCmdSetRenderingInputAttachmentIndices",
-          "vkCmdSetScissor",
           "vkCmdSetScissorWithCount",
           "vkCmdSetStencilCompareMask",
           "vkCmdSetStencilOp",
           "vkCmdSetStencilReference",
           "vkCmdSetStencilTestEnable",
           "vkCmdSetStencilWriteMask",
-          "vkCmdSetViewport",
           "vkCmdSetViewportWithCount",
           "vkCmdUpdateBuffer",
           "vkCmdWaitEvents",
@@ -8769,7 +8770,7 @@
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 12 of 89 named entry points exist; 12 are dispatched; 12 are declared in the public header."
+        "note": "Baseline surface: 15 of 89 named entry points exist; 15 are dispatched; 15 are declared in the public header."
       },
       "evidence": {
         "source": {
