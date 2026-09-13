@@ -25,8 +25,8 @@ EXPECTED_VULKAN10_TOTAL = 137
 # prototype, a dispatch entry and an implementation. This is not a semantic
 # support claim; see the report's advertised-obligation table for what each
 # command may actually be used for.
-EXPECTED_FULLY_WIRED_TOTAL = 131
-EXPECTED_MISSING_TOTAL = 6
+EXPECTED_FULLY_WIRED_TOTAL = 126
+EXPECTED_MISSING_TOTAL = 11
 
 REQUIRED_DYNAMIC_STATE_COMMANDS = {
     "vkCmdSetLineWidth", "vkCmdSetDepthBias", "vkCmdSetDepthBounds",
@@ -86,14 +86,10 @@ EXPECTED_MISSING_CATEGORIES = {
     # header-only cache slice; they are no longer deficits.
     "Transfer/Clear/Indirect": {
         "vkCmdCopyBuffer",
-        "vkCmdCopyImage",
         "vkCmdBlitImage",
         "vkCmdResolveImage",
         "vkCmdUpdateBuffer",
         "vkCmdFillBuffer",
-        "vkCmdClearColorImage",
-        "vkCmdClearDepthStencilImage",
-        "vkCmdClearAttachments",
         "vkCmdDrawIndirect",
         "vkCmdDrawIndexedIndirect",
         "vkCmdDispatchIndirect",

@@ -18,7 +18,11 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         info->mipLevels != 1 || info->arrayLayers != 1 || info->extent.depth != 1 ||
         info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL)
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
-    if((info->usage & (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
+    /* Padded linear layout: the sampled/upload role and the pure transfer role
+     * (copy source and/or destination) share one host-visible layout, so the
+     * upload path and both transfer directions address the same bytes. */
+    if((info->usage & (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
         !(info->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
         struct ps5vk_texture_layout texture;
         if(info->format!=VK_FORMAT_R8G8B8A8_UNORM ||

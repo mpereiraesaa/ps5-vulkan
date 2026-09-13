@@ -166,6 +166,41 @@ def _dynamic_state_compute_generated_segments(text: str) -> set[str]:
     }
 
 
+def _copy_and_blit_simple_image_leaf_names(function_text: str) -> set[str]:
+    """Derive the image-to-image simple-test leaves of the pinned copy module.
+
+    Those leaves are not written as literals: the factory composes each name
+    from three fixed tables in the same function.  Accept the cross product only
+    when the exact composition expression, the exact registration call and all
+    three table names are present, so an unrelated token elsewhere in the module
+    cannot satisfy provenance.
+    """
+    if not re.search(
+        r'"partial_image_"\s*\+\s*extent\.name\s*\+\s*"_"\s*\+\s*format\.name'
+        r'\s*\+\s*"_"\s*\+\s*clear\.name',
+        function_text,
+    ):
+        return set()
+    if "group->addChild(new CopyImageToImageTestCase(testCtx, testCaseName, params));" not in function_text:
+        return set()
+    formats = re.search(r"formats\[\]\s*=\s*\{(.*?)\n\s*\};", function_text, re.DOTALL)
+    clears = re.search(r"clears\[\]\s*=\s*\{(.*?)\};", function_text, re.DOTALL)
+    extents = re.search(r"extents\[\]\s*=\s*\{(.*?)\};", function_text, re.DOTALL)
+    if not (formats and clears and extents):
+        return set()
+    format_names = re.findall(r'\{\s*"([a-z0-9_]+)"\s*,\s*vk::VK_FORMAT_', formats.group(1))
+    clear_names = re.findall(r'\{\s*"([a-z0-9_]+)"\s*,\s*VK_(?:TRUE|FALSE)\s*\}', clears.group(1))
+    extent_names = re.findall(r'\{\s*"([a-z0-9_]+)"\s*,\s*\{', extents.group(1))
+    if not (format_names and clear_names and extent_names):
+        return set()
+    return {
+        f"partial_image_{extent}_{format_name}_{clear}"
+        for extent in extent_names
+        for format_name in format_names
+        for clear in clear_names
+    }
+
+
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     # Diagnostics are frozen upstream cases that are executed but are known not
@@ -235,6 +270,12 @@ def main() -> int:
         # this one pinned source module only.
         if (source_path.name == "vktApiFillBufferTests.cpp" and
                 leaf in _fill_update_generated_leaf_names(text)):
+            continue
+        # The copies/blits image-to-image factory composes its partial-image
+        # leaves from the extent, format and clear tables inside the cited
+        # function. Bounded to that factory's exact construction expressions.
+        if (source_path.name == "vktApiCopiesAndBlittingTests.cpp" and
+                leaf in _copy_and_blit_simple_image_leaf_names(function_text)):
             continue
         if leaf.isdigit():
             continue
