@@ -157,9 +157,10 @@ writes nothing and reports zero; a larger buffer is written only up to the
 header. Externally supplied `pInitialData` is treated as untrusted: a short,
 corrupt, wrong-vendor/device/version/UUID or oversized blob is ignored and cache
 creation still succeeds with an empty cache, and a header-only blob round-trips
-byte for byte. `vkMergePipelineCaches` validates the destination and every
-source (self-merge and duplicate sources are legal, foreign handles are
-rejected) and is a no-op because the cache stores no records.
+byte for byte. `vkMergePipelineCaches` requires at least one source and validates
+the destination and every source (the destination is forbidden as a source,
+duplicate sources are legal and foreign handles are rejected). It is a no-op
+because the cache stores no records.
 
 No compiled-code record is serialized and no restored cache hit is reported.
 The digest-addressed key schema that a later record format must carry already

@@ -149,11 +149,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(VkDevice d, VkPipelineCach
 VKAPI_ATTR VkResult VKAPI_CALL vkMergePipelineCaches(VkDevice d, VkPipelineCache dst,
     uint32_t src_count, const VkPipelineCache *srcs)
 {
-    if (!d || !dst || dst->device != d || (src_count && !srcs)) return INVALID;
-    /* Validate the whole call before touching the destination: self-merge and
-     * duplicate sources are legal, foreign or destroyed handles are not. */
+    if (!d || !dst || dst->device != d || !src_count || !srcs) return INVALID;
+    /* Validate the whole call before touching the destination. Vulkan 1.0
+     * requires at least one source and forbids the destination from appearing
+     * in that source list. Duplicate source handles are permitted; foreign or
+     * destroyed handles are not. */
     for (uint32_t i = 0; i < src_count; ++i)
-        if (!srcs[i] || srcs[i]->device != d) return INVALID;
+        if (!srcs[i] || srcs[i] == dst || srcs[i]->device != d) return INVALID;
     /* This slice stores no records, so a validated merge has nothing to copy and
      * the destination is deliberately left unchanged. */
     return VK_SUCCESS;

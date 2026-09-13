@@ -173,8 +173,8 @@ int main(void)
 
     /* --- merge: validated no-op --- */
     VkPipelineCache second = make_cache(device);
-    assert(vkMergePipelineCaches(device, cache, 0u, NULL) == VK_SUCCESS);
-    assert(vkMergePipelineCaches(device, cache, 1u, &cache) == VK_SUCCESS);       /* self */
+    assert(vkMergePipelineCaches(device, cache, 0u, NULL) != VK_SUCCESS);
+    assert(vkMergePipelineCaches(device, cache, 1u, &cache) != VK_SUCCESS);       /* dst as src */
     VkPipelineCache sources[2] = {second, second};
     assert(vkMergePipelineCaches(device, cache, 2u, sources) == VK_SUCCESS);      /* duplicates */
     VkPipelineCache null_source = VK_NULL_HANDLE;
