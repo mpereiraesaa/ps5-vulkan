@@ -19,7 +19,20 @@ struct ps5vk_submission {
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
     VkBool32 reserved;
+    VkBool32 waits_consumed;
 };
+static inline uint32_t ps5vk_submission_first_operation(
+    const struct ps5vk_submission *submission, uint32_t buffer)
+{
+    return submission->operation_count[buffer] ?
+        submission->first_operation[buffer] : 0;
+}
+static inline uint32_t ps5vk_submission_operation_count(
+    const struct ps5vk_submission *submission, uint32_t buffer)
+{
+    return submission->operation_count[buffer] ?
+        submission->operation_count[buffer] : submission->buffers[buffer]->operation_count;
+}
 VkResult ps5vk_queue_poll(VkDevice device);
 void ps5vk_queue_router_configure(VkDevice, struct ps5vk_queue_backend,
                                 struct ps5vk_queue_backend);

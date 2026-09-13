@@ -92,6 +92,24 @@ int main(void)
     assert(device.submit_backend.prepare(&device, &submit, &job) == VK_SUCCESS && job);
     assert(arenas == 2 && mappings == 1 && !submissions);
     device.submit_backend.release(&device, job); clean();
+
+    /* The compute backend consumes the submitted range directly. Event
+     * operations outside it are invisible; one inside it fails closed before
+     * dereferencing dispatch state. */
+    cb.operation_count = 3;
+    cb.operations[2] = cb.operations[1];
+    cb.operations[0].type = PS5VK_EVENT_SET;
+    cb.operations[1] = cb.operations[2];
+    cb.operations[2].type = PS5VK_EVENT_RESET;
+    submit.first_operation[0] = 1;
+    submit.operation_count[0] = 1;
+    assert(device.submit_backend.prepare(&device, &submit, &job) == VK_SUCCESS && job);
+    assert(arenas == 1 && mappings == 1 && !submissions);
+    device.submit_backend.release(&device, job); clean();
+    submit.first_operation[0] = 0;
+    submit.operation_count[0] = 2;
+    assert(device.submit_backend.prepare(&device, &submit, &job) == VK_ERROR_FEATURE_NOT_PRESENT && !job);
+    clean();
     free(pipeline);
     puts("Native prepare rollback: pass (host syscall doubles, no GPU execution)");
 }

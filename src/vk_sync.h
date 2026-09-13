@@ -19,6 +19,7 @@ struct VkEvent_T {
     VkBool32 host_signaled;
     VkBool32 device_signaled;
     uint32_t pending;
+    uint32_t pending_waits;
     struct VkEvent_T *next;
 };
 

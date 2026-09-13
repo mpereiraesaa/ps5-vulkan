@@ -87,13 +87,21 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
     job->mapped = 1;
     for (unsigned b = 0; b < submission->count; ++b) {
         VkCommandBuffer cb = submission->buffers[b];
-        for (unsigned i = 0; i < cb->operation_count; ++i) {
+        uint32_t first = ps5vk_submission_first_operation(submission, b);
+        uint32_t count = ps5vk_submission_operation_count(submission, b);
+        if (first > cb->operation_count || count > cb->operation_count - first) {
+            result = VK_ERROR_UNKNOWN; goto fail;
+        }
+        for (uint32_t i = first; i < first + count; ++i) {
             const struct ps5vk_operation *op = &cb->operations[i];
             /* Each dispatch is fully retired before the next. This is stronger
              * than supported global host/compute barriers, not a skipped GPU
              * dependency. Buffer ranges use this stronger global dependency;
              * image transitions and queue-family transfers are not handled here. */
             if (op->type == PS5VK_BARRIER) continue;
+            if (op->type != PS5VK_DISPATCH) {
+                result = VK_ERROR_FEATURE_NOT_PRESENT; goto fail;
+            }
             if (job->count == MAX_DISPATCHES) { result = VK_ERROR_UNKNOWN; goto fail; }
             struct prepared_dispatch *p = &job->dispatches[job->count++];
             const struct ps5vk_compiled_program *program = &op->pipeline->program;

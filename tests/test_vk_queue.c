@@ -13,37 +13,54 @@ static VkResult memory_sync(void *ctx, void *b, VkDeviceSize offset, VkDeviceSiz
 
 struct fixture {
     unsigned prepares, launches, polls, releases;
+    unsigned event_ops_seen;
     unsigned fail_prepare_at;
     VkResult prepare_result, launch_result, poll_result;
     uint64_t serial, now;
     int complete, wrong;
 };
+struct mock_job { struct fixture *fixture; uint64_t serial; };
 static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **job)
 {
     struct fixture *f = d->progress.context; ++f->prepares;
     assert(s->buffers[0]->state == PS5VK_EXECUTABLE);
+    for (uint32_t b = 0; b < s->count; ++b) {
+        uint32_t first = ps5vk_submission_first_operation(s, b);
+        uint32_t count = ps5vk_submission_operation_count(s, b);
+        assert(first <= s->buffers[b]->operation_count &&
+            count <= s->buffers[b]->operation_count - first);
+        for (uint32_t k = first; k < first + count; ++k)
+            f->event_ops_seen += s->buffers[b]->operations[k].type >= PS5VK_EVENT_SET;
+    }
     if (f->fail_prepare_at && f->prepares == f->fail_prepare_at)
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (f->prepare_result) return f->prepare_result;
-    f->serial = s->serial; *job = f; return VK_SUCCESS;
+    struct mock_job *prepared = malloc(sizeof(*prepared));
+    if (!prepared) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    prepared->fixture = f; prepared->serial = s->serial;
+    f->serial = s->serial; *job = prepared; return VK_SUCCESS;
 }
 static VkResult launch(VkDevice d, void *job)
 {
-    struct fixture *f = job; ++f->launches; f->complete = 0;
+    struct fixture *f = ((struct mock_job *)job)->fixture;
+    ++f->launches; f->complete = 0;
     assert(d->submission && d->submission->buffers[0]->state == PS5VK_PENDING);
     return f->launch_result;
 }
 static VkResult poll_backend(VkDevice d, void *job, uint64_t *completed)
 {
-    (void)d; struct fixture *f = job; ++f->polls;
-    *completed = f->complete ? f->serial + !!f->wrong : 0;
+    (void)d; struct mock_job *prepared = job;
+    struct fixture *f = prepared->fixture; ++f->polls;
+    *completed = f->complete ? prepared->serial + !!f->wrong : 0;
     return f->poll_result;
 }
 static void release(VkDevice d, void *job)
 {
-    struct fixture *f = job; ++f->releases;
+    struct mock_job *prepared = job;
+    struct fixture *f = prepared->fixture; ++f->releases;
     if (d->submission)
         assert(d->submission->buffers[0]->state == PS5VK_PENDING);
+    free(prepared);
 }
 static uint64_t clock_ns(void *ctx) { return ((struct fixture *)ctx)->now; }
 static void pause_wait(void *ctx, uint64_t remaining)
@@ -189,6 +206,34 @@ int main(void)
     assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
     assert(vkQueueSubmit(&d.queue, 2, ordered, fence) == VK_SUCCESS);
     assert(!semaphore->signaled && !semaphore->pending && fence->signaled);
+
+    /* The same dependency also orders two real backend jobs. Signal becomes
+     * available at retirement of record 0, is consumed exactly once before
+     * launching record 1, and the fence belongs only to the latter. */
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    VkCommandBufferBeginInfo semaphore_begin = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+    };
+    assert(vkBeginCommandBuffer(c, &semaphore_begin) == VK_SUCCESS);
+    vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 0, NULL);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+    ordered[0].commandBufferCount = ordered[1].commandBufferCount = 1;
+    ordered[0].pCommandBuffers = ordered[1].pCommandBuffers = &c;
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    unsigned semaphore_launches = f.launches;
+    assert(vkQueueSubmit(&d.queue, 2, ordered, fence) == VK_SUCCESS);
+    assert(f.launches == semaphore_launches + 1 && c->pending_count == 2 &&
+        semaphore->pending == 2 && !semaphore->signaled && !fence->signaled);
+    f.complete = 1;
+    assert(ps5vk_queue_poll(&d) == VK_SUCCESS);
+    assert(f.launches == semaphore_launches + 2 && c->pending_count == 1 &&
+        semaphore->pending == 1 && !semaphore->signaled && !fence->signaled);
+    f.complete = 1;
+    assert(ps5vk_queue_poll(&d) == VK_SUCCESS);
+    assert(!d.submission && !c->pending_count && !semaphore->pending &&
+        !semaphore->signaled && fence->signaled);
     uint64_t unchanged_serial = d.queue.next_serial;
     assert(vkQueueSubmit(&d.queue, 1, &wait_submit, NULL) != VK_SUCCESS);
     assert(d.queue.next_serial == unchanged_serial && !semaphore->signaled);
@@ -214,6 +259,7 @@ int main(void)
         .commandBufferCount = 2, .pCommandBuffers = event_buffers};
     assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
     assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
+    assert(!fence->signaled && vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
     assert(fence->signaled && vkGetEventStatus(&d, event) == VK_EVENT_SET &&
         !event->pending && c->state == PS5VK_EXECUTABLE && c2->state == PS5VK_EXECUTABLE);
     assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
@@ -224,6 +270,88 @@ int main(void)
     assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
     assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
     assert(vkGetEventStatus(&d, event) == VK_EVENT_RESET);
+
+    assert(vkResetCommandBuffer(c2, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c2, &event_begin) == VK_SUCCESS);
+    vkCmdWaitEvents(c2, 1, &event, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, NULL, 0, NULL, 0, NULL);
+    assert(vkEndCommandBuffer(c2) == VK_SUCCESS);
+    event_submit.pCommandBuffers = &c2;
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
+    assert(d.submission && d.submission->frontend_only && !fence->signaled &&
+        event->pending && event->pending_waits);
+    /* Host-set after submission is invalid while a pending CB waits on the
+     * event (VUID-vkSetEvent-event-09543).  Complete this synthetic invalid
+     * submission by changing fixture state directly, not through the API. */
+    assert(vkSetEvent(&d, event) == VK_ERROR_UNKNOWN);
+    event->host_signaled = VK_TRUE;
+    assert(ps5vk_queue_poll(&d) == VK_SUCCESS && d.submission && !d.submission->frontend_only);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && fence->signaled);
+
+    /* The valid host path signals before submit; WAIT consumes no event state
+     * and the following dependency segment is submitted to the backend. */
+    assert(vkResetEvent(&d, event) == VK_SUCCESS);
+    assert(vkSetEvent(&d, event) == VK_SUCCESS);
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
+    assert(d.submission && !d.submission->frontend_only &&
+        event->pending && event->pending_waits && !fence->signaled);
+    assert(vkSetEvent(&d, event) == VK_ERROR_UNKNOWN);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && fence->signaled &&
+        !event->pending && !event->pending_waits);
+
+    /* A mixed GPU -> SET -> GPU command is prepared transactionally as two
+     * independent backend jobs.  A late prepare failure publishes no event,
+     * semaphore, fence, serial or command-buffer state. */
+    assert(vkResetEvent(&d, event) == VK_SUCCESS);
+    assert(vkResetCommandBuffer(c2, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c2, &event_begin) == VK_SUCCESS);
+    vkCmdPipelineBarrier(c2, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 0, NULL);
+    vkCmdSetEvent(c2, event, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    vkCmdPipelineBarrier(c2, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 0, NULL);
+    assert(vkEndCommandBuffer(c2) == VK_SUCCESS && c2->operation_count == 3);
+    VkSemaphore segment_semaphore;
+    assert(vkCreateSemaphore(&d, &si, NULL, &segment_semaphore) == VK_SUCCESS);
+    event_submit.signalSemaphoreCount = 1;
+    event_submit.pSignalSemaphores = &segment_semaphore;
+    uint64_t mixed_serial = d.queue.next_serial;
+    unsigned mixed_releases = f.releases;
+    f.fail_prepare_at = f.prepares + 2;
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_ERROR_OUT_OF_HOST_MEMORY);
+    assert(!d.submission && d.queue.next_serial == mixed_serial &&
+        c2->state == PS5VK_EXECUTABLE && !c2->pending_count &&
+        vkGetEventStatus(&d, event) == VK_EVENT_RESET && !event->pending &&
+        !segment_semaphore->pending && !segment_semaphore->signaled &&
+        !fence->pending_serial && !fence->signaled &&
+        f.releases == mixed_releases + 1 && !f.event_ops_seen);
+
+    f.fail_prepare_at = 0;
+    unsigned mixed_launches = f.launches;
+    assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
+    assert(f.launches == mixed_launches + 1 && d.submission &&
+        d.submission->next && d.submission->next->frontend_only &&
+        d.submission->next->next && !d.submission->next->next->frontend_only &&
+        c2->pending_count == 3 && vkGetEventStatus(&d, event) == VK_EVENT_RESET &&
+        event->pending && !event->pending_waits &&
+        !segment_semaphore->signaled && !fence->signaled && !f.event_ops_seen);
+    f.complete = 1;
+    assert(ps5vk_queue_poll(&d) == VK_SUCCESS);
+    assert(f.launches == mixed_launches + 2 && d.submission &&
+        !d.submission->frontend_only && c2->pending_count == 1 &&
+        vkGetEventStatus(&d, event) == VK_EVENT_SET &&
+        event->pending && !event->pending_waits &&
+        !segment_semaphore->signaled && !fence->signaled && !f.event_ops_seen);
+    f.complete = 1;
+    assert(ps5vk_queue_poll(&d) == VK_SUCCESS);
+    assert(!d.submission && !c2->pending_count && c2->state == PS5VK_EXECUTABLE &&
+        !event->pending && !event->pending_waits &&
+        segment_semaphore->signaled && !segment_semaphore->pending &&
+        fence->signaled && !f.event_ops_seen);
+    vkDestroySemaphore(&d, segment_semaphore, NULL);
     vkDestroyEvent(&d, event, NULL); assert(!d.events);
     vkFreeCommandBuffers(&d, pool, 1, &c2);
 

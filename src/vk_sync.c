@@ -84,16 +84,24 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetEventStatus(VkDevice d, VkEvent event)
 
 VKAPI_ATTR VkResult VKAPI_CALL vkSetEvent(VkDevice d, VkEvent event)
 {
-    if (!d || !event || event->device != d || event->pending) return INVALID;
+    if (!d || !event || event->device != d) return INVALID;
     if (d->lost) return VK_ERROR_DEVICE_LOST;
+    /* VUID-vkSetEvent-event-09543: a host set cannot rescue an event that is
+     * already waited on by a pending command buffer.  Track waits separately
+     * from general pending ownership so pending device SET/RESET operations do
+     * not spuriously prohibit a host transition. */
+    if (event->pending_waits) return INVALID;
     event->host_signaled = VK_TRUE;
     return VK_SUCCESS;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkResetEvent(VkDevice d, VkEvent event)
 {
-    if (!d || !event || event->device != d || event->pending) return INVALID;
+    if (!d || !event || event->device != d) return INVALID;
     if (d->lost) return VK_ERROR_DEVICE_LOST;
+    /* This bounded single-queue implementation accepts host reset only when
+     * no pending device wait needs an execution dependency against it. */
+    if (event->pending_waits) return INVALID;
     event->host_signaled = VK_FALSE;
     event->device_signaled = VK_FALSE;
     return VK_SUCCESS;

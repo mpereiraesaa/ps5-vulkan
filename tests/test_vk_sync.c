@@ -58,8 +58,13 @@ int main(void)
     event->device_signaled = VK_TRUE;
     assert(vkGetEventStatus(&d, event) == VK_EVENT_SET);
     event->pending = 1;
-    assert(vkSetEvent(&d, event) != VK_SUCCESS);
-    assert(vkResetEvent(&d, event) != VK_SUCCESS);
+    assert(vkSetEvent(&d, event) == VK_SUCCESS);
+    assert(vkGetEventStatus(&d, event) == VK_EVENT_SET);
+    assert(vkResetEvent(&d, event) == VK_SUCCESS);
+    event->pending_waits = 1;
+    assert(vkSetEvent(&d, event) == VK_ERROR_UNKNOWN);
+    assert(vkResetEvent(&d, event) == VK_ERROR_UNKNOWN);
+    event->pending_waits = 0;
     vkDestroyEvent(&d, event, NULL);
     assert(d.events == event && d.lifetime_errors == 2);
     event->pending = 0;

@@ -15,7 +15,11 @@ static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **out
     for (unsigned i=0; i<s->count; ++i) {
         VkCommandBuffer c=s->buffers[i];
         if (!c || c->operation_count>PS5VK_MAX_OPERATIONS) return VK_ERROR_UNKNOWN;
-        for (unsigned k=0; k<c->operation_count; ++k) {
+        uint32_t first = ps5vk_submission_first_operation(s, i);
+        uint32_t count = ps5vk_submission_operation_count(s, i);
+        if (first > c->operation_count || count > c->operation_count - first)
+            return VK_ERROR_UNKNOWN;
+        for (uint32_t k=first; k<first+count; ++k) {
             switch (c->operations[k].type) {
             case PS5VK_DISPATCH: compute=1; break;
             case PS5VK_BARRIER: break;
@@ -35,6 +39,10 @@ static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **out
     struct routed_job *j=calloc(1,sizeof(*j));
     if (!j) return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->backend=b;
+    /* Backends consume the immutable operation ranges directly.  Do not
+     * clone a command buffer here: prepare callbacks may retain the submitted
+     * buffer until launch/release, so a transient clone would violate the
+     * backend lifetime contract. */
     VkResult rc=b.prepare(d,s,&j->child);
     if (rc!=VK_SUCCESS) { free(j); return rc; }
     *out=j; return VK_SUCCESS;
