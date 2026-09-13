@@ -666,6 +666,7 @@
           "vkEnumerateInstanceExtensionProperties",
           "vkEnumerateInstanceLayerProperties",
           "vkEnumeratePhysicalDevices",
+          "vkGetDeviceMemoryCommitment",
           "vkGetDeviceProcAddr",
           "vkGetDeviceQueue",
           "vkGetPhysicalDeviceFeatures",
@@ -683,7 +684,6 @@
           "vkGetDeviceImageMemoryRequirements",
           "vkGetDeviceImageSparseMemoryRequirements",
           "vkGetDeviceImageSubresourceLayout",
-          "vkGetDeviceMemoryCommitment",
           "vkGetDeviceMemoryOpaqueCaptureAddress",
           "vkGetDeviceQueue2",
           "vkGetPhysicalDeviceExternalBufferProperties",
@@ -703,7 +703,7 @@
           "src/vk_device.c",
           "src/vk_dispatch.c"
         ],
-        "note": "Baseline surface: 15 of 37 named entry points exist; 15 are dispatched; 15 are declared in the public header."
+        "note": "Baseline surface: 16 of 37 named entry points exist; 16 are dispatched; 16 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -3813,19 +3813,19 @@
           "vkCreateImageView",
           "vkDestroyImage",
           "vkDestroyImageView",
-          "vkGetImageMemoryRequirements"
+          "vkGetImageMemoryRequirements",
+          "vkGetImageSubresourceLayout"
         ],
         "absent_entry_points": [
           "vkBindImageMemory2",
           "vkGetImageMemoryRequirements2",
-          "vkGetImageSubresourceLayout",
           "vkGetImageSubresourceLayout2"
         ],
         "refs": [
           "src/vk_image_view.c",
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 6 of 10 named entry points exist; 6 are dispatched; 6 are declared in the public header."
+        "note": "Baseline surface: 7 of 10 named entry points exist; 7 are dispatched; 7 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -4590,15 +4590,15 @@
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkGetImageSubresourceLayout"
         ],
+        "absent_entry_points": [],
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -5031,7 +5031,7 @@
         "refs": [
           "src/vk_descriptor.c"
         ],
-        "note": "Baseline surface: 10 of 13 named entry points exist; 10 are dispatched; 9 are declared in the public header."
+        "note": "Baseline surface: 10 of 13 named entry points exist; 10 are dispatched; 10 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6442,19 +6442,18 @@
         "entry_points": [
           "vkCreateComputePipelines",
           "vkCreateGraphicsPipelines",
+          "vkCreatePipelineCache",
           "vkCreateShaderModule",
           "vkDestroyPipeline",
+          "vkDestroyPipelineCache",
           "vkDestroyShaderModule"
         ],
-        "absent_entry_points": [
-          "vkCreatePipelineCache",
-          "vkDestroyPipelineCache"
-        ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_graphics_pipeline.c",
           "src/vk_pipeline.c"
         ],
-        "note": "Baseline surface: 5 of 7 named entry points exist; 5 are dispatched; 5 are declared in the public header."
+        "note": "Baseline surface: 7 of 7 named entry points exist; 7 are dispatched; 7 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6656,33 +6655,45 @@
         "groups": [
           "vk-default/pipeline/monolithic/monolithic.txt"
         ],
-        "cases": [],
-        "note": "Group-level join only: cache behaviour is interleaved with pipeline creation cases.",
-        "coverage_quality": "family-level",
+        "cases": [
+          "dEQP-VK.pipeline.cache.compute_tests.compute_stage"
+        ],
+        "note": "The compute cache case runs unchanged and passes. The graphics-derived cache cases (graphics_tests, pipeline_from_get_data, pipeline_from_incomplete_get_data, merge and the four misc_tests) are blocked by their pinned D16_UNORM depth-attachment prerequisite and are covered by host tests that reproduce their oracles. The implementation exports the 32-byte header only and stores no portable compiled-code records, so no restored cache hit is claimed.",
+        "coverage_quality": "direct",
         "coverage_note": "Mapped only to the vk-default/pipeline/monolithic/monolithic.txt group(s); the group contains many cases and this row does not claim that any single one covers the whole requirement."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "native-evidence",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCreatePipelineCache",
           "vkGetPipelineCacheData",
           "vkMergePipelineCaches"
         ],
+        "absent_entry_points": [],
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: 0 of 3 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_pipeline_cache.c",
+            "src/physical_device_profile.h",
+            "tests/test_pipeline_cache.c",
+            "tests/test_runtime_pipeline_cache.c",
+            "API.md",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md",
+            "UPSTREAM_CTS.md"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -6692,7 +6703,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Reclassified after review: VkPipelineCache is a core 1.0 object. Using a cache is optional for an application, but the object contract is a requirement.",
+      "review_notes": "Header-only Vulkan pipeline cache: object, export/import contract, validated no-op merge and cache acceptance in both creation paths are implemented and host-tested; computed-record serialization and persistent restored hits remain future work.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -8869,7 +8880,11 @@
           "vkDestroyFramebuffer",
           "vkDestroyRenderPass",
           "vkEnumerateDeviceExtensionProperties",
-          "vkGetInstanceProcAddr"
+          "vkEnumerateDeviceLayerProperties",
+          "vkGetInstanceProcAddr",
+          "vkGetPipelineCacheData",
+          "vkGetRenderAreaGranularity",
+          "vkMergePipelineCaches"
         ],
         "absent_entry_points": [
           "vkCopyImageToImage",
@@ -8878,19 +8893,15 @@
           "vkCreatePrivateDataSlot",
           "vkCreateRenderPass2",
           "vkDestroyPrivateDataSlot",
-          "vkEnumerateDeviceLayerProperties",
           "vkGetBufferDeviceAddress",
           "vkGetBufferOpaqueCaptureAddress",
           "vkGetDescriptorSetLayoutSupport",
           "vkGetEventStatus",
           "vkGetImageSparseMemoryRequirements",
           "vkGetImageSparseMemoryRequirements2",
-          "vkGetPipelineCacheData",
           "vkGetPrivateData",
-          "vkGetRenderAreaGranularity",
           "vkGetRenderingAreaGranularity",
           "vkGetSemaphoreCounterValue",
-          "vkMergePipelineCaches",
           "vkQueueBindSparse",
           "vkResetQueryPool",
           "vkSetPrivateData",
@@ -8905,7 +8916,7 @@
           "src/vk_framebuffer.c",
           "src/vk_render_pass.c"
         ],
-        "note": "Baseline surface: 6 of 32 named entry points exist; 6 are dispatched; 6 are declared in the public header."
+        "note": "Baseline surface: 10 of 32 named entry points exist; 10 are dispatched; 10 are declared in the public header."
       },
       "evidence": {
         "source": {

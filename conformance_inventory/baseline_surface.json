@@ -1,15 +1,15 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "1edd0c94f2850a1dc66a4da5d219cc7fc8615bd6",
-  "inspected_commit": "1edd0c94f2850a1dc66a4da5d219cc7fc8615bd6",
+  "baseline_commit": "71902ea0943948eed8f0fb678eea9ebc7e6aff78",
+  "inspected_commit": "71902ea0943948eed8f0fb678eea9ebc7e6aff78",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 94,
-    "dispatched": 94,
-    "public_header": 93,
-    "implementation_only": 1
+    "entry_points": 102,
+    "dispatched": 102,
+    "public_header": 102,
+    "implementation_only": 0
   },
   "entry_points": [
     {
@@ -319,6 +319,15 @@
       "observed": "Accepts only apiVersion 1.0; other versions are rejected. Evidence: src/vk_device.c, src/platform_host.c."
     },
     {
+      "name": "vkCreatePipelineCache",
+      "files": [
+        "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCreatePipelineLayout",
       "files": [
         "src/vk_descriptor.c"
@@ -463,6 +472,15 @@
       "observed": null
     },
     {
+      "name": "vkDestroyPipelineCache",
+      "files": [
+        "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkDestroyPipelineLayout",
       "files": [
         "src/vk_descriptor.c"
@@ -524,6 +542,15 @@
       "dispatch_scope": "INSTANCE",
       "public_header": true,
       "observed": "Exists and is dispatched (INSTANCE). Enumerates VK_KHR_storage_buffer_storage_class, VK_KHR_8bit_storage and VK_KHR_16bit_storage when the platform exposes the corresponding storage-buffer features. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkEnumerateDeviceLayerProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
     },
     {
       "name": "vkEnumerateInstanceExtensionProperties",
@@ -598,6 +625,15 @@
       "observed": null
     },
     {
+      "name": "vkGetDeviceMemoryCommitment",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkGetDeviceProcAddr",
       "files": [
         "src/vk_dispatch.c"
@@ -626,6 +662,15 @@
     },
     {
       "name": "vkGetImageMemoryRequirements",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetImageSubresourceLayout",
       "files": [
         "src/vk_memory.c"
       ],
@@ -760,6 +805,24 @@
       "observed": "Returns an empty list because sparseBinding is not advertised. Evidence: src/vk_device.c."
     },
     {
+      "name": "vkGetPipelineCacheData",
+      "files": [
+        "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetRenderAreaGranularity",
+      "files": [
+        "src/vk_render_pass.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkInvalidateMappedMemoryRanges",
       "files": [
         "src/vk_memory.c"
@@ -772,6 +835,15 @@
       "name": "vkMapMemory",
       "files": [
         "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkMergePipelineCaches",
+      "files": [
+        "src/vk_pipeline_cache.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -819,7 +891,7 @@
         "src/vk_descriptor.c"
       ],
       "dispatch_scope": "DEVICE",
-      "public_header": false,
+      "public_header": true,
       "observed": null
     },
     {
