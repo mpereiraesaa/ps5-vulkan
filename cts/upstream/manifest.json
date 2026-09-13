@@ -362,6 +362,54 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "The original upstream ComputeCacheTest builds its compute pipelines through a VkPipelineCache, exports it with vkGetPipelineCacheData, re-imports that data into a second cache and compiles again, comparing the compute result after every step. This implementation stores no portable records yet, so the case proves the API and lifetime contract (creation, export, re-import, cache-accepted pipeline creation) rather than a restored compiled-code hit."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.event.host_set_reset",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp:54",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream host event oracle requires RESET at creation, SET after vkSetEvent and RESET after vkResetEvent."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.event.device_set_reset",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp:89",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream device event oracle submits vkCmdSetEvent and vkCmdResetEvent separately and checks the corresponding host-visible status after queue idle."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.event.single_submit_multi_command_buffer",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp:237",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream execution-dependency oracle submits a setter and waiter command buffer in one submit and requires the fence to complete without deadlock."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.event.multi_submit_multi_command_buffer",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp:293",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream execution-dependency oracle places event set and wait command buffers in separate submissions and requires both fences to signal."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.binary_semaphore.one_queue",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:907",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream binary semaphore oracle uses two ordered VkSubmitInfo records in one vkQueueSubmit, signaling in the first and consuming the wait in the second before the final fence."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.binary_semaphore.chain",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:937",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream 32768-link binary semaphore chain requires allocation-light ordered signal and wait consumption across empty submissions before the terminal fence."
     }
   ],
   "diagnostics": [

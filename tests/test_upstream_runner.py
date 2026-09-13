@@ -397,6 +397,12 @@ class TestUpstreamRunner(unittest.TestCase):
         "dEQP-VK.synchronization.basic.fence.multi_waitall_false",
         "dEQP-VK.synchronization.basic.fence.one_signaled",
         "dEQP-VK.synchronization.basic.fence.multiple_signaled",
+        "dEQP-VK.synchronization.basic.event.host_set_reset",
+        "dEQP-VK.synchronization.basic.event.device_set_reset",
+        "dEQP-VK.synchronization.basic.event.single_submit_multi_command_buffer",
+        "dEQP-VK.synchronization.basic.event.multi_submit_multi_command_buffer",
+        "dEQP-VK.synchronization.basic.binary_semaphore.one_queue",
+        "dEQP-VK.synchronization.basic.binary_semaphore.chain",
     }
 
     NONCOHERENT_RANGE_CASES = {
@@ -445,6 +451,10 @@ class TestUpstreamRunner(unittest.TestCase):
                       "vulkan/compute/vktComputeBasicComputeShaderTests.cpp")
         workgroup_path = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
                           "vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp")
+        event_path = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                      "vulkan/synchronization/vktSynchronizationBasicEventTests.cpp")
+        semaphore_path = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                          "vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp")
         # The large pinned CTS checkout is deliberately absent from the normal
         # GitHub host runner.  When present, freeze the original bodies/oracles;
         # otherwise the manifest provenance and package/build registration below
@@ -462,6 +472,15 @@ class TestUpstreamRunner(unittest.TestCase):
             self.assertIn("OpMemoryBarrier", workgroup)
             self.assertIn("OpControlBarrier", workgroup)
             self.assertIn('SpvAsmComputeShaderCase(testCtx, "uint32", spec)', workgroup)
+
+            event = event_path.read_text()
+            self.assertIn('"host_set_reset"', event)
+            self.assertIn('"device_set_reset"', event)
+            self.assertIn('"single_submit_multi_command_buffer"', event)
+            self.assertIn('"multi_submit_multi_command_buffer"', event)
+            semaphore = semaphore_path.read_text()
+            self.assertIn('"one_queue" + createName', semaphore)
+            self.assertIn('"chain"', semaphore)
         else:
             for path in self.SYNCHRONIZATION_CASES:
                 self.assertTrue(by_path[path]["source"].startswith("external/vulkancts/"))
@@ -470,7 +489,11 @@ class TestUpstreamRunner(unittest.TestCase):
         builder = (REPO_ROOT / "tools/build_upstream_cts.py").read_text()
         self.assertIn("createBasicComputeShaderTests", package)
         self.assertIn("createWorkgroupMemoryComputeGroup", package)
+        self.assertIn("createBasicEventTests", package)
+        self.assertIn("createBasicBinarySemaphoreTests", package)
         self.assertIn("vktSpvAsmWorkgroupMemoryTests.cpp", builder)
+        self.assertIn("vktSynchronizationBasicEventTests.cpp", builder)
+        self.assertIn("vktSynchronizationBasicSemaphoreTests.cpp", builder)
 
     def test_noncoherent_range_cases_are_original_and_not_gpu_evidence(self):
         manifest = json.loads(MANIFEST_PATH.read_text())
