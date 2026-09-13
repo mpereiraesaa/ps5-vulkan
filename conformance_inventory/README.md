@@ -15,10 +15,10 @@ Every number quoted below is generated from the data, not typed by hand:
 <!-- stats:begin -->
 ```json
 {
-  "baseline_dispatched": 142,
-  "baseline_entry_points": 142,
+  "baseline_dispatched": 144,
+  "baseline_entry_points": 144,
   "baseline_implementation_only": 0,
-  "baseline_public_header": 142,
+  "baseline_public_header": 144,
   "command_contracts": 12,
   "core_commands": 234,
   "core_conditional_feature_bits": 27,

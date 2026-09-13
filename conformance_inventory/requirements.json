@@ -3641,15 +3641,14 @@
         "surface_state": "symbol-present",
         "entry_points": [
           "vkCreateImageView",
-          "vkCmdCopyImage"
-        ],
-        "absent_entry_points": [
+          "vkCmdCopyImage",
           "vkCmdBlitImage"
         ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_image_view.c"
         ],
-        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8284,18 +8283,17 @@
           "vkCmdFillBuffer",
           "vkCmdCopyBufferToImage",
           "vkCmdCopyImageToBuffer",
-          "vkCmdCopyImage"
-        ],
-        "absent_entry_points": [
+          "vkCmdCopyImage",
           "vkCmdBlitImage",
           "vkCmdResolveImage"
         ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_transfer.c",
           "src/vk_buffer_transfer.c",
           "tests/test_buffer_transfer.c"
         ],
-        "note": "Baseline surface: 6 of 8 named entry points exist; 6 are dispatched; 6 are declared in the public header."
+        "note": "Baseline surface: 8 of 8 named entry points exist; 8 are dispatched; 8 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8724,6 +8722,7 @@
           "vkCmdBindIndexBuffer",
           "vkCmdBindPipeline",
           "vkCmdBindVertexBuffers",
+          "vkCmdBlitImage",
           "vkCmdClearAttachments",
           "vkCmdClearColorImage",
           "vkCmdClearDepthStencilImage",
@@ -8747,6 +8746,7 @@
           "vkCmdPushConstants",
           "vkCmdResetEvent",
           "vkCmdResetQueryPool",
+          "vkCmdResolveImage",
           "vkCmdSetBlendConstants",
           "vkCmdSetDepthBias",
           "vkCmdSetDepthBounds",
@@ -8767,7 +8767,6 @@
           "vkCmdBindDescriptorSets2",
           "vkCmdBindIndexBuffer2",
           "vkCmdBindVertexBuffers2",
-          "vkCmdBlitImage",
           "vkCmdBlitImage2",
           "vkCmdCopyBuffer2",
           "vkCmdCopyBufferToImage2",
@@ -8786,7 +8785,6 @@
           "vkCmdPushDescriptorSetWithTemplate",
           "vkCmdPushDescriptorSetWithTemplate2",
           "vkCmdResetEvent2",
-          "vkCmdResolveImage",
           "vkCmdResolveImage2",
           "vkCmdSetCullMode",
           "vkCmdSetDepthBiasEnable",
@@ -8814,7 +8812,7 @@
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 42 of 89 named entry points exist; 42 are dispatched; 42 are declared in the public header."
+        "note": "Baseline surface: 44 of 89 named entry points exist; 44 are dispatched; 44 are declared in the public header."
       },
       "evidence": {
         "source": {

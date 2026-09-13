@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "eb67a3b",
-  "inspected_commit": "eb67a3b",
+  "baseline_commit": "4784766ff74314290122b6d3024b60994746872c",
+  "inspected_commit": "4784766ff74314290122b6d3024b60994746872c",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 142,
-    "dispatched": 142,
-    "public_header": 142,
+    "entry_points": 144,
+    "dispatched": 144,
+    "public_header": 144,
     "implementation_only": 0
   },
   "entry_points": [
@@ -115,6 +115,15 @@
       "name": "vkCmdBindVertexBuffers",
       "files": [
         "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBlitImage",
+      "files": [
+        "src/vk_image_transfer.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -322,6 +331,15 @@
       "name": "vkCmdResetQueryPool",
       "files": [
         "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdResolveImage",
+      "files": [
+        "src/vk_image_transfer.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
