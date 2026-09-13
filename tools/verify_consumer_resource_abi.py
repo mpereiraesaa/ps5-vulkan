@@ -42,6 +42,14 @@ def validate(log, receipt, artifact):
                 ("sync_producer_spirv_sha256", "sync_consumer_spirv_sha256",
                  "shared_atomic_multiwave_spirv_sha256")),
             "synchronization artifact contract")
+    fixed = artifact.get("fixed_function", {})
+    require(fixed == {
+        "api": "Vulkan 1.0", "width": 1920, "height": 1080,
+        "frames": 18, "color_format": "VK_FORMAT_B8G8R8A8_UNORM",
+        "depth_format": "VK_FORMAT_D32_SFLOAT", "samples": 1,
+        "load_preservation": True, "dynamic_viewport": True,
+        "dynamic_scissor": True,
+    }, "fixed-function artifact contract")
     require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"),
             "log hash")
     require(receipt.get("protocol") == "ps5log/1" and
@@ -102,6 +110,19 @@ def validate(log, receipt, artifact):
     sync_start = one("PS5VK_CONSUMER_SYNC_START")
     sync_witness = one("PS5VK_CONSUMER_SYNC_SUCCESS ")
     sync_retired = one("PS5VK_CONSUMER_SYNC_RETIRED")
+    graphics_start = one("PS5VK_CONSUMER_GRAPHICS_START ")
+    graphics_cold = one("PS5VK_CONSUMER_GRAPHICS_PIPELINE_COLD_CREATED")
+    graphics_warm = one("PS5VK_CONSUMER_GRAPHICS_PIPELINE_WARM_CREATED")
+    graphics_cache_release = one("PS5VK_CONSUMER_GRAPHICS_PIPELINE_DESTROYED ")
+    dynamic_pipeline = one("PS5VK_CONSUMER_DYNAMIC_PIPELINE_CREATED ")
+    present_created = one("PS5VK_CONSUMER_PRESENT_SURFACE_CREATED ")
+    graphics_prepared = matching("PS5VK_GRAPHICS_PREPARED ")
+    graphics_submitted = matching("PS5VK_GRAPHICS_SUBMIT ")
+    graphics_suspended = matching("PS5VK_GRAPHICS_SUSPEND_POINT ")
+    graphics_completed = matching("PS5VK_GRAPHICS_COMPLETED ")
+    depth_reject = matching("PS5VK_CONSUMER_DEPTH_REJECT ")
+    readbacks = matching("PS5VK_CONSUMER_READBACK ")
+    present_destroyed = one("PS5VK_CONSUMER_PRESENT_SURFACE_DESTROYED")
     success = one("PS5VK_CONSUMER_TEST_SUCCESS")
     retired = one("PS5VK_CONSUMER_RESOURCES_RETIRED ")
     ready = one("PS5VK_READY_FOR_SHELL_CLOSE ")
@@ -121,6 +142,10 @@ def validate(log, receipt, artifact):
                sync_witness, sync_retired, success, retired, ready]
     require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
             "resource witness ordering")
+    require(graphics_start[0] > sync_retired[0] and
+            graphics_cold[0] < graphics_warm[0] < graphics_cache_release[0] <
+            dynamic_pipeline[0] < present_created[0] and
+            present_destroyed[0] < success[0], "graphics witness ordering")
     require("mode=finite" in boot[1], "finite mode")
     require(physical[1] ==
         "PS5VK_CONSUMER_PHYSICAL_DEVICE api=00400000 vendor=1002 device=0000 "
@@ -189,6 +214,37 @@ def validate(log, receipt, artifact):
         "synchronization oracle")
     require(retired[1].endswith("zero_tracked_allocations=1") and
             ready[1].endswith("resources_retired=1"), "resource retirement")
+    require(graphics_start[1].endswith("mode=finite") and
+            dynamic_pipeline[1].endswith("viewport=1 scissor=1"),
+            "dynamic fixed-function setup")
+    require(all(len(rows) == 36 for rows in
+                (graphics_prepared, graphics_submitted,
+                 graphics_suspended, graphics_completed)),
+            "two graphics submissions per finite frame")
+    require(len(depth_reject) == 18 and len(readbacks) == 18,
+            "fixed-function frame witnesses")
+
+    def fields(message):
+        return dict(item.split("=", 1) for item in message.split()[1:])
+
+    for frame, (blocked, readback) in enumerate(zip(depth_reject, readbacks)):
+        blocked_fields = fields(blocked[1])
+        readback_fields = fields(readback[1])
+        require(blocked_fields == {"frame": str(frame), "nonblack": "0", "valid": "1"},
+                "depth reject oracle")
+        require(readback_fields.get("frame") == str(frame) and
+                readback_fields.get("slot") == str(frame & 1) and
+                readback_fields.get("bad_alpha") == "0" and
+                readback_fields.get("bad_sum") == "0" and
+                readback_fields.get("valid") == "1" and
+                int(readback_fields.get("changed", "0")) > 0,
+                "load/depth/dynamic draw oracle")
+    serials = [int(fields(row[1])["serial"]) for row in graphics_prepared]
+    require(serials == list(range(serials[0], serials[0] + 36)) and
+            all(fields(row[1]).get("draws") == "1" for row in graphics_prepared) and
+            all(fields(row[1]).get("rc") == "0" for row in graphics_submitted) and
+            all(fields(row[1]).get("rc") == "0" for row in graphics_suspended),
+            "graphics serials and submit status")
 
     return {
         "run_id": receipt.get("run_id"),
@@ -214,6 +270,11 @@ def validate(log, receipt, artifact):
         "synchronization_words_checked": 64,
         "multiwave_atomic_lanes_checked": 128,
         "wave32_count": 4,
+        "fixed_function_frames_checked": 18,
+        "graphics_submissions_checked": 36,
+        "dynamic_viewport_scissor": True,
+        "attachment_load_preservation": True,
+        "depth_reject_then_accept": True,
         "clean_tcp": True,
         "os_close": "requires independent lifecycle evidence",
     }

@@ -14,9 +14,12 @@ hardware acceptance.
   formats.
 - Indexed and non-indexed draws. Index buffers support `uint16` and `uint32`,
   including offsets and signed base vertex.
-- One static viewport and scissor; no dynamic state.
-- One BGRA8 color attachment, one sample and one subpass. Blending, logic ops
-  and multisampling are unsupported.
+- One viewport and scissor, supplied statically at pipeline creation or through
+  `vkCmdSetViewport` / `vkCmdSetScissor` before each affected draw.
+- One BGRA8 presentation attachment or RGBA8 off-screen color attachment, one
+  sample and one subpass. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
+  `DONT_CARE` store semantics are supported by the bounded native path.
+  Blending, logic ops and multisampling are unsupported.
 - Optional D32 depth attachment. Depth testing and writing are supported;
   stencil and depth bounds are unsupported.
 - Face culling and front-face selection are encoded by the native backend.
@@ -27,13 +30,20 @@ hardware acceptance.
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
 | `VK_FORMAT_D32_SFLOAT` | Depth attachment |
-| `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled image and transfer destination |
+| `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled/upload image, or off-screen color attachment plus transfer-source readback |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
 
 Texture uploads use the GPU transfer path and require the sequence
 `UNDEFINED -> TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL`. Image layout
 state is committed only after exact submission completion.
+
+The off-screen readback profile requires a full single-mip RGBA8 image with
+`COLOR_ATTACHMENT | TRANSFER_SRC`, the exact
+`COLOR_ATTACHMENT_OPTIMAL -> TRANSFER_SRC_OPTIMAL` dependency and one full
+`vkCmdCopyImageToBuffer` region. The native queue detiles 64KB_R_X color data
+only after GPU completion. Partial regions and general image-copy support remain
+fail-closed.
 
 Nearest sampling has native visual and deterministic readback evidence. Linear
 filter, address-mode and mipmap-mode encodings have host-contract coverage, but
@@ -113,13 +123,13 @@ complete push-range stage signature. Specialization-dependent `LocalSizeId`
 workgroup dimensions are not yet supported; local size must remain literal.
 
 Runtime graphics uses the same pinned PSBC/NIR/ACO stack for vertex and
-fragment SPIR-V. The current profile supports procedural triangle lists,
-smooth float32 scalar/vector interfaces at matching whole locations 0–31,
-one vec4 fragment output at location 0, BGRA8 UNORM/sample1 and full color
-writes. VertexIndex, push constants and scalar specialization constants are
-supported. Vertex buffers, graphics descriptors, blending, additional targets
-and other interpolation modes are rejected by this runtime-compiled profile.
-The separate audited offline graphics path supports vertex buffers. Interface
+fragment SPIR-V. The current profile supports procedural or single-binding
+float32 vertex input for triangle lists, smooth float32 scalar/vector interfaces
+at matching whole locations 0–31, one vec4 fragment output at location 0,
+BGRA8/RGBA8 UNORM sample-1 targets and full color writes. VertexIndex, push
+constants and scalar specialization constants are supported. Graphics
+descriptors, blending, additional targets and other interpolation modes are
+rejected by this runtime-compiled profile. Interface
 reflection is bounded to 65,536 IDs and is not a complete SPIR-V validator;
 use developer-owned valid shader modules.
 

@@ -1,4 +1,5 @@
 #include "spirv_graphics_interface.h"
+#include "graphics_formats.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -105,7 +106,6 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
             type=&ids[type->type];
         }
         if(type->op!=22 || type->count!=32 || d->location>=LOCATIONS)goto done;
-        if(model==0 && d->storage==1)goto done; /* no vertex buffers in profile */
         unsigned *locations=d->storage==1?out->inputs:out->outputs;
         if(locations[d->location])goto done;
         locations[d->location]=components;
@@ -121,6 +121,14 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
     if(!key || !reflect(&key->vertex,0,&vs) || !reflect(&key->fragment,4,&fs))return 0;
     if(fs.outputs[0]!=4)return 0;
     for(unsigned i=0;i<LOCATIONS;++i) {
+        unsigned matched=0;
+        for(uint32_t a=0;a<key->vertex_attribute_count;++a)
+            if(key->vertex_attributes[a].location==i) {
+                uint32_t size=ps5vk_vertex_format_size(key->vertex_attributes[a].format);
+                if(!size || size/4u!=vs.inputs[i])return 0;
+                ++matched;
+            }
+        if((vs.inputs[i] && matched!=1) || (!vs.inputs[i] && matched))return 0;
         if(i && fs.outputs[i])return 0;
         if(fs.inputs[i] && fs.inputs[i]!=vs.outputs[i])return 0;
     }

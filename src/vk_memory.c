@@ -184,7 +184,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateBuffer(VkDevice d, const VkBufferCreateIn
     if (info->pNext || info->flags || info->sharingMode != VK_SHARING_MODE_EXCLUSIVE ||
         !info->usage || (info->usage & ~(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
         VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT))) return VK_ERROR_FEATURE_NOT_PRESENT;
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT))) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (info->size > UINT64_MAX - (d->buffer_alignment - 1))
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     VkDeviceSize required = (info->size + d->buffer_alignment - 1) & ~(d->buffer_alignment - 1);

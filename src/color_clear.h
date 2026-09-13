@@ -4,4 +4,5 @@
 /* Scoped finite [0,1] RGBA float clear -> little-endian BGRA8 UNORM.
  * Reject unsupported values without modifying the output. */
 int ps5vk_color_clear_bgra8(const float rgba[4], uint32_t *out);
+int ps5vk_color_clear_rgba8(const float rgba[4], uint32_t *out);
 #endif

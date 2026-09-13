@@ -35,9 +35,9 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     uint32_t runtime_vertex[16],runtime_pixel[16];
     uint32_t sh_count=state->sh_count?state->sh_count:12;
     if(sh_count>16)return VK_ERROR_UNKNOWN;
-    if(state->runtime.enabled && (vertex_input || indices || texture_low ||
+    if(state->runtime.enabled && (indices || texture_low ||
         ps5vk_runtime_draw_values(&state->runtime,op->first_vertex,op->first_instance,
-                                 state->push_constant_low,
+                                 vertex_input?vertex_table_low:0,state->push_constant_low,
                                  runtime_vertex,runtime_pixel))) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (capacity < 13) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;

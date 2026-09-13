@@ -1,15 +1,17 @@
 #include "draw_state_ps5.h"
 #include "viewport_ps5.h"
 #include <string.h>
-VkResult ps5vk_native_draw_state(VkPipeline p, const struct ps5vk_target_registers *color,
+VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
+    const VkRect2D *scissor_state, const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
     uint32_t width, uint32_t height, struct ps5vk_draw_state *out)
 {
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
-    if (!p || !p->graphics || !p->graphics_state || !color || color->count != 16 ||
+    if (!p || !viewport_state || !scissor_state || !p->graphics || !p->graphics_state || !color || color->count != 16 ||
         !width || !height || width > 16384 || height > 16384 ||
-        p->color_format != VK_FORMAT_B8G8R8A8_UNORM ||
+        (p->color_format != VK_FORMAT_B8G8R8A8_UNORM &&
+         p->color_format != VK_FORMAT_R8G8B8A8_UNORM) ||
         (p->cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
@@ -29,7 +31,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const struct ps5vk_target_registe
         fs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX))return VK_ERROR_UNKNOWN;
     if (pair->vertex_quantization != 0x2d) return VK_ERROR_FEATURE_NOT_PRESENT;
     ps5_agc_register viewport[PS5VK_VIEWPORT_REGISTERS];
-    VkResult rc = ps5vk_native_viewport(&p->viewport, &p->scissor, area, viewport);
+    VkResult rc = ps5vk_native_viewport(viewport_state, scissor_state, area, viewport);
     if (rc != VK_SUCCESS) return rc;
     struct ps5_pipeline_registers base;
     if (ps5_pipeline_build(&base, color->registers, &pair->cx, &pair->uc,

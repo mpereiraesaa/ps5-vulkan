@@ -51,10 +51,25 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
     return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
         key->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
-        key->color_format==VK_FORMAT_B8G8R8A8_UNORM && key->samples==VK_SAMPLE_COUNT_1_BIT &&
-        key->color_write_mask==15 && !key->blend_enable && !key->vertex_binding_count &&
-        !key->vertex_attribute_count && !key->descriptor_set_count &&
+        (key->color_format==VK_FORMAT_B8G8R8A8_UNORM ||
+         key->color_format==VK_FORMAT_R8G8B8A8_UNORM) && key->samples==VK_SAMPLE_COUNT_1_BIT &&
+        key->color_write_mask==15 && !key->blend_enable &&
+        key->vertex_binding_count<=1 && key->vertex_attribute_count<=PSBC_MAX_VERTEX_ATTRIBUTES &&
+        (!key->vertex_binding_count || key->vertex_bindings) &&
+        (!key->vertex_attribute_count || key->vertex_attributes) &&
+        !key->descriptor_set_count &&
         ps5vk_spirv_graphics_interface(key);
+}
+
+static PsbcVertexFormat vertex_format(VkFormat format)
+{
+    switch(format) {
+    case VK_FORMAT_R32_SFLOAT: return PSBC_VERTEX_FORMAT_R32_FLOAT;
+    case VK_FORMAT_R32G32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32_FLOAT;
+    case VK_FORMAT_R32G32B32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32B32_FLOAT;
+    case VK_FORMAT_R32G32B32A32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32B32A32_FLOAT;
+    default: return PSBC_VERTEX_FORMAT_NONE;
+    }
 }
 
 static int apply_parameters(PsbcCompileOptions *options,
@@ -74,6 +89,23 @@ static int apply_parameters(PsbcCompileOptions *options,
     options->force_indirect_push_constants=false;
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&stage)options->force_indirect_push_constants=true;
+    options->vertex_attribute_count=0;
+    if(stage==VK_SHADER_STAGE_VERTEX_BIT) {
+        for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
+            const VkVertexInputAttributeDescription *source=&key->vertex_attributes[i];
+            const VkVertexInputBindingDescription *binding=NULL;
+            for(uint32_t j=0;j<key->vertex_binding_count;++j)
+                if(key->vertex_bindings[j].binding==source->binding)binding=&key->vertex_bindings[j];
+            PsbcVertexFormat format=vertex_format(source->format);
+            if(!binding || !format || binding->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
+               !binding->stride || binding->stride>0x3fff || binding->stride%4 || source->offset%4)
+                return 0;
+            options->vertex_attributes[options->vertex_attribute_count++]=(PsbcVertexAttribute){
+                .location=(uint8_t)source->location,.binding=(uint8_t)source->binding,
+                .format=format,.offset=source->offset,.stride=binding->stride,
+                .alignment=4,.instance_divisor=0};
+        }
+    }
     return 1;
 }
 

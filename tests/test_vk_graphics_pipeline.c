@@ -44,10 +44,30 @@ int main(void)
     VkPipelineViewportStateCreateInfo vp={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,.viewportCount=1,.pViewports=&viewport,.scissorCount=1,.pScissors=&scissor};
     VkPipelineColorBlendAttachmentState color={.colorWriteMask=15};
     VkPipelineColorBlendStateCreateInfo b={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,.attachmentCount=1,.pAttachments=&color};
+    /* Vulkan ignores this state when the pipeline contains no tessellation
+     * stages. The CTS helper supplies this otherwise-unused pointer. */
+    VkPipelineTessellationStateCreateInfo tess={
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO};
     VkGraphicsPipelineCreateInfo info={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,.layout=&layout,.renderPass=&pass,
-        .stageCount=2,.pStages=stages,.pVertexInputState=&v,.pInputAssemblyState=&ia,.pRasterizationState=&r,.pMultisampleState=&m,.pViewportState=&vp,.pColorBlendState=&b};
+        .stageCount=2,.pStages=stages,.pVertexInputState=&v,.pInputAssemblyState=&ia,
+        .pTessellationState=&tess,.pRasterizationState=&r,.pMultisampleState=&m,
+        .pViewportState=&vp,.pColorBlendState=&b};
     VkPipeline p; assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&p)==VK_SUCCESS && p->graphics && created==1);
     viewport.width=1; assert(p->viewport.width==1920);
+    VkDynamicState dynamic_values[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamic={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount=2,.pDynamicStates=dynamic_values};
+    vp.pViewports=NULL;vp.pScissors=NULL;info.pDynamicState=&dynamic;
+    VkPipeline dynamic_pipeline;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==VK_SUCCESS);
+    assert(dynamic_pipeline->dynamic_viewport && dynamic_pipeline->dynamic_scissor);
+    vkDestroyPipeline(&d,dynamic_pipeline,NULL);
+    dynamic_values[1]=VK_DYNAMIC_STATE_VIEWPORT;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==VK_ERROR_FEATURE_NOT_PRESENT && !dynamic_pipeline);
+    dynamic_values[1]=(VkDynamicState)0x7fffffff;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==VK_ERROR_FEATURE_NOT_PRESENT && !dynamic_pipeline);
+    dynamic_values[1]=VK_DYNAMIC_STATE_SCISSOR;
+    vp.pViewports=&viewport;vp.pScissors=&scissor;info.pDynamicState=NULL;
     d.graphics_library=NULL;d.graphics_compiler_context=&acquired;
     d.graphics_acquire=acquire;d.graphics_compiled_release=compiled_release;
     VkPipeline runtime;
@@ -56,10 +76,10 @@ int main(void)
     vkDestroyPipeline(&d,runtime,NULL);
     compile_fail=1;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
-    assert(acquired==2 && compiled_released==2 && created==2);
+    assert(acquired==2 && compiled_released==2 && created==3);
     compile_fail=0;backend_fail=1;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_UNKNOWN && !runtime);
-    assert(acquired==3 && compiled_released==3 && released==2);
+    assert(acquired==3 && compiled_released==3 && released==3);
     backend_fail=0;d.graphics_compiled_release=NULL;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
     assert(acquired==3);

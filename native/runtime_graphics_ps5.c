@@ -41,9 +41,14 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,void *
     memcpy(vs_code,input->vertex.machine_code,input->vertex.machine_code_size);
     memcpy(fs_code,input->fragment.machine_code,input->fragment.machine_code_size);
     void *vs=NULL,*fs=NULL;
-    if(sceAgcCreateShader(&vs,&pair->runtime_vertex,vs_code) || vs!=&pair->runtime_vertex ||
-       sceAgcCreateShader(&fs,&pair->runtime_fragment,fs_code) || fs!=&pair->runtime_fragment ||
-       sceAgcLinkShaders(&pair->cx,&pair->uc,NULL,vs,fs,4u)) {
+    int32_t agc_rc=sceAgcCreateShader(&vs,&pair->runtime_vertex,vs_code);
+    if(!agc_rc && vs==&pair->runtime_vertex) {
+        agc_rc=sceAgcCreateShader(&fs,&pair->runtime_fragment,fs_code);
+    }
+    if(!agc_rc && fs==&pair->runtime_fragment) {
+        agc_rc=sceAgcLinkShaders(&pair->cx,&pair->uc,NULL,vs,fs,4u);
+    }
+    if(agc_rc || vs!=&pair->runtime_vertex || fs!=&pair->runtime_fragment) {
         rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
     }
     pair->vertex_quantization=0x2d;pair->ready=1;

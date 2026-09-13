@@ -16,7 +16,8 @@ struct ps5vk_draw_state {
 };
 /* Caller must keep the resulting register block in published GPU-visible
  * storage through retirement. No init-context, clear, cache or draw emitted. */
-VkResult ps5vk_native_draw_state(VkPipeline, const struct ps5vk_target_registers *color,
-    const struct ps5vk_target_registers *depth, const VkRect2D *area,
+VkResult ps5vk_native_draw_state(VkPipeline, const VkViewport *, const VkRect2D *,
+    const struct ps5vk_target_registers *color, const struct ps5vk_target_registers *depth,
+    const VkRect2D *area,
     uint32_t width, uint32_t height, struct ps5vk_draw_state *);
 #endif

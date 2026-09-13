@@ -4,6 +4,24 @@
 #include <float.h>
 #include <string.h>
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
+static int dynamic_states(const VkPipelineDynamicStateCreateInfo *info,
+                          VkBool32 *viewport, VkBool32 *scissor)
+{
+    *viewport=*scissor=VK_FALSE;
+    if(!info)return 1;
+    if(info->sType!=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO ||
+       info->pNext || info->flags || !info->dynamicStateCount ||
+       info->dynamicStateCount>2 || !info->pDynamicStates)return 0;
+    for(uint32_t i=0;i<info->dynamicStateCount;++i) {
+        VkBool32 *flag;
+        if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_VIEWPORT)flag=viewport;
+        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_SCISSOR)flag=scissor;
+        else return 0;
+        if(*flag)return 0;
+        *flag=VK_TRUE;
+    }
+    return 1;
+}
 
 static int specialization_key(const VkSpecializationInfo *info,
                               struct ps5vk_graphics_module_key *out)
@@ -38,7 +56,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (in->sType != VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO || !in->layout ||
         in->layout->device != d || !in->renderPass || in->renderPass->device != d) return VK_ERROR_UNKNOWN;
     if (in->pNext || in->flags || in->subpass || in->stageCount != 2 || !in->pStages ||
-        in->pTessellationState || in->pDynamicState || in->layout->set_count>1)
+        in->layout->set_count>1)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkBool32 dynamic_viewport,dynamic_scissor;
+    if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL;
     for (unsigned i=0; i<2; ++i) {
@@ -83,13 +104,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         vp->pNext || vp->flags || vp->viewportCount != 1 || vp->scissorCount != 1 ||
         b->pNext || b->flags || b->logicOpEnable || b->attachmentCount != 1)
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    if (!vp->pViewports || !vp->pScissors || !b->pAttachments) return VK_ERROR_UNKNOWN;
+    if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
+        !b->pAttachments) return VK_ERROR_UNKNOWN;
     const VkViewport *viewport=vp->pViewports; const VkRect2D *scissor=vp->pScissors;
-    if (!finite_float(viewport->x) || !finite_float(viewport->y) || !finite_float(viewport->width) ||
-        !finite_float(viewport->height) || !(viewport->width > 0) || !(viewport->height > 0) ||
+    if ((!dynamic_viewport && (!finite_float(viewport->x) || !finite_float(viewport->y) ||
+        !finite_float(viewport->width) || !finite_float(viewport->height) ||
+        !(viewport->width > 0) || !(viewport->height > 0) ||
         !(viewport->minDepth >= 0 && viewport->minDepth <= 1) ||
-        !(viewport->maxDepth >= 0 && viewport->maxDepth <= 1) ||
-        scissor->offset.x < 0 || scissor->offset.y < 0 || !scissor->extent.width || !scissor->extent.height ||
+        !(viewport->maxDepth >= 0 && viewport->maxDepth <= 1))) ||
+        (!dynamic_scissor && (scissor->offset.x < 0 || scissor->offset.y < 0 ||
+        !scissor->extent.width || !scissor->extent.height)) ||
         r->cullMode & ~VK_CULL_MODE_FRONT_AND_BACK ||
         (r->frontFace != VK_FRONT_FACE_CLOCKWISE && r->frontFace != VK_FRONT_FACE_COUNTER_CLOCKWISE))
         return VK_ERROR_UNKNOWN;
@@ -147,7 +171,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     p->device=d; p->allocator=saved; p->custom_allocator=custom; p->graphics=VK_TRUE;
     p->set_count=in->layout->set_count;
     if(p->set_count)memcpy(p->sets,in->layout->sets,p->set_count*sizeof(*p->sets));
-    p->graphics_release=d->graphics_release; p->viewport=*viewport; p->scissor=*scissor;
+    p->graphics_release=d->graphics_release;
+    p->dynamic_viewport=dynamic_viewport;p->dynamic_scissor=dynamic_scissor;
+    if(!dynamic_viewport)p->viewport=*viewport;
+    if(!dynamic_scissor)p->scissor=*scissor;
     p->push_constant_size=in->layout->push_constant_size;
     memcpy(p->push_constant_stages,in->layout->push_constant_stages,
            sizeof(p->push_constant_stages));
@@ -161,7 +188,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         p->depth_test=depth->depthTestEnable; p->depth_write=depth->depthWriteEnable;
         p->depth_compare=depth->depthCompareOp;
     }
-    ++d->pipeline_objects; *out=p; return VK_SUCCESS;
+    ++d->pipeline_objects;
+    *out=p;
+    return VK_SUCCESS;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineCache cache,
