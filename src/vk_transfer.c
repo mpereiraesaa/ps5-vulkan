@@ -1,9 +1,6 @@
 #include "vk_command.h"
 #include "texture_copy.h"
-static void invalid(VkCommandBuffer c)
-{
-    if(c){++c->pool->device->lifetime_errors;if(c->state!=PS5VK_PENDING)c->state=PS5VK_INVALID;}
-}
+#define invalid ps5vk_command_invalidate
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer source,VkImage image,
     VkImageLayout layout,uint32_t count,const VkBufferImageCopy *regions)
 {
@@ -25,8 +22,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
         if(ps5vk_texture_copy_plan(image->info.extent.width,image->info.extent.height,
             src_bytes,dst_bytes,&regions[i],&plan)!=VK_SUCCESS) {invalid(c);return;}
     }
-    for(uint32_t i=0;i<count;++i)c->operations[c->operation_count++]=(struct ps5vk_operation){
-        .type=PS5VK_COPY_BUFFER_IMAGE,.copy_source=source,.copy_image=image,.copy_layout=layout,.copy_region=regions[i]};
+    struct ps5vk_operation *ops=ps5vk_command_reserve_operations(c,PS5VK_COPY_BUFFER_IMAGE,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,count);
+    if(!ops)return;
+    for(uint32_t i=0;i<count;++i) {
+        ops[i].copy_source=source;ops[i].copy_image=image;
+        ops[i].copy_layout=layout;ops[i].copy_region=regions[i];
+    }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage image,
     VkImageLayout layout,VkBuffer destination,uint32_t count,const VkBufferImageCopy *regions)
@@ -55,7 +57,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
         ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
         ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS ||
         dst_bytes<pixels*4) {invalid(c);return;}
-    c->operations[c->operation_count++]=(struct ps5vk_operation){
-        .type=PS5VK_COPY_IMAGE_BUFFER,.copy_destination=destination,.copy_image=image,
-        .copy_layout=layout,.copy_region=*r};
+    struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
+    if(!op)return;
+    op->copy_destination=destination;op->copy_image=image;
+    op->copy_layout=layout;op->copy_region=*r;
 }

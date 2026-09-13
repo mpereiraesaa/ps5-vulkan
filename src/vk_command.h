@@ -3,15 +3,27 @@
 #include "vk_pipeline.h"
 #include "vk_framebuffer.h"
 enum ps5vk_command_state { PS5VK_INITIAL, PS5VK_RECORDING, PS5VK_EXECUTABLE, PS5VK_PENDING, PS5VK_INVALID };
+enum ps5vk_operation_type {
+    PS5VK_DISPATCH, PS5VK_BARRIER, PS5VK_BEGIN_RENDER_PASS, PS5VK_DRAW,
+    PS5VK_END_RENDER_PASS, PS5VK_DRAW_INDEXED, PS5VK_COPY_BUFFER_IMAGE,
+    PS5VK_IMAGE_BARRIER, PS5VK_COPY_IMAGE_BUFFER, PS5VK_EVENT_SET,
+    PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT
+};
+enum ps5vk_operation_scope {
+    PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
+    PS5VK_OPERATION_INSIDE_RENDER_PASS,
+    PS5VK_OPERATION_ANYWHERE
+};
 enum { PS5VK_MAX_OPERATIONS = 64 };
 enum { PS5VK_MAX_VERTEX_BINDINGS = 16 };
 struct ps5vk_vertex_binding { VkBuffer buffer; VkDeviceSize offset; };
 struct ps5vk_index_binding { VkBuffer buffer; VkDeviceSize offset; VkIndexType type; };
 struct ps5vk_operation {
-    enum { PS5VK_DISPATCH, PS5VK_BARRIER, PS5VK_BEGIN_RENDER_PASS, PS5VK_DRAW,
-        PS5VK_END_RENDER_PASS, PS5VK_DRAW_INDEXED, PS5VK_COPY_BUFFER_IMAGE,
-        PS5VK_IMAGE_BARRIER, PS5VK_COPY_IMAGE_BUFFER, PS5VK_EVENT_SET,
-        PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT } type;
+    enum ps5vk_operation_type type;
+    void *owned_payload;
+    size_t owned_payload_size;
+    VkAllocationCallbacks payload_allocator;
+    VkBool32 custom_payload_allocator;
     VkEvent event;
     VkImageMemoryBarrier image_barrier;
     VkBuffer copy_source;
@@ -74,4 +86,16 @@ struct VkCommandPool_T {
     VkCommandBuffer buffers;
     struct VkCommandPool_T *next;
 };
+
+/* Internal recording contract shared by command-domain modules.  Validation is
+ * transactional: failure invalidates the command buffer without consuming a
+ * slot; success zeroes and types every reserved operation before publishing
+ * the new operation_count. */
+void ps5vk_command_invalidate(VkCommandBuffer command);
+struct ps5vk_operation *ps5vk_command_reserve_operations(
+    VkCommandBuffer command, enum ps5vk_operation_type type,
+    enum ps5vk_operation_scope scope, uint32_t count);
+struct ps5vk_operation *ps5vk_command_reserve_operation_with_payload(
+    VkCommandBuffer command, enum ps5vk_operation_type type,
+    enum ps5vk_operation_scope scope, const void *data, size_t size);
 #endif
