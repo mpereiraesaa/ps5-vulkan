@@ -644,6 +644,36 @@ class TestUpstreamRunner(unittest.TestCase):
         upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
                     "modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp")
         with tempfile.TemporaryDirectory() as directory:
+            if not upstream.is_file():
+                upstream = Path(directory) / "upstream.cpp"
+                upstream.write_text(
+                    """
+void addCoreCopiesAndBlittingTests(tcu::TestCaseGroup *group)
+{
+    uint32_t extensionFlags = 0;
+    addCopiesAndBlittingTests(group, ALLOCATION_KIND_SUBALLOCATED, extensionFlags);
+    addBufferCopyOffsetTests(group);
+}
+void factory()
+{
+    copiesAndBlittingTests->addChild(createTestGroup(testCtx, "core", addCoreCopiesAndBlittingTests, cleanupGroup));
+    copiesAndBlittingTests->addChild(
+        createTestGroup(testCtx, "dedicated_allocation", addDedicatedAllocationCopiesAndBlittingTests, cleanupGroup));
+    copiesAndBlittingTests->addChild(createTestGroup(
+        testCtx, "copy_commands2",
+        [](tcu::TestCaseGroup *group) { addCopiesAndBlittingTests(group, ALLOCATION_KIND_DEDICATED, COPY_COMMANDS_2); },
+        cleanupGroup));
+    copiesAndBlittingTests->addChild(createTestGroup(
+        testCtx, "sparse",
+        [](tcu::TestCaseGroup *group)
+        { addSparseCopyTests(group, ALLOCATION_KIND_DEDICATED, COPY_COMMANDS_2 | SPARSE_BINDING); },
+        cleanupGroup));
+}
+void CopyBufferToBuffer::iterate() {}
+void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
+""",
+                    encoding="utf-8",
+                )
             destination = Path(directory) / "focused.cpp"
             write_focused_buffer_copy_source(upstream, destination)
             generated = destination.read_text()
