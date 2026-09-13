@@ -25,8 +25,8 @@ EXPECTED_VULKAN10_TOTAL = 137
 # prototype, a dispatch entry and an implementation. This is not a semantic
 # support claim; see the report's advertised-obligation table for what each
 # command may actually be used for.
-EXPECTED_FULLY_WIRED_TOTAL = 100
-EXPECTED_MISSING_TOTAL = 37
+EXPECTED_FULLY_WIRED_TOTAL = 99
+EXPECTED_MISSING_TOTAL = 38
 
 REQUIRED_BOOKKEEPING_COMMANDS = {
     "vkGetImageSubresourceLayout",
@@ -38,6 +38,7 @@ REQUIRED_BOOKKEEPING_COMMANDS = {
 
 EXPECTED_MISSING_CATEGORIES = {
     "Queries": {
+        "vkGetQueryPoolResults",
         "vkCmdResetQueryPool",
         "vkCmdBeginQuery",
         "vkCmdEndQuery",

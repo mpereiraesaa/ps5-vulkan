@@ -2,10 +2,9 @@
  * Host contract tests for the Vulkan 1.0 query-pool object surface and the two
  * sparse image queries.
  *
- * The oracle is deliberately "no fabrication": with no device-side query writes
- * implemented, vkGetQueryPoolResults must report VK_NOT_READY and leave the
- * destination buffer untouched. Sparse binding is not advertised, so both
- * sparse queries must report an empty list.
+ * Result retrieval remains absent until device-side query initialization and
+ * availability exist. Sparse binding is not advertised, so both sparse queries
+ * must report an empty list for valid inputs.
  */
 #include "vk_internal.h"
 #include "vk_query_pool.h"
@@ -69,6 +68,14 @@ static VkDevice make_device(VkPhysicalDevice physical)
     return device;
 }
 
+static VkResult image_requirements(VkDevice device,
+    const VkImageCreateInfo *info, VkMemoryRequirements *out)
+{
+    (void)device; (void)info;
+    *out = (VkMemoryRequirements){4096, 256, 1};
+    return VK_SUCCESS;
+}
+
 int main(void)
 {
     VkPhysicalDevice physical = physical_device();
@@ -107,32 +114,26 @@ int main(void)
     vkDestroyDevice(device, NULL);
     assert(device->lifetime_errors == errors + 1);
 
-    /* --- results are never fabricated --- */
-    uint32_t results[8];
-    memset(results, 0xa5, sizeof(results));
-    assert(vkGetQueryPoolResults(device, pool, 0, 8, sizeof(results), results,
-                                 sizeof(uint32_t), 0) == VK_NOT_READY);
-    for (unsigned i = 0; i < 8; ++i) assert(results[i] == 0xa5a5a5a5u);
-    uint64_t wide[8];
-    memset(wide, 0x5a, sizeof(wide));
-    assert(vkGetQueryPoolResults(device, pool, 0, 8, sizeof(wide), wide,
-                                 sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) == VK_NOT_READY);
-    for (unsigned i = 0; i < 8; ++i) assert(wide[i] == 0x5a5a5a5a5a5a5a5au);
-
-    /* range, flag, stride and buffer validation fail closed */
-    assert(vkGetQueryPoolResults(device, pool, 0, 0, sizeof(results), results, 4, 0) != VK_SUCCESS);
-    assert(vkGetQueryPoolResults(device, pool, 4, 5, sizeof(results), results, 4, 0) != VK_SUCCESS);
-    assert(vkGetQueryPoolResults(device, pool, 0, 8, sizeof(results), results, 4,
-                                 VK_QUERY_RESULT_PARTIAL_BIT) != VK_SUCCESS);
-    assert(vkGetQueryPoolResults(device, pool, 0, 8, sizeof(wide), wide, 4,
-                                 VK_QUERY_RESULT_64_BIT) != VK_SUCCESS);
-    assert(vkGetQueryPoolResults(device, pool, 0, 8, 0, NULL, 4, 0) != VK_SUCCESS);
-    assert(vkGetQueryPoolResults(device, pool, 0, 8, 8, results, 4, 0) != VK_SUCCESS);
-    assert(vkGetQueryPoolResults(device, VK_NULL_HANDLE, 0, 1, 4, results, 4, 0) != VK_SUCCESS);
-
     /* --- sparse queries report an empty list --- */
+    device->graphics_enabled = VK_TRUE;
+    device->image_requirements = image_requirements;
+    VkImageCreateInfo image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {16, 16, 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    VkImage image = VK_NULL_HANDLE;
+    assert(vkCreateImage(device, &image_info, NULL, &image) == VK_SUCCESS);
     uint32_t sparse_count = 7;
-    vkGetImageSparseMemoryRequirements(device, VK_NULL_HANDLE, &sparse_count, NULL);
+    vkGetImageSparseMemoryRequirements(device, image, &sparse_count, NULL);
     assert(sparse_count == 0);
     uint32_t format_count = 7;
     vkGetPhysicalDeviceSparseImageFormatProperties(physical, VK_FORMAT_R8G8B8A8_UNORM,
@@ -141,10 +142,11 @@ int main(void)
     assert(format_count == 0);
 
     /* --- teardown --- */
+    vkDestroyImage(device, image, NULL);
     vkDestroyQueryPool(device, pool, NULL);
     VkInstance instance = device->physical->instance;
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
-    puts("query pool and sparse queries: pass (lifecycle, validation, no fabricated results)");
+    puts("query-pool lifetime and empty sparse queries: pass");
     return 0;
 }

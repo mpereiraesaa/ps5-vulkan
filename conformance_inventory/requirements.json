@@ -9798,12 +9798,13 @@
         "surface_state": "symbol-present",
         "entry_points": [
           "vkCreateQueryPool",
-          "vkDestroyQueryPool",
+          "vkDestroyQueryPool"
+        ],
+        "absent_entry_points": [
           "vkGetQueryPoolResults"
         ],
-        "absent_entry_points": [],
         "refs": [],
-        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
+        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9869,17 +9870,17 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
-          "vkCreateQueryPool",
-          "vkGetQueryPoolResults"
+          "vkCreateQueryPool"
         ],
         "absent_entry_points": [
+          "vkGetQueryPoolResults",
           "vkCmdBeginQuery",
           "vkCmdEndQuery"
         ],
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: 2 of 4 named entry points exist; 2 are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 1 of 4 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {

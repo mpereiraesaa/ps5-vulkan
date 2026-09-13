@@ -214,17 +214,15 @@ profile can honestly create:
   pool are rejected.
 - `vkDestroyQueryPool` follows the standard parentage rules, and the device
   cannot be destroyed while a query pool child remains.
-- `vkGetQueryPoolResults` validates range, flags (`64_BIT` and `WAIT_BIT` only),
-  stride and buffer size, then reports `VK_NOT_READY` and writes nothing.
-  Device-side query writes are not implemented in this profile - the commands
-  that would make a query available belong to the command-recording file - so
-  the call never fabricates a result. A query pool is therefore an honest API
-  surface, not yet a measurement surface.
+- `vkGetQueryPoolResults` remains absent. It will land with query command
+  recording and per-query initialization/availability state; exposing it now
+  would make every attempted read invalid usage and could not implement
+  `WAIT_BIT`, `PARTIAL_BIT`, or availability semantics honestly.
 
 Sparse binding is not advertised and images cannot be created with sparse flags,
 so the two mandatory sparse queries report an empty list rather than inventing
-requirements: `vkGetImageSparseMemoryRequirements` sets the count to 0 (and
-leaves it at 0 for a foreign or destroyed image), and
+requirements: `vkGetImageSparseMemoryRequirements` sets the count to 0 for a
+valid non-sparse image, and
 `vkGetPhysicalDeviceSparseImageFormatProperties` reports zero properties for
 every format/type/tiling/usage combination.
 

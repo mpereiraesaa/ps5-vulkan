@@ -350,7 +350,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements(VkDevice d, VkImag
     if (!count) return;
     /* Images cannot be created with VK_IMAGE_CREATE_SPARSE_BINDING_BIT because
      * sparseBinding is not advertised, so every valid image reports zero sparse
-     * memory requirements. A foreign or destroyed image is equally empty. */
+     * memory requirements. Invalid handles remain outside this contract. */
     *count = 0;
     if (!d || !image || image->device != d) return;
 }

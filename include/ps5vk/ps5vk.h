@@ -386,10 +386,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMergePipelineCaches(
     uint32_t srcCacheCount,
     const VkPipelineCache* pSrcCaches);
 
-/* Query pools. Only VK_QUERY_TYPE_OCCLUSION is created (timestamps and pipeline
- * statistics require feature bits this implementation reports as false). No
- * device command writes query results yet, so vkGetQueryPoolResults reports
- * VK_NOT_READY instead of fabricating values. */
+/* Query-pool object lifetime. Only VK_QUERY_TYPE_OCCLUSION is created
+ * (timestamps and pipeline statistics require feature bits this implementation
+ * reports as false). Result retrieval remains private until query command
+ * recording and availability state are implemented as one semantic slice. */
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateQueryPool(
     VkDevice device,
     const VkQueryPoolCreateInfo* pCreateInfo,
@@ -400,16 +400,6 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyQueryPool(
     VkDevice device,
     VkQueryPool queryPool,
     const VkAllocationCallbacks* pAllocator);
-
-VKAPI_ATTR VkResult VKAPI_CALL vkGetQueryPoolResults(
-    VkDevice device,
-    VkQueryPool queryPool,
-    uint32_t firstQuery,
-    uint32_t queryCount,
-    size_t dataSize,
-    void* pData,
-    VkDeviceSize stride,
-    VkQueryResultFlags flags);
 
 /* Sparse image queries. Sparse binding is not advertised, so both report an
  * empty list rather than inventing sparse requirements. */

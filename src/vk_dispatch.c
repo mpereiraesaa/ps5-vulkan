@@ -111,7 +111,6 @@ static const struct entry entries[] = {
     ENTRY(vkMergePipelineCaches, DEVICE),
     ENTRY(vkCreateQueryPool, DEVICE),
     ENTRY(vkDestroyQueryPool, DEVICE),
-    ENTRY(vkGetQueryPoolResults, DEVICE),
     ENTRY(vkGetImageSparseMemoryRequirements, DEVICE),
     ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties, INSTANCE),
 };

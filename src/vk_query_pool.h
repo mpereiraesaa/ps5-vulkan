@@ -4,10 +4,9 @@
 
 /* Occlusion-capable query pool object.
  *
- * This slice implements the object surface only. No command in the current
- * profile writes query results yet, so every query is permanently unavailable
- * and vkGetQueryPoolResults reports VK_NOT_READY instead of fabricating values.
- * Host-side validation is still complete and tested. */
+ * This slice implements the object lifetime surface only. Result retrieval is
+ * intentionally deferred with query command recording so the public API does
+ * not pretend that uninitialized queries are merely unavailable. */
 struct VkQueryPool_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
