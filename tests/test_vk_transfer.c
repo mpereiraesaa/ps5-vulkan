@@ -58,9 +58,22 @@ int main(void)
         destination,1,&region);
     assert(command->state==PS5VK_INVALID && !command->operation_count);
 
+    /* The transfer-only role is host-visible memory, so a TRANSFER_SRC-only
+     * image is a legal (write-less) source for the bounded readback and is
+     * recorded as frontend work over the padded layout. */
     assert(vkResetCommandBuffer(command,0)==VK_SUCCESS &&
         vkBeginCommandBuffer(command,&begin)==VK_SUCCESS);
     region.bufferRowLength=0;image.info.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    vkCmdCopyImageToBuffer(command,&image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        destination,1,&region);
+    assert(command->state==PS5VK_RECORDING && command->operation_count==1 &&
+        command->operations[0].type==PS5VK_COPY_IMAGE_BUFFER);
+
+    /* Roles outside both executable paths stay refused, here a sampled role
+     * that is not the upload destination. */
+    assert(vkResetCommandBuffer(command,0)==VK_SUCCESS &&
+        vkBeginCommandBuffer(command,&begin)==VK_SUCCESS);
+    image.info.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     vkCmdCopyImageToBuffer(command,&image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         destination,1,&region);
     assert(command->state==PS5VK_INVALID && !command->operation_count);

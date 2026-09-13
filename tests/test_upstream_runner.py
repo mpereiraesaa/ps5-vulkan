@@ -18,8 +18,10 @@ from tools.build_upstream_cts import (
     write_focused_storage_source,
 )
 from tools.check_upstream_selection import (
+    _copy_and_blit_simple_image_leaf_names,
     _dynamic_state_compute_generated_segments,
     _fill_update_generated_leaf_names,
+    _source_function_at_line,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -698,6 +700,49 @@ class TestUpstreamRunner(unittest.TestCase):
         self.assertIn("createCopiesAndBlittingTests", package)
         self.assertIn("createFillAndUpdateBufferTests", package)
 
+    def test_image_copy_selection_uses_original_simple_oracles(self):
+        """Keep exactly the RGBA8_UNORM simple-case oracles and nothing wider."""
+        required = {
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests."
+            "partial_image_pot_same_format_clear",
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests."
+            "partial_image_pot_same_format_noclear",
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests."
+            "partial_image_npot_same_format_clear",
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests."
+            "partial_image_npot_same_format_noclear",
+        }
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        accepted = {case["path"] for case in manifest["cases"]}
+        self.assertTrue(required <= accepted)
+        # UINT, mixed-format, depth and stencil leaves are outside the
+        # advertised RGBA8 UNORM transfer role and must not be selected.
+        for path in (
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.whole_image",
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image",
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.depth",
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.stencil",
+        ):
+            self.assertNotIn(path, accepted)
+        self.assertFalse(any("diff_format" in path for path in accepted))
+
+        upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                    "modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp")
+        if not upstream.is_file():
+            return
+        text = upstream.read_text(encoding="utf-8")
+        function = _source_function_at_line(text, 9235)
+        leaves = _copy_and_blit_simple_image_leaf_names(function)
+        self.assertTrue({path.rsplit(".", 1)[1] for path in required} <= leaves)
+        self.assertIn("partial_image_pot_diff_format_clear", leaves)
+        degraded = _copy_and_blit_simple_image_leaf_names(
+            function.replace("+ clear.name", '+ "clear"', 1))
+        self.assertNotIn("partial_image_pot_same_format_clear", degraded)
+        self.assertFalse(_copy_and_blit_simple_image_leaf_names(
+            function.replace("group->addChild(new CopyImageToImageTestCase"
+                             "(testCtx, testCaseName, params));",
+                             "group->addChild(makeCase(testCtx, testCaseName));", 1)))
+
     def test_fill_update_dynamic_names_are_derived_fail_closed(self):
         source = r'''
         tcu::TestCaseGroup *createFillAndUpdateBufferTests()
@@ -738,6 +783,10 @@ void addCoreCopiesAndBlittingTests(tcu::TestCaseGroup *group)
     addCopiesAndBlittingTests(group, ALLOCATION_KIND_SUBALLOCATED, extensionFlags);
     addBufferCopyOffsetTests(group);
 }
+void addImageToImageTestsSimpleOnly(tcu::TestCaseGroup *group, TestGroupParamsPtr testGroupParams)
+{
+    addTestGroup(group, "simple_tests", addImageToImageSimpleTests, testGroupParams);
+}
 void factory()
 {
     copiesAndBlittingTests->addChild(createTestGroup(testCtx, "core", addCoreCopiesAndBlittingTests, cleanupGroup));
@@ -762,6 +811,9 @@ void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
             write_focused_buffer_copy_source(upstream, destination)
             generated = destination.read_text()
         self.assertIn('addTestGroup(group, "buffer_to_buffer",', generated)
+        self.assertIn('addTestGroup(group, "image_to_image",'
+                      ' addImageToImageTestsSimpleOnly,', generated)
+        self.assertIn('group, "simple_tests", addImageToImageSimpleTests', generated)
         self.assertNotIn('createTestGroup(testCtx, "dedicated_allocation"', generated)
         self.assertIn("CopyBufferToBuffer::iterate", generated)
         self.assertIn("deMemCmp(referenceData, resultData, bufferSize)", generated)

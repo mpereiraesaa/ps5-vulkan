@@ -153,7 +153,10 @@ def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
     case-list filter runs.  On PS5 that consumes the bounded application heap
     for image/blit/resolve families that are not selected.  Replace only the
     two pinned registration functions; every selected test implementation and
-    result oracle remains byte-for-byte upstream.
+    result oracle remains byte-for-byte upstream.  The image-to-image group is
+    registered through upstream's own simple-only factory so the audited RGBA8
+    transfer leaves exist in the packaged tree without the all-formats, 3D,
+    cube, array or blit/resolve families.
     """
     text = source.read_text(encoding="utf-8")
     old_core = """void addCoreCopiesAndBlittingTests(tcu::TestCaseGroup *group)
@@ -174,7 +177,11 @@ def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
     });
     addTestGroup(group, \"buffer_to_buffer\", addBufferToBufferTests,
                  universalGroupParams);
+    addTestGroup(group, \"image_to_image\", addImageToImageTestsSimpleOnly,
+                 universalGroupParams);
 }"""
+    simple_only = ("void addImageToImageTestsSimpleOnly(tcu::TestCaseGroup *group, "
+                   "TestGroupParamsPtr testGroupParams)")
     old_factory = """    copiesAndBlittingTests->addChild(createTestGroup(testCtx, \"core\", addCoreCopiesAndBlittingTests, cleanupGroup));
     copiesAndBlittingTests->addChild(
         createTestGroup(testCtx, \"dedicated_allocation\", addDedicatedAllocationCopiesAndBlittingTests, cleanupGroup));
@@ -191,6 +198,10 @@ def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
         testCtx, \"core\", addCoreCopiesAndBlittingTests, cleanupGroup));"""
     if text.count(old_core) != 1 or text.count(old_factory) != 1:
         raise SystemExit(f"focused buffer-copy registration layout drift in {source}")
+    if text.count(simple_only) != 1:
+        raise SystemExit(
+            f"focused image-to-image factory drift in {source}: "
+            f"expected one addImageToImageTestsSimpleOnly definition")
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(text.replace(old_core, new_core).replace(
         old_factory, new_factory), encoding="utf-8")

@@ -48,10 +48,10 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 55 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 93 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
-  pipeline, push-constant, storage-width, fixed-function and buffer-transfer
-  cases). Only these
+  pipeline, push-constant, storage-width, fixed-function, buffer-transfer and
+  image-copy cases). Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -604,3 +604,36 @@ Fail/NotSupported/Skip, complete QPA reconstruction and clean Close Game:
 This evidence proves the unchanged upstream compute/transfer oracles and that
 recording these setters does not interfere with those operations. It does not
 exercise their graphical effects and makes no Vulkan conformance claim.
+
+## Image copy and colour clear (2026-09-13)
+
+Four leaves of the pinned `api.copy_and_blit.core.image_to_image.simple_tests`
+factory are selected: `partial_image_pot_same_format_clear`,
+`partial_image_pot_same_format_noclear`,
+`partial_image_npot_same_format_clear` and
+`partial_image_npot_same_format_noclear`
+(`vktApiCopiesAndBlittingTests.cpp:9235`). They are the leaves whose source and
+destination images are `VK_FORMAT_R8G8B8A8_UNORM` with exactly
+`TRANSFER_SRC | TRANSFER_DST` usage, which is the only image role this driver
+implements byte-exactly. The clear variants record `vkCmdClearColorImage` with
+`(1, 0, 0, 1)` before `vkCmdCopyImage`; every variant compares the bit-exact
+readback of the destination image, so the selection judges the implementation
+with upstream's own oracle and not with a substituted one.
+
+The remaining leaves of the same factory are deliberately not selected:
+`whole_image`, `whole_image_diff_format` and `partial_image` use
+`VK_FORMAT_R8G8B8A8_UINT`, the `diff_format` leaves mix `R32_UINT` with RGBA8,
+and the `depth` and `stencil` leaves use `D32_SFLOAT` and `S8_UINT`. None of
+those roles is advertised, so selecting them would be a capability claim rather
+than evidence.
+
+The focused copy-module generator registers the group through upstream's own
+`addImageToImageTestsSimpleOnly` factory from the rewritten
+`addCoreCopiesAndBlittingTests`. That keeps the packaged tree bounded (no
+all-formats, 3D, cube, array, sparse or blit/resolve registration) while the
+selected bodies, support checks and comparison oracles stay byte-for-byte
+upstream. Both the rewrite and the derived leaf names are host-checked: the
+generator refuses to run if the factory or the pinned registration block drifts,
+and `tools/check_upstream_selection.py` derives
+`partial_image_<extent>_<format>_<clear>` only from the exact composition
+expression and the three table names inside the cited function.

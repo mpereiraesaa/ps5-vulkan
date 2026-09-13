@@ -128,7 +128,9 @@ static void lifecycle(void)
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_R8G8B8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_SAMPLED_BIT || usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
              usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
-             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT)));
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+             usage==VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
+             usage==(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)));
     }
     assert(!ps5vk_graphics_image_usage(VK_FORMAT_UNDEFINED,VK_IMAGE_USAGE_SAMPLED_BIT));
     VkInstance i = instance(); VkPhysicalDevice p = physical(i);
@@ -191,7 +193,7 @@ static void lifecycle(void)
         VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT};
     const VkFormatFeatureFlags bits[] = {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT,
+            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, 0, 0};
     for (unsigned n=0; n<5; ++n) {
         memset(&fp, 0xff, sizeof(fp));

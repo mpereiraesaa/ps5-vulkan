@@ -720,6 +720,41 @@ VKAPI_ATTR void VKAPI_CALL vkCmdFillBuffer(
     VkDeviceSize size,
     uint32_t data);
 
+/* Image copy and colour clear for the advertised RGBA8 transfer role. Depth
+ * clears and in-render-pass attachment clears are validated but fail closed:
+ * this profile has no 64KB_Z_X pixel addressing and no DCB clear path. */
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageCopy* pRegions);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(
+    VkCommandBuffer commandBuffer,
+    VkImage image,
+    VkImageLayout imageLayout,
+    const VkClearColorValue* pColor,
+    uint32_t rangeCount,
+    const VkImageSubresourceRange* pRanges);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdClearDepthStencilImage(
+    VkCommandBuffer commandBuffer,
+    VkImage image,
+    VkImageLayout imageLayout,
+    const VkClearDepthStencilValue* pDepthStencil,
+    uint32_t rangeCount,
+    const VkImageSubresourceRange* pRanges);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdClearAttachments(
+    VkCommandBuffer commandBuffer,
+    uint32_t attachmentCount,
+    const VkClearAttachment* pAttachments,
+    uint32_t rectCount,
+    const VkClearRect* pRects);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
     VkCommandBuffer commandBuffer,
     VkBuffer srcBuffer,
