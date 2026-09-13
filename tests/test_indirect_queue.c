@@ -80,18 +80,15 @@ int main(void)
     VkCommandBuffer command=NULL;assert(vkAllocateCommandBuffers(&d,&ai,&command)==VK_SUCCESS);
     VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     assert(vkBeginCommandBuffer(command,&begin)==VK_SUCCESS);
-    VkBufferMemoryBarrier dependency={.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+    VkMemoryBarrier dependency={.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT,
-        .dstAccessMask=VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
-        .buffer=buffer,.offset=0,.size=64};
+        .dstAccessMask=VK_ACCESS_INDIRECT_COMMAND_READ_BIT};
     vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,0,0,NULL,1,&dependency,0,NULL);
+        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,0,1,&dependency,0,NULL,0,NULL);
     struct VkPipeline_T pipeline={.device=&d};
     vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
     vkCmdDispatchIndirect(command,buffer,4);
-    assert(vkEndCommandBuffer(command)==VK_SUCCESS && command->operation_count==3);
+    assert(vkEndCommandBuffer(command)==VK_SUCCESS && command->operation_count==2);
     VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount=1,.pCommandBuffers=&command};
     assert(vkQueueSubmit(&d.queue,1,&submit,VK_NULL_HANDLE)==VK_SUCCESS);
