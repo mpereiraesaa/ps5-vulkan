@@ -92,6 +92,8 @@ static void test_mapping(void)
     VkDeviceMemory m = memory(&d, 1000); void *map;
     VkMappedMemoryRange r = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
                              .memory = m, .size = VK_WHOLE_SIZE};
+    assert(vkFlushMappedMemoryRanges(&d, 0, NULL) != VK_SUCCESS);
+    assert(vkInvalidateMappedMemoryRanges(&d, 0, NULL) != VK_SUCCESS);
     assert(vkFlushMappedMemoryRanges(&d, 1, &r) != VK_SUCCESS);
     assert(vkMapMemory(&d, m, 1000, VK_WHOLE_SIZE, 0, &map) != VK_SUCCESS);
     assert(vkMapMemory(&d, m, 1, UINT64_MAX - 1, 0, &map) != VK_SUCCESS);

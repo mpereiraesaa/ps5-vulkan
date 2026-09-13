@@ -76,12 +76,68 @@
       "rationale": "Verifies fence signaling on empty queue submission."
     },
     {
+      "path": "dEQP-VK.synchronization.basic.fence.multi_waitall_false",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp:360",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream test distinguishes wait-any from wait-all across two serialized submissions and validates timeout then success transitions with simultaneous command-buffer use."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.fence.one_signaled",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp:363",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Creates one fence with VK_FENCE_CREATE_SIGNALED_BIT and requires immediate signaled status and successful wait without a submission."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.fence.multiple_signaled",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp:366",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Repeats the original signaled-at-creation status and wait oracle over ten independent fences."
+    },
+    {
       "path": "dEQP-VK.memory.mapping.suballocation.random.0",
       "source": "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp:2039",
       "category": "memory",
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Exercises device memory suballocation, host mapping, random byte pattern read/write verification, and unmapping."
+    },
+    {
+      "path": "dEQP-VK.memory.mapping.suballocation.full.257.flush",
+      "source": "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp:1932",
+      "category": "host-memory",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original deterministic 257-byte full mapping flush case forces a nonCoherentAtomSize-aligned backing/range and byte-validates the mapped contents; it is API/range evidence, not a GPU visibility claim."
+    },
+    {
+      "path": "dEQP-VK.memory.mapping.suballocation.full.257.invalidate",
+      "source": "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp:1932",
+      "category": "host-memory",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original deterministic 257-byte full mapping invalidate case exercises non-coherent end-of-allocation handling and byte comparison without substituting a custom oracle."
+    },
+    {
+      "path": "dEQP-VK.memory.mapping.suballocation.sub.4087.offset_129.size_1025.subflush",
+      "source": "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp:1998",
+      "category": "host-memory",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original deterministic subrange flush case maps allocation offset 129 and size 1025, forcing the implementation to validate and process the exact non-coherent subrange contract."
+    },
+    {
+      "path": "dEQP-VK.memory.mapping.suballocation.sub.4087.offset_129.size_1025.subinvalidate",
+      "source": "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp:1998",
+      "category": "host-memory",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original deterministic subrange invalidate companion validates mapped-byte preservation and invalidate behavior for the same unaligned mapping interval."
     },
     {
       "path": "dEQP-VK.compute.basic.shared_var_single_invocation",
@@ -138,6 +194,30 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Upstream SSBOLocalBarrierTest with local_size (3,4,1) across 42 workgroups: each invocation reads back neighbour writes it did not perform, separated by memoryBarrierBuffer/barrier, so the oracle only holds if buffer writes become visible across invocations within a workgroup and stay private between workgroups."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.ssbo_cmd_barrier_single",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4711",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original SSBOBarrierTest records host-write to uniform-read, shader-write to shader-read, and shader-write to host-read buffer dependencies around two compute dispatches. The second dispatch atomically reduces data produced by the first and the upstream CPU oracle checks the exact sum."
+    },
+    {
+      "path": "dEQP-VK.compute.basic.ssbo_cmd_barrier_multiple",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp:4713",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "The same original two-dispatch dependency and exact atomic-sum oracle over 385 workgroups, exercising a larger producer/consumer SSBO range without replacing the upstream shader or verifier."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.uint32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp:511",
+      "category": "synchronization",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream SPIR-V 1.0 case runs LocalSize 16x4x2 (128 invocations, four wave32 waves), writes a 128-element uint LDS array, crosses OpMemoryBarrier and OpControlBarrier, then byte-compares the exact reversed output."
     },
     {
       "path": "dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation",

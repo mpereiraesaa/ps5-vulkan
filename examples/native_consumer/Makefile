@@ -59,8 +59,16 @@ $(BUILD_DIR)/storage_width_shaders.h: ../../tools/prepare_consumer_storage_shade
                                      ../../experiments/compute/storage16.comp | $(BUILD_DIR)
 	python3 ../../tools/prepare_consumer_storage_shaders.py --out $@
 
+$(BUILD_DIR)/sync_shaders.h: ../../tools/prepare_consumer_sync_shaders.py \
+                            ../../tools/prepare_test_shaders.py \
+                            ../../experiments/compute/sync_producer.comp \
+                            ../../experiments/compute/sync_consumer.comp \
+                            ../../experiments/compute/shared_atomic_multiwave.comp | $(BUILD_DIR)
+	python3 ../../tools/prepare_consumer_sync_shaders.py --out $@
+
 $(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h \
-                     $(BUILD_DIR)/storage_width_shaders.h | $(BUILD_DIR)
+                     $(BUILD_DIR)/storage_width_shaders.h \
+                     $(BUILD_DIR)/sync_shaders.h | $(BUILD_DIR)
 	PS5_PAYLOAD_SDK=$(PS5_PAYLOAD_SDK) sh $(CLANG_WRAPPER) $(CFLAGS) -c $< -o $@
 
 $(TARGET_PIE): $(BUILD_DIR)/main.o

@@ -1,0 +1,9 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) readonly buffer Source { uint values[]; } src;
+layout(set = 0, binding = 1, std430) writeonly buffer Destination { uint values[]; } dst;
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    dst.values[i] = src.values[i] ^ 0xa5a55a5au;
+}

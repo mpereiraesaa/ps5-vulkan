@@ -8,6 +8,7 @@
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
+#include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
 #include "deUniquePtr.hpp"
@@ -105,6 +106,7 @@ void FocusedVkTestPackage::init(void)
             new tcu::TestCaseGroup(m_testCtx, "compute"));
         computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createWorkgroupMemoryComputeGroup(m_testCtx));
         instructionGroup->addChild(computeGroup.release());
         spirvGroup->addChild(instructionGroup.release());
         addChild(spirvGroup.release());

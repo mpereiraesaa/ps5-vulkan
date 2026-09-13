@@ -4424,13 +4424,16 @@
           "vk-default/memory.txt"
         ],
         "cases": [
-          "dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.1048577.flush"
+          "dEQP-VK.memory.mapping.suballocation.full.257.flush",
+          "dEQP-VK.memory.mapping.suballocation.full.257.invalidate",
+          "dEQP-VK.memory.mapping.suballocation.sub.4087.offset_129.size_1025.subflush",
+          "dEQP-VK.memory.mapping.suballocation.sub.4087.offset_129.size_1025.subinvalidate"
         ],
-        "note": "Mapping/coherency case with explicit flush.",
+        "note": "Original mapping cases cover explicit flush/invalidate of full and offset suballocation ranges.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/memory.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "native-evidence",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -4447,12 +4450,21 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_memory.c",
+            "tests/test_vk_memory.c",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "cts-pass",
+          "refs": [
+            "UPSTREAM_CTS.md",
+            "VALIDATION.md",
+            "examples/native_consumer/main.c",
+            "cts/upstream/manifest.json"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -4462,7 +4474,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Coherency modelling is also central to the ParaLLEl-RDP consumer overlay.",
+      "review_notes": "The profile truthfully reports HOST_VISIBLE without HOST_COHERENT. Host range validation and cache callbacks are source-tested; four original non-coherent mapping cases and a public host-compute-host consumer pass twice on hardware. The evidence covers the bounded mapped ranges and 64-byte atom contract, not every mapping size or coherent-memory behavior. Coherency modelling is also central to the ParaLLEl-RDP consumer overlay.",
       "classification_basis": "core-cumulative-required",
       "consumer_demand": [
         "parallel-rdp"
@@ -9050,7 +9062,7 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Memory-model cases are the strongest available dependency evidence but do not enumerate every legal/illegal barrier combination."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "native-evidence",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -9064,12 +9076,23 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_command.c",
+            "src/vk_queue.c",
+            "native/queue_ps5.c",
+            "tests/test_vk_command.c",
+            "tests/test_vk_queue.c"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md",
+            "UPSTREAM_CTS.md",
+            "examples/native_consumer/main.c",
+            "cts/upstream/manifest.json"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -9079,7 +9102,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "The memory model is an implementation-owned feasibility area; this row records the obligation only.",
+      "review_notes": "A bounded Vulkan 1.0 host/compute dependency slice is source-audited and hardware-validated: host-write to compute, shader-write to later shader-read, shader-write to host-read, explicit non-coherent flush/invalidate, and one 128-invocation LDS barrier shape. The serial backend executes a stronger global completion/writeback dependency. Binary semaphores, events, mixed graphics/compute scopes, asynchronous range-scoped execution and the later Vulkan memory model remain missing, so this is native evidence rather than satisfaction of the whole row.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -9113,12 +9136,15 @@
         "groups": [
           "vk-default/synchronization.txt"
         ],
-        "cases": [],
-        "note": "Synchronization group is large; barrier cases are a subset not itemized here.",
-        "coverage_quality": "family-level",
-        "coverage_note": "Mapped only to the vk-default/synchronization.txt group(s); the group contains many cases and this row does not claim that any single one covers the whole requirement."
+        "cases": [
+          "dEQP-VK.compute.basic.ssbo_cmd_barrier_single",
+          "dEQP-VK.compute.basic.ssbo_cmd_barrier_multiple"
+        ],
+        "note": "Original compute barrier cases exercise the implemented host/compute subset with exact output oracles.",
+        "coverage_quality": "representative-case",
+        "coverage_note": "The two selected cases directly exercise bounded compute dependencies; they do not cover every Vulkan 1.0 stage/access combination, graphics dependencies or ownership transfer."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "native-evidence",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -9132,12 +9158,19 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_command.c",
+            "tests/test_vk_command.c"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "cts-pass",
+          "refs": [
+            "UPSTREAM_CTS.md",
+            "VALIDATION.md",
+            "cts/upstream/manifest.json"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -9147,7 +9180,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Queue ownership transfer only becomes observable with multiple queue families.",
+      "review_notes": "Supported host/compute stage and access masks are checked fail-closed and two original compute barrier cases pass twice on hardware. Unsupported access classes and queue-family ownership transfers are rejected; the single-family profile therefore does not establish transfer semantics or the complete stage/access matrix.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -9181,12 +9214,15 @@
         "groups": [
           "vk-default/synchronization.txt"
         ],
-        "cases": [],
-        "note": "Group-level join.",
-        "coverage_quality": "family-level",
-        "coverage_note": "Mapped only to the vk-default/synchronization.txt group(s); the group contains many cases and this row does not claim that any single one covers the whole requirement."
+        "cases": [
+          "dEQP-VK.compute.basic.ssbo_cmd_barrier_single",
+          "dEQP-VK.compute.basic.ssbo_cmd_barrier_multiple"
+        ],
+        "note": "The selected command-buffer cases use VkBufferMemoryBarrier between compute operations.",
+        "coverage_quality": "representative-case",
+        "coverage_note": "The exact selected ranges pass original output oracles; arbitrary overlap, every VK_WHOLE_SIZE edge and ownership transfer remain outside this evidence."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "native-evidence",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -9200,12 +9236,20 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_command.c",
+            "src/vk_queue.c",
+            "tests/test_vk_command.c"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "cts-pass",
+          "refs": [
+            "UPSTREAM_CTS.md",
+            "VALIDATION.md",
+            "cts/upstream/manifest.json"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -9215,7 +9259,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Accepting the parameter is not evidence of enforcing the barrier; see baseline note policy.",
+      "review_notes": "Buffer/range lifetime and bounds are validated at record and submit time, and the serial native queue enforces a stronger global dependency. Two original compute buffer-barrier cases pass twice on hardware. Ownership transfers and broader asynchronous range behavior remain unsupported.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -9323,13 +9367,16 @@
           "vk-default/synchronization.txt"
         ],
         "cases": [
-          "dEQP-VK.synchronization.basic.fence.empty_submit"
+          "dEQP-VK.synchronization.basic.fence.empty_submit",
+          "dEQP-VK.synchronization.basic.fence.multi_waitall_false",
+          "dEQP-VK.synchronization.basic.fence.one_signaled",
+          "dEQP-VK.synchronization.basic.fence.multiple_signaled"
         ],
-        "note": "Basic fence cases are at the head of the synchronization group.",
+        "note": "Selected original cases cover empty submission, any-of waiting and signaled single/multiple fence states.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/synchronization.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "native-evidence",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -9347,12 +9394,21 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_fence.c",
+            "src/vk_queue.c",
+            "tests/test_vk_fence.c",
+            "tests/test_vk_queue.c"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "cts-pass",
+          "refs": [
+            "UPSTREAM_CTS.md",
+            "VALIDATION.md",
+            "cts/upstream/manifest.json"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -9362,7 +9418,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Timeout/error return semantics (VK_TIMEOUT, VK_ERROR_DEVICE_LOST) need explicit audit.",
+      "review_notes": "Host regressions plus original upstream empty-submit, wait-any and signaled-state cases pass twice on hardware. This does not yet exhaust timeout boundaries, device-lost behavior or semaphore interactions, so the full row remains native evidence rather than a conformance claim.",
       "classification_basis": "core-cumulative-required"
     },
     {

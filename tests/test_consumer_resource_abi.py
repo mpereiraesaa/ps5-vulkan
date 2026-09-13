@@ -40,6 +40,21 @@ MESSAGES = [
     "mismatches8=0 mismatches16=0 guard_bytes8=4032 guard_bytes16=3968 "
     "guard_mismatches8=0 guard_mismatches16=0",
     "PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED",
+    "PS5VK_CONSUMER_SYNC_START",
+    "PS5VK_QUEUE_PREPARED serial=3 dispatches=3",
+    "PS5VK_QUEUE_SUBMIT serial=3 index=0 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=0 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=3 index=0 token=100000004 gcr=0070f528",
+    "PS5VK_QUEUE_SUBMIT serial=3 index=1 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=1 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=3 index=1 token=100000005 gcr=0070f528",
+    "PS5VK_QUEUE_SUBMIT serial=3 index=2 rc=0",
+    "PS5VK_QUEUE_SUSPEND_POINT serial=3 index=2 rc=0",
+    "PS5VK_QUEUE_COMPLETED serial=3 index=2 token=100000006 gcr=0070f528",
+    "PS5VK_CONSUMER_SYNC_SUCCESS producer_consumer=1 host_compute_host=1 "
+    "local_size=128 waves32=4 lds_atomic=1 permutation=1 counter=128 "
+    "sync_hash=467e2acd atomic_hash=1234abcd mismatches=0 guard_mismatches=0",
+    "PS5VK_CONSUMER_SYNC_RETIRED",
     "PS5VK_CONSUMER_TEST_SUCCESS",
     "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1",
     "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1",
@@ -72,6 +87,12 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                 "storage8_spirv_sha256": "b" * 64,
                 "storage16_spirv_sha256": "c" * 64,
             },
+            "synchronization": {
+                "api": "Vulkan 1.0", "local_size": 128, "wave_size": 32,
+                "sync_producer_spirv_sha256": "d" * 64,
+                "sync_consumer_spirv_sha256": "e" * 64,
+                "shared_atomic_multiwave_spirv_sha256": "f" * 64,
+            },
         }
         return log, receipt, artifact
 
@@ -86,6 +107,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         self.assertEqual(result["narrow_guard_bytes_checked"], 8000)
         self.assertEqual(result["physical_device_report_fnv1a32"], "be169e1b")
         self.assertFalse(result["reported_host_coherent"])
+        self.assertEqual(result["multiwave_atomic_lanes_checked"], 128)
+        self.assertEqual(result["wave32_count"], 4)
 
     def test_every_witness_is_required(self):
         for index in range(len(MESSAGES)):
@@ -99,6 +122,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                         ("serial=1 dispatches=1", "serial=1 dispatches=3"),
                         ("checksum8=9575e8c5", "checksum8=00000000"),
                         ("checksum16=603ddade", "checksum16=00000000"),
+                        ("sync_hash=467e2acd", "sync_hash=00000000"),
+                        ("permutation=1", "permutation=0"),
                         ("heap=268435456", "heap=268435455"),
                         ("hash=be169e1b", "hash=00000000"),
                         ("pnext_preserved=1", "pnext_preserved=0"),

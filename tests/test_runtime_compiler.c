@@ -104,6 +104,48 @@ int main(void)
     assert(shared_prog.local_size[0] == 2);
     free(shared_code); free(shared);
 
+    /* The public synchronization witness deliberately mixes two ordinary
+     * SSBO dispatches with a four-wave LDS/atomic dispatch.  Freeze the
+     * compiler-facing resource contract here so a reflection drift cannot
+     * surface only as an invalid command buffer on hardware. */
+    const char *sync_paths[] = {
+        "build/test-shaders/sync_producer.spv",
+        "build/test-shaders/sync_consumer.spv",
+        "build/test-shaders/shared_atomic_multiwave.spv",
+    };
+    const uint32_t sync_descriptor_counts[] = {1, 2, 1};
+    const uint32_t sync_local_sizes[] = {64, 64, 128};
+    struct VkPipelineLayout_T single_storage_layout = layout;
+    single_storage_layout.sets[0].count = 1;
+    single_storage_layout.sets[0].binding[1].count = 0;
+    single_storage_layout.sets[0].type[1] = 0;
+    for (unsigned sync_index = 0; sync_index < 3; ++sync_index) {
+        size_t sync_bytes = 0;
+        uint32_t *sync_spirv = read_file(sync_paths[sync_index], &sync_bytes);
+        assert(sync_spirv);
+        struct ps5vk_compiled_program sync_program = {0};
+        uint32_t *sync_code = NULL;
+        VkPipelineLayout sync_layout = sync_index == 1 ? &layout : &single_storage_layout;
+        assert(ps5vk_runtime_compile_compute(sync_spirv, sync_bytes / 4, "main",
+            sync_layout, NULL, &sync_program, &sync_code) == VK_SUCCESS);
+        if (sync_program.descriptor_set_mask != 1 ||
+            sync_program.descriptor_count != sync_descriptor_counts[sync_index] ||
+            sync_program.local_size[0] != sync_local_sizes[sync_index] ||
+            sync_program.local_size[1] != 1 || sync_program.local_size[2] != 1)
+            fprintf(stderr, "sync contract drift path=%s mask=%u descriptors=%u local=%u,%u,%u\n",
+                sync_paths[sync_index], sync_program.descriptor_set_mask,
+                sync_program.descriptor_count, sync_program.local_size[0],
+                sync_program.local_size[1], sync_program.local_size[2]);
+        assert(sync_program.descriptor_set_mask == 1 &&
+            sync_program.descriptor_count == sync_descriptor_counts[sync_index] &&
+            sync_program.local_size[0] == sync_local_sizes[sync_index] &&
+            sync_program.local_size[1] == 1 && sync_program.local_size[2] == 1);
+        if (sync_index == 2)
+            assert(sync_program.lds_size > 0 && sync_program.wave_size == 32);
+        free(sync_code);
+        free(sync_spirv);
+    }
+
     /* Push constants use a stable indirect user-data pointer and Vulkan
      * specialization values are consumed before NIR optimization. */
     size_t parameterized_bytes=0;

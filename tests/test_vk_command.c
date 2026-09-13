@@ -50,6 +50,54 @@ static void states(void)
     assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS && !c->operation_count);
     vkDestroyCommandPool(&d, p, NULL); assert(!d.command_pools);
 }
+static void stage_access_scopes(void)
+{
+    struct VkDevice_T d={0};
+    VkCommandPool p=pool(&d,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c=command(&d,p);
+    VkMemoryBarrier b={.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_HOST_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask=VK_ACCESS_SHADER_READ_BIT};
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_HOST_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,NULL,0,NULL);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
+        vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.srcAccessMask=VK_ACCESS_HOST_WRITE_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,NULL,0,NULL);
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
+
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
+        vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,NULL,0,NULL);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
+        vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.srcAccessMask=VK_ACCESS_HOST_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,1,&b,0,NULL,0,NULL);
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
+
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
+        vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_HOST_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,1,&b,0,NULL,0,NULL);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
+        vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,NULL,0,NULL);
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
+    vkDestroyCommandPool(&d,p,NULL);
+}
 static void recording_and_invalidation(void)
 {
     struct VkDevice_T d = {.memory = {NULL, allocate, release, cache, cache},
@@ -477,4 +525,4 @@ static void push_constant_recording(void)
     vkDestroyPipelineLayout(&d,layout,NULL);vkDestroyCommandPool(&d,p,NULL);
 }
 int main(void)
-{ states(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }

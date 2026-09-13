@@ -1,0 +1,24 @@
+#version 450
+layout(local_size_x = 128) in;
+layout(set = 0, binding = 0, std430) writeonly buffer Output { uint values[]; } output_data;
+
+shared uint counter;
+shared uint tickets[128];
+
+void main()
+{
+    uint lane = gl_LocalInvocationID.x;
+    if (lane == 0u)
+        counter = 0u;
+    memoryBarrierShared();
+    barrier();
+
+    uint ticket = atomicAdd(counter, 1u);
+    tickets[lane] = ticket;
+    memoryBarrierShared();
+    barrier();
+
+    output_data.values[lane] = ticket;
+    output_data.values[128u + lane] = tickets[127u - lane];
+    output_data.values[256u + lane] = counter;
+}

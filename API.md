@@ -75,7 +75,18 @@ supported.
 - Simultaneous-use command buffers are accepted with serialized retirement.
 - Host/compute buffer barriers validate ranges and lifetimes, using stronger
   global cache/completion dependencies. Host-write dependencies accept shader
-  and uniform reads; queue-family transfers are rejected.
+  and uniform reads; compute shader-write dependencies can feed later compute
+  reads or explicit host reads. The supported stage/access subset is checked
+  when recording, malformed or unsupported combinations fail closed, and
+  queue-family transfers are rejected because the profile exposes one family.
+- `vkFlushMappedMemoryRanges` and `vkInvalidateMappedMemoryRanges` operate on
+  the reported host-visible, non-coherent memory type. Ranges must belong to
+  live mapped allocations and satisfy the reported 64-byte non-coherent atom
+  rules except at allocation ends. Vulkan 1.0 requires a positive range count;
+  zero-count calls and positive counts without a range array fail closed.
+- Shared workgroup memory, workgroup barriers and 32-bit shared atomics execute
+  across a validated 128-invocation workgroup (four wave32 waves). This is a
+  bounded compute result, not a Vulkan memory-model or subgroup claim.
 
 ## Programs and compilation
 
@@ -88,10 +99,13 @@ scratch is rejected. The compiler adapter conservatively includes every
 compute-visible layout binding in execution metadata, so applications must
 define those bindings even when static shader use could eliminate one.
 Compiler LDS allocation (up to 64 KiB) and the pinned inline workgroup-count ABI
-are preserved during dispatch. Focused upstream shared-variable, barrier and
-shared-atomic cases pass on hardware. Focused upstream 8/16-bit conversions also
-pass for the advertised storage-buffer bits; neither result establishes broad
-compute conformance or support for narrow arithmetic and other storage classes.
+are preserved during dispatch. Focused upstream shared-variable, command-barrier
+and shared-atomic cases pass on hardware, including a 128-invocation upstream
+workgroup-memory case. A separate public-SDK consumer validates a 128-lane
+shared atomic permutation and counter across four wave32 waves. Focused upstream
+8/16-bit conversions also pass for the advertised storage-buffer bits; none of
+these results establishes broad compute conformance, Vulkan memory-model support
+or narrow arithmetic in other storage classes.
 Cache keys include the complete SPIR-V digest, entry point, compiler/ABI
 versions and pipeline-layout state, and entries are constrained by count and
 byte budgets. Cache identity includes canonical specialization values and the
