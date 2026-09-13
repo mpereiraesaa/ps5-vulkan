@@ -37,7 +37,10 @@ jobs:
 
       - name: Install host-test dependencies
         working-directory: homebrew_ps5/projects/ps5-vulkan
-        run: python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools
+          python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
 
       - name: Prepare pinned Vulkan headers
         working-directory: homebrew_ps5/projects/ps5-vulkan

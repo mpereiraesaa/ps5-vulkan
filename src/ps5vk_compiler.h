@@ -26,6 +26,17 @@ VkResult ps5vk_runtime_compile_compute(
     uint32_t **out_code
 );
 
+VkResult ps5vk_runtime_compile_compute_features(
+    const uint32_t *spirv,
+    size_t spirv_words,
+    const char *entry_name,
+    VkPipelineLayout layout,
+    const VkSpecializationInfo *specialization,
+    uint32_t feature_mask,
+    struct ps5vk_compiled_program *out_program,
+    uint32_t **out_code
+);
+
 /* Adapter matching struct ps5vk_compiler.compile signature */
 VkResult ps5vk_compiler_adapter_compile(
     void *context,
@@ -34,6 +45,7 @@ VkResult ps5vk_compiler_adapter_compile(
     const char *entry_name,
     VkPipelineLayout layout,
     const VkSpecializationInfo *specialization,
+    uint32_t feature_mask,
     struct ps5vk_compiled_program *out_program,
     uint32_t **out_code
 );

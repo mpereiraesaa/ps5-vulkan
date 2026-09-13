@@ -7,6 +7,7 @@
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
+#include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
 #include "deUniquePtr.hpp"
 
@@ -78,6 +79,23 @@ void FocusedVkTestPackage::init(void)
         pipelineGroup->addChild(vkt::pipeline::createPushConstantTests(
             m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
         addChild(pipelineGroup.release());
+    }
+
+    // spirv_assembly.instruction.compute: register generated focused groups.
+    // The generator prunes only leaf registration from pinned upstream source;
+    // selected shader bodies, support checks and result oracles stay upstream.
+    {
+        de::MovePtr<tcu::TestCaseGroup> spirvGroup(
+            new tcu::TestCaseGroup(m_testCtx, "spirv_assembly"));
+        de::MovePtr<tcu::TestCaseGroup> instructionGroup(
+            new tcu::TestCaseGroup(m_testCtx, "instruction"));
+        de::MovePtr<tcu::TestCaseGroup> computeGroup(
+            new tcu::TestCaseGroup(m_testCtx, "compute"));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
+        instructionGroup->addChild(computeGroup.release());
+        spirvGroup->addChild(instructionGroup.release());
+        addChild(spirvGroup.release());
     }
 }
 

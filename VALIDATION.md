@@ -67,23 +67,24 @@ selection manifest, strict acceptance policy and evidence rules are documented
 in [UPSTREAM_CTS.md](UPSTREAM_CTS.md). Results from that integration are
 reported separately and are not merged into the counts above.
 
-On 2026-09-12, two independent native launches completed **all twenty selected
-upstream cases with Pass**. In addition to the API/synchronization/memory,
-compute and resource groups, the selection now includes original upstream
-oracles for a 16-byte compute push range and a Vulkan 1.0 pipeline-lifetime
-case combining a scalar specialization constant, a scalar push constant,
-dispatch and exact 100-word SSBO verification.
-Both runs used native GLSL compilation and the original readback oracles, passed
-strict artifact/QPA verification and Close Game checks, observed GPU completion
-and reported zero tracked GPU allocation bytes at teardown. The two cases that
-previously exposed component-mapping and `UNIFORM_READ` command-validation bugs
-are now part of strict acceptance. Artifact/report hashes, the fixes and the
-remaining focused-coverage limits are recorded in
-[UPSTREAM_CTS.md](UPSTREAM_CTS.md).
+On 2026-09-13, two independent native launches completed **all 29 selected
+upstream cases with Pass**. The prior API, synchronization, memory, compute,
+resource, push-constant and specialization cases remain present. Nine original
+SPIR-V assembly oracles now additionally cover storage-buffer-only 8/16-bit
+scalar/vector conversions under extension-negotiated feature bits. Both runs
+matched executable and selection identity, reconstructed complete QPA reports,
+returned exit code zero and passed system Close Game checks.
 
-The final twenty-case artifact and selection hashes are respectively
-`3cd38c3a7ed6b26384a82151eb9d08618473fd24f1a685299a87b2872fb62c83`
-and `8db6098fc129cc43e0238ebfeb1f70b812d8e0ca4a116195b569f33a16318d8b`.
+The 29-case executable and selection hashes are respectively
+`ee09394647c9bb728f2725f3f3c087fa93fe61840e18c2f1299567576f1d069c`
+and `5a1448c6d7ea05acf1b1d6e0b8e38881df8fefeb7813386fafb151550377e302`.
+The QPA hashes are
+`dfaec984b71b5d2eae3c168e4be27b7420d83de4b1f9473ba66d2163b11ba6eb`
+and `2c717f5d59c23e121664b64a036e99965d5ed0c5ea4a7d2ae35d1f874c77b862`.
+One separate upstream stress case remains diagnostic because it requires a
+`HOST_COHERENT` memory type that ps5vk does not advertise; it is not counted as
+acceptance. Details and remaining limits are recorded in
+[UPSTREAM_CTS.md](UPSTREAM_CTS.md).
 The four nearby specialization cases that demand SPIR-V 1.3 and every
 `LocalSizeId` workgroup-size case remain outside the selection; no advertised
 API or SPIR-V version was widened to bypass their upstream support checks.
@@ -148,3 +149,29 @@ This validates the exact compute path. Runtime vertex/fragment compilation with
 push and specialization metadata has host/compiler regression coverage but no
 separate native draw oracle yet. `LocalSizeId` specialization remains outside
 the supported profile.
+
+## Extension-negotiated 8/16-bit storage
+
+The public SDK consumer was expanded on 2026-09-13 without including private
+driver headers or symbols. It enables the four Vulkan 1.0 extension contracts
+listed in [API.md](API.md), requests only `storageBuffer8BitAccess` and
+`storageBuffer16BitAccess`, and runs two storage-buffer dispatches in one
+command buffer. Each launch checks 64 byte results, 64 16-bit results and 8,000
+surrounding guard bytes. FNV-1a checksums were stable at `9575e8c5` and
+`603ddade`. Both owned modules use SPIR-V 1.0 extension forms; the 8-bit module
+declares `SPV_KHR_storage_buffer_storage_class` rather than relying on the
+Vulkan 1.1 SPIR-V environment.
+
+Two independent runs used the identical deployed SELF
+`e6c267c44e757ffe2a4f4fd72a49f853273d5f2eeb8c84fe4a809012c65ffc7d`:
+
+- `20260913T013455340Z_PPSA99994_ps5vk_0x1bbad7796637`, transcript
+  `8e54ea92d9fdaac875e0bfacdf484a077eaeea4b875db748370c66b71fb8d99c`;
+- `20260913T013501565Z_PPSA99994_ps5vk_0x1bbc4a86b154`, transcript
+  `da3574aa6cad0a702965cf1fbe84de1c3bf3ce456fcf0b092244c19fb97f2047`.
+
+Both passed `verify_consumer_resource_abi.py`, emitted complete `ps5log/1`
+streams and were confirmed absent after Close Game. This evidence covers only
+the two advertised storage-buffer feature bits. It does not establish
+`shaderInt8`, `shaderInt16`, float16, uniform/push/input-output narrow storage,
+general Vulkan 1.1 support or Vulkan conformance.

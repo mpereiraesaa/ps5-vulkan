@@ -22,6 +22,8 @@ selection is intentionally small and is frozen in a committed manifest.
 | `cts/upstream/main_ps5.cpp` | Entry point: ps5log init, run identity, command line, `tcu::App` iteration loop |
 | `cts/upstream/platform_ps5.cpp` | `tcu::Platform` / `vk::Platform` adaptation with static dispatch into the ps5vk driver |
 | `cts/upstream/package_ps5.cpp` | Focused `vkt::BaseTestPackage` that registers only the selected upstream groups |
+| `cts/upstream/storage8_focus.cpp`, `storage16_focus.cpp` | Thin adapters around generated, registration-pruned copies of the pinned upstream storage modules |
+| `cts/upstream/storage_width_focus.hpp` | Declarations for the two focused storage factories |
 | `cts/upstream/log_sink_ps5.cpp` | `qpTestLog` output captured through a pipe and streamed as base64 QPA chunks |
 | `cts/upstream/thread_atexit_ps5.cpp` | POSIX thread-exit destructor support required by libc++abi on this SDK |
 | `cts/upstream/dladdr_ps5.cpp` | `__dladdr` back-end stub; the SDK stubs do not export it |
@@ -31,10 +33,11 @@ selection is intentionally small and is frozen in a committed manifest.
 | `tools/run_upstream_cts.py` | Launch, capture and verify one native acceptance run |
 | `tools/check_upstream_selection.py` | Host-only check that every selected path traces back to upstream sources |
 
-The integration only supplies platform adaptation (threading, time, assets,
-logging, static Vulkan dispatch) and the payload entry point. It does not
-replace test bodies or oracles: every selected case runs its upstream
-implementation and its upstream result path.
+The integration supplies platform adaptation (threading, time, assets, logging,
+static Vulkan dispatch), the payload entry point and verified registration
+pruning for the two large storage modules. The generator changes only which
+leaf factories are added to their trees; selected shader bodies, support checks
+and result oracles remain the pinned upstream implementation.
 
 ### Linked versus selected versus executed
 
@@ -45,13 +48,15 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the twenty cases frozen in `cts/upstream/manifest.json`
-  (the previously accepted API, synchronization, memory, compute and resource
-  cases plus two pipeline/push-constant cases). Only these are registered by
+* **Selected**: the 29 acceptance cases frozen in `cts/upstream/manifest.json`
+  (the previously accepted API, synchronization, memory, compute, resource,
+  pipeline and push-constant cases plus nine storage-width cases). Only these
+  acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
-  `diagnostics` list: upstream cases that are compiled and registered but are
-  known not to pass yet. They are never part of strict acceptance.
+  `diagnostics` list: upstream cases that are intentionally run separately and
+  are known not to satisfy acceptance prerequisites. They are never part of
+  strict acceptance.
 * **Executed**: what a given report actually contains, which the strict verifier
   checks case by case.
 
@@ -282,6 +287,45 @@ The driver version is not inflated to turn that guard into a pass. Cases using
 `LocalSizeId` also remain excluded because specialization-dependent workgroup
 dimensions are not implemented.
 
+### Extension-negotiated 8/16-bit storage (2026-09-13)
+
+Nine pinned upstream SPIR-V assembly leaves extend strict acceptance without
+enabling narrow arithmetic. Four `8bit_storage.storagebuffer_32_to_8` leaves
+cover signed/unsigned scalar and vector output. Five 16-bit leaves cover the
+same four 32-to-16 shapes plus signed scalar 16-to-32 widening. Each executes
+the original upstream SPIR-V assembly and byte-comparison oracle.
+
+The driver continues to report Vulkan 1.0. It advertises
+`VK_KHR_get_physical_device_properties2`,
+`VK_KHR_storage_buffer_storage_class`, `VK_KHR_8bit_storage` and
+`VK_KHR_16bit_storage`, and reports only `storageBuffer8BitAccess` and
+`storageBuffer16BitAccess` in their feature structures. The CTS also appends
+Vulkan 1.1 protected-memory and shader-draw-parameter feature structures with
+false values while creating its session device; ps5vk accepts those neutral
+structures but rejects true or invalid booleans and does not advertise either
+feature.
+
+Two independent launches of the identical final payload completed the 29-case
+selection with **29 Pass, 0 Fail, 0 NotSupported**, exit code zero, matching
+executable/selection identities, complete QPA reconstruction and clean Close
+Game:
+
+- Executable SHA-256:
+  `ee09394647c9bb728f2725f3f3c087fa93fe61840e18c2f1299567576f1d069c`
+- Selection SHA-256:
+  `5a1448c6d7ea05acf1b1d6e0b8e38881df8fefeb7813386fafb151550377e302`
+- QPA A SHA-256:
+  `dfaec984b71b5d2eae3c168e4be27b7420d83de4b1f9473ba66d2163b11ba6eb`
+- QPA B SHA-256:
+  `2c717f5d59c23e121664b64a036e99965d5ed0c5ea4a7d2ae35d1f874c77b862`
+
+The nearby `uniform_8_to_8.stress_test` remains a separate diagnostic. Its
+shader requests the supported storage-buffer capability, but its upstream test
+also sets `coherentMemory=true`; the pinned allocator therefore requires a
+`HOST_COHERENT` memory type. ps5vk truthfully exposes one `HOST_VISIBLE`,
+non-coherent type, so the upstream result is `NotSupported` before shader
+execution. The driver does not invent coherence to force a pass.
+
 ### Heap and driver fixes
 
 The original roughly 13 MiB ceiling belonged to the foundation's **internal
@@ -323,5 +367,10 @@ oracle, or selection was replaced to obtain these results.
   or unsupported results, not silently converted into passes.
 * The resource selection is still focused: it does not establish general texel
   formats, descriptor arrays, dynamic buffers, images or arbitrary set layouts.
+* The storage-width selection establishes only storage-buffer access and
+  conversion. It does not establish `shaderInt8`, `shaderInt16`, float16 or
+  uniform/push/input-output narrow storage, all of which remain unadvertised.
+* The diagnostic 8-bit stress case requires host-coherent memory and therefore
+  does not execute its shader on this non-coherent memory profile.
 * `tcuImageIO` (libpng) and the generated EGL wrapper (`gluRenderConfig`) are
   not part of this focused build; no selected case uses them.

@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import tempfile
 import unittest
 
 from cts.upstream_runner import (
@@ -12,6 +13,7 @@ from cts.upstream_runner import (
     verify_run_identity,
     UpstreamVerificationError
 )
+from tools.build_upstream_cts import write_focused_storage_source
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "cts/upstream/manifest.json"
@@ -347,6 +349,27 @@ class TestUpstreamRunner(unittest.TestCase):
         "dEQP-VK.pipeline.spec_constant.compute.basic.float",
     }
 
+    STORAGE_WIDTH_CASES = {
+        "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage."
+        "storagebuffer_32_to_8.storage_buffer_scalar_sint",
+        "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage."
+        "storagebuffer_32_to_8.storage_buffer_scalar_uint",
+        "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage."
+        "storagebuffer_32_to_8.storage_buffer_vector_sint",
+        "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage."
+        "storagebuffer_32_to_8.storage_buffer_vector_uint",
+        "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage."
+        "uniform_32_to_16.uniform_buffer_block_scalar_sint",
+        "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage."
+        "uniform_32_to_16.uniform_buffer_block_scalar_uint",
+        "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage."
+        "uniform_32_to_16.uniform_buffer_block_vector_sint",
+        "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage."
+        "uniform_32_to_16.uniform_buffer_block_vector_uint",
+        "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage."
+        "uniform_16_to_32.uniform_buffer_block_scalar_sint",
+    }
+
     def test_resource_family_cannot_be_silently_removed(self):
         """The resource expansion cases are part of the frozen acceptance set."""
         manifest = json.loads(MANIFEST_PATH.read_text())
@@ -385,6 +408,83 @@ class TestUpstreamRunner(unittest.TestCase):
         self.assertNotIn("vktPipelineSpecConstantTests.cpp", build)
         self.assertIn("createPushConstantTests", package)
         self.assertIn("createPipelineTests", package)
+
+    def test_storage_width_selection_is_exact_and_storage_buffer_only(self):
+        """Freeze the audited extension-era 8/16-bit storage subset."""
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        by_path = {case["path"]: case for case in manifest["cases"]}
+        selected = {path for path in by_path if ".8bit_storage." in path or
+                    ".16bit_storage." in path}
+        self.assertEqual(self.STORAGE_WIDTH_CASES, selected)
+        for path in sorted(selected):
+            features = by_path[path]["features_required"]
+            self.assertEqual(1, len(features), path)
+            self.assertIn(features[0],
+                          {"storageBuffer8BitAccess", "storageBuffer16BitAccess"})
+            self.assertNotIn("shaderInt8", features, path)
+            self.assertNotIn("shaderInt16", features, path)
+
+    def test_storage_width_upstream_factories_are_linked(self):
+        build = (REPO_ROOT / "tools/build_upstream_cts.py").read_text(encoding="utf-8")
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text(encoding="utf-8")
+        self.assertIn("storage8_focus.cpp", build)
+        self.assertIn("storage16_focus.cpp", build)
+        self.assertIn("vktSpvAsmComputeShaderCase.cpp", build)
+        storage8 = (REPO_ROOT / "cts/upstream/storage8_focus.cpp").read_text(encoding="utf-8")
+        storage16 = (REPO_ROOT / "cts/upstream/storage16_focus.cpp").read_text(encoding="utf-8")
+        self.assertIn('#include "vktSpvAsm8bitStorageTests.cpp"', storage8)
+        self.assertIn('#include "vktSpvAsm16bitStorageTests.cpp"', storage16)
+        self.assertIn("addCompute8bitStorage32To8Group", storage8)
+        self.assertIn("addCompute8bitStorageBuffer8To8Group", storage8)
+        self.assertIn("addCompute16bitStorageUniform32To16Group", storage16)
+        self.assertIn("addCompute16bitStorageUniform16To32Group", storage16)
+        self.assertIn("createFocused8BitStorageComputeGroup", package)
+        self.assertIn("createFocused16BitStorageComputeGroup", package)
+
+    def test_coherent_storage_stress_case_is_diagnostic_not_acceptance(self):
+        """Do not invent HOST_COHERENT support to promote a shader-adjacent case."""
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        path = ("dEQP-VK.spirv_assembly.instruction.compute.8bit_storage."
+                "uniform_8_to_8.stress_test")
+        self.assertNotIn(path, {case["path"] for case in manifest["cases"]})
+        diagnostics = {case["path"]: case for case in manifest["diagnostics"]}
+        self.assertEqual("NotSupported", diagnostics[path]["expected_status"])
+        self.assertIn("HOST_COHERENT", diagnostics[path]["rationale"])
+
+    def test_storage_width_source_pruning_preserves_upstream_body(self):
+        """The build may gate registration only, never rewrite CTS bodies."""
+        needle = (
+            "group->addChild(new SpvAsmComputeShaderCase(testCtx, "
+            "testName.c_str(), spec));"
+        )
+        source_text = (
+            "static const char *shader = \"OpStore %dst %value\";\n"
+            f"{needle}\n"
+            "verifyOutputBuffers(inputs, outputs);\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "upstream.cpp"
+            destination = Path(directory) / "focused" / "upstream.cpp"
+            source.write_text(source_text, encoding="utf-8")
+            write_focused_storage_source(
+                source, destination, ("scalar_sint", "vector_uint"), 1)
+            generated = destination.read_text(encoding="utf-8")
+
+        self.assertIn('testName == "scalar_sint"', generated)
+        self.assertIn('testName == "vector_uint"', generated)
+        self.assertEqual(1, generated.count(needle))
+        self.assertIn('"OpStore %dst %value"', generated)
+        self.assertIn("verifyOutputBuffers(inputs, outputs);", generated)
+
+    def test_storage_width_source_pruning_fails_closed_on_upstream_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "upstream.cpp"
+            destination = Path(directory) / "focused.cpp"
+            source.write_text("// upstream registration changed\n", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                write_focused_storage_source(
+                    source, destination, ("scalar_sint",), 1)
+            self.assertFalse(destination.exists())
 
     def test_repaired_resource_cases_are_promoted_not_left_as_diagnostics(self):
         """The two repaired upstream cases must remain in strict acceptance."""

@@ -16,9 +16,16 @@ static const struct entry entries[] = {
     ENTRY(vkGetPhysicalDeviceProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceMemoryProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceFeatures, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceFeatures2KHR, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceProperties2KHR, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceMemoryProperties2KHR, INSTANCE),
     ENTRY(vkGetPhysicalDeviceFormatProperties, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceFormatProperties2KHR, INSTANCE),
     ENTRY(vkGetPhysicalDeviceImageFormatProperties, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceImageFormatProperties2KHR, INSTANCE),
     ENTRY(vkGetPhysicalDeviceQueueFamilyProperties, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceQueueFamilyProperties2KHR, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties2KHR, INSTANCE),
     ENTRY(vkEnumerateDeviceExtensionProperties, INSTANCE),
     ENTRY(vkCreateDevice, INSTANCE),
     ENTRY(vkGetDeviceProcAddr, DEVICE),
@@ -94,10 +101,29 @@ static const struct entry entries[] = {
 };
 #undef ENTRY
 
+static int gpdp2_command(const char *name)
+{
+    static const char *const commands[] = {
+        "vkGetPhysicalDeviceFeatures2KHR",
+        "vkGetPhysicalDeviceProperties2KHR",
+        "vkGetPhysicalDeviceFormatProperties2KHR",
+        "vkGetPhysicalDeviceImageFormatProperties2KHR",
+        "vkGetPhysicalDeviceQueueFamilyProperties2KHR",
+        "vkGetPhysicalDeviceMemoryProperties2KHR",
+        "vkGetPhysicalDeviceSparseImageFormatProperties2KHR",
+    };
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        if (!strcmp(name, commands[n])) return 1;
+    return 0;
+}
+
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
                                                               const char *name)
 {
     if (!name) return NULL;
+    if (gpdp2_command(name) &&
+        (!instance || !instance->features2_extension_enabled))
+        return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if ((instance || entries[j].scope == GLOBAL) && !strcmp(name, entries[j].name))
             return entries[j].function;

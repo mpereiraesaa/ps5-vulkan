@@ -104,6 +104,7 @@ bool ps5vk_cache_build_key(
     const char *entry_name,
     VkPipelineLayout layout,
     const VkSpecializationInfo *specialization,
+    uint32_t feature_mask,
     struct ps5vk_cache_key *out_key
 );
 

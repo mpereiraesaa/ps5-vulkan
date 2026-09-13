@@ -4,6 +4,7 @@
 #include <ps5vk/ps5vk_present.h>
 #include "shaders.h"
 #include "resource_shader.h"
+#include "storage_width_shaders.h"
 #include "ps5log.h"
 
 #include <stdio.h>
@@ -18,6 +19,14 @@
     if (_res != VK_SUCCESS) { \
         ps5log_printf(PS5LOG_ERR, "CHECK failed: %s -> %d at %s:%d", #expr, (int)_res, __FILE__, __LINE__); \
         ps5log_close("check-failed"); \
+        exit(1); \
+    } \
+} while (0)
+
+#define REQUIRE(condition, message) do { \
+    if (!(condition)) { \
+        ps5log_printf(PS5LOG_ERR, "REQUIRE failed: %s", (message)); \
+        ps5log_close("require-failed"); \
         exit(1); \
     } \
 } while (0)
@@ -40,6 +49,268 @@ static int parse_is_continuous(void)
     fclose(f);
     return continuous;
 #endif
+}
+
+static uint32_t fnv1a32(const uint8_t *bytes, size_t count)
+{
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < count; ++i) {
+        hash ^= bytes[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static void run_storage_width_compute(VkDevice device, VkQueue queue)
+{
+    enum { WIDTH_RUNS = 2, ELEMENTS = 64, BUFFER_BYTES = 4096, DATA_OFFSET = 256 };
+    const uint32_t *shader_words[WIDTH_RUNS] = {
+        consumer_storage8_spirv, consumer_storage16_spirv
+    };
+    const size_t shader_bytes[WIDTH_RUNS] = {
+        sizeof(consumer_storage8_spirv), sizeof(consumer_storage16_spirv)
+    };
+    const uint32_t element_bytes[WIDTH_RUNS] = {1, 2};
+    VkShaderModule modules[WIDTH_RUNS] = {VK_NULL_HANDLE};
+    VkPipeline pipelines[WIDTH_RUNS] = {VK_NULL_HANDLE};
+    VkBuffer buffers[WIDTH_RUNS][2] = {{VK_NULL_HANDLE}};
+    VkDeviceMemory memories[WIDTH_RUNS][2] = {{VK_NULL_HANDLE}};
+    VkDescriptorSet sets[WIDTH_RUNS] = {VK_NULL_HANDLE};
+
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_STORAGE_WIDTH_START");
+
+    VkDescriptorSetLayoutBinding bindings[2] = {
+        {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+         .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+        {.binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+         .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+    };
+    VkDescriptorSetLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 2,
+        .pBindings = bindings,
+    };
+    VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
+    CHECK(vkCreateDescriptorSetLayout(device, &layout_info, NULL, &set_layout));
+
+    VkPipelineLayoutCreateInfo pipeline_layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &set_layout,
+    };
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+    CHECK(vkCreatePipelineLayout(device, &pipeline_layout_info, NULL, &pipeline_layout));
+
+    for (uint32_t run = 0; run < WIDTH_RUNS; ++run) {
+        VkShaderModuleCreateInfo module_info = {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = shader_bytes[run],
+            .pCode = shader_words[run],
+        };
+        CHECK(vkCreateShaderModule(device, &module_info, NULL, &modules[run]));
+        VkComputePipelineCreateInfo pipeline_info = {
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .stage = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                .module = modules[run],
+                .pName = "main",
+            },
+            .layout = pipeline_layout,
+        };
+        CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1,
+                                       &pipeline_info, NULL, &pipelines[run]));
+    }
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_STORAGE_WIDTH_PIPELINES_CREATED count=2");
+
+    VkBufferCreateInfo buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = BUFFER_BYTES,
+        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+    };
+    for (uint32_t run = 0; run < WIDTH_RUNS; ++run) {
+        for (uint32_t io = 0; io < 2; ++io) {
+            CHECK(vkCreateBuffer(device, &buffer_info, NULL, &buffers[run][io]));
+            VkMemoryRequirements requirements;
+            vkGetBufferMemoryRequirements(device, buffers[run][io], &requirements);
+            VkMemoryAllocateInfo allocation = {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize = requirements.size,
+                .memoryTypeIndex = 0,
+            };
+            CHECK(vkAllocateMemory(device, &allocation, NULL, &memories[run][io]));
+            CHECK(vkBindBufferMemory(device, buffers[run][io], memories[run][io], 0));
+        }
+    }
+
+    for (uint32_t run = 0; run < WIDTH_RUNS; ++run) {
+        uint8_t *input = NULL;
+        uint8_t *output = NULL;
+        CHECK(vkMapMemory(device, memories[run][0], 0, BUFFER_BYTES, 0,
+                          (void **)&input));
+        CHECK(vkMapMemory(device, memories[run][1], 0, BUFFER_BYTES, 0,
+                          (void **)&output));
+        memset(input, 0xa5, BUFFER_BYTES);
+        memset(output, 0xa5, BUFFER_BYTES);
+        if (element_bytes[run] == 1) {
+            for (uint32_t i = 0; i < ELEMENTS; ++i)
+                input[DATA_OFFSET + i] = (uint8_t)(i * 7u + 3u);
+        } else {
+            uint16_t *values = (uint16_t *)(void *)(input + DATA_OFFSET);
+            for (uint32_t i = 0; i < ELEMENTS; ++i)
+                values[i] = (uint16_t)(i * 257u + 19u);
+        }
+        VkMappedMemoryRange flush_ranges[2] = {{
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = memories[run][0], .offset = 0, .size = BUFFER_BYTES,
+        }, {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = memories[run][1], .offset = 0, .size = BUFFER_BYTES,
+        }};
+        CHECK(vkFlushMappedMemoryRanges(device, 2, flush_ranges));
+        vkUnmapMemory(device, memories[run][0]);
+        vkUnmapMemory(device, memories[run][1]);
+    }
+
+    VkDescriptorPoolSize pool_size = {
+        .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = WIDTH_RUNS * 2,
+    };
+    VkDescriptorPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = WIDTH_RUNS,
+        .poolSizeCount = 1,
+        .pPoolSizes = &pool_size,
+    };
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    CHECK(vkCreateDescriptorPool(device, &pool_info, NULL, &descriptor_pool));
+    VkDescriptorSetLayout layouts[WIDTH_RUNS] = {set_layout, set_layout};
+    VkDescriptorSetAllocateInfo set_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = WIDTH_RUNS,
+        .pSetLayouts = layouts,
+    };
+    CHECK(vkAllocateDescriptorSets(device, &set_info, sets));
+
+    for (uint32_t run = 0; run < WIDTH_RUNS; ++run) {
+        VkDescriptorBufferInfo infos[2] = {
+            {.buffer = buffers[run][0], .offset = DATA_OFFSET,
+             .range = ELEMENTS * element_bytes[run]},
+            {.buffer = buffers[run][1], .offset = DATA_OFFSET,
+             .range = ELEMENTS * element_bytes[run]},
+        };
+        VkWriteDescriptorSet writes[2] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstSet = sets[run], .dstBinding = 0, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+             .pBufferInfo = &infos[0]},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstSet = sets[run], .dstBinding = 1, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+             .pBufferInfo = &infos[1]},
+        };
+        vkUpdateDescriptorSets(device, 2, writes, 0, NULL);
+    }
+
+    VkCommandPoolCreateInfo command_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex = 0,
+    };
+    VkCommandPool command_pool = VK_NULL_HANDLE;
+    CHECK(vkCreateCommandPool(device, &command_pool_info, NULL, &command_pool));
+    VkCommandBufferAllocateInfo command_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    CHECK(vkAllocateCommandBuffers(device, &command_info, &command));
+    VkCommandBufferBeginInfo begin = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    CHECK(vkBeginCommandBuffer(command, &begin));
+    for (uint32_t run = 0; run < WIDTH_RUNS; ++run) {
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelines[run]);
+        vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                pipeline_layout, 0, 1, &sets[run], 0, NULL);
+        vkCmdDispatch(command, 1, 1, 1);
+    }
+    CHECK(vkEndCommandBuffer(command));
+    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence fence = VK_NULL_HANDLE;
+    CHECK(vkCreateFence(device, &fence_info, NULL, &fence));
+    VkSubmitInfo submit = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command,
+    };
+    CHECK(vkQueueSubmit(queue, 1, &submit, fence));
+    CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+
+    uint32_t mismatch[WIDTH_RUNS] = {0, 0};
+    uint32_t guard_mismatch[WIDTH_RUNS] = {0, 0};
+    uint32_t checksum[WIDTH_RUNS] = {0, 0};
+    for (uint32_t run = 0; run < WIDTH_RUNS; ++run) {
+        uint8_t *output = NULL;
+        CHECK(vkMapMemory(device, memories[run][1], 0, BUFFER_BYTES, 0,
+                          (void **)&output));
+        VkMappedMemoryRange invalidate = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = memories[run][1], .offset = 0, .size = BUFFER_BYTES,
+        };
+        CHECK(vkInvalidateMappedMemoryRanges(device, 1, &invalidate));
+        const uint32_t data_bytes = ELEMENTS * element_bytes[run];
+        for (uint32_t i = 0; i < BUFFER_BYTES; ++i) {
+            if ((i < DATA_OFFSET || i >= DATA_OFFSET + data_bytes) &&
+                output[i] != 0xa5)
+                ++guard_mismatch[run];
+        }
+        if (element_bytes[run] == 1) {
+            for (uint32_t i = 0; i < ELEMENTS; ++i) {
+                const uint8_t source = (uint8_t)(i * 7u + 3u);
+                const uint8_t expected = (uint8_t)(source * 3u + i + 7u);
+                if (output[DATA_OFFSET + i] != expected) ++mismatch[run];
+            }
+        } else {
+            const uint16_t *values =
+                (const uint16_t *)(const void *)(output + DATA_OFFSET);
+            for (uint32_t i = 0; i < ELEMENTS; ++i) {
+                const uint16_t source = (uint16_t)(i * 257u + 19u);
+                const uint16_t expected = (uint16_t)(source * 5u + i + 11u);
+                if (values[i] != expected) ++mismatch[run];
+            }
+        }
+        checksum[run] = fnv1a32(output + DATA_OFFSET, data_bytes);
+        vkUnmapMemory(device, memories[run][1]);
+    }
+    if (mismatch[0] || mismatch[1] || guard_mismatch[0] || guard_mismatch[1]) {
+        ps5log_close("storage-width-verification-failed");
+        exit(1);
+    }
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_STORAGE_WIDTH_SUCCESS storage8=1 storage16=1 "
+        "elements8=64 elements16=64 checksum8=%08x checksum16=%08x "
+        "mismatches8=0 mismatches16=0 guard_bytes8=4032 guard_bytes16=3968 "
+        "guard_mismatches8=0 guard_mismatches16=0",
+        checksum[0], checksum[1]);
+
+    vkDestroyFence(device, fence, NULL);
+    vkFreeCommandBuffers(device, command_pool, 1, &command);
+    vkDestroyCommandPool(device, command_pool, NULL);
+    vkDestroyDescriptorPool(device, descriptor_pool, NULL);
+    for (uint32_t run = 0; run < WIDTH_RUNS; ++run) {
+        for (uint32_t io = 0; io < 2; ++io) {
+            vkDestroyBuffer(device, buffers[run][io], NULL);
+            vkFreeMemory(device, memories[run][io], NULL);
+        }
+        vkDestroyPipeline(device, pipelines[run], NULL);
+        vkDestroyShaderModule(device, modules[run], NULL);
+    }
+    vkDestroyPipelineLayout(device, pipeline_layout, NULL);
+    vkDestroyDescriptorSetLayout(device, set_layout, NULL);
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED");
 }
 
 static void run_runtime_compute(VkDevice device, VkQueue queue)
@@ -770,8 +1041,15 @@ int main(void)
                   is_continuous ? "continuous" : "finite",
                   PS5VK_SDK_VERSION_MAJOR, PS5VK_SDK_VERSION_MINOR);
 
-    /* 1. Create Instance */
-    VkInstanceCreateInfo ici = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    /* 1. Create a Vulkan 1.0 instance with the properties2 query extension. */
+    const char *instance_extensions[] = {
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+    };
+    VkInstanceCreateInfo ici = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 1,
+        .ppEnabledExtensionNames = instance_extensions,
+    };
     VkInstance instance = VK_NULL_HANDLE;
     CHECK(vkCreateInstance(&ici, NULL, &instance));
 
@@ -788,7 +1066,32 @@ int main(void)
                   VK_VERSION_MINOR(props.apiVersion),
                   props.driverVersion);
 
-    /* 3. Create Device & Queue */
+    VkPhysicalDevice16BitStorageFeatures storage16 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
+    };
+    VkPhysicalDevice8BitStorageFeatures storage8 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES,
+        .pNext = &storage16,
+    };
+    VkPhysicalDeviceFeatures2 features2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &storage8,
+    };
+    vkGetPhysicalDeviceFeatures2KHR(physical_device, &features2);
+    REQUIRE(storage8.storageBuffer8BitAccess == VK_TRUE &&
+            storage8.uniformAndStorageBuffer8BitAccess == VK_FALSE &&
+            storage8.storagePushConstant8 == VK_FALSE,
+            "exact 8-bit storage feature report");
+    REQUIRE(storage16.storageBuffer16BitAccess == VK_TRUE &&
+            storage16.uniformAndStorageBuffer16BitAccess == VK_FALSE &&
+            storage16.storagePushConstant16 == VK_FALSE &&
+            storage16.storageInputOutput16 == VK_FALSE,
+            "exact 16-bit storage feature report");
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=3 "
+        "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0");
+
+    /* 3. Create Device & Queue with only the two reported narrow-storage bits. */
     float priority = 1.0f;
     VkDeviceQueueCreateInfo qci = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -796,10 +1099,18 @@ int main(void)
         .queueCount = 1,
         .pQueuePriorities = &priority
     };
+    const char *device_extensions[] = {
+        VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME,
+        VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+    };
     VkDeviceCreateInfo dci = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &features2,
         .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &qci
+        .pQueueCreateInfos = &qci,
+        .enabledExtensionCount = 3,
+        .ppEnabledExtensionNames = device_extensions,
     };
     VkDevice device = VK_NULL_HANDLE;
     CHECK(vkCreateDevice(physical_device, &dci, NULL, &device));
@@ -810,7 +1121,10 @@ int main(void)
     /* 4. Run runtime compute */
     run_runtime_compute(device, queue);
 
-    /* 5. Run runtime procedural graphics and presentation */
+    /* 5. Run byte- and word-exact 8/16-bit storage-buffer witnesses. */
+    run_storage_width_compute(device, queue);
+
+    /* 6. Run runtime procedural graphics and presentation */
     run_consumer(device, queue, is_continuous);
 
     /* Orderly destroy device and instance if ever returned */

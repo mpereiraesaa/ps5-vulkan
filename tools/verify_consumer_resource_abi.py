@@ -26,6 +26,14 @@ def validate(log, receipt, artifact):
     require(len(digest) == 64 and
             all(c in "0123456789abcdef" for c in digest.lower()),
             "artifact identity")
+    width_artifact = artifact.get("storage_width", {})
+    require(width_artifact.get("storageBuffer8BitAccess") is True and
+            width_artifact.get("storageBuffer16BitAccess") is True and
+            width_artifact.get("shaderInt8") is False and
+            width_artifact.get("shaderInt16") is False and
+            all(len(width_artifact.get(key, "")) == 64 for key in
+                ("storage8_spirv_sha256", "storage16_spirv_sha256")),
+            "storage-width artifact contract")
     require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"),
             "log hash")
     require(receipt.get("protocol") == "ps5log/1" and
@@ -59,35 +67,63 @@ def validate(log, receipt, artifact):
     require(lines[-1] ==
             f"BYE seq={len(messages)} reason=consumer-finite-end", "complete BYE")
 
+    def matching(prefix):
+        return [(index, message) for index, message in enumerate(messages)
+                if message.startswith(prefix)]
+
     def one(prefix):
-        found = [(index, message) for index, message in enumerate(messages)
-                 if message.startswith(prefix)]
+        found = matching(prefix)
         require(len(found) == 1, prefix)
         return found[0]
 
     boot = one("PS5VK_CONSUMER_BOOT ")
+    negotiated = one("PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED ")
     start = one("PS5VK_CONSUMER_COMPUTE_START")
     pipeline = one("PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED")
-    prepared = one("PS5VK_QUEUE_PREPARED ")
-    submitted = one("PS5VK_QUEUE_SUBMIT ")
-    suspended = one("PS5VK_QUEUE_SUSPEND_POINT ")
-    completed = one("PS5VK_QUEUE_COMPLETED ")
+    prepared = matching("PS5VK_QUEUE_PREPARED ")
+    submitted = matching("PS5VK_QUEUE_SUBMIT ")
+    suspended = matching("PS5VK_QUEUE_SUSPEND_POINT ")
+    completed = matching("PS5VK_QUEUE_COMPLETED ")
     witness = one("PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS ")
+    width_start = one("PS5VK_CONSUMER_STORAGE_WIDTH_START")
+    width_pipelines = one("PS5VK_CONSUMER_STORAGE_WIDTH_PIPELINES_CREATED ")
+    width_witness = one("PS5VK_CONSUMER_STORAGE_WIDTH_SUCCESS ")
+    width_retired = one("PS5VK_CONSUMER_STORAGE_WIDTH_RETIRED")
     success = one("PS5VK_CONSUMER_TEST_SUCCESS")
     retired = one("PS5VK_CONSUMER_RESOURCES_RETIRED ")
     ready = one("PS5VK_READY_FOR_SHELL_CLOSE ")
 
-    require([row[0] for row in (boot, start, pipeline, prepared, submitted,
-                                suspended, completed, witness, success,
-                                retired, ready)] == sorted({row[0] for row in
-                                (boot, start, pipeline, prepared, submitted,
-                                 suspended, completed, witness, success,
-                                 retired, ready)}), "resource witness ordering")
+    require(len(prepared) == 2 and
+            all(len(rows) == 3 for rows in (submitted, suspended, completed)),
+            "one resource submit and two narrow submit records")
+    ordered = [boot, negotiated, start, pipeline,
+               prepared[0], submitted[0], suspended[0], completed[0], witness,
+               width_start, width_pipelines,
+               prepared[1], submitted[1], suspended[1], completed[1],
+               submitted[2], suspended[2], completed[2],
+               width_witness, width_retired, success, retired, ready]
+    require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
+            "resource witness ordering")
     require("mode=finite" in boot[1], "finite mode")
-    require(prepared[1].endswith("serial=1 dispatches=1"), "one dispatch")
-    require(submitted[1].endswith("serial=1 index=0 rc=0"), "submit")
-    require(suspended[1].endswith("serial=1 index=0 rc=0"), "suspend point")
-    require("serial=1 index=0 token=100000001 gcr=0070f528" in completed[1],
+    require(negotiated[1].split()[1:] == [
+        "instance_ext=1", "device_exts=3", "storageBuffer8BitAccess=1",
+        "storageBuffer16BitAccess=1", "narrow_arithmetic=0"],
+        "narrow storage negotiation")
+    require(prepared[0][1].endswith("serial=1 dispatches=1"), "one resource dispatch")
+    require(prepared[1][1].endswith("serial=2 dispatches=2"), "two narrow dispatches")
+    require([row[1].rsplit(" ", 1)[0] for row in submitted] == [
+                "PS5VK_QUEUE_SUBMIT serial=1 index=0",
+                "PS5VK_QUEUE_SUBMIT serial=2 index=0",
+                "PS5VK_QUEUE_SUBMIT serial=2 index=1"] and
+            all(row[1].endswith("rc=0") for row in submitted), "submits")
+    require([row[1].rsplit(" ", 1)[0] for row in suspended] == [
+                "PS5VK_QUEUE_SUSPEND_POINT serial=1 index=0",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=0",
+                "PS5VK_QUEUE_SUSPEND_POINT serial=2 index=1"] and
+            all(row[1].endswith("rc=0") for row in suspended), "suspend points")
+    require(all(f"serial={1 if index == 0 else 2} index={0 if index < 2 else 1}" in row[1]
+                for index, row in enumerate(completed)), "completion identities")
+    require("serial=1 index=0 token=100000001 gcr=0070f528" in completed[0][1],
             "completion")
     require(witness[1].split()[1:] == [
         "sets=3", "storage=2", "uniform=1", "texel=1",
@@ -95,6 +131,13 @@ def validate(log, receipt, artifact):
         "extra_bias=11", "addend=19", "elements=64", "mismatches=0",
         "guard_words=128", "guard_mismatches=0"],
         "resource oracle")
+    require(width_pipelines[1].endswith("count=2"), "narrow pipelines")
+    require(width_witness[1].split()[1:] == [
+        "storage8=1", "storage16=1", "elements8=64", "elements16=64",
+        "checksum8=9575e8c5", "checksum16=603ddade", "mismatches8=0",
+        "mismatches16=0", "guard_bytes8=4032", "guard_bytes16=3968",
+        "guard_mismatches8=0", "guard_mismatches16=0"],
+        "narrow storage oracle")
     require(retired[1].endswith("zero_tracked_allocations=1") and
             ready[1].endswith("resources_retired=1"), "resource retirement")
 
@@ -110,6 +153,11 @@ def validate(log, receipt, artifact):
         "specialization_constants": 2,
         "elements_checked": 64,
         "guard_words_checked": 128,
+        "storage8_elements_checked": 64,
+        "storage16_elements_checked": 64,
+        "narrow_guard_bytes_checked": 8000,
+        "storage8_checksum_fnv1a32": "9575e8c5",
+        "storage16_checksum_fnv1a32": "603ddade",
         "clean_tcp": True,
         "os_close": "requires independent lifecycle evidence",
     }

@@ -85,6 +85,7 @@ def main():
 
     dep_file = BUILD_DIR / "main.d"
     obj_file = BUILD_DIR / "main.o"
+    storage_shader_header = BUILD_DIR / "storage_width_shaders.h"
     pie_elf = BUILD_DIR / "consumer_pie.elf"
     eboot_elf = BUILD_DIR / "eboot.elf"
     eboot_bin = DIST_DIR / "eboot.bin"
@@ -95,6 +96,11 @@ def main():
         check_isolation(dep_file, obj_file)
         return
 
+    subprocess.run([
+        sys.executable, str(ROOT / "tools/prepare_consumer_storage_shaders.py"),
+        "--out", str(storage_shader_header),
+    ], check=True)
+
     # 1. Compile consumer main.c
     cflags = [
         "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
@@ -102,6 +108,7 @@ def main():
         "-MD", "-MP", "-MF", str(dep_file),
         "-I" + str(DIST_SDK / "include"),
         "-I" + str(CONSUMER_DIR),
+        "-I" + str(BUILD_DIR),
     ]
     if args.continuous:
         cflags.append("-DCONSUMER_CONTINUOUS=1")
@@ -186,8 +193,31 @@ def main():
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", DIST_DIR / "dev.conf")
 
+    files = {}
+    for path in sorted(p for p in DIST_DIR.rglob("*") if p.is_file()):
+        files[str(path.relative_to(DIST_DIR))] = hashlib.sha256(path.read_bytes()).hexdigest()
+    artifact = {
+        "title": "PPSA99994",
+        "profile": "public-consumer-resource-abi",
+        "submit_enabled": True,
+        "files": files,
+        "storage_width": {
+            "storageBuffer8BitAccess": True,
+            "storageBuffer16BitAccess": True,
+            "shaderInt8": False,
+            "shaderInt16": False,
+            "storage8_spirv_sha256": hashlib.sha256(
+                (ROOT / "build/test-shaders/storage8.spv").read_bytes()).hexdigest(),
+            "storage16_spirv_sha256": hashlib.sha256(
+                (ROOT / "build/test-shaders/storage16.spv").read_bytes()).hexdigest(),
+        },
+    }
+    artifact_path = DIST_DIR.parent / "artifact.json"
+    artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")
+
     print(f"Consumer successfully built and packaged into {DIST_DIR}")
     print(f"eboot.bin sha256: {hashlib.sha256(eboot_bin.read_bytes()).hexdigest()}")
+    print(f"artifact manifest: {artifact_path}")
 
 
 if __name__ == "__main__":

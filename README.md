@@ -22,6 +22,7 @@ results; visual output is not the sole correctness signal.
 - Command pools and command buffers with explicit recording state
 - Runtime-compiled compute pipelines with up to four resource sets
 - Storage buffers, uniform buffers and R32 uniform texel buffers
+- Extension-negotiated 8-bit and 16-bit storage-buffer access
 - Push constants and scalar specialization constants in compute and runtime graphics
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list draws
@@ -53,6 +54,8 @@ interfaces, a BGRA8 color target, push/specialization constants and no graphics
 descriptors. Compiled pairs
 reuse the bounded cache. The textured scene still uses its audited offline
 program library; it does not imply textured runtime-shader support.
+The 8/16-bit slice covers storage-buffer access only; narrow integer/float
+arithmetic and other narrow storage classes remain unadvertised.
 
 ## Development
 

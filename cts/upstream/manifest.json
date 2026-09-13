@@ -178,7 +178,88 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "The original upstream Vulkan 1.0 compute test supplies a uint32 specialization constant and a uint32 push constant, destroys the pipeline layout after command recording, dispatches 100 invocations and verifies every exact SSBO result."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.storagebuffer_32_to_8.storage_buffer_scalar_sint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:929",
+      "category": "storage-8bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer8BitAccess"],
+      "rationale": "Original upstream SPIR-V assembly case converts 128 signed 32-bit SSBO values to tightly packed signed 8-bit SSBO elements and byte-compares the GPU result."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.storagebuffer_32_to_8.storage_buffer_scalar_uint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:929",
+      "category": "storage-8bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer8BitAccess"],
+      "rationale": "Original upstream SPIR-V assembly case converts 128 unsigned 32-bit SSBO values to tightly packed unsigned 8-bit SSBO elements and byte-compares the GPU result."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.storagebuffer_32_to_8.storage_buffer_vector_sint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:929",
+      "category": "storage-8bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer8BitAccess"],
+      "rationale": "Original upstream SPIR-V assembly case validates signed two-lane vector narrowing from 32-bit to packed 8-bit storage-buffer elements."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.storagebuffer_32_to_8.storage_buffer_vector_uint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:929",
+      "category": "storage-8bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer8BitAccess"],
+      "rationale": "Original upstream SPIR-V assembly case validates unsigned two-lane vector narrowing from 32-bit to packed 8-bit storage-buffer elements."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage.uniform_32_to_16.uniform_buffer_block_scalar_sint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:2309",
+      "category": "storage-16bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer16BitAccess"],
+      "rationale": "Original upstream BufferBlock case converts signed scalar 32-bit SSBO elements to tightly packed signed 16-bit SSBO elements and compares the exact output."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage.uniform_32_to_16.uniform_buffer_block_scalar_uint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:2309",
+      "category": "storage-16bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer16BitAccess"],
+      "rationale": "Original upstream BufferBlock case converts unsigned scalar 32-bit SSBO elements to tightly packed unsigned 16-bit SSBO elements and compares the exact output."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage.uniform_32_to_16.uniform_buffer_block_vector_sint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:2309",
+      "category": "storage-16bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer16BitAccess"],
+      "rationale": "Original upstream BufferBlock case validates signed two-lane vector narrowing from 32-bit to packed 16-bit SSBO elements."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage.uniform_32_to_16.uniform_buffer_block_vector_uint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:2309",
+      "category": "storage-16bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer16BitAccess"],
+      "rationale": "Original upstream BufferBlock case validates unsigned two-lane vector narrowing from 32-bit to packed 16-bit SSBO elements."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.16bit_storage.uniform_16_to_32.uniform_buffer_block_scalar_sint",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:1128",
+      "category": "storage-16bit",
+      "expected_status": "Pass",
+      "features_required": ["storageBuffer16BitAccess"],
+      "rationale": "Original upstream BufferBlock case reads tightly packed signed 16-bit SSBO elements, sign-extends them to 32-bit output and compares all 128 values."
     }
   ],
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:1898",
+      "category": "storage-8bit-memory-precondition",
+      "expected_status": "NotSupported",
+      "features_required": ["storageBuffer8BitAccess"],
+      "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles."
+    }
+  ]
 }

@@ -112,11 +112,12 @@ bool ps5vk_cache_build_stage_key(const uint32_t *spirv, size_t spirv_words,
 
 bool ps5vk_cache_build_key(const uint32_t *spirv, size_t spirv_words,
     const char *entry_name, VkPipelineLayout layout,
-    const VkSpecializationInfo *specialization, struct ps5vk_cache_key *out_key)
+    const VkSpecializationInfo *specialization, uint32_t feature_mask,
+    struct ps5vk_cache_key *out_key)
 {
     if (!layout || layout->set_count > PS5VK_MAX_SETS ||
         !ps5vk_cache_build_stage_key(spirv, spirv_words, entry_name,
-                                    VK_SHADER_STAGE_COMPUTE_BIT, 0, out_key))
+                                    VK_SHADER_STAGE_COMPUTE_BIT, feature_mask, out_key))
         return false;
 
     out_key->set_count = layout->set_count;

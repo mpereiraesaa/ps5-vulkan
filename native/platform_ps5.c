@@ -152,6 +152,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
 #endif
 #if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, ps5vk_compiler_adapter_compile};
+    platform->supported_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                                   PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
 #endif
