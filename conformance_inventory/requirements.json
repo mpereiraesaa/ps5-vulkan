@@ -4669,15 +4669,14 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
+          "vkQueueBindSparse",
           "vkBindBufferMemory"
         ],
-        "absent_entry_points": [
-          "vkQueueBindSparse"
-        ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_memory.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7131,15 +7130,15 @@
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCmdNextSubpass"
         ],
+        "absent_entry_points": [],
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -7421,16 +7420,15 @@
         "surface_state": "symbol-present",
         "entry_points": [
           "vkCmdBeginRenderPass",
-          "vkCmdEndRenderPass"
-        ],
-        "absent_entry_points": [
           "vkCmdNextSubpass",
+          "vkCmdEndRenderPass",
           "vkCmdExecuteCommands"
         ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_command.c"
         ],
-        "note": "Baseline surface: 2 of 4 named entry points exist; 2 are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 4 of 4 named entry points exist; 4 are dispatched; 4 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8111,15 +8109,15 @@
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCmdExecuteCommands"
         ],
+        "absent_entry_points": [],
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8711,6 +8709,7 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
+          "vkCmdBeginQuery",
           "vkCmdBeginRenderPass",
           "vkCmdBindDescriptorSets",
           "vkCmdBindIndexBuffer",
@@ -8719,17 +8718,22 @@
           "vkCmdCopyBuffer",
           "vkCmdCopyBufferToImage",
           "vkCmdCopyImageToBuffer",
+          "vkCmdCopyQueryPoolResults",
           "vkCmdDispatch",
           "vkCmdDispatchIndirect",
           "vkCmdDraw",
           "vkCmdDrawIndexed",
           "vkCmdDrawIndexedIndirect",
           "vkCmdDrawIndirect",
+          "vkCmdEndQuery",
           "vkCmdEndRenderPass",
+          "vkCmdExecuteCommands",
           "vkCmdFillBuffer",
+          "vkCmdNextSubpass",
           "vkCmdPipelineBarrier",
           "vkCmdPushConstants",
           "vkCmdResetEvent",
+          "vkCmdResetQueryPool",
           "vkCmdSetBlendConstants",
           "vkCmdSetDepthBias",
           "vkCmdSetDepthBounds",
@@ -8741,10 +8745,10 @@
           "vkCmdSetStencilWriteMask",
           "vkCmdSetViewport",
           "vkCmdUpdateBuffer",
-          "vkCmdWaitEvents"
+          "vkCmdWaitEvents",
+          "vkCmdWriteTimestamp"
         ],
         "absent_entry_points": [
-          "vkCmdBeginQuery",
           "vkCmdBeginRenderPass2",
           "vkCmdBeginRendering",
           "vkCmdBindDescriptorSets2",
@@ -8760,15 +8764,11 @@
           "vkCmdCopyImage",
           "vkCmdCopyImage2",
           "vkCmdCopyImageToBuffer2",
-          "vkCmdCopyQueryPoolResults",
           "vkCmdDispatchBase",
           "vkCmdDrawIndexedIndirectCount",
           "vkCmdDrawIndirectCount",
-          "vkCmdEndQuery",
           "vkCmdEndRenderPass2",
           "vkCmdEndRendering",
-          "vkCmdExecuteCommands",
-          "vkCmdNextSubpass",
           "vkCmdNextSubpass2",
           "vkCmdPipelineBarrier2",
           "vkCmdPushConstants2",
@@ -8777,7 +8777,6 @@
           "vkCmdPushDescriptorSetWithTemplate",
           "vkCmdPushDescriptorSetWithTemplate2",
           "vkCmdResetEvent2",
-          "vkCmdResetQueryPool",
           "vkCmdResolveImage",
           "vkCmdResolveImage2",
           "vkCmdSetCullMode",
@@ -8800,14 +8799,13 @@
           "vkCmdSetStencilTestEnable",
           "vkCmdSetViewportWithCount",
           "vkCmdWaitEvents2",
-          "vkCmdWriteTimestamp",
           "vkCmdWriteTimestamp2"
         ],
         "refs": [
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 31 of 89 named entry points exist; 31 are dispatched; 31 are declared in the public header."
+        "note": "Baseline surface: 38 of 89 named entry points exist; 38 are dispatched; 38 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8912,7 +8910,8 @@
           "vkGetInstanceProcAddr",
           "vkGetPipelineCacheData",
           "vkGetRenderAreaGranularity",
-          "vkMergePipelineCaches"
+          "vkMergePipelineCaches",
+          "vkQueueBindSparse"
         ],
         "absent_entry_points": [
           "vkCopyImageToImage",
@@ -8928,7 +8927,6 @@
           "vkGetPrivateData",
           "vkGetRenderingAreaGranularity",
           "vkGetSemaphoreCounterValue",
-          "vkQueueBindSparse",
           "vkResetQueryPool",
           "vkSetPrivateData",
           "vkSignalSemaphore",
@@ -8942,7 +8940,7 @@
           "src/vk_framebuffer.c",
           "src/vk_render_pass.c"
         ],
-        "note": "Baseline surface: 12 of 32 named entry points exist; 12 are dispatched; 12 are declared in the public header."
+        "note": "Baseline surface: 13 of 32 named entry points exist; 13 are dispatched; 13 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9823,13 +9821,12 @@
         "surface_state": "symbol-present",
         "entry_points": [
           "vkCreateQueryPool",
-          "vkDestroyQueryPool"
-        ],
-        "absent_entry_points": [
+          "vkDestroyQueryPool",
           "vkGetQueryPoolResults"
         ],
+        "absent_entry_points": [],
         "refs": [],
-        "note": "Baseline surface: 2 of 3 named entry points exist; 2 are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 3 of 3 named entry points exist; 3 are dispatched; 3 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9895,17 +9892,16 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
-          "vkCreateQueryPool"
-        ],
-        "absent_entry_points": [
+          "vkCreateQueryPool",
           "vkGetQueryPoolResults",
           "vkCmdBeginQuery",
           "vkCmdEndQuery"
         ],
+        "absent_entry_points": [],
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: 1 of 4 named entry points exist; 1 are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 4 of 4 named entry points exist; 4 are dispatched; 4 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -9975,16 +9971,16 @@
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCmdBeginQuery",
           "vkCmdEndQuery"
         ],
+        "absent_entry_points": [],
         "refs": [
           "include/ps5vk/ps5vk.h"
         ],
-        "note": "Baseline surface: 0 of 2 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -10052,15 +10048,14 @@
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
+          "vkCmdWriteTimestamp",
           "vkGetPhysicalDeviceQueueFamilyProperties"
         ],
-        "absent_entry_points": [
-          "vkCmdWriteTimestamp"
-        ],
+        "absent_entry_points": [],
         "refs": [
           "src/vk_device.c"
         ],
-        "note": "Baseline surface: 1 of 2 named entry points exist; 1 are dispatched; 1 are declared in the public header."
+        "note": "Baseline surface: 2 of 2 named entry points exist; 2 are dispatched; 2 are declared in the public header."
       },
       "evidence": {
         "source": {

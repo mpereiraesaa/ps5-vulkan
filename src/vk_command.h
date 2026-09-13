@@ -9,7 +9,7 @@ enum ps5vk_operation_type {
     PS5VK_IMAGE_BARRIER, PS5VK_COPY_IMAGE_BUFFER, PS5VK_EVENT_SET,
     PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT, PS5VK_COPY_BUFFER,
     PS5VK_UPDATE_BUFFER, PS5VK_FILL_BUFFER, PS5VK_DISPATCH_INDIRECT,
-    PS5VK_DRAW_INDIRECT, PS5VK_DRAW_INDEXED_INDIRECT
+    PS5VK_DRAW_INDIRECT, PS5VK_DRAW_INDEXED_INDIRECT, PS5VK_QUERY_RESET
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -38,6 +38,9 @@ struct ps5vk_operation {
     uint32_t indirect_count;
     uint32_t indirect_stride;
     uint32_t fill_data;
+    VkQueryPool query_pool;
+    uint32_t query_first;
+    uint32_t query_count;
     VkImage copy_image;
     VkImageLayout copy_layout;
     VkBufferImageCopy copy_region;

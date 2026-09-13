@@ -155,6 +155,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
     const VkSubmitInfo* pSubmits,
     VkFence fence);
 
+/* Sparse queues are not advertised. The core symbol is present so callers get
+ * an explicit validation failure rather than a missing entry point. */
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(
+    VkQueue queue,
+    uint32_t bindInfoCount,
+    const VkBindSparseInfo* pBindInfo,
+    VkFence fence);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue);
 VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice device);
 
@@ -417,10 +425,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMergePipelineCaches(
     uint32_t srcCacheCount,
     const VkPipelineCache* pSrcCaches);
 
-/* Query-pool object lifetime. Only VK_QUERY_TYPE_OCCLUSION is created
- * (timestamps and pipeline statistics require feature bits this implementation
- * reports as false). Result retrieval remains private until query command
- * recording and availability state are implemented as one semantic slice. */
+/* Query pools. Only VK_QUERY_TYPE_OCCLUSION is created (the queue reports zero
+ * timestamp valid bits; pipelineStatisticsQuery is false). Reset and the
+ * reset-but-unavailable host result state are implemented. Occlusion counting,
+ * device-side result copies and timestamp writes are exported fail-closed until
+ * native counter semantics exist; their use invalidates the command buffer. */
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateQueryPool(
     VkDevice device,
     const VkQueryPoolCreateInfo* pCreateInfo,
@@ -431,6 +440,49 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyQueryPool(
     VkDevice device,
     VkQueryPool queryPool,
     const VkAllocationCallbacks* pAllocator);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetQueryPoolResults(
+    VkDevice device,
+    VkQueryPool queryPool,
+    uint32_t firstQuery,
+    uint32_t queryCount,
+    size_t dataSize,
+    void* pData,
+    VkDeviceSize stride,
+    VkQueryResultFlags flags);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdResetQueryPool(
+    VkCommandBuffer commandBuffer,
+    VkQueryPool queryPool,
+    uint32_t firstQuery,
+    uint32_t queryCount);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginQuery(
+    VkCommandBuffer commandBuffer,
+    VkQueryPool queryPool,
+    uint32_t query,
+    VkQueryControlFlags flags);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndQuery(
+    VkCommandBuffer commandBuffer,
+    VkQueryPool queryPool,
+    uint32_t query);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp(
+    VkCommandBuffer commandBuffer,
+    VkPipelineStageFlagBits pipelineStage,
+    VkQueryPool queryPool,
+    uint32_t query);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyQueryPoolResults(
+    VkCommandBuffer commandBuffer,
+    VkQueryPool queryPool,
+    uint32_t firstQuery,
+    uint32_t queryCount,
+    VkBuffer dstBuffer,
+    VkDeviceSize dstOffset,
+    VkDeviceSize stride,
+    VkQueryResultFlags flags);
 
 /* Sparse image queries. Sparse binding is not advertised, so both report an
  * empty list rather than inventing sparse requirements. */
@@ -589,8 +641,21 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(
     const VkRenderPassBeginInfo* pRenderPassBegin,
     VkSubpassContents contents);
 
+/* Current render passes contain exactly one subpass, so no valid transition
+ * exists. The entry point is exported and invalidates recording fail-closed. */
+VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(
+    VkCommandBuffer commandBuffer,
+    VkSubpassContents contents);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(
     VkCommandBuffer commandBuffer);
+
+/* Secondary allocation is not supported; execution is therefore always
+ * fail-closed rather than accepting an invalid zero-count pseudo no-op. */
+VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(
+    VkCommandBuffer commandBuffer,
+    uint32_t commandBufferCount,
+    const VkCommandBuffer* pCommandBuffers);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(
     VkCommandBuffer commandBuffer,

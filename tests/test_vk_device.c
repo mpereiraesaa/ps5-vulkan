@@ -276,6 +276,15 @@ static void lifecycle(void)
     CHECK_GRAPHICS(vkCmdSetStencilCompareMask);
     CHECK_GRAPHICS(vkCmdSetStencilWriteMask);
     CHECK_GRAPHICS(vkCmdSetStencilReference);
+    CHECK_GRAPHICS(vkGetQueryPoolResults);
+    CHECK_GRAPHICS(vkCmdResetQueryPool);
+    CHECK_GRAPHICS(vkCmdBeginQuery);
+    CHECK_GRAPHICS(vkCmdEndQuery);
+    CHECK_GRAPHICS(vkCmdWriteTimestamp);
+    CHECK_GRAPHICS(vkCmdCopyQueryPoolResults);
+    CHECK_GRAPHICS(vkCmdNextSubpass);
+    CHECK_GRAPHICS(vkCmdExecuteCommands);
+    CHECK_GRAPHICS(vkQueueBindSparse);
 #undef CHECK_GRAPHICS
     /* Vulkan 1.0 bookkeeping discovery: identity, scopes, and availability */
 #define CHECK_BOOKKEEPING_DEV(name) do { \

@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "2964ffdbeb97eb31d9161bf9c2b3f5603f312511",
-  "inspected_commit": "2964ffdbeb97eb31d9161bf9c2b3f5603f312511",
+  "baseline_commit": "2c8ef6144ec1b7095e7aa378d8fc08071156bdbf",
+  "inspected_commit": "2c8ef6144ec1b7095e7aa378d8fc08071156bdbf",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 129,
-    "dispatched": 129,
-    "public_header": 129,
+    "entry_points": 138,
+    "dispatched": 138,
+    "public_header": 138,
     "implementation_only": 0
   },
   "entry_points": [
@@ -61,6 +61,15 @@
       "name": "vkBindImageMemory",
       "files": [
         "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBeginQuery",
+      "files": [
+        "src/vk_query_pool.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -139,6 +148,15 @@
       "observed": null
     },
     {
+      "name": "vkCmdCopyQueryPoolResults",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCmdDispatch",
       "files": [
         "src/vk_command.c"
@@ -193,7 +211,25 @@
       "observed": null
     },
     {
+      "name": "vkCmdEndQuery",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCmdEndRenderPass",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdExecuteCommands",
       "files": [
         "src/vk_command.c"
       ],
@@ -205,6 +241,15 @@
       "name": "vkCmdFillBuffer",
       "files": [
         "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdNextSubpass",
+      "files": [
+        "src/vk_command.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -232,6 +277,15 @@
       "name": "vkCmdResetEvent",
       "files": [
         "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdResetQueryPool",
+      "files": [
+        "src/vk_query_pool.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
@@ -344,6 +398,15 @@
       "dispatch_scope": "DEVICE",
       "public_header": true,
       "observed": "Records validated event execution and memory dependencies; queue segmentation retires frontend event transitions around native jobs. Evidence: src/vk_command.c, src/vk_queue.c."
+    },
+    {
+      "name": "vkCmdWriteTimestamp",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
     },
     {
       "name": "vkCreateBuffer",
@@ -1039,6 +1102,15 @@
       "observed": null
     },
     {
+      "name": "vkGetQueryPoolResults",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkGetRenderAreaGranularity",
       "files": [
         "src/vk_render_pass.c"
@@ -1069,6 +1141,15 @@
       "name": "vkMergePipelineCaches",
       "files": [
         "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkQueueBindSparse",
+      "files": [
+        "src/vk_queue.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,

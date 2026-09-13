@@ -1,6 +1,7 @@
 #include "vk_queue.h"
 #include "vk_buffer_transfer.h"
 #include "vk_indirect.h"
+#include "vk_query_pool.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -109,6 +110,11 @@ static VkResult start_submission(VkDevice d)
                         d->lost = VK_TRUE;
                         return VK_ERROR_DEVICE_LOST;
                     }
+                    if (ps5vk_query_operation(op->type) &&
+                        ps5vk_query_operation_execute(d, op) != VK_SUCCESS) {
+                        d->lost = VK_TRUE;
+                        return VK_ERROR_DEVICE_LOST;
+                    }
                 }
             }
             pin(s, 0);
@@ -175,6 +181,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue)
 VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice d)
 { return d ? vkQueueWaitIdle(&d->queue) : INVALID; }
 
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(VkQueue queue, uint32_t count,
+    const VkBindSparseInfo *infos, VkFence fence)
+{
+    /* No queue family advertises VK_QUEUE_SPARSE_BINDING_BIT. Even count zero
+     * cannot waive that validity rule, so reject before inspecting batches or
+     * mutating fence/semaphore/submission state. */
+    (void)count; (void)infos; (void)fence;
+    if (!queue || !queue->device) return INVALID;
+    if (queue->device->lost) return VK_ERROR_DEVICE_LOST;
+    return VK_ERROR_VALIDATION_FAILED;
+}
+
 static int command_valid(VkDevice d, VkCommandBuffer c)
 {
     if (!c || c->pool->device != d || c->state != PS5VK_EXECUTABLE) return 0;
@@ -220,6 +238,10 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
         if (active) return 0;
         if (ps5vk_buffer_transfer_operation(op->type)) {
             if (ps5vk_buffer_transfer_validate(d, op) != VK_SUCCESS) return 0;
+            continue;
+        }
+        if (ps5vk_query_operation(op->type)) {
+            if (ps5vk_query_operation_validate(d, op) != VK_SUCCESS) return 0;
             continue;
         }
         if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE ||
@@ -310,7 +332,8 @@ static int event_operation(int type)
 static int frontend_operation(int type)
 {
     return event_operation(type) ||
-        ps5vk_buffer_transfer_operation((enum ps5vk_operation_type)type);
+        ps5vk_buffer_transfer_operation((enum ps5vk_operation_type)type) ||
+        ps5vk_query_operation((enum ps5vk_operation_type)type);
 }
 
 static int deferred_boundary(int type)
