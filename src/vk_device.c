@@ -419,7 +419,10 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
     if (!d) return;
     /* Valid usage requires children destroyed and work completed first. Defend
      * against invalid destruction by retaining ownership, not implicit frees. */
-    if (d->memories || d->buffers || d->buffer_views || d->descriptor_objects || d->pipeline_objects || d->graphics_objects || d->command_pools || d->fences || d->pipeline_caches || d->query_pools || d->submission ||
+    if (d->memories || d->buffers || d->buffer_views || d->descriptor_objects ||
+        d->pipeline_objects || d->graphics_objects || d->command_pools ||
+        d->fences || d->pipeline_caches || d->query_pools || d->semaphores ||
+        d->events || d->submission ||
         d->queue.next_serial != d->queue.completed_serial + 1) {
         ++d->lifetime_errors; return;
     }
