@@ -223,6 +223,17 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties2KHR(
     /* sparseBinding is not advertised, so the valid report is an empty list. */
     *count = 0;
 }
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties(
+    VkPhysicalDevice p, VkFormat format, VkImageType type,
+    VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling,
+    uint32_t *count, VkSparseImageFormatProperties *out)
+{
+    (void)format; (void)type; (void)samples; (void)usage; (void)tiling; (void)out;
+    if (!p || !count) return;
+    /* The 1.0 form of the same report: sparse binding is not advertised, images
+     * cannot be created with sparse flags, and the valid answer is empty. */
+    *count = 0;
+}
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(const char *layer,
     uint32_t *count, VkExtensionProperties *out)
 {
@@ -408,7 +419,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
     if (!d) return;
     /* Valid usage requires children destroyed and work completed first. Defend
      * against invalid destruction by retaining ownership, not implicit frees. */
-    if (d->memories || d->buffers || d->buffer_views || d->descriptor_objects || d->pipeline_objects || d->graphics_objects || d->command_pools || d->fences || d->pipeline_caches || d->submission ||
+    if (d->memories || d->buffers || d->buffer_views || d->descriptor_objects || d->pipeline_objects || d->graphics_objects || d->command_pools || d->fences || d->pipeline_caches || d->query_pools || d->submission ||
         d->queue.next_serial != d->queue.completed_serial + 1) {
         ++d->lifetime_errors; return;
     }
