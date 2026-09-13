@@ -69,6 +69,24 @@ int main(void)
     assert(layout.rowPitch == 0);
     assert(vkResetDescriptorPool(VK_NULL_HANDLE, VK_NULL_HANDLE, 0) != VK_SUCCESS);
 
+    /* Keep every synchronization-object symbol in the isolated native link.
+     * The full public consumer exercises the valid-device paths on hardware;
+     * this small link gate catches an SDK archive that exports declarations
+     * without packaging the implementation object. */
+    PFN_vkCreateSemaphore create_semaphore = vkCreateSemaphore;
+    PFN_vkDestroySemaphore destroy_semaphore = vkDestroySemaphore;
+    PFN_vkCreateEvent create_event = vkCreateEvent;
+    PFN_vkDestroyEvent destroy_event = vkDestroyEvent;
+    PFN_vkGetEventStatus get_event_status = vkGetEventStatus;
+    PFN_vkSetEvent set_event = vkSetEvent;
+    PFN_vkResetEvent reset_event = vkResetEvent;
+    PFN_vkCmdSetEvent cmd_set_event = vkCmdSetEvent;
+    PFN_vkCmdResetEvent cmd_reset_event = vkCmdResetEvent;
+    PFN_vkCmdWaitEvents cmd_wait_events = vkCmdWaitEvents;
+    assert(create_semaphore && destroy_semaphore && create_event && destroy_event);
+    assert(get_event_status && set_event && reset_event);
+    assert(cmd_set_event && cmd_reset_event && cmd_wait_events);
+
     /* 3. Verify public presentation API functions from <ps5vk/ps5vk_present.h> */
     struct ps5vk_present_config pconfig = {
         .width = 1920,

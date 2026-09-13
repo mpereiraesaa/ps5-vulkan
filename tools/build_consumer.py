@@ -220,6 +220,9 @@ def main():
             "api": "Vulkan 1.0",
             "local_size": 128,
             "wave_size": 32,
+            "binary_semaphore": True,
+            "host_event": True,
+            "device_event": True,
             "sync_producer_spirv_sha256": hashlib.sha256(
                 (ROOT / "build/test-shaders/sync_producer.spv").read_bytes()).hexdigest(),
             "sync_consumer_spirv_sha256": hashlib.sha256(
