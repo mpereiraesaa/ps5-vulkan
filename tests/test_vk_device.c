@@ -191,9 +191,10 @@ static void lifecycle(void)
             (usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_D32_SFLOAT,usage)==
             (usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
-        assert(!!ps5vk_graphics_image_usage(VK_FORMAT_R8G8B8A8_UNORM,usage)==
+    assert(!!ps5vk_graphics_image_usage(VK_FORMAT_R8G8B8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_SAMPLED_BIT || usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
              usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
              usage==VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
              usage==(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)));

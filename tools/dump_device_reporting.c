@@ -398,19 +398,49 @@ int main(int argc, char **argv)
         {VK_FORMAT_S8_UINT, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT},
     };
-    for (size_t i = 0; i < sizeof(queries) / sizeof(queries[0]); ++i) {
+    /* Cross-check matrix: every advertised format against the usages that have
+     * a VkFormatFeatureFlagBits counterpart, in both tiling scopes. The audit
+     * tool requires the two query paths to agree. */
+    const VkFormat advertised[] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM,
+                                   VK_FORMAT_D32_SFLOAT};
+    const VkImageUsageFlags usages[] = {VK_IMAGE_USAGE_SAMPLED_BIT,
+                                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                        VK_IMAGE_USAGE_STORAGE_BIT};
+    const VkImageTiling tilings[] = {VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_TILING_LINEAR};
+    size_t query_count = sizeof(queries) / sizeof(queries[0]);
+    size_t matrix_count = sizeof(advertised) / sizeof(advertised[0]) *
+                          sizeof(usages) / sizeof(usages[0]) *
+                          sizeof(tilings) / sizeof(tilings[0]);
+    for (size_t i = 0; i < query_count + matrix_count; ++i) {
+        VkFormat format;
+        VkImageType type = VK_IMAGE_TYPE_2D;
+        VkImageTiling tiling;
+        VkImageUsageFlags usage;
+        if (i < query_count) {
+            format = queries[i].format; type = queries[i].type;
+            tiling = queries[i].tiling; usage = queries[i].usage;
+        } else {
+            size_t index = i - query_count;
+            format = advertised[index / (sizeof(usages) / sizeof(usages[0]) *
+                                          sizeof(tilings) / sizeof(tilings[0]))];
+            usage = usages[(index / (sizeof(tilings) / sizeof(tilings[0]))) %
+                           (sizeof(usages) / sizeof(usages[0]))];
+            tiling = tilings[index % (sizeof(tilings) / sizeof(tilings[0]))];
+        }
         VkImageFormatProperties properties_out;
-        VkResult result = vkGetPhysicalDeviceImageFormatProperties(dump_physical, queries[i].format,
-            queries[i].type, queries[i].tiling, queries[i].usage, 0, &properties_out);
+        VkResult result = vkGetPhysicalDeviceImageFormatProperties(dump_physical, format,
+            type, tiling, usage, 0, &properties_out);
         fprintf(stdout, "    {\"format\": %u, \"type\": %u, \"tiling\": %u, \"usage\": %u, \"result\": %d",
-            (unsigned)queries[i].format, (unsigned)queries[i].type, (unsigned)queries[i].tiling,
-            queries[i].usage, (int)result);
+            (unsigned)format, (unsigned)type, (unsigned)tiling, usage, (int)result);
         if (result == VK_SUCCESS)
             fprintf(stdout, ", \"maxExtent\": [%u, %u, %u], \"maxMipLevels\": %u, \"maxArrayLayers\": %u, \"sampleCounts\": %u, \"maxResourceSize\": %llu",
                 properties_out.maxExtent.width, properties_out.maxExtent.height, properties_out.maxExtent.depth,
                 properties_out.maxMipLevels, properties_out.maxArrayLayers, properties_out.sampleCounts,
                 (unsigned long long)properties_out.maxResourceSize);
-        fprintf(stdout, "}%s\n", i + 1 == sizeof(queries) / sizeof(queries[0]) ? "" : ",");
+        fprintf(stdout, "}%s\n", i + 1 == query_count + matrix_count ? "" : ",");
     }
     fputs("  ]\n}\n", stdout);
 
