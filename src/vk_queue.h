@@ -9,6 +9,9 @@ struct ps5vk_submission {
     VkFence fence;
     unsigned count;
     VkCommandBuffer buffers[PS5VK_MAX_SUBMITTED_BUFFERS];
+    uint16_t first_operation[PS5VK_MAX_SUBMITTED_BUFFERS];
+    uint16_t operation_count[PS5VK_MAX_SUBMITTED_BUFFERS];
+    VkBool32 frontend_only;
     uint32_t wait_count, signal_count;
     VkSemaphore *waits, *signals;
     struct ps5vk_submission *next;

@@ -1,4 +1,5 @@
 #include "vk_command.h"
+#include "vk_sync.h"
 #include <float.h>
 #include <string.h>
 
@@ -52,6 +53,7 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
     for (unsigned j = 0; j < c->operation_count; ++j)
     {
         const struct ps5vk_operation *op = &c->operations[j];
+        if (type == VK_OBJECT_TYPE_EVENT && (const void *)op->event == object) return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->buffer_barrier.buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_source==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_destination==object)return 1;
@@ -544,4 +546,57 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         c->operations[c->operation_count++]=(struct ps5vk_operation){.type=PS5VK_IMAGE_BARRIER,
             .image_barrier=images[j],.src_stage=src,.dst_stage=dst,
             .src_access=images[j].srcAccessMask,.dst_access=images[j].dstAccessMask};
+}
+
+static void record_event(VkCommandBuffer c, VkEvent event,
+    VkPipelineStageFlags stage, int type)
+{
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass ||
+        !event || event->device != c->pool->device ||
+        !command_scope(stage, 0) || c->operation_count == PS5VK_MAX_OPERATIONS) {
+        invalid(c); return;
+    }
+    c->operations[c->operation_count++] = (struct ps5vk_operation){
+        .type = type, .event = event, .src_stage = stage, .dst_stage = stage,
+    };
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent(VkCommandBuffer c, VkEvent event,
+    VkPipelineStageFlags stage)
+{ record_event(c, event, stage, PS5VK_EVENT_SET); }
+
+VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent(VkCommandBuffer c, VkEvent event,
+    VkPipelineStageFlags stage)
+{ record_event(c, event, stage, PS5VK_EVENT_RESET); }
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents(VkCommandBuffer c, uint32_t event_count,
+    const VkEvent *events, VkPipelineStageFlags src, VkPipelineStageFlags dst,
+    uint32_t memory_count, const VkMemoryBarrier *memory,
+    uint32_t buffer_count, const VkBufferMemoryBarrier *buffers,
+    uint32_t image_count, const VkImageMemoryBarrier *images)
+{
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !event_count || !events ||
+        event_count > PS5VK_MAX_OPERATIONS - c->operation_count) { invalid(c); return; }
+    for (uint32_t j = 0; j < event_count; ++j)
+        if (!events[j] || events[j]->device != c->pool->device) { invalid(c); return; }
+    const unsigned aggregate = (memory_count || !image_count) ? 1u : 0u;
+    uint64_t barrier_count = (uint64_t)buffer_count + image_count + aggregate;
+    if (barrier_count > PS5VK_MAX_OPERATIONS ||
+        c->operation_count > PS5VK_MAX_OPERATIONS - barrier_count ||
+        event_count > PS5VK_MAX_OPERATIONS - barrier_count - c->operation_count) {
+        invalid(c); return;
+    }
+    unsigned before = c->operation_count;
+    vkCmdPipelineBarrier(c, src, dst, 0, memory_count, memory,
+        buffer_count, buffers, image_count, images);
+    if (c->state != PS5VK_RECORDING) return;
+    unsigned barriers = c->operation_count - before;
+    memmove(&c->operations[before + event_count], &c->operations[before],
+        barriers * sizeof(c->operations[0]));
+    for (uint32_t j = 0; j < event_count; ++j)
+        c->operations[before + j] = (struct ps5vk_operation){
+            .type = PS5VK_EVENT_WAIT, .event = events[j],
+            .src_stage = src, .dst_stage = dst,
+        };
+    c->operation_count += event_count;
 }

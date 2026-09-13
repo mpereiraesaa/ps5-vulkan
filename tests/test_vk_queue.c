@@ -194,6 +194,39 @@ int main(void)
     assert(d.queue.next_serial == unchanged_serial && !semaphore->signaled);
     vkDestroySemaphore(&d, semaphore, NULL); assert(!d.semaphores);
 
+    /* Device event transitions remain frontend operations. They execute in
+     * command-buffer order and the wait dependency is not sent to AGC. */
+    VkEventCreateInfo ei = {.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO};
+    VkEvent event;
+    assert(vkCreateEvent(&d, &ei, NULL, &event) == VK_SUCCESS);
+    VkCommandBufferBeginInfo event_begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    VkCommandBuffer c2;
+    assert(vkAllocateCommandBuffers(&d, &ai, &c2) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &event_begin) == VK_SUCCESS);
+    vkCmdSetEvent(c, event, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c2, &event_begin) == VK_SUCCESS);
+    vkCmdWaitEvents(c2, 1, &event, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, NULL, 0, NULL, 0, NULL);
+    assert(vkEndCommandBuffer(c2) == VK_SUCCESS);
+    VkCommandBuffer event_buffers[] = {c, c2};
+    VkSubmitInfo event_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 2, .pCommandBuffers = event_buffers};
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
+    assert(fence->signaled && vkGetEventStatus(&d, event) == VK_EVENT_SET &&
+        !event->pending && c->state == PS5VK_EXECUTABLE && c2->state == PS5VK_EXECUTABLE);
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &event_begin) == VK_SUCCESS);
+    vkCmdResetEvent(c, event, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+    event_submit.commandBufferCount = 1; event_submit.pCommandBuffers = &c;
+    assert(vkResetFences(&d, 1, &fence) == VK_SUCCESS);
+    assert(vkQueueSubmit(&d.queue, 1, &event_submit, fence) == VK_SUCCESS);
+    assert(vkGetEventStatus(&d, event) == VK_EVENT_RESET);
+    vkDestroyEvent(&d, event, NULL); assert(!d.events);
+    vkFreeCommandBuffers(&d, pool, 1, &c2);
+
     /* Graphics ownership fixture: real image binding, synthetic render objects
      * and control backend only. This never produces or executes GPU commands. */
     d.graphics_enabled = VK_TRUE; d.image_requirements = image_requirements;

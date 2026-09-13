@@ -16,6 +16,19 @@ static void pin(struct ps5vk_submission *s, int acquire)
         VkCommandBuffer c = s->buffers[j];
         for (unsigned k = 0; k < c->operation_count; ++k) {
             struct ps5vk_operation *op = &c->operations[k];
+            if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
+                op->type == PS5VK_EVENT_WAIT) {
+                if (acquire) ++op->event->pending; else --op->event->pending;
+            }
+            if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
+                op->type == PS5VK_EVENT_WAIT) {
+                if (acquire) ++op->event->pending; else --op->event->pending;
+                continue;
+            }
+            if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
+                op->type == PS5VK_EVENT_WAIT) {
+                if (acquire) ++op->event->pending; else --op->event->pending;
+            }
             if (op->type == PS5VK_BEGIN_RENDER_PASS) {
                 if (acquire) { ++op->render_pass->pending; ++op->framebuffer->pending; }
                 else { --op->render_pass->pending; --op->framebuffer->pending; }
@@ -56,7 +69,24 @@ static VkResult start_submission(VkDevice d)
             if (!s->waits[j]->signaled) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
             s->waits[j]->signaled = VK_FALSE;
         }
-        if (s->count) {
+        if (s->frontend_only) {
+            for (uint32_t b = 0; b < s->count; ++b) {
+                VkCommandBuffer command = s->buffers[b];
+                for (uint32_t k = 0; k < command->operation_count; ++k) {
+                    struct ps5vk_operation *op = &command->operations[k];
+                    if (op->type == PS5VK_EVENT_WAIT &&
+                        !(op->event->host_signaled || op->event->device_signaled)) {
+                        d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST;
+                    }
+                    if (op->type == PS5VK_EVENT_SET) op->event->device_signaled = VK_TRUE;
+                    if (op->type == PS5VK_EVENT_RESET) {
+                        op->event->host_signaled = VK_FALSE;
+                        op->event->device_signaled = VK_FALSE;
+                    }
+                }
+            }
+            pin(s, 0);
+        } else if (s->count) {
             VkResult result = d->submit_backend.launch(d, s->backend_job);
             if (result != VK_SUCCESS) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
             return VK_SUCCESS;
@@ -115,6 +145,12 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     VkFramebuffer framebuffer = NULL;
     for (unsigned j = 0; j < c->operation_count; ++j) {
         const struct ps5vk_operation *op = &c->operations[j];
+        if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
+            op->type == PS5VK_EVENT_WAIT) {
+            if (active || !op->event || op->event->device != d ||
+                !op->src_stage || !op->dst_stage) return 0;
+            continue;
+        }
         if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_END_RENDER_PASS) {
             if (!d->graphics_enabled || !d->graphics_submit_enabled || !op->render_pass || !op->framebuffer ||
                 op->render_pass->device != d || op->framebuffer->device != d) return 0;
@@ -139,6 +175,11 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             continue;
         }
         if (active) return 0;
+        if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
+            op->type == PS5VK_EVENT_WAIT) {
+            if (!op->event || op->event->device != d) return 0;
+            continue;
+        }
         if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE ||
            op->type==PS5VK_COPY_IMAGE_BUFFER) {
             VkImage image=op->type==PS5VK_IMAGE_BARRIER?op->image_barrier.image:op->copy_image;
@@ -156,6 +197,11 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 if (ps5vk_buffer_span(d, op->buffer_barrier.buffer, op->buffer_barrier.offset,
                     op->buffer_barrier.size, &address, &bytes) != VK_SUCCESS) return 0;
             }
+            continue;
+        }
+        if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
+            op->type == PS5VK_EVENT_WAIT) {
+            if (!op->event || op->event->device != d) return 0;
             continue;
         }
         if (op->type != PS5VK_DISPATCH || !op->pipeline || op->pipeline->graphics ||
@@ -290,9 +336,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
                     }
             s->buffers[s->count++] = command;
         }
-        if (s->count && (!d->submit_backend.prepare || !d->submit_backend.launch ||
+        VkBool32 has_event = VK_FALSE, has_gpu = VK_FALSE;
+        for (uint32_t k = 0; k < s->count; ++k)
+            for (uint32_t n = 0; n < s->buffers[k]->operation_count; ++n) {
+                int type = s->buffers[k]->operations[n].type;
+                if (type == PS5VK_EVENT_SET || type == PS5VK_EVENT_RESET ||
+                    type == PS5VK_EVENT_WAIT) has_event = VK_TRUE;
+                else if (type != PS5VK_BARRIER) has_gpu = VK_TRUE;
+            }
+        /* Mixed buffers require range segmentation; never pass event opcodes
+         * to a native backend that cannot interpret them. */
+        if (has_event && has_gpu) { result = INVALID; goto fail; }
+        s->frontend_only = has_event;
+        if (s->count && !s->frontend_only && (!d->submit_backend.prepare || !d->submit_backend.launch ||
             !d->submit_backend.poll || !d->submit_backend.release)) { result = INVALID; goto fail; }
-        if (s->count) {
+        if (s->count && !s->frontend_only) {
             result = d->submit_backend.prepare(d, s, &s->backend_job);
             if (result != VK_SUCCESS) { if (result >= 0) result = INVALID; goto fail; }
             if (!s->backend_job) { result = INVALID; goto fail; }

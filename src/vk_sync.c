@@ -63,6 +63,9 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyEvent(VkDevice d, VkEvent event,
     (void)allocator;
     if (!d || !event || event->device != d) return;
     if (event->pending) { ++d->lifetime_errors; return; }
+    if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_EVENT, event)) {
+        ++d->lifetime_errors; return;
+    }
     VkEvent *link = &d->events;
     while (*link && *link != event) link = &(*link)->next;
     if (!*link) return;
