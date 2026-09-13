@@ -5,6 +5,20 @@ PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely. Each
 capability below states its evidence boundary when it is narrower than native
 hardware acceptance.
 
+## Core feature negotiation
+
+- `robustBufferAccess` is the one Vulkan 1.0 core feature currently reported
+  true. Device creation accepts it through either `pEnabledFeatures` or the
+  `VkPhysicalDeviceFeatures2` chain, rejects malformed booleans, and rejects
+  every unreported core feature.
+- Storage and uniform buffer descriptors carry their actual byte extent and
+  use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
+  the bound buffer span. This is the implementation basis for the feature, not
+  an inference from the GPU name.
+- The original upstream `device_mandatory_features` reporting oracle is in the
+  focused selection. Executable out-of-bounds robustness cases and repeatable
+  hardware evidence remain required before this slice is considered complete.
+
 ## Graphics
 
 - Exactly one vertex stage and one fragment stage per graphics pipeline.
@@ -77,8 +91,10 @@ supported.
   `VK_KHR_get_physical_device_properties2`,
   `VK_KHR_storage_buffer_storage_class`, `VK_KHR_8bit_storage` and
   `VK_KHR_16bit_storage`.
-- `vkGetPhysicalDeviceFeatures2KHR` reports and `vkCreateDevice` accepts exactly
-  `storageBuffer8BitAccess` and `storageBuffer16BitAccess` for this slice.
+- `vkGetPhysicalDeviceFeatures2KHR` reports and `vkCreateDevice` accepts
+  `robustBufferAccess` in the core feature block plus exactly
+  `storageBuffer8BitAccess` and `storageBuffer16BitAccess` for the narrow
+  storage slice.
   `uniformAndStorageBuffer8BitAccess`, `storagePushConstant8`,
   `uniformAndStorageBuffer16BitAccess`, `storagePushConstant16` and
   `storageInputOutput16` remain false.

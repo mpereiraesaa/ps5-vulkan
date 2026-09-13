@@ -55,7 +55,8 @@ VkResult ps5vk_runtime_compile_compute_features(
     opts.address32_hi = 2;
     opts.force_indirect_push_constants = layout->push_constant_size != 0;
     if (feature_mask & ~(PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
-                         PS5VK_FEATURE_STORAGE_BUFFER_16BIT))
+                         PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+                         PS5VK_FEATURE_ROBUST_BUFFER_ACCESS))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);

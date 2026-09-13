@@ -657,3 +657,14 @@ Close Game. The image-transfer contribution to those runs is the four bounded
 RGBA8 copy leaves described above; the 93-case total also protects the existing
 compute, graphics, synchronization, memory and buffer-transfer oracles from
 regression. It does not widen the image profile or establish conformance.
+
+## Mandatory Vulkan 1.0 feature reporting expansion
+
+The current manifest contains 94 acceptance cases. The added original upstream
+leaf is `dEQP-VK.info.device_mandatory_features`, whose generated oracle requires
+`robustBufferAccess` for this Vulkan 1.0 profile. The historical 93/93 runs
+above predate this manifest change and remain evidence only for their exact
+selection hash. No 94/94 hardware result is claimed here until the rebuilt
+payload passes with matching executable and selection identities. This case
+checks feature reporting; executable robustness cases are a separate required
+step.

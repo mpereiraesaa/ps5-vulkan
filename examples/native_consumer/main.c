@@ -1863,6 +1863,8 @@ int main(void)
         .pNext = &storage8,
     };
     vkGetPhysicalDeviceFeatures2KHR(physical_device, &features2);
+    REQUIRE(features2.features.robustBufferAccess == VK_TRUE,
+            "mandatory Vulkan 1.0 robustBufferAccess feature report");
     REQUIRE(storage8.storageBuffer8BitAccess == VK_TRUE &&
             storage8.uniformAndStorageBuffer8BitAccess == VK_FALSE &&
             storage8.storagePushConstant8 == VK_FALSE,
@@ -1874,9 +1876,11 @@ int main(void)
             "exact 16-bit storage feature report");
     ps5log_line(PS5LOG_MARK,
         "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=3 "
-        "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0");
+        "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0 "
+        "robustBufferAccess=1");
 
-    /* 3. Create Device & Queue with only the two reported narrow-storage bits. */
+    /* 3. Create Device & Queue with the mandatory core robustness bit and the
+     * two reported narrow-storage bits returned by the same public query. */
     float priority = 1.0f;
     VkDeviceQueueCreateInfo qci = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,

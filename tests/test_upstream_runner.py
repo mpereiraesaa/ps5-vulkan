@@ -343,6 +343,9 @@ class TestUpstreamRunner(unittest.TestCase):
                        for case in manifest.get("diagnostics", [])}
         self.assertIn("dEQP-VK.info.physical_devices", accepted)
         self.assertIn("dEQP-VK.info.device_queue_family_properties", accepted)
+        mandatory = accepted["dEQP-VK.info.device_mandatory_features"]
+        self.assertEqual(["robustBufferAccess"], mandatory["features_required"])
+        self.assertEqual("physical-device-features", mandatory["category"])
         self.assertIn("dEQP-VK.info.device_properties", diagnostics)
         self.assertIn("dEQP-VK.info.device_memory_properties", diagnostics)
         self.assertEqual("Fail", diagnostics[
@@ -355,6 +358,11 @@ class TestUpstreamRunner(unittest.TestCase):
         self.assertIn("createFeatureInfoInstanceTests", package)
         self.assertIn("createFeatureInfoDeviceTests", package)
         self.assertIn("vktApiFeatureInfo.cpp", builder)
+        generated = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                     "framework/vulkan/generated/vulkan/vkMandatoryFeatures.inl")
+        if generated.exists():
+            self.assertIn("coreFeatures.features.robustBufferAccess == VK_FALSE",
+                          generated.read_text(encoding="utf-8"))
 
     RESOURCE_CASES = {
         "dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation",

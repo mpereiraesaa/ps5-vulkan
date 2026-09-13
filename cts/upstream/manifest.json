@@ -36,6 +36,16 @@
       "rationale": "Original upstream query body obtains and logs the native queue-family vector through the Vulkan instance interface."
     },
     {
+      "path": "dEQP-VK.info.device_mandatory_features",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3611",
+      "category": "physical-device-features",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
+      "rationale": "Original upstream generated mandatory-feature oracle requires robustBufferAccess for the advertised Vulkan 1.0 profile. This proves truthful reporting only; separate robustness execution cases are required for memory-access semantics."
+    },
+    {
       "path": "dEQP-VK.api.smoke.create_sampler",
       "source": "external/vulkancts/modules/vulkan/api/vktApiSmokeTests.cpp:64",
       "category": "api",

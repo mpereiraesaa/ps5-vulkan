@@ -33,7 +33,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     if (query_result) return query_result;
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
-                               .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT};
+                               .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT,
+                               .supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU",
         .heap_size = 65536,
@@ -140,8 +141,11 @@ static void lifecycle(void)
     VkPhysicalDeviceMemoryProperties memory;
     vkGetPhysicalDeviceMemoryProperties(p, &memory);
     assert(memory.memoryHeapCount == 1 && memory.memoryHeaps[0].size == 65536);
-    VkPhysicalDeviceFeatures features, zero = {0}; memset(&features, 0xff, sizeof(features));
-    vkGetPhysicalDeviceFeatures(p, &features); assert(!memcmp(&features, &zero, sizeof(zero)));
+    VkPhysicalDeviceFeatures features, expected_features = {0};
+    expected_features.robustBufferAccess = VK_TRUE;
+    memset(&features, 0xff, sizeof(features));
+    vkGetPhysicalDeviceFeatures(p, &features);
+    assert(!memcmp(&features, &expected_features, sizeof(expected_features)));
     VkQueueFamilyProperties queues[2];
     memset(queues, 0xa5, sizeof(queues));
     uint32_t count = 0;
@@ -385,17 +389,33 @@ static void negative(void)
     info.enabledExtensionCount = 0; info.ppEnabledExtensionNames = NULL;
     VkPhysicalDeviceFeatures features = {.shaderInt64 = VK_TRUE}; info.pEnabledFeatures = &features;
     assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT);
-    /* The profile advertises no optional core features. Verify every field,
-     * including graphics ones, rejects before a backend/device is opened. */
+    /* robustBufferAccess is the one supported Vulkan 1.0 core feature.  Every
+     * other field must reject before a backend/device is opened. */
     _Static_assert(sizeof(features)%sizeof(VkBool32)==0,"feature word layout");
     for(size_t offset=0;offset<sizeof(features);offset+=sizeof(VkBool32)) {
         memset(&features,0,sizeof(features));
         const VkBool32 enabled=VK_TRUE;
         memcpy((unsigned char *)&features+offset,&enabled,sizeof(enabled));
         d=(VkDevice)(uintptr_t)1;
-        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT);
-        assert(!d && opened==before && !i->devices);
+        if (offset == offsetof(VkPhysicalDeviceFeatures, robustBufferAccess)) {
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == PS5VK_FEATURE_ROBUST_BUFFER_ACCESS);
+            vkDestroyDevice(d, NULL);
+            before = opened;
+        } else {
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!d && opened==before && !i->devices);
+        }
     }
+    memset(&features, 0, sizeof(features));
+    features.robustBufferAccess = 2;
+    d=(VkDevice)(uintptr_t)1;
+    assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+    features.robustBufferAccess = VK_TRUE;
+    p->platform.supported_features &= ~PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+    d=(VkDevice)(uintptr_t)1;
+    assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    p->platform.supported_features |= PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
     info.pEnabledFeatures = NULL; priority = NAN;
     assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS); priority = 0;
     q.queueFamilyIndex = 1; assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
@@ -445,7 +465,8 @@ static void narrow_storage_features(void)
     assert(vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceFeatures2KHR") ==
            (PFN_vkVoidFunction)vkGetPhysicalDeviceFeatures2KHR);
     p->platform.supported_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
-                                     PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
+                                     PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+                                     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
     p->platform.format_properties = ps5vk_graphics_format_properties;
     p->platform.image_properties = ps5vk_graphics_image_properties;
 
@@ -574,8 +595,9 @@ static void narrow_storage_features(void)
     VkPhysicalDeviceFeatures2 feature_query = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &feature8};
     vkGetPhysicalDeviceFeatures2KHR(p, &feature_query);
-    VkPhysicalDeviceFeatures zero = {0};
-    assert(!memcmp(&feature_query.features, &zero, sizeof(zero)));
+    VkPhysicalDeviceFeatures expected = {0};
+    expected.robustBufferAccess = VK_TRUE;
+    assert(!memcmp(&feature_query.features, &expected, sizeof(expected)));
     assert(feature8.storageBuffer8BitAccess && !feature8.uniformAndStorageBuffer8BitAccess &&
            !feature8.storagePushConstant8);
     assert(feature16.storageBuffer16BitAccess && !feature16.uniformAndStorageBuffer16BitAccess &&
@@ -601,7 +623,8 @@ static void narrow_storage_features(void)
     VkDevice device = VK_NULL_HANDLE;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
     assert(device->enabled_features == (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
-                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT));
+                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+                                        PS5VK_FEATURE_ROBUST_BUFFER_ACCESS));
     vkDestroyDevice(device, NULL);
 
     protected_features.protectedMemory = VK_TRUE;

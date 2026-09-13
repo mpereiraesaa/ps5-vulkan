@@ -25,6 +25,10 @@ struct ps5vk_graphics_key;
 enum ps5vk_feature_bits {
     PS5VK_FEATURE_STORAGE_BUFFER_8BIT = 1u << 0,
     PS5VK_FEATURE_STORAGE_BUFFER_16BIT = 1u << 1,
+    /* Vulkan 1.0 core robustness.  Buffer SRDs carry the exact descriptor
+     * byte extent and select GFX10 raw OOB checking; vertex fetch descriptors
+     * are likewise bounded by the bound VkBuffer span. */
+    PS5VK_FEATURE_ROBUST_BUFFER_ACCESS = 1u << 2,
 };
 struct ps5vk_compiler {
     void *context;
