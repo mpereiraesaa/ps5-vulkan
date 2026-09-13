@@ -573,3 +573,19 @@ complete QPA reconstruction, exit code zero and independent Close Game checks.
 This establishes the selected single-dispatch compute paths only. The
 selection contains no indirect graphics draw oracle, and the implementation
 does not advertise multi-draw or `VK_KHR_draw_indirect_count`.
+
+## Dynamic-state compute/transfer non-interference (packaged, 2026-09-13)
+
+The focused package now registers the original upstream
+`dynamic_state.monolithic.compute_transfer` factory and selects 32 cases: 28
+single-state cases covering the seven newly wired Vulkan 1.0 setters across
+compute/transfer and before/after placement, plus the factory's four multi-state
+cases. The pinned upstream translation unit is compiled directly; its command
+recording, buffer readback and comparison oracles are unchanged. The outer
+dynamic-state group retains upstream's `cleanupDevice()` lifecycle for its
+singleton device helpers.
+
+Selection provenance, manifest shape, factory registration, original-body
+anchors and build wiring are host-validated. These cases are packaged for a
+future console run but have **not** been executed on PS5 hardware in this
+change, so no CTS pass or Vulkan conformance claim is made here.
