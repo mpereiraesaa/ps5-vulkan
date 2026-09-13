@@ -6187,7 +6187,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32_UINT lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32_UINT reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R32_UINT",
       "kind": "format-cell",
@@ -6195,7 +6195,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6331,7 +6331,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32_SINT lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32_SINT reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R32_SINT",
       "kind": "format-cell",
@@ -6339,7 +6339,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6587,7 +6587,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32_UINT lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32_UINT reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32_UINT",
       "kind": "format-cell",
@@ -6595,7 +6595,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6715,7 +6715,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32_SINT lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32_SINT reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32_SINT",
       "kind": "format-cell",
@@ -6723,7 +6723,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6891,7 +6891,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32_UINT lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32_UINT reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32B32_UINT",
       "kind": "format-cell",
@@ -6899,7 +6899,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6907,7 +6907,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32_SINT lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32_SINT reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32B32_SINT",
       "kind": "format-cell",
@@ -6915,7 +6915,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7019,7 +7019,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32A32_UINT lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32A32_UINT reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32B32A32_UINT",
       "kind": "format-cell",
@@ -7027,7 +7027,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7147,7 +7147,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32A32_SINT lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32A32_SINT reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32B32A32_SINT",
       "kind": "format-cell",
@@ -7155,7 +7155,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -25975,9 +25975,9 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 646,
+      "blocker": 638,
       "not-applicable": 2,
-      "satisfied": 16
+      "satisfied": 24
     },
     "limits": {
       "blocker": 72,

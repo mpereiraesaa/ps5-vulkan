@@ -105,6 +105,23 @@ class TestReportingMatrix(unittest.TestCase):
                             row.get("format") != "VK_FORMAT_R8G8B8A8_UNORM"
                             for row in rows))
 
+    def test_documented_format_counts_follow_the_generated_matrix(self):
+        """Narrative summaries must not retain stale format totals."""
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        counts = data["summary"]["formats"]
+        phrase = (f'{counts["satisfied"]} mandatory format-feature cells satisfied '
+                  f'and {counts["blocker"]} per-format blockers recorded')
+        requirements = json.loads(
+            (ROOT / "conformance_inventory/requirements.json").read_text())
+        row = next(item for item in requirements["requirements"]
+                   if item["id"] == "VK14-FORMATS-001")
+        self.assertIn(phrase, row["cts"]["note"])
+        validation = (ROOT / "VALIDATION.md").read_text()
+        self.assertIn(
+            f'{counts["satisfied"]} mandatory format-feature cells satisfied\n'
+            f'with {counts["blocker"]} documented per-format blockers',
+            validation)
+
 
 if __name__ == "__main__":
     unittest.main()

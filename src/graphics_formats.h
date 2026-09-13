@@ -1,20 +1,53 @@
+/*
+ * Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Vertex numeric categories follow the PSBC/Gallium contract in the pinned
+ * GPL ps5-opengl reference; ps5-vulkan owns the Vulkan-facing validation.
+ */
 #ifndef PS5VK_GRAPHICS_FORMATS_H
 #define PS5VK_GRAPHICS_FORMATS_H
 #include <vulkan/vulkan_core.h>
 #include "graphics_limits.h"
 #include "texture_format.h"
 
-/* Float attribute widths shared by capability queries and the fetch gate. */
-static inline uint32_t ps5vk_vertex_format_size(VkFormat format)
+enum ps5vk_vertex_numeric {
+    PS5VK_VERTEX_NUMERIC_NONE = 0,
+    PS5VK_VERTEX_NUMERIC_FLOAT,
+    PS5VK_VERTEX_NUMERIC_SINT,
+    PS5VK_VERTEX_NUMERIC_UINT,
+};
+struct ps5vk_vertex_format {
+    uint32_t bytes, components;
+    enum ps5vk_vertex_numeric numeric;
+};
+
+/* Vertex format metadata is shared by capability queries, SPIR-V interface
+ * matching, the PSBC adapter and the bounded fetch descriptor.  The 32-bit
+ * integer rows follow the PSBC/Gallium mapping used by the pinned GPL
+ * ps5-opengl implementation; narrower integer and normalized rows remain
+ * disabled until their complete conversion contract is wired. */
+static inline struct ps5vk_vertex_format ps5vk_vertex_format_info(VkFormat format)
 {
     switch (format) {
-    case VK_FORMAT_R32_SFLOAT: return 4;
-    case VK_FORMAT_R32G32_SFLOAT: return 8;
-    case VK_FORMAT_R32G32B32_SFLOAT: return 12;
-    case VK_FORMAT_R32G32B32A32_SFLOAT: return 16;
-    default: return 0;
+    case VK_FORMAT_R32_SFLOAT: return (struct ps5vk_vertex_format){4,1,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R32G32_SFLOAT: return (struct ps5vk_vertex_format){8,2,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R32G32B32_SFLOAT: return (struct ps5vk_vertex_format){12,3,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R32G32B32A32_SFLOAT: return (struct ps5vk_vertex_format){16,4,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R32_SINT: return (struct ps5vk_vertex_format){4,1,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R32G32_SINT: return (struct ps5vk_vertex_format){8,2,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R32G32B32_SINT: return (struct ps5vk_vertex_format){12,3,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R32G32B32A32_SINT: return (struct ps5vk_vertex_format){16,4,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R32_UINT: return (struct ps5vk_vertex_format){4,1,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R32G32_UINT: return (struct ps5vk_vertex_format){8,2,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R32G32B32_UINT: return (struct ps5vk_vertex_format){12,3,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R32G32B32A32_UINT: return (struct ps5vk_vertex_format){16,4,PS5VK_VERTEX_NUMERIC_UINT};
+    default: return (struct ps5vk_vertex_format){0};
     }
 }
+static inline uint32_t ps5vk_vertex_format_size(VkFormat format)
+{ return ps5vk_vertex_format_info(format).bytes; }
 
 /* Native executable image roles. RGBA8 is a bounded off-screen color target
  * with transfer-source readback, a sampled/upload target, and a pure

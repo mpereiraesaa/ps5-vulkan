@@ -32,7 +32,10 @@ results; visual output is not the sole correctness signal.
 - Vulkan pipeline-cache objects with a normative header export (no portable compiled-code records yet)
 - Occlusion query-pool lifetime (result retrieval deferred) and empty sparse image queries
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
-- Vertex and index buffers, indexed and non-indexed triangle-list draws
+- Vertex and index buffers, indexed and non-indexed triangle-list draws;
+  one- through four-component 32-bit float, signed-integer and unsigned-integer
+  vertex formats are supported, with the integer rows validated by exact GPU
+  readback on non-indexed runtime draws
 - One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
   plus an optional D32 depth attachment
 - Single-level R8, RG8, RGBA8 UNORM and RGBA8 sRGB sampled textures with GPU

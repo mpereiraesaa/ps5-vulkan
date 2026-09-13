@@ -136,12 +136,45 @@ int main(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);
     attribute.format=VK_FORMAT_R32G32B32_SFLOAT;
+    assert(ps5vk_spirv_graphics_interface(&vertex_input));
+    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    attribute.format=VK_FORMAT_R32_UINT;
     assert(!ps5vk_spirv_graphics_interface(&vertex_input));
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     attribute.format=VK_FORMAT_R32G32B32A32_SFLOAT;
     binding.inputRate=VK_VERTEX_INPUT_RATE_INSTANCE;
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     free((void *)vertex_input.vertex.words);free((void *)vertex_input.fragment.words);
+
+    const char *integer_modules[]={"build/runtime-graphics/vertex_sint.vert.spv",
+        "build/runtime-graphics/vertex_uint.vert.spv"};
+    const VkFormat integer_formats[][4]={
+        {VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_SINT,VK_FORMAT_R32G32B32_SINT,
+         VK_FORMAT_R32G32B32A32_SINT},
+        {VK_FORMAT_R32_UINT,VK_FORMAT_R32G32_UINT,VK_FORMAT_R32G32B32_UINT,
+         VK_FORMAT_R32G32B32A32_UINT},
+    };
+    for(unsigned kind=0;kind<2;++kind) {
+        struct ps5vk_graphics_key integer_input={
+            .vertex=read_module(integer_modules[kind]),
+            .fragment=read_module("build/runtime-graphics/vertex_input.frag.spv"),
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .color_format=VK_FORMAT_R8G8B8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+            .vertex_binding_count=1,.vertex_attribute_count=1,
+            .vertex_bindings=&binding,.vertex_attributes=&attribute};
+        binding.inputRate=VK_VERTEX_INPUT_RATE_VERTEX;
+        for(unsigned components=0;components<4;++components) {
+            attribute.format=integer_formats[kind][components];
+            binding.stride=4u*(components+1u);
+            assert(ps5vk_spirv_graphics_interface(&integer_input));
+            assert(ps5vk_runtime_graphics_compile(NULL,&integer_input,&out)==VK_SUCCESS && out);
+            ps5vk_runtime_graphics_free(NULL,out);
+        }
+        free((void *)integer_input.vertex.words);
+        free((void *)integer_input.fragment.words);
+    }
 
     cache=ps5vk_compilation_cache_create(4,1024*1024);
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&parameters,&cold)==VK_SUCCESS);

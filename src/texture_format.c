@@ -1,4 +1,6 @@
 /*
+ * Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * GFX10.3 image-format words and component selectors adapted from

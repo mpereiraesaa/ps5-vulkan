@@ -53,6 +53,11 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertIn("PS5VK_GRAPHICS_SCISSOR_PROBE!=7 && !PS5VK_GRAPHICS_CONTINUOUS",
                       source)
 
+    def test_integer_vertex_probe_is_nonindexed_runtime_draw(self):
+        source = (ROOT / "native/graphics_main.c").read_text()
+        self.assertIn("index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8", source)
+        self.assertIn("const size_t start=24u;", source)
+
     def rejected(self, options, message):
         env = {k: v for k, v in os.environ.items() if not k.startswith("PS5VK_")}
         env.update(options)

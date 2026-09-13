@@ -98,6 +98,24 @@ int main(void)
     assert(commands[2]==10 && commands[3]==0x8c && commands[4]==2);
     assert(commands[5]==11 && commands[6]==0); /* No LLPC table address in base vertex. */
     assert(commands[7]==0xc && commands[8]==2 && commands[9]==0 && commands[10]==0);
+    /* The integer vertex-format probe uses the real runtime vertex-table ABI
+     * but deliberately isolates it from the still-unsupported combination of
+     * runtime shaders with indexed emission. */
+    state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=3,.fragment_count=2,
+        .base_vertex_slot=1,.start_instance_slot=UINT32_MAX,
+        .vertex_buffer_valid=1,.vertex_buffer_slot=0,.lds_slot=2,.lds_value=0,
+        .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
+    cursor=commands;calls=0;op.type=PS5VK_DRAW;op.instance_count=1;op.first_vertex=0;
+    assert(ps5vk_native_emit_vertex_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x123400,0x567800)==VK_SUCCESS && cursor>commands && calls);
+    cursor=commands;calls=0;op.type=PS5VK_DRAW_INDEXED;op.index_count=6;
+    assert(ps5vk_native_emit_indexed_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x123400,0x567800,&indices,draw_index)==VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(cursor==commands && !calls);
+    op.type=PS5VK_DRAW;
+    state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,.fragment_count=2,
+        .base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.lds_slot=1,.lds_value=0,
+        .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     cursor=commands;calls=0;state.runtime.lds_slot=0;
     assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)!=VK_SUCCESS);
     assert(cursor==commands && !calls);

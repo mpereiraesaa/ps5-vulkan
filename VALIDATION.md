@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 16 format class rules
-satisfied with 646 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 24 mandatory format-feature cells satisfied
+with 638 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -624,6 +624,32 @@ the title in 100 ms. Linear filtering remains advertised only for RGBA8 UNORM;
 the new formats were validated with nearest sampling. This is bounded format
 evidence, not general format coverage or Vulkan conformance.
 
+### GPL integer vertex formats promoted by hardware evidence
+
+The vertex-format table adapted from the pinned GPLv3 `ps5-opengl` revision
+now exposes the `R32`, `R32G32`, `R32G32B32` and `R32G32B32A32` signed- and
+unsigned-integer rows as vertex buffers. Two runs used byte-identical SELF
+SHA-256 `2d0ad4667084f3127b38ca0d0e6cf4f9fab1339b6e34f0e2af496f86aa2ffba6`:
+
+- `20260913T225439880Z_PPSA99994_ps5vk_0x619065cfab35`, log SHA-256
+  `fb9582f5b10926ce0edb18538698d4568e355805d84b43061b22de2b4506d76c`
+- `20260913T225542599Z_PPSA99994_ps5vk_0x619f001c2d7a`, log SHA-256
+  `e1e42287e1d169eb93f392222496dde13a609641763ebeb608f53546230b237b`
+
+Each complete 1,534-record `ps5log/1` stream compiled the signed and unsigned
+vertex shaders at runtime, created eight independent pipelines, fetched three
+vertices per case and verified exactly 471,744 white pixels with zero other
+pixels. The scalar, vec2 and vec3 cases additionally prove Vulkan's missing
+component completion (`0,0,1`) without conflating the integer input category
+with the smooth float output passed to the fragment stage. Ninety-six compute
+rounds surrounded the graphics cases, resource accounting returned to zero,
+both streams ended with BYE and exact-title Close Game completed in 100 ms.
+
+The probe deliberately uses `vkCmdDraw`: the runtime shader emitter still
+rejects indexed draws, while the separate offline-program path retains its
+validated indexed support. This evidence therefore promotes eight vertex-format
+bits, not general runtime indexed rendering or broad format conformance.
+
 The earlier dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
@@ -632,7 +658,7 @@ ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
 reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
-blockers and 718 blockers overall.
+blockers and 710 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

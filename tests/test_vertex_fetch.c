@@ -28,13 +28,16 @@ int main(void)
     assert(words[0]==(uint32_t)address && (words[1]&0xffff)==address>>32 && words[2]==9);
     uint32_t saved[4];memcpy(saved,words,sizeof(words));
     const VkFormat supported[]={VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT,
-        VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT};
+        VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_SINT,VK_FORMAT_R32G32B32_SINT,
+        VK_FORMAT_R32G32B32A32_SINT,VK_FORMAT_R32_UINT,VK_FORMAT_R32G32_UINT,
+        VK_FORMAT_R32G32B32_UINT,VK_FORMAT_R32G32B32A32_UINT};
     key.vertex_attribute_count=1;
-    for(unsigned n=0;n<4;++n) {
+    for(unsigned n=0;n<sizeof(supported)/sizeof(supported[0]);++n) {
         attrs[0].format=supported[n];
         assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_SUCCESS);
     }
-    attrs[0].format=VK_FORMAT_R32_UINT;
+    attrs[0].format=VK_FORMAT_R16_UINT;
     assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_ERROR_FEATURE_NOT_PRESENT);
     attrs[0].format=VK_FORMAT_R32G32B32_SFLOAT;key.vertex_attribute_count=2;
     assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_SUCCESS);

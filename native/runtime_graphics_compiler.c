@@ -1,3 +1,12 @@
+/*
+ * Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * The GFX1013/PSBC vertex format mapping is adapted from the vertex-format
+ * contract in BlackBearReloaded's ps5-opengl, src/gallium/ps5/ps5_screen.c at
+ * commit 7f9bfabdddb187a11e4401058eba8c9e55194d0a (GPL-3.0-or-later).
+ */
 #include "runtime_graphics_compiler.h"
 #include "spirv_graphics_interface.h"
 #include <stdlib.h>
@@ -68,6 +77,14 @@ static PsbcVertexFormat vertex_format(VkFormat format)
     case VK_FORMAT_R32G32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32_FLOAT;
     case VK_FORMAT_R32G32B32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32B32_FLOAT;
     case VK_FORMAT_R32G32B32A32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32B32A32_FLOAT;
+    case VK_FORMAT_R32_SINT: return PSBC_VERTEX_FORMAT_R32_SINT;
+    case VK_FORMAT_R32G32_SINT: return PSBC_VERTEX_FORMAT_R32G32_SINT;
+    case VK_FORMAT_R32G32B32_SINT: return PSBC_VERTEX_FORMAT_R32G32B32_SINT;
+    case VK_FORMAT_R32G32B32A32_SINT: return PSBC_VERTEX_FORMAT_R32G32B32A32_SINT;
+    case VK_FORMAT_R32_UINT: return PSBC_VERTEX_FORMAT_R32_UINT;
+    case VK_FORMAT_R32G32_UINT: return PSBC_VERTEX_FORMAT_R32G32_UINT;
+    case VK_FORMAT_R32G32B32_UINT: return PSBC_VERTEX_FORMAT_R32G32B32_UINT;
+    case VK_FORMAT_R32G32B32A32_UINT: return PSBC_VERTEX_FORMAT_R32G32B32A32_UINT;
     default: return PSBC_VERTEX_FORMAT_NONE;
     }
 }

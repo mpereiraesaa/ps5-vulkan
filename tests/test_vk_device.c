@@ -278,21 +278,25 @@ static void lifecycle(void)
     }
     p->platform.queue_flags=VK_QUEUE_GRAPHICS_BIT;
     const VkFormat vertex_formats[]={VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT,
-        VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT};
-    for(unsigned n=0;n<4;++n) {
+        VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_SINT,VK_FORMAT_R32G32B32_SINT,
+        VK_FORMAT_R32G32B32A32_SINT,VK_FORMAT_R32_UINT,VK_FORMAT_R32G32_UINT,
+        VK_FORMAT_R32G32B32_UINT,VK_FORMAT_R32G32B32A32_UINT};
+    for(unsigned n=0;n<sizeof(vertex_formats)/sizeof(vertex_formats[0]);++n) {
         vkGetPhysicalDeviceFormatProperties(p,vertex_formats[n],&fp);
         VkFormatFeatureFlags expected=VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
-            (vertex_formats[n]==VK_FORMAT_R32_SFLOAT?VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT:0);
+            ((vertex_formats[n]==VK_FORMAT_R32_SFLOAT ||
+              vertex_formats[n]==VK_FORMAT_R32_SINT ||
+              vertex_formats[n]==VK_FORMAT_R32_UINT)?VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT:0);
         assert(fp.bufferFeatures==expected);
         assert(!fp.linearTilingFeatures && !fp.optimalTilingFeatures);
-        assert(ps5vk_vertex_format_size(vertex_formats[n])==4*(n+1));
+        assert(ps5vk_vertex_format_size(vertex_formats[n])==4*((n%4)+1));
         assert(vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)
             ==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }
-    vkGetPhysicalDeviceFormatProperties(p,VK_FORMAT_R32_UINT,&fp);
-    assert(fp.bufferFeatures==VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT &&
-        !ps5vk_vertex_format_size(VK_FORMAT_R32_UINT));
+    vkGetPhysicalDeviceFormatProperties(p,VK_FORMAT_R16_UINT,&fp);
+    assert(!fp.bufferFeatures && !ps5vk_vertex_format_size(VK_FORMAT_R16_UINT));
     count=1; vkGetPhysicalDeviceQueueFamilyProperties(p, &count, queues);
     assert(count==1 && queues[0].queueFlags==VK_QUEUE_GRAPHICS_BIT);
     p->platform.queue_flags=VK_QUEUE_COMPUTE_BIT;

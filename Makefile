@@ -16,6 +16,9 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_parameters.frag -o build/runtime-graphics/parameters.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_input.vert -o build/runtime-graphics/vertex_input.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_input.frag -o build/runtime-graphics/vertex_input.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_vertex_uint.vert -o build/runtime-graphics/vertex_uint.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_vertex_sint.vert -o build/runtime-graphics/vertex_sint.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_vertex_format.frag -o build/runtime-graphics/vertex_format.frag.spv
 	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tools/inspect_graphics_compiler.c src/ps5_compiler_shims.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/runtime-graphics/inspect
 	./build/runtime-graphics/inspect build/runtime-graphics/triangle.vert.spv build/runtime-graphics/triangle.frag.spv
 VULKAN_CFLAGS ?= -Ithird_party/vulkan-headers/include
@@ -136,6 +139,8 @@ check:
 	./build/tests/test_sampler_core_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/sampled_format_probe.c tests/test_sampled_format_probe.c -o build/tests/test_sampled_format_probe
 	./build/tests/test_sampled_format_probe
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vertex_format_probe.c tests/test_vertex_format_probe.c -o build/tests/test_vertex_format_probe
+	./build/tests/test_vertex_format_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state
 	./build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy
