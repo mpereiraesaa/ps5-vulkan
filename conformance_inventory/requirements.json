@@ -8306,7 +8306,9 @@
           "state": "native-evidence",
           "refs": [
             "VALIDATION.md#ordered-buffer-transfer-slice-2026-09-13",
-            "docs/HARDWARE_VALIDATION.md#ordered-vulkan-10-buffer-transfer-2026-09-13"
+            "docs/HARDWARE_VALIDATION.md#ordered-vulkan-10-buffer-transfer-2026-09-13",
+            "UPSTREAM_CTS.md#image-copy-and-colour-clear-2026-09-13",
+            "VALIDATION.md#vulkan-10-image-copy-and-colour-clear-2026-09-13"
           ]
         },
         "conformance": {
