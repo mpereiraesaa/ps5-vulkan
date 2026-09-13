@@ -1,10 +1,7 @@
 /*
- * Host contract tests for the Vulkan 1.0 query-pool object surface and the two
- * sparse image queries.
- *
- * Result retrieval remains absent until device-side query initialization and
- * availability exist. Sparse binding is not advertised, so both sparse queries
- * must report an empty list for valid inputs.
+ * Host contract tests for the bounded Vulkan 1.0 query-pool surface and the
+ * two sparse image queries. This proves ordered reset and the observable
+ * reset-but-unavailable result state; it does not emulate occlusion counters.
  */
 #include "vk_internal.h"
 #include "vk_query_pool.h"
@@ -87,6 +84,8 @@ int main(void)
     VkQueryPool pool = VK_NULL_HANDLE;
     assert(vkCreateQueryPool(device, &info, NULL, &pool) == VK_SUCCESS);
     assert(pool->query_type == VK_QUERY_TYPE_OCCLUSION && pool->query_count == 8);
+    for (uint32_t j = 0; j < pool->query_count; ++j)
+        assert(pool->states[j] == PS5VK_QUERY_UNINITIALIZED);
 
     VkQueryPool out = (VkQueryPool)(uintptr_t)0x1;
     VkQueryPoolCreateInfo bad_flags = info;
@@ -108,6 +107,77 @@ int main(void)
     stats.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
     stats.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT;
     assert(vkCreateQueryPool(device, &stats, NULL, &out) == VK_ERROR_FEATURE_NOT_PRESENT);
+
+    /* Reset is an ordered command: recording cannot change host-visible query
+     * state before the frontend operation executes. */
+    uint64_t results[4] = {0xaaaaaaaaaaaaaaaaull, 0xbbbbbbbbbbbbbbbbull,
+                           0xccccccccccccccccull, 0xddddddddddddddddull};
+    assert(vkGetQueryPoolResults(device, pool, 2, 2, sizeof(results), results,
+        16, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+        == VK_ERROR_UNKNOWN);
+    VkCommandPoolCreateInfo command_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+    };
+    VkCommandPool command_pool;
+    assert(vkCreateCommandPool(device, &command_pool_info, NULL, &command_pool)
+        == VK_SUCCESS);
+    VkCommandBufferAllocateInfo allocate_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer command;
+    assert(vkAllocateCommandBuffers(device, &allocate_info, &command) == VK_SUCCESS);
+    VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    vkCmdResetQueryPool(command, pool, 2, 2);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 1);
+    assert(pool->states[2] == PS5VK_QUERY_UNINITIALIZED);
+    assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &command};
+    assert(vkQueueSubmit(&device->queue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(!device->submission && command->state == PS5VK_EXECUTABLE);
+    assert(pool->states[1] == PS5VK_QUERY_UNINITIALIZED &&
+        pool->states[2] == PS5VK_QUERY_UNAVAILABLE &&
+        pool->states[3] == PS5VK_QUERY_UNAVAILABLE &&
+        pool->states[4] == PS5VK_QUERY_UNINITIALIZED);
+    assert(vkGetQueryPoolResults(device, pool, 2, 2, sizeof(results), results,
+        16, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+        == VK_NOT_READY);
+    assert(results[0] == 0xaaaaaaaaaaaaaaaaull && results[1] == 0 &&
+        results[2] == 0xccccccccccccccccull && results[3] == 0);
+    uint32_t one[2] = {0x12345678u, 0x87654321u};
+    assert(vkGetQueryPoolResults(device, pool, 2, 1, sizeof(one), one, 0,
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_NOT_READY);
+    assert(one[0] == 0x12345678u && one[1] == 0);
+    assert(vkGetQueryPoolResults(device, pool, 2, 1, sizeof(one), one, 0,
+        VK_QUERY_RESULT_WAIT_BIT) == VK_ERROR_UNKNOWN);
+    assert(vkGetQueryPoolResults(device, pool, 2, 1, sizeof(one), one, 0,
+        VK_QUERY_RESULT_PARTIAL_BIT) == VK_ERROR_UNKNOWN);
+
+    /* No fake results: operations requiring a real ZPASS counter or supported
+     * timestamp domain invalidate recording without consuming an op slot. */
+#define CHECK_QUERY_FAIL_CLOSED(statement) do { \
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS); \
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS); \
+    statement; \
+    assert(command->state == PS5VK_INVALID && !command->operation_count); \
+} while (0)
+    CHECK_QUERY_FAIL_CLOSED(vkCmdBeginQuery(command, pool, 2, 0));
+    CHECK_QUERY_FAIL_CLOSED(vkCmdEndQuery(command, pool, 2));
+    CHECK_QUERY_FAIL_CLOSED(vkCmdWriteTimestamp(command,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, pool, 2));
+    CHECK_QUERY_FAIL_CLOSED(vkCmdCopyQueryPoolResults(command, pool, 2, 1,
+        VK_NULL_HANDLE, 0, 0, 0));
+    CHECK_QUERY_FAIL_CLOSED(vkCmdNextSubpass(command, VK_SUBPASS_CONTENTS_INLINE));
+    CHECK_QUERY_FAIL_CLOSED(vkCmdNextSubpass(command,
+        VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS));
+    CHECK_QUERY_FAIL_CLOSED(vkCmdExecuteCommands(command, 0, NULL));
+    CHECK_QUERY_FAIL_CLOSED(vkCmdExecuteCommands(command, 1, &command));
+#undef CHECK_QUERY_FAIL_CLOSED
 
     /* the device cannot be destroyed while the pool child lives */
     unsigned errors = device->lifetime_errors;
@@ -143,6 +213,7 @@ int main(void)
 
     /* --- teardown --- */
     vkDestroyImage(device, image, NULL);
+    vkDestroyCommandPool(device, command_pool, NULL);
     vkDestroyQueryPool(device, pool, NULL);
     VkInstance instance = device->physical->instance;
     vkDestroyDevice(device, NULL);

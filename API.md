@@ -275,10 +275,16 @@ profile can honestly create:
   pool are rejected.
 - `vkDestroyQueryPool` follows the standard parentage rules, and the device
   cannot be destroyed while a query pool child remains.
-- `vkGetQueryPoolResults` remains absent. It will land with query command
-  recording and per-query initialization/availability state; exposing it now
-  would make every attempted read invalid usage and could not implement
-  `WAIT_BIT`, `PARTIAL_BIT`, or availability semantics honestly.
+- `vkCmdResetQueryPool` records an ordered frontend operation. Query slots stay
+  uninitialized until that operation executes, then become unavailable.
+- `vkGetQueryPoolResults` implements only that observable unavailable state:
+  it preserves result words, writes zero availability when requested and
+  returns `VK_NOT_READY`. `WAIT_BIT` and `PARTIAL_BIT` fail closed because no
+  native query can publish a real result yet.
+- `vkCmdBeginQuery`, `vkCmdEndQuery`, `vkCmdCopyQueryPoolResults` and
+  `vkCmdWriteTimestamp` are structurally exported but invalidate recording.
+  No draw-derived fake counter or CPU-derived timestamp is substituted for a
+  native GFX1013 result.
 
 Sparse binding is not advertised and images cannot be created with sparse flags,
 so the two mandatory sparse queries report an empty list rather than inventing
@@ -286,6 +292,17 @@ requirements: `vkGetImageSparseMemoryRequirements` sets the count to 0 for a
 valid non-sparse image, and
 `vkGetPhysicalDeviceSparseImageFormatProperties` reports zero properties for
 every format/type/tiling/usage combination.
+`vkQueueBindSparse` is also exported, but every call returns
+`VK_ERROR_VALIDATION_FAILED`: the sole queue family does not advertise
+`VK_QUEUE_SPARSE_BINDING_BIT`, and even a zero-count call cannot waive that
+valid-usage requirement. It does not inspect bind arrays or mutate fences,
+semaphores or queue state.
+
+`vkCmdNextSubpass` and `vkCmdExecuteCommands` are explicit fail-closed
+boundaries. The implementation accepts exactly one subpass and allocates only
+primary command buffers, so neither command currently has a valid reachable
+invocation. Their presence is structural API coverage, not subpass or
+secondary-command-buffer support.
 
 ## Compatibility boundary
 

@@ -1,4 +1,5 @@
 #include "vk_command.h"
+#include "vk_query_pool.h"
 #include "vk_sync.h"
 #include <float.h>
 #include <string.h>
@@ -130,6 +131,8 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
     {
         const struct ps5vk_operation *op = &c->operations[j];
         if (type == VK_OBJECT_TYPE_EVENT && (const void *)op->event == object) return 1;
+        if (type == VK_OBJECT_TYPE_QUERY_POOL &&
+            (const void *)op->query_pool == object) return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->buffer_barrier.buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_source==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_destination==object)return 1;
@@ -496,6 +499,22 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
     if(!op)return;
     op->render_pass=c->render_pass;op->framebuffer=c->framebuffer;
     c->render_pass = NULL; c->framebuffer = NULL;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
+    VkSubpassContents contents)
+{
+    /* vkCreateRenderPass accepts exactly one subpass, hence no next subpass is
+     * reachable. Do not mutate render-pass state or append a fake operation. */
+    (void)contents;
+    ps5vk_command_invalidate(c);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
+    uint32_t count, const VkCommandBuffer *commands)
+{
+    /* vkAllocateCommandBuffers rejects secondary level and Vulkan requires a
+     * nonzero array of secondary buffers here. There is no valid no-op subset. */
+    (void)count; (void)commands;
+    ps5vk_command_invalidate(c);
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(VkCommandBuffer c,uint32_t first,uint32_t count,
     const VkBuffer *buffers,const VkDeviceSize *offsets)

@@ -366,8 +366,8 @@ Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
 - Audits 1:1 symmetry across public headers (`include/ps5vk/ps5vk.h`), static dispatch
   tables (`src/vk_dispatch.c`), and implementation symbols (`src/*.c`).
 - Fails closed on any unexpected drift, asymmetry (e.g. declared in public header but un-dispatched,
-  or dispatched without implementation), or regression in fully wired commands (122 fully wired
-  commands, with all 15 unimplemented commands cataloged into strict categorical deficit buckets).
+  or dispatched without implementation), or regression in fully wired commands (131 fully wired
+  commands, with the six image-transfer/clear commands cataloged as deficits).
 - Enforced on host test runs via `make check` and verified by unit tests in
   `tests/test_command_surface.py` (which includes negative test fixtures asserting failure on
   missing dispatch entries, omitted declarations, or bookkeeping regressions).
@@ -382,6 +382,15 @@ Close Game. Pipeline creation tests independently prove that none of those
 seven states can yet be enabled for drawing, so this establishes structural
 recording and compute/transfer non-interference, not dynamic blending, stencil,
 depth-bounds or depth-bias effects on rendered pixels.
+
+The next structural slice adds all six query commands plus
+`vkCmdNextSubpass`, `vkCmdExecuteCommands` and `vkQueueBindSparse`. Host tests
+prove ordered query reset, the reset-but-unavailable 32/64-bit availability
+layout, preservation of result sentinels, query-pool command lifetime, function
+identity, and no queue/fence mutation on rejected sparse calls. Real occlusion,
+query-result copying, GPU timestamps, multi-subpass execution, secondary
+command buffers and sparse binding remain fail-closed. No new CTS or hardware
+claim is attached to these structural boundaries.
 
 ## Ordered buffer-transfer slice (2026-09-13)
 

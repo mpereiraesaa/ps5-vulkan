@@ -93,6 +93,19 @@ int main(void)
     record_empty(c, 0);
     VkFenceCreateInfo fi = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO}; VkFence fence;
     assert(vkCreateFence(&d, &fi, NULL, &fence) == VK_SUCCESS);
+    /* The queue does not advertise sparse binding. Reject before dereferencing
+     * batches or mutating serial/submission/fence state, including count zero. */
+    uint64_t sparse_serial = d.queue.next_serial;
+    assert(vkQueueBindSparse(&d.queue, 0, NULL, fence) == VK_ERROR_VALIDATION_FAILED);
+    assert(d.queue.next_serial == sparse_serial && !d.submission &&
+        !fence->signaled && !fence->pending_serial);
+    assert(vkQueueBindSparse(&d.queue, 1,
+        (const VkBindSparseInfo *)(uintptr_t)1, fence) == VK_ERROR_VALIDATION_FAILED);
+    assert(d.queue.next_serial == sparse_serial && !d.submission &&
+        !fence->signaled && !fence->pending_serial);
+    d.lost = VK_TRUE;
+    assert(vkQueueBindSparse(&d.queue, 0, NULL, fence) == VK_ERROR_DEVICE_LOST);
+    d.lost = VK_FALSE;
     VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &c};
     assert(vkQueueSubmit(&d.queue, 1, &submit, fence) == VK_SUCCESS);
     assert(c->state == PS5VK_PENDING && fence->pending_serial == 1 && !fence->signaled);

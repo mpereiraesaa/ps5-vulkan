@@ -19,6 +19,8 @@ from tools.check_command_surface import (
     REQUIRED_BUFFER_TRANSFER_COMMANDS,
     REQUIRED_INDIRECT_COMMANDS,
     REQUIRED_DYNAMIC_STATE_COMMANDS,
+    REQUIRED_QUERY_COMMANDS,
+    REQUIRED_FAIL_CLOSED_COMMANDS,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +63,14 @@ class TestCommandSurfaceParity(unittest.TestCase):
     def test_core_dynamic_state_commands_are_fully_wired(self):
         fully_wired = set(audit_command_surface(REPO_ROOT)["fully_wired"])
         self.assertTrue(REQUIRED_DYNAMIC_STATE_COMMANDS <= fully_wired)
+
+    def test_query_commands_are_fully_wired(self):
+        fully_wired = set(audit_command_surface(REPO_ROOT)["fully_wired"])
+        self.assertTrue(REQUIRED_QUERY_COMMANDS <= fully_wired)
+
+    def test_structural_fail_closed_commands_are_fully_wired(self):
+        fully_wired = set(audit_command_surface(REPO_ROOT)["fully_wired"])
+        self.assertTrue(REQUIRED_FAIL_CLOSED_COMMANDS <= fully_wired)
 
 
 class TestCommandSurfaceNegativeFixtures(unittest.TestCase):
@@ -137,8 +147,13 @@ class TestCommandSurfaceNegativeFixtures(unittest.TestCase):
         """Simulate adding an unimplemented command to the public header."""
         header_path = self.mock_root / "include/ps5vk/ps5vk.h"
         content = header_path.read_text()
-        content += "\nVKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(VkQueue q, uint32_t n, const VkBindSparseInfo* i, VkFence f);\n"
         header_path.write_text(content)
+        dispatch_path = self.mock_root / "src/vk_dispatch.c"
+        dispatch_path.write_text(dispatch_path.read_text().replace(
+            "    ENTRY(vkQueueBindSparse, DEVICE),\n", ""))
+        queue_path = self.mock_root / "src/vk_queue.c"
+        queue_path.write_text(queue_path.read_text().replace(
+            "VKAPI_CALL vkQueueBindSparse", "VKAPI_CALL vkQueueBindSparse_DISABLED"))
 
         result = audit_command_surface(self.mock_root)
         self.assertFalse(result["passed"])

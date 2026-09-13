@@ -25,8 +25,8 @@ EXPECTED_VULKAN10_TOTAL = 137
 # prototype, a dispatch entry and an implementation. This is not a semantic
 # support claim; see the report's advertised-obligation table for what each
 # command may actually be used for.
-EXPECTED_FULLY_WIRED_TOTAL = 122
-EXPECTED_MISSING_TOTAL = 15
+EXPECTED_FULLY_WIRED_TOTAL = 131
+EXPECTED_MISSING_TOTAL = 6
 
 REQUIRED_DYNAMIC_STATE_COMMANDS = {
     "vkCmdSetLineWidth", "vkCmdSetDepthBias", "vkCmdSetDepthBounds",
@@ -57,15 +57,17 @@ REQUIRED_INDIRECT_COMMANDS = {
     "vkCmdDispatchIndirect", "vkCmdDrawIndirect", "vkCmdDrawIndexedIndirect",
 }
 
+REQUIRED_QUERY_COMMANDS = {
+    "vkGetQueryPoolResults", "vkCmdResetQueryPool", "vkCmdBeginQuery",
+    "vkCmdEndQuery", "vkCmdCopyQueryPoolResults", "vkCmdWriteTimestamp",
+}
+
+REQUIRED_FAIL_CLOSED_COMMANDS = {
+    "vkCmdNextSubpass", "vkCmdExecuteCommands", "vkQueueBindSparse",
+}
+
 EXPECTED_MISSING_CATEGORIES = {
-    "Queries": {
-        "vkGetQueryPoolResults",
-        "vkCmdResetQueryPool",
-        "vkCmdBeginQuery",
-        "vkCmdEndQuery",
-        "vkCmdCopyQueryPoolResults",
-        "vkCmdWriteTimestamp",
-    },
+    "Queries": set(),
     "Events": {
         "vkCreateEvent",
         "vkDestroyEvent",
@@ -96,14 +98,9 @@ EXPECTED_MISSING_CATEGORIES = {
         "vkCmdDrawIndexedIndirect",
         "vkCmdDispatchIndirect",
     },
-    "Subpass/Secondary": {
-        "vkCmdNextSubpass",
-        "vkCmdExecuteCommands",
-    },
+    "Subpass/Secondary": set(),
     "Dynamic State": set(),
-    "Sparse": {
-        "vkQueueBindSparse",
-    },
+    "Sparse": set(),
 }
 
 
@@ -179,6 +176,8 @@ def audit_command_surface(repo_root: Path) -> dict:
         (REQUIRED_BOOKKEEPING_COMMANDS | REQUIRED_SYNC_OBJECT_COMMANDS |
          REQUIRED_BUFFER_TRANSFER_COMMANDS | REQUIRED_INDIRECT_COMMANDS) - fully_wired
         | (REQUIRED_DYNAMIC_STATE_COMMANDS - fully_wired)
+        | (REQUIRED_QUERY_COMMANDS - fully_wired)
+        | (REQUIRED_FAIL_CLOSED_COMMANDS - fully_wired)
     )
 
     errors = []
