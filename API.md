@@ -81,7 +81,14 @@ supported.
   of at most 8 bytes each. Map-entry order does not affect cache identity.
 - Command-buffer dispatch and fences.
 - Exact GPU completion and checked readback, including guard validation.
-- A single serial native queue; no multi-queue or semaphore contract.
+- A single serial native queue with Vulkan 1.0 binary semaphore signal, wait
+  and consumption across ordered `VkSubmitInfo` records. Signals become visible
+  only when their record retires; the final fence follows the final record.
+  Multi-queue, timeline semaphore and synchronization2 contracts are absent.
+- Vulkan 1.0 events support host and recorded device set/reset plus waits inside
+  or across primary command buffers. Event transitions are segmented from GPU
+  jobs, and `vkCmdWaitEvents` preserves its validated memory dependency without
+  forwarding frontend event operations to AGC.
 - Simultaneous-use command buffers are accepted with serialized retirement.
 - Host/compute buffer barriers validate ranges and lifetimes, using stronger
   global cache/completion dependencies. Host-write dependencies accept shader

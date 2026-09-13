@@ -198,10 +198,31 @@ graphics-derived cache cases
 `merge`, and the four `misc_tests`) remain unselected because the pinned bodies
 require a `D16_UNORM` depth attachment this profile does not support; their
 oracles are reproduced as host tests in `tests/test_pipeline_cache.c`.
+### Binary semaphore and event expansion (2026-09-13)
+
+The current selection contains **48 original upstream cases**. Six new cases
+retain their pinned factories, bodies and oracles: host and device event
+set/reset, event dependencies inside one submit and across submissions, a
+two-record one-queue binary semaphore signal/wait, and the 32,768-link binary
+semaphore chain.
+
+Two independent launches of the identical payload completed with **48 Pass,
+0 Fail, 0 NotSupported**. Both reports passed strict executable/selection
+identity and complete QPA reconstruction, reached exit code zero and
+`allocations_bytes=0`, and the title stopped after system Close Game.
+
+- Executable SHA-256: `098087bc16b4363dbf622365b93695acee8697f74e9daeb776a1b297751312d4`
+- Selection SHA-256: `c40bce192599fa734b00c8c670dccee43638d01efeb8eb042cc4c037fe2fda88`
+- QPA SHA-256: `c8ac547bd58b28d20c65558bbdaae29046aef883543ca91f7d472de875c24c31`
+  and `685714b9a80d6fd289ee0cfff206d7e2d04d968b63cd9f9170d9d7ca687a2fe2`
+
+The selected cases establish only the single-queue Vulkan 1.0 paths they run.
+Multi-queue, secondary command buffers, typed/timeline semaphores and
+synchronization2 remain excluded and are not inferred from these results.
 
 ### Fixed-function expansion (2026-09-13)
 
-Two independent launches of the identical final payload completed the current
+Two independent launches of the identical final payload completed the then-current
 42-case selection with **42 Pass, 0 Fail, 0 NotSupported**. Both reports passed
 strict identity and QPA reconstruction, included the original upstream triangle
 pixel comparison, reached `allocations_bytes=0`, and the title stopped after

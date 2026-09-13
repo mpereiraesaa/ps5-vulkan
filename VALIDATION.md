@@ -158,9 +158,10 @@ and `f0ec40048f397a3425b7b3a87ff454b1ad67752b4e69d8d1bff9242ed2c00d19`.
 
 The native queue implements a conservative dependency stronger than the
 recorded buffer range: every compute dispatch reaches completion and performs
-release/writeback before the next dispatch. This evidence does not establish
-range-scoped asynchronous execution, binary semaphores, events, mixed
-compute/graphics barriers, queue-family transfers, the Vulkan memory model or
+release/writeback before the next dispatch. Later binary-semaphore and event
+validation below covers ordered single-queue execution, but does not establish
+range-scoped asynchronous execution, mixed compute/graphics barriers,
+queue-family transfers, timeline semaphores, the Vulkan memory model or
 `synchronization2`.
 
 ### Fixed-function and original upstream pixel oracle
@@ -231,6 +232,39 @@ compiled-code record is serialized and no restored cache hit is claimed; the
 graphics-derived pipeline-cache cases remain blocked by the pinned bodies'
 `D16_UNORM` depth-attachment prerequisite and are covered by host tests that
 reproduce their oracles.
+### Vulkan 1.0 binary semaphores and events
+
+The public runtime now separates binary semaphore wait/signal/consumption,
+host event state, recorded device event transitions, execution dependencies and
+the memory barriers carried by `vkCmdWaitEvents`. Queue submissions are expanded
+transactionally into ordered frontend/GPU segments; event operations never
+reach the AGC backend, signals publish only on retirement, and the fence belongs
+only to the final segment.
+
+Two independent launches of the identical upstream payload passed **48/48**
+original cases, including `binary_semaphore.one_queue`, the 32,768-link
+`binary_semaphore.chain`, all four selected event cases and the previous
+42-case selection. Both reconstructed complete QPA reports, reported exit zero
+and zero live platform allocations, and passed system Close Game.
+
+- Executable SHA-256:
+  `098087bc16b4363dbf622365b93695acee8697f74e9daeb776a1b297751312d4`
+- Selection SHA-256:
+  `c40bce192599fa734b00c8c670dccee43638d01efeb8eb042cc4c037fe2fda88`
+- QPA SHA-256 values:
+  `c8ac547bd58b28d20c65558bbdaae29046aef883543ca91f7d472de875c24c31`
+  and `685714b9a80d6fd289ee0cfff206d7e2d04d968b63cd9f9170d9d7ca687a2fe2`
+
+The isolated public-SDK consumer independently passed twice with executable
+SHA-256
+`71940c2a5d4a2d219d56eedf15569818e1be3d2c925576a432e9bec4db3831a9`.
+It performs RESET→SET→RESET host event transitions, a device
+set→wait→reset chain, a two-record binary signal/wait/consume submission and
+the existing deterministic compute/graphics readbacks. Run IDs
+`20260913T073253015Z_PPSA99994_ps5vk_0x2f437088c857` and
+`20260913T073307544Z_PPSA99994_ps5vk_0x2f46d27bd3a1` passed the strict verifier
+and independent Close Game checks. This is focused native evidence, not a full
+synchronization or Vulkan conformance claim.
 
 ## Independent native SDK consumer validation
 
@@ -329,8 +363,8 @@ Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
 - Audits 1:1 symmetry across public headers (`include/ps5vk/ps5vk.h`), static dispatch
   tables (`src/vk_dispatch.c`), and implementation symbols (`src/*.c`).
 - Fails closed on any unexpected drift, asymmetry (e.g. declared in public header but un-dispatched,
-  or dispatched without implementation), or regression in fully wired commands (91 fully wired
-  commands, with all 46 unimplemented commands cataloged into strict categorical deficit buckets).
+  or dispatched without implementation), or regression in fully wired commands (101 fully wired
+  commands, with all 36 unimplemented commands cataloged into strict categorical deficit buckets).
 - Enforced on host test runs via `make check` and verified by unit tests in
   `tests/test_command_surface.py` (which includes negative test fixtures asserting failure on
   missing dispatch entries, omitted declarations, or bookkeeping regressions).

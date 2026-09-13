@@ -495,6 +495,52 @@ class TestUpstreamRunner(unittest.TestCase):
         self.assertIn("vktSynchronizationBasicEventTests.cpp", builder)
         self.assertIn("vktSynchronizationBasicSemaphoreTests.cpp", builder)
 
+    def test_synchronization_evidence_digests_do_not_drift(self):
+        """Keep public evidence summaries tied to the selection and local receipts."""
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        case_list = "\n".join(case["path"] for case in manifest["cases"]) + "\n"
+        selection_hash = hashlib.sha256(case_list.encode("utf-8")).hexdigest()
+
+        upstream = (REPO_ROOT / "UPSTREAM_CTS.md").read_text(encoding="utf-8")
+        upstream = upstream.split(
+            "### Binary semaphore and event expansion (2026-09-13)", 1)[1]
+        upstream = upstream.split("\n### ", 1)[0]
+        validation = (REPO_ROOT / "VALIDATION.md").read_text(encoding="utf-8")
+        validation = validation.split(
+            "### Vulkan 1.0 binary semaphores and events", 1)[1]
+        validation = validation.split("\n## ", 1)[0]
+        self.assertIn(selection_hash, upstream)
+        self.assertIn(selection_hash, validation)
+
+        receipts = REPO_ROOT / "private-captures/events-semaphores"
+        if not receipts.is_dir():
+            return
+
+        upstream_runs = [
+            json.loads((receipts / f"upstream-run{run}.json").read_text())
+            for run in (1, 2)
+        ]
+        executable_hashes = {
+            run["metadata"]["start"]["eboot_sha256"] for run in upstream_runs
+        }
+        selection_hashes = {
+            run["metadata"]["start"]["selection_hash"] for run in upstream_runs
+        }
+        qpa_hashes = {run["metadata"]["qpa_sha256"] for run in upstream_runs}
+        self.assertEqual(1, len(executable_hashes))
+        self.assertEqual({selection_hash}, selection_hashes)
+        for digest in executable_hashes | selection_hashes | qpa_hashes:
+            self.assertIn(digest, upstream)
+            self.assertIn(digest, validation)
+
+        consumer_runs = [
+            json.loads((receipts / f"consumer-run{run}.json").read_text())
+            for run in (1, 2)
+        ]
+        consumer_hashes = {run["deployment_self_sha256"] for run in consumer_runs}
+        self.assertEqual(1, len(consumer_hashes))
+        self.assertIn(next(iter(consumer_hashes)), validation)
+
     def test_noncoherent_range_cases_are_original_and_not_gpu_evidence(self):
         manifest = json.loads(MANIFEST_PATH.read_text())
         by_path = {case["path"]: case for case in manifest["cases"]}
