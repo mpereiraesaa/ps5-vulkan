@@ -30,6 +30,10 @@ def validate(log, receipt, artifact):
         "api": "Vulkan 1.0", "copy_bytes": 7, "update_bytes": 8,
         "fill_bytes": 20, "whole_tail_bytes": 3,
     }, "buffer-transfer artifact contract")
+    require(artifact.get("indirect_dispatch") == {
+        "api": "Vulkan 1.0", "groups": [1, 1, 1], "offset": 512,
+        "result_elements": 64,
+    }, "indirect-dispatch artifact contract")
     width_artifact = artifact.get("storage_width", {})
     require(width_artifact.get("storageBuffer8BitAccess") is True and
             width_artifact.get("storageBuffer16BitAccess") is True and
@@ -108,6 +112,7 @@ def validate(log, receipt, artifact):
     transfer_retired = one("PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED")
     start = one("PS5VK_CONSUMER_COMPUTE_START")
     pipeline = one("PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED")
+    indirect = one("PS5VK_CONSUMER_DISPATCH_INDIRECT_RECORDED ")
     prepared = matching("PS5VK_QUEUE_PREPARED ")
     submitted = matching("PS5VK_QUEUE_SUBMIT ")
     suspended = matching("PS5VK_QUEUE_SUSPEND_POINT ")
@@ -143,7 +148,7 @@ def validate(log, receipt, artifact):
             "resource, narrow and synchronization submit records")
     ordered = [boot, physical, physical_queries, negotiated,
                transfer_start, transfer_witness, transfer_retired,
-               start, pipeline,
+               start, pipeline, indirect,
                prepared[0], submitted[0], suspended[0], completed[0], witness,
                width_start, width_pipelines,
                prepared[1], submitted[1], suspended[1], completed[1],
@@ -182,6 +187,8 @@ def validate(log, receipt, artifact):
         "whole_tail_bytes=3", "guard_mismatches=0", "hash=9a158222"],
         "buffer-transfer oracle")
     require(prepared[0][1].endswith("serial=5 dispatches=1"), "one resource dispatch")
+    require(indirect[1].split()[1:] == ["groups=1,1,1", "offset=512"],
+            "indirect dispatch recording")
     require(prepared[1][1].endswith("serial=6 dispatches=2"), "two narrow dispatches")
     require(prepared[2][1].endswith("serial=8 dispatches=3"), "three synchronization dispatches")
     require(prepared[3][1].endswith("serial=10 dispatches=0"), "event dependency segment")
@@ -282,6 +289,7 @@ def validate(log, receipt, artifact):
         "guard_words_checked": 128,
         "buffer_transfer_bytes_checked": 67,
         "buffer_transfer_hash_fnv1a32": "9a158222",
+        "indirect_dispatches_checked": 1,
         "storage8_elements_checked": 64,
         "storage16_elements_checked": 64,
         "narrow_guard_bytes_checked": 8000,

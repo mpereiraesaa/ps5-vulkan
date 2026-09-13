@@ -23,6 +23,7 @@ MESSAGES = [
     "PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED",
     "PS5VK_CONSUMER_COMPUTE_START",
     "PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED",
+    "PS5VK_CONSUMER_DISPATCH_INDIRECT_RECORDED groups=1,1,1 offset=512",
     "PS5VK_QUEUE_PREPARED serial=5 dispatches=1",
     "PS5VK_QUEUE_SUBMIT serial=5 index=0 rc=0",
     "PS5VK_QUEUE_SUSPEND_POINT serial=5 index=0 rc=0",
@@ -118,6 +119,10 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                 "update_bytes": 8, "fill_bytes": 20,
                 "whole_tail_bytes": 3,
             },
+            "indirect_dispatch": {
+                "api": "Vulkan 1.0", "groups": [1, 1, 1],
+                "offset": 512, "result_elements": 64,
+            },
             "storage_width": {
                 "storageBuffer8BitAccess": True,
                 "storageBuffer16BitAccess": True,
@@ -150,6 +155,7 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         self.assertEqual(result["guard_words_checked"], 128)
         self.assertEqual(result["push_constant_bytes"], 4)
         self.assertEqual(result["specialization_constants"], 2)
+        self.assertEqual(result["indirect_dispatches_checked"], 1)
         self.assertEqual(result["storage8_elements_checked"], 64)
         self.assertEqual(result["storage16_elements_checked"], 64)
         self.assertEqual(result["narrow_guard_bytes_checked"], 8000)

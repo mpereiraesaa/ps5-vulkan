@@ -26,7 +26,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *submission,voi
     VkCommandBuffer command=submission->buffers[0];
     uint32_t first=ps5vk_submission_first_operation(submission,0);
     uint32_t count=ps5vk_submission_operation_count(submission,0);
-    assert(count==1);
+    assert(count>=1);
     const struct ps5vk_operation *op=&command->operations[first];
     struct job *job=calloc(1,sizeof(*job));if(!job)return VK_ERROR_OUT_OF_HOST_MEMORY;
     job->state=state;job->serial=submission->serial;
@@ -37,7 +37,9 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *submission,voi
         assert(resolved.type==PS5VK_DISPATCH);
         for(unsigned i=0;i<3;++i)state->resolved[i]=resolved.groups[i];
     } else {
-        assert(op->type==PS5VK_BARRIER);job->producer=VK_TRUE;
+        for(uint32_t i=0;i<count;++i)
+            assert(command->operations[first+i].type==PS5VK_BARRIER);
+        job->producer=VK_TRUE;
     }
     *out=job;return VK_SUCCESS;
 }
@@ -78,23 +80,36 @@ int main(void)
     VkCommandBuffer command=NULL;assert(vkAllocateCommandBuffers(&d,&ai,&command)==VK_SUCCESS);
     VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     assert(vkBeginCommandBuffer(command,&begin)==VK_SUCCESS);
-    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,0,0,NULL,0,NULL,0,NULL);
+    VkBufferMemoryBarrier dependency={.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask=VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .buffer=buffer,.offset=0,.size=64};
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,0,0,NULL,1,&dependency,0,NULL);
     struct VkPipeline_T pipeline={.device=&d};
     vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_COMPUTE,&pipeline);
     vkCmdDispatchIndirect(command,buffer,4);
-    assert(vkEndCommandBuffer(command)==VK_SUCCESS && command->operation_count==2);
+    assert(vkEndCommandBuffer(command)==VK_SUCCESS && command->operation_count==3);
     VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount=1,.pCommandBuffers=&command};
     assert(vkQueueSubmit(&d.queue,1,&submit,VK_NULL_HANDLE)==VK_SUCCESS);
     assert(state.prepares==1 && state.launches==1 && !state.invalidates);
     assert(d.submission && d.submission->next && d.submission->next->deferred_prepare &&
         !d.submission->next->backend_job);
+    /* Every segment keeps the whole command buffer pending.  The generic
+     * command-resource invalidator must therefore reject destruction of the
+     * deferred indirect argument buffer until the last segment retires. */
+    vkDestroyBuffer(&d,buffer,NULL);
+    assert(d.lifetime_errors==1 &&
+        ps5vk_buffer_usage(&d,buffer,VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
     assert(ps5vk_queue_poll(&d)==VK_SUCCESS);
     assert(state.prepares==2 && state.launches==2 && state.invalidates==1);
     assert(state.resolved[0]==4 && state.resolved[1]==5 && state.resolved[2]==6);
     assert(ps5vk_queue_poll(&d)==VK_SUCCESS && !d.submission);
     assert(state.releases==2 && command->state==PS5VK_EXECUTABLE);
+    d.lifetime_errors=0;
 
     assert(vkResetCommandBuffer(command,0)==VK_SUCCESS);
     vkDestroyCommandPool(&d,pool,NULL);vkUnmapMemory(&d,memory);

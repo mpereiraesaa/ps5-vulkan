@@ -458,6 +458,22 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Original upstream 32768-link binary semaphore chain requires allocation-light ordered signal and wait consumption across empty submissions before the terminal fence."
+    },
+    {
+      "path": "dEQP-VK.compute.indirect_dispatch.upload_buffer.single_invocation",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp:874",
+      "category": "indirect-command",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute oracle uploads one VkDispatchIndirectCommand, executes vkCmdDispatchIndirect and validates the complete storage-buffer result after queue completion."
+    },
+    {
+      "path": "dEQP-VK.compute.indirect_dispatch.gen_in_compute.single_invocation",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp:874",
+      "category": "indirect-command-visibility",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream dependency oracle generates VkDispatchIndirectCommand data in a compute dispatch, inserts its buffer barrier, consumes it through vkCmdDispatchIndirect and validates the final storage-buffer result."
     }
   ],
   "diagnostics": [
