@@ -22,6 +22,59 @@ static VkCommandBuffer command(VkDevice d, VkCommandPool p)
     VkCommandBuffer c; assert(vkAllocateCommandBuffers(d, &info, &c) == VK_SUCCESS); return c;
 }
 static VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+static void operation_reservation_contract(void)
+{
+    struct VkDevice_T d={0};
+    VkCommandPool p=pool(&d,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c=command(&d,p);
+    assert(!ps5vk_command_reserve_operations(NULL,PS5VK_DISPATCH,
+        PS5VK_OPERATION_ANYWHERE,1));
+    assert(!ps5vk_command_reserve_operations(c,PS5VK_DISPATCH,
+        PS5VK_OPERATION_ANYWHERE,1));
+    assert(c->state==PS5VK_INVALID && !c->operation_count && d.lifetime_errors==1);
+
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    memset(&c->operations[0],0xa5,2*sizeof(c->operations[0]));
+    struct ps5vk_operation *ops=ps5vk_command_reserve_operations(c,PS5VK_BARRIER,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,2);
+    assert(ops==&c->operations[0] && c->operation_count==2);
+    assert(ops[0].type==PS5VK_BARRIER && ops[1].type==PS5VK_BARRIER);
+    assert(!ops[0].event && !ops[1].pipeline && !ops[1].groups[0]);
+
+    uint32_t source[]={0x11223344u,0xaabbccddu};
+    struct ps5vk_operation *owned=ps5vk_command_reserve_operation_with_payload(c,
+        PS5VK_DISPATCH,PS5VK_OPERATION_OUTSIDE_RENDER_PASS,source,sizeof(source));
+    assert(owned && owned->owned_payload && owned->owned_payload_size==sizeof(source));
+    source[0]=0;
+    assert(((const uint32_t *)owned->owned_payload)[0]==0x11223344u);
+
+    struct VkRenderPass_T pass={.device=&d};
+    c->render_pass=&pass;
+    unsigned before=c->operation_count;
+    assert(!ps5vk_command_reserve_operations(c,PS5VK_DISPATCH,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1));
+    assert(c->state==PS5VK_INVALID && c->operation_count==before);
+
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    assert(!c->operations[0].owned_payload && !c->operations[0].owned_payload_size);
+    assert(!ps5vk_command_reserve_operations(c,PS5VK_DRAW,
+        PS5VK_OPERATION_INSIDE_RENDER_PASS,1));
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
+
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    c->operation_count=PS5VK_MAX_OPERATIONS-1;
+    assert(!ps5vk_command_reserve_operations(c,PS5VK_BARRIER,
+        PS5VK_OPERATION_ANYWHERE,2));
+    assert(c->state==PS5VK_INVALID && c->operation_count==PS5VK_MAX_OPERATIONS-1);
+
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    c->state=PS5VK_PENDING;
+    assert(!ps5vk_command_reserve_operations(c,PS5VK_BARRIER,
+        PS5VK_OPERATION_ANYWHERE,1));
+    assert(c->state==PS5VK_PENDING && !c->operation_count);
+    c->state=PS5VK_EXECUTABLE;
+    vkDestroyCommandPool(&d,p,NULL);
+}
 static void states(void)
 {
     struct VkDevice_T d = {0}; VkCommandPool p = pool(&d, 0); VkCommandBuffer c = command(&d, p);
@@ -582,4 +635,4 @@ static void push_constant_recording(void)
     vkDestroyPipelineLayout(&d,layout,NULL);vkDestroyCommandPool(&d,p,NULL);
 }
 int main(void)
-{ states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }

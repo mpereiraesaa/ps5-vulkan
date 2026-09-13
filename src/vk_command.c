@@ -6,6 +6,12 @@
 #define INVALID VK_ERROR_UNKNOWN
 static void clear(VkCommandBuffer c)
 {
+    for (unsigned j = 0; j < c->operation_count; ++j) {
+        struct ps5vk_operation *op = &c->operations[j];
+        if (op->owned_payload)
+            ps5vk_object_free(op->owned_payload, &op->payload_allocator,
+                op->custom_payload_allocator);
+    }
     c->state = PS5VK_INITIAL; c->usage = 0; c->pipeline = NULL;
     c->operation_count = 0;
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
@@ -20,9 +26,60 @@ static void clear(VkCommandBuffer c)
     memset(c->vertices, 0, sizeof(c->vertices));
     memset(&c->indices, 0, sizeof(c->indices));
 }
-static void invalid(VkCommandBuffer c)
+void ps5vk_command_invalidate(VkCommandBuffer c)
 {
     if (c) { ++c->pool->device->lifetime_errors; if (c->state != PS5VK_PENDING) c->state = PS5VK_INVALID; }
+}
+#define invalid ps5vk_command_invalidate
+
+struct ps5vk_operation *ps5vk_command_reserve_operations(VkCommandBuffer c,
+    enum ps5vk_operation_type type, enum ps5vk_operation_scope scope, uint32_t count)
+{
+    if (!c || c->state != PS5VK_RECORDING || !count ||
+        scope < PS5VK_OPERATION_OUTSIDE_RENDER_PASS ||
+        scope > PS5VK_OPERATION_ANYWHERE ||
+        (scope == PS5VK_OPERATION_OUTSIDE_RENDER_PASS && c->render_pass) ||
+        (scope == PS5VK_OPERATION_INSIDE_RENDER_PASS && !c->render_pass) ||
+        c->operation_count > PS5VK_MAX_OPERATIONS ||
+        count > PS5VK_MAX_OPERATIONS - c->operation_count) {
+        invalid(c);
+        return NULL;
+    }
+    struct ps5vk_operation *first = &c->operations[c->operation_count];
+    memset(first, 0, count * sizeof(*first));
+    for (uint32_t j = 0; j < count; ++j) first[j].type = type;
+    c->operation_count += count;
+    return first;
+}
+
+struct ps5vk_operation *ps5vk_command_reserve_operation_with_payload(VkCommandBuffer c,
+    enum ps5vk_operation_type type, enum ps5vk_operation_scope scope,
+    const void *data, size_t size)
+{
+    if (!c || !data || !size) {
+        invalid(c);
+        return NULL;
+    }
+    VkAllocationCallbacks saved = {0};
+    VkBool32 custom = VK_FALSE;
+    void *payload = ps5vk_object_alloc(NULL,
+        c->pool->custom_allocator ? &c->pool->allocator : NULL,
+        size, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, &saved, &custom);
+    if (!payload) {
+        invalid(c);
+        return NULL;
+    }
+    memcpy(payload, data, size);
+    struct ps5vk_operation *op = ps5vk_command_reserve_operations(c, type, scope, 1);
+    if (!op) {
+        ps5vk_object_free(payload, &saved, custom);
+        return NULL;
+    }
+    op->owned_payload = payload;
+    op->owned_payload_size = size;
+    op->payload_allocator = saved;
+    op->custom_payload_allocator = custom;
+    return op;
 }
 static int set_uses(VkDescriptorSet s, VkObjectType type, const void *object)
 {
@@ -133,7 +190,11 @@ VKAPI_ATTR void VKAPI_CALL vkFreeCommandBuffers(VkDevice d, VkCommandPool p, uin
     for (uint32_t j = 0; j < count; ++j) if (buffers[j]) {
         VkCommandBuffer *link = &p->buffers;
         while (*link && *link != buffers[j]) link = &(*link)->next;
-        if (*link) { *link = buffers[j]->next; ps5vk_object_free(buffers[j], &p->allocator, p->custom_allocator); }
+        if (*link) {
+            *link = buffers[j]->next;
+            clear(buffers[j]);
+            ps5vk_object_free(buffers[j], &p->allocator, p->custom_allocator);
+        }
     }
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkResetCommandPool(VkDevice d, VkCommandPool p, VkCommandPoolResetFlags flags)
@@ -272,8 +333,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t
         uint32_t index = set->signature.binding[binding->binding].first + binding->element;
         if (!set->defined[index]) { invalid(c); return; }
     }
-    struct ps5vk_operation *op=&c->operations[c->operation_count++];
-    *op=(struct ps5vk_operation){.type=PS5VK_DISPATCH,.pipeline=c->pipeline,.groups={x,y,z}};
+    struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_DISPATCH,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
+    if(!op)return;
+    op->pipeline=c->pipeline;op->groups[0]=x;op->groups[1]=y;op->groups[2]=z;
     op->push_constant_size=p->push_constant_size;
     if(op->push_constant_size)memcpy(op->push_constants,c->push_constants,op->push_constant_size);
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set)) {
@@ -301,9 +364,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
         if (fb->formats[j] != a->format || fb->samples[j] != a->samples ||
             (a->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR && info->clearValueCount <= j)) { invalid(c); return; }
     }
-    struct ps5vk_operation *op = &c->operations[c->operation_count++];
-    *op = (struct ps5vk_operation){.type = PS5VK_BEGIN_RENDER_PASS, .render_pass = pass,
-        .framebuffer = fb, .render_area = area, .clear_count = info->clearValueCount};
+    struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_BEGIN_RENDER_PASS,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
+    if(!op)return;
+    op->render_pass=pass;op->framebuffer=fb;op->render_area=area;
+    op->clear_count=info->clearValueCount;
     if (info->clearValueCount) memcpy(op->clears, info->pClearValues, info->clearValueCount * sizeof(VkClearValue));
     c->render_pass = pass; c->framebuffer = fb;
 }
@@ -311,8 +376,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
 {
     if (!c || c->state != PS5VK_RECORDING || !c->render_pass ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
-    c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_END_RENDER_PASS,
-        .render_pass = c->render_pass, .framebuffer = c->framebuffer};
+    struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
+        PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
+    if(!op)return;
+    op->render_pass=c->render_pass;op->framebuffer=c->framebuffer;
     c->render_pass = NULL; c->framebuffer = NULL;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(VkCommandBuffer c,uint32_t first,uint32_t count,
@@ -362,18 +429,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if (p->color_format != pass->attachments[pass->color.attachment].format || p->depth_format != depth) {
         invalid(c); return;
     }
-    c->operations[c->operation_count++] = (struct ps5vk_operation){.type = PS5VK_DRAW,
-        .pipeline = p, .render_pass = pass, .framebuffer = c->framebuffer,
-        .viewport = *viewport, .scissor = *scissor,
-        .vertex_count = vertices, .instance_count = instances, .first_vertex = first_vertex,
-        .first_instance = first_instance};
-    memcpy(c->operations[c->operation_count-1].vertices,c->vertices,sizeof(c->vertices));
-    c->operations[c->operation_count-1].push_constant_size=p->push_constant_size;
-    if(p->push_constant_size)memcpy(c->operations[c->operation_count-1].push_constants,
-        c->push_constants,p->push_constant_size);
+    struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_DRAW,
+        PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
+    if(!op)return;
+    op->pipeline=p;op->render_pass=pass;op->framebuffer=c->framebuffer;
+    op->viewport=*viewport;op->scissor=*scissor;op->vertex_count=vertices;
+    op->instance_count=instances;op->first_vertex=first_vertex;op->first_instance=first_instance;
+    memcpy(op->vertices,c->vertices,sizeof(c->vertices));
+    op->push_constant_size=p->push_constant_size;
+    if(p->push_constant_size)memcpy(op->push_constants,c->push_constants,p->push_constant_size);
     if(p->set_count) {
-        c->operations[c->operation_count-1].sets[0]=c->graphics_sets[0];
-        c->operations[c->operation_count-1].generations[0]=c->graphics_sets[0]->generation;
+        op->sets[0]=c->graphics_sets[0];
+        op->generations[0]=c->graphics_sets[0]->generation;
     }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer c,uint32_t count,uint32_t instances,
@@ -549,16 +616,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
 }
 
 static void record_event(VkCommandBuffer c, VkEvent event,
-    VkPipelineStageFlags stage, int type)
+    VkPipelineStageFlags stage, enum ps5vk_operation_type type)
 {
     if (!c || c->state != PS5VK_RECORDING || c->render_pass ||
         !event || event->device != c->pool->device ||
         !command_scope(stage, 0) || c->operation_count == PS5VK_MAX_OPERATIONS) {
         invalid(c); return;
     }
-    c->operations[c->operation_count++] = (struct ps5vk_operation){
-        .type = type, .event = event, .src_stage = stage, .dst_stage = stage,
-    };
+    struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,type,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
+    if(!op)return;
+    op->event=event;op->src_stage=stage;op->dst_stage=stage;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent(VkCommandBuffer c, VkEvent event,
