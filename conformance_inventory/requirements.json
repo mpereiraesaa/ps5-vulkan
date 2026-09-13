@@ -6750,16 +6750,15 @@
         "surface_state": "symbol-present",
         "entry_points": [
           "vkCmdSetViewport",
-          "vkCmdSetScissor"
-        ],
-        "absent_entry_points": [
+          "vkCmdSetScissor",
           "vkCmdSetBlendConstants",
           "vkCmdSetDepthBias"
         ],
+        "absent_entry_points": [],
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: 2 of 4 named entry points exist; 2 are dispatched; 2 are declared in the public header."
+        "note": "Baseline surface: 4 of 4 named entry points exist; 4 are dispatched; 4 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -6908,15 +6907,15 @@
       },
       "implementation_state": "not-audited",
       "baseline": {
-        "surface_state": "none",
-        "entry_points": [],
-        "absent_entry_points": [
+        "surface_state": "symbol-present",
+        "entry_points": [
           "vkCmdSetBlendConstants"
         ],
+        "absent_entry_points": [],
         "refs": [
           "API.md"
         ],
-        "note": "Baseline surface: 0 of 1 named entry points exist; 0 are dispatched; 0 are declared in the public header."
+        "note": "Baseline surface: 1 of 1 named entry points exist; 1 are dispatched; 1 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8731,8 +8730,15 @@
           "vkCmdPipelineBarrier",
           "vkCmdPushConstants",
           "vkCmdResetEvent",
+          "vkCmdSetBlendConstants",
+          "vkCmdSetDepthBias",
+          "vkCmdSetDepthBounds",
           "vkCmdSetEvent",
+          "vkCmdSetLineWidth",
           "vkCmdSetScissor",
+          "vkCmdSetStencilCompareMask",
+          "vkCmdSetStencilReference",
+          "vkCmdSetStencilWriteMask",
           "vkCmdSetViewport",
           "vkCmdUpdateBuffer",
           "vkCmdWaitEvents"
@@ -8774,11 +8780,8 @@
           "vkCmdResetQueryPool",
           "vkCmdResolveImage",
           "vkCmdResolveImage2",
-          "vkCmdSetBlendConstants",
           "vkCmdSetCullMode",
-          "vkCmdSetDepthBias",
           "vkCmdSetDepthBiasEnable",
-          "vkCmdSetDepthBounds",
           "vkCmdSetDepthBoundsTestEnable",
           "vkCmdSetDepthCompareOp",
           "vkCmdSetDepthTestEnable",
@@ -8787,18 +8790,14 @@
           "vkCmdSetEvent2",
           "vkCmdSetFrontFace",
           "vkCmdSetLineStipple",
-          "vkCmdSetLineWidth",
           "vkCmdSetPrimitiveRestartEnable",
           "vkCmdSetPrimitiveTopology",
           "vkCmdSetRasterizerDiscardEnable",
           "vkCmdSetRenderingAttachmentLocations",
           "vkCmdSetRenderingInputAttachmentIndices",
           "vkCmdSetScissorWithCount",
-          "vkCmdSetStencilCompareMask",
           "vkCmdSetStencilOp",
-          "vkCmdSetStencilReference",
           "vkCmdSetStencilTestEnable",
-          "vkCmdSetStencilWriteMask",
           "vkCmdSetViewportWithCount",
           "vkCmdWaitEvents2",
           "vkCmdWriteTimestamp",
@@ -8808,7 +8807,7 @@
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 24 of 89 named entry points exist; 24 are dispatched; 24 are declared in the public header."
+        "note": "Baseline surface: 31 of 89 named entry points exist; 31 are dispatched; 31 are declared in the public header."
       },
       "evidence": {
         "source": {
