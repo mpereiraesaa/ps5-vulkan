@@ -37,12 +37,13 @@ int main(void)
     struct ps5vk_queue_backend compute={pc,launch,poll,release};
     struct ps5vk_queue_backend graphics={pg,launch,poll,release};
     struct ps5vk_submission s={.serial=7,.count=1,.buffers={&command}};
+    const enum ps5vk_operation_type routed_types[]={PS5VK_DISPATCH,
+        PS5VK_DRAW_INDEXED,PS5VK_DISPATCH_INDIRECT,PS5VK_DRAW_INDIRECT};
     command.operation_count=1;
     /* Alternate native backend kinds on the same device, with pinned ownership. */
-    for (unsigned n=0;n<6;++n) {
-        unsigned kind=n%2;
+    for (unsigned n=0;n<8;++n) {
         ps5vk_queue_router_configure(&device,compute,graphics);
-        command.operations[0].type=kind ? PS5VK_DRAW_INDEXED : PS5VK_DISPATCH;
+        command.operations[0].type=routed_types[n%4];
         void *job=NULL;
         assert(device.submit_backend.prepare(&device,&s,&job)==VK_SUCCESS && job);
         device.compute_backend=(struct ps5vk_queue_backend){0};
@@ -54,8 +55,8 @@ int main(void)
         assert(device.submit_backend.poll(&device,job,&completed)==VK_SUCCESS && completed==7);
         device.submit_backend.release(&device,job);
     }
-    assert(prepared[0]==3 && prepared[1]==3 && launched[0]==3 && launched[1]==3);
-    assert(polled[0]==6 && polled[1]==6 && released[0]==3 && released[1]==3);
+    assert(prepared[0]==4 && prepared[1]==4 && launched[0]==4 && launched[1]==4);
+    assert(polled[0]==8 && polled[1]==8 && released[0]==4 && released[1]==4);
     ps5vk_queue_router_configure(&device,compute,graphics);
     command.operations[0].type=PS5VK_DISPATCH;
     command.operation_count=2; command.operations[1].type=PS5VK_BEGIN_RENDER_PASS;
@@ -64,17 +65,17 @@ int main(void)
     command.operation_count=1; s.count=2; s.buffers[1]=&second;
     second.operation_count=1; second.operations[0].type=PS5VK_DRAW;
     assert(device.submit_backend.prepare(&device,&s,&job)==VK_ERROR_FEATURE_NOT_PRESENT);
-    assert(prepared[0]==3 && prepared[1]==3); /* No speculative child prepare. */
+    assert(prepared[0]==4 && prepared[1]==4); /* No speculative child prepare. */
     s.count=1; prepare_rc=VK_ERROR_OUT_OF_DEVICE_MEMORY;
     assert(device.submit_backend.prepare(&device,&s,&job)==prepare_rc && !job);
     prepare_rc=VK_SUCCESS;
     assert(device.submit_backend.prepare(&device,&s,&job)==VK_SUCCESS);
     launch_rc=VK_ERROR_DEVICE_LOST;
     assert(device.submit_backend.launch(&device,job)==launch_rc);
-    assert(released[0]==3); /* Router must not free after launch failure. */
+    assert(released[0]==4); /* Router must not free after launch failure. */
     poll_rc=VK_ERROR_DEVICE_LOST; uint64_t completed=0;
     assert(device.submit_backend.poll(&device,job,&completed)==poll_rc);
-    assert(released[0]==3);
+    assert(released[0]==4);
     /* Mock cleanup only: this test submitted no hardware work. */
     device.submit_backend.release(&device,job);
 

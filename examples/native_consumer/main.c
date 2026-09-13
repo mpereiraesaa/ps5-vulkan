@@ -1069,10 +1069,12 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     VkBufferCreateInfo bci = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = buffer_bytes,
-        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
     };
     VkBuffer buffer_in = VK_NULL_HANDLE, buffer_out = VK_NULL_HANDLE;
     CHECK(vkCreateBuffer(device, &bci, NULL, &buffer_in));
+    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     CHECK(vkCreateBuffer(device, &bci, NULL, &buffer_out));
     bci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     VkBuffer buffer_uniform = VK_NULL_HANDLE;
@@ -1124,6 +1126,10 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
         map_in[i] = i * 100u + 42u;
         map_texel[i] = i * 31u;
     }
+    const VkDeviceSize dispatch_indirect_offset = 512;
+    VkDispatchIndirectCommand *dispatch_indirect =
+        (VkDispatchIndirectCommand *)((unsigned char *)map_in + dispatch_indirect_offset);
+    *dispatch_indirect = (VkDispatchIndirectCommand){1, 1, 1};
     map_uniform[0] = 0x1337u;
     /* Guard words in destination buffer */
     for (uint32_t i = 0; i < buffer_bytes / 4; ++i) {
@@ -1233,7 +1239,9 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     const uint32_t push_addend = 19u;
     vkCmdPushConstants(cmd_buf, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT,
                        0, sizeof(push_addend), &push_addend);
-    vkCmdDispatch(cmd_buf, 1, 1, 1);
+    vkCmdDispatchIndirect(cmd_buf, buffer_in, dispatch_indirect_offset);
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_CONSUMER_DISPATCH_INDIRECT_RECORDED groups=1,1,1 offset=512");
     CHECK(vkEndCommandBuffer(cmd_buf));
 
     /* 9. Submit with fence and wait */

@@ -25,8 +25,8 @@ EXPECTED_VULKAN10_TOTAL = 137
 # prototype, a dispatch entry and an implementation. This is not a semantic
 # support claim; see the report's advertised-obligation table for what each
 # command may actually be used for.
-EXPECTED_FULLY_WIRED_TOTAL = 112
-EXPECTED_MISSING_TOTAL = 25
+EXPECTED_FULLY_WIRED_TOTAL = 115
+EXPECTED_MISSING_TOTAL = 22
 
 REQUIRED_BOOKKEEPING_COMMANDS = {
     "vkGetImageSubresourceLayout",
@@ -45,6 +45,10 @@ REQUIRED_SYNC_OBJECT_COMMANDS = {
 
 REQUIRED_BUFFER_TRANSFER_COMMANDS = {
     "vkCmdCopyBuffer", "vkCmdUpdateBuffer", "vkCmdFillBuffer",
+}
+
+REQUIRED_INDIRECT_COMMANDS = {
+    "vkCmdDispatchIndirect", "vkCmdDrawIndirect", "vkCmdDrawIndexedIndirect",
 }
 
 EXPECTED_MISSING_CATEGORIES = {
@@ -174,7 +178,8 @@ def audit_command_surface(repo_root: Path) -> dict:
     dispatch_not_impl = sorted(core_dispatch - core_impl)
 
     missing_required = sorted(
-        (REQUIRED_BOOKKEEPING_COMMANDS | REQUIRED_SYNC_OBJECT_COMMANDS) - fully_wired
+        (REQUIRED_BOOKKEEPING_COMMANDS | REQUIRED_SYNC_OBJECT_COMMANDS |
+         REQUIRED_BUFFER_TRANSFER_COMMANDS | REQUIRED_INDIRECT_COMMANDS) - fully_wired
     )
 
     errors = []

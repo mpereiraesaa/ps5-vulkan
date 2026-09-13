@@ -1,4 +1,5 @@
 #include "vk_queue.h"
+#include "vk_indirect.h"
 #include "descriptor_encode.h"
 #include "dispatch_encode.h"
 #include "ps5_platform.h"
@@ -93,7 +94,14 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             result = VK_ERROR_UNKNOWN; goto fail;
         }
         for (uint32_t i = first; i < first + count; ++i) {
-            const struct ps5vk_operation *op = &cb->operations[i];
+            const struct ps5vk_operation *recorded = &cb->operations[i];
+            struct ps5vk_operation resolved;
+            const struct ps5vk_operation *op = recorded;
+            if (ps5vk_indirect_compute_operation(recorded->type)) {
+                result = ps5vk_indirect_resolve(device, recorded, &resolved);
+                if (result != VK_SUCCESS) goto fail;
+                op = &resolved;
+            }
             /* Each dispatch is fully retired before the next. This is stronger
              * than supported global host/compute barriers, not a skipped GPU
              * dependency. Buffer ranges use this stronger global dependency;

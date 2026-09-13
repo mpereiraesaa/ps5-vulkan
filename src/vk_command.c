@@ -114,6 +114,7 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
         if(type==VK_OBJECT_TYPE_BUFFER && op->buffer_barrier.buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_source==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_destination==object)return 1;
+        if(type==VK_OBJECT_TYPE_BUFFER && op->indirect_buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->copy_image==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->image_barrier.image==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->indices.buffer==object)return 1;
@@ -343,6 +344,25 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t
         op->sets[set]=c->sets[set];op->generations[set]=c->sets[set]->generation;
     }
 }
+static VkBool32 indirect_buffer_valid(VkCommandBuffer c, VkBuffer buffer,
+    VkDeviceSize offset, VkDeviceSize bytes)
+{
+    void *address = NULL; VkDeviceSize available = 0;
+    return c && c->state == PS5VK_RECORDING && !(offset & 3u) &&
+        ps5vk_buffer_usage(c->pool->device, buffer, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) &&
+        ps5vk_buffer_span(c->pool->device, buffer, offset, bytes,
+            &address, &available) == VK_SUCCESS;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(VkCommandBuffer c,VkBuffer buffer,
+    VkDeviceSize offset)
+{
+    if(!indirect_buffer_valid(c,buffer,offset,sizeof(VkDispatchIndirectCommand)))
+        {invalid(c);return;}
+    vkCmdDispatch(c,0,0,0);if(!c || c->state!=PS5VK_RECORDING)return;
+    struct ps5vk_operation *op=&c->operations[c->operation_count-1];
+    op->type=PS5VK_DISPATCH_INDIRECT;op->indirect_buffer=buffer;
+    op->indirect_offset=offset;op->indirect_count=1;
+}
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRenderPassBeginInfo *info,
     VkSubpassContents contents)
 {
@@ -458,6 +478,41 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer c,uint32_t count,uin
     struct ps5vk_operation *op=&c->operations[c->operation_count-1];
     op->type=PS5VK_DRAW_INDEXED;op->index_count=count;op->first_index=first;
     op->vertex_offset=base;op->indices=c->indices;
+}
+static int indirect_draw_valid(VkCommandBuffer c,VkBuffer buffer,VkDeviceSize offset,
+    uint32_t count,uint32_t stride,VkDeviceSize command_size)
+{
+    if(!c || (offset&3u) || count>1 ||
+       (count>1 && ((stride&3u) || stride<command_size)))return 0;
+    if(count)return indirect_buffer_valid(c,buffer,offset,command_size);
+    if(c->state!=PS5VK_RECORDING ||
+       !ps5vk_buffer_usage(c->pool->device,buffer,VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT))return 0;
+    void *address=NULL;VkDeviceSize available=0;
+    /* drawCount == 0 does not access command data, so Vulkan imposes no
+     * offset-plus-command-size bound in that case.  Still prove that the
+     * non-sparse buffer is live and completely bound. */
+    return ps5vk_buffer_span(c->pool->device,buffer,0,VK_WHOLE_SIZE,
+        &address,&available)==VK_SUCCESS;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirect(VkCommandBuffer c,VkBuffer buffer,
+    VkDeviceSize offset,uint32_t count,uint32_t stride)
+{
+    if(!indirect_draw_valid(c,buffer,offset,count,stride,sizeof(VkDrawIndirectCommand)))
+        {invalid(c);return;}
+    vkCmdDraw(c,0,0,0,0);if(!c || c->state!=PS5VK_RECORDING)return;
+    struct ps5vk_operation *op=&c->operations[c->operation_count-1];
+    op->type=PS5VK_DRAW_INDIRECT;op->indirect_buffer=buffer;
+    op->indirect_offset=offset;op->indirect_count=count;op->indirect_stride=stride;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirect(VkCommandBuffer c,VkBuffer buffer,
+    VkDeviceSize offset,uint32_t count,uint32_t stride)
+{
+    if(!indirect_draw_valid(c,buffer,offset,count,stride,
+        sizeof(VkDrawIndexedIndirectCommand))){invalid(c);return;}
+    vkCmdDrawIndexed(c,0,0,0,0,0);if(!c || c->state!=PS5VK_RECORDING)return;
+    struct ps5vk_operation *op=&c->operations[c->operation_count-1];
+    op->type=PS5VK_DRAW_INDEXED_INDIRECT;op->indirect_buffer=buffer;
+    op->indirect_offset=offset;op->indirect_count=count;op->indirect_stride=stride;
 }
 static int texture_layout_supported(VkImageLayout layout)
 {

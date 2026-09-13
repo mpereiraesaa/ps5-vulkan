@@ -1,5 +1,6 @@
 #include "vk_queue.h"
 #include "vk_buffer_transfer.h"
+#include "vk_indirect.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -44,12 +45,14 @@ static void pin(struct ps5vk_submission *s, int acquire)
                     else { --view->pending; --view->image->pending; }
                 }
             }
-            if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED) {
+            if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED ||
+                ps5vk_indirect_graphics_operation(op->type)) {
                 if (acquire) ++op->pipeline->pending;
                 else --op->pipeline->pending;
                 if(op->sets[0]) {if(acquire)++op->sets[0]->pending;else --op->sets[0]->pending;}
             }
-            if (op->type != PS5VK_DISPATCH) continue;
+            if (op->type != PS5VK_DISPATCH &&
+                !ps5vk_indirect_compute_operation(op->type)) continue;
             if (acquire) ++op->pipeline->pending; else --op->pipeline->pending;
             for (uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(op->sets[set]) {
                 if(acquire)++op->sets[set]->pending;else --op->sets[set]->pending;
@@ -110,6 +113,16 @@ static VkResult start_submission(VkDevice d)
             }
             pin(s, 0);
         } else if (s->count) {
+            if (!s->backend_job) {
+                if (!s->deferred_prepare || !d->submit_backend.prepare ||
+                    !d->submit_backend.launch || !d->submit_backend.poll ||
+                    !d->submit_backend.release ||
+                    d->submit_backend.prepare(d, s, &s->backend_job) != VK_SUCCESS ||
+                    !s->backend_job) {
+                    d->lost = VK_TRUE;
+                    return VK_ERROR_DEVICE_LOST;
+                }
+            }
             VkResult result = d->submit_backend.launch(d, s->backend_job);
             if (result != VK_SUCCESS) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
             return VK_SUCCESS;
@@ -175,7 +188,10 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 !op->src_stage || !op->dst_stage) return 0;
             continue;
         }
-        if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_END_RENDER_PASS) {
+        if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_DRAW ||
+            op->type == PS5VK_DRAW_INDEXED ||
+            ps5vk_indirect_graphics_operation(op->type) ||
+            op->type == PS5VK_END_RENDER_PASS) {
             if (!d->graphics_enabled || !d->graphics_submit_enabled || !op->render_pass || !op->framebuffer ||
                 op->render_pass->device != d || op->framebuffer->device != d) return 0;
             if (op->type == PS5VK_BEGIN_RENDER_PASS) {
@@ -189,9 +205,12 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 }
             } else {
                 if (active != op->render_pass || framebuffer != op->framebuffer) return 0;
-                if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED) {
+                if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED ||
+                    ps5vk_indirect_graphics_operation(op->type)) {
                     if (!op->pipeline || op->pipeline->device != d || !op->pipeline->graphics ||
                         !op->pipeline->graphics_state) return 0;
+                    if (ps5vk_indirect_graphics_operation(op->type) &&
+                        ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
                     if(op->pipeline->set_count && (!op->sets[0] || op->sets[0]->pool->device!=d ||
                         op->generations[0]!=op->sets[0]->generation))return 0;
                 } else { active = NULL; framebuffer = NULL; }
@@ -222,7 +241,11 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             }
             continue;
         }
-        if (op->type != PS5VK_DISPATCH || !op->pipeline || op->pipeline->graphics ||
+        if (op->type != PS5VK_DISPATCH &&
+            !ps5vk_indirect_compute_operation(op->type)) return 0;
+        if (ps5vk_indirect_compute_operation(op->type) &&
+            ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
+        if (!op->pipeline || op->pipeline->graphics ||
             op->pipeline->device != d) return 0;
         const struct ps5vk_compiled_program *p = &op->pipeline->program;
         for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set)) {
@@ -290,6 +313,17 @@ static int frontend_operation(int type)
         ps5vk_buffer_transfer_operation((enum ps5vk_operation_type)type);
 }
 
+static int deferred_boundary(int type)
+{ return ps5vk_indirect_compute_operation((enum ps5vk_operation_type)type); }
+
+static VkBool32 range_has_indirect(const VkCommandBuffer command,
+    uint32_t first, uint32_t count)
+{
+    for (uint32_t k = first; k < first + count; ++k)
+        if (ps5vk_indirect_operation(command->operations[k].type)) return VK_TRUE;
+    return VK_FALSE;
+}
+
 static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
     struct ps5vk_submission **expanded, uint32_t *segment_count)
 {
@@ -297,12 +331,13 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
     VkResult result = VK_SUCCESS;
     for (struct ps5vk_submission *record = original; record; record = record->next) {
         size_t refs = (size_t)record->wait_count + record->signal_count;
-        VkBool32 contains_frontend = VK_FALSE;
+        VkBool32 contains_special = VK_FALSE;
         for (uint32_t b = 0; b < record->count; ++b)
             for (uint32_t k = 0; k < record->buffers[b]->operation_count; ++k)
-                contains_frontend |= frontend_operation(record->buffers[b]->operations[k].type);
+                contains_special |= frontend_operation(record->buffers[b]->operations[k].type) ||
+                    ps5vk_indirect_operation(record->buffers[b]->operations[k].type);
         struct ps5vk_submission *first = NULL, *last = NULL;
-        if (!contains_frontend) {
+        if (!contains_special) {
             last = allocate_submission(d, refs, &result);
             if (!last) goto fail;
             last->count = record->count;
@@ -328,14 +363,19 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
                 while (operation < command->operation_count) {
                     uint32_t begin = operation;
                     VkBool32 frontend = frontend_operation(command->operations[operation].type);
+                    VkBool32 deferred = deferred_boundary(command->operations[operation].type);
                     if (frontend) ++operation;
+                    else if (deferred) ++operation;
                     else while (operation < command->operation_count &&
-                        !frontend_operation(command->operations[operation].type)) ++operation;
+                        !frontend_operation(command->operations[operation].type) &&
+                        !deferred_boundary(command->operations[operation].type)) ++operation;
                     last = allocate_submission(d, refs, &result); if (!last) goto fail;
                     last->count = 1; last->buffers[0] = command;
                     last->first_operation[0] = (uint16_t)begin;
                     last->operation_count[0] = (uint16_t)(operation - begin);
                     last->frontend_only = frontend;
+                    last->deferred_prepare = !frontend &&
+                        range_has_indirect(command, begin, operation - begin);
                     if (!first) first = last;
                     if (*segment_count == UINT32_MAX) {
                         free_submission(last); result = VK_ERROR_OUT_OF_HOST_MEMORY; goto fail;
@@ -460,7 +500,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
     uint32_t segment = 0;
     for (struct ps5vk_submission *s = head; s; s = s->next, ++segment) {
         s->serial = d->queue.next_serial + segment;
-        if (s->count && !s->frontend_only) {
+        if (s->count && !s->frontend_only && !s->deferred_prepare) {
             if (!d->submit_backend.prepare || !d->submit_backend.launch ||
                 !d->submit_backend.poll || !d->submit_backend.release) {
                 result = INVALID; goto fail;

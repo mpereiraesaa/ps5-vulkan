@@ -563,6 +563,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(
     uint32_t groupCountY,
     uint32_t groupCountZ);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(
+    VkCommandBuffer commandBuffer,
+    VkBuffer buffer,
+    VkDeviceSize offset);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(
     VkCommandBuffer commandBuffer,
     const VkRenderPassBeginInfo* pRenderPassBegin,
@@ -598,6 +603,20 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(
     uint32_t firstIndex,
     int32_t vertexOffset,
     uint32_t firstInstance);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirect(
+    VkCommandBuffer commandBuffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    uint32_t drawCount,
+    uint32_t stride);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirect(
+    VkCommandBuffer commandBuffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    uint32_t drawCount,
+    uint32_t stride);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(
     VkCommandBuffer commandBuffer,
