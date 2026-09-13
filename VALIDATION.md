@@ -375,11 +375,13 @@ Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
 The seven Vulkan 1.0 dynamic-state setters added after the indirect-command
 slice have host evidence for public/proc-address identity, strict parameter
 gates, retained per-command-buffer values, per-face stencil updates, reset and
-zero operation-slot consumption. Pipeline creation tests independently prove
-that none of those seven states can yet be enabled for drawing, so this is
-structural and non-interference coverage rather than native visual evidence.
-Applicable original upstream dynamic-state compute/transfer cases remain the
-next evidence gate before this slice is described as hardware validated.
+zero operation-slot consumption. Two byte-identical native runs also passed all
+32 selected original upstream monolithic compute/transfer non-interference
+cases, as part of an 89/89 focused run, with exact QPA reconstruction and clean
+Close Game. Pipeline creation tests independently prove that none of those
+seven states can yet be enabled for drawing, so this establishes structural
+recording and compute/transfer non-interference, not dynamic blending, stencil,
+depth-bounds or depth-bias effects on rendered pixels.
 
 ## Ordered buffer-transfer slice (2026-09-13)
 
