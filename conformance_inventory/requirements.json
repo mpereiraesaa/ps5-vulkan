@@ -8278,7 +8278,7 @@
       },
       "implementation_state": "missing",
       "baseline": {
-        "surface_state": "native-demonstrated",
+        "surface_state": "symbol-present",
         "entry_points": [
           "vkCmdCopyBuffer",
           "vkCmdUpdateBuffer",
@@ -8296,7 +8296,7 @@
           "src/vk_buffer_transfer.c",
           "tests/test_buffer_transfer.c"
         ],
-        "note": "Partial surface: 5 of 8 entry points exist and are dispatched. Buffer copy/update/fill have host, public-consumer and focused upstream hardware evidence; image copy/blit/resolve remain incomplete or absent."
+        "note": "Baseline surface: 5 of 8 named entry points exist; 5 are dispatched; 5 are declared in the public header."
       },
       "evidence": {
         "source": {
@@ -8706,18 +8706,21 @@
           "vkCmdBindIndexBuffer",
           "vkCmdBindPipeline",
           "vkCmdBindVertexBuffers",
+          "vkCmdCopyBuffer",
           "vkCmdCopyBufferToImage",
           "vkCmdCopyImageToBuffer",
           "vkCmdDispatch",
           "vkCmdDraw",
           "vkCmdDrawIndexed",
           "vkCmdEndRenderPass",
+          "vkCmdFillBuffer",
           "vkCmdPipelineBarrier",
           "vkCmdPushConstants",
           "vkCmdResetEvent",
           "vkCmdSetEvent",
           "vkCmdSetScissor",
           "vkCmdSetViewport",
+          "vkCmdUpdateBuffer",
           "vkCmdWaitEvents"
         ],
         "absent_entry_points": [
@@ -8732,7 +8735,6 @@
           "vkCmdClearAttachments",
           "vkCmdClearColorImage",
           "vkCmdClearDepthStencilImage",
-          "vkCmdCopyBuffer",
           "vkCmdCopyBuffer2",
           "vkCmdCopyBufferToImage2",
           "vkCmdCopyImage",
@@ -8749,7 +8751,6 @@
           "vkCmdEndRenderPass2",
           "vkCmdEndRendering",
           "vkCmdExecuteCommands",
-          "vkCmdFillBuffer",
           "vkCmdNextSubpass",
           "vkCmdNextSubpass2",
           "vkCmdPipelineBarrier2",
@@ -8788,7 +8789,6 @@
           "vkCmdSetStencilTestEnable",
           "vkCmdSetStencilWriteMask",
           "vkCmdSetViewportWithCount",
-          "vkCmdUpdateBuffer",
           "vkCmdWaitEvents2",
           "vkCmdWriteTimestamp",
           "vkCmdWriteTimestamp2"
@@ -8797,7 +8797,7 @@
           "src/vk_command.c",
           "src/vk_transfer.c"
         ],
-        "note": "Baseline surface: 18 of 89 named entry points exist; 18 are dispatched; 18 are declared in the public header."
+        "note": "Baseline surface: 21 of 89 named entry points exist; 21 are dispatched; 21 are declared in the public header."
       },
       "evidence": {
         "source": {

@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "0fe1da67605e84c4f286bfebec773382f7caa878",
-  "inspected_commit": "a3b4d30dc2414fa33d0353e9965698efbf4ffb9d",
+  "baseline_commit": "6ce9e81273290b2c0c530425c2552a1c6b412a30",
+  "inspected_commit": "6ce9e81273290b2c0c530425c2552a1c6b412a30",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 116,
-    "dispatched": 116,
-    "public_header": 116,
+    "entry_points": 119,
+    "dispatched": 119,
+    "public_header": 119,
     "implementation_only": 0
   },
   "entry_points": [
@@ -112,6 +112,15 @@
       "observed": null
     },
     {
+      "name": "vkCmdCopyBuffer",
+      "files": [
+        "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCmdCopyBufferToImage",
       "files": [
         "src/vk_transfer.c"
@@ -166,6 +175,15 @@
       "observed": null
     },
     {
+      "name": "vkCmdFillBuffer",
+      "files": [
+        "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCmdPipelineBarrier",
       "files": [
         "src/vk_command.c"
@@ -214,6 +232,15 @@
       "name": "vkCmdSetViewport",
       "files": [
         "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdUpdateBuffer",
+      "files": [
+        "src/vk_transfer.c"
       ],
       "dispatch_scope": "DEVICE",
       "public_header": true,
