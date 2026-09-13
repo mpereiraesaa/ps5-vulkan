@@ -223,7 +223,8 @@ allocations at teardown and clean system Close Game:
 - Selection SHA-256:
   `00e9eb1902905886e36bfdbe2b288ec4775c6147c9f69026c9f178cf25ca8210`
 - QPA SHA-256 values:
-  `6c5d95aa2dd2b9e8179e...` and `39233c916cba5a72bb36...`
+  `6c5d95aa2dd2b9e8179e759e7fa6e01618e8ff2380ef01c1ca5ffcfaf019528c`
+  and `39233c916cba5a72bb36c7e78eac1f8988d72a89f841264c38919ec92644f256`
 
 This establishes the cache object, header, import and merge contract only. No
 compiled-code record is serialized and no restored cache hit is claimed; the

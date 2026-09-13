@@ -173,7 +173,8 @@ stopped after system Close Game.
 
 - Executable SHA-256: `9fda99f15ea604987d3124ec40a11d6e8f0dc24310b0163ccf50da1f80f24bd1`
 - Selection SHA-256: `00e9eb1902905886e36bfdbe2b288ec4775c6147c9f69026c9f178cf25ca8210`
-- QPA SHA-256: `6c5d95aa2dd2b9e8179e...` and `39233c916cba5a72bb36...` (full digests in the private evidence index)
+- QPA SHA-256: `6c5d95aa2dd2b9e8179e759e7fa6e01618e8ff2380ef01c1ca5ffcfaf019528c`
+  and `39233c916cba5a72bb36c7e78eac1f8988d72a89f841264c38919ec92644f256`
 
 This case proves the API and lifetime contract only: the implementation exports
 the normative 32-byte `VkPipelineCacheHeaderVersionOne` and stores no portable
