@@ -171,6 +171,8 @@ check:
 	./build/tests/test_submit_suspend
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_queue_router.c tests/test_queue_router.c -o build/tests/test_queue_router
 	./build/tests/test_queue_router
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc tests/test_physical_device_profile.c -o build/tests/test_physical_device_profile
+	./build/tests/test_physical_device_profile
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/scene_region.c tests/test_scene_region.c -o build/tests/test_scene_region
 	./build/tests/test_scene_region
 	mkdir -p build/tests

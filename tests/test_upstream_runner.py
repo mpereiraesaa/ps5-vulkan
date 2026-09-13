@@ -327,6 +327,26 @@ class TestUpstreamRunner(unittest.TestCase):
         # The frozen list must not be the retired synthetic contract suite.
         self.assertFalse(any("contract." in p for p in paths))
 
+    def test_physical_device_reporting_uses_original_upstream_oracles(self):
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        accepted = {case["path"]: case for case in manifest["cases"]}
+        diagnostics = {case["path"]: case
+                       for case in manifest.get("diagnostics", [])}
+        self.assertIn("dEQP-VK.info.physical_devices", accepted)
+        self.assertIn("dEQP-VK.info.device_queue_family_properties", accepted)
+        self.assertIn("dEQP-VK.info.device_properties", diagnostics)
+        self.assertIn("dEQP-VK.info.device_memory_properties", diagnostics)
+        self.assertEqual("Fail", diagnostics[
+            "dEQP-VK.info.device_properties"]["expected_status"])
+        self.assertIn("HOST_COHERENT", diagnostics[
+            "dEQP-VK.info.device_memory_properties"]["rationale"])
+
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (REPO_ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn("createFeatureInfoInstanceTests", package)
+        self.assertIn("createFeatureInfoDeviceTests", package)
+        self.assertIn("vktApiFeatureInfo.cpp", builder)
+
     RESOURCE_CASES = {
         "dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation",
         "dEQP-VK.compute.basic.ubo_to_ssbo_multiple_groups",

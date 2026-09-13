@@ -1,9 +1,9 @@
 #include "vk_internal.h"
 #include "compilation_cache.h"
+#include "physical_device_profile.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
-static int power_two(VkDeviceSize n) { return n && !(n & (n - 1)); }
 
 static const VkExtensionProperties instance_extensions[] = {
     {VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
@@ -71,16 +71,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
     VkResult result = ps5vk_platform_query(&i->physical.platform);
     if (result == VK_SUCCESS) {
         struct ps5vk_platform *p = &i->physical.platform;
-        const VkPhysicalDeviceLimits *l = &p->properties.limits;
-        const VkPhysicalDeviceMemoryProperties *m = &p->memory_properties;
-        /* This frontend is intentionally one-memory-type/one-queue. Never
-         * manufacture heap or alignment capabilities when platform data is absent. */
         if (!p->open || !p->close || !p->max_allocation ||
-            !power_two(l->nonCoherentAtomSize) || !power_two(l->minStorageBufferOffsetAlignment) ||
-            m->memoryTypeCount != 1 || m->memoryHeapCount != 1 || m->memoryTypes[0].heapIndex ||
-            !(m->memoryTypes[0].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) ||
-            (m->memoryTypes[0].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ||
-            m->memoryHeaps[0].size < p->max_allocation)
+            !ps5vk_physical_profile_valid(&p->properties, &p->memory_properties,
+                p->max_allocation, p->queue_flags, !!p->format_properties,
+                !!p->image_properties))
             result = VK_ERROR_INITIALIZATION_FAILED;
     }
     if (result != VK_SUCCESS) { ps5vk_object_free(i, &saved, custom); return result; }

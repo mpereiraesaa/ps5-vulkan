@@ -980,9 +980,9 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "cts-pass",
       "baseline": {
-        "surface_state": "symbol-present",
+        "surface_state": "native-demonstrated",
         "entry_points": [
           "vkEnumeratePhysicalDevices"
         ],
@@ -994,22 +994,32 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_device.c",
+            "tests/test_vk_device.c",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "cts-pass",
+          "refs": [
+            "VALIDATION.md",
+            "examples/native_consumer/main.c"
+          ]
         },
         "conformance": {
           "state": "not-established",
-          "refs": []
+          "refs": [
+            "UPSTREAM_CTS.md",
+            "cts/upstream/manifest.json"
+          ]
         }
       },
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "The two-call enumeration contract (count then array) is a common narrow-implementation gap; needs an explicit audit.",
+      "review_notes": "The two-call contract, zero capacity and untouched-tail behavior are regression-tested. Two identical native runs passed the original upstream physical_devices oracle. This row is satisfied for the currently reported Vulkan 1.0 profile; it does not establish broader core conformance.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -1054,7 +1064,7 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Info cases validate a subset of reported properties and mandatory limit minimums; per-limit behavioural cases live in other groups."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "missing",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -1070,12 +1080,20 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/physical_device_profile.h",
+            "tests/test_physical_device_profile.c",
+            "tests/test_vk_device.c",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md",
+            "examples/native_consumer/main.c"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -1085,7 +1103,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Reported limits must be truthful; over-reporting is a conformance failure, not a shortcut.",
+      "review_notes": "The Vulkan 1.0 slice is now canonical, fail-closed and witnessed on hardware, but this cumulative Vulkan 1.4 row remains missing: the native profile truthfully reports known Vulkan 1.0 graphics minimum deficits and does not expose the core 1.4 Properties2 surface. Original device_properties remains diagnostic rather than acceptance.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -1367,9 +1385,9 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "native-evidence",
       "baseline": {
-        "surface_state": "symbol-present",
+        "surface_state": "native-demonstrated",
         "entry_points": [
           "vkGetPhysicalDeviceQueueFamilyProperties",
           "vkCreateDevice",
@@ -1383,12 +1401,20 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_device.c",
+            "tests/test_vk_device.c",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md",
+            "examples/native_consumer/main.c",
+            "UPSTREAM_CTS.md"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -1398,7 +1424,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "The 1.4 TRANSFER-advertisement rule is recorded separately in VK14-PROMOTED-007.",
+      "review_notes": "Queue enumeration, zero capacity and untouched tails are host-tested; the original upstream queue-family oracle passed twice, and existing device creation/get-queue paths execute in the same native sessions. This is native evidence for the current Vulkan 1.0 single-queue profile, not complete cumulative 1.4 coverage. The 1.4 TRANSFER-advertisement rule is recorded separately in VK14-PROMOTED-007.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -1732,7 +1758,7 @@
         "coverage_note": "Info cases check a subset of limit minimums; behavioural limits are checked by their own feature groups. Per-limit rows are the machine-readable table in core_target.json.",
         "note": "Obligation set derived from the pinned core requirement table."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "missing",
       "baseline": {
         "surface_state": "none",
         "entry_points": [],
@@ -1742,12 +1768,19 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/physical_device_profile.h",
+            "tests/test_physical_device_profile.c",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md",
+            "examples/native_consumer/main.c"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -1858,7 +1891,7 @@
       "owner": "implementation",
       "provenance": "spec-section-plus-vkxml",
       "manual_review": true,
-      "review_notes": "Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements (all-of of any-of groups, or an any-of over tables with 'this table' resolved) are recorded verbatim in capability_conditions."
+      "review_notes": "The canonical native profile now derives and validates the limits its allocator and encoders actually support, with a deterministic public-SDK hardware witness. The complete cumulative limits table remains missing: documented Vulkan 1.0 graphics minima already exceed several reported values, and later-core limits are not claimed. Conditional cells keep their symbol, per-table rule, scope and guard; structured requirements remain recorded in capability_conditions."
     },
     {
       "id": "VK14-CORE-132",
@@ -2966,7 +2999,7 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt, vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "missing",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -2980,12 +3013,19 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_device.c",
+            "tests/test_vk_device.c",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md",
+            "examples/native_consumer/main.c"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -2995,7 +3035,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Format support is reported per-format; the mandatory table is far larger than the documented profile.",
+      "review_notes": "The implemented matrix and unsupported-query behavior are now exact, host-tested and witnessed through the public SDK on hardware. The mandatory Vulkan 1.0 table is still far larger than that matrix, so this cumulative requirement remains missing rather than inferred from entry-point presence.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -3107,7 +3147,7 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "missing",
       "baseline": {
         "surface_state": "documented",
         "entry_points": [],
@@ -3119,12 +3159,19 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/physical_device_profile.h",
+            "tests/test_physical_device_profile.c",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md",
+            "examples/native_consumer/main.c"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -3134,7 +3181,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Limits shape what CTS can even attempt; they also constrain consumer profiles such as ParaLLEl-RDP.",
+      "review_notes": "The currently reported limits are derived, validated and hardware-witnessed instead of optimistic constants. They intentionally expose known Vulkan 1.0 minimum failures, so the full mandatory-limit requirement remains missing and the original device_properties oracle stays diagnostic.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -4295,7 +4342,7 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Allocation cases cover allocation accounting; heap/type reporting truthfulness is only partly covered."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "missing",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -4312,12 +4359,21 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/physical_device_profile.h",
+            "src/vk_device.c",
+            "tests/test_vk_device.c",
+            "PHYSICAL_DEVICE_REPORTING.md"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md",
+            "examples/native_consumer/main.c",
+            "UPSTREAM_CTS.md"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -4327,7 +4383,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": null,
+      "review_notes": "The single heap/type report is exact and hardware-witnessed, and selected allocation behavior passes upstream. Full core satisfaction remains missing because the graphics profile reports 2,048 maximum allocations, below the Vulkan 1.0 minimum, and intentionally does not advertise HOST_COHERENT memory. The original device_memory_properties case remains diagnostic.",
       "classification_basis": "core-cumulative-required"
     },
     {

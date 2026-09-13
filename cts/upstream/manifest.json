@@ -20,6 +20,22 @@
   },
   "cases": [
     {
+      "path": "dEQP-VK.info.physical_devices",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:2525",
+      "category": "physical-device-reporting",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream enumeration body exercises the result-bearing two-call idiom, VK_INCOMPLETE, returned count and untouched output tail."
+    },
+    {
+      "path": "dEQP-VK.info.device_queue_family_properties",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3219",
+      "category": "physical-device-reporting",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream query body obtains and logs the native queue-family vector through the Vulkan instance interface."
+    },
+    {
       "path": "dEQP-VK.api.smoke.create_sampler",
       "source": "external/vulkancts/modules/vulkan/api/vktApiSmokeTests.cpp:64",
       "category": "api",
@@ -253,6 +269,22 @@
     }
   ],
   "diagnostics": [
+    {
+      "path": "dEQP-VK.info.device_properties",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3147",
+      "category": "physical-device-reporting-gap",
+      "expected_status": "Fail",
+      "features_required": [],
+      "rationale": "Original upstream Vulkan 1.0 limit and complete-initialization oracle remains diagnostic because the truthful bounded profile does not yet satisfy the complete graphics minima."
+    },
+    {
+      "path": "dEQP-VK.info.device_memory_properties",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3233",
+      "category": "physical-device-reporting-gap",
+      "expected_status": "Fail",
+      "features_required": [],
+      "rationale": "Original upstream memory oracle remains diagnostic: the one direct-memory type is DEVICE_LOCAL and HOST_VISIBLE, but HOST_COHERENT is not advertised or established."
+    },
     {
       "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:1898",

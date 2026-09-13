@@ -77,6 +77,8 @@ def validate(log, receipt, artifact):
         return found[0]
 
     boot = one("PS5VK_CONSUMER_BOOT ")
+    physical = one("PS5VK_CONSUMER_PHYSICAL_DEVICE ")
+    physical_queries = one("PS5VK_CONSUMER_PHYSICAL_QUERIES ")
     negotiated = one("PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED ")
     start = one("PS5VK_CONSUMER_COMPUTE_START")
     pipeline = one("PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED")
@@ -96,7 +98,7 @@ def validate(log, receipt, artifact):
     require(len(prepared) == 2 and
             all(len(rows) == 3 for rows in (submitted, suspended, completed)),
             "one resource submit and two narrow submit records")
-    ordered = [boot, negotiated, start, pipeline,
+    ordered = [boot, physical, physical_queries, negotiated, start, pipeline,
                prepared[0], submitted[0], suspended[0], completed[0], witness,
                width_start, width_pipelines,
                prepared[1], submitted[1], suspended[1], completed[1],
@@ -105,6 +107,19 @@ def validate(log, receipt, artifact):
     require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
             "resource witness ordering")
     require("mode=finite" in boot[1], "finite mode")
+    require(physical[1] ==
+        "PS5VK_CONSUMER_PHYSICAL_DEVICE api=00400000 vendor=1002 device=0000 "
+        "heap=268435456 heap_flags=00000001 type_flags=00000003 "
+        "queue_flags=00000003 storage=268435456 uniform=65536 texel=65536 "
+        "push=256 allocations=2048 granularity=131072 map_align=64 "
+        "texel_align=4 ubo_align=256 ssbo_align=256 atom=64 shared=65536 "
+        "invocations=1024 hash=be169e1b",
+        "deterministic physical-device report")
+    require(physical_queries[1].split()[1:] == [
+        "devices=1", "queues=1", "two_call=1", "tail_preserved=1",
+        "pnext_preserved=1", "formats=5", "image_supported=1",
+        "image_rejected=1"],
+        "physical-device query witnesses")
     require(negotiated[1].split()[1:] == [
         "instance_ext=1", "device_exts=3", "storageBuffer8BitAccess=1",
         "storageBuffer16BitAccess=1", "narrow_arithmetic=0"],
@@ -158,6 +173,10 @@ def validate(log, receipt, artifact):
         "narrow_guard_bytes_checked": 8000,
         "storage8_checksum_fnv1a32": "9575e8c5",
         "storage16_checksum_fnv1a32": "603ddade",
+        "physical_device_report_fnv1a32": "be169e1b",
+        "reported_heap_bytes": 268435456,
+        "reported_memory_type_flags": "DEVICE_LOCAL|HOST_VISIBLE",
+        "reported_host_coherent": False,
         "clean_tcp": True,
         "os_close": "requires independent lifecycle evidence",
     }

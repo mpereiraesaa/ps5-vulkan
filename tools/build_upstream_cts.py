@@ -630,6 +630,7 @@ def main():
         # vk::createShader lives in the shader_object module but is referenced by the
         # framework's compute pipeline wrapper, so the module util is linked in.
         cts_root / "external/vulkancts/modules/vulkan/shader_object/vktShaderObjectCreateUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiSmokeTests.cpp",
         # Resource-focused modules: buffer views (uniform texel buffers) and the
         # binding-model shader-access family (multi-set binding of buffers).

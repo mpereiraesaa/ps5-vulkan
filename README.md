@@ -35,6 +35,9 @@ results; visual output is not the sole correctness signal.
 The exact supported profile is documented in [API.md](API.md). Build and test
 requirements are in [BUILDING.md](BUILDING.md).
 Runtime graphics test results and their limits are summarized in [VALIDATION.md](VALIDATION.md).
+The provenance and current deficits of physical-device limits, memory, queues
+and formats are tracked in
+[PHYSICAL_DEVICE_REPORTING.md](PHYSICAL_DEVICE_REPORTING.md).
 
 Two independent suites are integrated against this backend: a focused selection
 of **genuine upstream Khronos VK-GL-CTS** code compiled into a native payload

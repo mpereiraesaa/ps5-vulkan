@@ -6,6 +6,15 @@ from tools.verify_consumer_resource_abi import APP, TITLE, validate
 
 MESSAGES = [
     "PS5VK_CONSUMER_BOOT mode=finite sdk_version=0.1",
+    "PS5VK_CONSUMER_PHYSICAL_DEVICE api=00400000 vendor=1002 device=0000 "
+    "heap=268435456 heap_flags=00000001 type_flags=00000003 "
+    "queue_flags=00000003 storage=268435456 uniform=65536 texel=65536 "
+    "push=256 allocations=2048 granularity=131072 map_align=64 "
+    "texel_align=4 ubo_align=256 ssbo_align=256 atom=64 shared=65536 "
+    "invocations=1024 hash=be169e1b",
+    "PS5VK_CONSUMER_PHYSICAL_QUERIES devices=1 queues=1 two_call=1 "
+    "tail_preserved=1 pnext_preserved=1 formats=5 image_supported=1 "
+    "image_rejected=1",
     "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=3 "
     "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0",
     "PS5VK_CONSUMER_COMPUTE_START",
@@ -75,6 +84,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         self.assertEqual(result["storage8_elements_checked"], 64)
         self.assertEqual(result["storage16_elements_checked"], 64)
         self.assertEqual(result["narrow_guard_bytes_checked"], 8000)
+        self.assertEqual(result["physical_device_report_fnv1a32"], "be169e1b")
+        self.assertFalse(result["reported_host_coherent"])
 
     def test_every_witness_is_required(self):
         for index in range(len(MESSAGES)):
@@ -88,6 +99,9 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                         ("serial=1 dispatches=1", "serial=1 dispatches=3"),
                         ("checksum8=9575e8c5", "checksum8=00000000"),
                         ("checksum16=603ddade", "checksum16=00000000"),
+                        ("heap=268435456", "heap=268435455"),
+                        ("hash=be169e1b", "hash=00000000"),
+                        ("pnext_preserved=1", "pnext_preserved=0"),
                         ("allocations=1", "allocations=0"))
         for old, new in replacements:
             with self.subTest(old=old), self.assertRaises(ValueError):
