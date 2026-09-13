@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "0b600961ce13fafe4bf1b3813bf04dfd91c5b7b7",
-  "inspected_commit": "0b600961ce13fafe4bf1b3813bf04dfd91c5b7b7",
+  "baseline_commit": "7f2d6fa15264082e85948d068a8354d47b29944d",
+  "inspected_commit": "7f2d6fa15264082e85948d068a8354d47b29944d",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 84,
-    "dispatched": 84,
-    "public_header": 83,
+    "entry_points": 91,
+    "dispatched": 91,
+    "public_header": 90,
     "implementation_only": 1
   },
   "entry_points": [
@@ -235,7 +235,7 @@
       ],
       "dispatch_scope": "INSTANCE",
       "public_header": true,
-      "observed": "Rejects any enabledExtensionCount with VK_ERROR_EXTENSION_NOT_PRESENT and rejects pNext/flags with VK_ERROR_FEATURE_NOT_PRESENT. Evidence: src/vk_device.c."
+      "observed": "Accepts only the enumerated narrow-storage extensions and exact supported feature structs; unsupported features, unknown chains and invalid booleans fail closed. Evidence: src/vk_device.c."
     },
     {
       "name": "vkCreateFence",
@@ -496,7 +496,7 @@
       ],
       "dispatch_scope": "INSTANCE",
       "public_header": true,
-      "observed": "Exists and is dispatched (INSTANCE); forwards to the instance enumeration, so it also reports zero extensions. Evidence: src/vk_device.c."
+      "observed": "Exists and is dispatched (INSTANCE). Enumerates VK_KHR_storage_buffer_storage_class, VK_KHR_8bit_storage and VK_KHR_16bit_storage when the platform exposes the corresponding storage-buffer features. Evidence: src/vk_device.c."
     },
     {
       "name": "vkEnumerateInstanceExtensionProperties",
@@ -505,7 +505,7 @@
       ],
       "dispatch_scope": "GLOBAL",
       "public_header": true,
-      "observed": "Exists and is dispatched (GLOBAL). Returns VK_SUCCESS with *count = 0; a non-NULL layer name returns VK_ERROR_LAYER_NOT_PRESENT. Evidence: src/vk_device.c."
+      "observed": "Exists and is dispatched (GLOBAL). Enumerates VK_KHR_get_physical_device_properties2; a non-NULL layer name returns VK_ERROR_LAYER_NOT_PRESENT. Evidence: src/vk_device.c."
     },
     {
       "name": "vkEnumerateInstanceLayerProperties",
@@ -625,6 +625,15 @@
       "observed": null
     },
     {
+      "name": "vkGetPhysicalDeviceFeatures2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Reports storageBuffer8BitAccess and storageBuffer16BitAccess while leaving narrow arithmetic and other narrow storage classes false. Evidence: src/vk_device.c."
+    },
+    {
       "name": "vkGetPhysicalDeviceFormatProperties",
       "files": [
         "src/vk_device.c"
@@ -632,6 +641,15 @@
       "dispatch_scope": "INSTANCE",
       "public_header": true,
       "observed": null
+    },
+    {
+      "name": "vkGetPhysicalDeviceFormatProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Delegates to the bounded core format report through VkFormatProperties2. Evidence: src/vk_device.c."
     },
     {
       "name": "vkGetPhysicalDeviceImageFormatProperties",
@@ -643,6 +661,15 @@
       "observed": null
     },
     {
+      "name": "vkGetPhysicalDeviceImageFormatProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Delegates validated image-format queries through the KHR structure pair. Evidence: src/vk_device.c."
+    },
+    {
       "name": "vkGetPhysicalDeviceMemoryProperties",
       "files": [
         "src/vk_device.c"
@@ -650,6 +677,15 @@
       "dispatch_scope": "INSTANCE",
       "public_header": true,
       "observed": null
+    },
+    {
+      "name": "vkGetPhysicalDeviceMemoryProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Reports the bounded memory profile through VkPhysicalDeviceMemoryProperties2. Evidence: src/vk_device.c."
     },
     {
       "name": "vkGetPhysicalDeviceProperties",
@@ -661,6 +697,15 @@
       "observed": "Reports apiVersion = VK_API_VERSION_1_0. Evidence: src/platform_host.c."
     },
     {
+      "name": "vkGetPhysicalDeviceProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Returns the Vulkan 1.0 physical-device properties through the KHR properties2 structure. Evidence: src/vk_device.c."
+    },
+    {
       "name": "vkGetPhysicalDeviceQueueFamilyProperties",
       "files": [
         "src/vk_device.c"
@@ -668,6 +713,24 @@
       "dispatch_scope": "INSTANCE",
       "public_header": true,
       "observed": "Reports a single queue family with queueCount = 1. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceQueueFamilyProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Reports the single queue family through VkQueueFamilyProperties2. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceSparseImageFormatProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Returns an empty list because sparseBinding is not advertised. Evidence: src/vk_device.c."
     },
     {
       "name": "vkInvalidateMappedMemoryRanges",
