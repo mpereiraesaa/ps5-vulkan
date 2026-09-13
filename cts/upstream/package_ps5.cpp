@@ -8,6 +8,7 @@
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
+#include "vktPipelineCacheTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -90,6 +91,11 @@ void FocusedVkTestPackage::init(void)
     {
         de::MovePtr<tcu::TestCaseGroup> pipelineGroup(new tcu::TestCaseGroup(m_testCtx, "pipeline"));
         pipelineGroup->addChild(vkt::pipeline::createPushConstantTests(
+            m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+        // pipeline.cache: the upstream factory registers its whole family; the
+        // packaged case list is the only execution filter, so the graphics cache
+        // cases stay unselected while the D16_UNORM prerequisite is missing.
+        pipelineGroup->addChild(vkt::pipeline::createCacheTests(
             m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
         addChild(pipelineGroup.release());
     }

@@ -775,7 +775,54 @@ static void run_synchronization_compute(VkDevice device, VkQueue queue)
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_SYNC_RETIRED");
 }
 
-static void run_runtime_compute(VkDevice device, VkQueue queue)
+/* Bounded pipeline-cache contract: create, size query, export, re-import and
+ * merge through public entry points only. The exported blob is the normative
+ * 32-byte header; this slice stores no compiled-code records and never claims a
+ * restored hit. */
+static void run_pipeline_cache_contract(VkDevice device, VkPipelineCache *out_cache)
+{
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_PIPELINE_CACHE_START");
+    const VkPipelineCacheCreateInfo cache_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+    };
+    VkPipelineCache cache = VK_NULL_HANDLE;
+    CHECK(vkCreatePipelineCache(device, &cache_info, NULL, &cache));
+
+    size_t cache_size = 0;
+    CHECK(vkGetPipelineCacheData(device, cache, &cache_size, NULL));
+    REQUIRE(cache_size == 32u, "pipeline cache size query returns the header size");
+
+    uint8_t blob[33];
+    memset(blob, 0xa5, sizeof(blob));
+    cache_size = sizeof(blob);
+    CHECK(vkGetPipelineCacheData(device, cache, &cache_size, blob));
+    REQUIRE(cache_size == 32u && blob[32] == 0xa5, "pipeline cache export writes exactly the header");
+
+    /* One byte short: VK_INCOMPLETE, nothing written, size reported as zero. */
+    uint8_t small[32];
+    memset(small, 0x5a, sizeof(small));
+    size_t small_size = 31u;
+    REQUIRE(vkGetPipelineCacheData(device, cache, &small_size, small) == VK_INCOMPLETE &&
+            small_size == 0u && small[0] == 0x5a,
+            "short pipeline cache buffer fails without writing");
+
+    VkPipelineCache reimported = VK_NULL_HANDLE;
+    const VkPipelineCacheCreateInfo import_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        .initialDataSize = 32u,
+        .pInitialData = blob,
+    };
+    CHECK(vkCreatePipelineCache(device, &import_info, NULL, &reimported));
+    CHECK(vkMergePipelineCaches(device, cache, 1u, &reimported));
+    CHECK(vkMergePipelineCaches(device, cache, 2u, (const VkPipelineCache[]){cache, reimported}));
+    vkDestroyPipelineCache(device, reimported, NULL);
+
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_CONSUMER_PIPELINE_CACHE created=1 header_bytes=32 imported=1 merged=1 records=0");
+    *out_cache = cache;
+}
+
+static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache cache)
 {
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_COMPUTE_START");
 
@@ -865,7 +912,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue)
         .layout = pipeline_layout
     };
     VkPipeline compute_pipeline = VK_NULL_HANDLE;
-    CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL, &compute_pipeline));
+    CHECK(vkCreateComputePipelines(device, cache, 1, &cpci, NULL, &compute_pipeline));
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED");
 
     /* 5. Create storage buffers: 64 words input (binding 0) and 64 words output with boundary guards (binding 1) */
@@ -1702,8 +1749,11 @@ int main(void)
     VkQueue queue = VK_NULL_HANDLE;
     vkGetDeviceQueue(device, 0, 0, &queue);
 
-    /* 4. Run runtime compute */
-    run_runtime_compute(device, queue);
+    /* 4. Exercise the public pipeline-cache contract, then run runtime compute
+     * with that cache passed to pipeline creation. */
+    VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
+    run_pipeline_cache_contract(device, &pipeline_cache);
+    run_runtime_compute(device, queue, pipeline_cache);
 
     /* 5. Run byte- and word-exact 8/16-bit storage-buffer witnesses. */
     run_storage_width_compute(device, queue);
@@ -1713,6 +1763,8 @@ int main(void)
 
     /* 7. Run runtime procedural graphics and presentation */
     run_consumer(device, queue, is_continuous);
+
+    vkDestroyPipelineCache(device, pipeline_cache, NULL);
 
     /* Orderly destroy device and instance if ever returned */
     vkDestroyDevice(device, NULL);

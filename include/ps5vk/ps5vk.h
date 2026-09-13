@@ -360,6 +360,32 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
     VkPipeline pipeline,
     const VkAllocationCallbacks* pAllocator);
 
+/* Pipeline cache. This implementation exports the normative 32-byte
+ * VkPipelineCacheHeaderVersionOne and keeps no portable compiled-code records
+ * yet, so an imported blob is validated and then ignored. */
+VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineCache(
+    VkDevice device,
+    const VkPipelineCacheCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkPipelineCache* pPipelineCache);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyPipelineCache(
+    VkDevice device,
+    VkPipelineCache pipelineCache,
+    const VkAllocationCallbacks* pAllocator);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(
+    VkDevice device,
+    VkPipelineCache pipelineCache,
+    size_t* pDataSize,
+    void* pData);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkMergePipelineCaches(
+    VkDevice device,
+    VkPipelineCache dstCache,
+    uint32_t srcCacheCount,
+    const VkPipelineCache* pSrcCaches);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(
     VkDevice device,
     const VkDescriptorPoolCreateInfo* pCreateInfo,

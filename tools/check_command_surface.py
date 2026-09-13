@@ -21,8 +21,12 @@ import sys
 import xml.etree.ElementTree as ET
 
 EXPECTED_VULKAN10_TOTAL = 137
-EXPECTED_SUPPORTED_TOTAL = 91
-EXPECTED_MISSING_TOTAL = 46
+# Structural parity only: a command is counted here when it has a public
+# prototype, a dispatch entry and an implementation. This is not a semantic
+# support claim; see the report's advertised-obligation table for what each
+# command may actually be used for.
+EXPECTED_FULLY_WIRED_TOTAL = 95
+EXPECTED_MISSING_TOTAL = 42
 
 REQUIRED_BOOKKEEPING_COMMANDS = {
     "vkGetImageSubresourceLayout",
@@ -57,12 +61,8 @@ EXPECTED_MISSING_CATEGORIES = {
         "vkCreateSemaphore",
         "vkDestroySemaphore",
     },
-    "Pipeline Cache": {
-        "vkCreatePipelineCache",
-        "vkDestroyPipelineCache",
-        "vkGetPipelineCacheData",
-        "vkMergePipelineCaches",
-    },
+    # The four pipeline-cache commands moved to the fully wired surface with the
+    # header-only cache slice; they are no longer deficits.
     "Transfer/Clear/Indirect": {
         "vkCmdCopyBuffer",
         "vkCmdCopyImage",
@@ -153,8 +153,8 @@ def audit_command_surface(repo_root: Path) -> dict:
     impl = parse_implementations(src_dir, native_dir)
 
     core_set = set(core_commands)
-    supported = {cmd for cmd in core_commands if cmd in public and cmd in dispatch and cmd in impl}
-    missing = core_set - supported
+    fully_wired = {cmd for cmd in core_commands if cmd in public and cmd in dispatch and cmd in impl}
+    missing = core_set - fully_wired
 
     # Asymmetry checks for 1.0 core commands
     core_public = public & core_set
@@ -166,16 +166,16 @@ def audit_command_surface(repo_root: Path) -> dict:
     public_not_dispatch = sorted(core_public - core_dispatch)
     dispatch_not_impl = sorted(core_dispatch - core_impl)
 
-    missing_required = sorted(REQUIRED_BOOKKEEPING_COMMANDS - supported)
+    missing_required = sorted(REQUIRED_BOOKKEEPING_COMMANDS - fully_wired)
 
     errors = []
     if len(core_commands) != EXPECTED_VULKAN10_TOTAL:
         errors.append(
             f"Vulkan 1.0 mandatory command count mismatch: expected {EXPECTED_VULKAN10_TOTAL}, got {len(core_commands)}"
         )
-    if len(supported) != EXPECTED_SUPPORTED_TOTAL:
+    if len(fully_wired) != EXPECTED_FULLY_WIRED_TOTAL:
         errors.append(
-            f"Supported Vulkan 1.0 command count mismatch: expected {EXPECTED_SUPPORTED_TOTAL}, got {len(supported)}"
+            f"Supported Vulkan 1.0 command count mismatch: expected {EXPECTED_FULLY_WIRED_TOTAL}, got {len(fully_wired)}"
         )
     if len(missing) != EXPECTED_MISSING_TOTAL:
         errors.append(
@@ -202,7 +202,7 @@ def audit_command_surface(repo_root: Path) -> dict:
 
     return {
         "core_total": len(core_commands),
-        "supported_total": len(supported),
+        "fully_wired_total": len(fully_wired),
         "missing_total": len(missing),
         "dispatch_not_public": dispatch_not_public,
         "impl_not_public": impl_not_public,
@@ -210,7 +210,7 @@ def audit_command_surface(repo_root: Path) -> dict:
         "dispatch_not_impl": dispatch_not_impl,
         "missing_required": missing_required,
         "uncategorized_missing": uncategorized_missing,
-        "supported": sorted(supported),
+        "fully_wired": sorted(fully_wired),
         "missing": sorted(missing),
         "errors": errors,
         "passed": len(errors) == 0,
@@ -228,7 +228,7 @@ def main():
 
     print("=== Vulkan 1.0 Command Surface Parity Audit ===")
     print(f"Mandatory Vulkan 1.0 core commands : {result['core_total']}")
-    print(f"Supported / fully wired commands   : {result['supported_total']}")
+    print(f"Fully wired (structural) commands  : {result['fully_wired_total']}")
     print(f"Known missing commands             : {result['missing_total']}")
     print(f"Required bookkeeping commands      : {'ALL PRESENT' if not result['missing_required'] else result['missing_required']}")
     print(f"Dispatched not public              : {result['dispatch_not_public'] or 'NONE'}")
@@ -237,7 +237,7 @@ def main():
     print(f"Dispatched not implemented         : {result['dispatch_not_impl'] or 'NONE'}")
 
     if result["passed"]:
-        print("\nResult: PASS (perfect 1:1 public/dispatch/implementation parity on supported 1.0 surface)")
+        print("\nResult: PASS (perfect 1:1 public/dispatch/implementation parity on the fully wired 1.0 surface; structural, not a semantic support claim)")
         return 0
     else:
         print("\nResult: FAIL")

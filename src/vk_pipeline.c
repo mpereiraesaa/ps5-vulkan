@@ -1,5 +1,6 @@
 #include "vk_pipeline.h"
 #include "compilation_cache.h"
+#include "vk_pipeline_cache.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -293,7 +294,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(VkDevice d, VkPipelineCa
     if (!out) return INVALID;
     for (uint32_t j = 0; j < count; ++j) out[j] = VK_NULL_HANDLE;
     if (!d || !count || !infos) return INVALID;
-    if (cache) return VK_ERROR_UNKNOWN;
+    /* A live same-device cache is accepted; it carries no portable records yet,
+     * so compilation still comes from the bounded internal cache. */
+    if (cache && !ps5vk_pipeline_cache_usable(d, cache)) return VK_ERROR_UNKNOWN;
     VkResult result = VK_SUCCESS;
     for (uint32_t j = 0; j < count; ++j) {
         VkResult r = create_pipeline(d, &infos[j], a, &out[j]);

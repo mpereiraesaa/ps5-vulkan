@@ -1,6 +1,7 @@
 #include "vk_pipeline.h"
 #include "vk_render_pass.h"
 #include "graphics_program.h"
+#include "vk_pipeline_cache.h"
 #include <float.h>
 #include <string.h>
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
@@ -199,7 +200,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineC
     if (!out) return VK_ERROR_UNKNOWN;
     for (uint32_t i=0;i<count;++i) out[i]=VK_NULL_HANDLE;
     if (!d || !count || !infos) return VK_ERROR_UNKNOWN;
-    if (cache || !d->graphics_enabled || (!d->graphics_library && !d->graphics_acquire) ||
+    /* A live same-device cache is accepted and carries no portable records yet. */
+    if ((cache && !ps5vk_pipeline_cache_usable(d, cache)) ||
+        !d->graphics_enabled || (!d->graphics_library && !d->graphics_acquire) ||
         (!!d->graphics_acquire != !!d->graphics_compiled_release) ||
         !d->graphics_create || !d->graphics_release)
         return VK_ERROR_FEATURE_NOT_PRESENT;

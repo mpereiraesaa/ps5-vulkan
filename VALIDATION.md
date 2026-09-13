@@ -168,7 +168,8 @@ compute/graphics barriers, queue-family transfers, the Vulkan memory model or
 The next bounded graphics slice adds one static or dynamic viewport/scissor
 pair, compatible one-subpass render-pass/framebuffer ownership, bounded color
 and depth attachment load/store/clear behavior, and RGBA8 off-screen readback.
-The selection now contains **42 original upstream cases**. The added
+The selection now contains **43 original upstream cases** (the 42 below plus the
+pipeline-cache compute case described afterwards). The added
 `dEQP-VK.api.smoke.triangle` body records a real draw, copies the rendered image
 to a buffer and compares its pixels with the unchanged upstream reference
 renderer.
@@ -198,6 +199,37 @@ and `dc638572e4785c9c2dad9a4654f2bfb6e0a959f7c0a1be6f1e2a438023cb7528`.
 This evidence covers only the enumerated profile. It does not establish general
 rasterization, blending, multisampling, stencil, secondary command buffers,
 WSI or Vulkan conformance.
+
+### Pipeline cache (2026-09-13)
+
+The pipeline-cache slice makes the four mandatory Vulkan 1.0 cache commands part
+of the public surface again: `vkCreatePipelineCache`,
+`vkDestroyPipelineCache`, `vkGetPipelineCacheData` and `vkMergePipelineCaches`.
+Both pipeline-creation entry points now accept a live same-device cache again;
+an invalid or foreign handle still fails closed. The exported blob is exactly
+the normative 32-byte `VkPipelineCacheHeaderVersionOne`, externally supplied
+data is treated as untrusted (short, corrupt, mismatched or oversized blobs are
+ignored and creation still succeeds), and merge is a validated no-op.
+`pipelineCacheUUID` is derived deterministically from public compatibility
+inputs instead of being zero.
+
+The selection gained `dEQP-VK.pipeline.cache.compute_tests.compute_stage`. Two
+launches of the identical payload passed **43/43** with zero failures,
+unsupported or skipped cases, complete QPA reconstruction, zero live platform
+allocations at teardown and clean system Close Game:
+
+- Executable SHA-256:
+  `9fda99f15ea604987d3124ec40a11d6e8f0dc24310b0163ccf50da1f80f24bd1`
+- Selection SHA-256:
+  `00e9eb1902905886e36bfdbe2b288ec4775c6147c9f69026c9f178cf25ca8210`
+- QPA SHA-256 values:
+  `6c5d95aa2dd2b9e8179e...` and `39233c916cba5a72bb36...`
+
+This establishes the cache object, header, import and merge contract only. No
+compiled-code record is serialized and no restored cache hit is claimed; the
+graphics-derived pipeline-cache cases remain blocked by the pinned bodies'
+`D16_UNORM` depth-attachment prerequisite and are covered by host tests that
+reproduce their oracles.
 
 ## Independent native SDK consumer validation
 
@@ -301,4 +333,3 @@ Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
 - Enforced on host test runs via `make check` and verified by unit tests in
   `tests/test_command_surface.py` (which includes negative test fixtures asserting failure on
   missing dispatch entries, omitted declarations, or bookkeeping regressions).
-

@@ -3,6 +3,7 @@
 
 #include "vk_descriptor.h"
 #include <limits.h>
+#include <stdint.h>
 #include <string.h>
 
 /* Values in this profile describe ps5vk's executable frontend contract.  They
@@ -21,6 +22,53 @@ struct ps5vk_physical_profile_info {
 static inline int ps5vk_profile_power_of_two(VkDeviceSize value)
 { return value && !(value & (value - 1)); }
 
+/* Deterministic, public, non-secret compatibility identity for
+ * VkPhysicalDeviceProperties::pipelineCacheUUID. Any change to an input below
+ * must invalidate previously exported cache data:
+ *   - vendor/device identity of this frontend
+ *   - GFX1013 target
+ *   - driver version reported in the same properties block
+ *   - pinned compiler identity and version (PSBC/ACO, see compilation_cache.h)
+ *   - cache ABI revision and this UUID format counter
+ * The mixing is FNV-1a over two streams; it is an identity, not a security
+ * boundary, and it never depends on console state or private material. */
+#define PS5VK_PIPELINE_CACHE_UUID_FORMAT 1u
+#define PS5VK_GFX_TARGET 1013u
+#define PS5VK_DRIVER_VERSION 1u
+#define PS5VK_COMPILER_IDENTITY 0x50534243u /* "PSBC" */
+#define PS5VK_COMPILER_IDENTITY_VERSION 1u
+#define PS5VK_CACHE_ABI_IDENTITY 1u
+
+static inline void ps5vk_profile_mix(uint64_t *h, uint32_t value)
+{
+    for (unsigned byte = 0; byte < 4; ++byte) {
+        *h ^= (uint64_t)((value >> (8 * byte)) & 0xffu);
+        *h *= UINT64_C(0x100000001b3);
+    }
+}
+
+static inline void ps5vk_pipeline_cache_uuid(uint8_t out[VK_UUID_SIZE],
+                                             uint32_t vendor_id, uint32_t device_id)
+{
+    const char tag[] = "ps5vk-gfx1013-pipeline-cache";
+    uint64_t a = UINT64_C(0xcbf29ce484222325);
+    uint64_t b = UINT64_C(0x9e3779b97f4a7c15);
+    for (size_t i = 0; i < sizeof(tag) - 1; ++i) ps5vk_profile_mix(&a, (uint8_t)tag[i]);
+    for (size_t i = 0; i < sizeof(tag) - 1; ++i) ps5vk_profile_mix(&b, (uint8_t)tag[sizeof(tag) - 2 - i]);
+    ps5vk_profile_mix(&a, vendor_id);   ps5vk_profile_mix(&b, device_id);
+    ps5vk_profile_mix(&a, device_id);   ps5vk_profile_mix(&b, vendor_id);
+    ps5vk_profile_mix(&a, PS5VK_GFX_TARGET);             ps5vk_profile_mix(&b, PS5VK_GFX_TARGET ^ 0x5a5a5a5au);
+    ps5vk_profile_mix(&a, PS5VK_DRIVER_VERSION);         ps5vk_profile_mix(&b, PS5VK_DRIVER_VERSION);
+    ps5vk_profile_mix(&a, PS5VK_COMPILER_IDENTITY);      ps5vk_profile_mix(&b, PS5VK_COMPILER_IDENTITY);
+    ps5vk_profile_mix(&a, PS5VK_COMPILER_IDENTITY_VERSION); ps5vk_profile_mix(&b, PS5VK_COMPILER_IDENTITY_VERSION);
+    ps5vk_profile_mix(&a, PS5VK_CACHE_ABI_IDENTITY);     ps5vk_profile_mix(&b, PS5VK_CACHE_ABI_IDENTITY);
+    ps5vk_profile_mix(&a, PS5VK_PIPELINE_CACHE_UUID_FORMAT); ps5vk_profile_mix(&b, PS5VK_PIPELINE_CACHE_UUID_FORMAT);
+    for (unsigned i = 0; i < 8; ++i) {
+        out[i] = (uint8_t)((a >> (8 * i)) & 0xffu);
+        out[8 + i] = (uint8_t)((b >> (8 * i)) & 0xffu);
+    }
+}
+
 static inline uint32_t ps5vk_profile_u32(VkDeviceSize value)
 { return value > UINT32_MAX ? UINT32_MAX : (uint32_t)value; }
 
@@ -36,6 +84,7 @@ static inline void ps5vk_physical_profile_init(
     properties->driverVersion = 1;
     properties->vendorID = info->vendor_id;
     properties->deviceID = info->device_id;
+    ps5vk_pipeline_cache_uuid(properties->pipelineCacheUUID, info->vendor_id, info->device_id);
     properties->deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
     if (info->name) {
         strncpy(properties->deviceName, info->name,

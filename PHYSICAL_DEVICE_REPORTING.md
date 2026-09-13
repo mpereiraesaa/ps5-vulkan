@@ -59,6 +59,25 @@ single-layer, sample-count-one combinations that have an implemented native
 role. Unsupported combinations return `VK_ERROR_FORMAT_NOT_SUPPORTED` and a
 zeroed property structure.
 
+### Pipeline cache identity
+
+`pipelineCacheUUID` is no longer left zero. It is derived deterministically from
+public, non-secret compatibility inputs only:
+
+| Input | Current value |
+| --- | --- |
+| vendor / device identity | `0x1002` / `0` (the same values reported in the properties block) |
+| graphics target | GFX1013 |
+| driver version | the reported `driverVersion` |
+| compiler identity and version | the pinned PSBC/ACO adapter identity |
+| cache ABI revision | the pinned cache ABI version |
+| UUID format counter | 1 |
+
+Changing any input changes the UUID, which invalidates every previously exported
+blob. The derivation is a deterministic two-stream FNV-1a mix over those values
+(`src/physical_device_profile.h`); it is an identity, not a security boundary,
+and it never depends on console state, dumps or proprietary material.
+
 ## Known Vulkan 1.0 deficits
 
 Truthful reporting intentionally exposes several failures against the complete
@@ -83,4 +102,3 @@ boundaries, untouched tails, formats, image queries and `pNext` preservation.
 The standalone public-SDK consumer records a canonical report and checksum over
 the native values. Promotion requires two runs of the identical SELF, complete
 `ps5log/1` receipts, deterministic query witnesses and clean system Close Game.
-

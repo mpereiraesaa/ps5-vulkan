@@ -167,6 +167,21 @@ int main(void)
     assert(stats.compiles == 1);
     assert(stats.hits == 2);
 
+    /* 5b. A live Vulkan pipeline cache is accepted and changes nothing about
+     * compilation: this slice stores no portable records, so the internal
+     * compiled-code cache remains the only source of executable code. */
+    VkPipelineCacheCreateInfo cache_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    VkPipelineCache vulkan_cache;
+    assert(vkCreatePipelineCache(device, &cache_info, NULL, &vulkan_cache) == VK_SUCCESS);
+    VkPipeline pipeline_with_cache;
+    assert(vkCreateComputePipelines(device, vulkan_cache, 1, &cpci, NULL, &pipeline_with_cache) == VK_SUCCESS);
+    ps5vk_compilation_cache_get_stats(device->pipeline_cache, &stats);
+    assert(stats.compiles == 1);   /* still no recompilation */
+    assert(stats.hits == 3);       /* the internal cache answered, not the blob */
+    assert(pipeline_with_cache->program.gfx == 1013);
+    vkDestroyPipeline(device, pipeline_with_cache, NULL);
+    vkDestroyPipelineCache(device, vulkan_cache, NULL);
+
     /* Narrow storage is rejected before compiler/cache access unless the exact
      * device feature is enabled. The feature mask also partitions cache keys. */
     size_t narrow_bytes = 0;
