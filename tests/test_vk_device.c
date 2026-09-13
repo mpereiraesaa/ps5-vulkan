@@ -269,6 +269,13 @@ static void lifecycle(void)
     CHECK_GRAPHICS(vkCmdDrawIndexed);
     CHECK_GRAPHICS(vkCmdCopyBufferToImage);
     CHECK_GRAPHICS(vkCmdCopyImageToBuffer);
+    CHECK_GRAPHICS(vkCmdSetLineWidth);
+    CHECK_GRAPHICS(vkCmdSetDepthBias);
+    CHECK_GRAPHICS(vkCmdSetBlendConstants);
+    CHECK_GRAPHICS(vkCmdSetDepthBounds);
+    CHECK_GRAPHICS(vkCmdSetStencilCompareMask);
+    CHECK_GRAPHICS(vkCmdSetStencilWriteMask);
+    CHECK_GRAPHICS(vkCmdSetStencilReference);
 #undef CHECK_GRAPHICS
     /* Vulkan 1.0 bookkeeping discovery: identity, scopes, and availability */
 #define CHECK_BOOKKEEPING_DEV(name) do { \

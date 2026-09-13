@@ -34,6 +34,8 @@ results; visual output is not the sole correctness signal.
   plus an optional D32 depth attachment
 - Single-level RGBA8 sampled textures with GPU upload transitions
 - One static or dynamic viewport/scissor pair, depth testing and face culling
+- Recording support for all Vulkan 1.0 dynamic-state setters; only dynamic
+  viewport/scissor currently participate in native draws
 - Bounded RGBA8 attachment readback through `vkCmdCopyImageToBuffer`
 - Native two-buffer 1920x1080 presentation
 - Explicit completion, retirement and bounded resource accounting

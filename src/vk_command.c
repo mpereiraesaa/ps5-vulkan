@@ -4,6 +4,15 @@
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
+enum {
+    PS5VK_DYNAMIC_LINE_WIDTH = 1u << 0,
+    PS5VK_DYNAMIC_DEPTH_BIAS = 1u << 1,
+    PS5VK_DYNAMIC_BLEND_CONSTANTS = 1u << 2,
+    PS5VK_DYNAMIC_DEPTH_BOUNDS = 1u << 3,
+    PS5VK_DYNAMIC_STENCIL_COMPARE_MASK = 1u << 4,
+    PS5VK_DYNAMIC_STENCIL_WRITE_MASK = 1u << 5,
+    PS5VK_DYNAMIC_STENCIL_REFERENCE = 1u << 6,
+};
 static void clear(VkCommandBuffer c)
 {
     for (unsigned j = 0; j < c->operation_count; ++j) {
@@ -16,6 +25,16 @@ static void clear(VkCommandBuffer c)
     c->operation_count = 0;
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
     c->viewport_valid = c->scissor_valid = VK_FALSE;
+    c->line_width = 1.0f;
+    c->min_depth_bounds = 0.0f;
+    c->max_depth_bounds = 1.0f;
+    c->dynamic_state_valid = 0;
+    memset(c->blend_constants, 0, sizeof(c->blend_constants));
+    memset(c->stencil_compare_mask, 0, sizeof(c->stencil_compare_mask));
+    memset(c->stencil_write_mask, 0, sizeof(c->stencil_write_mask));
+    memset(c->stencil_reference, 0, sizeof(c->stencil_reference));
+    c->stencil_compare_faces = c->stencil_write_faces =
+        c->stencil_reference_faces = 0;
     memset(c->sets, 0, sizeof(c->sets)); memset(c->set_signatures, 0, sizeof(c->set_signatures));
     memset(c->graphics_sets,0,sizeof(c->graphics_sets));
     memset(c->graphics_set_signatures,0,sizeof(c->graphics_set_signatures));
@@ -277,6 +296,82 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetScissor(VkCommandBuffer c, uint32_t first,
     if (!c || c->state != PS5VK_RECORDING || first || count != 1 ||
         !valid_scissor(scissors)) { invalid(c); return; }
     c->scissor = scissors[0]; c->scissor_valid = VK_TRUE;
+}
+static int recording(VkCommandBuffer c)
+{
+    if (!c || c->state != PS5VK_RECORDING) { invalid(c); return 0; }
+    return 1;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineWidth(VkCommandBuffer c, float width)
+{
+    /* wideLines is not advertised, so Vulkan 1.0 permits only 1.0f. */
+    if (!recording(c)) return;
+    if (width != 1.0f) { invalid(c); return; }
+    c->line_width = width;
+    c->dynamic_state_valid |= PS5VK_DYNAMIC_LINE_WIDTH;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBias(VkCommandBuffer c, float constant,
+    float clamp, float slope)
+{
+    if (!recording(c)) return;
+    /* depthBiasClamp is not advertised, so its valid value is exactly zero.
+     * Vulkan places no finiteness restriction on the other two factors; retain
+     * their float bit patterns without inventing a narrower API contract. */
+    if (clamp != 0.0f) {
+        invalid(c); return;
+    }
+    c->depth_bias_constant=constant;c->depth_bias_clamp=clamp;c->depth_bias_slope=slope;
+    c->dynamic_state_valid |= PS5VK_DYNAMIC_DEPTH_BIAS;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetBlendConstants(VkCommandBuffer c, const float values[4])
+{
+    if (!recording(c)) return;
+    if (!values) { invalid(c); return; }
+    memcpy(c->blend_constants, values, sizeof(c->blend_constants));
+    c->dynamic_state_valid |= PS5VK_DYNAMIC_BLEND_CONSTANTS;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBounds(VkCommandBuffer c, float minimum, float maximum)
+{
+    if (!recording(c)) return;
+    /* Positive-form comparisons also reject NaN. */
+    if (!(minimum >= 0.0f && maximum <= 1.0f && minimum <= maximum)) {
+        invalid(c); return;
+    }
+    c->min_depth_bounds=minimum;c->max_depth_bounds=maximum;
+    c->dynamic_state_valid |= PS5VK_DYNAMIC_DEPTH_BOUNDS;
+}
+static int stencil_faces(VkCommandBuffer c, VkStencilFaceFlags faces, uint32_t value,
+    uint32_t state[2], VkStencilFaceFlags *initialized, uint32_t bit)
+{
+    const VkStencilFaceFlags supported=VK_STENCIL_FACE_FRONT_BIT|VK_STENCIL_FACE_BACK_BIT;
+    if (!recording(c)) return 0;
+    if (!faces || (faces & ~supported)) { invalid(c); return 0; }
+    if (faces & VK_STENCIL_FACE_FRONT_BIT) state[0]=value;
+    if (faces & VK_STENCIL_FACE_BACK_BIT) state[1]=value;
+    *initialized |= faces;
+    c->dynamic_state_valid |= bit;
+    return 1;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilCompareMask(VkCommandBuffer c,
+    VkStencilFaceFlags faces, uint32_t mask)
+{
+    (void)stencil_faces(c,faces,mask,c ? c->stencil_compare_mask : NULL,
+        c ? &c->stencil_compare_faces : NULL,
+        PS5VK_DYNAMIC_STENCIL_COMPARE_MASK);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilWriteMask(VkCommandBuffer c,
+    VkStencilFaceFlags faces, uint32_t mask)
+{
+    (void)stencil_faces(c,faces,mask,c ? c->stencil_write_mask : NULL,
+        c ? &c->stencil_write_faces : NULL,
+        PS5VK_DYNAMIC_STENCIL_WRITE_MASK);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilReference(VkCommandBuffer c,
+    VkStencilFaceFlags faces, uint32_t reference)
+{
+    (void)stencil_faces(c,faces,reference,c ? c->stencil_reference : NULL,
+        c ? &c->stencil_reference_faces : NULL,
+        PS5VK_DYNAMIC_STENCIL_REFERENCE);
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(VkCommandBuffer c, VkPipelineBindPoint point, VkPipelineLayout layout,
     uint32_t first, uint32_t count, const VkDescriptorSet *sets, uint32_t dynamic_count, const uint32_t *offsets)

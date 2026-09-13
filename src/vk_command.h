@@ -85,6 +85,21 @@ struct VkCommandBuffer_T {
     VkViewport viewport;
     VkRect2D scissor;
     VkBool32 viewport_valid, scissor_valid;
+    /* Core dynamic state is retained independently of pipeline support.  A
+     * value becomes executable only when pipeline creation explicitly accepts
+     * the corresponding VkDynamicState; unsupported pipeline state therefore
+     * remains fail-closed instead of being silently ignored. */
+    float line_width;
+    float depth_bias_constant, depth_bias_clamp, depth_bias_slope;
+    float blend_constants[4];
+    float min_depth_bounds, max_depth_bounds;
+    uint32_t stencil_compare_mask[2];
+    uint32_t stencil_write_mask[2];
+    uint32_t stencil_reference[2];
+    VkStencilFaceFlags stencil_compare_faces;
+    VkStencilFaceFlags stencil_write_faces;
+    VkStencilFaceFlags stencil_reference_faces;
+    uint32_t dynamic_state_valid;
     unsigned operation_count;
     struct ps5vk_operation operations[PS5VK_MAX_OPERATIONS];
 };
