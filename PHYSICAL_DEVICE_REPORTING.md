@@ -10,6 +10,11 @@ limit, reports contradictory memory flags, supplies only one of the format
 query callbacks, or advertises graphics without its required limits is rejected
 by `vkCreateInstance`.
 
+Both shipped profiles are built by `src/device_profile_report.h`, which the
+native platform (`native/platform_ps5.c`) and the host reporting dump
+(`tools/dump_device_reporting.c`) share, so the values below are the ones the
+console really queries rather than a hand-copied table.
+
 ## Native profiles
 
 | Property | Compute build | Graphics build | Provenance |
@@ -33,6 +38,76 @@ by `vkCreateInstance`.
 
 The host library uses the same initializer with a 64 MiB mock heap. Its values
 prove API and lifecycle behavior only; they are not PS5 hardware evidence.
+
+## Reporting audit against the pinned specification and CTS
+
+`tools/check_reporting_matrix.py` (run by `make check`) dumps the reported
+values through the public query paths, joins them with the pinned Khronos core
+tables in `conformance_inventory/core_target.json`, the pinned registry header
+and the pinned CTS consumer rules in `vktApiFeatureInfo.cpp`, and writes
+`conformance_inventory/reporting_matrix.json`. Every mandatory limit, feature
+bit, format rule and shader-capability gate is classified as one of
+`satisfied`, `blocker`, `not-applicable`, `not-audited` or `violation`, and an
+undocumented `violation` fails the gate.
+
+The audit corrected seven values that were simply unset and therefore below the
+mandatory floor. They are the minimum the specification allows, not a
+measurement of GFX1013:
+
+| Limit | Before | After | Basis |
+| --- | ---: | ---: | --- |
+| `subTexelPrecisionBits` | 0 | 4 | Required Limits floor; texture precision is the texture units' behaviour |
+| `mipmapPrecisionBits` | 0 | 4 | Required Limits floor |
+| `maxVertexOutputComponents` | 0 | 64 | Floor; `src/spirv_graphics_interface.c` reflects 32 locations x 4 components |
+| `maxFragmentInputComponents` | 0 | 64 | Floor; same reflected interface bound |
+| `maxSampleMaskWords` | 0 | 1 | The pipeline validates sample-mask word 0 only |
+| `pointSizeRange` | `[0, 0]` | `[1, 1]` | `largePoints` is `VK_FALSE`, so the only accepted size is the fixed 1.0 value |
+| `lineWidthRange` | `[0, 0]` | `[1, 1]` | `wideLines` is `VK_FALSE`, same fixed 1.0 value |
+
+The same seven floors are asserted by `ps5vk_physical_profile_valid`, so a
+future edit cannot silently zero them again, and `tests/test_vk_device.c`
+checks both the reported values and the rejection of a profile that drops each
+one.
+
+### Limits that stay below the floor (blockers)
+
+These are real restrictions of the executable frontend. They are reported
+truthfully and recorded as blockers rather than inflated, which is why
+`dEQP-VK.info.device_properties` remains a diagnostic and not an acceptance
+case:
+
+| Area | Reported | Mandatory floor |
+| --- | ---: | ---: |
+| Image type/layers: `maxImageDimension1D`, `maxImageDimension3D`, `maxImageDimensionCube`, `maxImageArrayLayers` | 0 / 0 / 0 / 1 | 4096 / 256 / 4096 / 256 |
+| Attachments: `maxColorAttachments`, `maxFragmentOutputAttachments`, `maxFragmentCombinedOutputResources` | 1 | 4 |
+| Vertex input: `maxVertexInputBindings` | 1 | 16 |
+| Descriptors: `maxPerStageDescriptorSamplers`, `maxPerStageDescriptorSampledImages`, `maxPerStageDescriptorStorageImages`, `maxPerStageDescriptorInputAttachments`, `maxDescriptorSetSamplers`, `maxDescriptorSetSampledImages`, `maxDescriptorSetStorageImages`, `maxDescriptorSetInputAttachments`, `maxDescriptorSet*Dynamic` | 0-1 | 4-96 |
+| Sampling: `maxSamplerLodBias`, `sampledImage*SampleCounts`, `framebuffer*SampleCounts`, `storageImageSampleCounts`, `sampledImageIntegerSampleCounts` | 0-1 | 2 / 1+4 / 1 |
+| Other: `discreteQueuePriorities`, `maxMemoryAllocationCount`, `minTexelOffset`, `maxTexelOffset` | 0 / 2048 / 0 / 0 | 2 / 4096 / -8 / 7 |
+
+The compute-only profile additionally leaves every graphics-object limit at
+zero because `ps5vk_graphics_limits` is applied only by the graphics build.
+
+### Still not audited
+
+Fourteen `VkPhysicalDeviceFeatures` bits are reported `VK_FALSE` without a
+frontend rejection branch this repository can cite, so the matrix records them
+as `not-audited` instead of claiming either support or enforcement:
+`robustBufferAccess`, `dualSrcBlend`, `depthBiasClamp`, `occlusionQueryPrecise`,
+`vertexPipelineStoresAndAtomics`, `fragmentStoresAndAtomics`,
+`shaderImageGatherExtended`, `shaderUniformBufferArrayDynamicIndexing`,
+`shaderSampledImageArrayDynamicIndexing`, `shaderStorageBufferArrayDynamicIndexing`,
+`shaderStorageImageArrayDynamicIndexing`, `shaderFloat64`, `shaderInt64` and
+`shaderInt16`. Their dependent usage is an application-side valid-usage rule or
+is rejected by PSBC/ACO without an explicit branch; neither is proven here.
+
+The per-format mandatory rules are likewise recorded as blockers rather than
+support: the profile advertises three image formats, so the mandatory format
+family tables (including the compressed families) are not implemented. Shader
+narrow-storage capabilities are gated on the advertised extension features by
+`spirv_narrow_requirements`, and the four capabilities that require
+uniform-and-storage narrow access are rejected outright; that pairing is
+checked by the matrix against `vkGetPhysicalDeviceFeatures2KHR`.
 
 ## Query contract
 

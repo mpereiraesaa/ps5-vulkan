@@ -1085,7 +1085,10 @@
             "src/physical_device_profile.h",
             "tests/test_physical_device_profile.c",
             "tests/test_vk_device.c",
-            "PHYSICAL_DEVICE_REPORTING.md"
+            "PHYSICAL_DEVICE_REPORTING.md",
+            "tools/dump_device_reporting.c",
+            "tools/check_reporting_matrix.py",
+            "conformance_inventory/reporting_matrix.json"
           ]
         },
         "runtime": {
@@ -1772,7 +1775,9 @@
           "refs": [
             "src/physical_device_profile.h",
             "tests/test_physical_device_profile.c",
-            "PHYSICAL_DEVICE_REPORTING.md"
+            "PHYSICAL_DEVICE_REPORTING.md",
+            "tools/check_reporting_matrix.py",
+            "conformance_inventory/reporting_matrix.json"
           ]
         },
         "runtime": {
@@ -2995,7 +3000,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Format-dependent cases span many groups; no single case covers the mandatory table.",
+        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 13 class rules satisfied and 649 per-format blockers recorded.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt, vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
@@ -3017,7 +3022,9 @@
           "refs": [
             "src/vk_device.c",
             "tests/test_vk_device.c",
-            "PHYSICAL_DEVICE_REPORTING.md"
+            "PHYSICAL_DEVICE_REPORTING.md",
+            "tools/check_reporting_matrix.py",
+            "conformance_inventory/reporting_matrix.json"
           ]
         },
         "runtime": {
@@ -3143,7 +3150,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Info cases check a subset; behavioural limits are checked by their own groups.",
+        "note": "Info cases check a subset; behavioural limits are checked by their own groups. Reporting audit: every mandatory limit row classified against the reported matrix; 120 satisfied and 78 documented blockers.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
@@ -3163,7 +3170,9 @@
           "refs": [
             "src/physical_device_profile.h",
             "tests/test_physical_device_profile.c",
-            "PHYSICAL_DEVICE_REPORTING.md"
+            "PHYSICAL_DEVICE_REPORTING.md",
+            "tools/check_reporting_matrix.py",
+            "conformance_inventory/reporting_matrix.json"
           ]
         },
         "runtime": {

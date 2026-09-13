@@ -787,7 +787,7 @@
       "category": "physical-device-reporting-gap",
       "expected_status": "Fail",
       "features_required": [],
-      "rationale": "Original upstream Vulkan 1.0 limit and complete-initialization oracle remains diagnostic because the truthful bounded profile does not yet satisfy the complete graphics minima."
+      "rationale": "Original upstream Vulkan 1.0 limit and complete-initialization oracle remains diagnostic because the truthful bounded profile does not yet satisfy the complete graphics minima. The remaining gaps are enumerated as documented blockers in conformance_inventory/reporting_matrix.json (mandatory image types and array layers, attachment and descriptor counts, multisampling sample counts, format families) after the seven unset precision/interface floors were corrected."
     },
     {
       "path": "dEQP-VK.info.device_memory_properties",

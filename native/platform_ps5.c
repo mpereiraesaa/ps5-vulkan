@@ -10,6 +10,7 @@ static struct ps5vk_program_library ps5vk_compiled_library={0};
 #include "ps5log.h"
 #include "graphics_formats.h"
 #include "physical_device_profile.h"
+#include "device_profile_report.h"
 #include "vk_queue.h"
 #include <string.h>
 #include <unistd.h>
@@ -159,27 +160,21 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
 #endif
     platform->max_allocation = HEAP_BYTES;
-    VkPhysicalDeviceProperties *p = &platform->properties;
-    const VkDeviceSize allocation_granularity =
-#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW
-        131072;
+    /* The same initializer the host reporting dump uses; see
+     * src/device_profile_report.h. Object-model sizing follows
+     * PS5VK_GRAPHICS_API, the advertised graphics limit/format matrix follows
+     * PS5VK_GRAPHICS_DRAW. */
+#ifdef PS5VK_GRAPHICS_API
+    const int graphics_objects = VK_TRUE;
 #else
-        65536;
-#endif
-    const struct ps5vk_physical_profile_info profile = {
-        .name = "ps5vk gfx1013 experimental compute profile",
-        .vendor_id = 0x1002,
-        .heap_size = HEAP_BYTES,
-        .allocation_granularity = allocation_granularity,
-        .buffer_image_granularity = allocation_granularity,
-        .host_coherent = VK_FALSE,
-    };
-    ps5vk_physical_profile_init(p, &platform->memory_properties, &profile);
-#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW
-    strcpy(p->deviceName, "ps5vk gfx1013 experimental graphics profile");
+    const int graphics_objects = VK_FALSE;
 #endif
 #if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW
-    ps5vk_graphics_limits(&p->limits);
+    const int graphics_submit = VK_TRUE;
+#else
+    const int graphics_submit = VK_FALSE;
 #endif
+    ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
+        graphics_objects, graphics_submit);
     return VK_SUCCESS;
 }

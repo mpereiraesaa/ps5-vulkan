@@ -466,3 +466,40 @@ image leaves independently judge bounded `vkCmdCopyImage`. Their clear variant
 uses the same red value as the destination initializer, so `vkCmdClearColorImage`
 still has deterministic host evidence rather than an independent native pixel
 oracle. The 137/137 result remains structural coverage, not Vulkan conformance.
+
+## Vulkan 1.0 device-reporting audit (2026-09-13)
+
+The reported device surface was audited against the pinned Khronos core tables
+and the pinned CTS consumer rules, with the reported values taken from the real
+public query paths rather than from a copied table:
+
+- `tools/dump_device_reporting.c` builds its platform with the same initializer
+  as the console platform and prints every `VkPhysicalDeviceLimits` member, all
+  1.0 feature bits, the extension feature structs, the format matrix and the
+  image-format query results.
+- `tools/check_reporting_matrix.py` joins that dump with
+  `conformance_inventory/core_target.json`, the pinned registry header and
+  `vktApiFeatureInfo.cpp`, and writes
+  `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
+  report fails the gate; only documented blockers are accepted.
+
+Result on the shipped profiles: 120 mandatory limits satisfied, 78 documented
+blockers (real frontend restrictions, not inflated), 656 limits not applicable
+to a Vulkan 1.0 `VkPhysicalDeviceLimits`, 82 feature bits consistent with the
+code path that enforces them with 28 rows not audited, 13 format class rules
+satisfied with 649 documented per-format blockers, and six narrow-storage
+SPIR-V capability gates consistent with what
+`vkGetPhysicalDeviceFeatures2KHR` advertises.
+
+Seven unset values that were below the mandatory floor were corrected to the
+minimum the specification allows (`subTexelPrecisionBits`, `mipmapPrecisionBits`,
+`maxVertexOutputComponents`, `maxFragmentInputComponents`,
+`maxSampleMaskWords`, `pointSizeRange`, `lineWidthRange`); the shared validator
+now rejects a profile that drops any of them, and `tests/test_vk_device.c`
+checks both the values and the rejections.
+
+This is host-only evidence about the report itself. It does not establish
+hardware behaviour behind those limits and it does not make the profile
+conformant: the documented blockers include the mandatory image-type, attachment
+count, descriptor-count, multisample and format-family gaps. No console run was
+performed for this increment, so no new hardware claim is made.

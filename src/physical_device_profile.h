@@ -39,6 +39,29 @@ static inline int ps5vk_profile_power_of_two(VkDeviceSize value)
 #define PS5VK_COMPILER_IDENTITY_VERSION 1u
 #define PS5VK_CACHE_ABI_IDENTITY 1u
 
+/* Vulkan 1.0 mandatory floors that both shipped frontends honour.
+ *
+ * These are the values the specification's "Required Limits" table demands and
+ * the pinned CTS checks unconditionally (vktApiFeatureInfo.cpp, the
+ * checkAlways rows). They are reported because this frontend does not restrict
+ * the corresponding operation below the floor, not because GFX1013 was
+ * measured: texture-unit precision and the compiled VS/FS interface are the
+ * GPU's and PSBC/ACO's business, so the least a conformant report may claim is
+ * the floor itself. Anything this frontend genuinely restricts stays below the
+ * floor and is recorded as a blocker in PHYSICAL_DEVICE_REPORTING.md instead. */
+#define PS5VK_REQUIRED_SUBTEXEL_BITS 4u
+#define PS5VK_REQUIRED_MIPMAP_PRECISION_BITS 4u
+/* src/spirv_graphics_interface.c reflects at most LOCATIONS = 32 interface
+ * locations of four components, so 128 components are representable. */
+#define PS5VK_REQUIRED_INTERFACE_COMPONENTS 64u
+#define PS5VK_REQUIRED_SAMPLE_MASK_WORDS 1u
+/* largePoints and wideLines are VK_FALSE, so the only sizes the pipeline
+ * accepts are the fixed 1.0 values the mandatory floor requires; the matching
+ * granularity limits stay 0, which is what the CTS applies for unsupported
+ * features. */
+#define PS5VK_REQUIRED_POINT_SIZE 1.0f
+#define PS5VK_REQUIRED_LINE_WIDTH 1.0f
+
 static inline void ps5vk_profile_mix(uint64_t *h, uint32_t value)
 {
     for (unsigned byte = 0; byte < 4; ++byte) {
@@ -108,6 +131,15 @@ static inline void ps5vk_physical_profile_init(
     limits->minStorageBufferOffsetAlignment = 256;
     limits->minUniformBufferOffsetAlignment = 256;
     limits->nonCoherentAtomSize = 64;
+    limits->subTexelPrecisionBits = PS5VK_REQUIRED_SUBTEXEL_BITS;
+    limits->mipmapPrecisionBits = PS5VK_REQUIRED_MIPMAP_PRECISION_BITS;
+    limits->maxVertexOutputComponents = PS5VK_REQUIRED_INTERFACE_COMPONENTS;
+    limits->maxFragmentInputComponents = PS5VK_REQUIRED_INTERFACE_COMPONENTS;
+    limits->pointSizeRange[0] = PS5VK_REQUIRED_POINT_SIZE;
+    limits->pointSizeRange[1] = PS5VK_REQUIRED_POINT_SIZE;
+    limits->lineWidthRange[0] = PS5VK_REQUIRED_LINE_WIDTH;
+    limits->lineWidthRange[1] = PS5VK_REQUIRED_LINE_WIDTH;
+    limits->maxSampleMaskWords = PS5VK_REQUIRED_SAMPLE_MASK_WORDS;
 
     limits->maxBoundDescriptorSets = PS5VK_MAX_SETS;
     limits->maxPerStageDescriptorStorageBuffers = PS5VK_MAX_DESCRIPTORS;
@@ -163,6 +195,15 @@ static inline int ps5vk_physical_profile_valid(
         !ps5vk_profile_power_of_two(limits->minUniformBufferOffsetAlignment) ||
         !ps5vk_profile_power_of_two(limits->minStorageBufferOffsetAlignment) ||
         !ps5vk_profile_power_of_two(limits->nonCoherentAtomSize) ||
+        limits->subTexelPrecisionBits < PS5VK_REQUIRED_SUBTEXEL_BITS ||
+        limits->mipmapPrecisionBits < PS5VK_REQUIRED_MIPMAP_PRECISION_BITS ||
+        limits->maxVertexOutputComponents < PS5VK_REQUIRED_INTERFACE_COMPONENTS ||
+        limits->maxFragmentInputComponents < PS5VK_REQUIRED_INTERFACE_COMPONENTS ||
+        limits->pointSizeRange[0] < PS5VK_REQUIRED_POINT_SIZE ||
+        limits->pointSizeRange[1] < PS5VK_REQUIRED_POINT_SIZE ||
+        limits->lineWidthRange[0] < PS5VK_REQUIRED_LINE_WIDTH ||
+        limits->lineWidthRange[1] < PS5VK_REQUIRED_LINE_WIDTH ||
+        !limits->maxSampleMaskWords ||
         limits->maxBoundDescriptorSets != PS5VK_MAX_SETS ||
         limits->maxPerStageResources != PS5VK_MAX_DESCRIPTORS ||
         !limits->maxComputeSharedMemorySize ||
