@@ -62,6 +62,24 @@ int main(void)
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==VK_SUCCESS);
     assert(dynamic_pipeline->dynamic_viewport && dynamic_pipeline->dynamic_scissor);
     vkDestroyPipeline(&d,dynamic_pipeline,NULL);
+    const VkDynamicState unsupported_dynamic[]={
+        VK_DYNAMIC_STATE_LINE_WIDTH,VK_DYNAMIC_STATE_DEPTH_BIAS,
+        VK_DYNAMIC_STATE_BLEND_CONSTANTS,VK_DYNAMIC_STATE_DEPTH_BOUNDS,
+        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+        VK_DYNAMIC_STATE_STENCIL_REFERENCE};
+    unsigned before_created=created;
+    dynamic.dynamicStateCount=1;
+    for(unsigned i=0;i<sizeof(unsupported_dynamic)/sizeof(unsupported_dynamic[0]);++i) {
+        dynamic.pDynamicStates=&unsupported_dynamic[i];
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !dynamic_pipeline && created==before_created);
+    }
+    dynamic.dynamicStateCount=0;dynamic.pDynamicStates=NULL;
+    vp.pViewports=&viewport;vp.pScissors=&scissor;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==VK_SUCCESS);
+    vkDestroyPipeline(&d,dynamic_pipeline,NULL);
+    vp.pViewports=NULL;vp.pScissors=NULL;
+    dynamic.dynamicStateCount=2;dynamic.pDynamicStates=dynamic_values;
     dynamic_values[1]=VK_DYNAMIC_STATE_VIEWPORT;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==VK_ERROR_FEATURE_NOT_PRESENT && !dynamic_pipeline);
     dynamic_values[1]=(VkDynamicState)0x7fffffff;
@@ -76,10 +94,10 @@ int main(void)
     vkDestroyPipeline(&d,runtime,NULL);
     compile_fail=1;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
-    assert(acquired==2 && compiled_released==2 && created==3);
+    assert(acquired==2 && compiled_released==2 && created==4);
     compile_fail=0;backend_fail=1;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_UNKNOWN && !runtime);
-    assert(acquired==3 && compiled_released==3 && released==3);
+    assert(acquired==3 && compiled_released==3 && released==4);
     backend_fail=0;d.graphics_compiled_release=NULL;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
     assert(acquired==3);

@@ -573,3 +573,30 @@ complete QPA reconstruction, exit code zero and independent Close Game checks.
 This establishes the selected single-dispatch compute paths only. The
 selection contains no indirect graphics draw oracle, and the implementation
 does not advertise multi-draw or `VK_KHR_draw_indirect_count`.
+
+## Dynamic-state compute/transfer non-interference (validated, 2026-09-13)
+
+The focused package now registers the original upstream
+`dynamic_state.monolithic.compute_transfer` factory and selects 32 cases: 28
+single-state cases covering the seven newly wired Vulkan 1.0 setters across
+compute/transfer and before/after placement, plus the factory's four multi-state
+cases. The pinned upstream translation unit is compiled directly; its command
+recording, buffer readback and comparison oracles are unchanged. The outer
+dynamic-state group retains upstream's `cleanupDevice()` lifecycle for its
+singleton device helpers.
+
+Selection provenance, manifest shape, factory registration, original-body
+anchors and build wiring are host-validated. Two launches of the byte-identical
+payload (SELF SHA-256
+`e799270e98d5019f2eb8142c2a4a20c3095702dd1ae5f2eaa3180ebc2f449df9`,
+selection SHA-256
+`32ec25db6d4763451124d7b32afb60091e2b507a921e6856c467c77b20645235`)
+passed all 89 focused cases, including all 32 cases in this family, with zero
+Fail/NotSupported/Skip, complete QPA reconstruction and clean Close Game:
+
+- `20260913T114816880Z_PPSA99994_upstream-cts_0x3d3341b8a877`
+- `20260913T114838666Z_PPSA99994_upstream-cts_0x3d3853beabc2`
+
+This evidence proves the unchanged upstream compute/transfer oracles and that
+recording these setters does not interfere with those operations. It does not
+exercise their graphical effects and makes no Vulkan conformance claim.

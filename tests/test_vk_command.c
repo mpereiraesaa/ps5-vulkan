@@ -634,5 +634,53 @@ static void push_constant_recording(void)
     vkDestroyPipelineLayout(&d,incompatible,NULL);
     vkDestroyPipelineLayout(&d,layout,NULL);vkDestroyCommandPool(&d,p,NULL);
 }
+static void core_dynamic_state_recording(void)
+{
+    struct VkDevice_T d={0};
+    VkCommandPool p=pool(&d,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c=command(&d,p);
+    const float blend[4]={0.25f,-2.0f,3.5f,1.0f};
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetLineWidth(c,1.0f);
+    vkCmdSetDepthBias(c,-1.5f,0.0f,2.25f);
+    vkCmdSetBlendConstants(c,blend);
+    vkCmdSetDepthBounds(c,0.25f,0.75f);
+    vkCmdSetStencilCompareMask(c,VK_STENCIL_FACE_FRONT_BIT,0x1234u);
+    vkCmdSetStencilWriteMask(c,VK_STENCIL_FACE_BACK_BIT,0x5678u);
+    vkCmdSetStencilReference(c,VK_STENCIL_FACE_FRONT_AND_BACK,9u);
+    assert(c->state==PS5VK_RECORDING && c->dynamic_state_valid==0x7fu &&
+        c->operation_count==0);
+    assert(c->line_width==1.0f && c->depth_bias_constant==-1.5f &&
+        c->depth_bias_clamp==0.0f && c->depth_bias_slope==2.25f);
+    assert(!memcmp(c->blend_constants,blend,sizeof(blend)));
+    assert(c->min_depth_bounds==0.25f && c->max_depth_bounds==0.75f);
+    assert(c->stencil_compare_mask[0]==0x1234u && !c->stencil_compare_mask[1]);
+    assert(!c->stencil_write_mask[0] && c->stencil_write_mask[1]==0x5678u);
+    assert(c->stencil_reference[0]==9u && c->stencil_reference[1]==9u);
+    assert(c->stencil_compare_faces==VK_STENCIL_FACE_FRONT_BIT &&
+        c->stencil_write_faces==VK_STENCIL_FACE_BACK_BIT &&
+        c->stencil_reference_faces==VK_STENCIL_FACE_FRONT_AND_BACK);
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && !c->dynamic_state_valid &&
+        c->line_width==1.0f && !c->blend_constants[0] &&
+        c->min_depth_bounds==0.0f && c->max_depth_bounds==1.0f &&
+        !c->stencil_compare_faces && !c->stencil_write_faces &&
+        !c->stencil_reference_faces);
+
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetLineWidth(c,2.0f);assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetDepthBias(c,0.0f,1.0f,0.0f);assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetBlendConstants(c,NULL);assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetDepthBounds(c,-0.1f,1.0f);assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetDepthBounds(c,0.75f,0.25f);assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetDepthBounds(c,NAN,1.0f);assert(c->state==PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetStencilReference(c,0,1);assert(c->state==PS5VK_INVALID);
+    vkDestroyCommandPool(&d,p,NULL);
+}
 int main(void)
-{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }

@@ -17,7 +17,10 @@ from tools.build_upstream_cts import (
     write_focused_buffer_copy_source,
     write_focused_storage_source,
 )
-from tools.check_upstream_selection import _fill_update_generated_leaf_names
+from tools.check_upstream_selection import (
+    _dynamic_state_compute_generated_segments,
+    _fill_update_generated_leaf_names,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "cts/upstream/manifest.json"
@@ -419,6 +422,87 @@ class TestUpstreamRunner(unittest.TestCase):
     FIXED_FUNCTION_CASES = {
         "dEQP-VK.api.smoke.triangle",
     }
+
+    DYNAMIC_STATE_CORE_SETTERS = {
+        "line_width",
+        "depth_bias",
+        "blend_constants",
+        "depth_bounds",
+        "stencil_compare_mask",
+        "stencil_write_mask",
+        "stencil_reference",
+    }
+
+    def test_dynamic_state_compute_transfer_selection_is_exact_and_original(self):
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        selected = {
+            case["path"]: case for case in manifest["cases"]
+            if ".dynamic_state.monolithic.compute_transfer." in case["path"]
+        }
+        prefix = "dEQP-VK.dynamic_state.monolithic.compute_transfer"
+        expected = {
+            f"{prefix}.single.{operation}.{state}.{moment}"
+            for operation in ("compute", "transfer")
+            for state in self.DYNAMIC_STATE_CORE_SETTERS
+            for moment in ("before", "after")
+        }
+        expected |= {
+            f"{prefix}.multi.{operation}.{moment}"
+            for operation in ("compute", "transfer")
+            for moment in ("before", "after")
+        }
+        self.assertEqual(expected, set(selected))
+        self.assertEqual(32, len(selected))
+        for case in selected.values():
+            self.assertEqual("dynamic-state-non-interference", case["category"])
+            self.assertEqual("Pass", case["expected_status"])
+            self.assertEqual([], case["features_required"])
+            source_line = "1264" if ".multi." in case["path"] else "1227"
+            self.assertEqual(
+                "external/vulkancts/modules/vulkan/dynamic_state/"
+                f"vktDynamicStateComputeTests.cpp:{source_line}", case["source"])
+
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (REPO_ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn("createDynamicStateComputeTests", package)
+        self.assertIn('"monolithic"', package)
+        self.assertIn("cleanupDynamicStateGroup", package)
+        self.assertIn("vkt::DynamicState::cleanupDevice()", package)
+        self.assertIn("vktDynamicStateComputeTests.cpp", builder)
+        self.assertNotIn("focused_sources / \"vktDynamicStateComputeTests.cpp\"", builder)
+
+        source = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                  "vulkan/dynamic_state/vktDynamicStateComputeTests.cpp")
+        if source.exists():
+            text = source.read_text(encoding="utf-8")
+            # Pin both original operation bodies and their result oracles.
+            self.assertIn("DynamicStateComputeInstance::iterateTransfer", text)
+            self.assertIn("vkd.cmdCopyBuffer", text)
+            self.assertIn("if (orig != res)", text)
+            self.assertIn("DynamicStateComputeInstance::iterateCompute", text)
+            self.assertIn("vkd.cmdDispatch(cmdBuffer, 1u, 1u, 1u)", text)
+            self.assertIn("if (bufferData[idx] != 1u)", text)
+            self.assertIn("createDynamicStateComputeTests", text)
+            self.assertIn("if (dynamicStateList[stateIdx] == "
+                          "VK_DYNAMIC_STATE_STENCIL_REFERENCE)", text)
+
+    def test_dynamic_state_generated_segments_are_fail_closed(self):
+        source = r'''
+        const VkDynamicState dynamicStateList[] = {
+            VK_DYNAMIC_STATE_LINE_WIDTH,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+        };
+        auto prefixLen = strlen("VK_DYNAMIC_STATE_");
+        auto name = de::toLower(fullName.substr(prefixLen));
+        auto stateName = getDynamicStateBriefName(state);
+        '''
+        self.assertEqual(
+            {"line_width", "stencil_reference"},
+            _dynamic_state_compute_generated_segments(source))
+        self.assertEqual(set(), _dynamic_state_compute_generated_segments(
+            source.replace("getDynamicStateBriefName(state)", "other(state)")))
+        self.assertEqual(set(), _dynamic_state_compute_generated_segments(
+            source.replace("de::toLower(fullName.substr(prefixLen))", "fullName")))
 
     def test_fixed_function_selection_uses_original_pixel_oracle(self):
         manifest = json.loads(MANIFEST_PATH.read_text())

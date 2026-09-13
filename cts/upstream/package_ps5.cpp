@@ -15,6 +15,8 @@
 #include "vktPipelinePushConstantTests.hpp"
 #include "vktPipelineCacheTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
+#include "vktDynamicStateComputeTests.hpp"
+#include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
 #include "deUniquePtr.hpp"
@@ -23,6 +25,32 @@ namespace cts
 {
 namespace ps5
 {
+
+namespace
+{
+
+void createDynamicStateMonolithicChildren(tcu::TestCaseGroup *group,
+                                          vk::PipelineConstructionType pipelineConstructionType)
+{
+    group->addChild(vkt::DynamicState::createDynamicStateComputeTests(
+        group->getTestContext(), pipelineConstructionType));
+}
+
+void cleanupDynamicStateGroup(tcu::TestCaseGroup *)
+{
+    // The upstream module holds device helpers in file-local singletons.  Keep
+    // the same outer-group cleanup lifetime as vktDynamicStateTests.cpp.
+    vkt::DynamicState::cleanupDevice();
+}
+
+void initDynamicStateGroup(tcu::TestCaseGroup *group)
+{
+    group->addChild(vkt::createTestGroup(
+        group->getTestContext(), "monolithic", createDynamicStateMonolithicChildren,
+        vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+}
+
+} // namespace
 
 FocusedVkTestPackage::FocusedVkTestPackage(tcu::TestContext &testCtx)
     : BaseTestPackage(testCtx, "dEQP-VK")
@@ -35,6 +63,12 @@ FocusedVkTestPackage::~FocusedVkTestPackage(void)
 
 void FocusedVkTestPackage::init(void)
 {
+    // dynamic_state.monolithic.compute_transfer: unchanged upstream compute /
+    // transfer non-interference bodies and oracles.  The outer cleanup callback
+    // releases the module's singleton device helpers at the upstream lifetime.
+    addChild(vkt::createTestGroup(m_testCtx, "dynamic_state", initDynamicStateGroup,
+                                  cleanupDynamicStateGroup));
+
     // info group: original upstream enumeration and physical-device query
     // bodies. cases.txt remains the execution filter; registering these
     // factories does not replace their result oracles.

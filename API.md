@@ -24,6 +24,17 @@ hardware acceptance.
   stencil and depth bounds are unsupported.
 - Face culling and front-face selection are encoded by the native backend.
 
+All seven remaining Vulkan 1.0 dynamic-state setters are public and retain
+validated command-buffer state: line width, depth bias, blend constants, depth
+bounds and the three stencil masks/references. Because `wideLines` and
+`depthBiasClamp` are not advertised, their valid recording subset is line width
+`1.0` and depth-bias clamp `0.0`. Graphics pipeline creation still rejects
+these seven `VkDynamicState` values: the native draw backend does not yet
+consume them. Recording therefore establishes a real, non-interfering state
+contract without claiming dynamic blending, stencil, depth bounds or depth
+bias execution. Viewport and scissor remain the only dynamic states consumed by
+draws.
+
 ## Images and sampling
 
 | Format | Supported role |

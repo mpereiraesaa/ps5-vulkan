@@ -11,8 +11,8 @@ static int dynamic_states(const VkPipelineDynamicStateCreateInfo *info,
     *viewport=*scissor=VK_FALSE;
     if(!info)return 1;
     if(info->sType!=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO ||
-       info->pNext || info->flags || !info->dynamicStateCount ||
-       info->dynamicStateCount>2 || !info->pDynamicStates)return 0;
+       info->pNext || info->flags || info->dynamicStateCount>2 ||
+       (info->dynamicStateCount && !info->pDynamicStates))return 0;
     for(uint32_t i=0;i<info->dynamicStateCount;++i) {
         VkBool32 *flag;
         if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_VIEWPORT)flag=viewport;

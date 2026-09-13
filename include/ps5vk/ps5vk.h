@@ -539,6 +539,22 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetScissor(
     uint32_t scissorCount,
     const VkRect2D* pScissors);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineWidth(
+    VkCommandBuffer commandBuffer, float lineWidth);
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBias(
+    VkCommandBuffer commandBuffer, float depthBiasConstantFactor,
+    float depthBiasClamp, float depthBiasSlopeFactor);
+VKAPI_ATTR void VKAPI_CALL vkCmdSetBlendConstants(
+    VkCommandBuffer commandBuffer, const float blendConstants[4]);
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBounds(
+    VkCommandBuffer commandBuffer, float minDepthBounds, float maxDepthBounds);
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilCompareMask(
+    VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t compareMask);
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilWriteMask(
+    VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t writeMask);
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilReference(
+    VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t reference);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(
     VkCommandBuffer commandBuffer,
     VkPipelineBindPoint pipelineBindPoint,

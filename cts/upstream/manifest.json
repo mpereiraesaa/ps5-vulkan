@@ -474,6 +474,262 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Original upstream dependency oracle generates VkDispatchIndirectCommand data in a compute dispatch, inserts its buffer barrier, consumes it through vkCmdDispatchIndirect and validates the final storage-buffer result."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.line_width.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetLineWidth before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.line_width.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetLineWidth after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.depth_bias.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetDepthBias before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.depth_bias.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetDepthBias after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.blend_constants.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetBlendConstants before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.blend_constants.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetBlendConstants after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.depth_bounds.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetDepthBounds before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.depth_bounds.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetDepthBounds after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.stencil_compare_mask.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetStencilCompareMask before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.stencil_compare_mask.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetStencilCompareMask after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.stencil_write_mask.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetStencilWriteMask before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.stencil_write_mask.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetStencilWriteMask after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.stencil_reference.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetStencilReference before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.compute.stencil_reference.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream compute non-interference body records vkCmdSetStencilReference after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.line_width.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetLineWidth before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.line_width.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetLineWidth after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.depth_bias.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetDepthBias before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.depth_bias.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetDepthBias after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.blend_constants.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetBlendConstants before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.blend_constants.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetBlendConstants after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.depth_bounds.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetDepthBounds before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.depth_bounds.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetDepthBounds after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.stencil_compare_mask.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetStencilCompareMask before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.stencil_compare_mask.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetStencilCompareMask after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.stencil_write_mask.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetStencilWriteMask before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.stencil_write_mask.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetStencilWriteMask after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.stencil_reference.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetStencilReference before the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.single.transfer.stencil_reference.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1227",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream transfer non-interference body records vkCmdSetStencilReference after the operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.multi.compute.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1264",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream multi-state compute non-interference body records all core dynamic setters before each operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.multi.compute.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1264",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream multi-state compute non-interference body records all core dynamic setters after each operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.multi.transfer.before",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1264",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream multi-state transfer non-interference body records all core dynamic setters before each operation and preserves its unchanged buffer-readback oracle."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.compute_transfer.multi.transfer.after",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp:1264",
+      "category": "dynamic-state-non-interference",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "Original upstream multi-state transfer non-interference body records all core dynamic setters after each operation and preserves its unchanged buffer-readback oracle."
     }
   ],
   "diagnostics": [

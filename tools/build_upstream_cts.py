@@ -710,6 +710,10 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeTestsUtil.cpp",
+        # Original dynamic-state compute/transfer non-interference module.  It
+        # is compiled directly from the pinned checkout; no body or oracle is
+        # copied into the integration.
+        cts_root / "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp",
         # Genuine upstream push-constant factory. The focused package registers
         # the complete group and cases.txt selects only the audited compute leaf.
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelinePushConstantTests.cpp",

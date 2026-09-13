@@ -25,8 +25,14 @@ EXPECTED_VULKAN10_TOTAL = 137
 # prototype, a dispatch entry and an implementation. This is not a semantic
 # support claim; see the report's advertised-obligation table for what each
 # command may actually be used for.
-EXPECTED_FULLY_WIRED_TOTAL = 115
-EXPECTED_MISSING_TOTAL = 22
+EXPECTED_FULLY_WIRED_TOTAL = 122
+EXPECTED_MISSING_TOTAL = 15
+
+REQUIRED_DYNAMIC_STATE_COMMANDS = {
+    "vkCmdSetLineWidth", "vkCmdSetDepthBias", "vkCmdSetDepthBounds",
+    "vkCmdSetBlendConstants", "vkCmdSetStencilCompareMask",
+    "vkCmdSetStencilWriteMask", "vkCmdSetStencilReference",
+}
 
 REQUIRED_BOOKKEEPING_COMMANDS = {
     "vkGetImageSubresourceLayout",
@@ -94,15 +100,7 @@ EXPECTED_MISSING_CATEGORIES = {
         "vkCmdNextSubpass",
         "vkCmdExecuteCommands",
     },
-    "Dynamic State": {
-        "vkCmdSetDepthBias",
-        "vkCmdSetDepthBounds",
-        "vkCmdSetStencilCompareMask",
-        "vkCmdSetStencilReference",
-        "vkCmdSetStencilWriteMask",
-        "vkCmdSetBlendConstants",
-        "vkCmdSetLineWidth",
-    },
+    "Dynamic State": set(),
     "Sparse": {
         "vkQueueBindSparse",
     },
@@ -180,6 +178,7 @@ def audit_command_surface(repo_root: Path) -> dict:
     missing_required = sorted(
         (REQUIRED_BOOKKEEPING_COMMANDS | REQUIRED_SYNC_OBJECT_COMMANDS |
          REQUIRED_BUFFER_TRANSFER_COMMANDS | REQUIRED_INDIRECT_COMMANDS) - fully_wired
+        | (REQUIRED_DYNAMIC_STATE_COMMANDS - fully_wired)
     )
 
     errors = []
