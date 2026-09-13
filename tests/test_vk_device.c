@@ -1,6 +1,7 @@
 #include "vk_internal.h"
 #include "graphics_formats.h"
 #include "physical_device_profile.h"
+#include "device_profile_report.h"
 #include <assert.h>
 #include <math.h>
 #include <stddef.h>
@@ -118,7 +119,71 @@ static void lifecycle(void)
     assert(gl.maxDrawIndexedIndexValue==UINT32_MAX);
     assert(gl.subPixelPrecisionBits==8);
     /* Raster quantization is not a claim about sampler/viewport precision. */
-    assert(!gl.subTexelPrecisionBits && !gl.mipmapPrecisionBits && !gl.viewportSubPixelBits);
+    assert(!gl.viewportSubPixelBits);
+    /* The full graphics profile reports the Vulkan 1.0 mandatory floors for
+     * texture precision and the compiled VS/FS interface, plus the fixed 1.0
+     * sizes implied by largePoints/wideLines being VK_FALSE. Those come from
+     * the shared initializer, so they hold for every shipped profile, and the
+     * validator rejects a report that drops any of them. */
+    {
+        VkPhysicalDeviceProperties profile;
+        VkPhysicalDeviceMemoryProperties profile_memory;
+        ps5vk_device_profile_init(&profile, &profile_memory, VK_TRUE, VK_TRUE);
+        const VkPhysicalDeviceLimits *pl = &profile.limits;
+        assert(pl->subTexelPrecisionBits==PS5VK_REQUIRED_SUBTEXEL_BITS);
+        assert(pl->mipmapPrecisionBits==PS5VK_REQUIRED_MIPMAP_PRECISION_BITS);
+        assert(pl->maxVertexOutputComponents==PS5VK_REQUIRED_INTERFACE_COMPONENTS);
+        assert(pl->maxFragmentInputComponents==PS5VK_REQUIRED_INTERFACE_COMPONENTS);
+        assert(pl->maxSampleMaskWords==PS5VK_REQUIRED_SAMPLE_MASK_WORDS);
+        assert(pl->pointSizeRange[0]==PS5VK_REQUIRED_POINT_SIZE &&
+               pl->pointSizeRange[1]==PS5VK_REQUIRED_POINT_SIZE);
+        assert(pl->lineWidthRange[0]==PS5VK_REQUIRED_LINE_WIDTH &&
+               pl->lineWidthRange[1]==PS5VK_REQUIRED_LINE_WIDTH);
+        assert(strcmp(profile.deviceName, PS5VK_PROFILE_GRAPHICS_NAME)==0);
+        assert(profile_memory.memoryHeaps[0].size==PS5VK_PROFILE_GRAPHICS_HEAP_BYTES);
+        /* The compute-only profile shares the same floors. */
+        VkPhysicalDeviceProperties compute_profile;
+        VkPhysicalDeviceMemoryProperties compute_memory;
+        ps5vk_device_profile_init(&compute_profile, &compute_memory, VK_FALSE, VK_FALSE);
+        assert(compute_profile.limits.subTexelPrecisionBits==PS5VK_REQUIRED_SUBTEXEL_BITS);
+        assert(compute_profile.limits.pointSizeRange[1]==PS5VK_REQUIRED_POINT_SIZE);
+        assert(strcmp(compute_profile.deviceName, PS5VK_PROFILE_COMPUTE_NAME)==0);
+        assert(compute_memory.memoryHeaps[0].size==PS5VK_PROFILE_COMPUTE_HEAP_BYTES);
+        const VkDeviceSize max_allocation = PS5VK_PROFILE_GRAPHICS_HEAP_BYTES;
+        const VkQueueFlags queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+        assert(ps5vk_physical_profile_valid(&profile, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        VkPhysicalDeviceProperties broken = profile;
+        broken.limits.subTexelPrecisionBits = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.mipmapPrecisionBits = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxVertexOutputComponents = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxFragmentInputComponents = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxSampleMaskWords = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.pointSizeRange[0] = 0.0f;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.lineWidthRange[1] = 0.0f;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        assert(ps5vk_physical_profile_valid(&profile, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+    }
     /* Enumerate all combinations of known core image role bits, not only the
      * three happy paths. Mixed executable/non-executable roles must fail. */
     for(unsigned usage=0;usage<256;++usage) {
