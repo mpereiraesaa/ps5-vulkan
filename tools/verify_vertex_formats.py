@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify bounded GPU fetch and component completion for 32-bit integer vertex formats."""
+"""Verify bounded GPU fetch, conversion and component order for vertex formats."""
 import argparse
 import hashlib
 import json
@@ -7,14 +7,16 @@ from pathlib import Path
 
 
 CASES = (
-    ("r32-sint", "99", "sint", "1"),
-    ("rg32-sint", "102", "sint", "2"),
-    ("rgb32-sint", "105", "sint", "3"),
-    ("rgba32-sint", "108", "sint", "4"),
-    ("r32-uint", "98", "uint", "1"),
-    ("rg32-uint", "101", "uint", "2"),
-    ("rgb32-uint", "104", "uint", "3"),
-    ("rgba32-uint", "107", "uint", "4"),
+    ("r32-sint", "99", "sint", "1", "4", "ffffffff"),
+    ("rg32-sint", "102", "sint", "2", "8", "ffffffff"),
+    ("rgb32-sint", "105", "sint", "3", "12", "ffffffff"),
+    ("rgba32-sint", "108", "sint", "4", "16", "ffffffff"),
+    ("r32-uint", "98", "uint", "1", "4", "ffffffff"),
+    ("rg32-uint", "101", "uint", "2", "8", "ffffffff"),
+    ("rgb32-uint", "104", "uint", "3", "12", "ffffffff"),
+    ("rgba32-uint", "107", "uint", "4", "16", "ffffffff"),
+    ("rgba8-unorm", "37", "unorm", "4", "4", "ffaa5511"),
+    ("bgra8-unorm", "44", "unorm", "4", "4", "ffaa5511"),
 )
 
 
@@ -29,11 +31,11 @@ def validate(log, metadata, artifact):
             "artifact identity")
     require(artifact.get("stage") == "graphics-api-native-presentation-reuse" and
             artifact.get("scissor_probe") == 8 and
-            artifact.get("geometry_fixture") == "integer-vertex-formats" and
+            artifact.get("geometry_fixture") == "vertex-format-cases" and
             artifact.get("compiler") == "runtime-psbc-aco" and
             artifact.get("graphics_shader_source") == "owned-runtime-vertex-formats" and
             set(artifact.get("runtime_graphics_inputs", {})) ==
-            {"vertex_sint", "vertex_uint", "fragment"} and
+            {"vertex_sint", "vertex_uint", "vertex_unorm", "fragment"} and
             artifact.get("termination") == "shell-close-after-cleanup", "artifact profile")
     require(hashlib.sha256(log).hexdigest() == metadata.get("sha256"), "log hash")
     require(metadata.get("clean") is True and metadata.get("bye") is True and
@@ -72,13 +74,13 @@ def validate(log, metadata, artifact):
     presents = matching("PS5VK_VIDEO_PRESENTED")
     ends = matching("PS5VK_GRAPHICS_REUSE_END")
     require(all(len(group) == len(CASES) for group in
-                (inputs, results, submits, completes, presents, ends)), "eight GPU cases")
+                (inputs, results, submits, completes, presents, ends)), "all GPU cases")
     require(len(compute_results) == 12 * len(CASES) and
             len(compute_ends) == 2 * len(CASES) and
             all(fields.get("rounds") == "6" and fields.get("dispatches") == "12"
                 for _, fields in compute_ends), "compute regression")
     last = -1
-    for case, (name, format_number, numeric, components) in enumerate(CASES):
+    for case, (name, format_number, numeric, components, stride, word) in enumerate(CASES):
         ordered = [group[case][0] for group in
                    (inputs, submits, completes, results, presents, ends)]
         pre_compute = compute_ends[2 * case][0]
@@ -93,20 +95,21 @@ def validate(log, metadata, artifact):
                 source.get("format") == result.get("format") == format_number and
                 source.get("numeric") == result.get("numeric") == numeric and
                 source.get("components") == result.get("components") == components and
-                source.get("stride") == str(int(components) * 4) and
-                source.get("word") == "ffffffff", "case identity")
+                source.get("stride") == stride and source.get("word") == word,
+                "case identity")
         require(result.get("expected_white") == "471744" and
                 result.get("other") == "0" and result.get("first_other") == "00000000" and
                 result.get("valid") == "1" and submits[case][1].get("rc") == "0",
-                "GPU integer vertex-format oracle")
+                "GPU vertex-format oracle")
     require(any(index > last and name == "PS5VK_PLATFORM_CLOSE" and
                 fields.get("rc") == "0" and fields.get("allocations_bytes") == "0"
                 for index, (name, fields) in enumerate(records)), "resource cleanup")
     require(any(name == "PS5VK_GRAPHICS_API_CLEANUP_COMPLETE" for name, _ in records),
             "API cleanup")
     return {"self_sha256": identity, "cases": len(CASES),
-            "formats": [name for name, _, _, _ in CASES], "gpu_readback": True,
-            "component_completion": True, "process_exit_verified": False}
+            "formats": [case[0] for case in CASES], "gpu_readback": True,
+            "component_completion": True, "normalized_channel_order": True,
+            "process_exit_verified": False}
 
 
 def main():

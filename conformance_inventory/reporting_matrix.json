@@ -3435,7 +3435,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8B8A8_UNORM lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8B8A8_UNORM reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R8G8B8A8_UNORM",
       "kind": "format-cell",
@@ -3443,7 +3443,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -4043,7 +4043,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_B8G8R8A8_UNORM lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_B8G8R8A8_UNORM reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_B8G8R8A8_UNORM",
       "kind": "format-cell",
@@ -4051,7 +4051,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -25975,9 +25975,9 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 638,
+      "blocker": 636,
       "not-applicable": 2,
-      "satisfied": 24
+      "satisfied": 26
     },
     "limits": {
       "blocker": 72,

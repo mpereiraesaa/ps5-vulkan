@@ -277,19 +277,23 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
             struct ps5vk_vertex_format_case c;
             if(ps5vk_vertex_format_case(witness_index,&c) ||
                pipeline->vertex_attributes[0].format!=c.format ||
-               pipeline->vertex_binding.stride!=c.components*4u)
+               pipeline->vertex_binding.stride!=(c.numeric==PS5VK_VERTEX_PROBE_UNORM?4u:c.components*4u))
                 fail("vertex-format-case",-1);
             /* This probe isolates vertex conversion. Runtime indexed draws
              * are a separate unsupported combination, so firstVertex=0 maps
              * directly to the three records beginning at the binding offset. */
             const size_t start=24u;
-            for(unsigned vertex=0;vertex<3;++vertex)
-                for(unsigned component=0;component<c.components;++component)
-                    ((uint32_t *)((unsigned char *)vertices+vertex_memory_offset+start+
-                        vertex*pipeline->vertex_binding.stride))[component]=UINT32_MAX;
-            ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_FORMAT_INPUT case=%u name=%s format=%u numeric=%s components=%u stride=%u word=ffffffff",
-                witness_index,c.name,c.format,c.numeric==PS5VK_VERTEX_PROBE_SINT?"sint":"uint",
-                c.components,pipeline->vertex_binding.stride);
+            for(unsigned vertex=0;vertex<3;++vertex) {
+                uint32_t *record=(uint32_t *)((unsigned char *)vertices+
+                    vertex_memory_offset+start+vertex*pipeline->vertex_binding.stride);
+                if(c.numeric==PS5VK_VERTEX_PROBE_UNORM)*record=c.raw_word;
+                else for(unsigned component=0;component<c.components;++component)
+                    record[component]=c.raw_word;
+            }
+            ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_FORMAT_INPUT case=%u name=%s format=%u numeric=%s components=%u stride=%u word=%08x",
+                witness_index,c.name,c.format,c.numeric==PS5VK_VERTEX_PROBE_SINT?"sint":
+                    (c.numeric==PS5VK_VERTEX_PROBE_UINT?"uint":"unorm"),
+                c.components,pipeline->vertex_binding.stride,c.raw_word);
         } else memcpy((unsigned char *)vertices+vertex_memory_offset+48,triangle,sizeof(triangle));
         VkMappedMemoryRange flush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=vertex_memory,.size=VK_WHOLE_SIZE};
         CHECK(vkFlushMappedMemoryRanges(d,1,&flush));vkUnmapMemory(d,vertex_memory);
@@ -425,7 +429,8 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         }
         valid=expected==471744u && !other;
         ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_FORMAT_READBACK case=%u name=%s format=%u numeric=%s components=%u expected_white=%zu other=%zu first_other=%08x valid=%d",
-            witness_index,c.name,c.format,c.numeric==PS5VK_VERTEX_PROBE_SINT?"sint":"uint",
+            witness_index,c.name,c.format,c.numeric==PS5VK_VERTEX_PROBE_SINT?"sint":
+                (c.numeric==PS5VK_VERTEX_PROBE_UINT?"uint":"unorm"),
             c.components,expected,other,first_other,valid);
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==7) {
         struct ps5vk_sampled_format_case c;size_t expected=0,other=0;
@@ -685,22 +690,24 @@ int main(void)
         li.setLayoutCount=1;li.pSetLayouts=&set_layout;
     }
     VkPipelineLayout layout; CHECK(vkCreatePipelineLayout(device,&li,NULL,&layout));
-    const struct ps5vk_graphics_module_key *modules[3]={&key->vertex,&key->fragment,NULL};
+    const struct ps5vk_graphics_module_key *modules[4]={&key->vertex,&key->fragment,NULL,NULL};
     unsigned shader_count=2,fragment_shader=1;
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
     const struct ps5vk_graphics_module_key vertex_sint={
         .words=ps5vk_runtime_vertex_sint,.word_count=sizeof(ps5vk_runtime_vertex_sint)/4,.entry="main"};
     const struct ps5vk_graphics_module_key vertex_uint={
         .words=ps5vk_runtime_vertex_uint,.word_count=sizeof(ps5vk_runtime_vertex_uint)/4,.entry="main"};
+    const struct ps5vk_graphics_module_key vertex_unorm={
+        .words=ps5vk_runtime_vertex_unorm,.word_count=sizeof(ps5vk_runtime_vertex_unorm)/4,.entry="main"};
     const struct ps5vk_graphics_module_key vertex_format_fragment={
         .words=ps5vk_runtime_vertex_format_fragment,
         .word_count=sizeof(ps5vk_runtime_vertex_format_fragment)/4,.entry="main"};
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==8) {
-        modules[0]=&vertex_sint;modules[1]=&vertex_uint;modules[2]=&vertex_format_fragment;
-        shader_count=3;fragment_shader=2;
+        modules[0]=&vertex_sint;modules[1]=&vertex_uint;modules[2]=&vertex_unorm;
+        modules[3]=&vertex_format_fragment;shader_count=4;fragment_shader=3;
     }
 #endif
-    VkShaderModule shaders[3]; VkPipelineShaderStageCreateInfo stages[2];
+    VkShaderModule shaders[4]; VkPipelineShaderStageCreateInfo stages[2];
     for (unsigned j=0;j<shader_count;++j) {
         VkShaderModuleCreateInfo si={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .codeSize=modules[j]->word_count*4,.pCode=modules[j]->words};
@@ -728,18 +735,36 @@ int main(void)
     VkPipelineDepthStencilStateCreateInfo depth={.sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable=VK_TRUE,.depthWriteEnable=VK_TRUE,.depthCompareOp=VK_COMPARE_OP_LESS};
     if(use_depth)pi.pDepthStencilState=&depth;
-    VkSpecializationMapEntry component_entry={0,0,sizeof(uint32_t)};
+    VkSpecializationMapEntry component_entries[4]={{0,0,sizeof(uint32_t)},
+        {1,sizeof(float),sizeof(float)},{2,2*sizeof(float),sizeof(float)},
+        {3,3*sizeof(float),sizeof(float)}};
     uint32_t component_count=4;
-    VkSpecializationInfo component_specialization={1,&component_entry,sizeof(component_count),&component_count};
+    float expected_components[4];
+    VkSpecializationInfo component_specialization={1,component_entries,
+        sizeof(component_count),&component_count};
     for (unsigned iteration=0;iteration<(PS5VK_GRAPHICS_WITNESSES?(PS5VK_GRAPHICS_WITNESSES==2?4u:6u):(PS5VK_GRAPHICS_SCISSOR_PROBE==8?PS5VK_VERTEX_FORMAT_CASES:(PS5VK_GRAPHICS_SCISSOR_PROBE==7?PS5VK_SAMPLED_FORMAT_CASES:(PS5VK_GRAPHICS_SCISSOR_PROBE==6?PS5VK_SAMPLER_CORE_CASES:((PS5VK_GRAPHICS_SCISSOR_PROBE==2 || PS5VK_GRAPHICS_SCISSOR_PROBE==3)?10u:(PS5VK_GRAPHICS_SCENE?1u:3u))))));++iteration) {
         unsigned witness_index=PS5VK_GRAPHICS_WITNESSES==2 && iteration==3?5:iteration;
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
         if(PS5VK_GRAPHICS_SCISSOR_PROBE==8) {
             struct ps5vk_vertex_format_case c;
             if(ps5vk_vertex_format_case(witness_index,&c))fail("vertex-format-case",-1);
-            runtime_binding.stride=c.components*4u;runtime_attribute.format=c.format;
+            runtime_binding.stride=c.numeric==PS5VK_VERTEX_PROBE_UNORM?4u:c.components*4u;
+            runtime_attribute.format=c.format;
             component_count=c.components;
-            stages[0].module=shaders[c.numeric==PS5VK_VERTEX_PROBE_SINT?0:1];
+            if(c.numeric==PS5VK_VERTEX_PROBE_UNORM) {
+                memcpy(expected_components,c.expected,sizeof(expected_components));
+                for(unsigned j=0;j<4;++j)component_entries[j].offset=j*sizeof(float);
+                component_specialization.mapEntryCount=4;
+                component_specialization.dataSize=sizeof(expected_components);
+                component_specialization.pData=expected_components;
+                stages[0].module=shaders[2];
+            } else {
+                component_entries[0].offset=0;
+                component_specialization.mapEntryCount=1;
+                component_specialization.dataSize=sizeof(component_count);
+                component_specialization.pData=&component_count;
+                stages[0].module=shaders[c.numeric==PS5VK_VERTEX_PROBE_SINT?0:1];
+            }
             stages[0].pSpecializationInfo=&component_specialization;
         }
 #endif

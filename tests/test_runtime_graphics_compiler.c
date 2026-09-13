@@ -176,6 +176,25 @@ int main(void)
         free((void *)integer_input.fragment.words);
     }
 
+    struct ps5vk_graphics_key packed_input={
+        .vertex=read_module("build/runtime-graphics/vertex_unorm.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/vertex_input.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .vertex_binding_count=1,.vertex_attribute_count=1,
+        .vertex_bindings=&binding,.vertex_attributes=&attribute};
+    binding.stride=4;
+    const VkFormat packed_formats[]={VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_B8G8R8A8_UNORM};
+    for(unsigned i=0;i<2;++i) {
+        attribute.format=packed_formats[i];
+        assert(ps5vk_spirv_graphics_interface(&packed_input));
+        assert(ps5vk_runtime_graphics_compile(NULL,&packed_input,&out)==VK_SUCCESS && out);
+        ps5vk_runtime_graphics_free(NULL,out);
+    }
+    free((void *)packed_input.vertex.words);free((void *)packed_input.fragment.words);
+
     cache=ps5vk_compilation_cache_create(4,1024*1024);
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&parameters,&cold)==VK_SUCCESS);
     vertex_scale=1.25f;

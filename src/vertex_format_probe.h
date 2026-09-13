@@ -4,11 +4,12 @@
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 
-#define PS5VK_VERTEX_FORMAT_CASES 8u
+#define PS5VK_VERTEX_FORMAT_CASES 10u
 
 enum ps5vk_vertex_probe_numeric {
     PS5VK_VERTEX_PROBE_SINT = 1,
     PS5VK_VERTEX_PROBE_UINT = 2,
+    PS5VK_VERTEX_PROBE_UNORM = 3,
 };
 
 struct ps5vk_vertex_format_case {
@@ -16,6 +17,8 @@ struct ps5vk_vertex_format_case {
     VkFormat format;
     uint32_t components;
     enum ps5vk_vertex_probe_numeric numeric;
+    uint32_t raw_word;
+    float expected[4];
 };
 
 int ps5vk_vertex_format_case(unsigned index,

@@ -32,7 +32,7 @@ def main():
         raise SystemExit("PS5VK_GRAPHICS_OBSERVE requires graphics profile API and must be 0 or 1")
     scissor_probe = os.environ.get("PS5VK_GRAPHICS_SCISSOR_PROBE", "0")
     if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8") or (scissor_probe != "0" and not graphics_api):
-        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0 off, 1 tile, 2 cube quadrants, 3 planar quadrants, 4 sampler UV ladder, 5 RGB presentation, 6 core sampler addressing, 7 sampled format candidates, 8 integer vertex formats")
+        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0 off, 1 tile, 2 cube quadrants, 3 planar quadrants, 4 sampler UV ladder, 5 RGB presentation, 6 core sampler addressing, 7 sampled format candidates, 8 vertex formats")
     scene_split = os.environ.get("PS5VK_GRAPHICS_SCENE_SPLIT", "0")
     if scene_split not in ("0", "1") or (scene_split == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_SCENE_SPLIT requires graphics profile API and must be 0 or 1")
@@ -182,7 +182,7 @@ def main():
             if scissor_probe != "0" and not scene and not (scissor_probe == "8" and use_runtime_graphics):
                 raise SystemExit("Scissor diagnostic requires scene3d.pipe")
             if scissor_probe == "8" and not use_runtime_graphics:
-                raise SystemExit("Integer vertex-format diagnostic requires runtime graphics")
+                raise SystemExit("Vertex-format diagnostic requires runtime graphics")
             common += ["-DPS5VK_GRAPHICS_SCISSOR_PROBE=" + scissor_probe]
             if scene_split == "1" and not scene:
                 raise SystemExit("Split-draw diagnostic requires scene3d.pipe")
@@ -311,7 +311,7 @@ def main():
                             scene="two-cubes" if scene else "triangle-controls",
                             scissor_probe=int(scissor_probe),
                             scissor_depth_comparison=scissor_probe in ("2", "3"),
-                            geometry_fixture="sampler-uv-ladder" if scissor_probe == "4" else ("sampler-core-addressing" if scissor_probe == "6" else ("sampled-format-candidates" if scissor_probe == "7" else ("integer-vertex-formats" if scissor_probe == "8" else ("planar-triangle" if int(scissor_probe)>=3 else "source-default")))),
+                            geometry_fixture="sampler-uv-ladder" if scissor_probe == "4" else ("sampler-core-addressing" if scissor_probe == "6" else ("sampled-format-candidates" if scissor_probe == "7" else ("vertex-format-cases" if scissor_probe == "8" else ("planar-triangle" if int(scissor_probe)>=3 else "source-default")))),
                             visual_hold_seconds=10 if scissor_probe in ("3", "5") else 0,
                             observation_frame_pause_us=60000 if observe_scene == "1" else 0,
                             exact_interior_witnesses=int(witnesses),
@@ -337,6 +337,7 @@ def main():
         if vertex_probe:
             runtime_inputs = (("vertex_sint", "runtime_vertex_sint.vert"),
                               ("vertex_uint", "runtime_vertex_uint.vert"),
+                              ("vertex_unorm", "runtime_vertex_unorm.vert"),
                               ("fragment", "runtime_vertex_format.frag"))
         manifest["runtime_graphics_inputs"] = {
             stage: {"glsl_sha256": hashlib.sha256((ROOT / "experiments/graphics" / source).read_bytes()).hexdigest(),

@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 24 mandatory format-feature cells satisfied
-with 638 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 26 mandatory format-feature cells satisfied
+with 636 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -624,7 +624,7 @@ the title in 100 ms. Linear filtering remains advertised only for RGBA8 UNORM;
 the new formats were validated with nearest sampling. This is bounded format
 evidence, not general format coverage or Vulkan conformance.
 
-### GPL integer vertex formats promoted by hardware evidence
+### GPL integer and packed UNORM vertex formats promoted by hardware evidence
 
 The vertex-format table adapted from the pinned GPLv3 `ps5-opengl` revision
 now exposes the `R32`, `R32G32`, `R32G32B32` and `R32G32B32A32` signed- and
@@ -650,6 +650,24 @@ rejects indexed draws, while the separate offline-program path retains its
 validated indexed support. This evidence therefore promotes eight vertex-format
 bits, not general runtime indexed rendering or broad format conformance.
 
+Two subsequent runs promoted the packed `R8G8B8A8_UNORM` and
+`B8G8R8A8_UNORM` vertex rows using byte-identical SELF SHA-256
+`f76e366d5d96d9eb5234235764216f7a18df197d9b74cdba2f28a450b9bf9029`:
+
+- `20260913T232331033Z_PPSA99994_ps5vk_0x63237537f92a`, log SHA-256
+  `cebb92f009c7b1586cebf36f0cc39108735dcec2fab4d39624001ab0cd628755`
+- `20260913T232410710Z_PPSA99994_ps5vk_0x632cb2222841`, log SHA-256
+  `408613181e9b90de6c45bcda3d4e645daf1367a0db48334e5396eb080b4d8419`
+
+Each complete 3,104-record `ps5log/1` stream executed all ten vertex cases.
+The packed cases used raw word `0xffaa5511`; the RGBA shader expected logical
+components `(17,85,170,255)/255`, while the BGRA shader expected
+`(170,85,17,255)/255`. Both produced exactly 471,744 white pixels and zero
+others, proving normalized conversion and the R/B permutation independently of
+the framebuffer result. Resource accounting returned to zero, both streams
+ended with BYE and exact-title Close Game completed in 100 ms. This adds two
+specific packed rows; it does not imply other normalized vertex formats.
+
 The earlier dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
@@ -658,7 +676,7 @@ ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
 reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
-blockers and 710 blockers overall.
+blockers and 708 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

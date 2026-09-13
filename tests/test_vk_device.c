@@ -274,14 +274,17 @@ static void lifecycle(void)
     for (unsigned n=0; n<7; ++n) {
         memset(&fp, 0xff, sizeof(fp));
         vkGetPhysicalDeviceFormatProperties(p, formats[n], &fp);
-        assert(!fp.linearTilingFeatures && !fp.bufferFeatures && fp.optimalTilingFeatures==bits[n]);
+        VkFormatFeatureFlags buffer_bits=n<2?VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
+        assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
+            fp.optimalTilingFeatures==bits[n]);
     }
     p->platform.queue_flags=VK_QUEUE_GRAPHICS_BIT;
     const VkFormat vertex_formats[]={VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT,
         VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT,
         VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_SINT,VK_FORMAT_R32G32B32_SINT,
         VK_FORMAT_R32G32B32A32_SINT,VK_FORMAT_R32_UINT,VK_FORMAT_R32G32_UINT,
-        VK_FORMAT_R32G32B32_UINT,VK_FORMAT_R32G32B32A32_UINT};
+        VK_FORMAT_R32G32B32_UINT,VK_FORMAT_R32G32B32A32_UINT,
+        VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM};
     for(unsigned n=0;n<sizeof(vertex_formats)/sizeof(vertex_formats[0]);++n) {
         vkGetPhysicalDeviceFormatProperties(p,vertex_formats[n],&fp);
         VkFormatFeatureFlags expected=VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
@@ -289,11 +292,21 @@ static void lifecycle(void)
               vertex_formats[n]==VK_FORMAT_R32_SINT ||
               vertex_formats[n]==VK_FORMAT_R32_UINT)?VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT:0);
         assert(fp.bufferFeatures==expected);
-        assert(!fp.linearTilingFeatures && !fp.optimalTilingFeatures);
-        assert(ps5vk_vertex_format_size(vertex_formats[n])==4*((n%4)+1));
-        assert(vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
-            VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)
-            ==VK_ERROR_FORMAT_NOT_SUPPORTED);
+        assert(!fp.linearTilingFeatures);
+        if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
+            assert(fp.optimalTilingFeatures==(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT));
+        else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
+            assert(fp.optimalTilingFeatures==VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+        else assert(!fp.optimalTilingFeatures);
+        assert(ps5vk_vertex_format_size(vertex_formats[n])==(n<12?4*((n%4)+1):4));
+        VkResult image_result=vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
+            VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip);
+        if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
+            assert(image_result==VK_SUCCESS);
+        else assert(image_result==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }
     vkGetPhysicalDeviceFormatProperties(p,VK_FORMAT_R16_UINT,&fp);
     assert(!fp.bufferFeatures && !ps5vk_vertex_format_size(VK_FORMAT_R16_UINT));
