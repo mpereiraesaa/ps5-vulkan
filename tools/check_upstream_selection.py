@@ -108,6 +108,41 @@ def _mapping_group_segment(text: str, segment: str) -> bool:
     return int(value) in {int(token) for token in re.findall(r"\b\d+\b", match.group(1))}
 
 
+def _fill_update_generated_leaf_names(function_text: str) -> set[str]:
+    """Derive names constructed by createFillAndUpdateBufferTests.
+
+    The pinned upstream factory composes most leaves from fixed ``testName``
+    literals and two fixed prefixes. Its VK_WHOLE_SIZE loop composes the
+    remaining names from the four uint32 byte remainders and aligned offsets.
+    Keep this recognizer tied to the exact construction expressions so an
+    unrelated token elsewhere in the module cannot satisfy provenance.
+    """
+    leaves: set[str] = set()
+    if ('"fill_" + testName' in function_text and
+            '"update_" + testName' in function_text):
+        names = re.findall(
+            r'const\s+std::string\s+testName\s*\(\s*"([a-z0-9_]+)"\s*\)\s*;',
+            function_text,
+        )
+        leaves.update(prefix + name for name in names for prefix in ("fill_", "update_"))
+
+    whole_name = re.search(
+        r'"fill_buffer_vk_whole_size_"\s*\+\s*de::toString\(extraBytes\)\s*\+'
+        r'\s*"_extra_bytes_offset_"\s*\+\s*de::toString\(params\.dstOffset\)',
+        function_text,
+    )
+    fixed_loops = function_text.count(
+        "for (VkDeviceSize i = 0; i < sizeof(uint32_t); ++i)") == 1 and function_text.count(
+        "for (VkDeviceSize j = 0; j < sizeof(uint32_t); ++j)") == 1
+    offset_is_words = "params.dstOffset = j * sizeof(uint32_t);" in function_text
+    if whole_name and fixed_loops and offset_is_words:
+        leaves.update(
+            f"fill_buffer_vk_whole_size_{extra}_extra_bytes_offset_{word * 4}"
+            for extra in range(4) for word in range(4)
+        )
+    return leaves
+
+
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     # Diagnostics are frozen upstream cases that are executed but are known not
@@ -164,6 +199,14 @@ def main() -> int:
         if re.search(r'"' + re.escape(leaf) + r'"', text):
             continue
         if leaf in _table_composed_leaf_names(text, function_text):
+            continue
+        # This factory's manifest citations point at individual registration
+        # blocks inside one function, so the generic forward-only extractor
+        # cannot recover the enclosing function. The recognizer itself is
+        # bounded to the factory's exact construction expressions; apply it to
+        # this one pinned source module only.
+        if (source_path.name == "vktApiFillBufferTests.cpp" and
+                leaf in _fill_update_generated_leaf_names(text)):
             continue
         if leaf.isdigit():
             continue

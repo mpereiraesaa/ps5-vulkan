@@ -294,6 +294,22 @@ VkResult ps5vk_buffer_span(VkDevice d, VkBuffer b, VkDeviceSize offset,
     return VK_SUCCESS;
 }
 
+VkResult ps5vk_buffer_cache(VkDevice d, VkBuffer b, VkDeviceSize offset,
+    VkDeviceSize range, VkBool32 invalidate)
+{
+    VkDeviceSize length;
+    if (!d || !b || b->device != d || !b->memory ||
+        !range_in(b->size, offset, range, &length)) return INVALID;
+    VkBuffer live = d->buffers;
+    while (live && live != b) live = live->next;
+    if (!live) return INVALID;
+    VkResult (*operation)(void *, void *, VkDeviceSize, VkDeviceSize) =
+        invalidate ? d->memory.invalidate : d->memory.flush;
+    if (!operation) return VK_ERROR_INITIALIZATION_FAILED;
+    return operation(d->memory.context, b->memory->backing,
+        b->offset + offset, length);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkImage *out)
 {

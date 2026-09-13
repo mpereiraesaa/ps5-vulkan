@@ -105,6 +105,25 @@ supported.
   across a validated 128-invocation workgroup (four wave32 waves). This is a
   bounded compute result, not a Vulkan memory-model or subgroup claim.
 
+## Buffer transfer commands
+
+- `vkCmdCopyBuffer` supports one or more byte-granular regions. The complete
+  call is validated before recording, including usage, bounds, source/destination
+  non-overlap and non-overlapping destination regions across aliased buffers.
+- `vkCmdUpdateBuffer` owns a recording-time copy of at most 65,536 bytes; its
+  offset and size are multiples of four.
+- `vkCmdFillBuffer` writes a repeated 32-bit value. An explicit size is a
+  multiple of four; `VK_WHOLE_SIZE` rounds the remaining bound span down to a
+  multiple of four.
+- These frontend operations retain their position among GPU operations. A
+  transfer executes only after an earlier GPU segment completes and before a
+  later segment is prepared or launched. Destination ranges are flushed through
+  the memory backend before following GPU use.
+
+The transfer family remains partial. Existing bounded buffer/image upload and
+readback paths do not imply general `vkCmdCopyImage`, `vkCmdBlitImage` or
+`vkCmdResolveImage` support; those commands remain absent.
+
 ## Programs and compilation
 
 Compute shaders are compiled at runtime using a pinned PSBC/NIR/ACO fork. The

@@ -206,6 +206,13 @@ def main():
         "profile": "public-consumer-resource-abi",
         "submit_enabled": True,
         "files": files,
+        "buffer_transfer": {
+            "api": "Vulkan 1.0",
+            "copy_bytes": 7,
+            "update_bytes": 8,
+            "fill_bytes": 20,
+            "whole_tail_bytes": 3,
+        },
         "storage_width": {
             "storageBuffer8BitAccess": True,
             "storageBuffer16BitAccess": True,

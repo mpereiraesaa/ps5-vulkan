@@ -152,6 +152,9 @@ void ps5vk_object_free(void *object, const VkAllocationCallbacks *saved, VkBool3
  * Used by the descriptor/compiler/backend bridge, never a Vulkan device address. */
 VkResult ps5vk_buffer_span(VkDevice device, VkBuffer buffer, VkDeviceSize offset,
                           VkDeviceSize range, void **address, VkDeviceSize *size);
+VkResult ps5vk_buffer_cache(VkDevice device, VkBuffer buffer,
+                            VkDeviceSize offset, VkDeviceSize range,
+                            VkBool32 invalidate);
 
 VkBool32 ps5vk_buffer_usage(VkDevice,VkBuffer,VkBufferUsageFlags);
 #endif

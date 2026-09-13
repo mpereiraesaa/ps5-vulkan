@@ -3,6 +3,8 @@
 #include "vktApiFeatureInfo.hpp"
 #include "vktApiBufferViewAccessTests.hpp"
 #include "vktApiPipelineTests.hpp"
+#include "vktApiCopiesAndBlittingTests.hpp"
+#include "vktApiFillBufferTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktSynchronizationBasicEventTests.hpp"
@@ -54,6 +56,11 @@ void FocusedVkTestPackage::init(void)
         bufferViewGroup->addChild(vkt::api::createBufferViewAccessTests(m_testCtx));
         apiGroup->addChild(bufferViewGroup.release());
         apiGroup->addChild(vkt::api::createPipelineTests(m_testCtx));
+        // Original upstream buffer-copy and fill/update cases. The build-time
+        // focused copy module prunes only unrelated image/blit/resolve
+        // registration so the package stays within the PS5 application heap.
+        apiGroup->addChild(vkt::api::createCopiesAndBlittingTests(m_testCtx));
+        apiGroup->addChild(vkt::api::createFillAndUpdateBufferTests(m_testCtx));
         addChild(apiGroup.release());
     }
 

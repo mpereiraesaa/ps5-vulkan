@@ -366,8 +366,29 @@ Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
 - Audits 1:1 symmetry across public headers (`include/ps5vk/ps5vk.h`), static dispatch
   tables (`src/vk_dispatch.c`), and implementation symbols (`src/*.c`).
 - Fails closed on any unexpected drift, asymmetry (e.g. declared in public header but un-dispatched,
-  or dispatched without implementation), or regression in fully wired commands (101 fully wired
-  commands, with all 36 unimplemented commands cataloged into strict categorical deficit buckets).
+  or dispatched without implementation), or regression in fully wired commands (112 fully wired
+  commands, with all 25 unimplemented commands cataloged into strict categorical deficit buckets).
 - Enforced on host test runs via `make check` and verified by unit tests in
   `tests/test_command_surface.py` (which includes negative test fixtures asserting failure on
   missing dispatch entries, omitted declarations, or bookkeeping regressions).
+
+## Ordered buffer-transfer slice (2026-09-13)
+
+`vkCmdCopyBuffer`, `vkCmdUpdateBuffer` and `vkCmdFillBuffer` are validated
+transactionally, recorded through the owned command-operation model and
+executed as ordered frontend segments. Host tests cover byte-granular copies,
+record-time update ownership, repeated fills, `VK_WHOLE_SIZE`, aliasing and
+overlap rejection, cache ranges, and GPU/transfer/GPU ordering.
+
+The standalone consumer links only the staged public SDK. Two identical native
+runs used SELF SHA-256
+`8d44d9c9b5d70967b397a63cf1fcda4a7c776a489c5a4cf08aadd064ff9d9312`
+and verified the same 67-byte result (`FNV-1a32 9a158222`) with intact guards,
+complete `ps5log/1` and clean Close Game:
+
+- `20260913T090542583Z_PPSA99994_ps5vk_0x3454301a9571`
+- `20260913T090553746Z_PPSA99994_ps5vk_0x3456c96c63e4`
+
+This closes the three named buffer commands at the bounded profile. It does
+not establish general image copy, blit or resolve, the full Vulkan transfer
+family, or conformance.

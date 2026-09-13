@@ -226,6 +226,119 @@ static void report_physical_device_contract(VkInstance instance,
         "image_rejected=1");
 }
 
+static void run_buffer_transfer_contract(VkDevice device, VkQueue queue)
+{
+    enum { LOGICAL_BYTES = 67 };
+    VkBuffer buffers[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDeviceMemory memories[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    void *mapped[2] = {NULL, NULL};
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_BUFFER_TRANSFER_START");
+
+    VkBufferCreateInfo buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = LOGICAL_BYTES,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    for (uint32_t j = 0; j < 2; ++j) {
+        buffer_info.usage = j ? VK_BUFFER_USAGE_TRANSFER_DST_BIT :
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        CHECK(vkCreateBuffer(device, &buffer_info, NULL, &buffers[j]));
+        VkMemoryRequirements requirements;
+        vkGetBufferMemoryRequirements(device, buffers[j], &requirements);
+        VkMemoryAllocateInfo allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = requirements.size,
+            .memoryTypeIndex = 0,
+        };
+        CHECK(vkAllocateMemory(device, &allocation, NULL, &memories[j]));
+        CHECK(vkBindBufferMemory(device, buffers[j], memories[j], 0));
+        CHECK(vkMapMemory(device, memories[j], 0, requirements.size, 0,
+                          &mapped[j]));
+        memset(mapped[j], j ? 0x5a : 0, (size_t)requirements.size);
+    }
+    for (uint32_t j = 0; j < LOGICAL_BYTES; ++j)
+        ((uint8_t *)mapped[0])[j] = (uint8_t)(j + 1);
+    VkMappedMemoryRange source_flush = {
+        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory = memories[0], .offset = 0, .size = VK_WHOLE_SIZE,
+    };
+    CHECK(vkFlushMappedMemoryRanges(device, 1, &source_flush));
+
+    VkCommandPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = 0,
+    };
+    VkCommandPool pool = VK_NULL_HANDLE;
+    CHECK(vkCreateCommandPool(device, &pool_info, NULL, &pool));
+    VkCommandBufferAllocateInfo command_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    CHECK(vkAllocateCommandBuffers(device, &command_info, &command));
+    VkCommandBufferBeginInfo begin = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    CHECK(vkBeginCommandBuffer(command, &begin));
+    VkBufferCopy copy = {.srcOffset = 1, .dstOffset = 0, .size = 7};
+    uint32_t update[2] = {0x11223344u, 0xaabbccddu};
+    vkCmdCopyBuffer(command, buffers[0], buffers[1], 1, &copy);
+    vkCmdUpdateBuffer(command, buffers[1], 8, sizeof(update), update);
+    update[0] = update[1] = 0;
+    vkCmdFillBuffer(command, buffers[1], 16, 16, 0xdecafbadu);
+    vkCmdFillBuffer(command, buffers[1], 60, VK_WHOLE_SIZE, 0x01020304u);
+    CHECK(vkEndCommandBuffer(command));
+    VkFenceCreateInfo fence_info = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    };
+    VkFence fence = VK_NULL_HANDLE;
+    CHECK(vkCreateFence(device, &fence_info, NULL, &fence));
+    VkSubmitInfo submit = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command,
+    };
+    CHECK(vkQueueSubmit(queue, 1, &submit, fence));
+    CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+
+    VkMappedMemoryRange destination_invalidate = source_flush;
+    destination_invalidate.memory = memories[1];
+    CHECK(vkInvalidateMappedMemoryRanges(device, 1, &destination_invalidate));
+    const uint8_t *bytes = mapped[1];
+    uint32_t mismatch = memcmp(bytes,
+        (const uint8_t[]){2, 3, 4, 5, 6, 7, 8}, 7) != 0;
+    mismatch += bytes[7] != 0x5a;
+    mismatch += *(const uint32_t *)(const void *)(bytes + 8) != 0x11223344u;
+    mismatch += *(const uint32_t *)(const void *)(bytes + 12) != 0xaabbccddu;
+    for (uint32_t j = 16; j < 32; j += 4)
+        mismatch += *(const uint32_t *)(const void *)(bytes + j) != 0xdecafbadu;
+    mismatch += *(const uint32_t *)(const void *)(bytes + 60) != 0x01020304u;
+    for (uint32_t j = 32; j < 60; ++j) mismatch += bytes[j] != 0x5a;
+    for (uint32_t j = 64; j < LOGICAL_BYTES; ++j) mismatch += bytes[j] != 0x5a;
+    if (mismatch) {
+        ps5log_printf(PS5LOG_ERR,
+            "PS5VK_CONSUMER_BUFFER_TRANSFER_FAILURE mismatches=%u", mismatch);
+        ps5log_close("buffer-transfer-verification-failed");
+        exit(1);
+    }
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_BUFFER_TRANSFER_SUCCESS copy_bytes=7 update_bytes=8 "
+        "fill_bytes=20 whole_tail_bytes=3 guard_mismatches=0 hash=%08x",
+        fnv1a32(bytes, LOGICAL_BYTES));
+
+    vkDestroyFence(device, fence, NULL);
+    vkDestroyCommandPool(device, pool, NULL);
+    for (uint32_t j = 0; j < 2; ++j) {
+        vkUnmapMemory(device, memories[j]);
+        vkDestroyBuffer(device, buffers[j], NULL);
+        vkFreeMemory(device, memories[j], NULL);
+    }
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED");
+}
+
 static void run_storage_width_compute(VkDevice device, VkQueue queue)
 {
     enum { WIDTH_RUNS = 2, ELEMENTS = 64, BUFFER_BYTES = 4096, DATA_OFFSET = 256 };
@@ -848,7 +961,6 @@ static void run_pipeline_cache_contract(VkDevice device, VkPipelineCache *out_ca
     };
     CHECK(vkCreatePipelineCache(device, &import_info, NULL, &reimported));
     CHECK(vkMergePipelineCaches(device, cache, 1u, &reimported));
-    CHECK(vkMergePipelineCaches(device, cache, 2u, (const VkPipelineCache[]){cache, reimported}));
     vkDestroyPipelineCache(device, reimported, NULL);
 
     ps5log_line(PS5LOG_MARK,
@@ -1787,6 +1899,7 @@ int main(void)
      * with that cache passed to pipeline creation. */
     VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
     run_pipeline_cache_contract(device, &pipeline_cache);
+    run_buffer_transfer_contract(device, queue);
     run_runtime_compute(device, queue, pipeline_cache);
 
     /* 5. Run byte- and word-exact 8/16-bit storage-buffer witnesses. */

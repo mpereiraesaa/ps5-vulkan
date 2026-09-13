@@ -87,6 +87,11 @@ int main(void)
     assert(get_event_status && set_event && reset_event);
     assert(cmd_set_event && cmd_reset_event && cmd_wait_events);
 
+    PFN_vkCmdCopyBuffer cmd_copy_buffer = vkCmdCopyBuffer;
+    PFN_vkCmdUpdateBuffer cmd_update_buffer = vkCmdUpdateBuffer;
+    PFN_vkCmdFillBuffer cmd_fill_buffer = vkCmdFillBuffer;
+    assert(cmd_copy_buffer && cmd_update_buffer && cmd_fill_buffer);
+
     /* 3. Verify public presentation API functions from <ps5vk/ps5vk_present.h> */
     struct ps5vk_present_config pconfig = {
         .width = 1920,

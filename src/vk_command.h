@@ -7,7 +7,8 @@ enum ps5vk_operation_type {
     PS5VK_DISPATCH, PS5VK_BARRIER, PS5VK_BEGIN_RENDER_PASS, PS5VK_DRAW,
     PS5VK_END_RENDER_PASS, PS5VK_DRAW_INDEXED, PS5VK_COPY_BUFFER_IMAGE,
     PS5VK_IMAGE_BARRIER, PS5VK_COPY_IMAGE_BUFFER, PS5VK_EVENT_SET,
-    PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT
+    PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT, PS5VK_COPY_BUFFER,
+    PS5VK_UPDATE_BUFFER, PS5VK_FILL_BUFFER
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -28,6 +29,10 @@ struct ps5vk_operation {
     VkImageMemoryBarrier image_barrier;
     VkBuffer copy_source;
     VkBuffer copy_destination;
+    VkBufferCopy buffer_copy;
+    VkDeviceSize buffer_offset;
+    VkDeviceSize buffer_size;
+    uint32_t fill_data;
     VkImage copy_image;
     VkImageLayout copy_layout;
     VkBufferImageCopy copy_region;

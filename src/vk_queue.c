@@ -1,8 +1,10 @@
 #include "vk_queue.h"
+#include "vk_buffer_transfer.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
 static int event_operation(int type);
+static int frontend_operation(int type);
 static void free_submission(struct ps5vk_submission *s)
 {
     if (s->reserved) {
@@ -99,6 +101,11 @@ static VkResult start_submission(VkDevice d)
                         op->event->host_signaled = VK_FALSE;
                         op->event->device_signaled = VK_FALSE;
                     }
+                    if (ps5vk_buffer_transfer_operation(op->type) &&
+                        ps5vk_buffer_transfer_execute(d, op) != VK_SUCCESS) {
+                        d->lost = VK_TRUE;
+                        return VK_ERROR_DEVICE_LOST;
+                    }
                 }
             }
             pin(s, 0);
@@ -192,6 +199,10 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             continue;
         }
         if (active) return 0;
+        if (ps5vk_buffer_transfer_operation(op->type)) {
+            if (ps5vk_buffer_transfer_validate(d, op) != VK_SUCCESS) return 0;
+            continue;
+        }
         if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE ||
            op->type==PS5VK_COPY_IMAGE_BUFFER) {
             VkImage image=op->type==PS5VK_IMAGE_BARRIER?op->image_barrier.image:op->copy_image;
@@ -273,6 +284,12 @@ static int event_operation(int type)
         type == PS5VK_EVENT_WAIT;
 }
 
+static int frontend_operation(int type)
+{
+    return event_operation(type) ||
+        ps5vk_buffer_transfer_operation((enum ps5vk_operation_type)type);
+}
+
 static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
     struct ps5vk_submission **expanded, uint32_t *segment_count)
 {
@@ -280,12 +297,12 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
     VkResult result = VK_SUCCESS;
     for (struct ps5vk_submission *record = original; record; record = record->next) {
         size_t refs = (size_t)record->wait_count + record->signal_count;
-        VkBool32 contains_event = VK_FALSE;
+        VkBool32 contains_frontend = VK_FALSE;
         for (uint32_t b = 0; b < record->count; ++b)
             for (uint32_t k = 0; k < record->buffers[b]->operation_count; ++k)
-                contains_event |= event_operation(record->buffers[b]->operations[k].type);
+                contains_frontend |= frontend_operation(record->buffers[b]->operations[k].type);
         struct ps5vk_submission *first = NULL, *last = NULL;
-        if (!contains_event) {
+        if (!contains_frontend) {
             last = allocate_submission(d, refs, &result);
             if (!last) goto fail;
             last->count = record->count;
@@ -310,10 +327,10 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
                 uint32_t operation = 0;
                 while (operation < command->operation_count) {
                     uint32_t begin = operation;
-                    VkBool32 frontend = event_operation(command->operations[operation].type);
+                    VkBool32 frontend = frontend_operation(command->operations[operation].type);
                     if (frontend) ++operation;
                     else while (operation < command->operation_count &&
-                        !event_operation(command->operations[operation].type)) ++operation;
+                        !frontend_operation(command->operations[operation].type)) ++operation;
                     last = allocate_submission(d, refs, &result); if (!last) goto fail;
                     last->count = 1; last->buffers[0] = command;
                     last->first_operation[0] = (uint16_t)begin;
