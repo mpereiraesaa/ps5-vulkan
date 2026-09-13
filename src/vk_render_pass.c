@@ -86,3 +86,14 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyRenderPass(VkDevice d, VkRenderPass pass,
     --d->graphics_objects;
     ps5vk_object_free(pass, &pass->allocator, pass->custom_allocator);
 }
+
+VKAPI_ATTR void VKAPI_CALL vkGetRenderAreaGranularity(VkDevice d, VkRenderPass pass,
+                                                     VkExtent2D *pGranularity)
+{
+    if (!pGranularity) return;
+    if (!d || !pass || pass->device != d) {
+        *pGranularity = (VkExtent2D){0, 0};
+        return;
+    }
+    *pGranularity = (VkExtent2D){1, 1};
+}

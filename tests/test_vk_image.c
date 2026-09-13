@@ -29,6 +29,25 @@ int main(void)
     assert(vkCreateImage(&d, &info, NULL, &image) == VK_SUCCESS && calls == 1);
     VkMemoryRequirements req; vkGetImageMemoryRequirements(&d, image, &req);
     assert(req.size == 4096 && req.alignment == 256);
+    VkSubresourceLayout layout = {.rowPitch = 1234, .size = 5678};
+    VkImageSubresource img_sub = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    vkGetImageSubresourceLayout(&d, image, &img_sub, &layout);
+    /* In ps5vk all images are optimal-tiling; linear layout is never fabricated */
+    assert(layout.rowPitch == 0 && layout.size == 0 && layout.offset == 0);
+    vkGetImageSubresourceLayout(&d, image, &img_sub, NULL); /* no crash */
+    layout = (VkSubresourceLayout){.rowPitch = 1234};
+    vkGetImageSubresourceLayout(NULL, image, &img_sub, &layout);
+    assert(layout.rowPitch == 0);
+    layout = (VkSubresourceLayout){.rowPitch = 1234};
+    vkGetImageSubresourceLayout(&d, NULL, &img_sub, &layout);
+    assert(layout.rowPitch == 0);
+    layout = (VkSubresourceLayout){.rowPitch = 1234};
+    vkGetImageSubresourceLayout(&d, image, NULL, &layout);
+    assert(layout.rowPitch == 0);
+    struct VkDevice_T other_d = {0};
+    layout = (VkSubresourceLayout){.rowPitch = 1234};
+    vkGetImageSubresourceLayout(&other_d, image, &img_sub, &layout);
+    assert(layout.rowPitch == 0);
     VkMemoryAllocateInfo ai = {.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize=8192};
     VkDeviceMemory m; assert(vkAllocateMemory(&d, &ai, NULL, &m) == VK_SUCCESS);
     assert(vkBindImageMemory(&d, image, m, 1) == VK_ERROR_UNKNOWN);

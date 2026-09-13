@@ -173,6 +173,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkFlushMappedMemoryRanges(VkDevice d, uint32_t n,
 VKAPI_ATTR VkResult VKAPI_CALL vkInvalidateMappedMemoryRanges(VkDevice d, uint32_t n,
                                                             const VkMappedMemoryRange *r)
 { return sync_ranges(d, n, r, 1); }
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryCommitment(VkDevice d, VkDeviceMemory m,
+                                                       VkDeviceSize *pCommittedMemoryInBytes)
+{
+    if (!pCommittedMemoryInBytes) return;
+    *pCommittedMemoryInBytes = 0;
+    if (!d || !m || m->device != d) return;
+    /*
+     * The physical profile exposes no memory type with
+     * VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, and Vulkan valid usage
+     * restricts this query to lazily allocated memory. In this no-lazy
+     * profile, ordinary allocations are never lazily committed; safely
+     * report 0 bytes committed (*pCommittedMemoryInBytes = 0).
+     */
+}
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateBuffer(VkDevice d, const VkBufferCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkBuffer *out)
@@ -327,6 +341,18 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements(VkDevice d, VkImage imag
     if (!out) return;
     memset(out, 0, sizeof(*out));
     if (d && image && image->device == d) *out = image->requirements;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(VkDevice d, VkImage image,
+    const VkImageSubresource *pSubresource, VkSubresourceLayout *pLayout)
+{
+    if (!pLayout) return;
+    memset(pLayout, 0, sizeof(*pLayout));
+    if (!d || !image || image->device != d || !pSubresource) return;
+    /* ps5vk only supports optimal tiling for hardware graphics and rejects
+     * linear tiling at image creation. Non-linear layouts must never be
+     * fabricated as linear, so safe zeroing is returned. */
+    if (image->info.tiling != VK_IMAGE_TILING_LINEAR) return;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(VkDevice d, VkImage image, VkDeviceMemory m, VkDeviceSize offset)

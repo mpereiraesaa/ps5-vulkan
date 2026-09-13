@@ -257,6 +257,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     }
     return enumerate_extensions(properties, total, count, out);
 }
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
+    uint32_t *pPropertyCount, VkLayerProperties *pProperties)
+{
+    (void)pProperties;
+    if (!physicalDevice || !pPropertyCount) return INVALID;
+    *pPropertyCount = 0;
+    return VK_SUCCESS;
+}
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDeviceCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkDevice *out)

@@ -174,6 +174,7 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/descriptor_encode.c tests/test_descriptor_encode.c -o build/tests/test_descriptor_encode
 	./build/tests/test_descriptor_encode
 	$(PYTHON) tools/prepare_vulkan_headers.py --check
+	$(PYTHON) tools/check_command_surface.py --check
 	$(PYTHON) -m unittest discover -s tests -v
 	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include tests/test_submit_suspend.c -o build/tests/test_submit_suspend
 	./build/tests/test_submit_suspend

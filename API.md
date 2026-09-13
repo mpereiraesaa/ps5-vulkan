@@ -161,6 +161,16 @@ Presentation uses a project-native VideoOut adapter with two registered BGRA8
 1920x1080 images, matching flip tokens and completion fences. This is not Vulkan
 WSI: `VkSurfaceKHR`, `VkSwapchainKHR` and `PRESENT_SRC_KHR` are not implemented.
 
+## Bookkeeping and core command surface
+
+The public driver interface exposes standard Vulkan 1.0 bookkeeping entry points:
+
+- `vkEnumerateDeviceLayerProperties`: Validates arguments and reports zero device layers (`*pPropertyCount = 0`), returning `VK_SUCCESS` in conformance with modern Vulkan conventions deprecating separate device layers.
+- `vkGetDeviceMemoryCommitment`: Queries memory commitment in `*pCommittedMemoryInBytes`. Because ps5vk exposes no memory type with `VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT` and does not support lazily allocated memory, ordinary allocations are not reported as lazily committed, and the query safely reports 0 bytes committed (`*pCommittedMemoryInBytes = 0`).
+- `vkGetImageSubresourceLayout`: Queries image subresource layout. Because ps5vk images are backed by optimal GPU-tiled memory and linear image layout access is not supported, the layout structure is safely zeroed (`*pLayout = {0}`) rather than fabricating fictitious linear row or depth pitches.
+- `vkGetRenderAreaGranularity`: Returns `(1, 1)` pixel render area granularity for valid render passes (`offset = 0`, full pixel granularity).
+- `vkResetDescriptorPool`: Resets all descriptor sets allocated from a descriptor pool back to the pool, preserving pool allocation state without requiring pool destruction.
+
 ## Compatibility boundary
 
 Object creation can describe some state that the native executor later rejects.
