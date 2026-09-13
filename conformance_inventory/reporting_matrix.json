@@ -138,12 +138,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "depthBiasClamp",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -190,12 +190,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "dualSrcBlend",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -216,12 +216,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "fragmentStoresAndAtomics",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -346,12 +346,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "occlusionQueryPrecise",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -439,12 +439,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderFloat64",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -452,12 +452,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderImageGatherExtended",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -465,12 +465,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderInt16",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -478,12 +478,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderInt64",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -517,12 +517,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderSampledImageArrayDynamicIndexing",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -530,12 +530,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageBufferArrayDynamicIndexing",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -543,12 +543,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageArrayDynamicIndexing",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -608,7 +608,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "not required by the implemented profile",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderTessellationAndGeometryPointSize",
       "kind": "feature",
       "profile": "graphics",
@@ -621,12 +621,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderUniformBufferArrayDynamicIndexing",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -816,12 +816,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "vertexPipelineStoresAndAtomics",
       "kind": "feature",
       "profile": "graphics",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -855,12 +855,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "depthBiasClamp",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -907,12 +907,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "dualSrcBlend",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -933,12 +933,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "fragmentStoresAndAtomics",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1063,12 +1063,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "occlusionQueryPrecise",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1156,12 +1156,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderFloat64",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1169,12 +1169,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderImageGatherExtended",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1182,12 +1182,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderInt16",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1195,12 +1195,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderInt64",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1234,12 +1234,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderSampledImageArrayDynamicIndexing",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1247,12 +1247,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageBufferArrayDynamicIndexing",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1260,12 +1260,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageArrayDynamicIndexing",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1325,7 +1325,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "not required by the implemented profile",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderTessellationAndGeometryPointSize",
       "kind": "feature",
       "profile": "compute",
@@ -1338,12 +1338,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderUniformBufferArrayDynamicIndexing",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -1533,12 +1533,12 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no frontend rejection branch; the dependent usage is an application-side valid-usage rule or compiler-side",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "vertexPipelineStoresAndAtomics",
       "kind": "feature",
       "profile": "compute",
       "reported": false,
-      "verdict": "not-audited"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -25969,8 +25969,7 @@
   ],
   "summary": {
     "features": {
-      "not-audited": 26,
-      "satisfied": 84
+      "satisfied": 110
     },
     "format_query_consistency": {
       "satisfied": 60

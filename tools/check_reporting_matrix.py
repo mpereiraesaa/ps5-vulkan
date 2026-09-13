@@ -141,16 +141,18 @@ ADVERTISED_FEATURES = {
     },
 }
 
-# Feature bits whose dependent behaviour has no frontend gate: the restriction
-# is an application-side valid-usage rule, or the compiler rejects it without an
-# explicit branch this repository can cite. They are reported as not-audited.
-FEATURE_WITHOUT_FRONTEND_GATE = {
-    "dualSrcBlend", "depthBiasClamp", "occlusionQueryPrecise",
-    "vertexPipelineStoresAndAtomics", "fragmentStoresAndAtomics", "shaderImageGatherExtended",
-    "shaderUniformBufferArrayDynamicIndexing", "shaderSampledImageArrayDynamicIndexing",
-    "shaderStorageBufferArrayDynamicIndexing", "shaderStorageImageArrayDynamicIndexing",
-    "shaderFloat64", "shaderInt64", "shaderInt16",
-}
+# Every non-advertised VkPhysicalDeviceFeatures member shares one fail-closed
+# device-negotiation gate.  Vulkan valid usage prevents an application from
+# relying on a false feature without requesting it; the driver's obligation is
+# to report it false and refuse device creation when it is requested.  The C
+# regression walks every VkBool32 member, so this generic citation is stronger
+# than inventing an object-level rejection branch for compiler-side features.
+FALSE_CORE_FEATURE_GATE = (
+    "src/vk_device.c",
+    "if (offset != robust_offset ||",
+    "tests/test_vk_device.c",
+    "for(size_t offset=0;offset<sizeof(features);offset+=sizeof(VkBool32))",
+)
 
 
 def evaluate_feature(name: str, value: bool) -> tuple[str, str]:
@@ -181,10 +183,16 @@ def evaluate_feature(name: str, value: bool) -> tuple[str, str]:
         if present:
             return "violation", f"{where} mentions {present}, so the family may exist"
         return "satisfied", f"no {tokens[0]} family in {where}"
-    if name in FEATURE_WITHOUT_FRONTEND_GATE:
-        return ("not-audited", "no frontend rejection branch; the dependent usage is an "
-                "application-side valid-usage rule or compiler-side")
-    return "satisfied", "not required by the implemented profile"
+    gate_file, gate_token, test_file, test_token = FALSE_CORE_FEATURE_GATE
+    missing = []
+    for where, token in ((gate_file, gate_token), (test_file, test_token)):
+        path = ROOT / where
+        if not path.is_file() or token not in path.read_text():
+            missing.append(f"{where}:{token}")
+    if missing:
+        return "not-audited", "generic false-feature gate citation missing: " + ", ".join(missing)
+    return ("satisfied", "reported false and any request for this VkPhysicalDeviceFeatures "
+            f"member is rejected before device creation ({gate_file}; exhaustive {test_file})")
 
 # Feature bits backed by the absence of an entire format family in the format
 # table rather than by an explicit rejection branch.

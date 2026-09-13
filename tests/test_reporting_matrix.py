@@ -55,6 +55,21 @@ class TestReportingMatrix(unittest.TestCase):
         for name, (where, token, _reason) in matrix.FEATURE_GATES.items():
             text = (ROOT / where).read_text()
             self.assertIn(token, text, f"{name} cites a missing token in {where}")
+        gate_file, gate_token, test_file, test_token = matrix.FALSE_CORE_FEATURE_GATE
+        self.assertIn(gate_token, (ROOT / gate_file).read_text())
+        self.assertIn(test_token, (ROOT / test_file).read_text())
+
+    def test_every_false_core_feature_has_a_fail_closed_negotiation_gate(self):
+        """A compiler-side feature needs no invented object gate, but it must not enable."""
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        false_rows = [row for row in data["features"] if row["reported"] is False]
+        self.assertTrue(false_rows)
+        for row in false_rows:
+            verdict, detail = matrix.evaluate_feature(row["feature"], False)
+            self.assertEqual(verdict, "satisfied", row["feature"])
+            self.assertTrue(detail)
+        self.assertFalse([row for row in data["features"]
+                          if row["verdict"] == "not-audited"])
 
     def test_advertised_features_are_explicit_and_fail_closed(self):
         """A true bit needs reviewed code evidence and a selected oracle."""

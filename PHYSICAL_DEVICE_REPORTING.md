@@ -99,18 +99,18 @@ blocker. Host contracts cover ordering, pool accounting, alignment and range
 rejection; executable PS5 evidence is tracked separately and is not implied by
 these host checks.
 
-### Still not audited
+### False core features
 
-Thirteen `VkPhysicalDeviceFeatures` bits are reported `VK_FALSE` without a
-frontend rejection branch this repository can cite, so the matrix records them
-as `not-audited` instead of claiming either support or enforcement:
-`dualSrcBlend`, `depthBiasClamp`, `occlusionQueryPrecise`,
-`vertexPipelineStoresAndAtomics`, `fragmentStoresAndAtomics`,
-`shaderImageGatherExtended`, `shaderUniformBufferArrayDynamicIndexing`,
-`shaderSampledImageArrayDynamicIndexing`, `shaderStorageBufferArrayDynamicIndexing`,
-`shaderStorageImageArrayDynamicIndexing`, `shaderFloat64`, `shaderInt64` and
-`shaderInt16`. Their dependent usage is an application-side valid-usage rule or
-is rejected by PSBC/ACO without an explicit branch; neither is proven here.
+All `VkPhysicalDeviceFeatures` members reported `VK_FALSE` share a device-level
+negotiation gate. `vkCreateDevice` examines every `VkBool32` member and refuses
+the request before opening the backend unless it is the one advertised core
+feature, `robustBufferAccess`. The regression repeats device creation with each
+member enabled individually. This is the relevant contract for optional
+compiler-side features such as `shaderInt64`: Vulkan valid usage does not allow
+an application to use a false feature without first requesting it. We therefore
+do not invent unrelated object-creation rejection branches as evidence. The
+matrix records all 110 feature rows across both profiles as satisfied reporting
+and negotiation contracts; this does not claim implementation of false bits.
 
 The per-format mandatory rules are likewise recorded as blockers rather than
 support: the profile advertises three image formats, so the mandatory format

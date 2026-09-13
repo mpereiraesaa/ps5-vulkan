@@ -530,8 +530,8 @@ public query paths rather than from a copied table:
 
 Result on the shipped profiles: 124 mandatory limits satisfied, 74 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
-to a Vulkan 1.0 `VkPhysicalDeviceLimits`, 84 feature rows consistent with the
-code path that enforces them with 26 rows not audited, 13 format class rules
+to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
+the code path that enforces them, 13 format class rules
 satisfied with 649 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
@@ -572,3 +572,13 @@ runs. Transcript SHA-256 values are
 `cf7f31e5815b9e03a9bebca3627fc578231130e38ce66bdf5ccd29ec0fe29f3a`.
 This evidence validates that exact bounded path; it is not blanket coverage of
 every descriptor array, pipeline layout or shader combination.
+
+The core-feature reporting audit also distinguishes feature negotiation from
+object validation. For every `VkPhysicalDeviceFeatures` member reported false,
+`vkCreateDevice` walks the complete structure and rejects a true request before
+opening the backend. `tests/test_vk_device.c` exhaustively sets each member in
+turn, proving that only the advertised `robustBufferAccess` bit can enable.
+This closes the previous 26 `not-audited` rows (13 features in each profile):
+the matrix now has 110/110 satisfied feature-reporting rows. It does not claim
+that those optional features are implemented; it proves precisely that they
+are reported unavailable and cannot be negotiated accidentally.
