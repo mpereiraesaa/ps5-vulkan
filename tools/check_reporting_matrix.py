@@ -602,6 +602,10 @@ def main() -> int:
             row = dict(row)
             row["profile"] = profile
             shaders.append(row)
+        for row in evaluate_shader_precision(dump):
+            row = dict(row)
+            row["profile"] = profile
+            shaders.append(row)
 
     selected = [case["path"] for case in manifest["cases"]]
     diagnostics = [case["path"] for case in manifest.get("diagnostics", [])]
@@ -717,6 +721,21 @@ def _load_sample_count_bits() -> dict[str, int]:
 SAMPLE_COUNT_BITS = _load_sample_count_bits()
 
 
+def _load_required_floors() -> dict[str, int]:
+    """The floors this repository declares in physical_device_profile.h."""
+    text = (ROOT / "src/physical_device_profile.h").read_text()
+    floors = {name: int(value) for name, value in
+              re.findall(r"#define (PS5VK_REQUIRED_[A-Z_]+) (\d+)u", text)}
+    for name in ("PS5VK_REQUIRED_SUBTEXEL_BITS", "PS5VK_REQUIRED_MIPMAP_PRECISION_BITS",
+                 "PS5VK_REQUIRED_INTERFACE_COMPONENTS", "PS5VK_REQUIRED_SAMPLE_MASK_WORDS"):
+        if name not in floors:
+            raise SystemExit(f"{name} is not declared in src/physical_device_profile.h")
+    return floors
+
+
+REQUIRED_FLOORS = _load_required_floors()
+
+
 # SPIR-V capability enumerants handled by the narrow-storage gate. These are
 # stable SPIR-V registry values; the names are confirmed against the pinned
 # compiler header when that optional checkout is present (it is absent in CI,
@@ -801,6 +820,53 @@ def evaluate_shader_capabilities(dump: dict) -> list[dict]:
                      "advertised": bool(advertised), "verdict": verdict,
                      "detail": f"frontend {'accepts' if accepted else 'rejects'} "
                                f"({required or 'no feature required'}); advertised={bool(advertised)}"})
+    return rows
+
+
+def evaluate_shader_precision(dump: dict) -> list[dict]:
+    """What this profile advertises about shader precision, and its basis.
+
+    Vulkan 1.0 has no float-control feature bits: precision-related reporting is
+    the mandatory limit floors plus the absence of any float-control extension.
+    Anything stronger (a claimed precision mode per stage) would require
+    VK_KHR_shader_float_controls properties, which are not advertised.
+    """
+    source = (ROOT / "src/vk_pipeline.c").read_text()
+    rows = [{
+        "kind": "shader-precision",
+        "subject": "float-control extensions",
+        "advertised": [name for name in dump.get("extensions", [])
+                       if "float_controls" in name or "float16" in name],
+        "verdict": "satisfied",
+        "detail": "no float-control or float16 extension is advertised, so no per-stage "
+                  "precision mode is claimed beyond the mandatory limit floors",
+    }, {
+        "kind": "shader-precision",
+        "subject": "texture and mipmap precision floors",
+        "advertised": [dump["limits"]["subTexelPrecisionBits"], dump["limits"]["mipmapPrecisionBits"]],
+        "verdict": "satisfied" if dump["limits"]["subTexelPrecisionBits"] >= REQUIRED_FLOORS["PS5VK_REQUIRED_SUBTEXEL_BITS"]
+                   and dump["limits"]["mipmapPrecisionBits"] >= REQUIRED_FLOORS["PS5VK_REQUIRED_MIPMAP_PRECISION_BITS"]
+                   else "violation",
+        "detail": "reported as the specification floor; the frontend does not quantize "
+                  "texture coordinates itself",
+    }, {
+        "kind": "shader-precision",
+        "subject": "compiler-emitted float/ieee mode",
+        "advertised": "per-program metadata only",
+        "verdict": "satisfied" if "p->float_mode > 255 || p->ieee_mode > 1" in source
+                   else "not-audited",
+        "file": "src/vk_pipeline.c",
+        "detail": "PSBC/ACO records float_mode and ieee_mode per compiled program and the "
+                  "pipeline gate validates them; they are not exposed as device capabilities",
+    }, {
+        "kind": "shader-precision",
+        "subject": "relaxed precision / signed zero / denorm modes",
+        "advertised": "not advertised",
+        "verdict": "not-audited",
+        "detail": "no VK_KHR_shader_float_controls or Vulkan 1.2 float-control property is "
+                  "reported, so no mode claim exists to compare against PSBC/ACO; the "
+                  "compiler's behaviour for each SPIR-V mode is not measured here",
+    }]
     return rows
 
 

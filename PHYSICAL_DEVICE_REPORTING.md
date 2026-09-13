@@ -109,6 +109,14 @@ narrow-storage capabilities are gated on the advertised extension features by
 uniform-and-storage narrow access are rejected outright; that pairing is
 checked by the matrix against `vkGetPhysicalDeviceFeatures2KHR`.
 
+Shader precision is reported only where the specification forces a value: no
+float-control or float16 extension is advertised, so no per-stage precision mode
+is claimed, and the texture/mipmap precision values are the mandatory floors.
+PSBC/ACO record `float_mode` and `ieee_mode` per compiled program and the
+pipeline gate validates them, but they are not exposed as device capabilities.
+The compiler's behaviour for each individual SPIR-V precision mode is not
+measured here and is recorded as not-audited.
+
 ## Query contract
 
 The public API exposes the Vulkan 1.0 queries and the enabled

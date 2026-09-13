@@ -25073,6 +25073,62 @@
       "verdict": "satisfied"
     },
     {
+      "advertised": [],
+      "applicable_cts": {
+        "cases": [],
+        "note": "the selected storage-width cases exercise the accepted capabilities",
+        "status": "not-selected"
+      },
+      "detail": "no float-control or float16 extension is advertised, so no per-stage precision mode is claimed beyond the mandatory limit floors",
+      "kind": "shader-precision",
+      "profile": "graphics",
+      "subject": "float-control extensions",
+      "verdict": "satisfied"
+    },
+    {
+      "advertised": [
+        4,
+        4
+      ],
+      "applicable_cts": {
+        "cases": [],
+        "note": "the selected storage-width cases exercise the accepted capabilities",
+        "status": "not-selected"
+      },
+      "detail": "reported as the specification floor; the frontend does not quantize texture coordinates itself",
+      "kind": "shader-precision",
+      "profile": "graphics",
+      "subject": "texture and mipmap precision floors",
+      "verdict": "satisfied"
+    },
+    {
+      "advertised": "per-program metadata only",
+      "applicable_cts": {
+        "cases": [],
+        "note": "the selected storage-width cases exercise the accepted capabilities",
+        "status": "not-selected"
+      },
+      "detail": "PSBC/ACO records float_mode and ieee_mode per compiled program and the pipeline gate validates them; they are not exposed as device capabilities",
+      "file": "src/vk_pipeline.c",
+      "kind": "shader-precision",
+      "profile": "graphics",
+      "subject": "compiler-emitted float/ieee mode",
+      "verdict": "satisfied"
+    },
+    {
+      "advertised": "not advertised",
+      "applicable_cts": {
+        "cases": [],
+        "note": "the selected storage-width cases exercise the accepted capabilities",
+        "status": "not-selected"
+      },
+      "detail": "no VK_KHR_shader_float_controls or Vulkan 1.2 float-control property is reported, so no mode claim exists to compare against PSBC/ACO; the compiler's behaviour for each SPIR-V mode is not measured here",
+      "kind": "shader-precision",
+      "profile": "graphics",
+      "subject": "relaxed precision / signed zero / denorm modes",
+      "verdict": "not-audited"
+    },
+    {
       "action": "requires-extension-feature",
       "advertised": true,
       "applicable_cts": {
@@ -25119,6 +25175,62 @@
       "number": 22,
       "profile": "compute",
       "verdict": "satisfied"
+    },
+    {
+      "advertised": [],
+      "applicable_cts": {
+        "cases": [],
+        "note": "the selected storage-width cases exercise the accepted capabilities",
+        "status": "not-selected"
+      },
+      "detail": "no float-control or float16 extension is advertised, so no per-stage precision mode is claimed beyond the mandatory limit floors",
+      "kind": "shader-precision",
+      "profile": "compute",
+      "subject": "float-control extensions",
+      "verdict": "satisfied"
+    },
+    {
+      "advertised": [
+        4,
+        4
+      ],
+      "applicable_cts": {
+        "cases": [],
+        "note": "the selected storage-width cases exercise the accepted capabilities",
+        "status": "not-selected"
+      },
+      "detail": "reported as the specification floor; the frontend does not quantize texture coordinates itself",
+      "kind": "shader-precision",
+      "profile": "compute",
+      "subject": "texture and mipmap precision floors",
+      "verdict": "satisfied"
+    },
+    {
+      "advertised": "per-program metadata only",
+      "applicable_cts": {
+        "cases": [],
+        "note": "the selected storage-width cases exercise the accepted capabilities",
+        "status": "not-selected"
+      },
+      "detail": "PSBC/ACO records float_mode and ieee_mode per compiled program and the pipeline gate validates them; they are not exposed as device capabilities",
+      "file": "src/vk_pipeline.c",
+      "kind": "shader-precision",
+      "profile": "compute",
+      "subject": "compiler-emitted float/ieee mode",
+      "verdict": "satisfied"
+    },
+    {
+      "advertised": "not advertised",
+      "applicable_cts": {
+        "cases": [],
+        "note": "the selected storage-width cases exercise the accepted capabilities",
+        "status": "not-selected"
+      },
+      "detail": "no VK_KHR_shader_float_controls or Vulkan 1.2 float-control property is reported, so no mode claim exists to compare against PSBC/ACO; the compiler's behaviour for each SPIR-V mode is not measured here",
+      "kind": "shader-precision",
+      "profile": "compute",
+      "subject": "relaxed precision / signed zero / denorm modes",
+      "verdict": "not-audited"
     }
   ],
   "summary": {
@@ -25137,7 +25249,8 @@
       "satisfied": 120
     },
     "shader_capabilities": {
-      "satisfied": 6
+      "not-audited": 2,
+      "satisfied": 12
     }
   }
 }
