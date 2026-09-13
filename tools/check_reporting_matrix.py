@@ -32,6 +32,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+VK_IMAGE_TILING_OPTIMAL = 0
+VK_IMAGE_USAGE_SAMPLED_BIT = 0x00000004
+VK_IMAGE_USAGE_STORAGE_BIT = 0x00000008
+VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT = 0x00000010
+VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT = 0x00000020
+VK_IMAGE_USAGE_TRANSFER_SRC_BIT = 0x00000040
+VK_IMAGE_USAGE_TRANSFER_DST_BIT = 0x00000080
+
 ROOT = Path(__file__).resolve().parents[1]
 CORE_TARGET = ROOT / "conformance_inventory/core_target.json"
 MANIFEST = ROOT / "cts/upstream/manifest.json"
@@ -505,6 +513,47 @@ def _format_entry(reported: dict, format_name: str | None):
     return reported.get(enum)
 
 
+def evaluate_format_query_consistency(dump: dict) -> list[dict]:
+    """The two format query paths must agree with each other.
+
+    `vkGetPhysicalDeviceFormatProperties` describes the features a format
+    supports per tiling scope; `vkGetPhysicalDeviceImageFormatProperties` must
+    answer VK_SUCCESS exactly for the (format, tiling, usage) combinations those
+    features allow. Any disagreement is a reporting defect, not a capability
+    question, so it is a violation.
+    """
+    scope_bits = {
+        VK_IMAGE_USAGE_SAMPLED_BIT: ("optimalTilingFeatures", "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT"),
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT: ("optimalTilingFeatures", "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT"),
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT: ("optimalTilingFeatures", "VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT"),
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT: ("optimalTilingFeatures", "VK_FORMAT_FEATURE_TRANSFER_SRC_BIT"),
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT: ("optimalTilingFeatures", "VK_FORMAT_FEATURE_TRANSFER_DST_BIT"),
+        VK_IMAGE_USAGE_STORAGE_BIT: ("optimalTilingFeatures", "VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT"),
+    }
+    rows = []
+    for query in dump.get("imageFormatProperties", []):
+        tiling = query["tiling"]
+        usage = query["usage"]
+        entry = dump["formats"].get(str(query["format"]))
+        if entry is None or usage not in scope_bits:
+            continue
+        scope, feature = scope_bits[usage]
+        scope = "optimalTilingFeatures" if tiling == 0 else "linearTilingFeatures"
+        bit = FEATURE_BITS.get(feature, 0)
+        expected = bool(entry.get(scope, 0) & bit) if tiling == 0 else bool(entry.get("linearTilingFeatures", 0) & bit)
+        actual = query["result"] == 0
+        rows.append({
+            "kind": "format-query-consistency",
+            "format": query["format"], "tiling": tiling, "usage": usage,
+            "reported_features": entry.get(scope, 0),
+            "expected_supported": expected, "reported_supported": actual,
+            "verdict": "satisfied" if expected == actual else "violation",
+            "detail": (f"tiling {tiling} usage {usage:#x}: features {entry.get(scope, 0):#x} "
+                       f"implies supported={expected}, query answered supported={actual}"),
+        })
+    return rows
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true",
@@ -585,6 +634,13 @@ def main() -> int:
             row["profile"] = profile
             shaders.append(row)
 
+    format_queries = []
+    for profile, dump in dumps.items():
+        for row in evaluate_format_query_consistency(dump):
+            row = dict(row)
+            row["profile"] = profile
+            format_queries.append(row)
+
     selected = [case["path"] for case in manifest["cases"]]
     diagnostics = [case["path"] for case in manifest.get("diagnostics", [])]
 
@@ -629,11 +685,12 @@ def main() -> int:
         "limits": limits,
         "features": features,
         "formats": formats,
+        "format_query_consistency": format_queries,
         "shader_capabilities": shaders,
     }
 
     summary = {}
-    for section in ("limits", "features", "formats", "shader_capabilities"):
+    for section in ("limits", "features", "formats", "format_query_consistency", "shader_capabilities"):
         counts = {}
         for row in matrix[section]:
             counts[row["verdict"]] = counts.get(row["verdict"], 0) + 1
@@ -649,11 +706,11 @@ def main() -> int:
     else:
         MATRIX.write_text(text)
 
-    for section in ("limits", "features", "formats", "shader_capabilities"):
+    for section in ("limits", "features", "formats", "format_query_consistency", "shader_capabilities"):
         print(f"{section}: " + ", ".join(f"{k}={v}" for k, v in sorted(summary[section].items())))
-    violations = [row for section in ("limits", "formats", "shader_capabilities") for row in matrix[section]
+    violations = [row for section in ("limits", "formats", "format_query_consistency", "shader_capabilities") for row in matrix[section]
                   if row["verdict"] == "violation"]
-    blockers = [row for section in ("limits", "formats", "shader_capabilities") for row in matrix[section]
+    blockers = [row for section in ("limits", "formats", "format_query_consistency", "shader_capabilities") for row in matrix[section]
                 if row["verdict"] == "blocker"]
     print(f"blockers: {len(blockers)} (documented below-floor reports, not claims)")
     print(f"unresolved violations: {len(violations)}")

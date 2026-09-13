@@ -37,6 +37,11 @@ static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags 
          * prelude and read by shader descriptors. */
         return (usage &&
             !(usage & ~(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))) ||
+            /* Tiled colour-attachment role. VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT
+             * is reported for this format, and a reported format feature implies
+             * an image with that usage can be created, so the bare attachment
+             * usage must be accepted as well as the readback pair. */
+            usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     default: return 0;
     }
