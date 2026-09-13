@@ -489,7 +489,29 @@ static void negative(void)
     assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
     p->platform.supported_features |= PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
     info.pEnabledFeatures = NULL; priority = NAN;
-    assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS); priority = 0;
+    assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
+    priority = 0.0f;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS &&
+           d->queue.priority_class == 0);
+    vkDestroyDevice(d, NULL);
+    priority = 0.499f;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS &&
+           d->queue.priority_class == 0);
+    vkDestroyDevice(d, NULL);
+    priority = 0.5f;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS &&
+           d->queue.priority_class == 1);
+    vkDestroyDevice(d, NULL);
+    priority = 1.0f;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS &&
+           d->queue.priority_class == 1);
+    vkDestroyDevice(d, NULL);
+    priority = -0.001f;
+    assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS && !d);
+    priority = 1.001f;
+    assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS && !d);
+    priority = 1.0f;
+    before = opened;
     q.queueFamilyIndex = 1; assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
     q.queueFamilyIndex = 0; assert(opened == before);
     open_result = VK_ERROR_OUT_OF_DEVICE_MEMORY;

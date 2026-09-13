@@ -14017,12 +14017,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 0 must be >= 2; blocker: single serial queue; priority-based scheduling is not implemented",
+      "detail": "untagged-core: reported 2 must be >= 2",
       "kind": "limit",
       "limit": "discreteQueuePriorities",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 2,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -14032,12 +14032,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 0 must be >= 2; blocker: single serial queue; priority-based scheduling is not implemented",
+      "detail": "untagged-core: reported 2 must be >= 2",
       "kind": "limit",
       "limit": "discreteQueuePriorities",
       "profile": "compute",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 2,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -25980,9 +25980,9 @@
       "satisfied": 16
     },
     "limits": {
-      "blocker": 74,
+      "blocker": 72,
       "not-applicable": 656,
-      "satisfied": 124
+      "satisfied": 126
     },
     "shader_capabilities": {
       "not-audited": 2,

@@ -92,6 +92,9 @@ struct VkInstance_T {
 struct VkQueue_T {
     VkDevice device;
     uint64_t next_serial, completed_serial;
+    /* 0=low, 1=high. With the single exposed queue this cannot affect
+     * inter-queue scheduling, but preserves the normalized creation contract. */
+    uint32_t priority_class;
 };
 
 struct VkDevice_T {

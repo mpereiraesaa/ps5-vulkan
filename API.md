@@ -157,6 +157,10 @@ arrays are not supported.
 - A single serial native queue with Vulkan 1.0 binary semaphore signal, wait
   and consumption across ordered `VkSubmitInfo` records. Signals become visible
   only when their record retires; the final fence follows the final record.
+  `vkCreateDevice` maps the normalized queue priority to explicit low/high
+  classes and the physical device conservatively reports the Vulkan 1.0 floor
+  of two discrete priorities. Because the family exposes one queue, the two
+  classes cannot compete and do not imply a multi-queue scheduler.
   Multi-queue, timeline semaphore and synchronization2 contracts are absent.
 - Vulkan 1.0 events support host and recorded device set/reset plus waits inside
   or across primary command buffers. Event transitions are segmented from GPU

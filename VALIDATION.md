@@ -528,7 +528,7 @@ public query paths rather than from a copied table:
   `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
   report fails the gate; only documented blockers are accepted.
 
-Result on the shipped profiles: 124 mandatory limits satisfied, 74 documented
+Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
 the code path that enforces them, 16 format class rules
@@ -628,8 +628,11 @@ The earlier dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
 alignment validation and native descriptor-address adjustment with checked
-ranges. The reporting matrix now records 124 satisfied mandatory limit rows,
-74 limit blockers and 720 blockers overall.
+ranges. Queue priority reporting subsequently removed two more blockers: both
+profiles report the required two discrete priority classes, and device creation
+maps every valid normalized priority deterministically to low or high. The
+reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
+blockers and 718 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

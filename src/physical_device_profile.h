@@ -55,6 +55,11 @@ static inline int ps5vk_profile_power_of_two(VkDeviceSize value)
  * locations of four components, so 128 components are representable. */
 #define PS5VK_REQUIRED_INTERFACE_COMPONENTS 64u
 #define PS5VK_REQUIRED_SAMPLE_MASK_WORDS 1u
+/* Vulkan 1.0 requires at least two discrete normalized queue priorities.  The
+ * frontend exposes one serial queue, so priorities cannot compete with one
+ * another, but device creation still maps the requested [0,1] value into the
+ * required low/high classes instead of reporting an impossible zero. */
+#define PS5VK_REQUIRED_QUEUE_PRIORITIES 2u
 /* largePoints and wideLines are VK_FALSE, so the only sizes the pipeline
  * accepts are the fixed 1.0 values the mandatory floor requires; the matching
  * granularity limits stay 0, which is what the CTS applies for unsupported
@@ -140,6 +145,7 @@ static inline void ps5vk_physical_profile_init(
     limits->lineWidthRange[0] = PS5VK_REQUIRED_LINE_WIDTH;
     limits->lineWidthRange[1] = PS5VK_REQUIRED_LINE_WIDTH;
     limits->maxSampleMaskWords = PS5VK_REQUIRED_SAMPLE_MASK_WORDS;
+    limits->discreteQueuePriorities = PS5VK_REQUIRED_QUEUE_PRIORITIES;
 
     limits->maxBoundDescriptorSets = PS5VK_MAX_SETS;
     limits->maxPerStageDescriptorStorageBuffers = PS5VK_MAX_DESCRIPTORS;
@@ -209,6 +215,7 @@ static inline int ps5vk_physical_profile_valid(
         limits->lineWidthRange[0] < PS5VK_REQUIRED_LINE_WIDTH ||
         limits->lineWidthRange[1] < PS5VK_REQUIRED_LINE_WIDTH ||
         !limits->maxSampleMaskWords ||
+        limits->discreteQueuePriorities < PS5VK_REQUIRED_QUEUE_PRIORITIES ||
         limits->maxBoundDescriptorSets != PS5VK_MAX_SETS ||
         limits->maxPerStageResources != PS5VK_MAX_DESCRIPTORS ||
         !limits->maxComputeSharedMemorySize ||

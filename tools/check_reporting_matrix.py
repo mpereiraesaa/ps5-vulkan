@@ -265,7 +265,6 @@ KNOWN_BLOCKERS = {
     "maxDescriptorSetStorageImages": "no storage image descriptor type is accepted",
     "maxPerStageDescriptorInputAttachments": "no input attachment support (subpass dependencies rejected)",
     "maxDescriptorSetInputAttachments": "no input attachment support (subpass dependencies rejected)",
-    "discreteQueuePriorities": "single serial queue; priority-based scheduling is not implemented",
     "maxMemoryAllocationCount": "allocator policy: heap size divided by the minimum allocation charge",
     "maxSamplerLodBias": "vkCreateSampler rejects mipLodBias/minLod/maxLod",
     "minTexelOffset": "no evidence the compiler/sampler path implements texel offsets",

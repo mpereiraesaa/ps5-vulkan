@@ -411,6 +411,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     }
     if (result != VK_SUCCESS) { ps5vk_object_free(d, &saved, custom); return result; }
     d->physical = p; d->queue.device = d; d->queue.next_serial = 1;
+    d->queue.priority_class = q->pQueuePriorities[0] >= 0.5f ? 1u : 0u;
     d->enabled_features = enabled_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

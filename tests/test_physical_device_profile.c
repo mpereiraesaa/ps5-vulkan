@@ -24,6 +24,8 @@ int main(void)
     assert(properties.limits.minTexelBufferOffsetAlignment == 4);
     assert(properties.limits.maxComputeSharedMemorySize == 65536);
     assert(properties.limits.maxComputeWorkGroupInvocations == 1024);
+    assert(properties.limits.discreteQueuePriorities ==
+           PS5VK_REQUIRED_QUEUE_PRIORITIES);
     assert(memory.memoryHeapCount == 1 && memory.memoryTypeCount == 1);
     assert(memory.memoryHeaps[0].flags == VK_MEMORY_HEAP_DEVICE_LOCAL_BIT);
     assert(memory.memoryTypes[0].propertyFlags ==
@@ -73,6 +75,10 @@ int main(void)
         compute.heap_size, VK_QUEUE_COMPUTE_BIT, 0, 0));
     bad = properties;
     bad.limits.maxComputeWorkGroupSize[2] = 0;
+    assert(!ps5vk_physical_profile_valid(&bad, &memory,
+        compute.heap_size, VK_QUEUE_COMPUTE_BIT, 0, 0));
+    bad = properties;
+    bad.limits.discreteQueuePriorities = PS5VK_REQUIRED_QUEUE_PRIORITIES - 1;
     assert(!ps5vk_physical_profile_valid(&bad, &memory,
         compute.heap_size, VK_QUEUE_COMPUTE_BIT, 0, 0));
     assert(!ps5vk_physical_profile_valid(&properties, &memory,
