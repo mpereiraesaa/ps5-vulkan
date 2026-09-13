@@ -52,6 +52,7 @@ def main():
                    ROOT / "src/graphics_sync.c",
                    ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
                    ROOT / "src/vk_command.c",
+                   ROOT / "src/vk_indirect.c",
                    ROOT / "src/vk_fence.c",
                    ROOT / "src/vk_queue.c",
                    ROOT / "src/dispatch_encode.c",

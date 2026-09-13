@@ -12,6 +12,9 @@ struct ps5vk_submission {
     uint16_t first_operation[PS5VK_MAX_SUBMITTED_BUFFERS];
     uint16_t operation_count[PS5VK_MAX_SUBMITTED_BUFFERS];
     VkBool32 frontend_only;
+    /* Preparation is delayed until this segment reaches the queue head so
+     * indirect parameters observe all prior queue writes. */
+    VkBool32 deferred_prepare;
     uint32_t wait_count, signal_count;
     VkSemaphore *waits, *signals;
     struct ps5vk_submission *next;

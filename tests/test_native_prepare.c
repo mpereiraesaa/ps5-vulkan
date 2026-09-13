@@ -57,6 +57,11 @@ static void release(void *ctx, void *backing)
 VkResult ps5vk_buffer_span(VkDevice d, VkBuffer b, VkDeviceSize off,
                           VkDeviceSize range, void **address, VkDeviceSize *bytes)
 { (void)d; *address = (void *)((uintptr_t)b + off); *bytes = range; return VK_SUCCESS; }
+VkBool32 ps5vk_buffer_usage(VkDevice d,VkBuffer b,VkBufferUsageFlags usage)
+{ (void)d;(void)usage;return b!=VK_NULL_HANDLE; }
+VkResult ps5vk_buffer_cache(VkDevice d,VkBuffer b,VkDeviceSize off,
+                            VkDeviceSize range,VkBool32 invalidate)
+{ (void)d;(void)b;(void)off;(void)range;(void)invalidate;return VK_SUCCESS; }
 static void clean(void)
 { assert(!arenas && !mappings && !physicals && !reservations && !submissions); }
 int main(void)

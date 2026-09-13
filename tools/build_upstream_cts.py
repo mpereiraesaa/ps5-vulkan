@@ -708,6 +708,7 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeTestsUtil.cpp",
         # Genuine upstream push-constant factory. The focused package registers
         # the complete group and cases.txt selects only the audited compute leaf.

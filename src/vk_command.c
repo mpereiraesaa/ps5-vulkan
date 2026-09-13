@@ -114,6 +114,7 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
         if(type==VK_OBJECT_TYPE_BUFFER && op->buffer_barrier.buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_source==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->copy_destination==object)return 1;
+        if(type==VK_OBJECT_TYPE_BUFFER && op->indirect_buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->copy_image==object)return 1;
         if(type==VK_OBJECT_TYPE_IMAGE && op->image_barrier.image==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER && op->indices.buffer==object)return 1;
@@ -343,6 +344,25 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t
         op->sets[set]=c->sets[set];op->generations[set]=c->sets[set]->generation;
     }
 }
+static VkBool32 indirect_buffer_valid(VkCommandBuffer c, VkBuffer buffer,
+    VkDeviceSize offset, VkDeviceSize bytes)
+{
+    void *address = NULL; VkDeviceSize available = 0;
+    return c && c->state == PS5VK_RECORDING && !(offset & 3u) &&
+        ps5vk_buffer_usage(c->pool->device, buffer, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) &&
+        ps5vk_buffer_span(c->pool->device, buffer, offset, bytes,
+            &address, &available) == VK_SUCCESS;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(VkCommandBuffer c,VkBuffer buffer,
+    VkDeviceSize offset)
+{
+    if(!indirect_buffer_valid(c,buffer,offset,sizeof(VkDispatchIndirectCommand)))
+        {invalid(c);return;}
+    vkCmdDispatch(c,0,0,0);if(!c || c->state!=PS5VK_RECORDING)return;
+    struct ps5vk_operation *op=&c->operations[c->operation_count-1];
+    op->type=PS5VK_DISPATCH_INDIRECT;op->indirect_buffer=buffer;
+    op->indirect_offset=offset;op->indirect_count=1;
+}
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRenderPassBeginInfo *info,
     VkSubpassContents contents)
 {
@@ -459,6 +479,41 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer c,uint32_t count,uin
     op->type=PS5VK_DRAW_INDEXED;op->index_count=count;op->first_index=first;
     op->vertex_offset=base;op->indices=c->indices;
 }
+static int indirect_draw_valid(VkCommandBuffer c,VkBuffer buffer,VkDeviceSize offset,
+    uint32_t count,uint32_t stride,VkDeviceSize command_size)
+{
+    if(!c || (offset&3u) || count>1 ||
+       (count>1 && ((stride&3u) || stride<command_size)))return 0;
+    if(count)return indirect_buffer_valid(c,buffer,offset,command_size);
+    if(c->state!=PS5VK_RECORDING ||
+       !ps5vk_buffer_usage(c->pool->device,buffer,VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT))return 0;
+    void *address=NULL;VkDeviceSize available=0;
+    /* drawCount == 0 does not access command data, so Vulkan imposes no
+     * offset-plus-command-size bound in that case.  Still prove that the
+     * non-sparse buffer is live and completely bound. */
+    return ps5vk_buffer_span(c->pool->device,buffer,0,VK_WHOLE_SIZE,
+        &address,&available)==VK_SUCCESS;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirect(VkCommandBuffer c,VkBuffer buffer,
+    VkDeviceSize offset,uint32_t count,uint32_t stride)
+{
+    if(!indirect_draw_valid(c,buffer,offset,count,stride,sizeof(VkDrawIndirectCommand)))
+        {invalid(c);return;}
+    vkCmdDraw(c,0,0,0,0);if(!c || c->state!=PS5VK_RECORDING)return;
+    struct ps5vk_operation *op=&c->operations[c->operation_count-1];
+    op->type=PS5VK_DRAW_INDIRECT;op->indirect_buffer=buffer;
+    op->indirect_offset=offset;op->indirect_count=count;op->indirect_stride=stride;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirect(VkCommandBuffer c,VkBuffer buffer,
+    VkDeviceSize offset,uint32_t count,uint32_t stride)
+{
+    if(!indirect_draw_valid(c,buffer,offset,count,stride,
+        sizeof(VkDrawIndexedIndirectCommand))){invalid(c);return;}
+    vkCmdDrawIndexed(c,0,0,0,0,0);if(!c || c->state!=PS5VK_RECORDING)return;
+    struct ps5vk_operation *op=&c->operations[c->operation_count-1];
+    op->type=PS5VK_DRAW_INDEXED_INDIRECT;op->indirect_buffer=buffer;
+    op->indirect_offset=offset;op->indirect_count=count;op->indirect_stride=stride;
+}
 static int texture_layout_supported(VkImageLayout layout)
 {
     return layout==VK_IMAGE_LAYOUT_GENERAL || layout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
@@ -472,11 +527,13 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_HOST_BIT |
         VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     const VkAccessFlags supported=VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
         VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
         VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
+        VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
         VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
     if(!stages || (stages & ~allowed) || (access & ~supported))return 0;
     if(!access)return 1;
@@ -490,6 +547,8 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         !(stages & (VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & VK_ACCESS_SHADER_READ_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    if((access & VK_ACCESS_INDIRECT_COMMAND_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     /* MEMORY_READ/WRITE select every read/write access available in the stage
      * mask and are valid with any non-empty supported stage mask. */
     return 1;

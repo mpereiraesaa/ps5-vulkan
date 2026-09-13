@@ -21,6 +21,7 @@ results; visual output is not the sole correctness signal.
 - Host-visible buffers and images backed by native direct memory
 - Command pools and command buffers with explicit recording state
 - Ordered byte-granular buffer copies plus bounded buffer update and fill commands
+- Single-dispatch and single-draw indirect commands with execution-time argument resolution
 - Runtime-compiled compute pipelines with up to four resource sets
 - Storage buffers, uniform buffers and R32 uniform texel buffers
 - Extension-negotiated 8-bit and 16-bit storage-buffer access

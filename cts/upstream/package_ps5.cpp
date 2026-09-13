@@ -11,6 +11,7 @@
 #include "vktSynchronizationBasicSemaphoreTests.hpp"
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
+#include "vktComputeIndirectComputeDispatchTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
 #include "vktPipelineCacheTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
@@ -97,6 +98,8 @@ void FocusedVkTestPackage::init(void)
     {
         de::MovePtr<tcu::TestCaseGroup> computeGroup(new tcu::TestCaseGroup(m_testCtx, "compute"));
         computeGroup->addChild(vkt::compute::createBasicComputeShaderTests(m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
+        computeGroup->addChild(vkt::compute::createIndirectComputeDispatchTests(
+            m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
         addChild(computeGroup.release());
     }
 

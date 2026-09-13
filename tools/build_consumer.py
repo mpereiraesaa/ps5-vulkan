@@ -213,6 +213,12 @@ def main():
             "fill_bytes": 20,
             "whole_tail_bytes": 3,
         },
+        "indirect_dispatch": {
+            "api": "Vulkan 1.0",
+            "groups": [1, 1, 1],
+            "offset": 512,
+            "result_elements": 64,
+        },
         "storage_width": {
             "storageBuffer8BitAccess": True,
             "storageBuffer16BitAccess": True,

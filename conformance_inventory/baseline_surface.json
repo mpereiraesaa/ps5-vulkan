@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "baseline_commit": "6ce9e81273290b2c0c530425c2552a1c6b412a30",
-  "inspected_commit": "6ce9e81273290b2c0c530425c2552a1c6b412a30",
+  "baseline_commit": "a0d40adc6e27bcc98c360650c075cb8894000535",
+  "inspected_commit": "a0d40adc6e27bcc98c360650c075cb8894000535",
   "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
   "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
   "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
   "counts": {
-    "entry_points": 119,
-    "dispatched": 119,
-    "public_header": 119,
+    "entry_points": 122,
+    "dispatched": 122,
+    "public_header": 122,
     "implementation_only": 0
   },
   "entry_points": [
@@ -148,6 +148,15 @@
       "observed": null
     },
     {
+      "name": "vkCmdDispatchIndirect",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
       "name": "vkCmdDraw",
       "files": [
         "src/vk_command.c"
@@ -158,6 +167,24 @@
     },
     {
       "name": "vkCmdDrawIndexed",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdDrawIndexedIndirect",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdDrawIndirect",
       "files": [
         "src/vk_command.c"
       ],

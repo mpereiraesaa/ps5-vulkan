@@ -682,6 +682,29 @@ void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
         self.assertIn("CopyBufferToBuffer::iterate", generated)
         self.assertIn("deMemCmp(referenceData, resultData, bufferSize)", generated)
 
+    def test_indirect_dispatch_upstream_factory_body_and_selection_are_pinned(self):
+        """Keep the two original indirect compute oracles linked and selected."""
+        expected = {
+            "dEQP-VK.compute.indirect_dispatch.upload_buffer.single_invocation",
+            "dEQP-VK.compute.indirect_dispatch.gen_in_compute.single_invocation",
+        }
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        selected = {case["path"] for case in manifest["cases"]}
+        self.assertTrue(expected <= selected)
+
+        build = (REPO_ROOT / "tools/build_upstream_cts.py").read_text(encoding="utf-8")
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text(encoding="utf-8")
+        self.assertIn("vktComputeIndirectComputeDispatchTests.cpp", build)
+        self.assertIn("createIndirectComputeDispatchTests", package)
+
+        upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                    "modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp")
+        if upstream.is_file():
+            body = upstream.read_text(encoding="utf-8")
+            self.assertIn("cmdDispatchIndirect", body)
+            self.assertIn('"gen_in_compute"', body)
+            self.assertIn('"upload_buffer"', body)
+
     def test_push_specialization_selection_is_frozen_and_bounded(self):
         """Keep the audited Vulkan 1.0 cases and reject unsupported variants."""
         manifest = json.loads(MANIFEST_PATH.read_text())

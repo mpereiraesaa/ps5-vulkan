@@ -1,4 +1,5 @@
 #include "vk_queue.h"
+#include "vk_indirect.h"
 #include "draw_prepare_ps5.h"
 #include "command_arena_ps5.h"
 #include "graphics_sync.h"
@@ -111,7 +112,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         }
     }
     for(unsigned i=first+1;i<last;++i)
-        if(cb->operations[i].type!=PS5VK_DRAW && cb->operations[i].type!=PS5VK_DRAW_INDEXED)return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(cb->operations[i].type!=PS5VK_DRAW &&
+           cb->operations[i].type!=PS5VK_DRAW_INDEXED &&
+           !ps5vk_indirect_graphics_operation(cb->operations[i].type))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
     struct graphics_job *j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial; j->color=begin->framebuffer->attachments[0]->image;
     phase="command-arena";
@@ -204,7 +208,13 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
     phase="draw";
     for(unsigned i=first+1;i<last;++i) {
-        const struct ps5vk_operation *op=&cb->operations[i];
+        const struct ps5vk_operation *recorded=&cb->operations[i];
+        struct ps5vk_operation resolved;
+        const struct ps5vk_operation *op=recorded;
+        if(ps5vk_indirect_graphics_operation(recorded->type)) {
+            rc=ps5vk_indirect_resolve(d,recorded,&resolved);if(rc!=VK_SUCCESS)goto fail;
+            op=&resolved;
+        }
         /* Require the uploaded image's predicted shader-readable layout. */
         if(op->pipeline->set_count) {
             if(!op->sets[0] || !op->sets[0]->defined[0]){rc=VK_ERROR_UNKNOWN;goto fail;}
