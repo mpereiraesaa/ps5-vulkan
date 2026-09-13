@@ -13,6 +13,10 @@ import check_reporting_matrix as matrix  # noqa: E402
 class TestReportingMatrix(unittest.TestCase):
     def test_committed_matrix_is_current(self):
         """The gate must fail when the reported values move without a refresh."""
+        # `make check` builds this dump in its own step and runs the same check;
+        # when only the unit suite is run, skip rather than build a second copy.
+        if not (ROOT / "build/tests/dump_device_reporting").is_file():
+            self.skipTest("reporting dump not built; `make check` builds and runs it")
         result = subprocess.run(
             [sys.executable, str(ROOT / "tools/check_reporting_matrix.py"), "--check"],
             capture_output=True, text=True)
