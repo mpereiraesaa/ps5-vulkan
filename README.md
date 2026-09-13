@@ -25,6 +25,7 @@ results; visual output is not the sole correctness signal.
 - Extension-negotiated 8-bit and 16-bit storage-buffer access
 - Push constants and scalar specialization constants in compute and runtime graphics
 - Vulkan pipeline-cache objects with a normative header export (no portable compiled-code records yet)
+- Occlusion query-pool lifetime (result retrieval deferred) and empty sparse image queries
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list draws
 - One BGRA8 presentation attachment or RGBA8 off-screen color attachment,

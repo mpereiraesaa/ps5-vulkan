@@ -343,6 +343,18 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements(VkDevice d, VkImage imag
     if (d && image && image->device == d) *out = image->requirements;
 }
 
+VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements(VkDevice d, VkImage image,
+    uint32_t *count, VkSparseImageMemoryRequirements *out)
+{
+    (void)out;
+    if (!count) return;
+    /* Images cannot be created with VK_IMAGE_CREATE_SPARSE_BINDING_BIT because
+     * sparseBinding is not advertised, so every valid image reports zero sparse
+     * memory requirements. Invalid handles remain outside this contract. */
+    *count = 0;
+    if (!d || !image || image->device != d) return;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(VkDevice d, VkImage image,
     const VkImageSubresource *pSubresource, VkSubresourceLayout *pLayout)
 {

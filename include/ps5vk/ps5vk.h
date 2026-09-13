@@ -386,6 +386,39 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMergePipelineCaches(
     uint32_t srcCacheCount,
     const VkPipelineCache* pSrcCaches);
 
+/* Query-pool object lifetime. Only VK_QUERY_TYPE_OCCLUSION is created
+ * (timestamps and pipeline statistics require feature bits this implementation
+ * reports as false). Result retrieval remains private until query command
+ * recording and availability state are implemented as one semantic slice. */
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateQueryPool(
+    VkDevice device,
+    const VkQueryPoolCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkQueryPool* pQueryPool);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyQueryPool(
+    VkDevice device,
+    VkQueryPool queryPool,
+    const VkAllocationCallbacks* pAllocator);
+
+/* Sparse image queries. Sparse binding is not advertised, so both report an
+ * empty list rather than inventing sparse requirements. */
+VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements(
+    VkDevice device,
+    VkImage image,
+    uint32_t* pSparseMemoryRequirementCount,
+    VkSparseImageMemoryRequirements* pSparseMemoryRequirements);
+
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties(
+    VkPhysicalDevice physicalDevice,
+    VkFormat format,
+    VkImageType type,
+    VkSampleCountFlagBits samples,
+    VkImageUsageFlags usage,
+    VkImageTiling tiling,
+    uint32_t* pPropertyCount,
+    VkSparseImageFormatProperties* pProperties);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(
     VkDevice device,
     const VkDescriptorPoolCreateInfo* pCreateInfo,
