@@ -25,7 +25,7 @@ VK_DESCRIPTOR_SOURCES = $(VK_MEMORY_SOURCES) src/vk_descriptor.c
 VK_PIPELINE_SOURCES = $(VK_DESCRIPTOR_SOURCES) src/vk_pipeline.c src/compilation_cache.c src/vk_pipeline_cache.c
 VK_COMMAND_SOURCES = $(VK_PIPELINE_SOURCES) src/vk_command.c src/vk_indirect.c
 VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_sync.c src/vk_buffer_transfer.c src/vk_image_transfer.c src/color_clear.c src/vk_query_pool.c src/vk_queue.c src/vk_queue_router.c
-VK_GRAPHICS_SOURCES = src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c src/texture_copy.c src/texture_layout.c
+VK_GRAPHICS_SOURCES = src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c src/texture_copy.c src/texture_format.c src/texture_layout.c
 VK_DEVICE_SOURCES = $(VK_QUEUE_SOURCES) $(VK_GRAPHICS_SOURCES) src/vk_device.c src/vk_dispatch.c
 NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/queue_ps5.c src/vk_indirect.c src/descriptor_encode.c src/dispatch_encode.c src/compute_commands.c tests/test_native_prepare.c
 GRAPHICS_PAIR_TEST = -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/graphics_pair.c src/shader_relocate.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_shader_header.c tests/test_graphics_pair.c
@@ -66,6 +66,10 @@ check-sanitize:
 	./build/tests/test_sampler_core_probe_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Isrc src/color_detile.c tests/test_color_detile.c -o build/tests/test_color_detile_sanitized
 	./build/tests/test_color_detile_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format.c -o build/tests/test_texture_format_sanitized
+	./build/tests/test_texture_format_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy_sanitized
+	./build/tests/test_texture_copy_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_vk_image.c -o build/tests/test_vk_image_sanitized
 	./build/tests/test_vk_image_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass_sanitized
@@ -108,7 +112,7 @@ check-sanitize:
 	./build/tests/test_vk_pipeline_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) tests/test_vk_command.c -o build/tests/test_vk_command_sanitized
 	./build/tests/test_vk_command_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/texture_layout.c tests/test_vk_transfer.c -o build/tests/test_vk_transfer_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_vk_transfer.c -o build/tests/test_vk_transfer_sanitized
 	./build/tests/test_vk_transfer_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_fence.c tests/test_vk_fence.c -o build/tests/test_vk_fence_sanitized
 	./build/tests/test_vk_fence_sanitized
@@ -132,11 +136,15 @@ check:
 	./build/tests/test_sampler_core_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state
 	./build/tests/test_image_layout_state
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy
 	./build/tests/test_texture_copy
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/vk_image_view.c src/vk_sampler.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_descriptor.c -o build/tests/test_texture_descriptor
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format.c -o build/tests/test_texture_format
+	./build/tests/test_texture_format
+	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_ENABLE_TEXTURE_FORMAT_CANDIDATES=1 $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format_candidates.c -o build/tests/test_texture_format_candidates
+	./build/tests/test_texture_format_candidates
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/texture_format.c src/vk_image_view.c src/vk_sampler.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_descriptor.c -o build/tests/test_texture_descriptor
 	./build/tests/test_texture_descriptor
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_layout.c -o build/tests/test_texture_layout
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_layout.c -o build/tests/test_texture_layout
 	./build/tests/test_texture_layout
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler
 	./build/tests/test_vk_sampler
@@ -175,11 +183,11 @@ check:
 	./build/tests/test_vk_graphics_pipeline
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/graphics_program.c tests/test_graphics_program.c -o build/tests/test_graphics_program
 	./build/tests/test_graphics_program
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_ps5
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_ps5
 	./build/tests/test_targets_ps5
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/memory_ps5.c tests/test_native_memory_alignment.c -o build/tests/test_native_memory_alignment
 	./build/tests/test_native_memory_alignment
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/depth_layout.c src/texture_layout.c native/image_ps5.c tests/test_depth_layout.c -o build/tests/test_depth_layout
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/depth_layout.c src/texture_format.c src/texture_layout.c native/image_ps5.c tests/test_depth_layout.c -o build/tests/test_depth_layout
 	./build/tests/test_depth_layout
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_vk_image.c -o build/tests/test_vk_image
 	./build/tests/test_vk_image
@@ -237,7 +245,7 @@ check:
 	./build/tests/test_vk_pipeline
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) tests/test_vk_command.c -o build/tests/test_vk_command
 	./build/tests/test_vk_command
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/texture_layout.c tests/test_vk_transfer.c -o build/tests/test_vk_transfer
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_vk_transfer.c -o build/tests/test_vk_transfer
 	./build/tests/test_vk_transfer
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_fence.c tests/test_vk_fence.c -o build/tests/test_vk_fence
 	./build/tests/test_vk_fence

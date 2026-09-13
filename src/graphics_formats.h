@@ -2,6 +2,7 @@
 #define PS5VK_GRAPHICS_FORMATS_H
 #include <vulkan/vulkan_core.h>
 #include "graphics_limits.h"
+#include "texture_format.h"
 
 /* Float attribute widths shared by capability queries and the fetch gate. */
 static inline uint32_t ps5vk_vertex_format_size(VkFormat format)
@@ -43,7 +44,9 @@ static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags 
              * usage must be accepted as well as the readback pair. */
             usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    default: return 0;
+    default:
+        return ps5vk_texture_format_supported(format) && usage &&
+            !(usage & ~(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     }
 }
 
@@ -75,6 +78,13 @@ static inline void ps5vk_graphics_format_properties(VkFormat format,
     if (format == VK_FORMAT_R32_UINT || format == VK_FORMAT_R32_SINT ||
         format == VK_FORMAT_R32_SFLOAT)
         out->bufferFeatures |= VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
+    const struct ps5vk_texture_format *sampled=ps5vk_texture_format_lookup(format);
+    if(sampled && ps5vk_texture_format_supported(format)) {
+        out->optimalTilingFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+            VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+        if(sampled->linear_filter_candidate)
+            out->optimalTilingFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+    }
     switch (format) {
     case VK_FORMAT_B8G8R8A8_UNORM:
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
@@ -83,10 +93,8 @@ static inline void ps5vk_graphics_format_properties(VkFormat format,
         /* TRANSFER_DST is real for the transfer-only role implemented by the
          * image-copy/clear slice (padded linear layout), not a claim about the
          * tiled colour-attachment layout. */
-        out->optimalTilingFeatures = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-            VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
-            VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
-            VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+        out->optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         break;
     case VK_FORMAT_D32_SFLOAT:
         out->optimalTilingFeatures = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;

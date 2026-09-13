@@ -144,7 +144,7 @@ def main():
                        "-DPS5VK_RUNTIME_COMPILER=1"]
         sources = [(p.stem, p, []) for p in sorted((ROOT / "src").glob("vk_*.c"))]
         compute_srcs = [ROOT / "native/compute_main.c",
-            ROOT / "src/graphics_program.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_layout.c",
+            ROOT / "src/graphics_program.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
             ROOT / "native/platform_ps5.c", ROOT / "native/memory_ps5.c", ROOT / "native/queue_ps5.c",
             ROOT / "src/compute_commands.c", ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c"]
         if use_runtime_compiler:
@@ -196,7 +196,7 @@ def main():
             sources += [(p.stem, p, []) for p in (
                 ROOT / "native/graphics_main.c", ROOT / "native/compute_main.c", ROOT / "native/platform_ps5.c", ROOT / "src/scene_geometry.c", ROOT / "src/scene_region.c", ROOT / "src/sampler_core_probe.c", ROOT / "src/color_clear.c", ROOT / "src/color_detile.c",
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
-                ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_layout.c",
+                ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
                 ROOT / "native/command_arena_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",

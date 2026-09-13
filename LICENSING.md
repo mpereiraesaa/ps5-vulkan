@@ -32,6 +32,7 @@ Current derived or adapted files are:
 | `native/runtime_shader.c` | `src/platform/ps5_agc_package.c` | AGC compiler-metadata/package ABI adaptation |
 | `src/color_detile.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_tiled_color_offset` | General 1/2/4/8/16-byte `SW_64K_R_X` tiled-address equations and surface sizing |
 | `src/vk_sampler.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_wrap` and fixed-border handling | GFX10.3 repeat, mirrored-repeat, edge/border clamp and fixed border-color encodings |
+| `src/texture_format.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_format`, `ps5_texture_descriptor_swizzle` and `ps5_texture_format_size` | GFX10.3 sampled-image format words, component selectors and texel sizes; unvalidated rows remain disabled candidates |
 
 Every future direct adaptation must add an SPDX identifier and identify its
 source file and pinned revision in the file header and this table. Ideas and

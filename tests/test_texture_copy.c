@@ -7,6 +7,17 @@ int main(void)
     struct ps5vk_texture_copy p={0};
     assert(ps5vk_texture_copy_plan(65,4,40,2048,&r,&p)==VK_SUCCESS);
     assert(p.source_offset==16 && p.destination_offset==516 && p.source_pitch==12 && p.destination_pitch==512 && p.row_bytes==12 && p.rows==2);
+    VkBufferImageCopy narrow=r;narrow.bufferOffset=3;
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_R8_UNORM,257,4,9,2048,
+        &narrow,&p)==VK_SUCCESS);
+    assert(p.source_offset==3 && p.destination_offset==513 && p.source_pitch==3 &&
+        p.destination_pitch==512 && p.row_bytes==3 && p.rows==2);
+    narrow.bufferOffset=4;
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_R8G8_UNORM,129,4,16,2048,
+        &narrow,&p)==VK_SUCCESS);
+    assert(p.destination_offset==514 && p.source_pitch==6 && p.row_bytes==6);
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_B8G8R8A8_UNORM,129,4,16,2048,
+        &narrow,&p)!=VK_SUCCESS);
     r.bufferRowLength=8;r.bufferImageHeight=3;
     assert(ps5vk_texture_copy_plan(65,4,60,2048,&r,&p)==VK_SUCCESS && p.source_pitch==32);
     assert(ps5vk_texture_copy_plan(65,4,59,2048,&r,&p)!=VK_SUCCESS && p.source_pitch==32);

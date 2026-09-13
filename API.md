@@ -58,6 +58,15 @@ draws.
 
 ## Images and sampling
 
+The internal GFX1013 texture-format table also records exact descriptor
+encodings, identity component completion and texel sizes for `R8_UNORM`,
+`R8G8_UNORM` and `R8G8B8A8_SRGB`, adapted from the pinned GPLv3
+`ps5-opengl` reference. These rows are diagnostic candidates, not public
+support: the normal SDK keeps them disabled until image creation, upload,
+descriptor sampling and deterministic readback all pass on PS5 hardware.
+Candidate knowledge never changes `vkGetPhysicalDeviceFormatProperties` by
+itself.
+
 | Format | Supported role |
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |

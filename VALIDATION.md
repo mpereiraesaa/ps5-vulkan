@@ -598,6 +598,23 @@ single-level RGBA8 sampled-image path. It does not establish mip chains,
 anisotropy, custom border colors, mirror-clamp extension support, other sampled
 formats or Vulkan conformance.
 
+### GPL texture-format staging
+
+The driver now has one internal sampled-format table derived from the exact
+GPLv3 `ps5-opengl` revision pinned in `LICENSING.md`. It centralizes texel size,
+GFX10.3 descriptor-format word and Vulkan identity component completion for the
+already validated `R8G8B8A8_UNORM` path and three next candidates:
+`R8_UNORM`, `R8G8_UNORM` and `R8G8B8A8_SRGB`. Texture layout and buffer-upload
+planning no longer assume four bytes per texel.
+
+This is host-validated preparation, not new hardware evidence. The regular SDK
+continues to enable and report only `R8G8B8A8_UNORM`; a separate build-time
+candidate gate exists solely for bounded native diagnostics. Tests require the
+gate to be off by default, preserve the exact native words and swizzles, cover
+1/2/4-byte row arithmetic and reject unknown formats. No matrix count changes
+until a candidate passes creation, upload, sampling and deterministic readback
+on the owned PS5.
+
 The earlier dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
