@@ -130,6 +130,7 @@ struct VkDevice_T {
     struct VkCommandPool_T *command_pools;
     VkBool32 (*invalidate)(VkDevice, VkObjectType, const void *);
     struct VkFence_T *fences;
+    struct VkPipelineCache_T *pipeline_caches;
     struct ps5vk_progress progress;
     struct ps5vk_queue_backend submit_backend;
     struct ps5vk_queue_backend compute_backend, graphics_backend;

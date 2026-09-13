@@ -138,7 +138,37 @@ compiler/profile options, per-stage canonical specialization maps and the push
 layout signature. Cache leases protect metadata and ISA while the
 native backend copies them into direct memory. The native SDK retains at most
 32 pairs / 4 MiB; transient compilation allocations are outside that retained
-budget. No persistent Vulkan pipeline-cache format is provided.
+budget.
+
+### Pipeline cache
+
+The Vulkan pipeline-cache object is implemented for the bounded profile:
+`vkCreatePipelineCache`, `vkDestroyPipelineCache`, `vkGetPipelineCacheData` and
+`vkMergePipelineCaches`. A cache is device-parented and may be passed to
+`vkCreateComputePipelines` and `vkCreateGraphicsPipelines`; doing so changes
+nothing about compilation, which always goes through the bounded internal
+compilation cache described above.
+
+`vkGetPipelineCacheData` exports exactly the normative 32-byte
+`VkPipelineCacheHeaderVersionOne` (header size 32, version 1, current vendor and
+device IDs and the device's 16-byte `pipelineCacheUUID`). A `pData == NULL` call
+reports that size; a buffer smaller than the header returns `VK_INCOMPLETE`,
+writes nothing and reports zero; a larger buffer is written only up to the
+header. Externally supplied `pInitialData` is treated as untrusted: a short,
+corrupt, wrong-vendor/device/version/UUID or oversized blob is ignored and cache
+creation still succeeds with an empty cache, and a header-only blob round-trips
+byte for byte. `vkMergePipelineCaches` requires at least one source and validates
+the destination and every source (the destination is forbidden as a source,
+duplicate sources are legal and foreign handles are rejected). It is a no-op
+because the cache stores no records.
+
+No compiled-code record is serialized and no restored cache hit is reported.
+The digest-addressed key schema that a later record format must carry already
+exists for the in-process cache (SPIR-V SHA-256, entry point, compiler/ABI
+version, target, layout, specialization and push-range state), and
+`pipelineCacheUUID` is derived deterministically from public compatibility
+inputs (vendor/device, GFX1013 target, driver version, compiler identity and
+cache ABI revision) so any change invalidates previously exported data.
 
 The existing textured scene retains its offline exact-program path. Its
 capabilities must not be inferred for the narrower runtime graphics profile.

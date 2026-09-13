@@ -173,6 +173,24 @@ def main() -> int:
         if leaf in {token[len("VK_FORMAT_"):].lower()
                     for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text)}:
             continue
+        # Shader-stage sub-groups are generated the same way from stage bit
+        # literals (pipeline factories build names such as "compute_stage" or
+        # "vertex_stage_fragment_stage" with de::toString-style joins).
+        stages = set(re.findall(r"\bVK_SHADER_STAGE_([A-Z0-9_]+?)_BIT\b", text))
+        derived = []
+        if "COMPUTE" in stages:
+            derived.append("compute_stage")
+        if "VERTEX" in stages and "FRAGMENT" in stages:
+            middle = ""
+            if "GEOMETRY" in stages:
+                middle += "_geometry_stage"
+            if "TESSELLATION_CONTROL" in stages:
+                middle += "_tessellation_control_stage"
+            if "TESSELLATION_EVALUATION" in stages:
+                middle += "_tessellation_evaluation_stage"
+            derived.append("vertex_stage" + middle + "_fragment_stage")
+        if leaf in derived:
+            continue
         failures.append(
             f"{path}: leaf name {leaf!r} is not registered in {source_ref}")
 

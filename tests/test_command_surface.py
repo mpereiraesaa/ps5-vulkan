@@ -12,7 +12,7 @@ from tools.check_command_surface import (
     parse_dispatch_entries,
     parse_implementations,
     EXPECTED_VULKAN10_TOTAL,
-    EXPECTED_SUPPORTED_TOTAL,
+    EXPECTED_FULLY_WIRED_TOTAL,
     EXPECTED_MISSING_TOTAL,
     REQUIRED_BOOKKEEPING_COMMANDS,
 )
@@ -27,7 +27,7 @@ class TestCommandSurfaceParity(unittest.TestCase):
         result = audit_command_surface(REPO_ROOT)
         self.assertTrue(result["passed"], f"Audit failed with errors: {result['errors']}")
         self.assertEqual(result["core_total"], EXPECTED_VULKAN10_TOTAL)
-        self.assertEqual(result["supported_total"], EXPECTED_SUPPORTED_TOTAL)
+        self.assertEqual(result["fully_wired_total"], EXPECTED_FULLY_WIRED_TOTAL)
         self.assertEqual(result["missing_total"], EXPECTED_MISSING_TOTAL)
         self.assertEqual(result["dispatch_not_public"], [])
         self.assertEqual(result["impl_not_public"], [])
@@ -38,9 +38,9 @@ class TestCommandSurfaceParity(unittest.TestCase):
 
     def test_all_five_bookkeeping_commands_are_supported(self):
         result = audit_command_surface(REPO_ROOT)
-        supported = set(result["supported"])
+        fully_wired = set(result["fully_wired"])
         for cmd in REQUIRED_BOOKKEEPING_COMMANDS:
-            self.assertIn(cmd, supported, f"Required bookkeeping command {cmd} is not in supported surface")
+            self.assertIn(cmd, fully_wired, f"Required bookkeeping command {cmd} is not in fully wired surface")
 
 
 class TestCommandSurfaceNegativeFixtures(unittest.TestCase):

@@ -637,6 +637,12 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferAndImageAllocationUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiPipelineTests.cpp",
+        # Pipeline cache module: only the compute case is selected (the graphics
+        # cache cases need a D16_UNORM depth attachment this profile lacks), but
+        # the module registers both families. Its helper definitions already
+        # exist in the linked synchronization util, so vktPipelineMakeUtil.cpp is
+        # deliberately not added a second time (it would duplicate symbols).
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineCacheTests.cpp",
         # vktImageTestsUtil provides the format-qualifier and packed-type helpers
         # the buffer-view access tests use to build their compute shader.
         cts_root / "external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp",

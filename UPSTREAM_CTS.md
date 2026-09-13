@@ -48,7 +48,7 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 42 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 43 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline and push-constant cases plus nine storage-width cases). Only these
   acceptance leaves are registered by
@@ -155,6 +155,35 @@ identified as such wherever it is reported. Host tests do not establish GPU
 correctness.
 
 ## Limitations
+
+### Pipeline cache (2026-09-13)
+
+One additional original upstream case joins the selection:
+`dEQP-VK.pipeline.cache.compute_tests.compute_stage`
+(`pipeline/vktPipelineCacheTests.cpp:1893`). Its own body creates compute
+pipelines through a `VkPipelineCache`, exports the cache with
+`vkGetPipelineCacheData`, re-imports that data into a second cache, compiles
+again and repeats the compute comparison, so it exercises creation, export,
+re-import and cache-accepted pipeline creation with the upstream oracle.
+
+Two independent launches of the identical final payload completed the 43-case
+selection with **43 Pass, 0 Fail, 0 NotSupported**. Both reports passed strict
+identity and QPA reconstruction, reached `allocations_bytes=0`, and the title
+stopped after system Close Game.
+
+- Executable SHA-256: `9fda99f15ea604987d3124ec40a11d6e8f0dc24310b0163ccf50da1f80f24bd1`
+- Selection SHA-256: `00e9eb1902905886e36bfdbe2b288ec4775c6147c9f69026c9f178cf25ca8210`
+- QPA SHA-256: `6c5d95aa2dd2b9e8179e759e7fa6e01618e8ff2380ef01c1ca5ffcfaf019528c`
+  and `39233c916cba5a72bb36c7e78eac1f8988d72a89f841264c38919ec92644f256`
+
+This case proves the API and lifetime contract only: the implementation exports
+the normative 32-byte `VkPipelineCacheHeaderVersionOne` and stores no portable
+compiled-code records, so no restored cache hit is claimed or reported. The
+graphics-derived cache cases
+(`graphics_tests`, `pipeline_from_get_data`, `pipeline_from_incomplete_get_data`,
+`merge`, and the four `misc_tests`) remain unselected because the pinned bodies
+require a `D16_UNORM` depth attachment this profile does not support; their
+oracles are reproduced as host tests in `tests/test_pipeline_cache.c`.
 
 ### Fixed-function expansion (2026-09-13)
 

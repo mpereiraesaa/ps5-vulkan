@@ -105,6 +105,10 @@ static const struct entry entries[] = {
     ENTRY(vkQueueSubmit, DEVICE),
     ENTRY(vkQueueWaitIdle, DEVICE),
     ENTRY(vkDeviceWaitIdle, DEVICE),
+    ENTRY(vkCreatePipelineCache, DEVICE),
+    ENTRY(vkDestroyPipelineCache, DEVICE),
+    ENTRY(vkGetPipelineCacheData, DEVICE),
+    ENTRY(vkMergePipelineCaches, DEVICE),
 };
 #undef ENTRY
 

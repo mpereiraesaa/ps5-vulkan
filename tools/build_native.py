@@ -148,7 +148,8 @@ def main():
             ROOT / "native/platform_ps5.c", ROOT / "native/memory_ps5.c", ROOT / "native/queue_ps5.c",
             ROOT / "src/compute_commands.c", ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c"]
         if use_runtime_compiler:
-            compute_srcs += [ROOT / "src/compilation_cache.c", ROOT / "src/ps5vk_compiler.c", ROOT / "src/ps5_compiler_shims.c"]
+            compute_srcs += [ROOT / "src/compilation_cache.c", ROOT / "src/vk_pipeline_cache.c",
+                             ROOT / "src/ps5vk_compiler.c", ROOT / "src/ps5_compiler_shims.c"]
         sources += [(p.stem, p, []) for p in compute_srcs]
         sources += [("log", logger / "ps5log.c", ["-include", logger / "ps5log_ps5_net.h"]),
                     ("net", logger / "ps5log_ps5_net.c", [])]
@@ -208,7 +209,7 @@ def main():
                 gears / "src/ps5_agc_writer.c", gears / "src/ps5_gpu_span.c",
                 ROOT / "src/graphics_program.c", ROOT / "src/compute_commands.c",
                 ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c",
-                ROOT / "src/compilation_cache.c")]
+                ROOT / "src/compilation_cache.c", ROOT / "src/vk_pipeline_cache.c")]
     if use_runtime_graphics:
         run(sys.executable,ROOT / "tools/prepare_runtime_graphics.py","--out",out / "runtime_graphics_spirv.h")
         common += ["-DPS5VK_RUNTIME_GRAPHICS=1", "-I" + str(ROOT / "third_party/psbc-reference")]

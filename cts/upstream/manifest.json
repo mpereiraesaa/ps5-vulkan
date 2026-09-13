@@ -354,6 +354,14 @@
       "expected_status": "Pass",
       "features_required": ["storageBuffer16BitAccess"],
       "rationale": "Original upstream BufferBlock case reads tightly packed signed 16-bit SSBO elements, sign-extends them to 32-bit output and compares all 128 values."
+    },
+    {
+      "path": "dEQP-VK.pipeline.cache.compute_tests.compute_stage",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCacheTests.cpp:1893",
+      "category": "resource",
+      "expected_status": "Pass",
+      "features_required": [],
+      "rationale": "The original upstream ComputeCacheTest builds its compute pipelines through a VkPipelineCache, exports it with vkGetPipelineCacheData, re-imports that data into a second cache and compiles again, comparing the compute result after every step. This implementation stores no portable records yet, so the case proves the API and lifetime contract (creation, export, re-import, cache-accepted pipeline creation) rather than a restored compiled-code hit."
     }
   ],
   "diagnostics": [
