@@ -466,3 +466,24 @@ image leaves independently judge bounded `vkCmdCopyImage`. Their clear variant
 uses the same red value as the destination initializer, so `vkCmdClearColorImage`
 still has deterministic host evidence rather than an independent native pixel
 oracle. The 137/137 result remains structural coverage, not Vulkan conformance.
+
+## Mandatory core feature reporting
+
+The Vulkan 1.0 profile now reports and accepts its mandatory
+`robustBufferAccess` bit while rejecting all other unreported core feature
+requests. The exact 94-case upstream payload used SELF SHA-256
+`b7c485340e03fe66cbba572cdf678c7b7ac2f61643721f63d3eade411298429b`
+and selection SHA-256
+`5f853eb7d53226b7eda4f758aecaa70be857a80270f213d546d7bcae28015e41`.
+Two independent native runs were captured:
+
+- `20260913T181536286Z_PPSA99994_upstream-cts_0x52560710bc64`, QPA SHA-256
+  `a6f94c96dc62537558c970e48d97009bd3c5fca60159bd67769e933156a18b24`
+- `20260913T181557404Z_PPSA99994_upstream-cts_0x525af1f50de2`, QPA SHA-256
+  `9febc48ffd1618ac5b356ab97cb4a02d14eca4aeddb8a61fb1fac97dc93dad08`
+
+Each passed 94/94 genuine upstream cases with zero failures, unsupported cases
+or skips, complete QPA reconstruction, exit code zero and verified Close Game.
+The new case proves mandatory feature reporting and negotiation. Buffer SRD
+bounds are the implementation basis, but executable out-of-bounds CTS remains
+required before claiming complete robustness semantics.

@@ -16,8 +16,9 @@ hardware acceptance.
   the bound buffer span. This is the implementation basis for the feature, not
   an inference from the GPU name.
 - The original upstream `device_mandatory_features` reporting oracle is in the
-  focused selection. Executable out-of-bounds robustness cases and repeatable
-  hardware evidence remain required before this slice is considered complete.
+  focused selection and passed twice on PS5 in the exact 94-case build.
+  Executable out-of-bounds robustness cases remain required before the complete
+  access semantics are considered validated.
 
 ## Graphics
 

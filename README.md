@@ -19,8 +19,8 @@ results; visual output is not the sole correctness signal.
 
 - Vulkan 1.0-style instance, physical-device, device and queue objects
 - Core `robustBufferAccess` reporting and device negotiation backed by bounded
-  GFX1013 buffer and vertex descriptors; executable robustness CTS coverage is
-  still being expanded
+  GFX1013 buffer and vertex descriptors; mandatory reporting passed twice in
+  the exact 94-case upstream suite while executable robustness coverage expands
 - Host-visible buffers and images backed by native direct memory
 - Command pools and command buffers with explicit recording state
 - Ordered byte-granular buffer copies plus bounded buffer update and fill commands

@@ -662,9 +662,18 @@ regression. It does not widen the image profile or establish conformance.
 
 The current manifest contains 94 acceptance cases. The added original upstream
 leaf is `dEQP-VK.info.device_mandatory_features`, whose generated oracle requires
-`robustBufferAccess` for this Vulkan 1.0 profile. The historical 93/93 runs
-above predate this manifest change and remain evidence only for their exact
-selection hash. No 94/94 hardware result is claimed here until the rebuilt
-payload passes with matching executable and selection identities. This case
-checks feature reporting; executable robustness cases are a separate required
-step.
+`robustBufferAccess` for this Vulkan 1.0 profile. The rebuilt payload used SELF
+SHA-256
+`b7c485340e03fe66cbba572cdf678c7b7ac2f61643721f63d3eade411298429b`
+and selection SHA-256
+`5f853eb7d53226b7eda4f758aecaa70be857a80270f213d546d7bcae28015e41`.
+Two independent launches produced these ps5log/1 runs:
+
+- `20260913T181536286Z_PPSA99994_upstream-cts_0x52560710bc64`
+- `20260913T181557404Z_PPSA99994_upstream-cts_0x525af1f50de2`
+
+Both reconstructed complete QPA reports, passed 94/94 with zero `Fail`,
+`NotSupported` or `Skip`, returned exit code zero and stopped through verified
+Close Game. This proves the reported mandatory bit and its device-creation
+contract on the exact build. It does not prove every out-of-bounds access
+semantic; original executable robustness cases are the next required step.
