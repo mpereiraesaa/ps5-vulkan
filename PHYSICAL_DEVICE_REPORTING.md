@@ -236,6 +236,16 @@ alone cannot settle it. Two identical-artifact console runs per diagnostic
 group passed before publication. Integer rows remain nearest-only; this
 promotion adds no storage-image, blit or attachment support.
 
+### Tiling scopes
+
+The audit evaluates every scope carried by the pinned mandatory tables. At the
+pinned revision those tables define `optimalTilingFeatures` and
+`bufferFeatures` rules only; there is no mandatory `linearTilingFeatures` cell.
+This profile reports zero `linearTilingFeatures` for every format and rejects
+`VK_IMAGE_TILING_LINEAR` in `vkGetPhysicalDeviceImageFormatProperties`. The
+format-query consistency checks compare that rejection with the reported
+feature words. Linear tiling is therefore unsupported, not advertised.
+
 ### Pipeline cache identity
 
 `pipelineCacheUUID` is no longer left zero. It is derived deterministically from
