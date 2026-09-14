@@ -65,7 +65,8 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
     for(unsigned s=0;s<key->descriptor_set_count;++s)
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_set_signature *set=&key->descriptor_sets[s];
-            if(set->binding[b].count && (set->binding[b].stages!=VK_SHADER_STAGE_FRAGMENT_BIT ||
+            if(set->binding[b].count && (!set->binding[b].stages ||
+                (set->binding[b].stages&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)) ||
                 set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER))return 0;
         }
     return 1;
