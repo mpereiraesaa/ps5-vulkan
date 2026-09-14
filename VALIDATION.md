@@ -878,6 +878,48 @@ query-result copying, GPU timestamps, multi-subpass execution, secondary
 command buffers and sparse binding remain fail-closed. No new CTS or hardware
 claim is attached to these structural boundaries.
 
+## Current capability gap ledger (unsupported, not planned)
+
+The 137/137 figure above is structural. This ledger is the current list of
+exported boundaries that do not execute the general Vulkan operation their name
+implies, so a reader never has to infer support from an entry point merely
+being present. Every entry is recorded as unsupported or as explicitly bounded;
+none of them is a planned success.
+
+`tests/test_documentation_facts.py` cross-checks this ledger against the
+`REQUIRED_FAIL_CLOSED_COMMANDS` set that `tools/check_command_surface.py`
+itself defines, so a bounded boundary command cannot silently drop out of it,
+and against the parity audit itself, so the reported command counts cannot
+drift away from the documents again.
+
+<!-- capability-gap-ledger:begin -->
+
+- `vkCmdBlitImage` — unsupported. No GPU scaling or filtering path exists, no
+  blit feature bit is advertised, and the call records nothing.
+- `vkCmdResolveImage` — unsupported. Multisample image creation is not
+  implemented, and a single-sample copy is never accepted as a resolve.
+- `vkCmdClearAttachments` — unsupported. There is no in-render-pass attachment
+  clear path.
+- `vkCmdClearDepthStencilImage` — bounded, not general. The whole subresource of
+  a one-sample `VK_FORMAT_D32_SFLOAT` 2D target clears to a depth value in
+  `[0,1]`, and that single shape is qualified on hardware. Stencil aspects,
+  combined depth/stencil formats, partial mip or array ranges, rectangles and
+  multisample images remain unsupported.
+- `vkCmdNextSubpass` — unsupported. A render pass accepts one subpass only, so
+  no multi-subpass transition executes.
+- `vkCmdExecuteCommands` — unsupported. Secondary command buffers are rejected
+  at allocation, so no secondary execution exists.
+- `vkQueueBindSparse` — unsupported. No queue advertises
+  `VK_QUEUE_SPARSE_BINDING_BIT`, and the call fails closed without mutating
+  queue, fence or semaphore state.
+- Real query results — unsupported. Only bounded occlusion pools are created.
+  Reset is ordered and observable, but `vkGetQueryPoolResults` reports
+  `VK_NOT_READY` with an untouched destination, and occlusion begin/end,
+  `vkCmdCopyQueryPoolResults` and timestamp writes are fail-closed.
+  `timestampValidBits` is reported as zero.
+
+<!-- capability-gap-ledger:end -->
+
 ## Ordered buffer-transfer slice (2026-09-13)
 
 `vkCmdCopyBuffer`, `vkCmdUpdateBuffer` and `vkCmdFillBuffer` are validated
@@ -924,10 +966,12 @@ multi-draw support, or a conformance claim.
 
 The command-surface gate now derives all 137 mandatory Vulkan 1.0 core commands
 from the pinned registry and reports 137/137 public, dispatched and implemented
-symbols with zero asymmetries. Unsupported semantics are not counted as
-supported: blit, resolve, depth/stencil clear, attachment clear, real queries,
-multi-subpass execution, secondary command buffers and sparse binding retain
-explicit host-tested fail-closed behavior.
+symbols with zero asymmetries. That is a structural symbol and dispatch result,
+not a semantic or conformance claim. Unsupported semantics are not counted as
+supported: blit, resolve, attachment clear, real query results, multi-subpass
+execution, secondary command buffers and sparse binding retain explicit
+host-tested fail-closed behavior. `vkCmdClearDepthStencilImage` left that list
+for one bounded shape only, recorded in the section below.
 
 The final image slice adds bounded RGBA8 transfer-role image copy and colour
 clear, pitched buffer/image copies, conservative backing-alias rejection,
@@ -951,6 +995,44 @@ image leaves independently judge bounded `vkCmdCopyImage`. Their clear variant
 uses the same red value as the destination initializer, so `vkCmdClearColorImage`
 still has deterministic host evidence rather than an independent native pixel
 oracle. The 137/137 result remains structural coverage, not Vulkan conformance.
+
+## Whole-subresource depth-only clear (2026-09-14)
+
+`vkCmdClearDepthStencilImage` left the fail-closed list for one exact shape: the
+whole subresource of a one-sample `VK_FORMAT_D32_SFLOAT` 2D target, cleared to
+a depth value in `[0,1]` through the same uniform-DWORD GPU DMA fill the render
+pass already uses for its depth load-op clear. A constant depth value is the
+same 32-bit word in every texel, so filling the surface is tiling-invariant and
+needs none of the pipe XOR pixel equations `src/depth_layout.h` still refuses to
+claim. `VK_FORMAT_D32_SFLOAT` advertises `VK_FORMAT_FEATURE_TRANSFER_DST_BIT`
+for that clear and for no other D32 role: no transfer-source, sampled or blit
+role is claimed, and stencil aspects, partial mip or array ranges, rectangles,
+combined depth/stencil formats and multisample images stay fail-closed and
+record nothing.
+
+The witness is built so that only a real clear can satisfy it. The render pass
+loads depth, so it contributes nothing to the buffer; the explicit clear runs as
+its own submission and must retire before the render pass records, which makes
+the committed attachment layout the driver's own proof that the operation
+reached its GPU completion label. Geometry at z=0.4 and z=0.8 under
+`VK_COMPARE_OP_LESS` means two frames differing in nothing but the clear value
+must produce opposite results, and the oracle is the existing GPU colour
+readback rather than a host packet check.
+
+Two independent native runs deployed the identical `eboot.bin` SHA-256
+`570d711ec90ab604eac8eebb68b1b90c7fcd347ea2da168427629c83bafe1320`, re-read
+with FTP SELF conversion disabled and matched exactly before each launch:
+
+- `20260914T213105426Z_PPSA99994_ps5vk_0xab95315aa185`
+- `20260914T213136782Z_PPSA99994_ps5vk_0xab9c7e582127`
+
+Both are identical in every witness value: frame 0, cleared to `3f800000`,
+reported `changed=139968` of `2228224`; frame 1, cleared to `00000000`, reported
+`changed=0`; both with `valid=1` and a deliberately nonzero, ignored stencil
+member. `PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0` and a clean
+`BYE reason=graphics-api-end` preceded verified Close Game in both runs. This
+qualifies that one bounded depth shape; it is not general image-clear, blit,
+resolve or stencil support.
 
 ## Mandatory core feature reporting
 
