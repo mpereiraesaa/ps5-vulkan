@@ -60,12 +60,17 @@ def main():
     parser.add_argument("--continuous", action="store_true", help="Compile in continuous rendering mode")
     parser.add_argument("--shared-stage-samplers", action="store_true",
                         help="Finite backend qualification: shared VS/FS samplers above advertised limits")
+    parser.add_argument("--sampler-visibility", choices=("vertex-fragment", "all-graphics", "all"),
+                        default="vertex-fragment", help="Descriptor visibility for the shared-stage diagnostic")
     parser.add_argument("--check-only", action="store_true", help="Only verify header and symbol isolation")
     parser.add_argument("--use-staged-sdk", action="store_true",
                         help="Reuse dist-sdk without rebuilding it (caller guarantees freshness)")
     args = parser.parse_args()
     if args.continuous and args.shared_stage_samplers:
         parser.error("Shared-stage qualification requires the finite consumer")
+    if args.sampler_visibility != "vertex-fragment" and not args.shared_stage_samplers:
+        parser.error("Wider sampler visibility requires --shared-stage-samplers")
+    sampler_visibility = {"vertex-fragment": 0x11, "all-graphics": 0x1f, "all": 0x7fffffff}[args.sampler_visibility]
 
     # A merely present archive may predate the source tree.  Fresh staging is
     # the safe default for a standalone consumer and prevents false link
@@ -128,6 +133,7 @@ def main():
         cflags.append("-DCONSUMER_CONTINUOUS=1")
     if args.shared_stage_samplers:
         cflags.append("-DCONSUMER_SHARED_STAGE_SAMPLERS=1")
+        cflags.append(f"-DCONSUMER_SAMPLER_VISIBILITY={sampler_visibility}")
 
     has_native_toolchain = clang_wrapper.is_file() and linker.is_file() and builder.is_file()
 
@@ -282,6 +288,7 @@ def main():
         },
     }
     if args.shared_stage_samplers:
+        artifact["sampled_graphics"]["visibility_mask"] = sampler_visibility
         artifact["sampled_graphics"]["vertex_spirv_sha256"] = hashlib.sha256(
             sampled_shader_header.with_suffix(".shared.vert.spv").read_bytes()).hexdigest()
     artifact_path = DIST_DIR.parent / "artifact.json"

@@ -4,7 +4,10 @@
 #include "sampled_set_shaders.h"
 
 #ifdef CONSUMER_SHARED_STAGE_SAMPLERS
-#define SAMPLED_VISIBILITY (VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)
+#ifndef CONSUMER_SAMPLER_VISIBILITY
+#define CONSUMER_SAMPLER_VISIBILITY (VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)
+#endif
+#define SAMPLED_VISIBILITY CONSUMER_SAMPLER_VISIBILITY
 #define SAMPLED_READ_STAGES (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
 #define SAMPLED_DENOMINATOR 32768u
 #else
@@ -44,9 +47,10 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
 {
     /* Backend qualification beyond advertised sampler limits, not conformance. */
 #ifdef CONSUMER_SHARED_STAGE_SAMPLERS
-    ps5log_line(PS5LOG_MARK,"PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"
+    ps5log_printf(PS5LOG_MARK,"PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"
         " stages=vertex-fragment vs_sha256=" CONSUMER_SHARED_VERTEX_SPIRV_SHA256
-        " fs_sha256=" CONSUMER_SHARED_FRAGMENT_SPIRV_SHA256);
+        " fs_sha256=" CONSUMER_SHARED_FRAGMENT_SPIRV_SHA256 " visibility=%08x",
+        (unsigned)SAMPLED_VISIBILITY);
 #else
     ps5log_line(PS5LOG_MARK,"PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4");
 #endif

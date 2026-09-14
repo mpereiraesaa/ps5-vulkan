@@ -43,9 +43,49 @@ missing/duplicate evidence and wrong pixels. The integrated host gate passed.
 counts of one. This is backend qualification through public SDK headers, not
 a portable consumer, upstream CTS execution or a general limit promotion.
 The witness uses procedural vertices, a nearest sampler and four level-zero
-RGBA8 textures. Wider stage-visibility masks at pipeline consumption,
+RGBA8 textures. Bindings visible exclusively to nonexecuting stages,
 statically unused resources, mixed graphics buffer/image resources and
 applicable upstream CTS remain pending. No capability is promoted here.
+
+### Wider core visibility masks
+
+The same shared-stage workload additionally passed two identical-artifact runs
+per mask on 2026-09-14, using the native backend at
+`529d6b139b567309961d65efdf02a10ff1a21b78` and the public consumer's explicit
+visibility option. Only VS and FS execute; wider layout visibility does not
+instantiate geometry, tessellation or compute shader stages.
+
+```sh
+python3 tools/build_consumer.py --shared-stage-samplers --sampler-visibility all
+python3 tools/build_consumer.py --shared-stage-samplers --sampler-visibility all-graphics
+```
+
+- `ALL` (`0x7fffffff`), SELF SHA-256:
+  `65e560ea1df2a42d20f0ff9f809d040063c5aa5f3365a0a30a8963739da75974`.
+  TCP log SHA-256:
+  `da9395c3a3ff5dfebf5b6b92b61b8309513086deb1e2c8d732249263125b5707`,
+  `13687c02f97330ad10634ed25d5440e36f15145e0ee4e8c0d15f199a4c56ba6c`.
+- `ALL_GRAPHICS` (`0x1f`), SELF SHA-256:
+  `39dd0c374039e2286deabdb282d0816784c6694935d67ea89d3b780df63f7581`.
+  TCP log SHA-256:
+  `bf61e44356537519db6d5ff5939abaf9fca68e0366dac3fe79a64cfe0ebd929e`,
+  `53ea0e5f78e49043e18e4d5ec3344f23290bbf0bac58d4a95e9a292b2a5b28c6`.
+
+Each run matched the four BGRA references above, 471,744 colored pixels per
+round with zero mismatches, matched GPU completion, preceding compute/sync
+checks, fixed-function presentation, resource retirement and TCP BYE. All
+four runs independently confirmed Close Game; a decoded post-close image
+showed the home menu without an error dialog. Deployment and runtime identity
+use the same distinct mechanisms described above. The verifier binds the
+exact visibility mask in the manifest to the runtime record; it rejects
+unknown masks, mismatches, omitted fields in new logs and attempts to relabel
+legacy evidence. Eleven focused consumer tests pass. The core implementation
+also passed real compiler and native-preparation tests with ASan/UBSan:
+wider masks preserve machine code, argument ABI, table offsets and contents.
+
+This remains a 96-descriptor backend diagnostic beyond advertised limits, not
+upstream CTS or a general sampler-limit promotion. Static-use elimination and
+bindings visible only to nonexecuting stages remain incomplete.
 
 ## Shared-stage sampler compilation (host evidence)
 
@@ -58,8 +98,8 @@ uses the same canonical table address. A vertex-only sampling variant requires
 four vertex pointers and no fragment pointers. The pinned PSBC compiler conservatively
 ORs option-provided sets into its used-set mask: visibility can reserve a
 vertex pointer even without an actual vertex shader access. Eliminating
-statically unused resources is not implemented by this change. Unsupported
-stage masks and resource types remain rejected.
+statically unused resources is not implemented by this change. Invalid
+stage masks and unsupported resource types remain rejected.
 
 Compiler/ABI tests alone are **not vertex-sampling hardware evidence**.
 The separate shared-stage runs above provide bounded GPU output evidence.
