@@ -23,8 +23,9 @@ the focused test also passes ASan/UBSan.
 At the upload-only revision, the three upstream cases completed their uploads
 on GFX1013 but next encountered an initial color-attachment barrier: its
 write-only access scope was rejected. The follow-up below resolves that
-restriction. **None passes its full oracle yet**; the three cases remain
-outside strict acceptance. No sampler limits or conformance claim change.
+restriction; the later independent-readback fix lets the vertex case pass
+its full oracle. The three-case diagnostic selection remains outside strict
+acceptance. No sampler limits or conformance claim change.
 Upload completion alone is not verification of the uploaded texture pixels.
 
 Regression validation: two runs of the existing **106-case** upstream selection
@@ -53,8 +54,9 @@ The same three original sampler cases were executed again on 2026-09-14:
 all complete the separate color-transition submission. The vertex case also
 completes its draw, then fails the independent image-readback submission.
 The fragment and combined-stage cases instead fail graphics-pipeline creation.
-These are remaining implementation gaps, not CTS passes; upstream sources,
-oracles and the strict selection remain unchanged.
+Those were the remaining implementation gaps at this revision, not CTS passes;
+the next section records the readback fix. Upstream sources, oracles and the
+strict selection remain unchanged.
 
 The existing 106-case selection above passed with signed SELF SHA-256
 `7b74ade0920b1c77d42d867f0d3339c71307c6b84c291dd4b17bd1fd7ccc0b67`,
@@ -64,6 +66,35 @@ and confirmed Close Game. A decoded post-close image showed the home menu
 without an error dialog; the automated stream was stopped afterward.
 The integrated host and sanitizer gates also passed. As above, runtime
 identity is a manifest echo, not an independent running-SELF measurement.
+
+### Independent color readback
+
+The bounded full-image RGBA8 readback can now run separately from the render
+pass. Both routes use a shared validator for the color-to-transfer transition,
+copy region, destination span and host-read barrier. Preparation records only
+tentative layout state. The native job emits a cache-flushing GPU completion
+packet and waits for its exact serial before the existing CPU detile publishes
+the readback bytes; only then can the submission retire. This is not a GPU
+detile implementation or support for arbitrary formats/regions.
+
+On 2026-09-14, two identical-artifact runs of the original three-case sampler
+diagnostic each returned **one Pass and two Fail**. The vertex-only case now
+passes the unchanged upstream bilinear image comparison, covering its separate
+upload, color transition, textured draw and image readback. Fragment and
+combined-stage cases still fail graphics-pipeline creation. Full diagnostic
+acceptance remains false; no failing case was skipped or counted as supported.
+Transport reassembly and expected package identity were checked independently
+of that failing acceptance verdict, and both runs confirmed Close Game.
+
+The signed SELF SHA-256 is
+`596b34c2c484d4c5930608a3c8615431ef1f71cd5105d720a93d4fd70b922b0f`.
+Host tests exercise both submission shapes, deferred layout/pixel mutation,
+invalid commands, stages/access scopes, spans and regions, and rollback of an
+existing render-layout transaction. They pass ASan/UBSan; the integrated host
+and sanitizer gates also pass. Two identical-SELF runs of the unchanged strict
+106-case regression selection passed every original oracle, identity/QPA
+verification, zero tracked allocations and confirmed Close Game. This bounded
+result does not promote advertised sampler counts or establish Vulkan conformance.
 
 ## Shared-stage sampler hardware qualification
 
