@@ -176,9 +176,14 @@ int main(void)
     ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_UNORM, &properties);
     assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
     assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+    /* The depth target advertises the transfer destination the whole-subresource
+     * vkCmdClearDepthStencilImage consumes, and nothing else: there is no
+     * transfer source, no sampled role and no blit role for 64KB_Z_X. */
     ps5vk_texture_format_properties(VK_FORMAT_D32_SFLOAT, &properties);
-    assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
-    assert(!properties.bufferFeatures);
+    assert(properties.optimalTilingFeatures ==
+        (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                               VK_FORMAT_FEATURE_TRANSFER_DST_BIT));
+    assert(!properties.bufferFeatures && !properties.linearTilingFeatures);
     ps5vk_texture_format_properties(VK_FORMAT_R32_UINT, &properties);
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
@@ -296,11 +301,21 @@ int main(void)
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_USAGE_SAMPLED_BIT));
-    /* D32 is a depth/stencil attachment only. */
+    /* D32 is a depth/stencil attachment, optionally clearable. */
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    /* The clear destination is a role on its own: Vulkan asks only for
+     * transfer-destination usage on a cleared image, and such a D32 image is
+     * still the tiled depth surface, not a padded linear one. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_SAMPLED_BIT));
     /* RGBA8 has the transfer pair, the sampled route and the attachment with

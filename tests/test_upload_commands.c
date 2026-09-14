@@ -21,8 +21,14 @@ VkResult ps5vk_texture_copy_plan_for_image(VkImage image,VkDeviceSize src,VkDevi
     *out=(struct ps5vk_texture_copy){0,0,16,32,8,2,64,96,2};
     return plan_result;
 }
+static const void *flushed;static size_t flushed_bytes;
 static void flush(const void *p,size_t n)
-{ assert(p>= (const void *)source && n<=sizeof(source));++flushes; }
+{
+    const unsigned char *at=p;
+    assert((at>=source && n<=(size_t)(source+sizeof(source)-at)) ||
+           (at>=destination && n<=(size_t)(destination+sizeof(destination)-at)));
+    flushed=p;flushed_bytes=n;++flushes;
+}
 int main(void)
 {
     struct VkDevice_T device={0};struct VkImage_T image={0};
@@ -104,4 +110,52 @@ int main(void)
     image.info.usage=VK_IMAGE_USAGE_SAMPLED_BIT;
     assert(ps5vk_upload_commands(&device,&color,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
     assert(cursor==words && !layouts.count);
+
+    /* --- whole-subresource depth clear ------------------------------------
+     * The emitted work is the uniform DWORD fill, over the whole allocation,
+     * of the exact value the frontend recorded. The host writes nothing: the
+     * destination bytes are still the guard pattern afterwards. */
+    struct VkImage_T depth={.info={.format=VK_FORMAT_D32_SFLOAT,
+        .imageType=VK_IMAGE_TYPE_2D,.extent={8,4,1},.mipLevels=1,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+        .usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT},
+        .layout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL};
+    struct ps5vk_operation clear={.type=PS5VK_CLEAR_DEPTH_STENCIL_IMAGE,
+        .image_destination=&depth,
+        .image_destination_layout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .clear_word=0x3f800000u,.image_region_count=1};
+    layouts=(struct ps5vk_layout_state){0};cursor=words;flushes=0;
+    memset(destination,0xa5,sizeof(destination));
+    assert(ps5vk_upload_commands(&device,&clear,1,NULL,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
+    /* One DMA_DATA packet covers the 256-byte span: immediate DWORD source,
+     * L2 destination, DMA_SYNC on the final packet. */
+    assert(cursor-words==7);
+    assert(words[0]==0xc0055000u && words[1]==(0x40300000u|0x80000000u));
+    assert(words[2]==0x3f800000u && words[3]==0);
+    assert(words[4]==(uint32_t)(uintptr_t)destination && words[6]==sizeof(destination));
+    assert(flushes==1 && flushed==(const void *)destination &&
+           flushed_bytes==sizeof(destination));
+    for(unsigned i=0;i<sizeof(destination);++i)assert(destination[i]==0xa5);
+    /* The emitter refuses a target that is not the advertised depth role, and
+     * refuses a layout the recorded operation did not establish. */
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    depth.info.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    assert(ps5vk_upload_commands(&device,&clear,1,NULL,&layouts,&cursor,words+256,flush)==
+           VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(cursor==words);
+    depth.info.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    depth.info.samples=VK_SAMPLE_COUNT_4_BIT;
+    assert(ps5vk_upload_commands(&device,&clear,1,NULL,&layouts,&cursor,words+256,flush)==
+           VK_ERROR_FEATURE_NOT_PRESENT);
+    depth.info.samples=VK_SAMPLE_COUNT_1_BIT;
+    depth.layout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    assert(ps5vk_upload_commands(&device,&clear,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    assert(cursor==words);
+    /* An arena too small to hold the fill fails instead of emitting a partial
+     * clear, and the tentative layout state stays empty. */
+    depth.layout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&clear,1,NULL,&layouts,&cursor,words+6,flush)==
+           VK_ERROR_UNKNOWN);
+    assert(cursor==words);
 }

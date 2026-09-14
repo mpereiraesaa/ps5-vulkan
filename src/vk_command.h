@@ -12,7 +12,11 @@ enum ps5vk_operation_type {
     PS5VK_DRAW_INDIRECT, PS5VK_DRAW_INDEXED_INDIRECT, PS5VK_QUERY_RESET,
     /* Frontend image domain: executed in submission order by start_submission
      * when the segment reaches the head, like the buffer transfers. */
-    PS5VK_COPY_IMAGE, PS5VK_CLEAR_COLOR_IMAGE
+    PS5VK_COPY_IMAGE, PS5VK_CLEAR_COLOR_IMAGE,
+    /* Backend image domain: the tiled depth target is device memory the host
+     * never writes, so a depth clear is emitted as GPU packets and completes
+     * against the segment's label, like the buffer-to-image upload. */
+    PS5VK_CLEAR_DEPTH_STENCIL_IMAGE
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,

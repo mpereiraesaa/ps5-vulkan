@@ -286,9 +286,27 @@ resolve remain fail-closed entry points.
   rejected before mutation.
 - The tiled colour-attachment role is deliberately not copyable or clearable
   here, because 64KB_R_X has no linear addressing in this codebase.
-  `vkCmdClearDepthStencilImage` and `vkCmdClearAttachments` are structurally
-  exposed and always invalidate recording: the depth role has no pixel
-  addressing and a mid-render-pass attachment clear would need a DCB clear path
+- `vkCmdClearDepthStencilImage` clears the **whole subresource** of a
+  one-sample `VK_FORMAT_D32_SFLOAT` 2D target created with both
+  `VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT` and
+  `VK_IMAGE_USAGE_TRANSFER_DST_BIT`, in `TRANSFER_DST_OPTIMAL` or `GENERAL`,
+  with a depth value in `[0,1]` and a zero stencil value. The surface is
+  64KB_Z_X tiled and this driver still does not claim the pipe XOR pixel
+  equations; it does not need them here, because a constant depth value is the
+  same 32-bit word in every texel, so filling the whole allocation with that
+  word is tiling-invariant and yields exactly the image a per-pixel clear
+  would. The work is emitted as the same uniform-DWORD GPU DMA fill the render
+  pass already uses for its depth load-op clear, ordered at the queue head like
+  the other transfers, and the host never writes the surface. Accordingly
+  `VK_FORMAT_D32_SFLOAT` advertises `VK_FORMAT_FEATURE_TRANSFER_DST_BIT`, which
+  exists solely for this clear: transfer-destination usage **alone** is not a
+  valid usage for the format, and no transfer-source, sampled or blit role is
+  claimed. Everything that would require the missing pixel addressing stays
+  fail-closed and records nothing: a partial mip or array range, any stencil
+  aspect, a combined depth/stencil format, a multisample image, and a
+  rectangle.
+- `vkCmdClearAttachments` is structurally exposed and always invalidates
+  recording: a mid-render-pass attachment clear would need a DCB clear path
   that does not exist yet. `vkCmdBlitImage` and `vkCmdResolveImage` likewise
   always invalidate recording because no proven scaling/filter or multisample
   contract exists.

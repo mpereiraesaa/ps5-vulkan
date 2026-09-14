@@ -286,8 +286,14 @@ static void lifecycle(void)
     for(unsigned usage=0;usage<256;++usage) {
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_B8G8R8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+        /* The depth target is an attachment, the destination of the whole-
+         * subresource vkCmdClearDepthStencilImage, or both. Every form is the
+         * tiled depth surface; no other combination exists. */
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_D32_SFLOAT,usage)==
-            (usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+            (usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT ||
+             usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
+             usage==(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT)));
     assert(!!ps5vk_graphics_image_usage(VK_FORMAT_R8G8B8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_SAMPLED_BIT || usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
              usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
@@ -358,8 +364,12 @@ static void lifecycle(void)
         if(ps5vk_graphics_image_usage(image_formats[f],usage)) {
             assert(result==VK_SUCCESS && ip.maxExtent.width==(f==0?16383u:16384u));
             assert(ip.maxExtent.height==ip.maxExtent.width && ip.maxExtent.depth==1);
+            /* Every D32 role is the tiled depth surface, including the target
+             * created only as the destination of a whole-subresource depth
+             * clear, so all of them are attachment-shaped: one mip, one layer. */
             const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0;
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 ||
+                image_formats[f]==VK_FORMAT_D32_SFLOAT;
             const VkBool32 transfer_only=image_formats[f]==VK_FORMAT_R8G8B8A8_UNORM && usage &&
                 !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                                              VK_IMAGE_USAGE_TRANSFER_DST_BIT));
@@ -426,7 +436,10 @@ static void lifecycle(void)
             optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         else if(formats[n]==VK_FORMAT_D32_SFLOAT)
-            optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            /* TRANSFER_DST is the whole-subresource depth clear, which is the
+             * only transfer role 64KB_Z_X has; there is no TRANSFER_SRC. */
+            optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
         assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
             fp.optimalTilingFeatures==optimal_bits);
     }

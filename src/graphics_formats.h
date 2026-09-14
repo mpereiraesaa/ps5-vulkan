@@ -138,8 +138,15 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         PS5VK_FORMAT_CAP_TRANSFER_SRC) && usage &&
         !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    /* The whole-subresource depth clear destination: a D32 target created only
+     * as a transfer destination is still the tiled depth surface, so it keeps
+     * the depth attachment's dimensions rather than the padded linear ones. */
+    const VkBool32 depth_clear_target=ps5vk_texture_format_witnessed(format,
+        PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) &&
+        ps5vk_texture_format_witnessed(format,PS5VK_FORMAT_CAP_TRANSFER_DST) &&
+        usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     uint32_t width=0,height=0,depth=1,layers=1;
-    if(attachment) {
+    if(attachment || depth_clear_target) {
         if(type!=VK_IMAGE_TYPE_2D || flags)return VK_ERROR_FORMAT_NOT_SUPPORTED;
         width=height=format==VK_FORMAT_B8G8R8A8_UNORM?
             PS5VK_MAX_COLOR_DIMENSION:PS5VK_MAX_IMAGE_2D;
