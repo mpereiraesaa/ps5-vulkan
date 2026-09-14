@@ -78,6 +78,40 @@ int main(void)
         destination,1,&region);
     assert(command->state==PS5VK_INVALID && !command->operation_count);
 
+    /* Upload visibility must be recordable for vertex sampling, without
+     * substituting ALL_COMMANDS or confusing vertex fetch with shader reads. */
+    image.info.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkImageMemoryBarrier barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.dstAccessMask=VK_ACCESS_SHADER_READ_BIT,
+        .oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .image=&image,.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+    const VkPipelineStageFlags readers[]={VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
+    for(unsigned n=0;n<sizeof(readers)/sizeof(readers[0]);++n) {
+        assert(vkResetCommandBuffer(command,0)==VK_SUCCESS &&
+               vkBeginCommandBuffer(command,&begin)==VK_SUCCESS);
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,readers[n],
+            0,0,NULL,0,NULL,1,&barrier);
+        assert(command->state==PS5VK_RECORDING && command->operation_count==1);
+        assert(command->operations[0].type==PS5VK_IMAGE_BARRIER &&
+               command->operations[0].dst_stage==readers[n] &&
+               command->operations[0].image_barrier.image==&image &&
+               command->operations[0].image_barrier.dstAccessMask==VK_ACCESS_SHADER_READ_BIT);
+        assert(vkEndCommandBuffer(command)==VK_SUCCESS);
+    }
+    const VkPipelineStageFlags invalid_readers[]={0,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    for(unsigned n=0;n<sizeof(invalid_readers)/sizeof(invalid_readers[0]);++n) {
+        assert(vkResetCommandBuffer(command,0)==VK_SUCCESS &&
+               vkBeginCommandBuffer(command,&begin)==VK_SUCCESS);
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,invalid_readers[n],
+            0,0,NULL,0,NULL,1,&barrier);
+        assert(command->state==PS5VK_INVALID && !command->operation_count);
+    }
     vkDestroyCommandPool(&d,pool,NULL);vkDestroyBuffer(&d,destination,NULL);
     d.images=NULL;vkFreeMemory(&d,memory,NULL);
     puts("Bounded image-to-buffer recording: pass (host only)");
