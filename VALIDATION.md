@@ -3,6 +3,41 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Independent texture-upload submissions
+
+On 2026-09-14, the original upstream binding-model cases
+`primary_cmd_buf.bind.combined_image_sampler_mutable.{vertex,fragment,vertex_fragment}.single_descriptor.2d`
+exposed a backend restriction: an upload submission was rejected unless it
+also contained a render pass. These cases upload a two-layer RGBA8 image, use
+a single 2D view with a linear/repeat sampler, and eventually compare four
+rendered quadrants with the unchanged CTS image reference.
+
+Uploads now use the same DMA/cache emitter in an independent submission or a
+render prelude. Staging-buffer ranges are flushed, commands remain job-owned,
+and tentative image layouts commit only after the exact GPU completion serial.
+The standalone path does not create a color target or perform a CPU pixel copy.
+Host tests cover multi-layer DMA encoding, no pixel/layout mutation during
+preparation, rollback on span/planner/capacity failures and unsupported commands;
+the focused test also passes ASan/UBSan.
+
+The three upstream cases now complete their upload submissions on GFX1013, but
+**none passes its full oracle yet**: they next encounter the separate initial
+color-attachment barrier, whose write-only access scope is rejected by the
+current frontend. They remain outside strict acceptance; no sampler limits or
+conformance claim change. This is execution/completion evidence for the upload
+path, not yet independent verification of the uploaded texture pixels.
+
+Regression validation: two runs of the existing **106-case** upstream selection
+passed all original oracles, with complete TCP QPA reconstruction, identity
+checks, zero tracked allocations and independently confirmed Close Game.
+The exact signed SELF, verified by FTP readback before remount/launch, is
+`5446ca4b8ff55d6f66444f13c81ff5fd7c9ffc71fa8739876448527f60c0ec55`;
+the selection SHA-256 is
+`344a278e325846f6918903e48b3262e2551178aab2caa022c67e8dd3539f5b62`.
+Runtime identity fields echo the deployed manifest and do not independently
+hash the running SELF. Temporary rejection-location instrumentation was removed
+before this regression build.
+
 ## Shared-stage sampler hardware qualification
 
 On PS5 GFX1013 / firmware 12.02, 2026-09-14, the independent public-SDK

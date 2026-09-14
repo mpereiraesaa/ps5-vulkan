@@ -1,0 +1,76 @@
+#ifndef PS5VK_UPLOAD_COMMANDS_PS5_H
+#define PS5VK_UPLOAD_COMMANDS_PS5_H
+#include "vk_command.h"
+#include "image_layout_state.h"
+#include "texture_copy.h"
+#include "texture_dma.h"
+#include "graphics_sync.h"
+
+/* Shared by a render prelude and an independent transfer submission. Prepare
+ * only emits commands and records tentative layouts: it never copies pixels
+ * or commits resource state before the GPU completion label. */
+static inline VkResult ps5vk_upload_commands(VkDevice d,
+    const struct ps5vk_operation *ops, unsigned count, VkImage color,
+    struct ps5vk_layout_state *layouts, uint32_t **cursor, uint32_t *end,
+    void (*flush)(const void *,size_t))
+{
+    for(unsigned i=0;i<count;++i) {
+        const struct ps5vk_operation *op=&ops[i];
+        size_t n=0;
+        if(op->type==PS5VK_BARRIER) {
+            /* Existing vertex-host prelude or host-written upload staging.
+             * Range validity/lifetime is also checked by the frontend. */
+            const int vertex=!op->buffer_barrier.buffer &&
+                op->src_stage==VK_PIPELINE_STAGE_HOST_BIT &&
+                op->dst_stage==VK_PIPELINE_STAGE_ALL_COMMANDS_BIT &&
+                op->src_access==VK_ACCESS_HOST_WRITE_BIT &&
+                op->dst_access==VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+            const int upload=op->src_stage==VK_PIPELINE_STAGE_HOST_BIT &&
+                op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                op->src_access==VK_ACCESS_HOST_WRITE_BIT &&
+                op->dst_access==VK_ACCESS_TRANSFER_READ_BIT;
+            if(!vertex && !upload)return VK_ERROR_FEATURE_NOT_PRESENT;
+            if(op->buffer_barrier.buffer) {
+                void *address;VkDeviceSize bytes;
+                VkResult rc=ps5vk_buffer_span(d,op->buffer_barrier.buffer,
+                    op->buffer_barrier.offset,op->buffer_barrier.size,&address,&bytes);
+                if(rc!=VK_SUCCESS)return rc;
+                flush(address,(size_t)bytes);
+            }
+            n=ps5vk_graphics_acquire(*cursor,(size_t)(end-*cursor));
+        } else if(op->type==PS5VK_IMAGE_BARRIER) {
+            const VkImageMemoryBarrier *b=&op->image_barrier;
+            if(!((b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+                 b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                 !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+                (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                 b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT && b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT) ||
+                (color && b->image==color && b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+                 b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && !b->srcAccessMask &&
+                 b->dstAccessMask==(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);
+            if(rc!=VK_SUCCESS)return rc;
+            n=ps5vk_graphics_acquire(*cursor,(size_t)(end-*cursor));
+        } else if(op->type==PS5VK_COPY_BUFFER_IMAGE) {
+            if(op->copy_layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)return VK_ERROR_FEATURE_NOT_PRESENT;
+            void *source,*destination;VkDeviceSize source_bytes,destination_bytes;
+            struct ps5vk_texture_copy copy;
+            VkResult rc=ps5vk_layout_require(layouts,op->copy_image,op->copy_layout);
+            if(rc!=VK_SUCCESS)return rc;
+            rc=ps5vk_buffer_span(d,op->copy_source,0,VK_WHOLE_SIZE,&source,&source_bytes);
+            if(rc!=VK_SUCCESS)return rc;
+            rc=ps5vk_image_span(d,op->copy_image,&destination,&destination_bytes);
+            if(rc!=VK_SUCCESS)return rc;
+            rc=ps5vk_texture_copy_plan_for_image(op->copy_image,source_bytes,destination_bytes,&op->copy_region,&copy);
+            if(rc!=VK_SUCCESS)return rc;
+            flush(source,(size_t)source_bytes);
+            n=ps5vk_texture_dma(*cursor,(size_t)(end-*cursor),(uintptr_t)source,(uintptr_t)destination,&copy);
+        } else return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(!n)return VK_ERROR_UNKNOWN;
+        *cursor+=n;
+    }
+    return VK_SUCCESS;
+}
+#endif
