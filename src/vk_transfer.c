@@ -113,7 +113,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
     const int linear_upload=ps5vk_pure_transfer_image(image) &&
         (usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     if(!ps5vk_buffer_usage(d,source,VK_BUFFER_USAGE_TRANSFER_SRC_BIT) ||
-        !ps5vk_texture_format_supported(image->info.format) || image->info.mipLevels!=1 ||
+        !ps5vk_texture_format_supported(image->info.format) ||
         (!sampled_upload && !linear_upload)) {invalid(c);return;}
     void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
     if(ps5vk_buffer_span(d,source,0,VK_WHOLE_SIZE,&src,&src_bytes)!=VK_SUCCESS ||

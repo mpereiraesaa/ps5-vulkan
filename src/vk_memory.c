@@ -346,6 +346,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
          (info->imageType!=VK_IMAGE_TYPE_2D || info->arrayLayers!=6 ||
           info->extent.width!=info->extent.height))) return INVALID;
     uint32_t dim = info->extent.width > info->extent.height ? info->extent.width : info->extent.height;
+    if(info->extent.depth>dim)dim=info->extent.depth;
     uint32_t levels = 0; for (; dim; dim >>= 1) ++levels;
     if (info->mipLevels > levels ||
         (info->format == VK_FORMAT_D32_SFLOAT ? (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :

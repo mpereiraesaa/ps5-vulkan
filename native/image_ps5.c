@@ -1,3 +1,5 @@
+/* Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later */
 #include "vk_internal.h"
 #include "depth_layout.h"
 #include "texture_layout.h"
@@ -16,7 +18,9 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     int depth = info->format == VK_FORMAT_D32_SFLOAT;
     int sampled = ps5vk_texture_format_supported(info->format);
     int color = info->format == VK_FORMAT_B8G8R8A8_UNORM || info->format == VK_FORMAT_R8G8B8A8_UNORM;
-    if ((!depth && !color && !sampled) || info->mipLevels != 1 ||
+    if ((!depth && !color && !sampled) ||
+        (info->mipLevels!=1 && !PS5VK_ENABLE_MIPMAP_CANDIDATE) ||
+        info->mipLevels > PS5VK_MAX_TEXTURE_MIP_LEVELS ||
         info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL)
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     const int attachment=(info->usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
@@ -50,11 +54,12 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     if((info->usage & (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
             VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
         !(info->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
-        struct ps5vk_texture_layout texture;
+        struct ps5vk_texture_mip_layout texture;
         const uint32_t slices=info->imageType==VK_IMAGE_TYPE_3D?
             info->extent.depth:info->arrayLayers;
-        if(!sampled || ps5vk_texture_layout_for_slices(info->format,
-            info->extent.width,info->extent.height,slices,&texture))
+        if(!sampled || (info->mipLevels!=1 && !(info->usage&VK_IMAGE_USAGE_SAMPLED_BIT)) ||
+           ps5vk_texture_mip_layout_for_slices(info->format,
+            info->extent.width,info->extent.height,slices,info->mipLevels,&texture))
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
         *out=(VkMemoryRequirements){texture.bytes,texture.alignment,1};return VK_SUCCESS;
     }

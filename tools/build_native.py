@@ -31,8 +31,14 @@ def main():
     if observe_scene not in ("0", "1") or (observe_scene == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_OBSERVE requires graphics profile API and must be 0 or 1")
     scissor_probe = os.environ.get("PS5VK_GRAPHICS_SCISSOR_PROBE", "0")
-    if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11") or (scissor_probe != "0" and not graphics_api):
-        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0 off through 10 existing diagnostics, 11 layered sampled images")
+    if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12") or (scissor_probe != "0" and not graphics_api):
+        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0-10 existing diagnostics, 11 layered images, 12 mipmaps")
+    mip_view_base=os.environ.get("PS5VK_MIP_VIEW_BASE","0")
+    if mip_view_base not in ("0","1") or (mip_view_base!="0" and scissor_probe!="12"):
+        raise SystemExit("PS5VK_MIP_VIEW_BASE must be 0, or 1 only for mipmap diagnostic")
+    mip_force_lod=os.environ.get("PS5VK_MIP_FORCE_LOD","-1")
+    if mip_force_lod not in ("-1","0","1","2") or (mip_force_lod!="-1" and scissor_probe!="12"):
+        raise SystemExit("PS5VK_MIP_FORCE_LOD must be -1, 0, 1, or 2 only for mipmap diagnostic")
     scene_split = os.environ.get("PS5VK_GRAPHICS_SCENE_SPLIT", "0")
     if scene_split not in ("0", "1") or (scene_split == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_SCENE_SPLIT requires graphics profile API and must be 0 or 1")
@@ -174,7 +180,8 @@ def main():
                 "experiments/graphics/scene3d-cube.pipe",
                 "experiments/graphics/scene3d-3d.pipe",
                 "experiments/graphics/scene3d-1d.pipe",
-                "experiments/graphics/scene3d-1d-array.pipe")
+                "experiments/graphics/scene3d-1d-array.pipe",
+                "experiments/graphics/scene3d-mipmap.pipe")
             image_target={
                 "experiments/graphics/scene3d-array.pipe":1,
                 "experiments/graphics/scene3d-cube.pipe":2,
@@ -186,6 +193,10 @@ def main():
                 raise SystemExit("Layered sampled diagnostic requires scene3d-array.pipe, scene3d-cube.pipe or scene3d-3d.pipe")
             if image_target and scissor_probe!="11":
                 raise SystemExit("Layered sampled controls require PS5VK_GRAPHICS_SCISSOR_PROBE=11")
+            if scissor_probe=="12" and graphics_source!="experiments/graphics/scene3d-mipmap.pipe":
+                raise SystemExit("Mipmap diagnostic requires scene3d-mipmap.pipe")
+            if graphics_source=="experiments/graphics/scene3d-mipmap.pipe" and scissor_probe!="12":
+                raise SystemExit("scene3d-mipmap.pipe requires PS5VK_GRAPHICS_SCISSOR_PROBE=12")
             integer_sampled_sign = 0
             if scissor_probe == "10":
                 integer_sampled_sign = {
@@ -214,6 +225,9 @@ def main():
             if scissor_probe == "8" and not use_runtime_graphics:
                 raise SystemExit("Vertex-format diagnostic requires runtime graphics")
             common += ["-DPS5VK_GRAPHICS_SCISSOR_PROBE=" + scissor_probe]
+            common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
+            common += ["-DPS5VK_MIP_FORCE_LOD=" + mip_force_lod]
+            common += ["-DPS5VK_ENABLE_MIPMAP_CANDIDATE=" + ("1" if scissor_probe == "12" else "0")]
             common += ["-DPS5VK_IMAGE_TARGET=" + str(image_target)]
             common += ["-DPS5VK_INTEGER_SAMPLED_SIGN=" + str(integer_sampled_sign)]
             if scene_split == "1" and not scene:
@@ -349,7 +363,8 @@ def main():
                     ("vertex-format-cases" if scissor_probe == "8" else
                     ("sampled-format-filtering" if scissor_probe == "9" else
                     ("integer-sampled-formats" if scissor_probe == "10" else
-                    ("planar-triangle" if int(scissor_probe)>=3 else "source-default")))))))
+                    ("sampled-image-mipmaps" if scissor_probe == "12" else
+                    ("planar-triangle" if int(scissor_probe)>=3 else "source-default"))))))))
             manifest.update(stage="graphics-api-creation-only", submit_enabled=False,
                             scene="two-cubes" if scene else "triangle-controls",
                             scissor_probe=int(scissor_probe),

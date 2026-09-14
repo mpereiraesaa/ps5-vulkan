@@ -1,4 +1,6 @@
 /*
+ * Copyright (C) 2026 Manuel Pereira
+ * Copyright (C) 2026 BlackBearReloaded
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * GFX10.3 texture resource types and dimension fields adapted from
@@ -15,9 +17,11 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     VkImage image=view->image;
     const struct ps5vk_texture_format *format=ps5vk_texture_format_lookup(view->format);
     if(!format || !ps5vk_texture_format_supported(view->format) || image->info.format!=view->format ||
-        view->range.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || view->range.baseMipLevel ||
-        view->range.levelCount!=1 || !view->range.layerCount ||
-        image->info.mipLevels!=1 || !(image->info.usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
+        view->range.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || !view->range.levelCount ||
+        view->range.baseMipLevel>=image->info.mipLevels ||
+        view->range.levelCount>image->info.mipLevels-view->range.baseMipLevel ||
+        !view->range.layerCount || image->info.mipLevels>PS5VK_MAX_TEXTURE_MIP_LEVELS ||
+        !(image->info.usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
         (image->info.usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t slices=image->info.imageType==VK_IMAGE_TYPE_3D?
@@ -26,9 +30,9 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
        (image->info.imageType==VK_IMAGE_TYPE_3D?1u:image->info.arrayLayers) ||
        view->range.layerCount>(image->info.imageType==VK_IMAGE_TYPE_3D?1u:image->info.arrayLayers)-
             view->range.baseArrayLayer)return VK_ERROR_FEATURE_NOT_PRESENT;
-    struct ps5vk_texture_layout layout;
-    if(ps5vk_texture_layout_for_slices(view->format,image->info.extent.width,
-        image->info.extent.height,slices,&layout))return VK_ERROR_UNKNOWN;
+    struct ps5vk_texture_mip_layout layout;
+    if(ps5vk_texture_mip_layout_for_slices(view->format,image->info.extent.width,
+        image->info.extent.height,slices,image->info.mipLevels,&layout))return VK_ERROR_UNKNOWN;
     void *base;VkDeviceSize bytes;
     VkResult rc=ps5vk_image_span(d,image,&base,&bytes);if(rc!=VK_SUCCESS)return rc;
     uint64_t address=(uintptr_t)base,limit=UINT64_C(1)<<48;
@@ -39,10 +43,10 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     case VK_IMAGE_VIEW_TYPE_1D:
         if(image->info.imageType!=VK_IMAGE_TYPE_1D || view->range.layerCount!=1)
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        if(layout.slice_pitch>limit-address ||
-           view->range.baseArrayLayer>(limit-address)/layout.slice_pitch)
+        if(layout.layer_stride>limit-address ||
+           view->range.baseArrayLayer>(limit-address)/layout.layer_stride)
             return VK_ERROR_UNKNOWN;
-        address+=layout.slice_pitch*view->range.baseArrayLayer;
+        address+=layout.layer_stride*view->range.baseArrayLayer;
         type_word=8u<<28;
         break;
     case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
@@ -55,13 +59,14 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     case VK_IMAGE_VIEW_TYPE_2D:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D || view->range.layerCount!=1)
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        if(layout.slice_pitch>limit-address ||
-           view->range.baseArrayLayer>(limit-address)/layout.slice_pitch)
+        if(layout.layer_stride>limit-address ||
+           view->range.baseArrayLayer>(limit-address)/layout.layer_stride)
             return VK_ERROR_UNKNOWN;
-        address+=layout.slice_pitch*view->range.baseArrayLayer;
+        address+=layout.layer_stride*view->range.baseArrayLayer;
         type_word=9u<<28;
-        if(layout.row_pitch/format->bytes_per_texel!=image->info.extent.width)
-            dimension_word=layout.row_pitch/format->bytes_per_texel-1;
+        if(image->info.mipLevels==1 &&
+           layout.levels[0].row_pitch/format->bytes_per_texel!=image->info.extent.width)
+            dimension_word=layout.levels[0].row_pitch/format->bytes_per_texel-1;
         break;
     case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D)return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -90,8 +95,10 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     words[1]=(uint32_t)(address>>40)|format->descriptor_format_word|((width&3u)<<30);
     words[2]=(width>>2)|((image->info.extent.height-1)<<14)|(1u<<31);
     words[3]=format->selectors[0]|((uint32_t)format->selectors[1]<<3)|
-        ((uint32_t)format->selectors[2]<<6)|((uint32_t)format->selectors[3]<<9)|type_word;
+        ((uint32_t)format->selectors[2]<<6)|((uint32_t)format->selectors[3]<<9)|type_word|
+        (view->range.baseMipLevel<<12)|
+        ((view->range.baseMipLevel+view->range.levelCount-1)<<16);
     words[4]=dimension_word;
-    words[5]=4u<<20;
+    words[5]=(4u<<20)|((image->info.mipLevels-1)<<4);
     memcpy(words+8,sampler->words,16);memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }

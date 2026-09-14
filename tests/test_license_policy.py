@@ -26,6 +26,7 @@ class LicensePolicyTests(unittest.TestCase):
         self.assertIn(PS5_OPENGL_COMMIT, policy)
         for relative in ("native/runtime_shader.c", "src/color_detile.c",
                          "src/vk_sampler.c", "src/texture_format.c",
+                         "src/texture_descriptor.c", "src/texture_layout.c",
                          "native/runtime_graphics_compiler.c",
                          "src/graphics_formats.h"):
             self.assertIn(f"`{relative}`", policy)

@@ -8,6 +8,7 @@
 #include "command_arena_ps5.h"
 #include "graphics_sync.h"
 #include "graphics_limits.h"
+#include "texture_layout.h"
 #include "triangle_readback.h"
 #include "scene_geometry.h"
 #include "scene_region.h"
@@ -24,6 +25,12 @@
 #include <string.h>
 #ifndef PS5VK_IMAGE_TARGET
 #define PS5VK_IMAGE_TARGET 0
+#endif
+#ifndef PS5VK_MIP_VIEW_BASE
+#define PS5VK_MIP_VIEW_BASE 0
+#endif
+#ifndef PS5VK_MIP_FORCE_LOD
+#define PS5VK_MIP_FORCE_LOD -1
 #endif
 static const char *layered_target_name(void)
 {
@@ -69,7 +76,7 @@ static void fail(const char *call, int rc)
 struct texture_fixture {
     VkImage image;VkImageView view;VkSampler sampler;VkDeviceMemory memory,upload_memory;
     VkBuffer upload;VkDescriptorPool pool;VkDescriptorSet set;
-    VkFormat format;uint32_t width,height,slices,upload_bytes;
+    VkFormat format;uint32_t width,height,slices,mip_levels,upload_bytes;
     VkImageType image_type;VkImageViewType view_type;
 };
 static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout layout,unsigned probe_case)
@@ -113,10 +120,12 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
             (PS5VK_IMAGE_TARGET==4?VK_IMAGE_VIEW_TYPE_1D:VK_IMAGE_VIEW_TYPE_1D_ARRAY)));
         if(PS5VK_IMAGE_TARGET==2)image_flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     }
+    uint32_t mip_levels=PS5VK_GRAPHICS_SCISSOR_PROBE==12?3u:1u;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==12){width=64;height=64;slices=1;}
     VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.flags=image_flags,
         .imageType=image_type,.format=format,
         .extent={width,height,image_type==VK_IMAGE_TYPE_3D?slices:1},
-        .mipLevels=1,.arrayLayers=image_type==VK_IMAGE_TYPE_3D?1:slices,
+        .mipLevels=mip_levels,.arrayLayers=image_type==VK_IMAGE_TYPE_3D?1:slices,
         .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT};
     CHECK(vkCreateImage(d,&ii,NULL,&t.image));
     VkMemoryRequirements req;vkGetImageMemoryRequirements(d,t.image,&req);
@@ -124,7 +133,9 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     CHECK(vkAllocateMemory(d,&mi,NULL,&t.memory));CHECK(vkBindImageMemory(d,t.image,t.memory,0));
     VkImageViewCreateInfo vi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=t.image,
         .viewType=view_type,.format=ii.format,
-        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,
+            PS5VK_GRAPHICS_SCISSOR_PROBE==12?PS5VK_MIP_VIEW_BASE:0,
+            PS5VK_GRAPHICS_SCISSOR_PROBE==12 && PS5VK_MIP_VIEW_BASE?1:mip_levels,0,
             image_type==VK_IMAGE_TYPE_3D?1:slices}};
     CHECK(vkCreateImageView(d,&vi,NULL,&t.view));
     VkSamplerCreateInfo si={.sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -143,9 +154,19 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==9) {
         si.magFilter=si.minFilter=(probe_case%PS5VK_SAMPLED_FORMAT_FILTER_TRIALS)?
             VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+        si.magFilter=si.minFilter=VK_FILTER_NEAREST;
+        si.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        si.maxLod=2.0f;
+        if(PS5VK_MIP_FORCE_LOD>=0)
+            si.minLod=si.maxLod=(float)PS5VK_MIP_FORCE_LOD;
     }
     CHECK(vkCreateSampler(d,&si,NULL,&t.sampler));
-    t.upload_bytes=width*height*slices*bytes_per_texel;
+    if(mip_levels==1)t.upload_bytes=width*height*slices*bytes_per_texel;
+    else for(uint32_t level=0;level<mip_levels;++level) {
+        uint32_t w=width>>level?width>>level:1,h=height>>level?height>>level:1;
+        t.upload_bytes+=w*h*slices*bytes_per_texel;
+    }
     VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=t.upload_bytes,.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
     CHECK(vkCreateBuffer(d,&bi,NULL,&t.upload));vkGetBufferMemoryRequirements(d,t.upload,&req);
     mi.allocationSize=req.size;CHECK(vkAllocateMemory(d,&mi,NULL,&t.upload_memory));
@@ -161,7 +182,7 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     VkWriteDescriptorSet write={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=t.set,
         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.pImageInfo=&image};
     vkUpdateDescriptorSets(d,1,&write,0,NULL);
-    t.format=format;t.width=width;t.height=height;t.slices=slices;
+    t.format=format;t.width=width;t.height=height;t.slices=slices;t.mip_levels=mip_levels;
     t.image_type=image_type;t.view_type=view_type;
     return t;
 }
@@ -219,6 +240,18 @@ static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer 
     } else if(checkerboard) {
         const uint32_t pixels[4]={0xff000000,0xffffffff,0xffffffff,0xff000000};
         memcpy(mapped,pixels,sizeof(pixels));
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+        size_t offset=0;
+        for(uint32_t level=0;level<t->mip_levels;++level) {
+            uint32_t w=t->width>>level?t->width>>level:1;
+            uint32_t h=t->height>>level?t->height>>level:1;
+            for(uint32_t i=0;i<w*h;++i)
+                ((uint32_t *)((unsigned char *)mapped+offset))[i]=colors[level];
+            offset+=(size_t)w*h*sizeof(uint32_t);
+        }
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_MIPMAP_INPUT levels=%u view_base=%u width=%u height=%u colors=red,green,blue bytes=%u",
+            t->mip_levels,PS5VK_MIP_VIEW_BASE,t->width,t->height,t->upload_bytes);
     } else if(PS5VK_IMAGE_TARGET) {
         const unsigned pixels=t->width*t->height;
         for(unsigned slice=0;slice<t->slices;++slice)
@@ -236,23 +269,34 @@ static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer 
         .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.image=t->image,
         .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
-        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,t->mip_levels,0,
             t->image_type==VK_IMAGE_TYPE_3D?1:t->slices}};
     vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
-    VkBufferImageCopy copy={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,
-        t->image_type==VK_IMAGE_TYPE_3D?1:t->slices},
-        .imageExtent={t->width,t->height,
-            t->image_type==VK_IMAGE_TYPE_3D?t->slices:1}};
-    vkCmdCopyBufferToImage(cb,t->upload,t->image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
+    VkBufferImageCopy copies[PS5VK_MAX_TEXTURE_MIP_LEVELS]={0};
+    VkDeviceSize offset=0;
+    for(uint32_t level=0;level<t->mip_levels;++level) {
+        uint32_t w=t->width>>level?t->width>>level:1;
+        uint32_t h=t->height>>level?t->height>>level:1;
+        copies[level]=(VkBufferImageCopy){.bufferOffset=offset,
+            .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,level,0,
+                t->image_type==VK_IMAGE_TYPE_3D?1:t->slices},
+            .imageExtent={w,h,t->image_type==VK_IMAGE_TYPE_3D?
+                (t->slices>>level?t->slices>>level:1):1}};
+        offset+=(VkDeviceSize)w*h*(t->image_type==VK_IMAGE_TYPE_3D?
+            copies[level].imageExtent.depth:t->slices)*4u;
+    }
+    vkCmdCopyBufferToImage(cb,t->upload,t->image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        t->mip_levels,copies);
     barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
     vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&barrier);
-    ps5log_printf(PS5LOG_MARK,"PS5VK_TEXTURE_UPLOAD frame=%u pattern=%s width=%u height=%u slices=%u format=%u",
+    ps5log_printf(PS5LOG_MARK,"PS5VK_TEXTURE_UPLOAD frame=%u pattern=%s width=%u height=%u slices=%u levels=%u format=%u",
         frame,PS5VK_GRAPHICS_SCISSOR_PROBE==10?"integer-sampled-solid":
         (PS5VK_GRAPHICS_SCISSOR_PROBE==9?"sampled-format-checkerboard":
         (PS5VK_GRAPHICS_SCISSOR_PROBE==7?"sampled-format-solid":
-        (PS5VK_IMAGE_TARGET?"layered-rgb":(checkerboard?"checkerboard":"rgb-cycle")))),
-        t->width,t->height,t->slices,t->format);
+        (PS5VK_GRAPHICS_SCISSOR_PROBE==12?"mipmap-rgb":
+        (PS5VK_IMAGE_TARGET?"layered-rgb":(checkerboard?"checkerboard":"rgb-cycle"))))),
+        t->width,t->height,t->slices,t->mip_levels,t->format);
 }
 static void texture_destroy(VkDevice d,struct texture_fixture *t)
 {
@@ -506,7 +550,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         } else vkCmdDrawIndexed(cb,6,1,2,-2,0);
     } else vkCmdDraw(cb,3,1,0,0);
     vkCmdEndRenderPass(cb); CHECK(vkEndCommandBuffer(cb));
-    unsigned prelude=set_layout?3:0;
+    unsigned prelude=set_layout?(texture.mip_levels+2):0;
     if (cb->operation_count!=prelude+2+draw_count)fail("recorded-operation-count",-1);
     for(unsigned j=0;j<draw_count;++j)
         if(cb->operations[prelude+1+j].type!=
@@ -528,6 +572,27 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
        (depth_image && depth_image->layout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
         fail("render-pass-layout-commit",-1);
     CHECK(vkInvalidateMappedMemoryRanges(d,1,&range));
+    if(set_layout && PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+        struct ps5vk_texture_mip_layout mip_layout;
+        void *texture_bytes=NULL;
+        if(ps5vk_texture_mip_layout_for_slices(texture.format,texture.width,
+            texture.height,texture.slices,texture.mip_levels,&mip_layout))
+            fail("mipmap-layout-inspect",-1);
+        CHECK(vkMapMemory(d,texture.memory,0,VK_WHOLE_SIZE,0,&texture_bytes));
+        VkMappedMemoryRange texture_range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=texture.memory,.size=VK_WHOLE_SIZE};
+        CHECK(vkInvalidateMappedMemoryRanges(d,1,&texture_range));
+        for(uint32_t level=0;level<texture.mip_levels;++level) {
+            uint32_t first=0;
+            memcpy(&first,(unsigned char *)texture_bytes+
+                mip_layout.levels[level].offset,sizeof(first));
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_MIPMAP_STORAGE level=%u offset=%llu pitch=%u first=%08x",
+                level,(unsigned long long)mip_layout.levels[level].offset,
+                mip_layout.levels[level].row_pitch,first);
+        }
+        vkUnmapMemory(d,texture.memory);
+    }
     const uint32_t background=(PS5VK_GRAPHICS_SCISSOR_PROBE==6 ||
         PS5VK_GRAPHICS_SCISSOR_PROBE==9 ||
         PS5VK_GRAPHICS_SCISSOR_PROBE==10)?0xff404040:
@@ -680,6 +745,13 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         }
         ps5log_printf(PS5LOG_MARK,"PS5VK_TEXTURE_READBACK frame=%u red=%zu green=%zu blue=%zu unexpected=%zu",
             frame,histogram[0],histogram[1],histogram[2],unexpected);
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+            int mip_valid=!unexpected && histogram[0] && histogram[1] && histogram[2];
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_MIPMAP_READBACK levels=%u red=%zu green=%zu blue=%zu unexpected=%zu valid=%d",
+                texture.mip_levels,histogram[0],histogram[1],histogram[2],unexpected,mip_valid);
+            if(!mip_valid)fail("mipmap-readback",-1);
+        }
         if(PS5VK_IMAGE_TARGET) {
             int layered_valid=!unexpected && histogram[0] && histogram[1] && histogram[2];
             ps5log_printf(PS5LOG_MARK,
@@ -794,7 +866,7 @@ int main(void)
         CHECK(vkGetPhysicalDeviceImageFormatProperties(physical,query_formats[q],VK_IMAGE_TYPE_2D,
             VK_IMAGE_TILING_OPTIMAL,query_usages[q],0,&props));
         if(props.maxExtent.width<1920 || props.maxExtent.height<1080 || props.maxExtent.depth!=1 ||
-           props.maxMipLevels!=1 || props.maxArrayLayers!=(q==2?PS5VK_MAX_IMAGE_ARRAY_LAYERS:1u) ||
+           props.maxMipLevels!=(q==2?15u:1u) || props.maxArrayLayers!=(q==2?PS5VK_MAX_IMAGE_ARRAY_LAYERS:1u) ||
            props.sampleCounts!=VK_SAMPLE_COUNT_1_BIT)
             fail("image-query-profile",-1);
         ps5log_printf(PS5LOG_MARK,"PS5VK_IMAGE_QUERY format=%u usage=%u max_width=%u max_height=%u max_bytes=%llu",

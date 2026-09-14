@@ -32,7 +32,7 @@ int main(void)
     BAD(imageSubresource.aspectMask,VK_IMAGE_ASPECT_DEPTH_BIT);
 #undef BAD
     struct VkImage_T array={.info={.imageType=VK_IMAGE_TYPE_2D,
-        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={64,4,1},.arrayLayers=3}};
+        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={64,4,1},.mipLevels=1,.arrayLayers=3}};
     VkBufferImageCopy layers={.bufferOffset=16,.bufferRowLength=66,.bufferImageHeight=6,
         .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,1,2},
         .imageOffset={1,1,0},.imageExtent={3,2,1}};
@@ -41,9 +41,22 @@ int main(void)
         p.destination_pitch==256 && p.row_bytes==12 && p.rows==2 &&
         p.source_slice_pitch==1584 && p.destination_slice_pitch==1024 && p.slices==2);
     struct VkImage_T volume={.info={.imageType=VK_IMAGE_TYPE_3D,
-        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={64,4,3},.arrayLayers=1}};
+        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={64,4,3},.mipLevels=1,.arrayLayers=1}};
     layers.imageSubresource.baseArrayLayer=0;layers.imageSubresource.layerCount=1;
     layers.imageOffset.z=1;layers.imageExtent.depth=2;
     assert(ps5vk_texture_copy_plan_for_image(&volume,4096,3072,&layers,&p)==VK_SUCCESS &&
         p.destination_offset==1284 && p.slices==2);
+    struct VkImage_T mip_image={.info={.imageType=VK_IMAGE_TYPE_2D,
+        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={65,3,1},.mipLevels=3,.arrayLayers=2}};
+    VkBufferImageCopy mip={.bufferOffset=0,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,2,1,1},
+        .imageExtent={16,1,1}};
+    assert(ps5vk_texture_copy_plan_for_image(&mip_image,64,4608,&mip,&p)==VK_SUCCESS);
+    assert(p.destination_offset==2304 && p.destination_pitch==256 &&
+        p.destination_slice_pitch==2304 && p.row_bytes==64);
+    mip.imageSubresource.mipLevel=1;mip.imageExtent=(VkExtent3D){32,1,1};
+    assert(ps5vk_texture_copy_plan_for_image(&mip_image,128,4608,&mip,&p)==VK_SUCCESS &&
+        p.destination_offset==256+2304 && p.destination_pitch==256);
+    mip.imageExtent.width=33;
+    assert(ps5vk_texture_copy_plan_for_image(&mip_image,132,4608,&mip,&p)!=VK_SUCCESS);
 }

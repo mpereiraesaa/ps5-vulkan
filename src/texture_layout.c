@@ -1,15 +1,53 @@
+/*
+ * Copyright (C) 2026 Manuel Pereira
+ * Copyright (C) 2026 BlackBearReloaded
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Descending padded-linear mip packing is adapted from ps5-opengl,
+ * src/gallium/ps5/ps5_screen.c at
+ * 7f9bfabdddb187a11e4401058eba8c9e55194d0a.
+ */
 #include "texture_layout.h"
 #include "texture_format.h"
+int ps5vk_texture_mip_layout_for_slices(VkFormat format,uint32_t width,
+    uint32_t height,uint32_t storage_layers,uint32_t level_count,
+    struct ps5vk_texture_mip_layout *out)
+{
+    const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(format);
+    struct ps5vk_texture_mip_layout result={0};
+    if(!out || !entry || !width || !height || !storage_layers || !level_count ||
+       level_count>PS5VK_MAX_TEXTURE_MIP_LEVELS || width>16384 || height>16384)
+        return -1;
+    result.level_count=level_count;result.storage_layers=storage_layers;
+    result.alignment=256;
+    for(uint32_t level=level_count;level--;) {
+        uint64_t divisor=UINT64_C(1)<<level;
+        uint64_t storage_width=((uint64_t)width+divisor-1)/divisor;
+        uint64_t storage_height=((uint64_t)height+divisor-1)/divisor;
+        if(!storage_width)storage_width=1;
+        if(!storage_height)storage_height=1;
+        if(storage_width>UINT32_MAX/entry->bytes_per_texel ||
+           storage_height>UINT32_MAX)return -1;
+        uint64_t pitch=(storage_width*entry->bytes_per_texel+255u)&~UINT64_C(255);
+        uint64_t level_bytes=pitch*storage_height;
+        if(pitch>UINT32_MAX || level_bytes>UINT64_MAX-result.layer_stride)return -1;
+        result.levels[level]=(struct ps5vk_texture_mip_level){
+            result.layer_stride,(uint32_t)pitch,(uint32_t)storage_width,
+            (uint32_t)storage_height};
+        result.layer_stride+=level_bytes;
+    }
+    if(result.layer_stride>UINT64_MAX/storage_layers)return -1;
+    result.bytes=result.layer_stride*storage_layers;
+    *out=result;return 0;
+}
 int ps5vk_texture_layout_for_slices(VkFormat format,uint32_t width,uint32_t height,
     uint32_t slices,struct ps5vk_texture_layout *out)
 {
-    const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(format);
-    if(!out || !entry || !width || !height || !slices || width>16384 || height>16384 ||
-       width>UINT32_MAX/entry->bytes_per_texel)return -1;
-    uint32_t pitch=(width*entry->bytes_per_texel+255u)&~255u;
-    uint64_t slice=(uint64_t)pitch*height;
-    if(slice>UINT64_MAX/slices)return -1;
-    *out=(struct ps5vk_texture_layout){pitch,slice*slices,256,slice};return 0;
+    struct ps5vk_texture_mip_layout chain;
+    if(!out || ps5vk_texture_mip_layout_for_slices(format,width,height,slices,1,&chain))
+        return -1;
+    *out=(struct ps5vk_texture_layout){chain.levels[0].row_pitch,chain.bytes,
+        chain.alignment,chain.layer_stride};return 0;
 }
 int ps5vk_texture_layout_for_format(VkFormat format,uint32_t width,uint32_t height,
     struct ps5vk_texture_layout *out)

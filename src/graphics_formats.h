@@ -11,6 +11,7 @@
 #include <vulkan/vulkan_core.h>
 #include "graphics_limits.h"
 #include "texture_format.h"
+#include "texture_layout.h"
 
 enum ps5vk_vertex_numeric {
     PS5VK_VERTEX_NUMERIC_NONE = 0,
@@ -169,8 +170,17 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
     } else if(sampled && type==VK_IMAGE_TYPE_3D && !flags) {
         width=height=depth=PS5VK_MAX_IMAGE_3D;
     } else return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    uint32_t mip_levels=1;
+    if(sampled && PS5VK_ENABLE_MIPMAP_CANDIDATE) {
+        uint32_t dimension=width>height?width:height;
+        if(depth>dimension)dimension=depth;
+        mip_levels=0;
+        while(dimension){++mip_levels;dimension>>=1;}
+        if(mip_levels>PS5VK_MAX_TEXTURE_MIP_LEVELS)
+            mip_levels=PS5VK_MAX_TEXTURE_MIP_LEVELS;
+    }
     *out=(VkImageFormatProperties){.maxExtent={width,height,depth},
-        .maxMipLevels=1,.maxArrayLayers=layers,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+        .maxMipLevels=mip_levels,.maxArrayLayers=layers,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
         .maxResourceSize=budget};
     return VK_SUCCESS;
 }

@@ -148,6 +148,27 @@ int main(void)
         layered_words[0]==(uint32_t)(((uintptr_t)layered_base+512)>>8) &&
         layered_words[3]==0x80000fac && !layered_words[4]);
     vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
+
+    layered_ii=(VkImageCreateInfo){.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .extent={64,4,1},.mipLevels=3,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_SAMPLED_BIT|
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    assert(vkCreateImage(&d,&layered_ii,NULL,&layered_image)==VK_SUCCESS &&
+        layered_image->requirements.size==1792);
+    assert(vkBindImageMemory(&d,layered_image,layered_memory,0)==VK_SUCCESS);
+    layered_vi=(VkImageViewCreateInfo){.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=layered_image,.viewType=VK_IMAGE_VIEW_TYPE_2D,.format=layered_ii.format,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,3,0,1}};
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&layered_view)==VK_SUCCESS);
+    VkSamplerCreateInfo mip_si={.sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .mipmapMode=VK_SAMPLER_MIPMAP_MODE_LINEAR,.maxLod=2.0f};
+    VkSampler mip_sampler;assert(vkCreateSampler(&d,&mip_si,NULL,&mip_sampler)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,layered_view,mip_sampler,layered_words)==VK_SUCCESS &&
+        layered_words[3]==0x90020fac && layered_words[5]==0x00400020 &&
+        layered_words[9]==0x00200000 && layered_words[10]==0x08000000);
+    vkDestroySampler(&d,mip_sampler,NULL);
+    vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
     vkFreeMemory(&d,layered_memory,NULL);
     uint32_t saved[12];memcpy(saved,words,sizeof(words));
     image->info.usage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;

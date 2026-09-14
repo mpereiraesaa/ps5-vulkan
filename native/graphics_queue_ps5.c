@@ -256,6 +256,13 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 draw->state->sh[k].offset,draw->state->sh[k].value);
 #endif
         if(!p->global_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+        if(draw->texture_table)
+            for(unsigned k=0;k<12;++k)
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TEXTURE_DESCRIPTOR serial=%llu draw=%u word=%u value=%08x",
+                    (unsigned long long)j->serial,j->count-1,k,draw->texture_table[k]);
+#endif
         if(op->pipeline->vertex_binding_count) {
             if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;goto fail;}
             if(op->pipeline->set_count) {

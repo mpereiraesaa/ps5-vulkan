@@ -34,6 +34,7 @@ Current derived or adapted files are:
 | `src/vk_sampler.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_wrap` and fixed-border handling | GFX10.3 repeat, mirrored-repeat, edge/border clamp and fixed border-color encodings |
 | `src/texture_format.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_format`, `ps5_texture_descriptor_swizzle` and `ps5_texture_format_size` | GFX10.3 sampled-image format words, component selectors and texel sizes; public rows require ps5-vulkan-owned typed shader and readback evidence |
 | `src/texture_descriptor.c` | `src/gallium/ps5/ps5_screen.c`, texture resource descriptor construction | GFX10.3 1D, 1D-array, 2D, 2D-array, cube and 3D resource-type and dimension-field adaptation; ps5-vulkan supplies the Vulkan image/view validation and hardware readback gates |
+| `src/texture_layout.c` | `src/gallium/ps5/ps5_screen.c`, linear sampled-resource allocation | Descending, 256-byte-aligned GFX1013 mip-level packing and complete-chain-per-layer layout; ps5-vulkan supplies Vulkan mip bounds, transfer planning and memory-overflow gates |
 | `native/runtime_graphics_compiler.c`, `src/graphics_formats.h` | `src/gallium/ps5/ps5_screen.c`, `ps5_integer_vertex_format`, `ps5_packed_vertex_format` and PSBC vertex-format adaptation | Vulkan-to-PSBC GFX1013 vertex numeric-category mapping, including hardware-gated 8/16/32-bit and packed rows; only rows covered by ps5-vulkan's own gates are advertised |
 
 Every future direct adaptation must add an SPDX identifier and identify its
