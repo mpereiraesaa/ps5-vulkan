@@ -17909,12 +17909,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 4096; blocker: 2D-only image model: vkCreateImage accepts VK_IMAGE_TYPE_2D and rejects 1D images",
+      "detail": "core: reported 4096 must be >= 4096",
       "kind": "limit",
       "limit": "maxImageDimension1D",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 4096,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -17924,7 +17924,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 4096; blocker: 2D-only image model: vkCreateImage accepts VK_IMAGE_TYPE_2D and rejects 1D images",
+      "detail": "core: reported 0 must be >= 4096; blocker: compute-only build: graphics limits are not applied to this profile",
       "kind": "limit",
       "limit": "maxImageDimension1D",
       "profile": "compute",
@@ -25980,9 +25980,9 @@
       "satisfied": 98
     },
     "limits": {
-      "blocker": 67,
+      "blocker": 66,
       "not-applicable": 656,
-      "satisfied": 131
+      "satisfied": 132
     },
     "shader_capabilities": {
       "not-audited": 2,

@@ -25,6 +25,10 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     if ((info->flags && !cube) ||
         (attachment && (info->flags || info->imageType!=VK_IMAGE_TYPE_2D ||
                         info->arrayLayers!=1 || info->extent.depth!=1)) ||
+        (!attachment && info->imageType==VK_IMAGE_TYPE_1D &&
+         (cube || info->extent.height!=1 || info->extent.depth!=1 ||
+          !info->arrayLayers || info->arrayLayers>PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
+          info->extent.width>PS5VK_MAX_IMAGE_1D)) ||
         (!attachment && info->imageType==VK_IMAGE_TYPE_2D &&
          (info->extent.depth!=1 || !info->arrayLayers ||
           info->arrayLayers>PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
@@ -36,7 +40,8 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
           info->extent.width>PS5VK_MAX_IMAGE_3D ||
           info->extent.height>PS5VK_MAX_IMAGE_3D ||
           info->extent.depth>PS5VK_MAX_IMAGE_3D)) ||
-        (!attachment && info->imageType!=VK_IMAGE_TYPE_2D &&
+        (!attachment && info->imageType!=VK_IMAGE_TYPE_1D &&
+         info->imageType!=VK_IMAGE_TYPE_2D &&
          info->imageType!=VK_IMAGE_TYPE_3D))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     /* Padded linear layout: the sampled/upload role and the pure transfer role

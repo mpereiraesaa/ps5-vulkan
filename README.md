@@ -48,9 +48,9 @@ results; visual output is not the sole correctness signal.
   implemented. Nearest/linear filtering is validated for the twenty-one
   filterable rows; the eighteen integer rows use typed samplers and correctly
   remain nearest-only
-- Single-level 2D-array, cubemap and 3D sampled-image views with layered
-  buffer uploads; RGBA8 variants have deterministic per-layer/face/slice GPU
-  readback on PS5
+- Single-level 1D, 1D-array, 2D-array, cubemap and 3D sampled-image views with
+  layered buffer uploads; RGBA8 variants have deterministic per-region,
+  layer, face or slice GPU readback on PS5
 - One static or dynamic viewport/scissor pair, depth testing and face culling
 - Recording support for all Vulkan 1.0 dynamic-state setters; only dynamic
   viewport/scissor currently participate in native draws

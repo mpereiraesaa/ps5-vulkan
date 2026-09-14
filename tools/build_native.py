@@ -172,11 +172,15 @@ def main():
                 "experiments/graphics/scene3d-sint.pipe",
                 "experiments/graphics/scene3d-array.pipe",
                 "experiments/graphics/scene3d-cube.pipe",
-                "experiments/graphics/scene3d-3d.pipe")
+                "experiments/graphics/scene3d-3d.pipe",
+                "experiments/graphics/scene3d-1d.pipe",
+                "experiments/graphics/scene3d-1d-array.pipe")
             image_target={
                 "experiments/graphics/scene3d-array.pipe":1,
                 "experiments/graphics/scene3d-cube.pipe":2,
                 "experiments/graphics/scene3d-3d.pipe":3,
+                "experiments/graphics/scene3d-1d.pipe":4,
+                "experiments/graphics/scene3d-1d-array.pipe":5,
             }.get(graphics_source,0)
             if scissor_probe=="11" and not image_target:
                 raise SystemExit("Layered sampled diagnostic requires scene3d-array.pipe, scene3d-cube.pipe or scene3d-3d.pipe")
@@ -336,7 +340,8 @@ def main():
                         graphics=json.loads((graphics / "manifest.json").read_text()))
         if graphics_api:
             geometry_fixture={1:"sampled-image-array",2:"sampled-image-cube",
-                              3:"sampled-image-3d"}.get(image_target)
+                              3:"sampled-image-3d",4:"sampled-image-1d",
+                              5:"sampled-image-1d-array"}.get(image_target)
             if not geometry_fixture:
                 geometry_fixture=("sampler-uv-ladder" if scissor_probe == "4" else
                     ("sampler-core-addressing" if scissor_probe == "6" else
@@ -350,7 +355,8 @@ def main():
                             scissor_probe=int(scissor_probe),
                             scissor_depth_comparison=scissor_probe in ("2", "3"),
                             geometry_fixture=geometry_fixture,
-                            image_target={1:"2d-array",2:"cube",3:"3d"}.get(image_target),
+                            image_target={1:"2d-array",2:"cube",3:"3d",4:"1d",
+                                          5:"1d-array"}.get(image_target),
                             integer_sampled_sign={1:"uint",2:"sint"}.get(integer_sampled_sign),
                             visual_hold_seconds=10 if scissor_probe in ("3", "5") else 0,
                             observation_frame_pause_us=60000 if observe_scene == "1" else 0,

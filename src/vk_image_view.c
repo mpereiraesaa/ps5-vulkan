@@ -37,6 +37,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
         !range.layerCount || range.baseArrayLayer>=image_layers ||
         range.layerCount>image_layers-range.baseArrayLayer) return VK_ERROR_UNKNOWN;
     switch(info->viewType) {
+    case VK_IMAGE_VIEW_TYPE_1D:
+        if(image->info.imageType!=VK_IMAGE_TYPE_1D || range.layerCount!=1)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        break;
+    case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
+        if(image->info.imageType!=VK_IMAGE_TYPE_1D)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        break;
     case VK_IMAGE_VIEW_TYPE_2D:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D || range.layerCount!=1)
             return VK_ERROR_FEATURE_NOT_PRESENT;

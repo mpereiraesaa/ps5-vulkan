@@ -13,6 +13,12 @@ TARGETS = {
              "depth": "1", "layers": "6", "slices": "6"},
     "3d": {"fixture": "sampled-image-3d", "dimension": "512",
            "depth": "512", "layers": "1", "slices": "3"},
+    "1d": {"fixture": "sampled-image-1d", "dimension": "4096",
+           "depth": "1", "layers": "256", "slices": "1",
+           "width": "192", "height": "1"},
+    "1d-array": {"fixture": "sampled-image-1d-array", "dimension": "4096",
+                 "depth": "1", "layers": "256", "slices": "3",
+                 "width": "64", "height": "1"},
 }
 
 
@@ -74,7 +80,8 @@ def validate(log, metadata, artifact, target):
                          "depth": expected["depth"], "layers": expected["layers"]},
             "image query")
     require(source[1] == {"target": target, "slices": expected["slices"],
-                          "width": "64", "height": "64"}, "upload fixture")
+                          "width": expected.get("width", "64"),
+                          "height": expected.get("height", "64")}, "upload fixture")
     require(readback[1].get("target") == target and
             all(int(readback[1].get(color, "0")) > 0 for color in ("red", "green", "blue")) and
             readback[1].get("unexpected") == "0" and readback[1].get("valid") == "1",

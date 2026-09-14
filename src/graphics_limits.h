@@ -8,6 +8,7 @@ enum {
     PS5VK_MAX_IMAGE_2D = 16384,
     /* Vulkan 1.0 floors. The GFX10 descriptor fields cover these dimensions;
      * allocation-size and format queries still bound each concrete image. */
+    PS5VK_MAX_IMAGE_1D = 4096,
     PS5VK_MAX_IMAGE_3D = 512,
     PS5VK_MAX_IMAGE_CUBE = 4096,
     PS5VK_MAX_IMAGE_ARRAY_LAYERS = 256,
@@ -22,8 +23,10 @@ enum {
 };
 static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
 {
-    /* Common guarantee across supported 2D formats. Per-format queries may
-     * expose the larger RGBA/depth ceiling, but BGRA stops at 16383. */
+    /* Common guarantees across supported sampled-image types. Per-format 2D
+     * queries may expose the larger RGBA/depth ceiling, but BGRA stops at
+     * 16383. */
+    limits->maxImageDimension1D=PS5VK_MAX_IMAGE_1D;
     limits->maxImageDimension2D=PS5VK_MAX_COLOR_DIMENSION;
     limits->maxImageDimension3D=PS5VK_MAX_IMAGE_3D;
     limits->maxImageDimensionCube=PS5VK_MAX_IMAGE_CUBE;

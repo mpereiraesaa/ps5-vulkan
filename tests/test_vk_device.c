@@ -94,7 +94,8 @@ static void lifecycle(void)
     ps5vk_graphics_limits(&gl);
     assert(gl.maxComputeWorkGroupInvocations==1024 && gl.nonCoherentAtomSize==64);
     assert(gl.maxPerStageDescriptorStorageBuffers==128 && gl.maxDescriptorSetStorageBuffers==128 && gl.maxPerStageResources==128);
-    assert(gl.maxImageDimension2D==16383 &&
+    assert(gl.maxImageDimension1D==PS5VK_MAX_IMAGE_1D &&
+        gl.maxImageDimension2D==16383 &&
         gl.maxImageDimension3D==PS5VK_MAX_IMAGE_3D &&
         gl.maxImageDimensionCube==PS5VK_MAX_IMAGE_CUBE &&
         gl.maxImageArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
@@ -282,6 +283,10 @@ static void lifecycle(void)
             assert(ip.maxResourceSize==p->platform.max_allocation);
         } else assert(result==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     }
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_1D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)==VK_SUCCESS &&
+        ip.maxExtent.width==PS5VK_MAX_IMAGE_1D && ip.maxExtent.height==1 &&
+        ip.maxExtent.depth==1 && ip.maxArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
     assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_TYPE_3D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)==VK_SUCCESS &&
         ip.maxExtent.width==PS5VK_MAX_IMAGE_3D && ip.maxExtent.height==PS5VK_MAX_IMAGE_3D &&

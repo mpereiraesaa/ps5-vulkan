@@ -36,6 +36,22 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
        bytes<layout.bytes || layout.bytes>limit-address)return VK_ERROR_UNKNOWN;
     uint32_t type_word=0,dimension_word=0;
     switch(view->view_type) {
+    case VK_IMAGE_VIEW_TYPE_1D:
+        if(image->info.imageType!=VK_IMAGE_TYPE_1D || view->range.layerCount!=1)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(layout.slice_pitch>limit-address ||
+           view->range.baseArrayLayer>(limit-address)/layout.slice_pitch)
+            return VK_ERROR_UNKNOWN;
+        address+=layout.slice_pitch*view->range.baseArrayLayer;
+        type_word=8u<<28;
+        break;
+    case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
+        if(image->info.imageType!=VK_IMAGE_TYPE_1D)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        type_word=12u<<28;
+        dimension_word=(view->range.baseArrayLayer<<16)|
+            (view->range.baseArrayLayer+view->range.layerCount-1);
+        break;
     case VK_IMAGE_VIEW_TYPE_2D:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D || view->range.layerCount!=1)
             return VK_ERROR_FEATURE_NOT_PRESENT;

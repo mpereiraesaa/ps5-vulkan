@@ -159,6 +159,8 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
             PS5VK_MAX_COLOR_DIMENSION:PS5VK_MAX_IMAGE_2D;
     } else if(transfer_only && type==VK_IMAGE_TYPE_2D && !flags) {
         width=height=PS5VK_MAX_IMAGE_2D;
+    } else if(sampled && type==VK_IMAGE_TYPE_1D && !flags) {
+        width=PS5VK_MAX_IMAGE_1D;height=1;layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
     } else if(sampled && type==VK_IMAGE_TYPE_2D && !flags) {
         width=height=PS5VK_MAX_IMAGE_2D;layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
     } else if(sampled && type==VK_IMAGE_TYPE_2D &&

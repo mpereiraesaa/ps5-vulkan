@@ -10,7 +10,8 @@ class LayeredSampledVerifier(unittest.TestCase):
         messages = [
             f"PS5VK_LAYERED_QUERY target={target} dimension={expected['dimension']} depth={expected['depth']} layers={expected['layers']}",
             "PS5VK_COMPUTE_END rounds=6 dispatches=12",
-            f"PS5VK_LAYERED_INPUT target={target} slices={expected['slices']} width=64 height=64",
+            f"PS5VK_LAYERED_INPUT target={target} slices={expected['slices']} "
+            f"width={expected.get('width', '64')} height={expected.get('height', '64')}",
             "PS5VK_GRAPHICS_SUBMIT serial=1 rc=0",
             "PS5VK_GRAPHICS_COMPLETED serial=1 image_bytes=8912896",
             f"PS5VK_LAYERED_READBACK target={target} red=1 green=2 blue=3 unexpected=0 valid=1",

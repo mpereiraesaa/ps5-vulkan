@@ -329,7 +329,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     if (!d->graphics_enabled || !d->image_requirements) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (info->pNext ||
         (info->flags && info->flags != VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
-        (info->imageType != VK_IMAGE_TYPE_2D && info->imageType != VK_IMAGE_TYPE_3D) ||
+        (info->imageType != VK_IMAGE_TYPE_1D && info->imageType != VK_IMAGE_TYPE_2D &&
+         info->imageType != VK_IMAGE_TYPE_3D) ||
         !info->arrayLayers || info->samples != VK_SAMPLE_COUNT_1_BIT ||
         info->sharingMode != VK_SHARING_MODE_EXCLUSIVE || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
         info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED) return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -337,6 +338,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     if (!info->usage || info->usage & ~supported || !info->extent.width || !info->extent.height ||
         !info->extent.depth || !info->mipLevels ||
+        (info->imageType==VK_IMAGE_TYPE_1D &&
+         (info->extent.height!=1 || info->extent.depth!=1)) ||
         (info->imageType==VK_IMAGE_TYPE_2D && info->extent.depth!=1) ||
         (info->imageType==VK_IMAGE_TYPE_3D && info->arrayLayers!=1) ||
         (info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&

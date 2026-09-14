@@ -78,12 +78,18 @@ case:
 
 | Area | Reported | Mandatory floor |
 | --- | ---: | ---: |
-| Image type/layers: `maxImageDimension1D`, `maxImageDimension3D`, `maxImageDimensionCube`, `maxImageArrayLayers` | 0 / 0 / 0 / 1 | 4096 / 256 / 4096 / 256 |
 | Attachments: `maxColorAttachments`, `maxFragmentOutputAttachments`, `maxFragmentCombinedOutputResources` | 1 | 4 |
 | Vertex input: `maxVertexInputBindings` | 1 | 16 |
 | Descriptors: `maxPerStageDescriptorSamplers`, `maxPerStageDescriptorSampledImages`, `maxPerStageDescriptorStorageImages`, `maxPerStageDescriptorInputAttachments`, `maxDescriptorSetSamplers`, `maxDescriptorSetSampledImages`, `maxDescriptorSetStorageImages`, `maxDescriptorSetInputAttachments` | 0-1 | 4-96 |
 | Sampling: `maxSamplerLodBias`, color/depth/stencil `sampledImage*SampleCounts`, `framebuffer*SampleCounts`, `storageImageSampleCounts` | 0-1 | 2 / 1+4 |
-| Other: `discreteQueuePriorities`, `maxMemoryAllocationCount`, `minTexelOffset`, `maxTexelOffset` | 0 / 2048 / 0 / 0 | 2 / 4096 / -8 / 7 |
+| Other: `maxMemoryAllocationCount`, `minTexelOffset`, `maxTexelOffset` | 2048 / 0 / 0 | 4096 / -8 / 7 |
+
+The graphics profile now reaches the Vulkan 1.0 floors for 1D, 2D, 3D, cube
+and array-layer image limits. Each image type has its own creation, view,
+descriptor, upload and GPU-readback witness; the reported maximum dimensions
+remain bounded frontend contracts rather than exhaustive maximum-allocation
+tests. The compute-only build intentionally does not apply graphics limits and
+continues to classify those rows as blockers for that separate profile.
 
 `sampledImageIntegerSampleCounts` now reports `VK_SAMPLE_COUNT_1_BIT` in both
 profiles, matching the typed integer sampled-image table and its native
@@ -197,7 +203,7 @@ and it never depends on console state, dumps or proprietary material.
 
 Truthful reporting intentionally exposes several failures against the complete
 Vulkan 1.0 graphics requirements. The graphics profile now implements bounded
-single-level 2D-array, cube and 3D sampled images and reports the corresponding
+single-level 1D, 1D-array, 2D-array, cube and 3D sampled images and reports the corresponding
 core floors; the compute-only profile still has no graphics image model. Other
 gaps include 1D images, sample counts above one, a graphics allocation count
 below the Vulkan 1.0 minimum, no host-coherent memory type, and only the small

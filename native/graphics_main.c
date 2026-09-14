@@ -25,6 +25,17 @@
 #ifndef PS5VK_IMAGE_TARGET
 #define PS5VK_IMAGE_TARGET 0
 #endif
+static const char *layered_target_name(void)
+{
+    switch(PS5VK_IMAGE_TARGET) {
+    case 1:return "2d-array";
+    case 2:return "cube";
+    case 3:return "3d";
+    case 4:return "1d";
+    case 5:return "1d-array";
+    default:return "none";
+    }
+}
 void ps5vk_compute_regression(VkDevice);
 static uint64_t scene_now_ns(void)
 {
@@ -90,9 +101,16 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     VkImageCreateFlags image_flags=0;
     if(PS5VK_IMAGE_TARGET) {
         width=height=64;slices=PS5VK_IMAGE_TARGET==2?6:3;
-        image_type=PS5VK_IMAGE_TARGET==3?VK_IMAGE_TYPE_3D:VK_IMAGE_TYPE_2D;
+        if(PS5VK_IMAGE_TARGET>=4) {
+            width=PS5VK_IMAGE_TARGET==4?192:64;height=1;
+            slices=PS5VK_IMAGE_TARGET==4?1:3;
+        }
+        image_type=PS5VK_IMAGE_TARGET==3?VK_IMAGE_TYPE_3D:
+            (PS5VK_IMAGE_TARGET>=4?VK_IMAGE_TYPE_1D:VK_IMAGE_TYPE_2D);
         view_type=PS5VK_IMAGE_TARGET==1?VK_IMAGE_VIEW_TYPE_2D_ARRAY:
-            (PS5VK_IMAGE_TARGET==2?VK_IMAGE_VIEW_TYPE_CUBE:VK_IMAGE_VIEW_TYPE_3D);
+            (PS5VK_IMAGE_TARGET==2?VK_IMAGE_VIEW_TYPE_CUBE:
+            (PS5VK_IMAGE_TARGET==3?VK_IMAGE_VIEW_TYPE_3D:
+            (PS5VK_IMAGE_TARGET==4?VK_IMAGE_VIEW_TYPE_1D:VK_IMAGE_VIEW_TYPE_1D_ARRAY)));
         if(PS5VK_IMAGE_TARGET==2)image_flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     }
     VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.flags=image_flags,
@@ -107,7 +125,7 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     VkImageViewCreateInfo vi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=t.image,
         .viewType=view_type,.format=ii.format,
         .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,
-            image_type==VK_IMAGE_TYPE_2D?slices:1}};
+            image_type==VK_IMAGE_TYPE_3D?1:slices}};
     CHECK(vkCreateImageView(d,&vi,NULL,&t.view));
     VkSamplerCreateInfo si={.sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,.addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -205,10 +223,11 @@ static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer 
         const unsigned pixels=t->width*t->height;
         for(unsigned slice=0;slice<t->slices;++slice)
             for(unsigned i=0;i<pixels;++i)
-                ((uint32_t *)mapped)[slice*pixels+i]=colors[slice%3];
+                ((uint32_t *)mapped)[slice*pixels+i]=
+                    PS5VK_IMAGE_TARGET==4?colors[(3u*i)/pixels]:colors[slice%3];
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_LAYERED_INPUT target=%s slices=%u width=%u height=%u",
-            PS5VK_IMAGE_TARGET==1?"2d-array":(PS5VK_IMAGE_TARGET==2?"cube":"3d"),
+            layered_target_name(),
             t->slices,t->width,t->height);
     } else for(unsigned i=0;i<4;++i)((uint32_t *)mapped)[i]=colors[(i+frame)%3];
     VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=t->upload_memory,.size=VK_WHOLE_SIZE};
@@ -218,10 +237,10 @@ static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer 
         .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.image=t->image,
         .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
         .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,
-            t->image_type==VK_IMAGE_TYPE_2D?t->slices:1}};
+            t->image_type==VK_IMAGE_TYPE_3D?1:t->slices}};
     vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
     VkBufferImageCopy copy={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,
-        t->image_type==VK_IMAGE_TYPE_2D?t->slices:1},
+        t->image_type==VK_IMAGE_TYPE_3D?1:t->slices},
         .imageExtent={t->width,t->height,
             t->image_type==VK_IMAGE_TYPE_3D?t->slices:1}};
     vkCmdCopyBufferToImage(cb,t->upload,t->image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
@@ -665,7 +684,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
             int layered_valid=!unexpected && histogram[0] && histogram[1] && histogram[2];
             ps5log_printf(PS5LOG_MARK,
                 "PS5VK_LAYERED_READBACK target=%s red=%zu green=%zu blue=%zu unexpected=%zu valid=%d",
-                PS5VK_IMAGE_TARGET==1?"2d-array":(PS5VK_IMAGE_TARGET==2?"cube":"3d"),
+                layered_target_name(),
                 histogram[0],histogram[1],histogram[2],unexpected,layered_valid);
             if(!layered_valid)fail("layered-texture-readback",-1);
         }
@@ -784,27 +803,30 @@ int main(void)
     }
     if(PS5VK_IMAGE_TARGET) {
         VkImageFormatProperties props;
-        VkImageType type=PS5VK_IMAGE_TARGET==3?VK_IMAGE_TYPE_3D:VK_IMAGE_TYPE_2D;
+        VkImageType type=PS5VK_IMAGE_TARGET==3?VK_IMAGE_TYPE_3D:
+            (PS5VK_IMAGE_TARGET>=4?VK_IMAGE_TYPE_1D:VK_IMAGE_TYPE_2D);
         VkImageCreateFlags flags=PS5VK_IMAGE_TARGET==2?
             VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT:0;
         CHECK(vkGetPhysicalDeviceImageFormatProperties(physical,VK_FORMAT_R8G8B8A8_UNORM,
             type,VK_IMAGE_TILING_OPTIMAL,
             VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,flags,&props));
         uint32_t expected_dimension=PS5VK_IMAGE_TARGET==2?PS5VK_MAX_IMAGE_CUBE:
-            (PS5VK_IMAGE_TARGET==3?PS5VK_MAX_IMAGE_3D:PS5VK_MAX_IMAGE_2D);
-        uint32_t expected_layers=PS5VK_IMAGE_TARGET==1?PS5VK_MAX_IMAGE_ARRAY_LAYERS:
-            (PS5VK_IMAGE_TARGET==2?6u:1u);
+            (PS5VK_IMAGE_TARGET==3?PS5VK_MAX_IMAGE_3D:
+            (PS5VK_IMAGE_TARGET>=4?PS5VK_MAX_IMAGE_1D:PS5VK_MAX_IMAGE_2D));
+        uint32_t expected_layers=(PS5VK_IMAGE_TARGET==1 || PS5VK_IMAGE_TARGET>=4)?
+            PS5VK_MAX_IMAGE_ARRAY_LAYERS:(PS5VK_IMAGE_TARGET==2?6u:1u);
         if(props.maxExtent.width!=expected_dimension ||
-           props.maxExtent.height!=expected_dimension ||
+           props.maxExtent.height!=(PS5VK_IMAGE_TARGET>=4?1u:expected_dimension) ||
            props.maxExtent.depth!=(PS5VK_IMAGE_TARGET==3?PS5VK_MAX_IMAGE_3D:1u) ||
            props.maxArrayLayers!=expected_layers)fail("layered-image-query",-1);
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_LAYERED_QUERY target=%s dimension=%u depth=%u layers=%u",
-            PS5VK_IMAGE_TARGET==1?"2d-array":(PS5VK_IMAGE_TARGET==2?"cube":"3d"),
+            layered_target_name(),
             props.maxExtent.width,props.maxExtent.depth,props.maxArrayLayers);
     }
     VkPhysicalDeviceProperties device_props;vkGetPhysicalDeviceProperties(physical,&device_props);
-    if(device_props.limits.maxImageDimension2D<1920 ||
+    if(device_props.limits.maxImageDimension1D<PS5VK_MAX_IMAGE_1D ||
+       device_props.limits.maxImageDimension2D<1920 ||
        device_props.limits.maxImageDimension3D<PS5VK_MAX_IMAGE_3D ||
        device_props.limits.maxImageDimensionCube<PS5VK_MAX_IMAGE_CUBE ||
        device_props.limits.maxImageArrayLayers<PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
@@ -814,8 +836,8 @@ int main(void)
        device_props.limits.maxDescriptorSetSamplers!=1 || device_props.limits.maxDescriptorSetSampledImages!=1 ||
        !device_props.limits.maxSamplerAllocationCount)
         fail("graphics-limits-profile",-1);
-    ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_LIMITS image_2d=%u image_3d=%u image_cube=%u image_layers=%u framebuffer=%ux%u vertex_stride=%u bindings=%u viewports=%u",
-        device_props.limits.maxImageDimension2D,device_props.limits.maxImageDimension3D,
+    ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_LIMITS image_1d=%u image_2d=%u image_3d=%u image_cube=%u image_layers=%u framebuffer=%ux%u vertex_stride=%u bindings=%u viewports=%u",
+        device_props.limits.maxImageDimension1D,device_props.limits.maxImageDimension2D,device_props.limits.maxImageDimension3D,
         device_props.limits.maxImageDimensionCube,device_props.limits.maxImageArrayLayers,
         device_props.limits.maxFramebufferWidth,
         device_props.limits.maxFramebufferHeight,device_props.limits.maxVertexInputBindingStride,

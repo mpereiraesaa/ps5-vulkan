@@ -528,7 +528,7 @@ public query paths rather than from a copied table:
   `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
   report fails the gate; only documented blockers are accepted.
 
-Result on the shipped profiles: 131 mandatory limits satisfied, 67 documented
+Result on the shipped profiles: 132 mandatory limits satisfied, 66 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
 the code path that enforces them, 98 mandatory format-feature cells satisfied
@@ -829,8 +829,8 @@ alignment validation and native descriptor-address adjustment with checked
 ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
-reporting matrix now records 131 satisfied mandatory limit rows, 67 limit
-blockers and 631 blockers overall.
+reporting matrix now records 132 satisfied mandatory limit rows, 66 limit
+blockers and 630 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs
@@ -861,10 +861,10 @@ are reported unavailable and cannot be negotiated accidentally.
 ## Layered sampled images derived from ps5-opengl (2026-09-14)
 
 The GPL-compatible integration of the pinned `ps5-opengl` GFX1013 texture
-descriptor contract now covers distinct single-level 2D-array, cube and 3D
-resource types. The Vulkan frontend adds bounded image creation, view ranges,
-multi-slice layout and buffer-upload planning; it does not link Mesa/Gallium or
-expose an OpenGL API.
+descriptor contract now covers distinct single-level 1D, 1D-array, 2D-array,
+cube and 3D resource types. The Vulkan frontend adds bounded image creation,
+view ranges, multi-slice layout and buffer-upload planning; it does not link
+Mesa/Gallium or expose an OpenGL API.
 
 Three independently built RGBA8 payloads exercised the exact paths on firmware
 12.02. Each used a 64x64 source with one solid color per layer, face or volume
@@ -891,3 +891,22 @@ expose the Vulkan 1.0 floors of 256 array layers, 4096 cube dimension and 512
 blockers. Those values are bounds of the implemented descriptor and allocation
 contract; these small witnesses do not claim exhaustive execution at the
 maximum dimensions, mipmaps, cube arrays or general descriptor arrays.
+
+Two later independent payloads validated the remaining Vulkan 1D image type
+rather than inferring it from the 2D layout. Both emitted 407 ordered records,
+preserved the pre/post compute regression, reported zero unexpected pixels,
+released all allocations and returned through exact-title Close Game:
+
+- 1D: run `20260914T035618318Z_PPSA99994_ps5vk_0x720636c8b4ca`, SELF
+  SHA-256 `3f931e503cf55dee3d5a6efad6fb6353801cb797862f12febe52b383140a2f2f`,
+  log SHA-256 `8f0782095b4c8ca7277ab88c379a43eadceb3e9efbb043480ce4965caec30aad`;
+  three independently colored regions produced red/green/blue
+  `82944/207360/82944`.
+- 1D array: run `20260914T035708018Z_PPSA99994_ps5vk_0x7211c91f6e55`, SELF
+  SHA-256 `80525965827292498f2ab0c882c5ad701c385ddfe8b34d98cd727c8cc45b301c`,
+  log SHA-256 `18c8c8b6a0331dd4eb953462cba83894adb0d10fa03b4184a8225cd909716441`;
+  three independently colored layers produced the same exact histogram.
+
+The graphics profile consequently reports `maxImageDimension1D=4096` and
+removes that real blocker. This is still a bounded contract, not an exhaustive
+maximum-sized allocation test.

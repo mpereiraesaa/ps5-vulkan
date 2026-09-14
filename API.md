@@ -131,18 +131,19 @@ separate nearest-versus-linear magnification and minification discriminators;
 both float and integer variants of the six fixed `VkBorderColor` enums map to
 those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
 unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
-is advertised only for the twenty-one validated filterable rows. Mipmap-mode and
-LOD encodings retain host contract coverage, but no mip-chain execution has
-been established. Single-level 2D-array, cube and 3D views are supported for
-the sampled-image role. The implementation encodes the distinct GFX1013
-resource types, retains layer/depth bounds in the view, and uploads multi-layer
-or multi-slice regions with ordered DMA packets. Exact RGBA8 hardware witnesses
-select three different array layers, cube faces or volume slices and verify
-distinct RGB output. The reported 256 array layers, 4096 cube dimension and 512
-3D dimension are frontend floors backed by descriptor/layout arithmetic and
-allocation bounds; the hardware witnesses use small 64x64 resources and are
-not exhaustive tests at those maximum dimensions. Mip chains, anisotropy, cube
-arrays and general descriptor arrays are not supported.
+is advertised only for the twenty-one validated filterable rows. Mipmap-mode
+and LOD encodings retain host contract coverage, but no mip-chain execution has
+been established. Single-level 1D, 1D-array, 2D-array, cube and 3D views are
+supported for the sampled-image role. The implementation encodes the distinct
+GFX1013 resource types, retains layer/depth bounds in the view, and uploads
+multi-layer or multi-slice regions with ordered DMA packets. Exact RGBA8
+hardware witnesses select three 1D regions, array layers, cube faces or volume
+slices and verify distinct RGB output. The reported 4096 1D dimension, 256
+array layers, 4096 cube dimension and 512 3D dimension are frontend floors
+backed by descriptor/layout arithmetic and allocation bounds; the hardware
+witnesses use small resources and are not exhaustive tests at those maximum
+dimensions. Mip chains, anisotropy, cube arrays and general descriptor arrays
+are not supported.
 
 ## Compute
 
