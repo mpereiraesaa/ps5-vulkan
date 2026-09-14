@@ -194,6 +194,10 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
         }
     memcpy(options->descriptor_bindings,bindings,sizeof(bindings));
     options->descriptor_binding_count=count;
+    /* The layout is a declaration, not evidence of use: the compiler reports
+     * the sets and bindings the optimized NIR really dereferences, so a layout
+     * set no shader touches cannot acquire a native descriptor dependency. */
+    options->static_descriptor_use=true;
     return VK_SUCCESS;
 }
 
