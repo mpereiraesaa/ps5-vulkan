@@ -12,6 +12,10 @@ struct ps5vk_runtime_graphics_program {
 VkResult ps5vk_runtime_graphics_compile(void *,const struct ps5vk_graphics_key *,const void **);
 void ps5vk_runtime_graphics_free(void *,const void *);
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *);
+/* Shared descriptor-table lowering, independent of the currently enabled
+ * draw ABI. Success proves compiler options only, not native submission. */
+VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_key *,
+    VkShaderStageFlagBits, PsbcCompileOptions *);
 /* Context is an existing ps5vk_compilation_cache. Lease data has the same
  * program view as the uncached adapter, but must use cached_release. */
 VkResult ps5vk_runtime_graphics_cached_acquire(void *,const struct ps5vk_graphics_key *,const void **);

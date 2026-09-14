@@ -15,6 +15,86 @@ static struct ps5vk_graphics_module_key read_module(const char *path)
     assert(fread(code,1,(size_t)bytes,f)==(size_t)bytes);fclose(f);
     return (struct ps5vk_graphics_module_key){.words=code,.word_count=(size_t)bytes/4,.entry="main"};
 }
+static void check_descriptor_options(void)
+{
+    struct ps5vk_set_signature sets[4]={0};
+    for(unsigned s=0;s<4;++s) {
+        sets[s].binding[2].count=2;
+        sets[s].binding[2].stages=VK_SHADER_STAGE_VERTEX_BIT;
+        sets[s].type[2]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        sets[s].binding[7].count=24;
+        sets[s].binding[7].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+        sets[s].type[7]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+            sets[s].binding[b].first=sets[s].count;
+            sets[s].count+=sets[s].binding[b].count;
+        }
+    }
+    struct ps5vk_graphics_key key={.descriptor_set_count=4,.descriptor_sets=sets};
+    PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
+        .entrypoint="main",.optimise=true,.address32_hi=2,.primitive_type=4,.rasterization_samples=1};
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_FRAGMENT_BIT,&options)==VK_SUCCESS);
+    assert(options.descriptor_binding_count==4);
+    for(unsigned s=0;s<4;++s) {
+        const PsbcDescriptorBinding *b=&options.descriptor_bindings[s];
+        assert(b->set==s && b->binding==7 && b->array_size==24 && b->offset==32 && b->stride==48);
+        assert(b->type==PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER);
+    }
+    struct ps5vk_graphics_module_key module=read_module("build/runtime-graphics/descriptor_arrays.frag.spv");
+    PsbcShaderOutput output={0};
+    assert(psbc_compile_shader(module.words,module.word_count*4,&options,&output)==PSBC_RESULT_OK);
+    assert(output.machine_code_size && output.metadata.hardware_stage==PSBC_HW_STAGE_PIXEL);
+    assert(output.metadata.descriptor_binding_count==4);
+    for(unsigned s=0;s<4;++s) {
+        assert(output.metadata.descriptor_set_valid[s]);
+        assert(output.metadata.descriptor_set_user_data_dword[s]<output.metadata.user_sgpr_count);
+        const PsbcDescriptorBinding *b=&output.metadata.descriptor_bindings[s];
+        assert(b->set==s && b->binding==7 && b->array_size==24 && b->offset==32 && b->stride==48);
+    }
+    struct ps5vk_runtime_shader header;
+    assert(!ps5vk_runtime_shader_build(&header,&output));
+    struct ps5vk_graphics_key base={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    const void *compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&base,&compiled)==VK_SUCCESS);
+    const struct ps5vk_runtime_graphics_program *program=compiled;
+    struct ps5vk_runtime_draw_abi abi;
+    assert(!ps5vk_runtime_draw_abi_build(&program->vertex.metadata,&output.metadata,&abi));
+    const uint32_t tables[4]={0x1000,0x2000,0x3000,0x4000};
+    uint32_t vs[16],fs[16];
+    assert(!ps5vk_runtime_draw_values_sets(&abi,0,0,0,0,tables,vs,fs));
+    for(unsigned s=0;s<4;++s)assert(fs[abi.fragment_descriptor_slot[s]]==tables[s]);
+    assert(ps5vk_runtime_draw_values(&abi,0,0,0,0,tables[0],vs,fs));
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    free((void *)base.vertex.words);free((void *)base.fragment.words);
+    psbc_free_output(&output);free((void *)module.words);
+    /* Compiler-only evidence: the public pipeline is deliberately still gated
+     * until the matching per-set native submission ABI is implemented. */
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_VERTEX_BIT,&options)==VK_SUCCESS);
+    assert(options.descriptor_binding_count==4);
+    for(unsigned s=0;s<4;++s) {
+        const PsbcDescriptorBinding *b=&options.descriptor_bindings[s];
+        assert(b->set==s && b->binding==2 && b->array_size==2 && !b->offset && b->stride==16);
+    }
+    PsbcCompileOptions saved=options;
+    sets[3].binding[8].first--;
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_VERTEX_BIT,&options)!=VK_SUCCESS);
+    assert(!memcmp(&saved,&options,sizeof(options)));sets[3].binding[8].first++;
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_COMPUTE_BIT,&options)!=VK_SUCCESS);
+    assert(!memcmp(&saved,&options,sizeof(options)));
+    memset(sets,0,sizeof(sets));
+    for(unsigned s=0;s<4;++s)for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+        sets[s].binding[b]=(struct ps5vk_binding){.first=b,.count=1,.stages=VK_SHADER_STAGE_FRAGMENT_BIT};
+        sets[s].type[b]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;++sets[s].count;
+    }
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_FRAGMENT_BIT,&options)==VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!memcmp(&saved,&options,sizeof(options)));
+    puts("Descriptor compiler: four sets / 96 array elements lowered by real PSBC; GPU proof pending");
+}
 static void check_interfaces(struct ps5vk_graphics_key *key)
 {
     assert(ps5vk_spirv_graphics_interface(key));
@@ -52,6 +132,7 @@ static void check_interfaces(struct ps5vk_graphics_key *key)
 }
 int main(void)
 {
+    check_descriptor_options();
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
@@ -89,8 +170,8 @@ int main(void)
     assert(p->fragment.metadata.descriptor_binding_count==1);
     assert(p->fragment.metadata.descriptor_set0_valid &&
         p->fragment.metadata.descriptor_set_valid[0]);
-    assert(p->arguments.fragment_descriptor_set0_valid &&
-        p->arguments.fragment_descriptor_set0_slot< p->arguments.fragment_count);
+    assert(p->arguments.fragment_descriptor_valid[0] &&
+        p->arguments.fragment_descriptor_slot[0]< p->arguments.fragment_count);
     ps5vk_runtime_graphics_free(NULL,out);
     sampled.binding[0].stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
     assert(ps5vk_runtime_graphics_compile(NULL,&textured,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);

@@ -112,13 +112,13 @@ int main(void)
     assert(ps5vk_native_emit_indexed_draw(&cursor,64,&state,&state,sizeof(state),&op,
         0x123400,0x567800,&indices,draw_index)==VK_ERROR_FEATURE_NOT_PRESENT);
     assert(cursor==commands && !calls);
-    op.type=PS5VK_DRAW;state.runtime.fragment_descriptor_set0_valid=1;
-    state.runtime.fragment_descriptor_set0_slot=0;
+    op.type=PS5VK_DRAW;state.runtime.fragment_descriptor_valid[0]=1;
+    state.runtime.fragment_descriptor_slot[0]=0;
     cursor=commands;calls=0;
     assert(ps5vk_native_emit_textured_draw(&cursor,64,&state,&state,sizeof(state),&op,
         0x123400,0x567800,0x900000,NULL,NULL)==VK_SUCCESS);
     assert(commands[8]==0xc && commands[9]==2 && commands[10]==0x900000);
-    state.runtime.fragment_descriptor_set0_valid=0;
+    state.runtime.fragment_descriptor_valid[0]=0;
     op.type=PS5VK_DRAW;
     state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,.fragment_count=2,
         .base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.lds_slot=1,.lds_value=0,

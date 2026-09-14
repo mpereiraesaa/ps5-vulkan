@@ -3,6 +3,34 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Multi-set compiler and argument preparation (host only)
+
+The descriptor-table layout is now shared by graphics compiler options and
+the existing native single-sampler preparation check. It preserves byte offsets
+across stage filtering, sparse binding numbers, mixed 16-byte buffer records
+and 48-byte combined image/sampler records, and arrays in four sets.
+
+`test-runtime-graphics-compiler` compiles the owned
+`experiments/graphics/runtime_descriptor_arrays.frag` with real PSBC/ACO for
+GFX1013. Its loop addresses 24 sampler elements in each of four sets. The test
+checks machine-code production, four active table-pointer slots, each declared
+array's 48-byte stride and 32-byte offset after vertex-only uniform buffers,
+native shader-header construction, and argument preparation using an actual
+compiled vertex shader. Synthetic tests separately check shared VS/FS table
+addresses, collisions with push/LDS/vertex arguments, malformed metadata,
+missing/misaligned addresses, descriptor bounds, and unchanged outputs on
+failure. Compiler options exceeding PSBC's binding-declaration bound fail.
+
+This is compiler/host evidence, **not GPU execution of 96 samplers**, an
+upstream CTS result, or a capability promotion. Public graphics pipeline
+creation still admits only its existing single combined fragment sampler;
+the one-table emitter rejects multi-set programs with missing table addresses.
+Job-owned multi-set table encoding, command emission, resource/layout tracking,
+an independent public-SDK hardware consumer and applicable CTS coverage remain
+to be connected and validated before increasing the advertised limits. Earlier
+hardware results below identify their own binaries; they do not validate this
+new argument preparation merely because host regressions pass.
+
 ## Observed results
 
 ### Packed sampled images and filtering

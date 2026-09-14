@@ -123,12 +123,21 @@ int main(void)
     struct VkDescriptorPool_T pool={.device=&d};
     struct VkDescriptorSet_T set={.pool=&pool,.generation=7};
     set.signature.count=1;set.signature.binding[0].count=1;set.signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;set.defined[0]=VK_TRUE;
+    set.signature.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)set.signature.binding[b].first=1;
     op.pipeline->set_count=1;op.sets[0]=&set;op.generations[0]=7;
     expected_bytes+=48;
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)==VK_SUCCESS);
     assert(prepared.texture_table==prepared.vertex_table+4 && prepared.bytes==expected_bytes);
     for(unsigned i=0;i<12;++i)assert(prepared.texture_table[i]==100+i);
     ps5vk_native_release_draw(&prepared);assert(!prepared.texture_table && allocations==releases);
+    allocated=allocations;set.signature.binding[1].first=0;
+    assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=VK_SUCCESS &&
+        allocations==allocated && !prepared.backing);
+    set.signature.binding[1].first=1;
+    set.pool=NULL;
+    assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=VK_SUCCESS);
+    set.pool=&pool;
     allocated=allocations;op.generations[0]=6;
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=VK_SUCCESS && allocations==allocated);
     op.generations[0]=7;texture_rc=VK_ERROR_UNKNOWN;

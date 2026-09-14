@@ -23,6 +23,7 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_unorm.vert -o build/runtime-graphics/vertex_unorm.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_format.frag -o build/runtime-graphics/vertex_format.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_texture.frag -o build/runtime-graphics/texture.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_descriptor_arrays.frag -o build/runtime-graphics/descriptor_arrays.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_mipmap.vert -o build/runtime-graphics/mipmap.vert.spv
 	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tools/inspect_graphics_compiler.c src/ps5_compiler_shims.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/runtime-graphics/inspect
 	./build/runtime-graphics/inspect build/runtime-graphics/triangle.vert.spv build/runtime-graphics/triangle.frag.spv
@@ -67,6 +68,8 @@ test-shaders:
 	$(PYTHON) tools/prepare_test_shaders.py
 check-sanitize:
 	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc tests/test_descriptor_table_layout.c -o build/tests/test_descriptor_table_layout_sanitized
+	./build/tests/test_descriptor_table_layout_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) src/texture_format.c src/vertex_descriptor.c src/vertex_fetch.c tests/test_vertex_fetch.c -o build/tests/test_vertex_fetch_sanitized
 	./build/tests/test_vertex_fetch_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_prepare_ps5.c src/texture_format.c src/vertex_descriptor.c tests/test_draw_prepare_ps5.c -o build/tests/test_draw_prepare_ps5_sanitized
@@ -139,6 +142,8 @@ check-sanitize:
 	./build/tests/test_compilation_cache_sanitized
 check:
 	@mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc tests/test_descriptor_table_layout.c -o build/tests/test_descriptor_table_layout
+	./build/tests/test_descriptor_table_layout
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_dma.c tests/test_texture_dma.c -o build/tests/test_texture_dma
 	./build/tests/test_texture_dma
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/color_clear.c tests/test_color_clear.c -o build/tests/test_color_clear

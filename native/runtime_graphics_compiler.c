@@ -9,6 +9,7 @@
  */
 #include "runtime_graphics_compiler.h"
 #include "spirv_graphics_interface.h"
+#include "descriptor_table_layout.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -57,6 +58,9 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
 
 static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
 {
+    struct ps5vk_descriptor_table_layout tables;
+    if (ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
+            key->descriptor_sets,&tables)!=VK_SUCCESS) return 0;
     if(!key->descriptor_set_count)return 1;
     if(key->descriptor_set_count!=1 || !key->descriptor_sets)return 0;
     const struct ps5vk_set_signature *set=&key->descriptor_sets[0];
@@ -157,6 +161,41 @@ static PsbcVertexFormat vertex_format(VkFormat format)
     }
 }
 
+VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_key *key,
+    VkShaderStageFlagBits stage,PsbcCompileOptions *options)
+{
+    if(!key || !options || (stage!=VK_SHADER_STAGE_VERTEX_BIT &&
+            stage!=VK_SHADER_STAGE_FRAGMENT_BIT))return VK_ERROR_UNKNOWN;
+    struct ps5vk_descriptor_table_layout tables;
+    VkResult rc=ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
+        key->descriptor_sets,&tables);
+    if(rc!=VK_SUCCESS)return rc;
+    PsbcDescriptorBinding bindings[PSBC_MAX_DESCRIPTOR_BINDINGS]={0};
+    uint32_t count=0;
+    for(uint32_t s=0;s<key->descriptor_set_count;++s)
+        for(uint32_t b=0;b<PS5VK_MAX_BINDINGS;++b) {
+            const struct ps5vk_binding *source=&key->descriptor_sets[s].binding[b];
+            if(!source->count || !(source->stages&stage))continue;
+            if(count==PSBC_MAX_DESCRIPTOR_BINDINGS)return VK_ERROR_FEATURE_NOT_PRESENT;
+            PsbcDescriptorType type;
+            switch(key->descriptor_sets[s].type[b]) {
+            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER;break;
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
+            case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
+            default:return VK_ERROR_FEATURE_NOT_PRESENT;
+            }
+            bindings[count++]=(PsbcDescriptorBinding){.set=s,.binding=b,.type=type,
+                .array_size=source->count,.offset=tables.binding[s][b].byte_offset,
+                .stride=tables.binding[s][b].byte_stride};
+        }
+    memcpy(options->descriptor_bindings,bindings,sizeof(bindings));
+    options->descriptor_binding_count=count;
+    return VK_SUCCESS;
+}
+
 static int apply_parameters(PsbcCompileOptions *options,
                             const struct ps5vk_graphics_module_key *module,
                             const struct ps5vk_graphics_key *key,VkShaderStageFlagBits stage)
@@ -175,13 +214,7 @@ static int apply_parameters(PsbcCompileOptions *options,
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&stage)options->force_indirect_push_constants=true;
     options->vertex_attribute_count=0;
-    options->descriptor_binding_count=0;
-    if(stage==VK_SHADER_STAGE_FRAGMENT_BIT && key->descriptor_set_count) {
-        options->descriptor_bindings[0]=(PsbcDescriptorBinding){
-            .set=0,.binding=0,.type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER,
-            .array_size=1,.offset=0,.stride=48};
-        options->descriptor_binding_count=1;
-    }
+    if(ps5vk_runtime_graphics_descriptor_options(key,stage,options)!=VK_SUCCESS)return 0;
     if(stage==VK_SHADER_STAGE_VERTEX_BIT) {
         for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
             const VkVertexInputAttributeDescription *source=&key->vertex_attributes[i];

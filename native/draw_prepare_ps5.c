@@ -2,6 +2,7 @@
 #include "vertex_fetch.h"
 #include "vertex_descriptor.h"
 #include "texture_descriptor.h"
+#include "descriptor_table_layout.h"
 #include <string.h>
 void ps5vk_native_release_draw(struct ps5vk_prepared_draw *draw)
 {
@@ -130,9 +131,13 @@ VkResult ps5vk_native_prepare_vertex_draw_masked(VkDevice d,const struct ps5vk_o
     uint32_t texture[12];const uint32_t *texture_words=NULL;
     if(op->pipeline && op->pipeline->set_count) {
         VkDescriptorSet set=op->sets[0];
-        if(op->pipeline->set_count!=1 || !set || set->pool->device!=d || set->generation!=op->generations[0] ||
+        if(op->pipeline->set_count!=1 || !set || !set->pool || set->pool->device!=d || set->generation!=op->generations[0] ||
             set->signature.count!=1 || set->signature.binding[0].count!=1 ||
             set->signature.type[0]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || !set->defined[0])return VK_ERROR_UNKNOWN;
+        struct ps5vk_descriptor_table_layout tables;
+        if(ps5vk_descriptor_table_layout_build(1,&set->signature,&tables)!=VK_SUCCESS ||
+            tables.binding[0][0].byte_offset || tables.set_bytes[0]!=sizeof(texture))
+            return VK_ERROR_UNKNOWN;
         rc=ps5vk_texture_descriptor(d,set->images[0].imageView,set->images[0].sampler,texture);
         if(rc!=VK_SUCCESS)return rc;
         texture_words=texture;
