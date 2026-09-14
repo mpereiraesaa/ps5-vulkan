@@ -97,6 +97,8 @@ readback. Each format query exposes only the operations actually established.
 | `VK_FORMAT_R8_UINT`, `VK_FORMAT_R8_SINT`, `VK_FORMAT_R8G8_UINT`, `VK_FORMAT_R8G8_SINT`, `VK_FORMAT_R8G8B8A8_UINT`, `VK_FORMAT_R8G8B8A8_SINT` | Typed integer sampled/upload image with nearest filtering and Vulkan completion of missing components |
 | `VK_FORMAT_R16_UINT`, `VK_FORMAT_R16_SINT`, `VK_FORMAT_R16G16_UINT`, `VK_FORMAT_R16G16_SINT`, `VK_FORMAT_R16G16B16A16_UINT`, `VK_FORMAT_R16G16B16A16_SINT` | Typed 16-bit integer sampled/upload image with nearest filtering |
 | `VK_FORMAT_R32_UINT`, `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32G32_UINT`, `VK_FORMAT_R32G32_SINT`, `VK_FORMAT_R32G32B32A32_UINT`, `VK_FORMAT_R32G32B32A32_SINT` | Typed 32-bit integer sampled/upload image with nearest filtering |
+| `VK_FORMAT_A8B8G8R8_UNORM_PACK32`, `VK_FORMAT_A8B8G8R8_SNORM_PACK32`, `VK_FORMAT_A8B8G8R8_SRGB_PACK32` | Packed sampled/upload image with native conversion and nearest/linear filtering; no color-attachment or storage-image role |
+| `VK_FORMAT_A8B8G8R8_UINT_PACK32`, `VK_FORMAT_A8B8G8R8_SINT_PACK32` | Packed typed integer sampled/upload image, nearest only |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
 
@@ -127,7 +129,7 @@ committed layout. Anything outside the padded linear geometry stays refused
 rather than being approximated with a linear write.
 
 Nearest and linear sampling have native deterministic readback evidence for all
-twenty-one filterable sampled formats. Eighteen additional signed and unsigned
+24 filterable sampled formats. 20 additional signed and unsigned
 integer rows have typed `isampler2D`/`usampler2D` nearest-sampling evidence and
 do not expose linear filtering. R8 and RG8 verify Vulkan completion of missing
 components;
@@ -142,7 +144,7 @@ separate nearest-versus-linear magnification and minification discriminators;
 both float and integer variants of the six fixed `VkBorderColor` enums map to
 those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
 unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
-is advertised only for the twenty-one validated filterable rows. Valid sampled
+is advertised only for the 24 validated filterable rows. Valid sampled
 images can carry complete mip chains up to the per-type query limit. A
 public-SDK-linked 2D RGBA8 witness uploaded three levels and selected all three
 with runtime-compiled explicit LOD, producing deterministic GPU readback.

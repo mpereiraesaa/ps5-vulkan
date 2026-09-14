@@ -110,33 +110,35 @@ int main(void)
         assert(entry->provenance & PS5VK_FORMAT_PROVENANCE_REGISTRY_PACKING);
     }
 
-    /* --- implemented but not yet witnessed -------------------------------- */
-    /* The sampled encoding exists and is host-tested, but the physical
-     * diagnostic has not run, so nothing is published and no usage is
-     * accepted. A promotion is a data change in the table, not a code change. */
+    /* --- packed sampled/filter capabilities ------------------------------- */
     const int packed_linear[] = {1, 1, 1, 0, 0};
     for (unsigned i = 0; i < sizeof(packed) / sizeof(packed[0]); ++i) {
         VkFormat format = packed[i];
         assert(ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
-        assert(!ps5vk_texture_format_witnessed(format, PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
-        assert(!ps5vk_texture_format_sampled_image(format));
-        /* Integer packed rows stay nearest-only even before promotion. */
+        assert(ps5vk_texture_format_witnessed(format,
+            PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_DST));
+        assert(ps5vk_texture_format_sampled_image(format));
+        /* Integer packed rows stay nearest-only. */
         assert(ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR) ==
                (VkBool32)(packed_linear[i] != 0));
         VkFormatProperties properties;
         memset(&properties, 0xff, sizeof(properties));
         ps5vk_texture_format_properties(format, &properties);
-        assert(!properties.optimalTilingFeatures);
+        assert(properties.optimalTilingFeatures ==
+            (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                (packed_linear[i] ? VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT : 0)));
         if (format == VK_FORMAT_A8B8G8R8_SRGB_PACK32)
             assert(!properties.bufferFeatures);
         else
             assert(properties.bufferFeatures ==
                    (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
-        assert(!ps5vk_texture_format_image_usage(format, VK_IMAGE_USAGE_SAMPLED_BIT));
-        assert(!ps5vk_texture_format_image_usage(format,
+        assert(ps5vk_texture_format_image_usage(format, VK_IMAGE_USAGE_SAMPLED_BIT));
+        assert(ps5vk_texture_format_image_usage(format,
             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-        /* The internal layout arithmetic is implemented, so the format is
-         * ready for the physical diagnostic the moment it is promoted. */
+        assert(!ps5vk_texture_format_image_usage(format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+        assert(!ps5vk_texture_format_image_usage(format, VK_IMAGE_USAGE_STORAGE_BIT));
+        assert(!ps5vk_texture_format_image_usage(format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
         assert(ps5vk_texture_format_sampled_encoding(format));
     }
     assert(ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UNORM_PACK32,

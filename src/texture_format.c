@@ -34,10 +34,9 @@
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (EXTRA) | (PENDING), CAP_SAMP | CAP_DST | (EXTRA), GPL }
 /* Sampled row whose byte layout is the pinned registry's packed-component
- * order rather than one of the reference's explicit rows. The WITNESSED
- * argument lists the non-sampled capabilities that already have a console
- * witness (the vertex-input mapping); the PENDING argument lists the
- * implemented-but-unwitnessed ones. */
+ * order rather than one of the reference's explicit rows. WITNESSED lists
+ * enabled capabilities, including the independently qualified sampled roles;
+ * PENDING lists any remaining implemented-but-disabled operations. */
 #define SAMPLED_PACKED(f, bpt, word, s0, s1, s2, s3, WITNESSED, PENDING) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (WITNESSED) | (PENDING), (WITNESSED), GPL | PACK }
@@ -119,24 +118,24 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R32G32_SINT, 8, UINT32_C(0x03f00000), 4, 5, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R32G32B32A32_UINT, 16, UINT32_C(0x04b00000), 4, 5, 6, 7, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R32G32B32A32_SINT, 16, UINT32_C(0x04c00000), 4, 5, 6, 7, CAP_VERTEX, 0),
-    /* --- implemented, awaiting the physical diagnostic --------------------
+    /* --- packed sampled formats qualified on 2026-09-14 --------------------
      * `A8B8G8R8_*_PACK32` names the packed form whose R component occupies
      * bits 0-7 (the pinned registry's packed-component order), so its memory
      * layout is byte-identical to the R8G8B8A8_* row above: same GFX1013 word
-     * and same identity selectors. The byte identity is already witnessed for
-     * the identical vertex-input mapping, but the sampled route still needs
-     * its own console diagnostic, so the sampled/linear flags stay in the
-     * pending column and the format is not published. */
+     * and same identity selectors. Separate typed/normalized/sRGB sampling
+     * and checkerboard filter diagnostics each passed twice with identical
+     * SELF images. This does not promote attachment, storage or blit roles.
+     * Exact artifacts and log digests are recorded in VALIDATION.md. */
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_UNORM_PACK32, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
-                   CAP_VERTEX, CAP_LINEAR),
+                   CAP_VERTEX | CAP_SAMP | CAP_DST | CAP_LINEAR, 0),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SNORM_PACK32, 4, UINT32_C(0x03900000), 4, 5, 6, 7,
-                   CAP_VERTEX, CAP_LINEAR),
+                   CAP_VERTEX | CAP_SAMP | CAP_DST | CAP_LINEAR, 0),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SRGB_PACK32, 4, UINT32_C(0x08200000), 4, 5, 6, 7,
-                   0, CAP_LINEAR),
+                   CAP_SAMP | CAP_DST | CAP_LINEAR, 0),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_UINT_PACK32, 4, UINT32_C(0x03c00000), 4, 5, 6, 7,
-                   CAP_VERTEX, 0),
+                   CAP_VERTEX | CAP_SAMP | CAP_DST, 0),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SINT_PACK32, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
-                   CAP_VERTEX, 0),
+                   CAP_VERTEX | CAP_SAMP | CAP_DST, 0),
     /* --- roles without a sampled-image encoding --------------------------- */
     /* VideoOut target and vertex input; deliberately not sampled. */
     BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_VERTEX),

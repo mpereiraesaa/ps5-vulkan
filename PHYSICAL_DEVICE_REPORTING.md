@@ -129,8 +129,8 @@ matrix records all 110 feature rows across both profiles as satisfied reporting
 and negotiation contracts; this does not claim implementation of false bits.
 
 The per-format mandatory rules are likewise recorded as blockers rather than
-support: the profile advertises three image formats, so the mandatory format
-family tables (including the compressed families) are not implemented. Shader
+support: the advertised roles are listed below, but the complete mandatory
+format families (including the compressed families) are not implemented. Shader
 narrow-storage capabilities are gated on the advertised extension features by
 `spirv_narrow_requirements`, and the four capabilities that require
 uniform-and-storage narrow access are rejected outright; that pairing is
@@ -176,9 +176,12 @@ The current graphics format matrix remains deliberately bounded:
 | `R16_UNORM`, `R16_SNORM`, `R16_SFLOAT`, `R16G16_UNORM`, `R16G16_SNORM`, `R16G16_SFLOAT` | optimal sampled image, linear filtering and transfer destination; vertex-buffer support also applies where independently listed by the vertex table |
 | `R16G16B16A16_UNORM`, `R16G16B16A16_SNORM`, `R16G16B16A16_SFLOAT` | optimal sampled image, linear filtering and transfer destination; vertex-buffer support also applies where independently listed by the vertex table |
 | `R32_SFLOAT`, `R32G32_SFLOAT`, `R32G32B32A32_SFLOAT` | optimal sampled image, linear filtering and transfer destination; vertex-buffer support also applies |
+| scalar, two-component and four-component `R8`, `R16`, `R32` UINT/SINT families (18 formats) | typed sampled image and transfer destination, nearest only |
+| `A8B8G8R8_UNORM_PACK32`, `A8B8G8R8_SNORM_PACK32`, `A8B8G8R8_SRGB_PACK32` | optimal sampled image, linear filtering and transfer destination |
+| `A8B8G8R8_UINT_PACK32`, `A8B8G8R8_SINT_PACK32` | typed sampled image and transfer destination, nearest only |
 | `D32_SFLOAT` | optimal depth/stencil attachment |
-| `R32_SFLOAT` | vertex buffer and uniform texel buffer |
-| `R32_SINT`, `R32_UINT` | uniform texel buffer |
+| `R32_SFLOAT` | vertex buffer and uniform texel buffer; the texel-buffer role has host-only evidence |
+| `R32_SINT`, `R32_UINT` | uniform texel buffer; UINT has native evidence, SINT is host-only |
 | `R32G32_SFLOAT`, `R32G32B32_SFLOAT`, `R32G32B32A32_SFLOAT` | vertex buffer |
 
 Image-format queries accept optimal-tiling, sample-count-one combinations that
@@ -191,8 +194,12 @@ pure-transfer roles remain single-level. Unsupported combinations return
 
 `src/texture_format.c` is the single place that decides a format capability.
 Every row carries two masks: `capabilities` (the operation is implemented in
-this tree and covered by host tests) and `witnessed` (the subset that also has a
-deterministic on-console witness recorded in `VALIDATION.md`). All Vulkan-facing
+this tree and covered by host tests) and `witnessed` (the enabled subset).
+Sampled-image/filter promotions have deterministic on-console witnesses in
+`VALIDATION.md`. Two inherited uniform-texel-buffer roles, R32_SINT and
+R32_SFLOAT, retain host-only object/encoder evidence as stated in `API.md`;
+the historical mask name must not be read as native proof for those roles.
+All Vulkan-facing
 decisions - the bits `vkGetPhysicalDeviceFormatProperties` reports, the usage
 combinations `vkGetPhysicalDeviceImageFormatProperties` and image creation
 accept, the T#/S# encoding, the padded-linear layout and the copy planner - are
@@ -203,14 +210,14 @@ The two questions are deliberately not the same one. A capability can be
 implemented, encoded and host-tested while still being reported as a blocker,
 because host tests do not prove hardware behaviour. `tools/dump_device_reporting.c`
 emits the capability ledger and `tests/test_format_capabilities.py` re-derives
-every published bit from it, so a feature cannot be advertised without a
-witnessed capability, and `tests/test_reporting_matrix.py` freezes the rows of
+every published bit from it, so a feature cannot be advertised without an
+enabled capability, and `tests/test_reporting_matrix.py` freezes the rows of
 every mandatory format table outside the ones a change is scoped to.
 
 The Vulkan 1.0 4-byte and 32-bit mandatory tables are the worked example of
-that accounting: 287 cells, of which 0 are advertised by this task, 8 are
-implemented and host-tested but await their console diagnostic, and 279 have no
-backend operation at all.
+that accounting: 287 baseline deficit cells (not the total mandatory-cell
+count), of which 8 sampled/filter capabilities are now enabled after physical
+qualification and 279 still need backend work.
 
 | Blocker reason | Cells | Why a diagnostic cannot promote it |
 | --- | ---: | --- |
@@ -219,16 +226,15 @@ backend operation at all.
 | no texel-buffer descriptor | 32 | only the R32 UINT/SINT/SFLOAT uniform rows have buffer views and descriptor formats; there is no storage-texel-buffer type |
 | no render-target encoding | 23 | only B8G8R8A8/R8G8B8A8 have a render-target encoding, and the native compiler requires `colorWriteMask` 15 with `blendEnable` false |
 | no storage-image ABI | 15 | no storage-image descriptor, image-load/store ABI or atomic path exists |
-| implemented, pending physical diagnostic | 8 | the A8B8G8R8_* sampled/linear encodings are complete and host-tested; only the console witness is missing |
 | no sampled encoding | 4 | BGRA8 sampling needs a component swap the pinned GPL reference does not encode |
 
 `conformance_inventory/physical_format_validation.json` is the machine-readable
-form of the pending row of that table: one entry per cell, naming the exact GPU
+record of the eight promoted cells: one entry per cell, naming the exact GPU
 operation, the texel fixture, the deterministic expected readback, the shader
-type (float, uint, sint or sRGB) and why the host test cannot settle it.
-Promotion is a data change: move the named flag from the pending column to the
-witnessed column of the same row once two byte-identical console runs pass, and
-no code path changes.
+type (float, uint, sint or sRGB), physical evidence hashes and why host tests
+alone cannot settle it. Two identical-artifact console runs per diagnostic
+group passed before publication. Integer rows remain nearest-only; this
+promotion adds no storage-image, blit or attachment support.
 
 ### Pipeline cache identity
 

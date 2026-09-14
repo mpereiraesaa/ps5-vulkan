@@ -58,6 +58,14 @@ int ps5vk_sampled_format_case(unsigned index,
         /* R=.5, G=.25, B=.125 in Vulkan B10G11R11 packed order. */
         {"b10g11r11-ufloat", VK_FORMAT_B10G11R11_UFLOAT_PACK32,
             {0x80,0x03,0x1a,0x60}, 4, UINT32_C(0xff804020)},
+        /* PACK32 places R in the least significant byte. Distinct channels
+         * catch an accidental ABGR/RGBA selector reversal on the GPU. */
+        {"abgr8-unorm-packed", VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+            {0x40,0x80,0xc0,0xff}, 4, UINT32_C(0xff4080c0)},
+        {"abgr8-snorm-packed", VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+            {0x20,0x40,0x60,0x7f}, 4, UINT32_C(0xff4080c1)},
+        {"abgr8-srgb-packed", VK_FORMAT_A8B8G8R8_SRGB_PACK32,
+            {0x80,0x40,0x20,0xff}, 4, UINT32_C(0xff370d04)},
     };
     _Static_assert(sizeof(cases)/sizeof(cases[0])==PS5VK_SAMPLED_FORMAT_CASES,
         "sampled-format case count");
@@ -77,6 +85,7 @@ int ps5vk_sampled_format_filter_texels(unsigned index,
         {0}, {0}, {0}, {0}, {0}, {0},
         {0,0,0,0,0,0,0xff,0xff},
         {0,0,0,0,0,0,0xff,0x7f}, {0}, {0}, {0},
+        {0,0,0,0xff}, {0,0,0,0x7f}, {0,0,0,0xff},
     };
     static const uint8_t white_texels[PS5VK_SAMPLED_FORMAT_CASES][16] = {
         {0xff}, {0xff,0xff}, {0xff,0xff,0xff,0xff}, {0x7f},
@@ -93,6 +102,8 @@ int ps5vk_sampled_format_filter_texels(unsigned index,
         {0x00,0x00,0x80,0x3f},
         {0x00,0x00,0x80,0x3f,0x00,0x00,0x80,0x3f},
         {0xc0,0x03,0x1e,0x78},
+        {0xff,0xff,0xff,0xff}, {0x7f,0x7f,0x7f,0x7f},
+        {0xff,0xff,0xff,0xff},
     };
     static const uint32_t nearest_expected[PS5VK_SAMPLED_FORMAT_CASES] = {
         /* R8 fixtures are four texels wide so a row is one DWORD; their
@@ -105,6 +116,7 @@ int ps5vk_sampled_format_filter_texels(unsigned index,
         UINT32_C(0xff000000), UINT32_C(0xff000000), UINT32_C(0xff000000),
         UINT32_C(0xff000000), UINT32_C(0xff000000), UINT32_C(0xff000000),
         UINT32_C(0xff000000), UINT32_C(0xff000000),
+        UINT32_C(0xff000000), UINT32_C(0xff000000), UINT32_C(0xff000000),
     };
     static const uint32_t linear_expected[PS5VK_SAMPLED_FORMAT_CASES] = {
         UINT32_C(0xff800000), UINT32_C(0xff808000), UINT32_C(0xff808080),
@@ -114,6 +126,7 @@ int ps5vk_sampled_format_filter_texels(unsigned index,
         UINT32_C(0xff808000), UINT32_C(0xff808000), UINT32_C(0xff808000),
         UINT32_C(0xff808080), UINT32_C(0xff808080), UINT32_C(0xff800000),
         UINT32_C(0xff808000), UINT32_C(0xff808080),
+        UINT32_C(0xff808080), UINT32_C(0xff808080), UINT32_C(0xff808080),
     };
     if(index>=PS5VK_SAMPLED_FORMAT_CASES || !black || !white ||
        !nearest_bgra || !linear_bgra)

@@ -8,7 +8,7 @@ class SampledFormatVerifier(unittest.TestCase):
     def fixture(self):
         messages = []
         for case, (name, format_number, texel_bytes, expected) in enumerate(CASES):
-            messages += [f"PS5VK_COMPUTE_RESULT round={round_index} outputs=0 guards=0"
+            messages += [f"PS5VK_COMPUTE_RESULT round={round_index} checked=3072 outputs=0 guards=0"
                          for round_index in range(6)]
             messages += ["PS5VK_COMPUTE_END rounds=6 dispatches=12"]
             messages += [
@@ -19,7 +19,7 @@ class SampledFormatVerifier(unittest.TestCase):
                 f"PS5VK_VIDEO_PRESENTED token={case+1} fence=0 matching_event=1",
                 f"PS5VK_GRAPHICS_REUSE_END frame=0 slot=0 displayed=0",
             ]
-            messages += [f"PS5VK_COMPUTE_RESULT round={round_index} outputs=0 guards=0"
+            messages += [f"PS5VK_COMPUTE_RESULT round={round_index} checked=3072 outputs=0 guards=0"
                          for round_index in range(6)]
             messages += ["PS5VK_COMPUTE_END rounds=6 dispatches=12"]
         messages += ["PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0",
@@ -40,7 +40,7 @@ class SampledFormatVerifier(unittest.TestCase):
 
     def test_accepts_complete_gpu_witness(self):
         result = validate(*self.fixture())
-        self.assertEqual(result["cases"], 20)
+        self.assertEqual(result["cases"], 23)
         self.assertEqual(result["formats"], [case[0] for case in CASES])
 
     def test_rejects_wrong_srgb_decode(self):

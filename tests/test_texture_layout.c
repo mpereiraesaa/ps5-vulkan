@@ -59,7 +59,7 @@ int main(void)
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_A2B10G10R10_UNORM_PACK32,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_UNDEFINED,4,4,&l));
 
-    /* The pending sampled rows already have their arithmetic: the packed
+    /* The packed sampled rows share the same arithmetic: the packed
      * A8B8G8R8 order is byte-identical to R8G8B8A8, so the layout matches the
      * witnessed row exactly. */
     struct ps5vk_texture_mip_layout rgba8={0}, packed={0};

@@ -19,11 +19,12 @@
  *                 encoding (or the documented absence of one) exists, the
  *                 layout/copy arithmetic is bounded, and host tests cover the
  *                 contract. This is a statement about ps5-vulkan's code only.
- *   witnessed     the subset of `capabilities` that additionally has a
- *                 deterministic on-console witness (two byte-identical PS5
- *                 runs recorded in VALIDATION.md). Only witnessed capabilities
- *                 are published through the public queries and accepted by
- *                 resource creation.
+ *   witnessed     the enablement subset used by public queries and resource
+ *                 creation. Sampled-image/filter promotions require two
+ *                 identical-artifact console runs recorded in VALIDATION.md.
+ *                 Two inherited uniform-texel-buffer roles (R32_SINT/SFLOAT)
+ *                 have host object/encoder tests only, as API.md states;
+ *                 their presence in this historical mask is NOT native proof.
  *
  * A capability may therefore be implemented and tested while still being
  * reported as a blocker: host tests do not prove hardware behaviour, so an
@@ -89,7 +90,7 @@ struct ps5vk_texture_format {
     uint8_t selectors[4];
     /* Implemented operations (host contract complete). */
     uint32_t capabilities;
-    /* On-console witnessed operations; always a subset of capabilities. */
+    /* Enabled operations; see the two legacy evidence exceptions above. */
     uint32_t witnessed;
     /* Provenance of the sampled-image encoding, if any (bitmask). */
     uint8_t provenance;

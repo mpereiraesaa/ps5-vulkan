@@ -51,6 +51,25 @@ int main(void)
     assert(!memcmp(white,(uint8_t[]){0xc0,0x03,0x1e,0x78},4) &&
         linear==UINT32_C(0xff808080));
     assert(ps5vk_sampled_format_case(PS5VK_SAMPLED_FORMAT_CASES,&c));
+    for (unsigned index = 20; index < PS5VK_SAMPLED_FORMAT_CASES; ++index) {
+        assert(!ps5vk_sampled_format_case(index,&c));
+        assert(c.bytes_per_texel == 4);
+        assert(!ps5vk_sampled_format_filter_texels(index,black,white,&nearest,&linear));
+        assert(nearest == UINT32_C(0xff000000) && linear == UINT32_C(0xff808080));
+        assert(black[0] == 0 && black[1] == 0 && black[2] == 0);
+        assert(black[3] == (index == 21 ? 0x7f : 0xff));
+        for (unsigned channel = 0; channel < 4; ++channel)
+            assert(white[channel] == black[3]);
+    }
+    assert(!ps5vk_sampled_format_case(20,&c));
+    assert(c.format == VK_FORMAT_A8B8G8R8_UNORM_PACK32 &&
+        c.expected_bgra == UINT32_C(0xff4080c0));
+    assert(!ps5vk_sampled_format_case(21,&c));
+    assert(c.format == VK_FORMAT_A8B8G8R8_SNORM_PACK32 &&
+        c.expected_bgra == UINT32_C(0xff4080c1));
+    assert(!ps5vk_sampled_format_case(22,&c));
+    assert(c.format == VK_FORMAT_A8B8G8R8_SRGB_PACK32 &&
+        c.expected_bgra == UINT32_C(0xff370d04));
     assert(ps5vk_sampled_format_case(0,0));
     assert(ps5vk_sampled_format_filter_texels(PS5VK_SAMPLED_FORMAT_CASES,
         black,white,&nearest,&linear));

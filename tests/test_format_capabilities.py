@@ -1,7 +1,9 @@
 """Audit the authoritative format-capability contract.
 
-The driver publishes a format feature bit only for a capability that has an
-on-console witness. These tests close the loop between the three artefacts that
+The driver publishes a format feature bit only from its enablement mask.
+Sampled-image/filter promotions additionally require recorded console witnesses;
+the two legacy R32_SINT/SFLOAT uniform-texel roles remain host-only in API.md.
+These tests close the loop between the three artefacts that
 must agree: the capability ledger emitted by ``tools/dump_device_reporting.c``,
 the committed ``conformance_inventory/reporting_matrix.json`` and
 ``conformance_inventory/physical_format_validation.json``.
@@ -125,8 +127,8 @@ class TestFormatCapabilities(unittest.TestCase):
             self.assertTrue(row["capabilities"], name)
             self.assertEqual(row["capabilities"] & ~sum(CAP.values()), 0, name)
 
-    def test_published_features_are_exactly_the_witnessed_capabilities(self):
-        """A bit may not be reported without a witnessed capability."""
+    def test_published_features_are_exactly_the_enabled_capabilities(self):
+        """The bit mask is an enablement contract, not proof of GPU execution."""
         for row in self.ledger:
             name = self.names[row["format"]]
             optimal = 0
@@ -156,6 +158,19 @@ class TestFormatCapabilities(unittest.TestCase):
             self.assertNotIn("_UINT", name, name)
             self.assertNotIn("_SINT", name, name)
 
+    def test_public_narrative_counts_match_enabled_texture_roles(self):
+        sampled = [row for row in self.ledger if row["witnessed"] & CAP["SAMPLED_IMAGE"]]
+        linear = [row for row in sampled if row["witnessed"] & CAP["SAMPLED_IMAGE_LINEAR"]]
+        integers = [row for row in sampled if any(sign in self.names[row["format"]]
+                    for sign in ("_UINT", "_SINT"))]
+        readme = " ".join((ROOT / "README.md").read_text().split())
+        api = " ".join((ROOT / "API.md").read_text().split())
+        self.assertIn(f"{len(sampled)} sampled texture formats", readme)
+        self.assertIn(f"{len(linear)} filterable rows", readme)
+        self.assertIn(f"{len(integers)} integer rows", readme)
+        self.assertIn(f"{len(linear)} filterable sampled formats", api)
+        self.assertIn(f"{len(integers)} additional signed and unsigned", api)
+
     def test_no_satisfied_cell_lacks_a_witnessed_capability(self):
         """The committed matrix may not report a feature the ledger cannot back."""
         satisfied = [row for row in self.format_rows
@@ -175,9 +190,12 @@ class TestFormatCapabilities(unittest.TestCase):
                 continue
             self.assertTrue(entry["witnessed"] & CAP[cap], row["format"])
 
-    def test_every_pending_entry_is_implemented_but_unwitnessed(self):
+    def test_qualification_entries_match_enablement_and_recorded_evidence(self):
         entries = self.plan["entries"]
-        self.assertEqual(len(entries), self.plan["summary"]["ready_pending_physical_validation"])
+        qualified = self.plan.get("qualification", {}).get("status") == "validated"
+        summary = self.plan["summary"]
+        self.assertEqual(len(entries), summary["ready_pending_physical_validation"] +
+                         summary["satisfied_by_this_task"])
         for entry in entries:
             self.assertIn(entry["table"], TASK_TABLES)
             self.assertEqual(entry["profile"], "graphics")
@@ -185,16 +203,24 @@ class TestFormatCapabilities(unittest.TestCase):
             row = self.by_name[entry["format"]]
             cap = entry["capability"].replace("PS5VK_FORMAT_CAP_", "")
             self.assertTrue(row["capabilities"] & CAP[cap], entry["capability"])
-            self.assertFalse(row["witnessed"] & CAP[cap], entry["capability"])
+            self.assertEqual(bool(row["witnessed"] & CAP[cap]), qualified, entry["capability"])
             for field in ("minimal_gpu_operation", "expected_result", "shader_type",
-                          "host_test_limit", "pending_flag"):
+                          "host_test_limit", "enablement"):
                 self.assertTrue(entry[field], (entry["format"], field))
-            # The named feature must still be a blocker in the committed matrix.
-            blockers = [cell for cell in self.format_rows
+            cells = [cell for cell in self.format_rows
                         if cell["format"] == entry["format"]
+                        and cell["profile"] == entry["profile"]
                         and cell.get("feature") == entry["feature"]
-                        and cell["verdict"] == "blocker"]
-            self.assertTrue(blockers, (entry["format"], entry["feature"]))
+                        and cell["verdict"] == ("satisfied" if qualified else "blocker")]
+            self.assertTrue(cells, (entry["format"], entry["feature"]))
+            if qualified:
+                group = self.plan["qualification"]["groups"][entry["evidence_group"]]
+                self.assertEqual(len(group["log_sha256"]), 2)
+                self.assertEqual(len(set(group["log_sha256"])), 2)
+                validation_doc = (ROOT / "VALIDATION.md").read_text()
+                for digest in [group["self_sha256"], *group["log_sha256"]]:
+                    self.assertRegex(digest, r"^[0-9a-f]{64}$")
+                    self.assertIn(digest, validation_doc)
 
     def test_pending_formats_keep_the_registry_packing_provenance(self):
         for name in PENDING_FORMATS:
@@ -204,16 +230,18 @@ class TestFormatCapabilities(unittest.TestCase):
         classification = {row["reason"]: row for row in self.plan["blocker_classification"]}
         total = sum(row["cells"] for row in classification.values())
         summary = self.plan["summary"]
-        self.assertEqual(total, summary["mandatory_cells_in_scope"])
+        self.assertEqual(total + summary["satisfied_by_this_task"],
+                         summary["mandatory_cells_in_scope"])
         self.assertEqual(
             total - classification["implemented-pending-physical-diagnostic"]["cells"],
             summary["blocked_without_backend"])
-        self.assertEqual(total,
+        self.assertEqual(summary["mandatory_cells_in_scope"],
                          summary["satisfied_by_this_task"]
                          + summary["ready_pending_physical_validation"]
                          + summary["blocked_without_backend"])
         blockers = [row for row in self.format_rows if row["verdict"] == "blocker"]
-        self.assertEqual(len(blockers), self.plan["summary"]["mandatory_cells_in_scope"])
+        self.assertEqual(len(blockers), summary["mandatory_cells_in_scope"] -
+                         summary["satisfied_by_this_task"])
         by_reason = {}
         for name, row in classification.items():
             features = BLOCKER_REASON_FEATURES[name] if name != "profile-has-no-image-model" else None

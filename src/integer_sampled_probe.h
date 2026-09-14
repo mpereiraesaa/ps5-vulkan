@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 
-#define PS5VK_INTEGER_SAMPLED_CASES_PER_SIGN 9u
+#define PS5VK_INTEGER_SAMPLED_CASES_PER_SIGN 10u
 #define PS5VK_INTEGER_SAMPLED_EXPECTED_PIXELS 1036800u
 
 struct ps5vk_integer_sampled_case {

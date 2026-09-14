@@ -25,5 +25,15 @@ int main(void)
         c.expected_bgra==UINT32_C(0xff40a0e0));
     assert(ps5vk_integer_sampled_case(VK_FALSE,
         PS5VK_INTEGER_SAMPLED_CASES_PER_SIGN,&c));
+    assert(!ps5vk_integer_sampled_case(VK_FALSE,9,&c));
+    assert(c.format == VK_FORMAT_A8B8G8R8_UINT_PACK32 &&
+        c.bytes_per_texel == 4 && c.components == 4 &&
+        !memcmp(c.texel,(uint8_t[]){51,102,153,255},4) &&
+        c.expected_bgra == UINT32_C(0xff336699));
+    assert(!ps5vk_integer_sampled_case(VK_TRUE,9,&c));
+    assert(c.format == VK_FORMAT_A8B8G8R8_SINT_PACK32 &&
+        c.bytes_per_texel == 4 && c.components == 4 &&
+        !memcmp(c.texel,(uint8_t[]){0xc0,32,96,127},4) &&
+        c.expected_bgra == UINT32_C(0xff40a0e0));
     assert(ps5vk_integer_sampled_case(VK_FALSE,0,NULL));
 }

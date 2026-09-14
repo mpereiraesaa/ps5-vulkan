@@ -5,6 +5,58 @@ firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013
 
 ## Observed results
 
+### Packed sampled images and filtering
+
+On PS5 GFX1013 / firmware 12.02, 2026-09-14, four diagnostic binaries each
+passed two consecutive identical-artifact runs. The promotion adds sampled
+image/transfer-destination support for `A8B8G8R8_UNORM_PACK32`,
+`A8B8G8R8_SNORM_PACK32`, `A8B8G8R8_SRGB_PACK32`, `A8B8G8R8_UINT_PACK32` and
+`A8B8G8R8_SINT_PACK32`; only the first three expose linear filtering.
+
+| Diagnostic | Cases per run | SELF SHA-256 |
+| --- | ---: | --- |
+| normalized/sRGB sampling | 23 | `dbad7e701b4203f7ea19080e8f8e0ca1b316c9a954b56a8347ce12d2f6c46607` |
+| nearest/linear discriminator | 46 | `cb7b50aea118b015ef8f83e25ca47b4d0e0b6b7e4a320d2ec6747b387e8e4233` |
+| typed unsigned sampling | 10 | `854b60687f3a4754cbeb33ea882776963e2d93c64ac9c1d5b3377e3f9a30bac4` |
+| typed signed sampling | 10 | `8cdf6ceaea24a72d5291075c1692d00e4e8f93a8253274b39deb395b64ae00b3` |
+
+Complete TCP log SHA-256 pairs, in the same order:
+
+- Sampling: `ebba816ee063d8a0bf68b6783e2af5cd20a5805840242ea91dfc0cb1538f7bd7`,
+  `3e36477c514bd364677d03ff58635e0b7089f6f12747c97185359f188f95589b`.
+- Filtering: `810fa91c663c89a9d4297c7975a4969221baab3cb770dd925716163f019dbaa3`,
+  `c7eb3e0ff7636add9c0befbf65492cbb789bcab4aa91ac8e7cc3264ac3c4fca7`.
+- UINT: `d35793639a624ed5ed0c2d61f8307577b3cc60100e1cada86bf6310f3975c313`,
+  `995a17d818c7d968fe7ec809772c0565257d7a624af6500f43e79140bdc34831`.
+- SINT: `a3a7091c0f41ce651db18d278d340fdca79414987ece48db0289479832233c9e`,
+  `5f139f54dd0700a11b67552da37863a7946b13af7d1493a898740fb329bcad96`.
+
+The 178 GPU trials include the earlier formats as regressions. Each float/filter
+trial verified 373,248 interior pixels; each integer trial verified 1,036,800
+pixels, with zero unexpected pixels. Asymmetric source bytes distinguish
+component order, SNORM/sRGB conversion and signed/unsigned shader interfaces.
+All three packed filter pairs produce opaque black with nearest and
+`0xff808080` with linear. The UNORM readback word is `0xff4080c0` in this
+BGRA8 target, not the byte-reversed word from an RGBA8 target.
+
+Every run has complete `ps5log/1` sequence/identity/hash verification and BYE,
+six checked compute rounds before and after each graphics trial, matching
+submission/completion serials, VideoOut retirement and zero retained allocation
+bytes. `run_format_diagnostic.py` separately confirmed exact-title Close Game
+after all eight runs. Exact FTP SELF readback and mount refresh were checked
+before each diagnostic pair; those deployment checks are separate from the
+log verifier. The final Remote Play capture shows the home screen without an
+error dialog. Raw captures, telemetry, deployment receipts and binaries remain
+private.
+
+These diagnostics use owned, precompiled scene shaders. They validate texture
+roles, not runtime shader compilation, every mip level, all sampling precision,
+storage images, new color attachments, blits, or upstream CTS conformance.
+Runtime compiler/SDK witnesses are listed separately below. In the scoped
+format inventory, eight of the 287 baseline deficit cells are now satisfied;
+279 require further backend work. The whole reporting matrix still has 620
+documented deficit rows, which is neither a CTS score nor a conformance result.
+
 ### Sixteen and sparse runtime vertex bindings
 
 Two consecutive PS5 GFX1013 / firmware 12.02 runs on 2026-09-14 used identical
@@ -632,11 +684,11 @@ public query paths rather than from a copied table:
   `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
   report fails the gate; only documented blockers are accepted.
 
-Result on the shipped profiles: 132 mandatory limits satisfied, 66 documented
+Result on the shipped profiles: 134 mandatory limits satisfied, 64 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 98 mandatory format-feature cells satisfied
-with 564 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 106 mandatory format-feature cells satisfied
+with 556 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.

@@ -8,22 +8,24 @@ class SampledFilteringVerifier(unittest.TestCase):
     def fixture(self):
         records = []
         for trial, (case, name, number, texel_bytes, filtering, expected) in enumerate(TRIALS):
-            records.append(f"PS5VK_COMPUTE_END rounds=6 dispatches=12")
-            records.extend("PS5VK_COMPUTE_RESULT valid=1" for _ in range(6))
+            records.extend(f"PS5VK_COMPUTE_RESULT round={r} checked=3072 outputs=0 guards=0"
+                           for r in range(6))
+            records.append("PS5VK_COMPUTE_END rounds=6 dispatches=12")
             records.append(
                 f"PS5VK_SAMPLED_FILTER_INPUT trial={trial} case={case} name={name} "
                 f"format={number} filter={filtering} bytes_per_texel={texel_bytes} "
                 f"expected_bgra={expected}")
-            records.append("PS5VK_GRAPHICS_SUBMIT rc=0")
-            records.append("PS5VK_GRAPHICS_COMPLETED serial=1")
+            records.append(f"PS5VK_GRAPHICS_SUBMIT serial={trial+1} rc=0")
+            records.append(f"PS5VK_GRAPHICS_COMPLETED serial={trial+1}")
             records.append(
                 f"PS5VK_SAMPLED_FILTER_READBACK trial={trial} case={case} name={name} "
                 f"format={number} filter={filtering} expected_bgra={expected} "
                 "expected=373248 other=0 first_other=00000000 valid=1")
-            records.append("PS5VK_VIDEO_PRESENTED slot=0")
-            records.append("PS5VK_GRAPHICS_REUSE_END frame=0")
+            records.append("PS5VK_VIDEO_PRESENTED slot=0 fence=0 matching_event=1")
+            records.append("PS5VK_GRAPHICS_REUSE_END frame=0 displayed=0")
+            records.extend(f"PS5VK_COMPUTE_RESULT round={r} checked=3072 outputs=0 guards=0"
+                           for r in range(6))
             records.append("PS5VK_COMPUTE_END rounds=6 dispatches=12")
-            records.extend("PS5VK_COMPUTE_RESULT valid=1" for _ in range(6))
         records += ["PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0",
                     "PS5VK_GRAPHICS_API_CLEANUP_COMPLETE"]
         lines = ["HELLO ps5log/1 title=PPSA99994 app=ps5vk boot=b"]
@@ -43,8 +45,8 @@ class SampledFilteringVerifier(unittest.TestCase):
 
     def test_accepts_complete_nearest_linear_matrix(self):
         result = validate(*self.fixture())
-        self.assertEqual(result["formats"], 20)
-        self.assertEqual(result["trials"], 40)
+        self.assertEqual(result["formats"], 23)
+        self.assertEqual(result["trials"], 46)
         self.assertTrue(result["nearest_linear_discriminated"])
 
     def test_nearest_oracle_tracks_dword_aligned_r8_fixture_width(self):

@@ -5,6 +5,11 @@ import hashlib
 import json
 from pathlib import Path
 
+try:
+    from tools.verify_graphics_regression import validate_regression
+except ModuleNotFoundError:
+    from verify_graphics_regression import validate_regression
+
 
 CASES = (
     ("r8-unorm", "9", "1", "ff400000"),
@@ -27,6 +32,9 @@ CASES = (
     ("r32-sfloat", "100", "4", "ff800000"),
     ("rg32-sfloat", "103", "8", "ff804000"),
     ("b10g11r11-ufloat", "122", "4", "ff804020"),
+    ("abgr8-unorm-packed", "51", "4", "ff4080c0"),
+    ("abgr8-snorm-packed", "52", "4", "ff4080c1"),
+    ("abgr8-srgb-packed", "57", "4", "ff370d04"),
 )
 
 
@@ -59,13 +67,14 @@ def validate(log, metadata, artifact):
         fields = line.split("\t", 3)
         require(len(fields) == 4, "record shape")
         seq, stamp, level, message = fields
-        require(int(seq) == sequence and int(stamp) >= previous and level != "ERR",
+        require(int(seq) == sequence and int(stamp) >= previous and level in ("INFO", "MARK"),
                 "record integrity")
         previous = int(stamp)
         words = message.split()
         records.append((words[0], dict(word.split("=", 1) for word in words[1:])))
     require(metadata.get("records") == len(records) and
             lines[-1] == f"BYE seq={len(records)} reason=graphics-api-end", "bye/count")
+    validate_regression(records, len(CASES))
 
     def matching(name):
         return [(index, fields) for index, (record, fields) in enumerate(records)

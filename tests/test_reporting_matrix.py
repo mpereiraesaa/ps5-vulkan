@@ -167,6 +167,9 @@ class TestReportingMatrix(unittest.TestCase):
             "VK_FORMAT_R16G16B16A16_SFLOAT",
             "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32",
             "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
+            "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
+            "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
+            "VK_FORMAT_A8B8G8R8_SRGB_PACK32",
         })
         self.assertTrue(any(row.get("verdict") == "blocker" and
                             row.get("format") != "VK_FORMAT_R8G8B8A8_UNORM"
@@ -180,6 +183,7 @@ class TestReportingMatrix(unittest.TestCase):
             for suffix in ("", f"G{width}", f"G{width}B{width}A{width}")
             for sign in ("UINT", "SINT")
         }
+        integer |= {"VK_FORMAT_A8B8G8R8_UINT_PACK32", "VK_FORMAT_A8B8G8R8_SINT_PACK32"}
         sampled = {row["format"] for row in data["formats"]
                    if row.get("profile") == "graphics" and
                    row.get("feature") == "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT" and

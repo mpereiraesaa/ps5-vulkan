@@ -397,13 +397,15 @@ static void lifecycle(void)
             assert(result == VK_ERROR_FORMAT_NOT_SUPPORTED &&
                    !memcmp(&ip, &zero_ip, sizeof(ip)));
     }
-    /* The unwitnessed packed rows publish no image feature at all: the vertex
-     * role is the only witnessed capability they have. */
+    /* Packed rows expose sampled/upload and non-integer filtering, but no
+     * unrelated render-target, storage-image or blit role. */
+    VkFormatFeatureFlags packed_sampled = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+        VK_FORMAT_FEATURE_TRANSFER_DST_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
     vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_A8B8G8R8_UNORM_PACK32, &fp);
-    assert(!fp.optimalTilingFeatures &&
+    assert(fp.optimalTilingFeatures == packed_sampled &&
         fp.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
     vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_A8B8G8R8_SRGB_PACK32, &fp);
-    assert(!fp.optimalTilingFeatures && !fp.bufferFeatures &&
+    assert(fp.optimalTilingFeatures == packed_sampled && !fp.bufferFeatures &&
         !fp.linearTilingFeatures);
 
     p->platform.queue_flags=VK_QUEUE_GRAPHICS_BIT;

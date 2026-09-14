@@ -74,7 +74,7 @@ int main(void)
     assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_A2B10G10R10_UNORM_PACK32,4,4,
         UINT64_C(64),UINT64_C(64),&single,&p)!=VK_SUCCESS);
 
-    /* A pending sampled row has the same plan as its byte-identical witnessed
+    /* A packed sampled row has the same plan as its byte-identical unpacked
      * counterpart, so promotion changes only the published capability. */
     VkBufferImageCopy sample={.bufferOffset=16,
         .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},

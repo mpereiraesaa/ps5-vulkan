@@ -13,17 +13,17 @@ def fixture(sign="uint"):
         seq += 1
         lines.append(f"{seq}\t{seq}\tMARK\t{message}")
     for case, (name, number, texel_bytes, components, expected) in enumerate(CASES[sign]):
-        for _ in range(6):
-            add("PS5VK_COMPUTE_RESULT round=0")
+        for r in range(6):
+            add(f"PS5VK_COMPUTE_RESULT round={r} checked=3072 outputs=0 guards=0")
         add("PS5VK_COMPUTE_END rounds=6 dispatches=12")
         add(f"PS5VK_INTEGER_SAMPLED_INPUT case={case} name={name} sign={sign} format={number} components={components} bytes_per_texel={texel_bytes} expected_bgra={expected}")
-        add("PS5VK_GRAPHICS_SUBMIT rc=0")
-        add("PS5VK_GRAPHICS_COMPLETED")
+        add(f"PS5VK_GRAPHICS_SUBMIT serial={case+1} rc=0")
+        add(f"PS5VK_GRAPHICS_COMPLETED serial={case+1}")
         add(f"PS5VK_INTEGER_SAMPLED_READBACK case={case} name={name} sign={sign} format={number} expected_bgra={expected} expected={EXPECTED_PIXELS} other=0 first_other=00000000 valid=1")
-        add("PS5VK_VIDEO_PRESENTED")
-        add("PS5VK_GRAPHICS_REUSE_END")
-        for _ in range(6):
-            add("PS5VK_COMPUTE_RESULT round=0")
+        add("PS5VK_VIDEO_PRESENTED fence=0 matching_event=1")
+        add("PS5VK_GRAPHICS_REUSE_END displayed=0")
+        for r in range(6):
+            add(f"PS5VK_COMPUTE_RESULT round={r} checked=3072 outputs=0 guards=0")
         add("PS5VK_COMPUTE_END rounds=6 dispatches=12")
     add("PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0")
     add("PS5VK_GRAPHICS_API_CLEANUP_COMPLETE")

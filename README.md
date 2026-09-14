@@ -40,13 +40,13 @@ results; visual output is not the sole correctness signal.
   offsets
 - One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
   plus an optional D32 depth attachment
-- Thirty-nine sampled texture formats spanning 8/16/32-bit UNORM,
+- 44 sampled texture formats spanning 8/16/32-bit UNORM,
   SNORM, signed/unsigned integer and floating-point families, RGBA8 sRGB,
-  RGB9E5 and B10G11R11 packed floating point, with GPU
+  A8B8G8R8 packed color/integer, RGB9E5 and B10G11R11 packed floating point, with GPU
   upload transitions and deterministic hardware readback; core repeat,
   mirrored-repeat, edge/border clamp and the six fixed border-color enums are
-  implemented. Nearest/linear filtering is validated for the twenty-one
-  filterable rows; the eighteen integer rows use typed samplers and correctly
+  implemented. Nearest/linear filtering is validated for the 24
+  filterable rows; the 20 integer rows use typed samplers and correctly
   remain nearest-only. A three-level RGBA8 chain has deterministic explicit-LOD
   GPU readback through the staged public SDK; signed sampler LOD bias is
   implemented and hardware-qualified at both Vulkan 1.0 boundary values, -2

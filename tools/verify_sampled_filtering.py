@@ -7,8 +7,10 @@ from pathlib import Path
 
 try:
     from tools.verify_sampled_formats import CASES as FORMAT_CASES
+    from tools.verify_graphics_regression import validate_regression
 except ModuleNotFoundError:
     from verify_sampled_formats import CASES as FORMAT_CASES
+    from verify_graphics_regression import validate_regression
 
 
 LINEAR = (
@@ -16,10 +18,12 @@ LINEAR = (
     "ff808080", "ff808080", "ff808080", "ff808080", "ff800000",
     "ff800000", "ff800000", "ff808000", "ff808000", "ff808000",
     "ff808080", "ff808080", "ff800000", "ff808000", "ff808080",
+    "ff808080", "ff808080", "ff808080",
 )
 NEAREST = (
     "ffff0000", "ff000000", "ff000000", "ffff0000", "ff000000",
     "ff000000", "ff000000", "ff000000", "ff000000", "ff000000",
+    "ff000000", "ff000000", "ff000000",
     "ff000000", "ff000000", "ff000000", "ff000000", "ff000000",
     "ff000000", "ff000000", "ff000000", "ff000000", "ff000000",
 )
@@ -60,13 +64,14 @@ def validate(log, metadata, artifact):
         fields = line.split("\t", 3)
         require(len(fields) == 4, "record shape")
         seq, stamp, level, message = fields
-        require(int(seq) == sequence and int(stamp) >= previous and level != "ERR",
+        require(int(seq) == sequence and int(stamp) >= previous and level in ("INFO", "MARK"),
                 "record integrity")
         previous = int(stamp)
         words = message.split()
         records.append((words[0], dict(word.split("=", 1) for word in words[1:])))
     require(metadata.get("records") == len(records) and
             lines[-1] == f"BYE seq={len(records)} reason=graphics-api-end", "bye/count")
+    validate_regression(records, len(TRIALS))
 
     def matching(name):
         return [(index, fields) for index, (record, fields) in enumerate(records)

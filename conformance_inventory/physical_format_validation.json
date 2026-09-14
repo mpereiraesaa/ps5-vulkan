@@ -2,13 +2,37 @@
   "schema": "ps5vk-physical-format-validation/1",
   "task": "ps5vk-vulkan10-formats-4byte-32bit",
   "tables": ["formats-mandatory-features-4byte", "formats-mandatory-features-32bit"],
-  "console_used_by_this_task": false,
+  "console_used_by_this_task": true,
   "summary": {
     "mandatory_cells_in_scope": 287,
-    "satisfied_by_this_task": 0,
-    "ready_pending_physical_validation": 8,
+    "satisfied_by_this_task": 8,
+    "ready_pending_physical_validation": 0,
     "blocked_without_backend": 279,
-    "notes": "No cell was advertised by this task: ps5-vulkan publishes a format feature only with a deterministic on-console witness, and this assignment forbids console use. The eight entries below are implemented, host-tested and one data change away from being advertised; the remaining 279 cells have no backend operation at all and cannot be promoted by running a diagnostic."
+    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated and enabled the eight entries below. The remaining 279 baseline cells require backend work; the count is not CTS coverage or conformance."
+  },
+  "qualification": {
+    "status": "validated",
+    "date": "2026-09-14",
+    "target": "PS5 GFX1013 / firmware 12.02",
+    "oracle": "BGRA8 VideoOut-target readback; typed UINT/SINT shaders, asymmetric UNORM/SNORM/sRGB fixtures, and nearest-versus-linear checkerboards",
+    "groups": {
+      "sample": {
+        "self_sha256": "dbad7e701b4203f7ea19080e8f8e0ca1b316c9a954b56a8347ce12d2f6c46607",
+        "log_sha256": ["ebba816ee063d8a0bf68b6783e2af5cd20a5805840242ea91dfc0cb1538f7bd7", "3e36477c514bd364677d03ff58635e0b7089f6f12747c97185359f188f95589b"]
+      },
+      "filter": {
+        "self_sha256": "cb7b50aea118b015ef8f83e25ca47b4d0e0b6b7e4a320d2ec6747b387e8e4233",
+        "log_sha256": ["810fa91c663c89a9d4297c7975a4969221baab3cb770dd925716163f019dbaa3", "c7eb3e0ff7636add9c0befbf65492cbb789bcab4aa91ac8e7cc3264ac3c4fca7"]
+      },
+      "uint": {
+        "self_sha256": "854b60687f3a4754cbeb33ea882776963e2d93c64ac9c1d5b3377e3f9a30bac4",
+        "log_sha256": ["d35793639a624ed5ed0c2d61f8307577b3cc60100e1cada86bf6310f3975c313", "995a17d818c7d968fe7ec809772c0565257d7a624af6500f43e79140bdc34831"]
+      },
+      "sint": {
+        "self_sha256": "8cdf6ceaea24a72d5291075c1692d00e4e8f93a8253274b39deb395b64ae00b3",
+        "log_sha256": ["a3a7091c0f41ce651db18d278d340fdca79414987ece48db0289479832233c9e", "5f139f54dd0700a11b67552da37863a7946b13af7d1493a898740fb329bcad96"]
+      }
+    }
   },
   "promotion_procedure": [
     "1. In a private qualification build, include the candidate capability in the witnessed argument of its SAMPLED_PACKED row in src/texture_format.c. Sampling with upload requires both SAMPLED_IMAGE and TRANSFER_DST; linear filtering additionally requires SAMPLED_IMAGE_LINEAR. Do not publish the promotion before both physical runs pass.",
@@ -20,12 +44,13 @@
     {
       "format": "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "evidence_group": "sample",
       "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
-      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_UNORM_PACK32 row",
+      "enablement": "SAMPLED_IMAGE and TRANSFER_DST in the enabled mask for VK_FORMAT_A8B8G8R8_UNORM_PACK32",
       "table": "formats-mandatory-features-4byte",
       "profile": "graphics",
       "shader_type": "float",
-      "minimal_gpu_operation": "Create a 2D optimal-tiling image with usage SAMPLED|TRANSFER_DST, upload one 2x2 texel set through the ordinary buffer-to-image path, encode the T#/S# with ps5vk_texture_descriptor, sample a texel centre with a nearest sampler in a fragment shader and read the pixel back through the RGBA8 colour attachment.",
+      "minimal_gpu_operation": "Create a 2D optimal-tiling image with usage SAMPLED|TRANSFER_DST, upload an asymmetric texel set through the ordinary buffer-to-image path, encode the T#/S# with ps5vk_texture_descriptor, sample with a nearest sampler in a fragment shader and read pixels from the diagnostic BGRA8 target.",
       "texel_bytes": [64, 128, 192, 255],
       "expected_result": "exact BGRA8-target readback word 0xff4080c0 (R=0x40, G=0x80, B=0xc0, A=0xff), identical to the same bytes uploaded as VK_FORMAT_R8G8B8A8_UNORM; an RGBA8 target instead stores 0xffc08040",
       "host_test_limit": "Host tests prove descriptor word 0x03800000, the identity selectors, the texel size and the copy/layout arithmetic; only the texture unit decodes the packed component order."
@@ -33,8 +58,9 @@
     {
       "format": "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "evidence_group": "sample",
       "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
-      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_SNORM_PACK32 row",
+      "enablement": "SAMPLED_IMAGE and TRANSFER_DST in the enabled mask for VK_FORMAT_A8B8G8R8_SNORM_PACK32",
       "table": "formats-mandatory-features-4byte",
       "profile": "graphics",
       "shader_type": "float",
@@ -46,8 +72,9 @@
     {
       "format": "VK_FORMAT_A8B8G8R8_SRGB_PACK32",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "evidence_group": "sample",
       "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
-      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_SRGB_PACK32 row",
+      "enablement": "SAMPLED_IMAGE and TRANSFER_DST in the enabled mask for VK_FORMAT_A8B8G8R8_SRGB_PACK32",
       "table": "formats-mandatory-features-4byte",
       "profile": "graphics",
       "shader_type": "sRGB",
@@ -59,8 +86,9 @@
     {
       "format": "VK_FORMAT_A8B8G8R8_UINT_PACK32",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "evidence_group": "uint",
       "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
-      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_UINT_PACK32 row",
+      "enablement": "SAMPLED_IMAGE and TRANSFER_DST in the enabled mask for VK_FORMAT_A8B8G8R8_UINT_PACK32",
       "table": "formats-mandatory-features-4byte",
       "profile": "graphics",
       "shader_type": "uint",
@@ -72,8 +100,9 @@
     {
       "format": "VK_FORMAT_A8B8G8R8_SINT_PACK32",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "evidence_group": "sint",
       "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
-      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_SINT_PACK32 row",
+      "enablement": "SAMPLED_IMAGE and TRANSFER_DST in the enabled mask for VK_FORMAT_A8B8G8R8_SINT_PACK32",
       "table": "formats-mandatory-features-4byte",
       "profile": "graphics",
       "shader_type": "sint",
@@ -85,8 +114,9 @@
     {
       "format": "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
+      "evidence_group": "filter",
       "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR",
-      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR in the pending column of the VK_FORMAT_A8B8G8R8_UNORM_PACK32 row",
+      "enablement": "SAMPLED_IMAGE_LINEAR in the enabled mask for VK_FORMAT_A8B8G8R8_UNORM_PACK32",
       "table": "formats-mandatory-features-4byte",
       "profile": "graphics",
       "shader_type": "float",
@@ -98,8 +128,9 @@
     {
       "format": "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
+      "evidence_group": "filter",
       "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR",
-      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR in the pending column of the VK_FORMAT_A8B8G8R8_SNORM_PACK32 row",
+      "enablement": "SAMPLED_IMAGE_LINEAR in the enabled mask for VK_FORMAT_A8B8G8R8_SNORM_PACK32",
       "table": "formats-mandatory-features-4byte",
       "profile": "graphics",
       "shader_type": "float",
@@ -111,8 +142,9 @@
     {
       "format": "VK_FORMAT_A8B8G8R8_SRGB_PACK32",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
+      "evidence_group": "filter",
       "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR",
-      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR in the pending column of the VK_FORMAT_A8B8G8R8_SRGB_PACK32 row",
+      "enablement": "SAMPLED_IMAGE_LINEAR in the enabled mask for VK_FORMAT_A8B8G8R8_SRGB_PACK32",
       "table": "formats-mandatory-features-4byte",
       "profile": "graphics",
       "shader_type": "sRGB",
@@ -156,8 +188,8 @@
     {
       "reason": "implemented-pending-physical-diagnostic",
       "profiles": ["graphics"],
-      "cells": 8,
-      "detail": "The A8B8G8R8_* sampled and linear-filtering capabilities are implemented and host-tested but have no console witness, so they stay unpublished until the entries above are executed."
+      "cells": 0,
+      "detail": "All eight A8B8G8R8_* sampled/filter entries were qualified in two identical-artifact runs per diagnostic group and are now enabled."
     },
     {
       "reason": "no-sampled-encoding",

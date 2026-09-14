@@ -5,6 +5,11 @@ import hashlib
 import json
 from pathlib import Path
 
+try:
+    from tools.verify_graphics_regression import validate_regression
+except ModuleNotFoundError:
+    from verify_graphics_regression import validate_regression
+
 
 CASES = {
     "uint": (
@@ -17,6 +22,7 @@ CASES = {
         ("r32-uint", "98", "4", "1", "ff330000"),
         ("rg32-uint", "101", "8", "2", "ff336600"),
         ("rgba32-uint", "107", "16", "4", "ff336699"),
+        ("abgr8-uint-packed", "55", "4", "4", "ff336699"),
     ),
     "sint": (
         ("r8-sint", "14", "1", "1", "ff408080"),
@@ -28,6 +34,7 @@ CASES = {
         ("r32-sint", "99", "4", "1", "ff408080"),
         ("rg32-sint", "102", "8", "2", "ff40a080"),
         ("rgba32-sint", "108", "16", "4", "ff40a0e0"),
+        ("abgr8-sint-packed", "56", "4", "4", "ff40a0e0"),
     ),
 }
 EXPECTED_PIXELS = 1920 * 1080 // 2
@@ -67,13 +74,14 @@ def validate(log, metadata, artifact):
         fields = line.split("\t", 3)
         require(len(fields) == 4, "record shape")
         seq, stamp, level, message = fields
-        require(int(seq) == sequence and int(stamp) >= previous and level != "ERR",
+        require(int(seq) == sequence and int(stamp) >= previous and level in ("INFO", "MARK"),
                 "record integrity")
         previous = int(stamp)
         words = message.split()
         records.append((words[0], dict(word.split("=", 1) for word in words[1:])))
     require(metadata.get("records") == len(records) and
             lines[-1] == f"BYE seq={len(records)} reason=graphics-api-end", "bye/count")
+    validate_regression(records, len(cases))
 
     def matching(name):
         return [(index, fields) for index, (record, fields) in enumerate(records)
