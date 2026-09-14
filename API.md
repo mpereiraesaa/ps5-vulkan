@@ -287,10 +287,19 @@ resolve remain fail-closed entry points.
 - The tiled colour-attachment role is deliberately not copyable or clearable
   here, because 64KB_R_X has no linear addressing in this codebase.
 - `vkCmdClearDepthStencilImage` clears the **whole subresource** of a
-  one-sample `VK_FORMAT_D32_SFLOAT` 2D target created with both
-  `VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT` and
-  `VK_IMAGE_USAGE_TRANSFER_DST_BIT`, in `TRANSFER_DST_OPTIMAL` or `GENERAL`,
-  with a depth value in `[0,1]` and a zero stencil value. The surface is
+  one-sample `VK_FORMAT_D32_SFLOAT` 2D target in `TRANSFER_DST_OPTIMAL` or
+  `GENERAL` with a depth value in `[0,1]`. The image needs
+  `VK_IMAGE_USAGE_TRANSFER_DST_BIT`, which Vulkan requires of any cleared
+  image, and that is the only usage it needs: **both** accepted profiles are
+  `TRANSFER_DST` alone, which is a clear-only target, and
+  `DEPTH_STENCIL_ATTACHMENT | TRANSFER_DST`, which is a depth attachment that
+  may also be cleared. Every D32 image is the same tiled depth surface, so the
+  two profiles differ only in what else the image may be used for.
+  `pDepthStencil->stencil` is **ignored, not rejected**: Vulkan reads that
+  member only for a range whose aspect mask includes
+  `VK_IMAGE_ASPECT_STENCIL_BIT`, and the only accepted range here is
+  depth-only, so a nonzero stencil is a conformant call that clears depth
+  alone. The surface is
   64KB_Z_X tiled and this driver still does not claim the pipe XOR pixel
   equations; it does not need them here, because a constant depth value is the
   same 32-bit word in every texel, so filling the whole allocation with that
@@ -299,12 +308,23 @@ resolve remain fail-closed entry points.
   pass already uses for its depth load-op clear, ordered at the queue head like
   the other transfers, and the host never writes the surface. Accordingly
   `VK_FORMAT_D32_SFLOAT` advertises `VK_FORMAT_FEATURE_TRANSFER_DST_BIT`, which
-  exists solely for this clear: transfer-destination usage **alone** is not a
-  valid usage for the format, and no transfer-source, sampled or blit role is
-  claimed. Everything that would require the missing pixel addressing stays
+  exists solely for this clear and is reachable in both usage profiles above,
+  so the bit never advertises something the driver would refuse to create. No
+  transfer-source, sampled or blit role is claimed for the format. Everything that would require the missing pixel addressing stays
   fail-closed and records nothing: a partial mip or array range, any stencil
   aspect, a combined depth/stencil format, a multisample image, and a
   rectangle.
+- A cleared depth target reaches a depth-tested draw through one bounded
+  transition: `TRANSFER_DST_OPTIMAL` to `DEPTH_STENCIL_ATTACHMENT_OPTIMAL`,
+  source access `VK_ACCESS_TRANSFER_WRITE_BIT` in
+  `VK_PIPELINE_STAGE_TRANSFER_BIT`, destination access
+  `DEPTH_STENCIL_ATTACHMENT_READ | DEPTH_STENCIL_ATTACHMENT_WRITE` in either or
+  both of `EARLY_FRAGMENT_TESTS` and `LATE_FRAGMENT_TESTS`, with the depth
+  aspect over the whole subresource. A narrower single-stage destination mask
+  is accepted because a pipeline may test depth at either stage. Nothing else
+  is: the depth target never becomes a transfer source or a sampled image, the
+  reverse transition is not part of the contract, and the colour roles keep
+  their own transitions.
 - `vkCmdClearAttachments` is structurally exposed and always invalidates
   recording: a mid-render-pass attachment clear would need a DCB clear path
   that does not exist yet. `vkCmdBlitImage` and `vkCmdResolveImage` likewise

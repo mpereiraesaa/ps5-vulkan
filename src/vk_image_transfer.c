@@ -257,7 +257,15 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage(VkCommandBuffer c, VkImage source,
  * Consequently only the whole subresource is accepted. A partial range, a
  * rectangle, a stencil aspect, a combined depth/stencil format, a second mip
  * or layer and any multisample image stay fail-closed, because each of those
- * does need the pixel addressing this driver has not proven. */
+ * does need the pixel addressing this driver has not proven.
+ *
+ * value->stencil is IGNORED, not rejected. Vulkan uses that member only for a
+ * range whose aspect mask includes VK_IMAGE_ASPECT_STENCIL_BIT, and the only
+ * range accepted here is depth-only, so a nonzero stencil is a valid call that
+ * clears depth alone. The pinned upstream CTS relies on exactly that: the
+ * depth/stencil copy tests clear a D32_SFLOAT image with
+ * makeClearValueDepthStencil(0.1f, 0x10). Rejecting it would refuse a
+ * conformant call and fail those cases. */
 VKAPI_ATTR void VKAPI_CALL vkCmdClearDepthStencilImage(VkCommandBuffer c, VkImage image,
     VkImageLayout image_layout, const VkClearDepthStencilValue *value,
     uint32_t range_count, const VkImageSubresourceRange *ranges)
@@ -271,9 +279,6 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearDepthStencilImage(VkCommandBuffer c, VkImag
     if (!image || image->device != d || !ps5vk_depth_clear_image(image) ||
         !layout_is_transfer_destination(image_layout) ||
         !ps5vk_depth_clear_word(value->depth, &word) ||
-        /* D32_SFLOAT carries no stencil, so a nonzero stencil clear value has
-         * no destination and must not be silently discarded. */
-        value->stencil ||
         ps5vk_image_span(d, image, &address, &bytes) != VK_SUCCESS) {
         ps5vk_command_invalidate(c);
         return;

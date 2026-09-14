@@ -48,6 +48,26 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
                  b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
                  b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT && b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT) ||
+                /* The cleared depth target becoming a depth attachment. This is
+                 * the transition that makes an explicit clear controllable by a
+                 * later depth test, so it is bounded to exactly that: a D32
+                 * clear target, the transfer write it just received, and the
+                 * depth/stencil attachment access the fragment tests perform.
+                 * The destination stage mask may name either fragment-test
+                 * stage or both: a pipeline may test depth at either, and the
+                 * emitted ordering is the same conservative acquire, so
+                 * demanding both would refuse a narrower valid barrier. */
+                (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+                 ps5vk_depth_clear_image(b->image) &&
+                 b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                 b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
+                 op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                 (op->dst_stage & (VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)) &&
+                 !(op->dst_stage & ~(VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT))) ||
                 ((!color || b->image==color) && ps5vk_color_discard_barrier(b))))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);
