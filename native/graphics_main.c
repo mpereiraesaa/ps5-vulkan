@@ -977,8 +977,15 @@ int main(void)
        !ps5vk_graphics_vertex_bindings_available(&device_props.limits,
            PS5VK_GRAPHICS_SCISSOR_PROBE==13?16u:1u) ||
        device_props.limits.maxViewports!=1 || device_props.limits.maxColorAttachments!=1 ||
-       device_props.limits.maxPerStageDescriptorSamplers!=1 || device_props.limits.maxPerStageDescriptorSampledImages!=1 ||
-       device_props.limits.maxDescriptorSetSamplers!=1 || device_props.limits.maxDescriptorSetSampledImages!=1 ||
+       /* Floors, not equalities. The sampled-descriptor limits were promoted to
+        * the witnessed 16 per stage and 96 per set; pinning this gate to the
+        * old single-descriptor profile made the graphics payload fail closed at
+        * boot on hardware even though the device reports exactly what
+        * ps5vk_physical_profile_valid requires of it. */
+       device_props.limits.maxPerStageDescriptorSamplers<PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS ||
+       device_props.limits.maxPerStageDescriptorSampledImages<PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS ||
+       device_props.limits.maxDescriptorSetSamplers<PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS ||
+       device_props.limits.maxDescriptorSetSampledImages<PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS ||
        !device_props.limits.maxSamplerAllocationCount)
         fail("graphics-limits-profile",-1);
     ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_LIMITS image_1d=%u image_2d=%u image_3d=%u image_cube=%u image_layers=%u framebuffer=%ux%u vertex_stride=%u bindings=%u viewports=%u",
