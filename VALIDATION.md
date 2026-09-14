@@ -25,6 +25,13 @@ fragment-only GPU results below do not validate the new vertex-stage path.
 
 ## Multi-set fragment samplers: connected backend and hardware diagnostic
 
+Vertex texture barrier recording now accepts transfer-write to shader-read
+dependencies scoped to vertex, fragment or both shader stages. The host
+regression checks preservation of the recorded stage/access masks and rejects
+shader-read access scoped only to vertex input, top/bottom of pipe or color
+output. This removes a frontend blocker for vertex texture uploads; it does
+not itself prove GPU visibility, vertex sampling or broader synchronization.
+
 The canonical descriptor-table layout is shared by compiler options and
 job-owned native table encoding. It preserves offsets across stage filtering,
 sparse binding numbers, arrays, 16-byte buffer and 48-byte combined sampler
