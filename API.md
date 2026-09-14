@@ -408,10 +408,13 @@ buffer/image resource delivery are not complete. See [VALIDATION.md](VALIDATION.
 The shared-stage witness uses procedural vertices, explicit level-zero nearest
 sampling from four RGBA8 textures and different weighted sums in each stage.
 It does not qualify every supported image format or arbitrary sampler state.
-Descriptor layout creation accepts legal core visibility masks, including
-`VK_SHADER_STAGE_ALL`; pipeline compiler/preparation still reject masks outside
-vertex/fragment visibility. That is a remaining semantic gap, not a Vulkan
-restriction on unused stage visibility.
+Descriptor layout creation and shared-sampler pipeline consumption accept legal
+wider core visibility masks, including `VK_SHADER_STAGE_ALL` and
+`VK_SHADER_STAGE_ALL_GRAPHICS`, without creating additional executable stages.
+Both convenience masks have bounded public-SDK GPU readback evidence.
+Bindings visible exclusively to nonexecuting stages are still rejected by the
+runtime graphics profile; together with incomplete static-use elimination,
+that remains a semantic gap rather than a Vulkan application requirement.
 Recording also conservatively requires all nonempty layout sets to be bound,
 even if compilation later eliminates a whole set. That is a remaining Vulkan
 semantic gap, not an application requirement of the full API.

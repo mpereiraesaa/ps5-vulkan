@@ -1,6 +1,7 @@
 import hashlib
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -102,7 +103,7 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 
 
 class ConsumerResourceAbiTests(unittest.TestCase):
-    def fixture(self, edit=None, sampled=False, shared=False):
+    def fixture(self, edit=None, sampled=False, shared=False, visibility=None):
         sampled = sampled or shared
         messages = list(MESSAGES)
         if sampled:
@@ -115,6 +116,7 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             words=("914c503b","914b4d4f","914a4643","913a5449")
             if shared:
                 rows[0]+=" stages=vertex-fragment vs_sha256="+"e"*64+" fs_sha256="+"f"*64
+                if visibility is not None:rows[0]+=f" visibility={visibility:08x}"
                 words=("6d3a3b2f","6d373d35","6d42392a","6d2e4135")
             for round_index,word in enumerate(words):
                 serial=13+round_index
@@ -186,7 +188,32 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                                          "shader_spirv_sha256":"f"*64}
             if shared:
                 artifact["sampled_graphics"].update(stage_profile="vertex-fragment", vertex_spirv_sha256="e"*64)
+                if visibility is not None:artifact["sampled_graphics"]["visibility_mask"]=visibility
         return log, receipt, artifact
+
+    def test_shared_visibility_is_exact_and_cannot_be_downgraded(self):
+        for mask in (0x11,0x1f,0x7fffffff):
+            log,receipt,artifact=self.fixture(shared=True,visibility=mask)
+            self.assertEqual(validate(log,receipt,artifact)["sampled_graphics_visibility_mask"],mask)
+            for wrong in (0,0x40000000,0x10,"all",None,True,0x11 if mask!=0x11 else 0x1f):
+                artifact["sampled_graphics"]["visibility_mask"]=wrong
+                with self.subTest(mask=mask,wrong=wrong),self.assertRaises(ValueError):validate(log,receipt,artifact)
+            del artifact["sampled_graphics"]["visibility_mask"]
+            with self.assertRaises(ValueError):validate(log,receipt,artifact)
+        log,receipt,artifact=self.fixture(shared=True)
+        self.assertEqual(validate(log,receipt,artifact)["sampled_graphics_visibility_mask"],0x11)
+        artifact["sampled_graphics"]["visibility_mask"]=0x7fffffff
+        with self.assertRaises(ValueError):validate(log,receipt,artifact)
+        log,receipt,artifact=self.fixture(sampled=True)
+        artifact["sampled_graphics"]["visibility_mask"]=0x10
+        with self.assertRaises(ValueError):validate(log,receipt,artifact)
+
+    def test_visibility_cli_rejects_unknown_or_unexecuted_modes(self):
+        builder=Path(__file__).resolve().parents[1]/"tools/build_consumer.py"
+        for args in (("--sampler-visibility","unknown"),("--sampler-visibility","all"),
+                     ("--continuous","--shared-stage-samplers","--sampler-visibility","all")):
+            result=subprocess.run([sys.executable,str(builder),*args],capture_output=True,text=True)
+            self.assertEqual(result.returncode,2,result.stdout+result.stderr)
 
     def test_shared_sampler_profile_and_hashes_are_bound_to_evidence(self):
         result=validate(*self.fixture(shared=True))

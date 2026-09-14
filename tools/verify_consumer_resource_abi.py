@@ -81,11 +81,15 @@ def validate(log, receipt, artifact):
                 all(c in "0123456789abcdef" for c in sampled["shader_spirv_sha256"]),
                 "sampled-graphics artifact contract")
         if sampled_profile == "vertex-fragment":
+            if "visibility_mask" in sampled:
+                require(type(sampled["visibility_mask"]) is int and
+                        sampled["visibility_mask"] in (0x11, 0x1f, 0x7fffffff), "sampled visibility mask")
             vertex_digest = sampled.get("vertex_spirv_sha256", "")
             require(isinstance(vertex_digest, str) and len(vertex_digest) == 64 and
                     all(c in "0123456789abcdef" for c in vertex_digest), "sampled vertex digest")
         else:
             require("vertex_spirv_sha256" not in sampled, "vertex digest in fragment-only artifact")
+            require("visibility_mask" not in sampled, "shared visibility in fragment-only artifact")
     require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"),
             "log hash")
     require(receipt.get("protocol") == "ps5log/1" and
@@ -318,6 +322,10 @@ def validate(log, receipt, artifact):
         if sampled_profile == "vertex-fragment":
             start += (f" stages=vertex-fragment vs_sha256={sampled['vertex_spirv_sha256']}"
                       f" fs_sha256={sampled['shader_spirv_sha256']}")
+            # Legacy shared artifacts used explicit VS|FS visibility without
+            # a mask field. New logs cannot silently fall back to that format.
+            if "visibility_mask" in sampled:
+                start += f" visibility={sampled['visibility_mask']:08x}"
         require(len(sampled_rows) == 6 and sampled_rows[0][1] ==
                 start and
                 sampled_rows[-1][1] == "PS5VK_CONSUMER_SAMPLED_SETS_RETIRED" and
@@ -376,6 +384,8 @@ def validate(log, receipt, artifact):
         "sampled_graphics_descriptors_per_round": 96 if sampled is not None else 0,
         "sampled_graphics_rounds_checked": 4 if sampled is not None else 0,
         "sampled_graphics_stage_profile": sampled_profile,
+        "sampled_graphics_visibility_mask": (sampled.get("visibility_mask", 0x11)
+            if sampled_profile == "vertex-fragment" else None),
         "sampled_graphics_exceeds_advertised_limits": sampled is not None,
         "dynamic_viewport_scissor": True,
         "attachment_load_preservation": True,
