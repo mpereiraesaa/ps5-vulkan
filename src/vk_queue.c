@@ -511,6 +511,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
             if (!info->pWaitDstStageMask[k]) return INVALID;
         for (uint32_t k = 0; k < info->commandBufferCount; ++k) {
             VkCommandBuffer command = info->pCommandBuffers[k];
+            /* Only a primary is submittable. A secondary reaches the queue
+             * through vkCmdExecuteCommands, which is still fail-closed, so
+             * submitting one directly is refused rather than silently run. */
+            if (command && command->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY)
+                return INVALID;
             if (command && command->pool && command->pool->device == d &&
                 command->state == PS5VK_PENDING &&
                 !(command->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))

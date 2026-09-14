@@ -534,11 +534,39 @@ every format/type/tiling/usage combination.
 valid-usage requirement. It does not inspect bind arrays or mutate fences,
 semaphores or queue state.
 
-`vkCmdNextSubpass` and `vkCmdExecuteCommands` are explicit fail-closed
-boundaries. The implementation accepts exactly one subpass and allocates only
-primary command buffers, so neither command currently has a valid reachable
-invocation. Their presence is structural API coverage, not subpass or
-secondary-command-buffer support.
+`VK_COMMAND_BUFFER_LEVEL_SECONDARY` command buffers can be allocated, recorded
+and reset with the same allocator, device and pool ownership guarantees as
+primary ones. The level is fixed at allocation and survives every reset,
+including a pool reset, because Vulkan has no operation that changes it. A
+secondary must supply `pInheritanceInfo`, which is copied and owned, so a
+caller mutating its own structure afterwards cannot change what was recorded;
+a primary ignores the pointer and stores nothing. Without
+`VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT` Vulkan ignores the
+inherited `renderPass`, `framebuffer` and `subpass` members, so any value the
+caller supplies is accepted and retained verbatim in that opaque copy, and
+nothing in this driver reads it.
+`VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT` and
+`VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT` are mutually exclusive for a
+primary only, per
+`VUID-vkBeginCommandBuffer-commandBuffer-02840`; a secondary may set both.
+
+**Nothing executes a secondary.** `vkCmdExecuteCommands` remains an explicit
+fail-closed boundary for both levels, and a secondary is refused at
+`vkQueueSubmit`, so nothing recorded into one can run. Ordered child
+references, lifetime ownership and submission-time execution do not exist yet.
+Accordingly the driver refuses what it would not honour, and only that:
+`VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT`, because inherited
+render-pass execution is unimplemented; and `occlusionQueryEnable`,
+`queryFlags` and `pipelineStatistics`, because this device reports
+`occlusionQueryPrecise` and `pipelineStatisticsQuery` false and executes no
+query at all. Members Vulkan defines as ignored are not refused. Recording a
+primary-only command into a secondary - `vkCmdBeginRenderPass`,
+`vkCmdEndRenderPass`, `vkCmdNextSubpass` - or nesting `vkCmdExecuteCommands`
+poisons the recording transactionally, leaving no partial operation behind.
+
+`vkCmdNextSubpass` is an explicit fail-closed boundary. The implementation
+accepts exactly one subpass, so it has no valid reachable invocation. Its
+presence is structural API coverage, not subpass support.
 
 ## Compatibility boundary
 
