@@ -166,7 +166,7 @@ check:
 	./build/tests/test_index_fetch
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) src/vertex_descriptor.c src/vertex_fetch.c src/texture_format.c tests/test_vertex_fetch.c -o build/tests/test_vertex_fetch
 	./build/tests/test_vertex_fetch
-	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/vertex_descriptor.c src/texture_format.c tests/test_vertex_descriptor.c -o build/tests/test_vertex_descriptor
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vertex_descriptor.c src/texture_format.c tests/test_vertex_descriptor.c -o build/tests/test_vertex_descriptor
 	./build/tests/test_vertex_descriptor
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/triangle_readback.c tests/test_triangle_readback.c -o build/tests/test_triangle_readback
 	./build/tests/test_triangle_readback
