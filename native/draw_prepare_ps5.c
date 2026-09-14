@@ -32,8 +32,7 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
             const struct ps5vk_binding *binding=&set->signature.binding[b];
             if(!binding->count)continue;
             if(set->signature.type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
-               !binding->stages ||
-               (binding->stages&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
+               !(binding->stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             for(unsigned e=0;e<binding->count;++e)
                 if(!set->defined[binding->first+e])return VK_ERROR_UNKNOWN;

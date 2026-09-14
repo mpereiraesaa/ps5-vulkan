@@ -140,6 +140,27 @@ static void check_descriptor_options(void)
         assert(actual->vertex.metadata.descriptor_bindings[s].offset==0);
         assert(actual->fragment.metadata.descriptor_bindings[s].offset==0);
     }
+    const VkShaderStageFlags visibility[]={VK_SHADER_STAGE_ALL,VK_SHADER_STAGE_ALL_GRAPHICS,
+        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT};
+    for(unsigned i=0;i<sizeof(visibility)/sizeof(visibility[0]);++i) {
+        for(unsigned s=0;s<4;++s)sets[s].binding[7].stages=visibility[i];
+        const void *wide=NULL;
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&wide)==VK_SUCCESS);
+        const struct ps5vk_runtime_graphics_program *candidate=wide;
+        assert(candidate->vertex.machine_code_size==actual->vertex.machine_code_size &&
+               candidate->fragment.machine_code_size==actual->fragment.machine_code_size);
+        assert(!memcmp(candidate->vertex.machine_code,actual->vertex.machine_code,actual->vertex.machine_code_size));
+        assert(!memcmp(candidate->fragment.machine_code,actual->fragment.machine_code,actual->fragment.machine_code_size));
+        assert(!memcmp(&candidate->arguments,&actual->arguments,sizeof(actual->arguments)));
+        for(unsigned s=0;s<4;++s) {
+            assert(sets[s].binding[7].stages==visibility[i]);
+            assert(candidate->vertex.metadata.descriptor_bindings[s].offset==0 &&
+                   candidate->fragment.metadata.descriptor_bindings[s].offset==0);
+        }
+        ps5vk_runtime_graphics_free(NULL,wide);
+    }
+    sets[3].binding[7].stages=UINT32_C(0x40000000);
+    assert(!ps5vk_runtime_graphics_supported(&key));
     ps5vk_runtime_graphics_free(NULL,compiled);
     free((void *)key.fragment.words);
     key.fragment=read_module("build/runtime-graphics/vertex_sets.frag.spv");
