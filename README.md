@@ -20,7 +20,7 @@ results; visual output is not the sole correctness signal.
 - Vulkan 1.0-style instance, physical-device, device and queue objects
 - Core `robustBufferAccess` reporting, device negotiation and executable
   UBO/SSBO out-of-bounds semantics backed by bounded GFX1013 descriptors; 12
-  original upstream access oracles pass in the exact 106-case native suite
+  original upstream access oracles pass in the exact 109-case native suite
 - Host-visible buffers and images backed by native direct memory
 - Command pools and command buffers with explicit recording state
 - Ordered byte-granular buffer copies plus bounded buffer update and fill commands
