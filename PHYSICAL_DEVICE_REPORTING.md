@@ -79,10 +79,16 @@ case:
 | Area | Reported | Mandatory floor |
 | --- | ---: | ---: |
 | Attachments: `maxColorAttachments`, `maxFragmentOutputAttachments`, `maxFragmentCombinedOutputResources` | 1 | 4 |
-| Vertex input: `maxVertexInputBindings` | 1 | 16 |
 | Descriptors: `maxPerStageDescriptorSamplers`, `maxPerStageDescriptorSampledImages`, `maxPerStageDescriptorStorageImages`, `maxPerStageDescriptorInputAttachments`, `maxDescriptorSetSamplers`, `maxDescriptorSetSampledImages`, `maxDescriptorSetStorageImages`, `maxDescriptorSetInputAttachments` | 0-1 | 4-96 |
 | Sampling: color/depth/stencil `sampledImage*SampleCounts`, `framebuffer*SampleCounts`, `storageImageSampleCounts` | 0-1 | 1+4 |
 | Other: `maxMemoryAllocationCount`, `minTexelOffset`, `maxTexelOffset` | 2048 / 0 / 0 | 4096 / -8 / 7 |
+
+`maxVertexInputBindings` is **not** one of these blockers: the graphics profile
+reports the Vulkan 1.0 floor of 16, and the compiled vertex-input path carries a
+16-bit usage mask over the dense native SRDs (`VERTEX_INPUT.md`), so the
+generated matrix classifies the row as `satisfied` for that profile. The
+compute-only build applies no graphics limits and still records the row as
+blocked for its separate profile.
 
 The graphics profile now reaches the Vulkan 1.0 floors for 1D, 2D, 3D, cube
 and array-layer image limits. Each image type has its own creation, view,
