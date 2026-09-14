@@ -15,8 +15,8 @@ _Static_assert(PS5VK_RUNTIME_SEMANTICS_MAX >= PSBC_MAX_SEMANTICS,"compiler seman
 
 /* Header construction only. Code upload, cache publication, AGC creation and
  * linking remain caller responsibilities. The bounded profile permits the
- * compiler-described vertex-buffer table but no general descriptor resources;
- * unsupported requirements fail before destination writes. */
+ * compiler-described vertex-buffer table and one fragment combined-image
+ * sampler at set 0/binding 0. Other descriptor profiles fail before writes. */
 int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *destination,
                               const PsbcShaderOutput *compiled);
 int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *vertex,

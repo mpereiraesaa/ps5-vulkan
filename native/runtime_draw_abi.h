@@ -1,3 +1,11 @@
+/*
+ * Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * The descriptor user-SGPR mapping follows the bounded PSBC/Gallium ABI in
+ * the pinned ps5-opengl reference. Validation and draw ownership are local.
+ */
 #ifndef PS5VK_RUNTIME_DRAW_ABI_H
 #define PS5VK_RUNTIME_DRAW_ABI_H
 #include <stdint.h>
@@ -11,17 +19,18 @@ struct ps5vk_runtime_draw_abi {
     uint32_t vertex_buffer_valid, vertex_buffer_slot;
     uint32_t lds_slot, lds_value;
     uint32_t vertex_push_slot, fragment_push_slot, push_constant_size;
+    uint32_t fragment_descriptor_set0_valid, fragment_descriptor_set0_slot;
 };
 
 static inline int ps5vk_runtime_draw_values(const struct ps5vk_runtime_draw_abi *a,
     uint32_t base_vertex, uint32_t instance, uint32_t vertex_buffer_low,
-    uint32_t push_constant_low,
+    uint32_t push_constant_low, uint32_t descriptor_set0_low,
     uint32_t vertex[16], uint32_t pixel[16])
 {
     if (!a || a->enabled!=1 || !a->vertex_count || a->vertex_count>16 ||
         a->fragment_count>16 || a->lds_slot>=a->vertex_count || a->lds_value>UINT16_MAX)
         return -1;
-    if(a->vertex_buffer_valid>1)return -1;
+    if(a->vertex_buffer_valid>1 || a->fragment_descriptor_set0_valid>1)return -1;
     uint32_t slots[5]={a->base_vertex_slot,a->start_instance_slot,
         a->vertex_buffer_valid?a->vertex_buffer_slot:UINT32_MAX,
         a->lds_slot,a->vertex_push_slot};
@@ -45,6 +54,12 @@ static inline int ps5vk_runtime_draw_values(const struct ps5vk_runtime_draw_abi 
         if(a->vertex_push_slot!=UINT32_MAX)vertex[a->vertex_push_slot]=push_constant_low;
         if(a->fragment_push_slot!=UINT32_MAX)pixel[a->fragment_push_slot]=push_constant_low;
     } else if(a->vertex_push_slot!=UINT32_MAX || a->fragment_push_slot!=UINT32_MAX || push_constant_low)return -1;
+    if(a->fragment_descriptor_set0_valid) {
+        if(!descriptor_set0_low || (descriptor_set0_low&15u) ||
+           a->fragment_descriptor_set0_slot>=a->fragment_count ||
+           a->fragment_descriptor_set0_slot==a->fragment_push_slot)return -1;
+        pixel[a->fragment_descriptor_set0_slot]=descriptor_set0_low;
+    } else if(descriptor_set0_low)return -1;
     return 0;
 }
 #endif

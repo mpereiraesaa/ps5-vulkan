@@ -24,6 +24,8 @@ def main():
         ("experiments/graphics/runtime_vertex_uint.vert", "runtime_vertex_uint.vert.spv", "vertex_uint"),
         ("experiments/graphics/runtime_vertex_unorm.vert", "runtime_vertex_unorm.vert.spv", "vertex_unorm"),
         ("experiments/graphics/runtime_vertex_format.frag", "runtime_vertex_format.frag.spv", "vertex_format_fragment"),
+        ("experiments/graphics/runtime_texture.frag", "runtime_texture.frag.spv", "texture_fragment"),
+        ("experiments/graphics/runtime_mipmap.vert", "runtime_mipmap.vert.spv", "mipmap_vertex"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

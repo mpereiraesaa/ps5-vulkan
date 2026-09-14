@@ -30,7 +30,10 @@ static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned m
         }
         if(op==59) {
             if(n<4)return 0;
-            if(w[3]==0 || w[3]==2 || w[3]==12)return 0;
+            /* UniformConstant is admitted only through the separately checked
+             * one-sampler descriptor profile; general buffer resources remain
+             * outside this bounded graphics compiler. */
+            if(w[3]==2 || w[3]==12)return 0;
         }
         if(op==54) {
             if(n!=5 || in_function)return 0;
@@ -52,6 +55,20 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
     psbc_free_output(&p->vertex);psbc_free_output(&p->fragment);free(p);
 }
 
+static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
+{
+    if(!key->descriptor_set_count)return 1;
+    if(key->descriptor_set_count!=1 || !key->descriptor_sets)return 0;
+    const struct ps5vk_set_signature *set=&key->descriptor_sets[0];
+    if(set->count!=1 || set->binding[0].count!=1 || set->binding[0].first ||
+       set->binding[0].stages!=VK_SHADER_STAGE_FRAGMENT_BIT ||
+       set->type[0]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)return 0;
+    for(unsigned binding=1;binding<PS5VK_MAX_BINDINGS;++binding)
+        if(set->binding[binding].count || set->binding[binding].first!=1 ||
+           set->binding[binding].stages || set->type[binding])return 0;
+    return 1;
+}
+
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
@@ -66,7 +83,7 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         key->vertex_binding_count<=1 && key->vertex_attribute_count<=PSBC_MAX_VERTEX_ATTRIBUTES &&
         (!key->vertex_binding_count || key->vertex_bindings) &&
         (!key->vertex_attribute_count || key->vertex_attributes) &&
-        !key->descriptor_set_count &&
+        descriptor_profile_supported(key) &&
         ps5vk_spirv_graphics_interface(key);
 }
 
@@ -141,6 +158,13 @@ static int apply_parameters(PsbcCompileOptions *options,
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&stage)options->force_indirect_push_constants=true;
     options->vertex_attribute_count=0;
+    options->descriptor_binding_count=0;
+    if(stage==VK_SHADER_STAGE_FRAGMENT_BIT && key->descriptor_set_count) {
+        options->descriptor_bindings[0]=(PsbcDescriptorBinding){
+            .set=0,.binding=0,.type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER,
+            .array_size=1,.offset=0,.stride=48};
+        options->descriptor_binding_count=1;
+    }
     if(stage==VK_SHADER_STAGE_VERTEX_BIT) {
         for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
             const VkVertexInputAttributeDescription *source=&key->vertex_attributes[i];

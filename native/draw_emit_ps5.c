@@ -1,3 +1,12 @@
+/*
+ * Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * The fragment descriptor-table bridge follows the bounded PSBC/Gallium ABI
+ * documented by the pinned ps5-opengl reference; packet validation and
+ * Vulkan-facing ownership are ps5-vulkan work.
+ */
 #include "draw_emit_ps5.h"
 #include "ps5_agc_writer.h"
 #include "ps5_gpu_span.h"
@@ -35,9 +44,10 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     uint32_t runtime_vertex[16],runtime_pixel[16];
     uint32_t sh_count=state->sh_count?state->sh_count:12;
     if(sh_count>16)return VK_ERROR_UNKNOWN;
-    if(state->runtime.enabled && (indices || texture_low ||
+    if(state->runtime.enabled && (indices ||
         ps5vk_runtime_draw_values(&state->runtime,op->first_vertex,op->first_instance,
                                  vertex_input?vertex_table_low:0,state->push_constant_low,
+                                 texture_low?*texture_low:0,
                                  runtime_vertex,runtime_pixel))) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (capacity < 13) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;

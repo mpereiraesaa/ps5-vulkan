@@ -373,8 +373,11 @@ version, target, layout, specialization and push-range state), and
 inputs (vendor/device, GFX1013 target, driver version, compiler identity and
 cache ABI revision) so any change invalidates previously exported data.
 
-The existing textured scene retains its offline exact-program path. Its
-capabilities must not be inferred for the narrower runtime graphics profile.
+The established textured scene retains its offline exact-program path. A
+separate candidate runtime profile accepts exactly one fragment combined-image
+sampler at set 0/binding 0 and compiles it through PSBC/ACO. That candidate has
+proved descriptor delivery and level-0 sampling, but explicit mip LOD remains
+red in strict readback and is not advertised as a public capability.
 
 ## Memory and presentation
 

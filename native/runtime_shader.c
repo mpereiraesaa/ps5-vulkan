@@ -51,11 +51,15 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout,
         .vertex_push_slot=v->push_constants_valid?v->push_constants_user_data_dword:UINT32_MAX,
         .fragment_push_slot=f->push_constants_valid?f->push_constants_user_data_dword:UINT32_MAX,
+        .fragment_descriptor_set0_valid=f->descriptor_set_valid[0],
+        .fragment_descriptor_set0_slot=f->descriptor_set_valid[0]?
+            f->descriptor_set_user_data_dword[0]:UINT32_MAX,
         .push_constant_size=v->push_constant_size>f->push_constant_size?
             v->push_constant_size:f->push_constant_size};
     uint32_t vertex[16],pixel[16];
     if(ps5vk_runtime_draw_values(&abi,0,0,abi.vertex_buffer_valid?16:0,
-        abi.push_constant_size?4:0,vertex,pixel))return -1;
+        abi.push_constant_size?4:0,abi.fragment_descriptor_set0_valid?16:0,
+        vertex,pixel))return -1;
     *out=abi;
     return 0;
 }
@@ -70,7 +74,6 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
         m->address32_hi!=2 || m->user_sgpr_count>16 || m->scratch_valid ||
         m->scratch_bytes_per_wave || m->scratch_size_per_thread || m->streamout_valid ||
-        m->descriptor_binding_count || m->descriptor_set0_valid ||
         m->clip_distance_mask || m->cull_distance_mask ||
         m->input_semantic_count>PSBC_MAX_SEMANTICS || m->output_semantic_count>PSBC_MAX_SEMANTICS ||
         (vs && m->input_semantic_count) || (fs && m->output_semantic_count) ||
@@ -79,8 +82,22 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if (m->vertex_buffer_table_valid ?
         (!vs || m->vertex_buffer_table_user_data_dword>=m->user_sgpr_count) :
         m->vertex_buffer_table_user_data_dword) return -2;
-    for(uint32_t set=0;set<PSBC_MAX_DESCRIPTOR_SETS;++set)
-        if(m->descriptor_set_valid[set])return -2;
+    if(vs && (m->descriptor_binding_count || m->descriptor_set0_valid))return -2;
+    if(fs && m->descriptor_binding_count) {
+        const PsbcDescriptorBinding *b=&m->descriptor_bindings[0];
+        if(m->descriptor_binding_count!=1 || !m->descriptor_set0_valid ||
+           !m->descriptor_set_valid[0] || b->set || b->binding ||
+           b->type!=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER ||
+           b->array_size!=1 || b->offset || b->stride!=48 ||
+           m->descriptor_set0_user_data_dword!=m->descriptor_set_user_data_dword[0])return -2;
+    } else if(m->descriptor_set0_valid || m->descriptor_set0_user_data_dword ||
+              m->descriptor_set_valid[0])return -2;
+    for(uint32_t set=0;set<PSBC_MAX_DESCRIPTOR_SETS;++set) {
+        int expected=fs && m->descriptor_binding_count && set==0;
+        if(m->descriptor_set_valid[set]!=expected ||
+           (expected ? m->descriptor_set_user_data_dword[set]>=m->user_sgpr_count :
+            m->descriptor_set_user_data_dword[set]))return -2;
+    }
     if (m->push_constants_valid ?
         (!m->push_constant_size || m->push_constant_size>256 ||
          m->push_constants_user_data_dword>=m->user_sgpr_count) :

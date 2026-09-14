@@ -172,7 +172,7 @@ def main():
         if graphics_api:
             sources = [s for s in sources if s[0] != "graphics_link_main"]
             graphics_source = graphics_manifest.get("source")
-            scene = not use_runtime_graphics and graphics_source in (
+            scene = (not use_runtime_graphics or scissor_probe == "12") and graphics_source in (
                 "experiments/graphics/scene3d.pipe",
                 "experiments/graphics/scene3d-uint.pipe",
                 "experiments/graphics/scene3d-sint.pipe",

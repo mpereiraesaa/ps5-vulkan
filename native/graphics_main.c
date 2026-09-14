@@ -32,6 +32,9 @@
 #ifndef PS5VK_MIP_FORCE_LOD
 #define PS5VK_MIP_FORCE_LOD -1
 #endif
+#ifndef PS5VK_RUNTIME_GRAPHICS
+#define PS5VK_RUNTIME_GRAPHICS 0
+#endif
 static const char *layered_target_name(void)
 {
     switch(PS5VK_IMAGE_TARGET) {
@@ -537,7 +540,8 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     VkDeviceSize vertex_offset=PS5VK_GRAPHICS_SCISSOR_PROBE==8?25u:24u;
     unsigned draw_count=1;
     if(vertex_buffer)vkCmdBindVertexBuffers(cb,0,1,&vertex_buffer,&vertex_offset);
-    if(index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8) {
+    if(index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8 &&
+       !(PS5VK_RUNTIME_GRAPHICS && PS5VK_GRAPHICS_SCISSOR_PROBE==12)) {
         vkCmdBindIndexBuffer(cb,index_buffer,4,(frame&1)?VK_INDEX_TYPE_UINT32:VK_INDEX_TYPE_UINT16);
         if(PS5VK_GRAPHICS_SCENE) {
             struct ps5vk_scene_draw draws[2];
@@ -554,7 +558,9 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     if (cb->operation_count!=prelude+2+draw_count)fail("recorded-operation-count",-1);
     for(unsigned j=0;j<draw_count;++j)
         if(cb->operations[prelude+1+j].type!=
-           ((index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8)?PS5VK_DRAW_INDEXED:PS5VK_DRAW))
+           ((index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8 &&
+             !(PS5VK_RUNTIME_GRAPHICS && PS5VK_GRAPHICS_SCISSOR_PROBE==12))?
+             PS5VK_DRAW_INDEXED:PS5VK_DRAW))
             fail("recorded-draw",-1);
 #if PS5VK_GRAPHICS_DRAW
     void *mapped;
@@ -952,19 +958,37 @@ int main(void)
     VkPipelineLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     const struct ps5vk_graphics_key *key=&graphics_library.programs[0].key;
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
-    VkVertexInputBindingDescription runtime_binding={0,16,VK_VERTEX_INPUT_RATE_VERTEX};
-    VkVertexInputAttributeDescription runtime_attribute={0,0,VK_FORMAT_R32G32B32A32_SINT,0};
+    VkVertexInputBindingDescription runtime_binding={0,
+        PS5VK_GRAPHICS_SCISSOR_PROBE==12?24:16,VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription runtime_attributes[2]={
+        {0,0,PS5VK_GRAPHICS_SCISSOR_PROBE==12?VK_FORMAT_R32G32B32_SFLOAT:
+            VK_FORMAT_R32G32B32A32_SINT,0},
+        {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}};
+    struct ps5vk_set_signature runtime_sampled={0};
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+        runtime_sampled.count=1;runtime_sampled.binding[0].count=1;
+        runtime_sampled.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+        runtime_sampled.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        for(unsigned binding_index=1;binding_index<PS5VK_MAX_BINDINGS;++binding_index)
+            runtime_sampled.binding[binding_index].first=1;
+    }
     const struct ps5vk_graphics_key runtime_key={
-        .vertex={.words=PS5VK_GRAPHICS_SCISSOR_PROBE==8?ps5vk_runtime_vertex_sint:ps5vk_runtime_vertex,
-            .word_count=PS5VK_GRAPHICS_SCISSOR_PROBE==8?sizeof(ps5vk_runtime_vertex_sint)/4:sizeof(ps5vk_runtime_vertex)/4,.entry="main"},
-        .fragment={.words=PS5VK_GRAPHICS_SCISSOR_PROBE==8?ps5vk_runtime_vertex_format_fragment:ps5vk_runtime_fragment,
-            .word_count=PS5VK_GRAPHICS_SCISSOR_PROBE==8?sizeof(ps5vk_runtime_vertex_format_fragment)/4:sizeof(ps5vk_runtime_fragment)/4,.entry="main"},
+        .vertex={.words=PS5VK_GRAPHICS_SCISSOR_PROBE==12?ps5vk_runtime_mipmap_vertex:
+                (PS5VK_GRAPHICS_SCISSOR_PROBE==8?ps5vk_runtime_vertex_sint:ps5vk_runtime_vertex),
+            .word_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?sizeof(ps5vk_runtime_mipmap_vertex)/4:
+                (PS5VK_GRAPHICS_SCISSOR_PROBE==8?sizeof(ps5vk_runtime_vertex_sint)/4:sizeof(ps5vk_runtime_vertex)/4),.entry="main"},
+        .fragment={.words=PS5VK_GRAPHICS_SCISSOR_PROBE==12?ps5vk_runtime_texture_fragment:
+                (PS5VK_GRAPHICS_SCISSOR_PROBE==8?ps5vk_runtime_vertex_format_fragment:ps5vk_runtime_fragment),
+            .word_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?sizeof(ps5vk_runtime_texture_fragment)/4:
+                (PS5VK_GRAPHICS_SCISSOR_PROBE==8?sizeof(ps5vk_runtime_vertex_format_fragment)/4:sizeof(ps5vk_runtime_fragment)/4),.entry="main"},
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
         .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
-        .vertex_binding_count=PS5VK_GRAPHICS_SCISSOR_PROBE==8?1:0,
-        .vertex_attribute_count=PS5VK_GRAPHICS_SCISSOR_PROBE==8?1:0,
-        .vertex_bindings=PS5VK_GRAPHICS_SCISSOR_PROBE==8?&runtime_binding:NULL,
-        .vertex_attributes=PS5VK_GRAPHICS_SCISSOR_PROBE==8?&runtime_attribute:NULL};
+        .vertex_binding_count=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?1:0,
+        .vertex_attribute_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?2:(PS5VK_GRAPHICS_SCISSOR_PROBE==8?1:0),
+        .vertex_bindings=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?&runtime_binding:NULL,
+        .vertex_attributes=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?runtime_attributes:NULL,
+        .descriptor_set_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?1:0,
+        .descriptor_sets=PS5VK_GRAPHICS_SCISSOR_PROBE==12?&runtime_sampled:NULL};
     key=&runtime_key;
     const struct ps5vk_graphics_program *unexpected=NULL;
     if(ps5vk_graphics_resolve(&graphics_library,key,&unexpected)!=VK_ERROR_FEATURE_NOT_PRESENT)
@@ -1042,7 +1066,7 @@ int main(void)
             struct ps5vk_vertex_format_case c;
             if(ps5vk_vertex_format_case(witness_index,&c))fail("vertex-format-case",-1);
             runtime_binding.stride=c.bytes;
-            runtime_attribute.format=c.format;
+            runtime_attributes[0].format=c.format;
             memcpy(&expected_components,&c.expected,sizeof(expected_components));
             for(unsigned j=0;j<4;++j)component_entries[j].offset=j*sizeof(uint32_t);
             stages[0].module=shaders[c.numeric==PS5VK_VERTEX_PROBE_SINT?0:

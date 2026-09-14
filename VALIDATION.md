@@ -28,6 +28,24 @@ See [BUILDING.md](BUILDING.md) for the SDK-linked diagnostic and the
 `make check`, `make check-sanitize` and the runtime graphics compiler/cache
 test with ASan/UBSan enabled. The PSBC static archive itself is not instrumented.
 
+### Runtime sampled-image and mipmap candidate
+
+The GPL-compatible `ps5-opengl` reference informed a bounded runtime-graphics
+adapter for exactly one fragment-stage combined image sampler at set 0,
+binding 0. The compiler metadata, user-SGPR slot, 48-byte descriptor table,
+descending mip layout and cache identity are validated on the host and reject
+other descriptor shapes.
+
+A native GFX1013 diagnostic on 2026-09-14 compiled both owned SPIR-V stages at
+runtime, submitted successfully and verified the backing bytes for three mip
+levels. Its readback selected level 0 for every explicit LOD, however, so the
+run intentionally ended as a failure (`PS5VK_MIPMAP_READBACK valid=0`). The
+ps5log/1 run was
+`20260914T050039610Z_PPSA99994_ps5vk_0x75893aacacda`, executable SHA-256
+`c65e7bbf98370d004b8eda6054c5eb60cec97d230fa277089a891c0b92714bff`.
+This is diagnostic evidence for the descriptor/compiler path, not mipmap
+support or Vulkan acceptance; public image limits remain single-level.
+
 ## Vulkan API contract suite validation (CTS-modeled)
 
 A suite of 26 synthetic Vulkan API contract tests modeled after the Khronos `VK-GL-CTS`

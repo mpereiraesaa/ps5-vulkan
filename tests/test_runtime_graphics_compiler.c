@@ -66,6 +66,39 @@ int main(void)
     assert(p->fragment.metadata.hardware_stage==PSBC_HW_STAGE_PIXEL);
     assert(p->arguments.base_vertex_slot==0 && p->arguments.lds_slot==1);
     ps5vk_runtime_graphics_free(NULL,out);
+
+    struct ps5vk_set_signature sampled={0};
+    sampled.count=1;sampled.binding[0].count=1;sampled.binding[0].first=0;
+    sampled.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sampled.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    for(unsigned binding_index=1;binding_index<PS5VK_MAX_BINDINGS;++binding_index)
+        sampled.binding[binding_index].first=1;
+    struct ps5vk_graphics_key textured=key;
+    textured.vertex=read_module("build/runtime-graphics/mipmap.vert.spv");
+    textured.fragment=read_module("build/runtime-graphics/texture.frag.spv");
+    VkVertexInputBindingDescription mip_binding={.binding=0,.stride=24,
+        .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription mip_attributes[2]={
+        {.location=0,.binding=0,.format=VK_FORMAT_R32G32B32_SFLOAT,.offset=0},
+        {.location=1,.binding=0,.format=VK_FORMAT_R32G32B32_SFLOAT,.offset=12}};
+    textured.vertex_binding_count=1;textured.vertex_attribute_count=2;
+    textured.vertex_bindings=&mip_binding;textured.vertex_attributes=mip_attributes;
+    textured.descriptor_set_count=1;textured.descriptor_sets=&sampled;
+    assert(ps5vk_runtime_graphics_compile(NULL,&textured,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(p->fragment.metadata.descriptor_binding_count==1);
+    assert(p->fragment.metadata.descriptor_set0_valid &&
+        p->fragment.metadata.descriptor_set_valid[0]);
+    assert(p->arguments.fragment_descriptor_set0_valid &&
+        p->arguments.fragment_descriptor_set0_slot< p->arguments.fragment_count);
+    ps5vk_runtime_graphics_free(NULL,out);
+    sampled.binding[0].stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+    assert(ps5vk_runtime_graphics_compile(NULL,&textured,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    sampled.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sampled.type[0]=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    assert(ps5vk_runtime_graphics_compile(NULL,&textured,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    sampled.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    free((void *)textured.vertex.words);free((void *)textured.fragment.words);
     struct ps5vk_compilation_cache *cache=ps5vk_compilation_cache_create(4,1024*1024);
     assert(cache);
     const void *cold,*warm;
@@ -240,7 +273,7 @@ int main(void)
     ps5vk_compilation_cache_destroy(cache);
     key.fragment.entry="absent";
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
-    key.fragment.entry="main";key.descriptor_set_count=1;
+    key.fragment.entry="main";key.descriptor_set_count=1;key.descriptor_sets=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
     key.descriptor_set_count=0;key.blend_enable=1;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
