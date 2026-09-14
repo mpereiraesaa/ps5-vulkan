@@ -17,11 +17,32 @@ vertex pointer even without an actual vertex shader access. Eliminating
 statically unused resources is not implemented by this change. Unsupported
 stage masks and resource types remain rejected.
 
-This is a compiler/ABI change, **not vertex-sampling hardware evidence**.
-Native draw preparation still rejects vertex resource use in this revision;
-connecting that delivery and checking deterministic GPU output are separate
-dependent changes. No advertised feature or limit is promoted, and the earlier
-fragment-only GPU results below do not validate the new vertex-stage path.
+This compiler/ABI evidence is **not vertex-sampling hardware evidence**.
+The follow-on native delivery is described below; deterministic GPU output
+for vertex sampling remains pending. No advertised feature or limit is
+promoted, and the earlier fragment-only GPU results do not validate vertex use.
+
+## Shared-stage sampler delivery (host qualification only)
+
+Native preparation now builds the union of vertex and fragment descriptor
+sets. It allocates each table once, even when both stages use it, and preserves
+canonical offsets when a table mixes vertex-only and fragment-only bindings.
+The queue's predicted-layout checks cover vertex-only sets as well. The
+existing emitter supplies the shared address to each stage's compiler-selected
+argument slot; draw-owned backing remains retained until retirement.
+
+The allocation/encoding regression checks the exact table footprint and all
+96 descriptor records across shared, vertex-only and fragment-only sets.
+Missing or stale vertex sets, undefined array elements and unsupported stage
+masks fail before allocation. An injected vertex-descriptor encoding failure
+releases the allocation without publishing a prepared draw. The focused
+ASan/UBSan test passes. Synthetic inactive-set metadata is tested separately;
+it does not prove PSBC eliminates statically unused sets.
+
+This connects delivery but does not yet qualify vertex texture instructions
+on the GPU. The independent public-SDK shared-stage readback experiment and
+applicable upstream CTS are still pending. Published sampler limits remain
+unchanged.
 
 ## Multi-set fragment samplers: connected backend and hardware diagnostic
 
@@ -36,7 +57,8 @@ The canonical descriptor-table layout is shared by compiler options and
 job-owned native table encoding. It preserves offsets across stage filtering,
 sparse binding numbers, arrays, 16-byte buffer and 48-byte combined sampler
 records. Host compiler tests cover mixed layouts; executable graphics resource
-tables currently accept only fragment-stage combined image/samplers.
+tables accept combined image/samplers; the hardware results in this section
+cover fragment use only.
 
 The connected runtime carries up to four fragment-table pointers from PSBC
 metadata through command recording, per-set generation/signature validation,
@@ -70,7 +92,7 @@ public-SDK consumer passed two identical-artifact runs:
 currently advertised sampler limits. It exercises the backend through public
 headers, not a portable application obeying the published limits, and is not
 upstream CTS or conformance evidence. The advertised sampler counts remain
-one. Vertex-stage sampling, non-sampler graphics resources, statically unused
+one. Vertex-stage hardware qualification, non-sampler graphics resources, statically unused
 individual bindings, broader sampler/state combinations and applicable CTS
 must be addressed before a general limit promotion. The diagnostic uses
 procedural vertices, one nearest sampler and four level-0 RGBA8 source images;

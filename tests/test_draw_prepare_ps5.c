@@ -188,11 +188,59 @@ int main(void)
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=VK_SUCCESS &&
         allocations==allocated+1 && releases==allocations && !prepared.backing && !prepared.descriptor_tables[0]);
     texture_fail_view=NULL;
+    /* Share sets0/3 between stages, set1 only VS and set2 only FS. Each
+     * table is allocated once and keeps its canonical element addresses. */
+    for(unsigned s=0;s<4;++s) {
+        VkShaderStageFlags stages=s==1?VK_SHADER_STAGE_VERTEX_BIT:
+            s==2?VK_SHADER_STAGE_FRAGMENT_BIT:
+            VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+        sets[s].signature.binding[3].stages=stages;
+        sets[s].signature.binding[7].stages=stages;
+        p.sets[s]=sets[s].signature;
+        runtime.vertex_descriptor_valid[s]=s!=2;
+        runtime.fragment_descriptor_valid[s]=s!=1;
+    }
+    /* One shared table can also contain bindings with distinct visibility;
+     * stage filtering must not compact their offsets. */
+    sets[0].signature.binding[3].stages=VK_SHADER_STAGE_VERTEX_BIT;
+    sets[0].signature.binding[7].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    p.sets[0]=sets[0].signature;
     expected_bytes-=16;
+    allocated=allocations;
     assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)==VK_SUCCESS);
-    assert(!prepared.vertex_table && prepared.descriptor_tables[3] && prepared.bytes==expected_bytes);
+    assert(!prepared.vertex_table && prepared.descriptor_tables[3] &&
+           prepared.bytes==expected_bytes && allocations==allocated+1);
+    for(unsigned s=0;s<4;++s) {
+        assert(prepared.descriptor_bytes[s]==24*48);
+        assert((uintptr_t)prepared.descriptor_tables[s]==
+               latest_address+((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+s*24*48);
+        for(unsigned e=0;e<24;++e)for(unsigned w=0;w<12;++w)
+            assert(prepared.descriptor_tables[s][12*e+w]==100+w+256*(1+24*s+e));
+    }
     ps5vk_native_release_draw(&prepared);assert(allocations==releases);
-    /* Optimized-out sets need no allocation or dereference. */
+    /* A vertex-only set is just as mandatory as a fragment set. */
+    allocated=allocations;op.sets[1]=NULL;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS &&
+           allocations==allocated && !prepared.backing);
+    op.sets[1]=sets+1;op.generations[1]--;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS &&
+           allocations==allocated && !prepared.backing);
+    op.generations[1]++;sets[1].defined[23]=VK_FALSE;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS &&
+           allocations==allocated && !prepared.backing);
+    sets[1].defined[23]=VK_TRUE;texture_fail_view=sets[1].images[23].imageView;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS &&
+           allocations==allocated+1 && allocations==releases && !prepared.backing);
+    texture_fail_view=NULL;
+    sets[1].signature.binding[3].stages=VK_SHADER_STAGE_COMPUTE_BIT;
+    p.sets[1]=sets[1].signature;allocated=allocations;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)==VK_ERROR_FEATURE_NOT_PRESENT &&
+           allocations==allocated && !prepared.backing);
+    sets[1].signature.binding[3].stages=VK_SHADER_STAGE_VERTEX_BIT;
+    p.sets[1]=sets[1].signature;
+    /* Synthetic ABI with inactive sets: no allocation or dereference.
+     * Actual PSBC currently conservatively reserves option-visible sets. */
+    runtime.vertex_descriptor_valid[1]=0;
     runtime.fragment_descriptor_valid[1]=runtime.fragment_descriptor_valid[2]=0;
     op.sets[1]=op.sets[2]=NULL;expected_bytes-=2*24*48;
     assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)==VK_SUCCESS);

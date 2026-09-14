@@ -223,7 +223,8 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         if(op->pipeline->set_count>PS5VK_MAX_SETS){rc=VK_ERROR_UNKNOWN;goto fail;}
         for(unsigned set_index=0;set_index<op->pipeline->set_count;++set_index) {
             if(p->pair->runtime_arguments.enabled &&
-               !p->pair->runtime_arguments.fragment_descriptor_valid[set_index])continue;
+               !p->pair->runtime_arguments.fragment_descriptor_valid[set_index] &&
+               !p->pair->runtime_arguments.vertex_descriptor_valid[set_index])continue;
             VkDescriptorSet set=op->sets[set_index];
             if(!set || !set->pool || set->pool->device!=d ||
                set->generation!=op->generations[set_index] ||
