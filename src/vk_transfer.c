@@ -108,12 +108,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
      * and the host-visible padded-linear transfer role. */
     const VkImageUsageFlags usage=image->info.usage;
     const int sampled_upload=(usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
-        ps5vk_texture_format_supported(image->info.format) &&
+        ps5vk_texture_format_sampled_image(image->info.format) &&
         !(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
     const int linear_upload=ps5vk_pure_transfer_image(image) &&
         (usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     if(!ps5vk_buffer_usage(d,source,VK_BUFFER_USAGE_TRANSFER_SRC_BIT) ||
-        !ps5vk_texture_format_supported(image->info.format) ||
+        !ps5vk_texture_format_sampled_image(image->info.format) ||
         (!sampled_upload && !linear_upload)) {invalid(c);return;}
     void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
     if(ps5vk_buffer_span(d,source,0,VK_WHOLE_SIZE,&src,&src_bytes)!=VK_SUCCESS ||

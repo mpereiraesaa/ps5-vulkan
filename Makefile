@@ -146,7 +146,7 @@ check:
 	./build/tests/test_sampled_format_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/integer_sampled_probe.c tests/test_integer_sampled_probe.c -o build/tests/test_integer_sampled_probe
 	./build/tests/test_integer_sampled_probe
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vertex_format_probe.c tests/test_vertex_format_probe.c -o build/tests/test_vertex_format_probe
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vertex_format_probe.c src/texture_format.c tests/test_vertex_format_probe.c -o build/tests/test_vertex_format_probe
 	./build/tests/test_vertex_format_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state
 	./build/tests/test_image_layout_state
@@ -164,9 +164,9 @@ check:
 	./build/tests/test_index_emit_ps5
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) src/index_fetch.c tests/test_index_fetch.c -o build/tests/test_index_fetch
 	./build/tests/test_index_fetch
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) src/vertex_descriptor.c src/vertex_fetch.c tests/test_vertex_fetch.c -o build/tests/test_vertex_fetch
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) src/vertex_descriptor.c src/vertex_fetch.c src/texture_format.c tests/test_vertex_fetch.c -o build/tests/test_vertex_fetch
 	./build/tests/test_vertex_fetch
-	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/vertex_descriptor.c tests/test_vertex_descriptor.c -o build/tests/test_vertex_descriptor
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/vertex_descriptor.c src/texture_format.c tests/test_vertex_descriptor.c -o build/tests/test_vertex_descriptor
 	./build/tests/test_vertex_descriptor
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/triangle_readback.c tests/test_triangle_readback.c -o build/tests/test_triangle_readback
 	./build/tests/test_triangle_readback
@@ -177,7 +177,7 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/graphics_sync.c tests/test_graphics_sync.c -o build/tests/test_graphics_sync
 	./build/tests/test_graphics_sync
 	@mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_prepare_ps5.c src/vertex_descriptor.c tests/test_draw_prepare_ps5.c -o build/tests/test_draw_prepare_ps5
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_prepare_ps5.c src/vertex_descriptor.c src/texture_format.c tests/test_draw_prepare_ps5.c -o build/tests/test_draw_prepare_ps5
 	./build/tests/test_draw_prepare_ps5
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_emit_ps5.c native/index_emit_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_agc_writer.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_gpu_span.c tests/test_draw_emit_ps5.c -o build/tests/test_draw_emit_ps5
@@ -282,12 +282,12 @@ build/libpsbc.host.a:
 .PHONY: test-runtime-graphics-compiler
 test-runtime-graphics-compiler: inspect-graphics-compiler
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
 	./build/tests/test_runtime_graphics_compiler
 .PHONY: test-runtime-graphics-native
 test-runtime-graphics-native:
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
 	./build/tests/test_runtime_graphics_native
 test-runtime-header:
 	mkdir -p build/tests

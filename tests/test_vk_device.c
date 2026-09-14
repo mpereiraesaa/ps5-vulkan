@@ -327,10 +327,11 @@ static void lifecycle(void)
         VkFormatFeatureFlags optimal_bits=0;
         const struct ps5vk_texture_format *sampled=
             ps5vk_texture_format_lookup(formats[n]);
-        if(sampled && sampled->validated) {
+        /* The published bits come from the witnessed column only. */
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
             optimal_bits=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-            if(sampled->linear_filter_validated)
+            if(sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR)
                 optimal_bits|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
         }
         if(formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
@@ -343,6 +344,62 @@ static void lifecycle(void)
         assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
             fp.optimalTilingFeatures==optimal_bits);
     }
+    /* Query/create coherence: for every format the capability table knows, the
+     * (format, optimal tiling, usage) answer of the image-format query must
+     * agree with the feature bits the format query reports. A format whose
+     * sampled encoding is implemented but not yet witnessed is reported as
+     * unsupported and refused, never silently creatable. */
+    const struct { VkFormat format; VkImageUsageFlags usage; VkFormatFeatureFlags bit; }
+        coherence[] = {
+        {VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_FORMAT_FEATURE_TRANSFER_DST_BIT},
+        {VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_FORMAT_FEATURE_TRANSFER_SRC_BIT},
+        {VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT},
+        {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT},
+        {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+         VK_FORMAT_FEATURE_TRANSFER_SRC_BIT},
+        {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT},
+        {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT},
+        {VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+         VK_FORMAT_FEATURE_TRANSFER_DST_BIT},
+        {VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+         VK_FORMAT_FEATURE_TRANSFER_DST_BIT},
+        {VK_FORMAT_A8B8G8R8_SRGB_PACK32, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+    };
+    for (unsigned n = 0; n < sizeof(coherence) / sizeof(coherence[0]); ++n) {
+        vkGetPhysicalDeviceFormatProperties(p, coherence[n].format, &fp);
+        memset(&ip, 0xff, sizeof(ip));
+        VkResult result = vkGetPhysicalDeviceImageFormatProperties(p, coherence[n].format,
+            VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, coherence[n].usage, 0, &ip);
+        if (fp.optimalTilingFeatures & coherence[n].bit)
+            assert(result == VK_SUCCESS);
+        else
+            assert(result == VK_ERROR_FORMAT_NOT_SUPPORTED &&
+                   !memcmp(&ip, &zero_ip, sizeof(ip)));
+    }
+    /* The unwitnessed packed rows publish no image feature at all: the vertex
+     * role is the only witnessed capability they have. */
+    vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_A8B8G8R8_UNORM_PACK32, &fp);
+    assert(!fp.optimalTilingFeatures &&
+        fp.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+    vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_A8B8G8R8_SRGB_PACK32, &fp);
+    assert(!fp.optimalTilingFeatures && !fp.bufferFeatures &&
+        !fp.linearTilingFeatures);
+
     p->platform.queue_flags=VK_QUEUE_GRAPHICS_BIT;
     const VkFormat vertex_formats[]={VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT,
         VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -362,10 +419,10 @@ static void lifecycle(void)
         VkFormatFeatureFlags expected_optimal=0;
         const struct ps5vk_texture_format *sampled=
             ps5vk_texture_format_lookup(vertex_formats[n]);
-        if(sampled && sampled->validated) {
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
             expected_optimal=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-            if(sampled->linear_filter_validated)
+            if(sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR)
                 expected_optimal|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
         }
         if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
@@ -377,7 +434,7 @@ static void lifecycle(void)
         assert(ps5vk_vertex_format_size(vertex_formats[n])==(n<12?4*((n%4)+1):4));
         VkResult image_result=vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip);
-        if(sampled && sampled->validated)
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE))
             assert(image_result==VK_SUCCESS);
         else assert(image_result==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }

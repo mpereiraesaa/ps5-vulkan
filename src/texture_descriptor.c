@@ -16,7 +16,7 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     if(!d || !view || !sampler || !out || view->device!=d || sampler->device!=d || !view->image)return VK_ERROR_UNKNOWN;
     VkImage image=view->image;
     const struct ps5vk_texture_format *format=ps5vk_texture_format_lookup(view->format);
-    if(!format || !ps5vk_texture_format_supported(view->format) || image->info.format!=view->format ||
+    if(!format || !ps5vk_texture_format_sampled_image(view->format) || image->info.format!=view->format ||
         view->range.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || !view->range.levelCount ||
         view->range.baseMipLevel>=image->info.mipLevels ||
         view->range.levelCount>image->info.mipLevels-view->range.baseMipLevel ||

@@ -7,6 +7,9 @@
  * points - vkGetPhysicalDeviceProperties, vkGetPhysicalDeviceFeatures,
  * vkGetPhysicalDeviceMemoryProperties, vkGetPhysicalDeviceFormatProperties and
  * vkGetPhysicalDeviceImageFormatProperties - rather than reading C constants.
+ * It also emits the authoritative capability ledger (implemented versus
+ * witnessed per format) so the audit can prove that every advertised bit has a
+ * backend and that nothing is advertised without a console witness.
  * The spec -> reported matrix in tools/check_reporting_matrix.py consumes this
  * output, so a changed report changes the matrix.
  */
@@ -241,7 +244,8 @@ static const VkFormat dump_formats[] = {
     VK_FORMAT_R8G8B8A8_SINT, VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SNORM,
     VK_FORMAT_B8G8R8A8_UINT, VK_FORMAT_B8G8R8A8_SINT, VK_FORMAT_A8B8G8R8_UNORM_PACK32,
     VK_FORMAT_A8B8G8R8_SNORM_PACK32, VK_FORMAT_A8B8G8R8_UINT_PACK32,
-    VK_FORMAT_A8B8G8R8_SINT_PACK32, VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+    VK_FORMAT_A8B8G8R8_SINT_PACK32, VK_FORMAT_A8B8G8R8_SRGB_PACK32,
+    VK_FORMAT_A2B10G10R10_UNORM_PACK32,
     VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_FORMAT_R16_UNORM, VK_FORMAT_R16_SNORM,
     VK_FORMAT_R16_UINT, VK_FORMAT_R16_SINT, VK_FORMAT_R16_SFLOAT, VK_FORMAT_R16G16_UNORM,
     VK_FORMAT_R16G16_UINT, VK_FORMAT_R16G16_SINT, VK_FORMAT_R16G16_SFLOAT,
@@ -274,6 +278,33 @@ static void print_format_properties(FILE *out)
             i + 1 == sizeof(dump_formats) / sizeof(dump_formats[0]) ? "" : ",");
     }
     fputs("  },\n", out);
+}
+
+/* The capability ledger, read through the authoritative table accessors: for
+ * every format the driver knows, which operations are implemented and which of
+ * them have an on-console witness. The published feature bits must equal the
+ * witnessed column, so a capability cannot be re-advertised without a backend
+ * or silently advertised without evidence. */
+static void print_format_capabilities(FILE *out)
+{
+    fputs("  \"formatCapabilities\": [\n", out);
+    const unsigned count = ps5vk_texture_format_count();
+    for (unsigned i = 0; i < count; ++i) {
+        const struct ps5vk_texture_format *entry = ps5vk_texture_format_at(i);
+        VkFormatProperties properties;
+        ps5vk_texture_format_properties(entry->format, &properties);
+        fprintf(out,
+            "    {\"format\": %u, \"bytesPerTexel\": %u, \"descriptorFormatWord\": %u, "
+            "\"selectors\": [%u, %u, %u, %u], \"capabilities\": %u, \"witnessed\": %u, "
+            "\"provenance\": %u, \"optimalTilingFeatures\": %u, \"bufferFeatures\": %u}%s\n",
+            (unsigned)entry->format, entry->bytes_per_texel, entry->descriptor_format_word,
+            entry->selectors[0], entry->selectors[1], entry->selectors[2],
+            entry->selectors[3], entry->capabilities, entry->witnessed,
+            (unsigned)entry->provenance, properties.optimalTilingFeatures,
+            properties.bufferFeatures,
+            i + 1 == count ? "" : ",");
+    }
+    fputs("  ],\n", out);
 }
 
 int main(int argc, char **argv)
@@ -381,6 +412,7 @@ int main(int argc, char **argv)
     fputs("],\n", stdout);
 
     print_format_properties(stdout);
+    print_format_capabilities(stdout);
 
     /* Image-format queries: the combinations the advertised matrix claims,
      * plus the mandatory 2D/optimal/buffer scopes, so the matrix tool can show

@@ -7,12 +7,31 @@
 #include "texture_format.h"
 #include "vk_image.h"
 
+/* Overflow-checked arithmetic: a rejected plan must leave the caller's
+ * structure untouched, so every quantity is computed into a local first. */
+static int mul64(uint64_t a, uint64_t b, uint64_t *out)
+{
+    if (a && b > UINT64_MAX / a) return -1;
+    *out = a * b;
+    return 0;
+}
+static int add64(uint64_t a, uint64_t b, uint64_t *out)
+{
+    if (b > UINT64_MAX - a) return -1;
+    *out = a + b;
+    return 0;
+}
+
 static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
     uint32_t base_slices,uint32_t mip_levels,VkBool32 is_3d,VkDeviceSize source_bytes,
     VkDeviceSize destination_bytes,const VkBufferImageCopy *r,
     struct ps5vk_texture_copy *out)
 {
     if(!r || !out)return VK_ERROR_UNKNOWN;
+    /* A format without an implemented padded-linear encoding has no copy plan;
+     * this covers formats that exist in the capability table for another role
+     * (colour attachment, depth, vertex) but are not sampleable. */
+    if(!ps5vk_texture_format_sampled_encoding(format))return VK_ERROR_UNKNOWN;
     const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(format);
     struct ps5vk_texture_mip_layout layout;
     if(!entry || ps5vk_texture_mip_layout_for_slices(format,width,height,base_slices,
@@ -49,18 +68,28 @@ static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
         first_slice=r->imageSubresource.baseArrayLayer;
         slices=r->imageSubresource.layerCount;
     }
-    uint64_t pitch=(uint64_t)entry->bytes_per_texel*
-        (r->bufferRowLength?r->bufferRowLength:r->imageExtent.width);
-    uint64_t row_bytes=(uint64_t)entry->bytes_per_texel*r->imageExtent.width;
-    uint64_t source_slice=pitch*
-        (r->bufferImageHeight?r->bufferImageHeight:r->imageExtent.height);
-    uint64_t source_span=(uint64_t)(slices-1)*source_slice+
-        (uint64_t)(r->imageExtent.height-1)*pitch+row_bytes;
+    uint64_t pitch,row_bytes,source_slice,source_span;
+    if(mul64(entry->bytes_per_texel,
+             r->bufferRowLength?r->bufferRowLength:r->imageExtent.width,&pitch) ||
+       mul64(entry->bytes_per_texel,r->imageExtent.width,&row_bytes) ||
+       row_bytes>UINT32_MAX ||
+       mul64(pitch,(r->bufferImageHeight?r->bufferImageHeight:r->imageExtent.height),
+             &source_slice) ||
+       mul64(slices-1,source_slice,&source_span) ||
+       add64(source_span,(uint64_t)(r->imageExtent.height-1)*pitch,&source_span) ||
+       add64(source_span,row_bytes,&source_span))
+        return VK_ERROR_UNKNOWN;
     const struct ps5vk_texture_mip_level *mip=&layout.levels[level];
-    uint64_t destination_offset=(uint64_t)first_slice*layout.layer_stride+
-        mip->offset+(uint64_t)y*mip->row_pitch+(uint64_t)entry->bytes_per_texel*x;
-    uint64_t destination_span=(uint64_t)(slices-1)*layout.layer_stride+
-        (uint64_t)(r->imageExtent.height-1)*mip->row_pitch+row_bytes;
+    uint64_t destination_offset,destination_span;
+    if(mul64(first_slice,layout.layer_stride,&destination_offset) ||
+       add64(destination_offset,mip->offset,&destination_offset) ||
+       add64(destination_offset,(uint64_t)y*mip->row_pitch,&destination_offset) ||
+       add64(destination_offset,(uint64_t)entry->bytes_per_texel*x,&destination_offset) ||
+       mul64(slices-1,layout.layer_stride,&destination_span) ||
+       add64(destination_span,(uint64_t)(r->imageExtent.height-1)*mip->row_pitch,
+             &destination_span) ||
+       add64(destination_span,row_bytes,&destination_span))
+        return VK_ERROR_UNKNOWN;
     if(r->bufferOffset>source_bytes || source_span>source_bytes-r->bufferOffset ||
        destination_offset>destination_bytes ||
        destination_span>destination_bytes-destination_offset)

@@ -1,71 +1,327 @@
+#include "graphics_formats.h"
 #include "texture_format.h"
 #include <assert.h>
+#include <string.h>
+
+/* Table-driven contract tests over the authoritative capability table.
+ * These prove the published/reported decisions, the GFX1013 encoding and the
+ * capability split; they are not a GPU execution claim. */
+static void check_encoding(VkFormat format, uint32_t bytes, uint32_t word,
+                           uint8_t s0, uint8_t s1, uint8_t s2, uint8_t s3)
+{
+    const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
+    assert(entry);
+    assert(entry->bytes_per_texel == bytes);
+    assert(entry->descriptor_format_word == word);
+    assert(entry->selectors[0] == s0 && entry->selectors[1] == s1 &&
+           entry->selectors[2] == s2 && entry->selectors[3] == s3);
+    assert(entry->provenance & PS5VK_FORMAT_PROVENANCE_GPL_REFERENCE);
+    assert(ps5vk_texture_format_sampled_encoding(format));
+}
+
+static void check_vertex(VkFormat format, uint32_t bytes, uint32_t components,
+                         enum ps5vk_vertex_numeric numeric)
+{
+    const struct ps5vk_vertex_format vertex = ps5vk_vertex_format_info(format);
+    assert(ps5vk_texture_format_witnessed(format, PS5VK_FORMAT_CAP_VERTEX_BUFFER));
+    assert(vertex.bytes == bytes && vertex.components == components);
+    assert(vertex.numeric == numeric);
+    assert(ps5vk_vertex_format_size(format) == bytes);
+}
 
 int main(void)
 {
-    const struct ps5vk_texture_format *r=ps5vk_texture_format_lookup(VK_FORMAT_R8_UNORM);
-    const struct ps5vk_texture_format *rg=ps5vk_texture_format_lookup(VK_FORMAT_R8G8_UNORM);
-    const struct ps5vk_texture_format *rgba=ps5vk_texture_format_lookup(VK_FORMAT_R8G8B8A8_UNORM);
-    const struct ps5vk_texture_format *srgb=ps5vk_texture_format_lookup(VK_FORMAT_R8G8B8A8_SRGB);
-    assert(r && r->bytes_per_texel==1 && r->descriptor_format_word==0x00100000u);
-    assert(r->selectors[0]==4 && r->selectors[1]==0 && r->selectors[2]==0 && r->selectors[3]==1);
-    assert(rg && rg->bytes_per_texel==2 && rg->descriptor_format_word==0x00e00000u);
-    assert(rg->selectors[0]==4 && rg->selectors[1]==5 && rg->selectors[2]==0 && rg->selectors[3]==1);
-    assert(rgba && rgba->bytes_per_texel==4 && rgba->descriptor_format_word==0x03800000u);
-    assert(srgb && srgb->bytes_per_texel==4 && srgb->descriptor_format_word==0x08200000u);
-    assert(r->validated && rg->validated && rgba->validated && srgb->validated);
-    assert(r->linear_filter_validated && rg->linear_filter_validated &&
-        rgba->linear_filter_validated && srgb->linear_filter_validated);
-    assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8B8A8_UNORM));
-    assert(ps5vk_texture_format_supported(VK_FORMAT_R8_UNORM));
-    assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8_UNORM));
-    assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8B8A8_SRGB));
-    const VkFormat added[]={VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,
-        VK_FORMAT_R8G8B8A8_SNORM,VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
-        VK_FORMAT_R16G16B16A16_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT,
-        VK_FORMAT_B10G11R11_UFLOAT_PACK32,
-        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_SFLOAT,
-        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_SFLOAT,
-        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
-        VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT};
-    const uint32_t words[]={0x00200000u,0x00f00000u,0x03900000u,
-        0x08400000u,0x04700000u,0x04d00000u,0x02400000u,
-        0x00700000u,0x00800000u,0x00d00000u,
-        0x01700000u,0x01800000u,0x01d00000u,
-        0x04100000u,0x04200000u,0x01600000u,0x04000000u};
-    const unsigned sizes[]={1,2,4,4,8,16,4,2,2,2,4,4,4,8,8,4,8};
-    for(unsigned i=0;i<sizeof(added)/sizeof(added[0]);++i) {
-        const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(added[i]);
-        assert(entry && entry->validated && entry->linear_filter_validated &&
-            entry->descriptor_format_word==words[i] && entry->bytes_per_texel==sizes[i]);
+    /* --- GFX1013 sampled encodings (GPL-derived rows) --------------------- */
+    check_encoding(VK_FORMAT_R8_UNORM, 1, UINT32_C(0x00100000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R8_SNORM, 1, UINT32_C(0x00200000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R8G8_UNORM, 2, UINT32_C(0x00e00000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R8G8_SNORM, 2, UINT32_C(0x00f00000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R8G8B8A8_UNORM, 4, UINT32_C(0x03800000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R8G8B8A8_SNORM, 4, UINT32_C(0x03900000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R8G8B8A8_SRGB, 4, UINT32_C(0x08200000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32, 4, UINT32_C(0x08400000), 4, 5, 6, 1);
+    check_encoding(VK_FORMAT_B10G11R11_UFLOAT_PACK32, 4, UINT32_C(0x02400000), 4, 5, 6, 1);
+    check_encoding(VK_FORMAT_R16_UNORM, 2, UINT32_C(0x00700000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R16_SNORM, 2, UINT32_C(0x00800000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R16_SFLOAT, 2, UINT32_C(0x00d00000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R16G16_UNORM, 4, UINT32_C(0x01700000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R16G16_SNORM, 4, UINT32_C(0x01800000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R16G16_SFLOAT, 4, UINT32_C(0x01d00000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R16G16B16A16_UNORM, 8, UINT32_C(0x04100000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R16G16B16A16_SNORM, 8, UINT32_C(0x04200000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R16G16B16A16_SFLOAT, 8, UINT32_C(0x04700000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R32_SFLOAT, 4, UINT32_C(0x01600000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R32G32_SFLOAT, 8, UINT32_C(0x04000000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R32G32B32A32_SFLOAT, 16, UINT32_C(0x04d00000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R8_UINT, 1, UINT32_C(0x00500000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R8_SINT, 1, UINT32_C(0x00600000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R8G8_UINT, 2, UINT32_C(0x01200000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R8G8_SINT, 2, UINT32_C(0x01300000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R8G8B8A8_UINT, 4, UINT32_C(0x03c00000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R8G8B8A8_SINT, 4, UINT32_C(0x03d00000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R16_UINT, 2, UINT32_C(0x00b00000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R16_SINT, 2, UINT32_C(0x00c00000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R16G16_UINT, 4, UINT32_C(0x01b00000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R16G16_SINT, 4, UINT32_C(0x01c00000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R16G16B16A16_UINT, 8, UINT32_C(0x04500000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R16G16B16A16_SINT, 8, UINT32_C(0x04600000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R32_UINT, 4, UINT32_C(0x01400000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R32_SINT, 4, UINT32_C(0x01500000), 4, 0, 0, 1);
+    check_encoding(VK_FORMAT_R32G32_UINT, 8, UINT32_C(0x03e00000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R32G32_SINT, 8, UINT32_C(0x03f00000), 4, 5, 0, 1);
+    check_encoding(VK_FORMAT_R32G32B32A32_UINT, 16, UINT32_C(0x04b00000), 4, 5, 6, 7);
+    check_encoding(VK_FORMAT_R32G32B32A32_SINT, 16, UINT32_C(0x04c00000), 4, 5, 6, 7);
+
+    /* --- integer formats never claim linear filtering --------------------- */
+    const VkFormat integer_formats[] = {
+        VK_FORMAT_R8_UINT, VK_FORMAT_R8_SINT, VK_FORMAT_R8G8_UINT, VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_R16_UINT, VK_FORMAT_R16_SINT, VK_FORMAT_R16G16_UINT, VK_FORMAT_R16G16_SINT,
+        VK_FORMAT_R16G16B16A16_UINT, VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R32_UINT, VK_FORMAT_R32_SINT, VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32_SINT,
+        VK_FORMAT_R32G32B32A32_UINT, VK_FORMAT_R32G32B32A32_SINT,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32, VK_FORMAT_A8B8G8R8_SINT_PACK32,
+    };
+    for (unsigned i = 0; i < sizeof(integer_formats) / sizeof(integer_formats[0]); ++i) {
+        VkFormat format = integer_formats[i];
+        assert(!ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
+        VkFormatProperties properties;
+        memset(&properties, 0xff, sizeof(properties));
+        ps5vk_texture_format_properties(format, &properties);
+        if (ps5vk_texture_format_sampled_image(format))
+            assert(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
+        assert(!(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT));
     }
-    const struct ps5vk_texture_format *rgb9e5=
-        ps5vk_texture_format_lookup(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32);
-    assert(rgb9e5->selectors[0]==4 && rgb9e5->selectors[1]==5 &&
-        rgb9e5->selectors[2]==6 && rgb9e5->selectors[3]==1);
-    const struct ps5vk_texture_format *rg32=
-        ps5vk_texture_format_lookup(VK_FORMAT_R32G32_SFLOAT);
-    assert(rg32->selectors[0]==4 && rg32->selectors[1]==5 &&
-        rg32->selectors[2]==0 && rg32->selectors[3]==1);
-    const VkFormat integer_formats[]={
-        VK_FORMAT_R8_UINT,VK_FORMAT_R8_SINT,VK_FORMAT_R8G8_UINT,VK_FORMAT_R8G8_SINT,
-        VK_FORMAT_R8G8B8A8_UINT,VK_FORMAT_R8G8B8A8_SINT,
-        VK_FORMAT_R16_UINT,VK_FORMAT_R16_SINT,VK_FORMAT_R16G16_UINT,VK_FORMAT_R16G16_SINT,
-        VK_FORMAT_R16G16B16A16_UINT,VK_FORMAT_R16G16B16A16_SINT,
-        VK_FORMAT_R32_UINT,VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_UINT,VK_FORMAT_R32G32_SINT,
-        VK_FORMAT_R32G32B32A32_UINT,VK_FORMAT_R32G32B32A32_SINT};
-    const uint32_t integer_words[]={
-        0x00500000u,0x00600000u,0x01200000u,0x01300000u,0x03c00000u,0x03d00000u,
-        0x00b00000u,0x00c00000u,0x01b00000u,0x01c00000u,0x04500000u,0x04600000u,
-        0x01400000u,0x01500000u,0x03e00000u,0x03f00000u,0x04b00000u,0x04c00000u};
-    const unsigned integer_sizes[]={1,1,2,2,4,4,2,2,4,4,8,8,4,4,8,8,16,16};
-    for(unsigned i=0;i<sizeof(integer_formats)/sizeof(integer_formats[0]);++i) {
-        const struct ps5vk_texture_format *entry=
-            ps5vk_texture_format_lookup(integer_formats[i]);
-        assert(entry && entry->validated && !entry->linear_filter_validated &&
-            entry->descriptor_format_word==integer_words[i] &&
-            entry->bytes_per_texel==integer_sizes[i]);
-        assert(ps5vk_texture_format_supported(integer_formats[i]));
+
+    /* --- packed formats: byte-identical to their RGBA8 counterpart -------- */
+    const VkFormat packed[] = {
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_SRGB_PACK32, VK_FORMAT_A8B8G8R8_UINT_PACK32,
+        VK_FORMAT_A8B8G8R8_SINT_PACK32,
+    };
+    const uint32_t packed_words[] = {
+        UINT32_C(0x03800000), UINT32_C(0x03900000), UINT32_C(0x08200000),
+        UINT32_C(0x03c00000), UINT32_C(0x03d00000),
+    };
+    for (unsigned i = 0; i < sizeof(packed) / sizeof(packed[0]); ++i) {
+        check_encoding(packed[i], 4, packed_words[i], 4, 5, 6, 7);
+        const struct ps5vk_texture_format *entry =
+            ps5vk_texture_format_lookup(packed[i]);
+        assert(entry->provenance & PS5VK_FORMAT_PROVENANCE_REGISTRY_PACKING);
     }
-    assert(!ps5vk_texture_format_lookup(VK_FORMAT_B8G8R8A8_UNORM));
+
+    /* --- implemented but not yet witnessed -------------------------------- */
+    /* The sampled encoding exists and is host-tested, but the physical
+     * diagnostic has not run, so nothing is published and no usage is
+     * accepted. A promotion is a data change in the table, not a code change. */
+    const int packed_linear[] = {1, 1, 1, 0, 0};
+    for (unsigned i = 0; i < sizeof(packed) / sizeof(packed[0]); ++i) {
+        VkFormat format = packed[i];
+        assert(ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
+        assert(!ps5vk_texture_format_witnessed(format, PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
+        assert(!ps5vk_texture_format_sampled_image(format));
+        /* Integer packed rows stay nearest-only even before promotion. */
+        assert(ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR) ==
+               (VkBool32)(packed_linear[i] != 0));
+        VkFormatProperties properties;
+        memset(&properties, 0xff, sizeof(properties));
+        ps5vk_texture_format_properties(format, &properties);
+        assert(!properties.optimalTilingFeatures);
+        if (format == VK_FORMAT_A8B8G8R8_SRGB_PACK32)
+            assert(!properties.bufferFeatures);
+        else
+            assert(properties.bufferFeatures ==
+                   (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+        assert(!ps5vk_texture_format_image_usage(format, VK_IMAGE_USAGE_SAMPLED_BIT));
+        assert(!ps5vk_texture_format_image_usage(format,
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+        /* The internal layout arithmetic is implemented, so the format is
+         * ready for the physical diagnostic the moment it is promoted. */
+        assert(ps5vk_texture_format_sampled_encoding(format));
+    }
+    assert(ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+        PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
+    assert(!ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UINT_PACK32,
+        PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
+
+    /* --- vertex metadata matches the published vertex role ---------------- */
+    check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_R8G8B8A8_UNORM, 4, 4, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_B8G8R8A8_UNORM, 4, 4, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_A2B10G10R10_UNORM_PACK32, 4, 4, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_R8_UINT, 1, 1, PS5VK_VERTEX_NUMERIC_UINT);
+    check_vertex(VK_FORMAT_R16_SINT, 2, 1, PS5VK_VERTEX_NUMERIC_SINT);
+    check_vertex(VK_FORMAT_R16G16B16A16_SFLOAT, 8, 4, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_R32_SFLOAT, 4, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_R32G32_SFLOAT, 8, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_R32G32B32_SFLOAT, 12, 3, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_R32G32B32A32_SFLOAT, 16, 4, PS5VK_VERTEX_NUMERIC_FLOAT);
+    check_vertex(VK_FORMAT_R32G32B32_UINT, 12, 3, PS5VK_VERTEX_NUMERIC_UINT);
+    check_vertex(VK_FORMAT_R32G32B32_SINT, 12, 3, PS5VK_VERTEX_NUMERIC_SINT);
+
+    /* --- published properties for the advertised rows --------------------- */
+    VkFormatProperties properties;
+    ps5vk_texture_format_properties(VK_FORMAT_R8G8B8A8_UNORM, &properties);
+    assert(properties.optimalTilingFeatures ==
+        (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+         VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+         VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT));
+    assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+    assert(!properties.linearTilingFeatures);
+    ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_UNORM, &properties);
+    assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+    assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+    ps5vk_texture_format_properties(VK_FORMAT_D32_SFLOAT, &properties);
+    assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    assert(!properties.bufferFeatures);
+    ps5vk_texture_format_properties(VK_FORMAT_R32_UINT, &properties);
+    assert(properties.bufferFeatures ==
+        (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
+                               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    ps5vk_texture_format_properties(VK_FORMAT_R32G32B32_SFLOAT, &properties);
+    assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+    assert(!properties.optimalTilingFeatures);
+    assert(!ps5vk_texture_format_sampled_encoding(VK_FORMAT_R32G32B32_SFLOAT));
+
+    /* --- no capability is published without a witness --------------------- */
+    const VkFormat all_formats[] = {
+        VK_FORMAT_R8_UNORM, VK_FORMAT_R8_SNORM, VK_FORMAT_R8G8_UNORM, VK_FORMAT_R8G8_SNORM,
+        VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM, VK_FORMAT_R8G8B8A8_SRGB,
+        VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_SNORM_PACK32, VK_FORMAT_A8B8G8R8_SRGB_PACK32,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32, VK_FORMAT_A8B8G8R8_SINT_PACK32,
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+        VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_R16_UNORM, VK_FORMAT_R16_SNORM, VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16_UINT, VK_FORMAT_R16_SINT, VK_FORMAT_R16G16_UNORM,
+        VK_FORMAT_R16G16_SNORM, VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_R16G16_UINT,
+        VK_FORMAT_R16G16_SINT, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_UINT,
+        VK_FORMAT_R16G16B16A16_SINT, VK_FORMAT_R32_SFLOAT, VK_FORMAT_R32_SINT,
+        VK_FORMAT_R32_UINT, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_R32G32_SINT,
+        VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32_SINT,
+        VK_FORMAT_R32G32B32_UINT, VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_FORMAT_R32G32B32A32_SINT, VK_FORMAT_R32G32B32A32_UINT,
+    };
+    for (unsigned i = 0; i < sizeof(all_formats) / sizeof(all_formats[0]); ++i) {
+        uint32_t capabilities = ps5vk_texture_format_capabilities(all_formats[i]);
+        const struct ps5vk_texture_format *entry =
+            ps5vk_texture_format_lookup(all_formats[i]);
+        assert(entry && capabilities);
+        /* witnessed is a subset of capabilities, and linear filtering implies
+         * a sampled-image role. */
+        assert((entry->witnessed & ~capabilities) == 0);
+        assert(!(entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR) ||
+               (entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
+        memset(&properties, 0xff, sizeof(properties));
+        ps5vk_texture_format_properties(all_formats[i], &properties);
+        if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT)
+            assert(ps5vk_texture_format_witnessed(all_formats[i],
+                PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND));
+        if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)
+            assert(ps5vk_texture_format_witnessed(all_formats[i],
+                PS5VK_FORMAT_CAP_STORAGE_IMAGE));
+        assert(!(properties.bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT));
+        assert(!(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT));
+        assert(!(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT));
+    }
+
+    /* --- unknown formats are rejected, not defaulted ---------------------- */
+    const VkFormat unknown[] = {
+        VK_FORMAT_UNDEFINED, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8_USCALED,
+        VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_R8G8B8_UNORM,
+        VK_FORMAT_R8G8_USCALED, VK_FORMAT_R16G16_SSCALED,
+    };
+    for (unsigned i = 0; i < sizeof(unknown) / sizeof(unknown[0]); ++i) {
+        assert(!ps5vk_texture_format_lookup(unknown[i]));
+        assert(!ps5vk_texture_format_capabilities(unknown[i]));
+        assert(!ps5vk_texture_format_has(unknown[i], PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
+        assert(!ps5vk_texture_format_witnessed(unknown[i], PS5VK_FORMAT_CAP_VERTEX_BUFFER));
+        assert(!ps5vk_texture_format_sampled_image(unknown[i]));
+        assert(!ps5vk_texture_format_sampled_encoding(unknown[i]));
+        assert(!ps5vk_texture_format_image_usage(unknown[i], VK_IMAGE_USAGE_SAMPLED_BIT));
+        memset(&properties, 0xff, sizeof(properties));
+        ps5vk_texture_format_properties(unknown[i], &properties);
+        assert(!properties.optimalTilingFeatures && !properties.bufferFeatures &&
+               !properties.linearTilingFeatures);
+        assert(!ps5vk_vertex_format_size(unknown[i]));
+    }
+    /* The zero-capability query never matches a zero mask either. */
+    assert(!ps5vk_texture_format_has(VK_FORMAT_R8_UNORM, 0));
+    assert(!ps5vk_texture_format_witnessed(VK_FORMAT_R8_UNORM, 0));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM, 0));
+
+    /* --- exact accepted image-usage combinations -------------------------- */
+    const VkImageUsageFlags sampled_combos[] = {
+        VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+    };
+    for (unsigned i = 0; i < sizeof(sampled_combos) / sizeof(sampled_combos[0]); ++i)
+        assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM, sampled_combos[i]));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    /* BGRA8 is a colour attachment only: no sampled role, no readback. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+        VK_IMAGE_USAGE_SAMPLED_BIT));
+    /* D32 is a depth/stencil attachment only. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
+        VK_IMAGE_USAGE_SAMPLED_BIT));
+    /* RGBA8 has the transfer pair, the sampled route and the attachment with
+     * its readback pair; nothing else. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
+    /* Vertex-only formats have no image role at all. */
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R32G32B32_SFLOAT,
+        VK_IMAGE_USAGE_SAMPLED_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+        VK_IMAGE_USAGE_SAMPLED_BIT));
+
+    /* A null output is ignored rather than dereferenced. */
+    ps5vk_texture_format_properties(VK_FORMAT_R8_UNORM, NULL);
+
+    /* --- whole-table invariants ------------------------------------------ */
+    const unsigned count = ps5vk_texture_format_count();
+    assert(count >= sizeof(all_formats) / sizeof(all_formats[0]));
+    assert(!ps5vk_texture_format_at(count));
+    for (unsigned i = 0; i < count; ++i) {
+        const struct ps5vk_texture_format *entry = ps5vk_texture_format_at(i);
+        assert(entry);
+        assert(ps5vk_texture_format_lookup(entry->format) == entry);
+        assert((entry->witnessed & ~entry->capabilities) == 0);
+        assert(!(entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR) ||
+               (entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
+        assert(!(entry->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR) ||
+               (entry->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
+        assert(!entry->capabilities || entry->provenance ||
+               !(entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
+        for (unsigned j = i + 1; j < count; ++j)
+            assert(ps5vk_texture_format_at(j)->format != entry->format);
+    }
+    return 0;
 }

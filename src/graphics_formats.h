@@ -13,12 +13,6 @@
 #include "texture_format.h"
 #include "texture_layout.h"
 
-enum ps5vk_vertex_numeric {
-    PS5VK_VERTEX_NUMERIC_NONE = 0,
-    PS5VK_VERTEX_NUMERIC_FLOAT,
-    PS5VK_VERTEX_NUMERIC_SINT,
-    PS5VK_VERTEX_NUMERIC_UINT,
-};
 struct ps5vk_vertex_format {
     uint32_t bytes, components;
     enum ps5vk_vertex_numeric numeric;
@@ -28,9 +22,16 @@ struct ps5vk_vertex_format {
  * matching, the PSBC adapter and the bounded fetch descriptor.  The 32-bit
  * integer rows follow the PSBC/Gallium mapping used by the pinned GPL
  * ps5-opengl implementation. The 8/16-bit families are exposed only together
- * with the pinned PSBC lowering and ps5-vulkan's conversion oracles. */
+ * with the pinned PSBC lowering and ps5-vulkan's conversion oracles.
+ *
+ * Whether a format is a vertex format at all is decided by the authoritative
+ * capability table (VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT is published only for
+ * a witnessed PS5VK_FORMAT_CAP_VERTEX_BUFFER row); this switch only carries
+ * the numeric metadata the PSBC/native vertex mapping needs. */
 static inline struct ps5vk_vertex_format ps5vk_vertex_format_info(VkFormat format)
 {
+    if (!ps5vk_texture_format_witnessed(format, PS5VK_FORMAT_CAP_VERTEX_BUFFER))
+        return (struct ps5vk_vertex_format){0};
     switch (format) {
     case VK_FORMAT_R32_SFLOAT: return (struct ps5vk_vertex_format){4,1,PS5VK_VERTEX_NUMERIC_FLOAT};
     case VK_FORMAT_R32G32_SFLOAT: return (struct ps5vk_vertex_format){8,2,PS5VK_VERTEX_NUMERIC_FLOAT};
@@ -106,33 +107,11 @@ static inline uint32_t ps5vk_vertex_format_size(VkFormat format)
  * transfer role; BGRA8 remains the VideoOut target. */
 static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags usage)
 {
-    switch(format) {
-    case VK_FORMAT_B8G8R8A8_UNORM:
-        return usage == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    case VK_FORMAT_D32_SFLOAT:
-        return usage == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    case VK_FORMAT_R8G8B8A8_UNORM:
-        /* Pure transfer role: the padded linear layout used by the upload path,
-         * which also serves vkCmdCopyImage, vkCmdClearColorImage and the
-         * buffer transfers without pretending the tiled colour-attachment
-         * layout is linear. The role is host-visible memory that no GPU stage
-         * touches, so a copy source alone is a real (if write-less) role. */
-        if (usage && !(usage & ~(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
-            return 1;
-        /* Sampled role: the same padded linear layout, uploaded by the GPU
-         * prelude and read by shader descriptors. */
-        return (usage &&
-            !(usage & ~(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))) ||
-            /* Tiled colour-attachment role. VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT
-             * is reported for this format, and a reported format feature implies
-             * an image with that usage can be created, so the bare attachment
-             * usage must be accepted as well as the readback pair. */
-            usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
-            usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    default:
-        return ps5vk_texture_format_supported(format) && usage &&
-            !(usage & ~(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-    }
+    /* The exact accepted combinations come from the witnessed capability rows:
+     * sampled upload, the pure transfer role, the tiled colour attachment and
+     * its readback pair, and the depth/stencil target. Anything else is
+     * rejected before the object exists. */
+    return ps5vk_texture_format_image_usage(format, usage);
 }
 
 /* Implementation ceilings from the encoders/layout arithmetic, not a hardware
@@ -147,10 +126,16 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0;
-    const VkBool32 sampled=ps5vk_texture_format_supported(format) &&
+    const VkBool32 sampled=ps5vk_texture_format_sampled_image(format) &&
         (usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))!=0 &&
         !attachment;
-    const VkBool32 transfer_only=format==VK_FORMAT_R8G8B8A8_UNORM && usage &&
+    /* Pure transfer role: the padded linear layout used by the upload path,
+     * which also serves vkCmdCopyImage, vkCmdClearColorImage and the buffer
+     * transfers without pretending the tiled colour-attachment layout is
+     * linear. The role is host-visible memory that no GPU stage touches, so a
+     * copy source alone is a real (if write-less) role. */
+    const VkBool32 transfer_only=ps5vk_texture_format_witnessed(format,
+        PS5VK_FORMAT_CAP_TRANSFER_SRC) && usage &&
         !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     uint32_t width=0,height=0,depth=1,layers=1;
@@ -190,34 +175,8 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
 static inline void ps5vk_graphics_format_properties(VkFormat format,
                                                     VkFormatProperties *out)
 {
-    *out = (VkFormatProperties){0};
-    if (ps5vk_vertex_format_size(format))
-        out->bufferFeatures = VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
-    if (format == VK_FORMAT_R32_UINT || format == VK_FORMAT_R32_SINT ||
-        format == VK_FORMAT_R32_SFLOAT)
-        out->bufferFeatures |= VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
-    const struct ps5vk_texture_format *sampled=ps5vk_texture_format_lookup(format);
-    if(sampled && ps5vk_texture_format_supported(format)) {
-        out->optimalTilingFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-            VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-        if(sampled->linear_filter_validated)
-            out->optimalTilingFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-    }
-    switch (format) {
-    case VK_FORMAT_B8G8R8A8_UNORM:
-        out->optimalTilingFeatures = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
-        break;
-    case VK_FORMAT_R8G8B8A8_UNORM:
-        /* TRANSFER_DST is real for the transfer-only role implemented by the
-         * image-copy/clear slice (padded linear layout), not a claim about the
-         * tiled colour-attachment layout. */
-        out->optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
-        break;
-    case VK_FORMAT_D32_SFLOAT:
-        out->optimalTilingFeatures = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        break;
-    default: break;
-    }
+    /* Single derivation from the authoritative capability table: only
+     * witnessed capabilities are published. */
+    ps5vk_texture_format_properties(format, out);
 }
 #endif
