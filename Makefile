@@ -71,6 +71,8 @@ test-shaders:
 	$(PYTHON) tools/prepare_test_shaders.py
 check-sanitize:
 	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c tests/test_readback_commands.c -o build/tests/test_readback_commands_sanitized
+	./build/tests/test_readback_commands_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/texture_dma.c src/graphics_sync.c tests/test_upload_commands.c -o build/tests/test_upload_commands_sanitized
 	./build/tests/test_upload_commands_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc tests/test_descriptor_table_layout.c -o build/tests/test_descriptor_table_layout_sanitized
@@ -168,6 +170,8 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/texture_dma.c src/graphics_sync.c tests/test_upload_commands.c -o build/tests/test_upload_commands
 	./build/tests/test_upload_commands
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c tests/test_readback_commands.c -o build/tests/test_readback_commands
+	./build/tests/test_readback_commands
 	./build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy
 	./build/tests/test_texture_copy
