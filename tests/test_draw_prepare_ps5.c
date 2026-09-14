@@ -372,4 +372,34 @@ int main(void)
         ps5vk_native_release_draw(&prepared);assert(allocations==releases);
         runtime.enabled=1;
     }
+
+    /* Only the bindings the compiled stages name are a requirement. Binding 3
+     * is declared in every set but no stage dereferences it, so its elements
+     * need no descriptor, no view and no layout; its records stay zero while
+     * the used binding 7 is still encoded. */
+    for(unsigned s=0;s<4;++s) {
+        runtime.vertex_descriptor_valid[s]=0;
+        runtime.fragment_descriptor_valid[s]=1;
+        runtime.vertex_used_bindings[s]=0;
+        runtime.fragment_used_bindings[s]=UINT64_C(1)<<7;
+        sets[s].defined[0]=sets[s].defined[1]=VK_FALSE;
+        sets[s].images[0].imageView=sets[s].images[1].imageView=NULL;
+        p.sets[s]=sets[s].signature;op.sets[s]=sets+s;op.generations[s]=sets[s].generation;
+    }
+    expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+4*24*48;
+    allocated=allocations;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)==VK_SUCCESS &&
+           prepared.bytes==expected_bytes);
+    for(unsigned s=0;s<4;++s) {
+        for(unsigned w=0;w<12;++w)
+            assert(prepared.descriptor_tables[s][w]==0 && prepared.descriptor_tables[s][12+w]==0);
+        for(unsigned e=2;e<24;++e)for(unsigned w=0;w<12;++w)
+            assert(prepared.descriptor_tables[s][12*e+w]==100+w+256*(1+24*s+e));
+    }
+    ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+    /* The same undefined element fails closed once a stage names that binding. */
+    runtime.fragment_used_bindings[0]=UINT64_C(1)<<3;
+    allocated=allocations;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS &&
+           allocations==allocated && !prepared.backing);
 }
