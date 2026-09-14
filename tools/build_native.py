@@ -58,6 +58,19 @@ def main():
         graphics = graphics_api
     if graphics and compute:
         raise SystemExit("Choose one native variant")
+    graphics_manifest = None
+    if graphics:
+        graphics = Path(graphics).resolve()
+        if ROOT / "build/graphics" not in graphics.parents:
+            raise SystemExit("Use a project-local graphics control")
+        graphics_manifest = json.loads((graphics / "manifest.json").read_text())
+        if graphics_manifest.get("scope") == "compiler-inspection-only":
+            raise SystemExit("Compiler inspection is not a native ABI/library adapter")
+        if graphics_manifest.get("native_input_version") != 3:
+            raise SystemExit("Graphics control lacks current interpolation ABI; recompile the owned .pipe")
+        quantization = graphics_manifest.get("shader_context", {}).get("vertex_quantization", {})
+        if quantization.get("byte_address") != 0x28be4 or quantization.get("value") != 0x2d:
+            raise SystemExit("Graphics control lacks audited vertex quantization; recompile the owned .pipe")
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     pin = subprocess.check_output(["git", "-C", str(foundation),
@@ -78,17 +91,6 @@ def main():
     out = ROOT / ("build/native-compute" if compute else "build/native")
     dist = ROOT / ("dist-compute/PPSA99994" if compute else "dist/PPSA99994")
     if graphics:
-        graphics = Path(graphics).resolve()
-        if ROOT / "build/graphics" not in graphics.parents:
-            raise SystemExit("Use a project-local graphics control")
-        graphics_manifest = json.loads((graphics / "manifest.json").read_text())
-        if graphics_manifest.get("scope") == "compiler-inspection-only":
-            raise SystemExit("Compiler inspection is not a native ABI/library adapter")
-        if graphics_manifest.get("native_input_version") != 3:
-            raise SystemExit("Graphics control lacks current interpolation ABI; recompile the owned .pipe")
-        quantization = graphics_manifest.get("shader_context", {}).get("vertex_quantization", {})
-        if quantization.get("byte_address") != 0x28be4 or quantization.get("value") != 0x2d:
-            raise SystemExit("Graphics control lacks audited vertex quantization; recompile the owned .pipe")
         out, dist = ROOT / "build/native-graphics-link", ROOT / "dist-graphics-link/PPSA99994"
         if graphics_api:
             out, dist = ROOT / "build/native-graphics-api", ROOT / "dist-graphics-api/PPSA99994"
