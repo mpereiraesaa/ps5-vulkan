@@ -34,7 +34,9 @@ def emit_program(directory, record, index):
     values += [f".tg_size={int(registers['.tg_size_en'])}",
                ".tgid={" + ",".join(str(int(registers[f".tgid_{axis}_en"])) for axis in "xyz") + "}",
                f".tidig_components={registers['.tidig_comp_cnt']}",
-               ".descriptor_set_mask=1", ".descriptor_set_sgpr={2}",
+               # Pinned standalone amdllpc ABI: s0 internal, set 0 table at s1.
+               # This is intentionally distinct from PSBC's reusable s2+ ABI.
+               ".descriptor_set_mask=1", ".descriptor_set_sgpr={1}",
                f".descriptor_count={len(abi['descriptors'])}"]
     descriptors = ["{" + ",".join(str(d[k]) for k in ("set", "binding", "array_element", "table_offset_dwords")) +
                    ",VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}"

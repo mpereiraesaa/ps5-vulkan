@@ -19,6 +19,12 @@ static struct ps5vk_compiled_program fixture(const uint32_t *module, const uint3
         .tgid = {1, 1, 1}, .descriptor_set_mask=1,.descriptor_set_sgpr={2},
         .descriptor_count = 1, .descriptors = {{0, 0, 0, 0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
 }
+static struct ps5vk_compiled_program legacy_fixture(const uint32_t *module, const uint32_t *code)
+{
+    struct ps5vk_compiled_program p=fixture(module,code);
+    p.user_sgprs=2;p.descriptor_set_sgpr[0]=1;
+    return p;
+}
 static VkShaderModule shader(VkDevice d, const uint32_t *words)
 {
     VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -65,6 +71,19 @@ static void lifecycle(void)
     pipelines[0]->pending = 0;
     vkDestroyPipeline(&d, pipelines[0], NULL); vkDestroyPipeline(&d, pipelines[1], NULL);
     assert(!d.pipeline_objects && !d.descriptor_objects);
+}
+static void legacy_offline_abi(void)
+{
+    struct ps5vk_compiled_program p=legacy_fixture(module_a,code_a);
+    struct ps5vk_program_library lib={&p,1};
+    struct VkDevice_T d={.compiler={&lib,ps5vk_program_resolve}};
+    VkShaderModule m=shader(&d,module_a);VkPipelineLayout l=layout(&d);
+    VkComputePipelineCreateInfo ci=info(m,l);VkPipeline pipeline;
+    assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_SUCCESS);
+    vkDestroyPipeline(&d,pipeline,NULL);
+    p.descriptor_set_sgpr[0]=2;
+    assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)!=VK_SUCCESS);
+    vkDestroyShaderModule(&d,m,NULL);vkDestroyPipelineLayout(&d,l,NULL);
 }
 static void negative(void)
 {
@@ -117,5 +136,6 @@ static void graphics_entries(void)
 }
 int main(void)
 {
-    lifecycle(); negative(); graphics_entries(); puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
+    lifecycle(); legacy_offline_abi(); negative(); graphics_entries();
+    puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
 }

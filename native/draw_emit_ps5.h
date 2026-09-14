@@ -7,6 +7,11 @@
 #include "index_emit_ps5.h"
 VkResult ps5vk_native_emit_scissor_replay(uint32_t **,uint32_t,
     const struct ps5vk_draw_state *);
+/* Runtime per-stage/per-set ABI; addresses belong to the prepared draw. */
+VkResult ps5vk_native_emit_runtime_draw(uint32_t **,uint32_t,
+    const struct ps5vk_draw_state *,const void *,size_t,
+    const struct ps5vk_operation *,uint32_t,const uint32_t [PS5VK_RUNTIME_DESCRIPTOR_SETS],
+    const struct ps5vk_index_fetch *,ps5vk_emit_index_fn);
 /* Audited PS(global, combined descriptor table) ABI. Full table ownership and
  * high address aperture are checked during preparation, not by low words. */
 VkResult ps5vk_native_emit_textured_draw(uint32_t **,uint32_t,

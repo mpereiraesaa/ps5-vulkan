@@ -1,8 +1,10 @@
-"""Verify the public SDK consumer's multi-set compute witness.
+"""Verify the public SDK consumer's compute and graphics resource witnesses.
 
 This validates one bounded resource-ABI workload and its telemetry integrity.
 It is not Vulkan conformance and does not infer support beyond the exact
 descriptor types, formats and shader exercised by the consumer.
+The optional 96-sampler diagnostic exceeds the still-published sampler limits;
+its success is backend qualification, not validation of a portable application.
 """
 import argparse
 import hashlib
@@ -34,6 +36,11 @@ def validate(log, receipt, artifact):
         "api": "Vulkan 1.0", "groups": [1, 1, 1], "offset": 512,
         "result_elements": 64,
     }, "indirect-dispatch artifact contract")
+    require(artifact.get("dynamic_descriptors") == {
+        "storage_buffers": 2, "uniform_buffers": 1,
+        "offsets": [256, 256, 256], "base_plus_dynamic": True,
+        "result_elements": 64, "guard_words": 192,
+    }, "dynamic-descriptor artifact contract")
     width_artifact = artifact.get("storage_width", {})
     require(width_artifact.get("storageBuffer8BitAccess") is True and
             width_artifact.get("storageBuffer16BitAccess") is True and
@@ -61,6 +68,13 @@ def validate(log, receipt, artifact):
         "load_preservation": True, "dynamic_viewport": True,
         "dynamic_scissor": True,
     }, "fixed-function artifact contract")
+    sampled = artifact.get("sampled_graphics")
+    if sampled is not None:
+        require(sampled.get("sets") == 4 and sampled.get("descriptors") == 96 and
+                sampled.get("rounds") == 4 and
+                len(sampled.get("shader_spirv_sha256", "")) == 64 and
+                all(c in "0123456789abcdef" for c in sampled["shader_spirv_sha256"]),
+                "sampled-graphics artifact contract")
     require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"),
             "log hash")
     require(receipt.get("protocol") == "ps5log/1" and
@@ -153,10 +167,11 @@ def validate(log, receipt, artifact):
                width_start, width_pipelines,
                prepared[1], submitted[1], suspended[1], completed[1],
                submitted[2], suspended[2], completed[2],
-               width_witness, width_retired, sync_start, prepared[2], prepared[3],
+               width_witness, width_retired, sync_start, prepared[2],
                submitted[3], suspended[3], completed[3],
                submitted[4], suspended[4], completed[4],
                submitted[5], suspended[5], completed[5],
+               prepared[3],
                sync_objects, sync_witness, sync_retired, success, retired, ready]
     require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
             "resource witness ordering")
@@ -180,7 +195,8 @@ def validate(log, receipt, artifact):
         "physical-device query witnesses")
     require(negotiated[1].split()[1:] == [
         "instance_ext=1", "device_exts=3", "storageBuffer8BitAccess=1",
-        "storageBuffer16BitAccess=1", "narrow_arithmetic=0"],
+        "storageBuffer16BitAccess=1", "narrow_arithmetic=0",
+        "robustBufferAccess=1"],
         "narrow storage negotiation")
     require(transfer_witness[1].split()[1:] == [
         "copy_bytes=7", "update_bytes=8", "fill_bytes=20",
@@ -217,9 +233,11 @@ def validate(log, receipt, artifact):
             "completion")
     require(witness[1].split()[1:] == [
         "sets=3", "storage=2", "uniform=1", "texel=1",
+        "dynamic_ssbo=2", "dynamic_ubo=1", "offsets=256,256,256",
+        "base_plus_dynamic=1",
         "push_bytes=4", "spec_constants=2", "multiplier=5",
         "extra_bias=11", "addend=19", "elements=64", "mismatches=0",
-        "guard_words=128", "guard_mismatches=0"],
+        "guard_words=192", "guard_mismatches=0"],
         "resource oracle")
     require(width_pipelines[1].endswith("count=2"), "narrow pipelines")
     require(width_witness[1].split()[1:] == [
@@ -246,7 +264,8 @@ def validate(log, receipt, artifact):
     require(graphics_start[1].endswith("mode=finite") and
             dynamic_pipeline[1].endswith("viewport=1 scissor=1"),
             "dynamic fixed-function setup")
-    require(all(len(rows) == 36 for rows in
+    graphics_count = 40 if sampled is not None else 36
+    require(all(len(rows) == graphics_count for rows in
                 (graphics_prepared, graphics_submitted,
                  graphics_suspended, graphics_completed)),
             "two graphics submissions per finite frame")
@@ -269,11 +288,39 @@ def validate(log, receipt, artifact):
                 int(readback_fields.get("changed", "0")) > 0,
                 "load/depth/dynamic draw oracle")
     serials = [int(fields(row[1])["serial"]) for row in graphics_prepared]
-    require(serials == list(range(serials[0], serials[0] + 36)) and
+    require(serials == list(range(serials[0], serials[0] + graphics_count)) and
             all(fields(row[1]).get("draws") == "1" for row in graphics_prepared) and
             all(fields(row[1]).get("rc") == "0" for row in graphics_submitted) and
             all(fields(row[1]).get("rc") == "0" for row in graphics_suspended),
             "graphics serials and submit status")
+    for index in range(graphics_count):
+        sequence = [rows[index] for rows in (graphics_prepared, graphics_submitted,
+                                            graphics_suspended, graphics_completed)]
+        require([row[0] for row in sequence] == sorted({row[0] for row in sequence}) and
+                all(int(fields(row[1])["serial"]) == serials[index] for row in sequence),
+                "graphics completion pairing and ordering")
+    sampled_rows = matching("PS5VK_CONSUMER_SAMPLED_SETS_")
+    if sampled is None:
+        require(not sampled_rows, "sampled graphics without artifact contract")
+    else:
+        require(len(sampled_rows) == 6 and sampled_rows[0][1] ==
+                "PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4" and
+                sampled_rows[-1][1] == "PS5VK_CONSUMER_SAMPLED_SETS_RETIRED" and
+                sync_retired[0] < sampled_rows[0][0] < sampled_rows[-1][0] < graphics_start[0],
+                "sampled-graphics scope")
+        # Literal independent reference values from the owned four-palette,
+        # weighted 96-element shader. This is not a pass flag from the app.
+        expected_words = ("914c503b", "914b4d4f", "914a4643", "913a5449")
+        previous = sampled_rows[0][0]
+        for round_index, expected_word in enumerate(expected_words):
+            row = sampled_rows[round_index + 1]
+            require(row[1] == f"PS5VK_CONSUMER_SAMPLED_SETS_RESULT round={round_index} "
+                    f"expected={expected_word} changed=471744 bad=0",
+                    "sampled-graphics pixel oracle")
+            require(previous < graphics_prepared[round_index][0] <
+                    graphics_completed[round_index][0] < row[0] < sampled_rows[-1][0],
+                    "sampled-graphics round completion")
+            previous = row[0]
 
     return {
         "run_id": receipt.get("run_id"),
@@ -282,11 +329,14 @@ def validate(log, receipt, artifact):
         "descriptor_sets": 3,
         "storage_buffers": 2,
         "uniform_buffers": 1,
+        "dynamic_storage_buffers": 2,
+        "dynamic_uniform_buffers": 1,
+        "dynamic_offsets": [256, 256, 256],
         "uniform_texel_buffers": 1,
         "push_constant_bytes": 4,
         "specialization_constants": 2,
         "elements_checked": 64,
-        "guard_words_checked": 128,
+        "guard_words_checked": 192,
         "buffer_transfer_bytes_checked": 67,
         "buffer_transfer_hash_fnv1a32": "9a158222",
         "indirect_dispatches_checked": 1,
@@ -303,7 +353,11 @@ def validate(log, receipt, artifact):
         "multiwave_atomic_lanes_checked": 128,
         "wave32_count": 4,
         "fixed_function_frames_checked": 18,
-        "graphics_submissions_checked": 36,
+        "graphics_submissions_checked": graphics_count,
+        "sampled_graphics_sets_checked": 4 if sampled is not None else 0,
+        "sampled_graphics_descriptors_per_round": 96 if sampled is not None else 0,
+        "sampled_graphics_rounds_checked": 4 if sampled is not None else 0,
+        "sampled_graphics_exceeds_advertised_limits": sampled is not None,
         "dynamic_viewport_scissor": True,
         "attachment_load_preservation": True,
         "depth_reject_then_accept": True,

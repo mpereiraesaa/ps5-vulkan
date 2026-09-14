@@ -1,5 +1,4 @@
 #define _DEFAULT_SOURCE 1
-
 #include <ps5vk/ps5vk.h>
 #include <ps5vk/ps5vk_present.h>
 #include "shaders.h"
@@ -32,6 +31,8 @@
     } \
 } while (0)
 
+#include "sampled_sets.h"
+
 static int parse_is_continuous(void)
 {
 #if defined(CONSUMER_CONTINUOUS) && CONSUMER_CONTINUOUS
@@ -52,179 +53,7 @@ static int parse_is_continuous(void)
 #endif
 }
 
-static uint32_t fnv1a32(const uint8_t *bytes, size_t count)
-{
-    uint32_t hash = 2166136261u;
-    for (size_t i = 0; i < count; ++i) {
-        hash ^= bytes[i];
-        hash *= 16777619u;
-    }
-    return hash;
-}
-
-static void report_physical_device_contract(VkInstance instance,
-                                            VkPhysicalDevice physical_device,
-                                            const VkPhysicalDeviceProperties *props)
-{
-    uint32_t count = 0;
-    REQUIRE(vkEnumeratePhysicalDevices(instance, &count, NULL) == VK_SUCCESS &&
-            count == 1, "physical-device count query");
-
-    VkPhysicalDevice sentinel = (VkPhysicalDevice)(uintptr_t)0x1234;
-    VkPhysicalDevice devices[2] = {sentinel, sentinel};
-    count = 0;
-    REQUIRE(vkEnumeratePhysicalDevices(instance, &count, devices) == VK_INCOMPLETE &&
-            count == 0 && devices[0] == sentinel && devices[1] == sentinel,
-            "physical-device zero-capacity query");
-    count = 2;
-    REQUIRE(vkEnumeratePhysicalDevices(instance, &count, devices) == VK_SUCCESS &&
-            count == 1 && devices[0] == physical_device && devices[1] == sentinel,
-            "physical-device oversized-capacity query");
-
-    VkPhysicalDeviceMemoryProperties memory;
-    memset(&memory, 0xa5, sizeof(memory));
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory);
-    REQUIRE(memory.memoryHeapCount == 1 && memory.memoryTypeCount == 1 &&
-            memory.memoryHeaps[0].size == UINT64_C(268435456) &&
-            memory.memoryHeaps[0].flags == VK_MEMORY_HEAP_DEVICE_LOCAL_BIT &&
-            memory.memoryTypes[0].heapIndex == 0 &&
-            memory.memoryTypes[0].propertyFlags ==
-                (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
-            "exact native memory report");
-
-    VkQueueFamilyProperties queues[2];
-    memset(queues, 0xa5, sizeof(queues));
-    count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, NULL);
-    REQUIRE(count == 1, "queue-family count query");
-    count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, queues);
-    for (size_t byte = 0; byte < sizeof(queues); ++byte)
-        REQUIRE(((const uint8_t *)queues)[byte] == 0xa5,
-                "queue-family zero-capacity preservation");
-    count = 2;
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, queues);
-    REQUIRE(count == 1 && queues[0].queueCount == 1 &&
-            queues[0].queueFlags == (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT) &&
-            queues[0].minImageTransferGranularity.width == 1 &&
-            queues[0].minImageTransferGranularity.height == 1 &&
-            queues[0].minImageTransferGranularity.depth == 1,
-            "exact queue-family report");
-    for (size_t byte = sizeof(queues[0]); byte < sizeof(queues); ++byte)
-        REQUIRE(((const uint8_t *)queues)[byte] == 0xa5,
-                "queue-family tail preservation");
-
-    VkBaseOutStructure unknown = {
-        .sType = VK_STRUCTURE_TYPE_MAX_ENUM,
-        .pNext = NULL,
-    };
-    VkPhysicalDeviceProperties2 properties2 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-        .pNext = &unknown,
-    };
-    vkGetPhysicalDeviceProperties2KHR(physical_device, &properties2);
-    REQUIRE(!memcmp(&properties2.properties, props, sizeof(*props)) &&
-            unknown.sType == VK_STRUCTURE_TYPE_MAX_ENUM && !unknown.pNext,
-            "properties2 and unknown pNext preservation");
-
-    VkFormatProperties bgra, rgba, depth, texel, unsupported;
-    vkGetPhysicalDeviceFormatProperties(physical_device,
-        VK_FORMAT_B8G8R8A8_UNORM, &bgra);
-    vkGetPhysicalDeviceFormatProperties(physical_device,
-        VK_FORMAT_R8G8B8A8_UNORM, &rgba);
-    vkGetPhysicalDeviceFormatProperties(physical_device,
-        VK_FORMAT_D32_SFLOAT, &depth);
-    vkGetPhysicalDeviceFormatProperties(physical_device,
-        VK_FORMAT_R32_UINT, &texel);
-    vkGetPhysicalDeviceFormatProperties(physical_device,
-        VK_FORMAT_R8G8B8A8_SRGB, &unsupported);
-    REQUIRE(!bgra.linearTilingFeatures && !bgra.bufferFeatures &&
-            bgra.optimalTilingFeatures == VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT &&
-            !rgba.linearTilingFeatures && !rgba.bufferFeatures &&
-            rgba.optimalTilingFeatures ==
-                (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) &&
-            !depth.linearTilingFeatures && !depth.bufferFeatures &&
-            depth.optimalTilingFeatures ==
-                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT &&
-            texel.bufferFeatures == VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT &&
-            !texel.linearTilingFeatures && !texel.optimalTilingFeatures &&
-            !unsupported.linearTilingFeatures &&
-            !unsupported.optimalTilingFeatures && !unsupported.bufferFeatures,
-            "exact format-property matrix");
-
-    VkImageFormatProperties image;
-    REQUIRE(vkGetPhysicalDeviceImageFormatProperties(physical_device,
-                VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_TYPE_2D,
-                VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                0, &image) == VK_SUCCESS &&
-            image.maxExtent.width == 16383 && image.maxExtent.height == 16383 &&
-            image.maxExtent.depth == 1 && image.maxMipLevels == 1 &&
-            image.maxArrayLayers == 1 &&
-            image.sampleCounts == VK_SAMPLE_COUNT_1_BIT &&
-            image.maxResourceSize == UINT64_C(268435456),
-            "exact supported image-format query");
-    memset(&image, 0xa5, sizeof(image));
-    REQUIRE(vkGetPhysicalDeviceImageFormatProperties(physical_device,
-                VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
-                VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT,
-                0, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED,
-            "unsupported image-format result");
-    VkImageFormatProperties zero_image = {0};
-    REQUIRE(!memcmp(&image, &zero_image, sizeof(image)),
-            "unsupported image-format zero report");
-
-    const VkPhysicalDeviceLimits *limits = &props->limits;
-    REQUIRE(props->apiVersion == VK_API_VERSION_1_0 &&
-            props->vendorID == 0x1002 && props->deviceID == 0 &&
-            props->deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU &&
-            limits->maxStorageBufferRange == UINT32_C(268435456) &&
-            limits->maxUniformBufferRange == 65536 &&
-            limits->maxTexelBufferElements == 65536 &&
-            limits->maxPushConstantsSize == 256 &&
-            limits->maxMemoryAllocationCount == 2048 &&
-            limits->bufferImageGranularity == UINT64_C(131072) &&
-            limits->minMemoryMapAlignment == 64 &&
-            limits->minTexelBufferOffsetAlignment == 4 &&
-            limits->minUniformBufferOffsetAlignment == 256 &&
-            limits->minStorageBufferOffsetAlignment == 256 &&
-            limits->nonCoherentAtomSize == 64 &&
-            limits->maxComputeSharedMemorySize == 65536 &&
-            limits->maxComputeWorkGroupInvocations == 1024,
-            "exact derived physical-device limits");
-
-    char canonical[512];
-    int written = snprintf(canonical, sizeof(canonical),
-        "api=%08x vendor=%04x device=%04x heap=%llu heap_flags=%08x "
-        "type_flags=%08x queue_flags=%08x storage=%u uniform=%u texel=%u "
-        "push=%u allocations=%u granularity=%llu map_align=%llu texel_align=%llu "
-        "ubo_align=%llu ssbo_align=%llu atom=%llu shared=%u invocations=%u",
-        props->apiVersion, props->vendorID, props->deviceID,
-        (unsigned long long)memory.memoryHeaps[0].size,
-        memory.memoryHeaps[0].flags, memory.memoryTypes[0].propertyFlags,
-        queues[0].queueFlags, limits->maxStorageBufferRange,
-        limits->maxUniformBufferRange, limits->maxTexelBufferElements,
-        limits->maxPushConstantsSize, limits->maxMemoryAllocationCount,
-        (unsigned long long)limits->bufferImageGranularity,
-        (unsigned long long)limits->minMemoryMapAlignment,
-        (unsigned long long)limits->minTexelBufferOffsetAlignment,
-        (unsigned long long)limits->minUniformBufferOffsetAlignment,
-        (unsigned long long)limits->minStorageBufferOffsetAlignment,
-        (unsigned long long)limits->nonCoherentAtomSize,
-        limits->maxComputeSharedMemorySize,
-        limits->maxComputeWorkGroupInvocations);
-    REQUIRE(written > 0 && (size_t)written < sizeof(canonical),
-            "physical-device canonical report size");
-    ps5log_printf(PS5LOG_MARK,
-        "PS5VK_CONSUMER_PHYSICAL_DEVICE %s hash=%08x",
-        canonical, fnv1a32((const uint8_t *)canonical, (size_t)written));
-    ps5log_line(PS5LOG_MARK,
-        "PS5VK_CONSUMER_PHYSICAL_QUERIES devices=1 queues=1 two_call=1 "
-        "tail_preserved=1 pnext_preserved=1 formats=5 image_supported=1 "
-        "image_rejected=1");
-}
+#include "physical_device_contract.h"
 
 static void run_buffer_transfer_contract(VkDevice device, VkQueue queue)
 {
@@ -985,13 +814,13 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     VkDescriptorSetLayoutBinding bindings[2] = {
         {
             .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
         },
         {
             .binding = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
         }
@@ -1004,7 +833,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     VkDescriptorSetLayout set_layouts[3] = {VK_NULL_HANDLE};
     CHECK(vkCreateDescriptorSetLayout(device, &dslci, NULL, &set_layouts[0]));
     VkDescriptorSetLayoutBinding uniform_binding = {
-        0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL
+        0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL
     };
     dslci.bindingCount = 1;
     dslci.pBindings = &uniform_binding;
@@ -1064,6 +893,10 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     /* 5. Create storage buffers: 64 words input (binding 0) and 64 words output with boundary guards (binding 1) */
     const uint32_t element_count = 64;
     const uint32_t guard_count = 64; /* 256 bytes = minStorageBufferOffsetAlignment */
+    const uint32_t dynamic_offset = 256;
+    const uint32_t output_base_offset = 256;
+    const uint32_t output_word_offset =
+        (output_base_offset + dynamic_offset) / sizeof(uint32_t);
     const VkDeviceSize buffer_bytes = 4096; /* ample alignment and guard room */
 
     VkBufferCreateInfo bci = {
@@ -1123,14 +956,14 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     CHECK(vkMapMemory(device, mem_texel, 0, buffer_bytes, 0, (void **)&map_texel));
 
     for (uint32_t i = 0; i < element_count; ++i) {
-        map_in[i] = i * 100u + 42u;
+        map_in[dynamic_offset / sizeof(uint32_t) + i] = i * 100u + 42u;
         map_texel[i] = i * 31u;
     }
     const VkDeviceSize dispatch_indirect_offset = 512;
     VkDispatchIndirectCommand *dispatch_indirect =
         (VkDispatchIndirectCommand *)((unsigned char *)map_in + dispatch_indirect_offset);
     *dispatch_indirect = (VkDispatchIndirectCommand){1, 1, 1};
-    map_uniform[0] = 0x1337u;
+    map_uniform[dynamic_offset / sizeof(uint32_t)] = 0x1337u;
     /* Guard words in destination buffer */
     for (uint32_t i = 0; i < buffer_bytes / 4; ++i) {
         map_out[i] = 0xdeadbeefu;
@@ -1150,8 +983,8 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
 
     /* 7. Descriptor pool and allocation */
     VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,2},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,2},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,1},
         {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,1}};
     VkDescriptorPoolCreateInfo dpci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -1178,7 +1011,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     };
     VkDescriptorBufferInfo dbi_out = {
         .buffer = buffer_out,
-        .offset = guard_count * sizeof(uint32_t), /* store output after front guards */
+        .offset = output_base_offset,
         .range = element_count * sizeof(uint32_t)
     };
     VkDescriptorBufferInfo dbi_uniform = {buffer_uniform, 0, 256};
@@ -1197,7 +1030,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
             .dstSet = desc_sets[0],
             .dstBinding = 0,
             .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
             .pBufferInfo = &dbi_in
         },
         {
@@ -1205,11 +1038,11 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
             .dstSet = desc_sets[0],
             .dstBinding = 1,
             .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
             .pBufferInfo = &dbi_out
         },
         {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=desc_sets[1],.dstBinding=0,
-         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.pBufferInfo=&dbi_uniform},
+         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,.pBufferInfo=&dbi_uniform},
         {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=desc_sets[2],.dstBinding=0,
          .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,.pTexelBufferView=&texel_view}
     };
@@ -1235,7 +1068,12 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     VkCommandBufferBeginInfo cbbi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     CHECK(vkBeginCommandBuffer(cmd_buf, &cbbi));
     vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
-    vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 3, desc_sets, 0, NULL);
+    const uint32_t dynamic_offsets[3] = {
+        dynamic_offset, dynamic_offset, dynamic_offset
+    };
+    vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipeline_layout, 0, 3, desc_sets, 3,
+                            dynamic_offsets);
     const uint32_t push_addend = 19u;
     vkCmdPushConstants(cmd_buf, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT,
                        0, sizeof(push_addend), &push_addend);
@@ -1269,7 +1107,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
 
     /* Check front guards */
     int guards_intact = 1;
-    for (uint32_t i = 0; i < guard_count; ++i) {
+    for (uint32_t i = 0; i < output_word_offset; ++i) {
         if (map_out[i] != 0xdeadbeefu) {
             guards_intact = 0;
             ps5log_printf(PS5LOG_ERR, "Compute front guard corrupted at index %u: 0x%08x", i, map_out[i]);
@@ -1278,7 +1116,7 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
 
     /* Check non-default specialization values and the pushed word together. */
     int results_correct = 1;
-    uint32_t *results = map_out + guard_count;
+    uint32_t *results = map_out + output_word_offset;
     for (uint32_t i = 0; i < element_count; ++i) {
         uint32_t src_val = i * 100u + 42u;
         uint32_t expected =
@@ -1291,7 +1129,8 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     }
 
     /* Check tail guards */
-    for (uint32_t i = guard_count + element_count; i < guard_count + element_count + guard_count; ++i) {
+    for (uint32_t i = output_word_offset + element_count;
+         i < output_word_offset + element_count + guard_count; ++i) {
         if (map_out[i] != 0xdeadbeefu) {
             guards_intact = 0;
             ps5log_printf(PS5LOG_ERR, "Compute tail guard corrupted at index %u: 0x%08x", i, map_out[i]);
@@ -1306,9 +1145,11 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     }
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS sets=3 storage=2 uniform=1 texel=1 "
+        "dynamic_ssbo=2 dynamic_ubo=1 offsets=256,256,256 base_plus_dynamic=1 "
         "push_bytes=4 spec_constants=2 multiplier=%u extra_bias=%u addend=%u "
         "elements=%u mismatches=0 guard_words=%u guard_mismatches=0",
-        multiplier, extra_bias, push_addend, element_count, guard_count * 2);
+        multiplier, extra_bias, push_addend, element_count,
+        output_word_offset + guard_count);
 
     /* Clean up compute resources in reverse order */
     vkDestroyFence(device, fence, NULL);
@@ -1863,6 +1704,8 @@ int main(void)
         .pNext = &storage8,
     };
     vkGetPhysicalDeviceFeatures2KHR(physical_device, &features2);
+    REQUIRE(features2.features.robustBufferAccess == VK_TRUE,
+            "mandatory Vulkan 1.0 robustBufferAccess feature report");
     REQUIRE(storage8.storageBuffer8BitAccess == VK_TRUE &&
             storage8.uniformAndStorageBuffer8BitAccess == VK_FALSE &&
             storage8.storagePushConstant8 == VK_FALSE,
@@ -1874,9 +1717,11 @@ int main(void)
             "exact 16-bit storage feature report");
     ps5log_line(PS5LOG_MARK,
         "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=3 "
-        "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0");
+        "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0 "
+        "robustBufferAccess=1");
 
-    /* 3. Create Device & Queue with only the two reported narrow-storage bits. */
+    /* 3. Create Device & Queue with the mandatory core robustness bit and the
+     * two reported narrow-storage bits returned by the same public query. */
     float priority = 1.0f;
     VkDeviceQueueCreateInfo qci = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -1915,6 +1760,9 @@ int main(void)
 
     /* 6. Run explicit host/compute barriers and multi-wave LDS atomics. */
     run_synchronization_compute(device, queue);
+
+    /* Four sampled sets are checked offscreen before presentation resources. */
+    if(!is_continuous)run_sampled_sets(device,queue);
 
     /* 7. Run runtime procedural graphics and presentation */
     run_consumer(device, queue, is_continuous);

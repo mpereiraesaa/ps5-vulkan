@@ -1085,7 +1085,10 @@
             "src/physical_device_profile.h",
             "tests/test_physical_device_profile.c",
             "tests/test_vk_device.c",
-            "PHYSICAL_DEVICE_REPORTING.md"
+            "PHYSICAL_DEVICE_REPORTING.md",
+            "tools/dump_device_reporting.c",
+            "tools/check_reporting_matrix.py",
+            "conformance_inventory/reporting_matrix.json"
           ]
         },
         "runtime": {
@@ -1772,7 +1775,9 @@
           "refs": [
             "src/physical_device_profile.h",
             "tests/test_physical_device_profile.c",
-            "PHYSICAL_DEVICE_REPORTING.md"
+            "PHYSICAL_DEVICE_REPORTING.md",
+            "tools/check_reporting_matrix.py",
+            "conformance_inventory/reporting_matrix.json"
           ]
         },
         "runtime": {
@@ -2995,7 +3000,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Format-dependent cases span many groups; no single case covers the mandatory table.",
+        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 106 mandatory format-feature cells satisfied and 556 per-format blockers recorded.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt, vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
@@ -3017,7 +3022,9 @@
           "refs": [
             "src/vk_device.c",
             "tests/test_vk_device.c",
-            "PHYSICAL_DEVICE_REPORTING.md"
+            "PHYSICAL_DEVICE_REPORTING.md",
+            "tools/check_reporting_matrix.py",
+            "conformance_inventory/reporting_matrix.json"
           ]
         },
         "runtime": {
@@ -3143,7 +3150,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Info cases check a subset; behavioural limits are checked by their own groups.",
+        "note": "Info cases check a subset; behavioural limits are checked by their own groups. Reporting audit: every mandatory limit row classified against the reported matrix; 133 satisfied and 65 documented blockers.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
@@ -3163,7 +3170,9 @@
           "refs": [
             "src/physical_device_profile.h",
             "tests/test_physical_device_profile.c",
-            "PHYSICAL_DEVICE_REPORTING.md"
+            "PHYSICAL_DEVICE_REPORTING.md",
+            "tools/check_reporting_matrix.py",
+            "conformance_inventory/reporting_matrix.json"
           ]
         },
         "runtime": {
@@ -3591,7 +3600,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Integer and packed vertex formats are mandatory in core but are not in the documented profile.",
+      "review_notes": "The documented profile now covers the audited 8/16/32-bit and packed vertex rows; remaining mandatory format and vertex-input combinations stay explicit blockers.",
       "classification_basis": "core-cumulative-required"
     },
     {
@@ -5594,7 +5603,7 @@
         "core": "core-mandatory",
         "target": "required",
         "target_condition": null,
-        "note": "Conditional parts: VK_KHR_sampler_mirror_clamp_to_edge is supported."
+        "note": "Vulkan 1.0 sampler modes are implemented in part; the Vulkan 1.4 mandatory anisotropy and mirror-clamp capabilities remain missing."
       },
       "classification": "mandatory",
       "condition": null,
@@ -5630,7 +5639,7 @@
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/image/sample-texture.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
-      "implementation_state": "not-audited",
+      "implementation_state": "native-evidence",
       "baseline": {
         "surface_state": "symbol-present",
         "entry_points": [
@@ -5644,12 +5653,18 @@
       },
       "evidence": {
         "source": {
-          "state": "not-audited",
-          "refs": []
+          "state": "host-only-evidence",
+          "refs": [
+            "src/vk_sampler.c",
+            "tests/test_vk_sampler.c",
+            "tests/test_texture_descriptor.c"
+          ]
         },
         "runtime": {
-          "state": "not-run",
-          "refs": []
+          "state": "native-evidence",
+          "refs": [
+            "VALIDATION.md#core-sampler-addressing-fixed-borders-and-linear-filtering-2026-09-13"
+          ]
         },
         "conformance": {
           "state": "not-established",
@@ -5659,7 +5674,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "samplerAnisotropy and samplerMirrorClampToEdge become mandatory in 1.4.",
+      "review_notes": "Core Vulkan 1.0 repeat, mirrored-repeat, edge/border clamp and all six fixed border-color enums are implemented. Two byte-identical hardware runs cover nearest and linear magnification/minification for single-level RGBA8, mirrored repeat and the three fixed border values. Mip chains and anisotropy remain outside this evidence. samplerAnisotropy and samplerMirrorClampToEdge become mandatory in 1.4.",
       "classification_basis": "core-cumulative-required"
     },
     {

@@ -1,5 +1,15 @@
+/*
+ * Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * The GFX1013/PSBC vertex format mapping is adapted from the vertex-format
+ * contract in BlackBearReloaded's ps5-opengl, src/gallium/ps5/ps5_screen.c at
+ * commit 7f9bfabdddb187a11e4401058eba8c9e55194d0a (GPL-3.0-or-later).
+ */
 #include "runtime_graphics_compiler.h"
 #include "spirv_graphics_interface.h"
+#include "descriptor_table_layout.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,7 +31,10 @@ static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned m
         }
         if(op==59) {
             if(n<4)return 0;
-            if(w[3]==0 || w[3]==2 || w[3]==12)return 0;
+            /* UniformConstant is admitted only through the separately checked
+             * sampled descriptor profile; general buffer resources remain
+             * outside this bounded graphics compiler. */
+            if(w[3]==2 || w[3]==12)return 0;
         }
         if(op==54) {
             if(n!=5 || in_function)return 0;
@@ -43,21 +56,53 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
     psbc_free_output(&p->vertex);psbc_free_output(&p->fragment);free(p);
 }
 
+static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
+{
+    struct ps5vk_descriptor_table_layout tables;
+    if (ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
+            key->descriptor_sets,&tables)!=VK_SUCCESS) return 0;
+    if(tables.binding_count>PSBC_MAX_DESCRIPTOR_BINDINGS)return 0;
+    for(unsigned s=0;s<key->descriptor_set_count;++s)
+        for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+            const struct ps5vk_set_signature *set=&key->descriptor_sets[s];
+            if(set->binding[b].count && (set->binding[b].stages!=VK_SHADER_STAGE_FRAGMENT_BIT ||
+                set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER))return 0;
+        }
+    return 1;
+}
+
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
        key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
+    if(key->vertex_binding_count>16 || key->vertex_attribute_count>PSBC_MAX_VERTEX_ATTRIBUTES ||
+       (key->vertex_binding_count && !key->vertex_bindings) ||
+       (key->vertex_attribute_count && !key->vertex_attributes))return 0;
+    for(uint32_t i=0;i<key->vertex_binding_count;++i) {
+        const VkVertexInputBindingDescription *b=&key->vertex_bindings[i];
+        if(b->binding>=16 || b->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
+           !b->stride || b->stride>0x3fff)return 0;
+        for(uint32_t j=0;j<i;++j)if(key->vertex_bindings[j].binding==b->binding)return 0;
+    }
+    for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
+        const VkVertexInputAttributeDescription *a=&key->vertex_attributes[i];
+        if(a->binding>=16 || a->location>=PSBC_MAX_VERTEX_ATTRIBUTES)return 0;
+        unsigned found=0;
+        for(uint32_t j=0;j<key->vertex_binding_count;++j)found|=key->vertex_bindings[j].binding==a->binding;
+        if(!found)return 0;
+        for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return 0;
+    }
     return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
         key->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
         (key->color_format==VK_FORMAT_B8G8R8A8_UNORM ||
          key->color_format==VK_FORMAT_R8G8B8A8_UNORM) && key->samples==VK_SAMPLE_COUNT_1_BIT &&
         key->color_write_mask==15 && !key->blend_enable &&
-        key->vertex_binding_count<=1 && key->vertex_attribute_count<=PSBC_MAX_VERTEX_ATTRIBUTES &&
+        key->vertex_binding_count<=16 && key->vertex_attribute_count<=PSBC_MAX_VERTEX_ATTRIBUTES &&
         (!key->vertex_binding_count || key->vertex_bindings) &&
         (!key->vertex_attribute_count || key->vertex_attributes) &&
-        !key->descriptor_set_count &&
+        descriptor_profile_supported(key) &&
         ps5vk_spirv_graphics_interface(key);
 }
 
@@ -68,8 +113,85 @@ static PsbcVertexFormat vertex_format(VkFormat format)
     case VK_FORMAT_R32G32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32_FLOAT;
     case VK_FORMAT_R32G32B32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32B32_FLOAT;
     case VK_FORMAT_R32G32B32A32_SFLOAT: return PSBC_VERTEX_FORMAT_R32G32B32A32_FLOAT;
+    case VK_FORMAT_R32_SINT: return PSBC_VERTEX_FORMAT_R32_SINT;
+    case VK_FORMAT_R32G32_SINT: return PSBC_VERTEX_FORMAT_R32G32_SINT;
+    case VK_FORMAT_R32G32B32_SINT: return PSBC_VERTEX_FORMAT_R32G32B32_SINT;
+    case VK_FORMAT_R32G32B32A32_SINT: return PSBC_VERTEX_FORMAT_R32G32B32A32_SINT;
+    case VK_FORMAT_R32_UINT: return PSBC_VERTEX_FORMAT_R32_UINT;
+    case VK_FORMAT_R32G32_UINT: return PSBC_VERTEX_FORMAT_R32G32_UINT;
+    case VK_FORMAT_R32G32B32_UINT: return PSBC_VERTEX_FORMAT_R32G32B32_UINT;
+    case VK_FORMAT_R32G32B32A32_UINT: return PSBC_VERTEX_FORMAT_R32G32B32A32_UINT;
+    case VK_FORMAT_R8_UNORM: return PSBC_VERTEX_FORMAT_R8_UNORM;
+    case VK_FORMAT_R8_SNORM: return PSBC_VERTEX_FORMAT_R8_SNORM;
+    case VK_FORMAT_R8_UINT: return PSBC_VERTEX_FORMAT_R8_UINT;
+    case VK_FORMAT_R8_SINT: return PSBC_VERTEX_FORMAT_R8_SINT;
+    case VK_FORMAT_R8G8_UNORM: return PSBC_VERTEX_FORMAT_R8G8_UNORM;
+    case VK_FORMAT_R8G8_SNORM: return PSBC_VERTEX_FORMAT_R8G8_SNORM;
+    case VK_FORMAT_R8G8_UINT: return PSBC_VERTEX_FORMAT_R8G8_UINT;
+    case VK_FORMAT_R8G8_SINT: return PSBC_VERTEX_FORMAT_R8G8_SINT;
+    case VK_FORMAT_R8G8B8A8_UNORM: return PSBC_VERTEX_FORMAT_R8G8B8A8_UNORM;
+    case VK_FORMAT_B8G8R8A8_UNORM: return PSBC_VERTEX_FORMAT_B8G8R8A8_UNORM;
+    case VK_FORMAT_A8B8G8R8_UNORM_PACK32: return PSBC_VERTEX_FORMAT_R8G8B8A8_UNORM;
+    case VK_FORMAT_R8G8B8A8_SNORM:
+    case VK_FORMAT_A8B8G8R8_SNORM_PACK32: return PSBC_VERTEX_FORMAT_R8G8B8A8_SNORM;
+    case VK_FORMAT_R8G8B8A8_UINT:
+    case VK_FORMAT_A8B8G8R8_UINT_PACK32: return PSBC_VERTEX_FORMAT_R8G8B8A8_UINT;
+    case VK_FORMAT_R8G8B8A8_SINT:
+    case VK_FORMAT_A8B8G8R8_SINT_PACK32: return PSBC_VERTEX_FORMAT_R8G8B8A8_SINT;
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+        return PSBC_VERTEX_FORMAT_R10G10B10A2_UNORM;
+    case VK_FORMAT_R16_UNORM: return PSBC_VERTEX_FORMAT_R16_UNORM;
+    case VK_FORMAT_R16_SNORM: return PSBC_VERTEX_FORMAT_R16_SNORM;
+    case VK_FORMAT_R16_UINT: return PSBC_VERTEX_FORMAT_R16_UINT;
+    case VK_FORMAT_R16_SINT: return PSBC_VERTEX_FORMAT_R16_SINT;
+    case VK_FORMAT_R16_SFLOAT: return PSBC_VERTEX_FORMAT_R16_FLOAT;
+    case VK_FORMAT_R16G16_UNORM: return PSBC_VERTEX_FORMAT_R16G16_UNORM;
+    case VK_FORMAT_R16G16_SNORM: return PSBC_VERTEX_FORMAT_R16G16_SNORM;
+    case VK_FORMAT_R16G16_UINT: return PSBC_VERTEX_FORMAT_R16G16_UINT;
+    case VK_FORMAT_R16G16_SINT: return PSBC_VERTEX_FORMAT_R16G16_SINT;
+    case VK_FORMAT_R16G16_SFLOAT: return PSBC_VERTEX_FORMAT_R16G16_FLOAT;
+    case VK_FORMAT_R16G16B16A16_UNORM: return PSBC_VERTEX_FORMAT_R16G16B16A16_UNORM;
+    case VK_FORMAT_R16G16B16A16_SNORM: return PSBC_VERTEX_FORMAT_R16G16B16A16_SNORM;
+    case VK_FORMAT_R16G16B16A16_UINT: return PSBC_VERTEX_FORMAT_R16G16B16A16_UINT;
+    case VK_FORMAT_R16G16B16A16_SINT: return PSBC_VERTEX_FORMAT_R16G16B16A16_SINT;
+    case VK_FORMAT_R16G16B16A16_SFLOAT: return PSBC_VERTEX_FORMAT_R16G16B16A16_FLOAT;
     default: return PSBC_VERTEX_FORMAT_NONE;
     }
+}
+
+VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_key *key,
+    VkShaderStageFlagBits stage,PsbcCompileOptions *options)
+{
+    if(!key || !options || (stage!=VK_SHADER_STAGE_VERTEX_BIT &&
+            stage!=VK_SHADER_STAGE_FRAGMENT_BIT))return VK_ERROR_UNKNOWN;
+    struct ps5vk_descriptor_table_layout tables;
+    VkResult rc=ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
+        key->descriptor_sets,&tables);
+    if(rc!=VK_SUCCESS)return rc;
+    PsbcDescriptorBinding bindings[PSBC_MAX_DESCRIPTOR_BINDINGS]={0};
+    uint32_t count=0;
+    for(uint32_t s=0;s<key->descriptor_set_count;++s)
+        for(uint32_t b=0;b<PS5VK_MAX_BINDINGS;++b) {
+            const struct ps5vk_binding *source=&key->descriptor_sets[s].binding[b];
+            if(!source->count || !(source->stages&stage))continue;
+            if(count==PSBC_MAX_DESCRIPTOR_BINDINGS)return VK_ERROR_FEATURE_NOT_PRESENT;
+            PsbcDescriptorType type;
+            switch(key->descriptor_sets[s].type[b]) {
+            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER;break;
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
+            case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
+            default:return VK_ERROR_FEATURE_NOT_PRESENT;
+            }
+            bindings[count++]=(PsbcDescriptorBinding){.set=s,.binding=b,.type=type,
+                .array_size=source->count,.offset=tables.binding[s][b].byte_offset,
+                .stride=tables.binding[s][b].byte_stride};
+        }
+    memcpy(options->descriptor_bindings,bindings,sizeof(bindings));
+    options->descriptor_binding_count=count;
+    return VK_SUCCESS;
 }
 
 static int apply_parameters(PsbcCompileOptions *options,
@@ -90,6 +212,7 @@ static int apply_parameters(PsbcCompileOptions *options,
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&stage)options->force_indirect_push_constants=true;
     options->vertex_attribute_count=0;
+    if(ps5vk_runtime_graphics_descriptor_options(key,stage,options)!=VK_SUCCESS)return 0;
     if(stage==VK_SHADER_STAGE_VERTEX_BIT) {
         for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
             const VkVertexInputAttributeDescription *source=&key->vertex_attributes[i];
@@ -98,12 +221,13 @@ static int apply_parameters(PsbcCompileOptions *options,
                 if(key->vertex_bindings[j].binding==source->binding)binding=&key->vertex_bindings[j];
             PsbcVertexFormat format=vertex_format(source->format);
             if(!binding || !format || binding->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
-               !binding->stride || binding->stride>0x3fff || binding->stride%4 || source->offset%4)
+               !binding->stride || binding->stride>0x3fff)
                 return 0;
             options->vertex_attributes[options->vertex_attribute_count++]=(PsbcVertexAttribute){
                 .location=(uint8_t)source->location,.binding=(uint8_t)source->binding,
                 .format=format,.offset=source->offset,.stride=binding->stride,
-                .alignment=4,.instance_divisor=0};
+                /* Vulkan vertex bindings and offsets are byte-granular. */
+                .alignment=1,.instance_divisor=0};
         }
     }
     return 1;

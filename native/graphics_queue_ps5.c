@@ -198,7 +198,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(rc!=VK_SUCCESS)goto fail;
             rc=ps5vk_image_span(d,op->copy_image,&destination,&destination_bytes);
             if(rc!=VK_SUCCESS)goto fail;
-            rc=ps5vk_texture_copy_plan(op->copy_image->info.extent.width,op->copy_image->info.extent.height,
+            rc=ps5vk_texture_copy_plan_for_image(op->copy_image,
                 source_bytes,destination_bytes,&op->copy_region,&copy);
             if(rc!=VK_SUCCESS)goto fail;
             cache(source,(size_t)source_bytes);
@@ -215,32 +215,63 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             rc=ps5vk_indirect_resolve(d,recorded,&resolved);if(rc!=VK_SUCCESS)goto fail;
             op=&resolved;
         }
-        /* Require the uploaded image's predicted shader-readable layout. */
-        if(op->pipeline->set_count) {
-            if(!op->sets[0] || !op->sets[0]->defined[0]){rc=VK_ERROR_UNKNOWN;goto fail;}
-            if(op->sets[0]->images[0].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
-            }
-            rc=ps5vk_layout_require(&j->layouts,op->sets[0]->image_resources[0],op->sets[0]->images[0].imageLayout);
-            if(rc!=VK_SUCCESS)goto fail;
-        }
         struct ps5vk_prepared_draw *draw=&j->draws[j->count];
         struct ps5vk_native_graphics_pipeline *p=op->pipeline->graphics_state;
         if(!p || !p->pair || !p->pair->ready){rc=VK_ERROR_UNKNOWN;goto fail;}
+        /* Check each sampled resource, not just element zero of set zero.
+         * Preparation validates generations and copies exactly these tables. */
+        if(op->pipeline->set_count>PS5VK_MAX_SETS){rc=VK_ERROR_UNKNOWN;goto fail;}
+        for(unsigned set_index=0;set_index<op->pipeline->set_count;++set_index) {
+            if(p->pair->runtime_arguments.enabled &&
+               !p->pair->runtime_arguments.fragment_descriptor_valid[set_index])continue;
+            VkDescriptorSet set=op->sets[set_index];
+            if(!set || !set->pool || set->pool->device!=d ||
+               set->generation!=op->generations[set_index] ||
+               memcmp(&set->signature,&op->pipeline->sets[set_index],sizeof(set->signature))) {
+                rc=VK_ERROR_UNKNOWN;goto fail;
+            }
+            for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+                const struct ps5vk_binding *binding=&set->signature.binding[b];
+                if(binding->count && set->signature.type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+                    rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                }
+                if(binding->first>PS5VK_MAX_DESCRIPTORS ||
+                   binding->count>PS5VK_MAX_DESCRIPTORS-binding->first){rc=VK_ERROR_UNKNOWN;goto fail;}
+                for(unsigned e=0;e<binding->count;++e) {
+                    unsigned index=binding->first+e;
+                    if(!set->defined[index] || !set->image_resources[index] ||
+                       set->images[index].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+                        rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                    }
+                    rc=ps5vk_layout_require(&j->layouts,set->image_resources[index],set->images[index].imageLayout);
+                    if(rc!=VK_SUCCESS)goto fail;
+                }
+            }
+        }
         struct ps5vk_index_fetch indices={0};
         if(op->type==PS5VK_DRAW_INDEXED) {
             if(!op->pipeline->vertex_binding_count){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
             rc=ps5vk_index_fetch_prepare(d,op,&indices);if(rc!=VK_SUCCESS)goto fail;
         }
-        if(op->pipeline->vertex_binding_count) {
+        const uint32_t vertex_usage=p->pair->runtime_arguments.enabled?
+            p->pair->runtime_arguments.vertex_buffer_usage_mask:
+            (op->pipeline->vertex_binding_count?1u:0u);
+        if(vertex_usage) {
             const struct ps5vk_graphics_key key={.vertex_binding_count=op->pipeline->vertex_binding_count,
                 .vertex_attribute_count=op->pipeline->vertex_attribute_count,
-                .vertex_bindings=&op->pipeline->vertex_binding,.vertex_attributes=op->pipeline->vertex_attributes};
-            rc=ps5vk_native_prepare_vertex_draw(d,op,&begin->render_area,defaults,&key,(uintptr_t)p->pair,draw);
-        } else rc=ps5vk_native_prepare_draw(d,op,&begin->render_area,defaults,draw);
+                .vertex_bindings=op->pipeline->vertex_bindings,.vertex_attributes=op->pipeline->vertex_attributes};
+            rc=ps5vk_native_prepare_vertex_draw_masked(d,op,&begin->render_area,defaults,&key,
+                (uintptr_t)p->pair,vertex_usage,draw);
+        } else rc=ps5vk_native_prepare_resource_draw(d,op,&begin->render_area,defaults,(uintptr_t)p->pair,draw);
         if(rc!=VK_SUCCESS)goto fail;
         ++j->count;
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)
+            ps5log_printf(PS5LOG_MARK,"PS5VK_BINDINGS_PREPARED serial=%llu mask=%04x copied_bytes=%zu",
+                (unsigned long long)j->serial,vertex_usage,draw->vertex_bounce_bytes);
+        if(draw->vertex_bounce)
+            ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_BOUNCE serial=%llu draw=%u bytes=%zu alignment=4",
+                (unsigned long long)j->serial,j->count-1,draw->vertex_bounce_bytes);
         /* Private TCP evidence of the exact prepared block, not inferred API
          * intent. Include duplicate offsets and order; later writes can win. */
         for(unsigned k=0;k<draw->state->cx_count;++k)
@@ -253,7 +284,21 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 draw->state->sh[k].offset,draw->state->sh[k].value);
 #endif
         if(!p->global_table){rc=VK_ERROR_UNKNOWN;goto fail;}
-        if(op->pipeline->vertex_binding_count) {
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+        if(draw->texture_table)
+            for(unsigned k=0;k<12;++k)
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TEXTURE_DESCRIPTOR serial=%llu draw=%u word=%u value=%08x",
+                    (unsigned long long)j->serial,j->count-1,k,draw->texture_table[k]);
+#endif
+        if(p->pair->runtime_arguments.enabled) {
+            uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+            for(unsigned s=0;s<PS5VK_RUNTIME_DESCRIPTOR_SETS;++s)
+                tables[s]=(uint32_t)(uintptr_t)draw->descriptor_tables[s];
+            rc=ps5vk_native_emit_runtime_draw(&cursor,(uint32_t)(end-cursor),draw->state,
+                draw->state,draw->bytes,op,(uint32_t)(uintptr_t)draw->vertex_table,tables,
+                op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
+        } else if(vertex_usage) {
             if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;goto fail;}
             if(op->pipeline->set_count) {
                 if(!draw->texture_table){rc=VK_ERROR_UNKNOWN;goto fail;}

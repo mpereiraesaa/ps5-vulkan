@@ -11,6 +11,19 @@ static void *alloc(VkDevice d, const VkAllocationCallbacks *a, size_t size,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, saved, custom);
 }
 
+static VkBool32 valid_descriptor_stages(VkShaderStageFlags stages)
+{
+    const VkShaderStageFlags core = VK_SHADER_STAGE_VERTEX_BIT |
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+        VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
+        VK_SHADER_STAGE_COMPUTE_BIT;
+    /* VK_SHADER_STAGE_ALL is a reserved convenience value rather than the OR
+     * of today's bits.  Layout visibility does not create a shader stage and
+     * may name stages that no pipeline ultimately consumes. */
+    return stages == VK_SHADER_STAGE_ALL || (stages && !(stages & ~core));
+}
+
 static int indices(VkDescriptorSet set, uint32_t binding, uint32_t element,
                    uint32_t count, uint32_t out[PS5VK_MAX_DESCRIPTORS])
 {
@@ -38,8 +51,9 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
     for (uint32_t j = 0; j < write_count; ++j) {
         const VkWriteDescriptorSet *w = &writes[j];
         VkBool32 image=w->descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        VkBool32 buffer=w->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
-            w->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        VkDescriptorType base_type=ps5vk_base_buffer_descriptor_type(w->descriptorType);
+        VkBool32 buffer=base_type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
+            base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         VkBool32 texel=w->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
         uint32_t dst[PS5VK_MAX_DESCRIPTORS];
         if (w->sType != VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET || w->pNext || !w->dstSet ||
@@ -71,9 +85,9 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
             }
             const VkDescriptorBufferInfo *b = &w->pBufferInfo[k];
             void *address; VkDeviceSize size;
-            const VkBufferUsageFlags usage = w->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
+            const VkBufferUsageFlags usage = base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-            const VkDeviceSize alignment = w->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
+            const VkDeviceSize alignment = base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
                 d->uniform_buffer_alignment : d->buffer_alignment;
             if (!ps5vk_buffer_usage(d,b->buffer,usage) || !alignment || b->offset % alignment ||
                 ps5vk_buffer_span(d, b->buffer, b->offset, b->range, &address, &size) != VK_SUCCESS) {
@@ -143,16 +157,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         if (seen[b->binding]) return INVALID;
         seen[b->binding] = VK_TRUE;
         VkBool32 image=b->descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        VkBool32 buffer=b->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
-            b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        VkDescriptorType base_type=ps5vk_base_buffer_descriptor_type(b->descriptorType);
+        VkBool32 buffer=base_type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
+            base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         VkBool32 texel=b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-        if (b->descriptorCount && b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+        if (b->descriptorCount && !valid_descriptor_stages(b->stageFlags))
+            return INVALID;
+        if (b->descriptorCount && base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
             !d->uniform_buffer_alignment)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount && (image ? (!d->graphics_enabled || b->pImmutableSamplers ||
                 b->stageFlags!=VK_SHADER_STAGE_FRAGMENT_BIT) :
-                (!(buffer||texel) || b->pImmutableSamplers ||
-                 (b->stageFlags & ~VK_SHADER_STAGE_COMPUTE_BIT))))
+                (!(buffer||texel) || b->pImmutableSamplers)))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount > PS5VK_MAX_DESCRIPTORS - signature.count)
             return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -191,11 +207,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(VkDevice d,
         !info->maxSets || (info->poolSizeCount && !info->pPoolSizes)) return INVALID;
     if (info->pNext || (info->flags & ~VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    uint64_t storage_capacity=0,uniform_capacity=0,texel_capacity=0,image_capacity=0;
+    uint64_t storage_capacity=0,uniform_capacity=0,dynamic_storage_capacity=0,
+        dynamic_uniform_capacity=0,texel_capacity=0,image_capacity=0;
     for (uint32_t j = 0; j < info->poolSizeCount; ++j) {
         const VkDescriptorPoolSize *size=&info->pPoolSizes[j];
         uint64_t *capacity=size->type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER?&storage_capacity:
             size->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER?&uniform_capacity:
+            size->type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC?&dynamic_storage_capacity:
+            size->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC?&dynamic_uniform_capacity:
             size->type==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER?&texel_capacity:
             size->type==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER?&image_capacity:NULL;
         if (!capacity ||
@@ -212,6 +231,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(VkDevice d,
     pool->device = d; pool->allocator = saved; pool->custom_allocator = custom;
     pool->flags = info->flags; pool->max_sets = info->maxSets;
     pool->storage_capacity=storage_capacity;pool->uniform_capacity=uniform_capacity;
+    pool->dynamic_storage_capacity=dynamic_storage_capacity;
+    pool->dynamic_uniform_capacity=dynamic_uniform_capacity;
     pool->texel_capacity=texel_capacity;pool->image_capacity=image_capacity;
     ++d->descriptor_objects; *out = pool;
     return VK_SUCCESS;
@@ -227,6 +248,8 @@ static void free_set(VkDescriptorPool pool, VkDescriptorSet set)
         switch(set->signature.type[j]) {
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: pool->storage_used-=count;break;
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: pool->uniform_used-=count;break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: pool->dynamic_storage_used-=count;break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: pool->dynamic_uniform_used-=count;break;
         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: pool->texel_used-=count;break;
         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: pool->image_used-=count;break;
         default: break;
@@ -266,7 +289,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
     VkDescriptorPool pool = info->descriptorPool;
     if (info->descriptorSetCount > pool->max_sets - pool->used_sets)
         return VK_ERROR_OUT_OF_POOL_MEMORY;
-    uint64_t storage_needed=0,uniform_needed=0,texel_needed=0,image_needed=0;
+    uint64_t storage_needed=0,uniform_needed=0,dynamic_storage_needed=0,
+        dynamic_uniform_needed=0,texel_needed=0,image_needed=0;
     for (uint32_t j = 0; j < info->descriptorSetCount; ++j) {
         VkDescriptorSetLayout layout = info->pSetLayouts[j];
         if (!layout || layout->device != d) return INVALID;
@@ -275,6 +299,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
             switch(layout->signature.type[k]) {
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: storage_needed+=count;break;
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: uniform_needed+=count;break;
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: dynamic_storage_needed+=count;break;
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: dynamic_uniform_needed+=count;break;
             case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: texel_needed+=count;break;
             case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: image_needed+=count;break;
             default: if(count)return INVALID;
@@ -283,6 +309,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
     }
     if (storage_needed>pool->storage_capacity-pool->storage_used ||
         uniform_needed>pool->uniform_capacity-pool->uniform_used ||
+        dynamic_storage_needed>pool->dynamic_storage_capacity-pool->dynamic_storage_used ||
+        dynamic_uniform_needed>pool->dynamic_uniform_capacity-pool->dynamic_uniform_used ||
         texel_needed>pool->texel_capacity-pool->texel_used ||
         image_needed>pool->image_capacity-pool->image_used)
         return VK_ERROR_OUT_OF_POOL_MEMORY;
@@ -309,6 +337,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
         pending->next = pool->sets; pool->sets = pending; pending = next;
     }
     pool->storage_used+=storage_needed;pool->uniform_used+=uniform_needed;
+    pool->dynamic_storage_used+=dynamic_storage_needed;
+    pool->dynamic_uniform_used+=dynamic_uniform_needed;
     pool->texel_used+=texel_needed;pool->image_used+=image_needed;
     pool->used_sets += info->descriptorSetCount;
     return VK_SUCCESS;
@@ -343,6 +373,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(VkDevice d,
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkPipelineLayout layout = alloc(d, a, sizeof(*layout), &saved, &custom);
     if (!layout) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    memset(layout, 0, sizeof(*layout));
     layout->device = d; layout->allocator = saved; layout->custom_allocator = custom;
     layout->set_count = info->setLayoutCount;
     for (uint32_t j = 0; j < info->setLayoutCount; ++j)

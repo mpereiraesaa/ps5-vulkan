@@ -7,9 +7,15 @@
 #include "draw_prepare_ps5.h"
 #include "command_arena_ps5.h"
 #include "graphics_sync.h"
+#include "graphics_limits.h"
+#include "texture_layout.h"
 #include "triangle_readback.h"
 #include "scene_geometry.h"
 #include "scene_region.h"
+#include "sampler_core_probe.h"
+#include "sampled_format_probe.h"
+#include "integer_sampled_probe.h"
+#include "vertex_format_probe.h"
 #include "scene_clock.h"
 #include "scene_witnesses.h"
 #include "present_ps5.h"
@@ -17,12 +23,54 @@
 #include <time.h>
 #include <unistd.h>
 #include <string.h>
+#ifndef PS5VK_IMAGE_TARGET
+#define PS5VK_IMAGE_TARGET 0
+#endif
+#ifndef PS5VK_MIP_VIEW_BASE
+#define PS5VK_MIP_VIEW_BASE 0
+#endif
+#ifndef PS5VK_MIP_FORCE_LOD
+#define PS5VK_MIP_FORCE_LOD -1
+#endif
+#ifndef PS5VK_MIP_LOD_BIAS
+#define PS5VK_MIP_LOD_BIAS 0
+#endif
+#ifndef PS5VK_RUNTIME_GRAPHICS
+#define PS5VK_RUNTIME_GRAPHICS 0
+#endif
+static const char *layered_target_name(void)
+{
+    switch(PS5VK_IMAGE_TARGET) {
+    case 1:return "2d-array";
+    case 2:return "cube";
+    case 3:return "3d";
+    case 4:return "1d";
+    case 5:return "1d-array";
+    default:return "none";
+    }
+}
 void ps5vk_compute_regression(VkDevice);
 static uint64_t scene_now_ns(void)
 {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC,&t);
     return (uint64_t)t.tv_sec*UINT64_C(1000000000)+(uint64_t)t.tv_nsec;
+}
+static unsigned diagnostic_iterations(void)
+{
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)return 4;
+    if(PS5VK_GRAPHICS_WITNESSES)
+        return PS5VK_GRAPHICS_WITNESSES==2?4u:6u;
+    switch(PS5VK_GRAPHICS_SCISSOR_PROBE) {
+    case 10: return PS5VK_INTEGER_SAMPLED_CASES_PER_SIGN;
+    case 9: return PS5VK_SAMPLED_FORMAT_CASES*PS5VK_SAMPLED_FORMAT_FILTER_TRIALS;
+    case 8: return PS5VK_VERTEX_FORMAT_CASES;
+    case 7: return PS5VK_SAMPLED_FORMAT_CASES;
+    case 6: return PS5VK_SAMPLER_CORE_CASES;
+    case 2:
+    case 3: return 10u;
+    default: return PS5VK_GRAPHICS_SCENE?1u:3u;
+    }
 }
 static void fail(const char *call, int rc)
 {
@@ -35,25 +83,99 @@ static void fail(const char *call, int rc)
 struct texture_fixture {
     VkImage image;VkImageView view;VkSampler sampler;VkDeviceMemory memory,upload_memory;
     VkBuffer upload;VkDescriptorPool pool;VkDescriptorSet set;
+    VkFormat format;uint32_t width,height,slices,mip_levels,upload_bytes;
+    VkImageType image_type;VkImageViewType view_type;
 };
-static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout layout)
+static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout layout,unsigned probe_case)
 {
     struct texture_fixture t={0};
-    VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.imageType=VK_IMAGE_TYPE_2D,
-        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={2,2,1},.mipLevels=1,.arrayLayers=1,
+    VkFormat format=VK_FORMAT_R8G8B8A8_UNORM;
+    uint32_t width=2,height=2,slices=1,bytes_per_texel=4;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
+        struct ps5vk_integer_sampled_case c;
+        if(ps5vk_integer_sampled_case(PS5VK_INTEGER_SAMPLED_SIGN==2,
+                                      probe_case,&c))
+            fail("integer-sampled-case",-1);
+        format=c.format;
+        bytes_per_texel=c.bytes_per_texel;
+        if(c.bytes_per_texel==1)width=4;
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==7 || PS5VK_GRAPHICS_SCISSOR_PROBE==9) {
+        struct ps5vk_sampled_format_case c;
+        unsigned case_index=PS5VK_GRAPHICS_SCISSOR_PROBE==9?
+            probe_case/PS5VK_SAMPLED_FORMAT_FILTER_TRIALS:probe_case;
+        if(ps5vk_sampled_format_case(case_index,&c))fail("sampled-format-case",-1);
+        format=c.format;
+        bytes_per_texel=c.bytes_per_texel;
+        /* CP DMA copies DWORD-aligned rows. A four-wide R8 solid fixture keeps
+         * its 4-byte rows native without changing the full-screen oracle. */
+        if(c.bytes_per_texel==1)width=4;
+    }
+    VkImageType image_type=VK_IMAGE_TYPE_2D;
+    VkImageViewType view_type=VK_IMAGE_VIEW_TYPE_2D;
+    VkImageCreateFlags image_flags=0;
+    if(PS5VK_IMAGE_TARGET) {
+        width=height=64;slices=PS5VK_IMAGE_TARGET==2?6:3;
+        if(PS5VK_IMAGE_TARGET>=4) {
+            width=PS5VK_IMAGE_TARGET==4?192:64;height=1;
+            slices=PS5VK_IMAGE_TARGET==4?1:3;
+        }
+        image_type=PS5VK_IMAGE_TARGET==3?VK_IMAGE_TYPE_3D:
+            (PS5VK_IMAGE_TARGET>=4?VK_IMAGE_TYPE_1D:VK_IMAGE_TYPE_2D);
+        view_type=PS5VK_IMAGE_TARGET==1?VK_IMAGE_VIEW_TYPE_2D_ARRAY:
+            (PS5VK_IMAGE_TARGET==2?VK_IMAGE_VIEW_TYPE_CUBE:
+            (PS5VK_IMAGE_TARGET==3?VK_IMAGE_VIEW_TYPE_3D:
+            (PS5VK_IMAGE_TARGET==4?VK_IMAGE_VIEW_TYPE_1D:VK_IMAGE_VIEW_TYPE_1D_ARRAY)));
+        if(PS5VK_IMAGE_TARGET==2)image_flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    }
+    uint32_t mip_levels=PS5VK_GRAPHICS_SCISSOR_PROBE==12?3u:1u;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==12){width=64;height=64;slices=1;}
+    VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.flags=image_flags,
+        .imageType=image_type,.format=format,
+        .extent={width,height,image_type==VK_IMAGE_TYPE_3D?slices:1},
+        .mipLevels=mip_levels,.arrayLayers=image_type==VK_IMAGE_TYPE_3D?1:slices,
         .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT};
     CHECK(vkCreateImage(d,&ii,NULL,&t.image));
     VkMemoryRequirements req;vkGetImageMemoryRequirements(d,t.image,&req);
     VkMemoryAllocateInfo mi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=req.size};
     CHECK(vkAllocateMemory(d,&mi,NULL,&t.memory));CHECK(vkBindImageMemory(d,t.image,t.memory,0));
     VkImageViewCreateInfo vi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=t.image,
-        .viewType=VK_IMAGE_VIEW_TYPE_2D,.format=ii.format,.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+        .viewType=view_type,.format=ii.format,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,
+            PS5VK_GRAPHICS_SCISSOR_PROBE==12?PS5VK_MIP_VIEW_BASE:0,
+            PS5VK_GRAPHICS_SCISSOR_PROBE==12 && PS5VK_MIP_VIEW_BASE?1:mip_levels,0,
+            image_type==VK_IMAGE_TYPE_3D?1:slices}};
     CHECK(vkCreateImageView(d,&vi,NULL,&t.view));
     VkSamplerCreateInfo si={.sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,.addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
+        si.magFilter=si.minFilter=VK_FILTER_NEAREST;
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
+        struct ps5vk_sampler_core_case c;
+        if(ps5vk_sampler_core_case(probe_case,&c))fail("sampler-core-case",-1);
+        si.addressModeU=si.addressModeV=si.addressModeW=c.address_mode;
+        si.borderColor=c.border_color;
+        si.magFilter=c.mag_filter;
+        si.minFilter=c.min_filter;
+        if(c.minification)si.maxLod=15.0f;
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==9) {
+        si.magFilter=si.minFilter=(probe_case%PS5VK_SAMPLED_FORMAT_FILTER_TRIALS)?
+            VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+        si.magFilter=si.minFilter=VK_FILTER_NEAREST;
+        si.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        si.mipLodBias=(float)PS5VK_MIP_LOD_BIAS;
+        si.maxLod=2.0f;
+        if(PS5VK_MIP_FORCE_LOD>=0)
+            si.minLod=si.maxLod=(float)PS5VK_MIP_FORCE_LOD;
+    }
     CHECK(vkCreateSampler(d,&si,NULL,&t.sampler));
-    VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=16,.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
+    if(mip_levels==1)t.upload_bytes=width*height*slices*bytes_per_texel;
+    else for(uint32_t level=0;level<mip_levels;++level) {
+        uint32_t w=width>>level?width>>level:1,h=height>>level?height>>level:1;
+        t.upload_bytes+=w*h*slices*bytes_per_texel;
+    }
+    VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=t.upload_bytes,.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
     CHECK(vkCreateBuffer(d,&bi,NULL,&t.upload));vkGetBufferMemoryRequirements(d,t.upload,&req);
     mi.allocationSize=req.size;CHECK(vkAllocateMemory(d,&mi,NULL,&t.upload_memory));
     CHECK(vkBindBufferMemory(d,t.upload,t.upload_memory,0));
@@ -68,33 +190,169 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     VkWriteDescriptorSet write={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=t.set,
         .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.pImageInfo=&image};
     vkUpdateDescriptorSets(d,1,&write,0,NULL);
+    t.format=format;t.width=width;t.height=height;t.slices=slices;t.mip_levels=mip_levels;
+    t.image_type=image_type;t.view_type=view_type;
     return t;
 }
-static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer cb,unsigned frame)
+static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer cb,
+    unsigned frame,unsigned probe_case)
 {
     void *mapped;CHECK(vkMapMemory(d,t->upload_memory,0,VK_WHOLE_SIZE,0,&mapped));
+    memset(mapped,0,t->upload_bytes);
     const uint32_t colors[3]={0xff0000ff,0xff00ff00,0xffff0000}; /* RGBA8 */
-    for(unsigned i=0;i<4;++i)((uint32_t *)mapped)[i]=colors[(i+frame)%3];
+    unsigned checkerboard=0;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
+        struct ps5vk_sampler_core_case c;
+        if(ps5vk_sampler_core_case(probe_case,&c))fail("sampler-core-case",-1);
+        checkerboard=c.checkerboard;
+    }
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
+        struct ps5vk_integer_sampled_case c;
+        if(ps5vk_integer_sampled_case(PS5VK_INTEGER_SAMPLED_SIGN==2,
+                                      probe_case,&c) || c.format!=t->format)
+            fail("integer-sampled-case",-1);
+        for(unsigned pixel=0;pixel<t->width*t->height;++pixel)
+            memcpy((unsigned char *)mapped+pixel*c.bytes_per_texel,
+                   c.texel,c.bytes_per_texel);
+        ps5log_printf(PS5LOG_MARK,"PS5VK_INTEGER_SAMPLED_INPUT case=%u name=%s sign=%s format=%u components=%u bytes_per_texel=%u expected_bgra=%08x",
+            probe_case,c.name,PS5VK_INTEGER_SAMPLED_SIGN==2?"sint":"uint",
+            c.format,c.components,c.bytes_per_texel,c.expected_bgra);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==7 || PS5VK_GRAPHICS_SCISSOR_PROBE==9) {
+        struct ps5vk_sampled_format_case c;
+        unsigned case_index=PS5VK_GRAPHICS_SCISSOR_PROBE==9?
+            probe_case/PS5VK_SAMPLED_FORMAT_FILTER_TRIALS:probe_case;
+        if(ps5vk_sampled_format_case(case_index,&c) || c.format!=t->format)
+            fail("sampled-format-case",-1);
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==9) {
+            uint8_t black[16],white[16];uint32_t nearest_bgra,linear_bgra;
+            if(ps5vk_sampled_format_filter_texels(case_index,black,white,
+                                                  &nearest_bgra,&linear_bgra))
+                fail("sampled-format-filter-texels",-1);
+            for(unsigned pixel=0;pixel<t->width*t->height;++pixel) {
+                unsigned x=pixel%t->width,y=pixel/t->width;
+                const uint8_t *texel=((x+y)&1)?white:black;
+                memcpy((unsigned char *)mapped+pixel*c.bytes_per_texel,
+                    texel,c.bytes_per_texel);
+            }
+            ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLED_FILTER_INPUT trial=%u case=%u name=%s format=%u filter=%s bytes_per_texel=%u expected_bgra=%08x",
+                probe_case,case_index,c.name,c.format,
+                (probe_case%PS5VK_SAMPLED_FORMAT_FILTER_TRIALS)?"linear":"nearest",
+                c.bytes_per_texel,(probe_case%PS5VK_SAMPLED_FORMAT_FILTER_TRIALS)?
+                    linear_bgra:nearest_bgra);
+        } else {
+            for(unsigned pixel=0;pixel<t->width*t->height;++pixel)
+                memcpy((unsigned char *)mapped+pixel*c.bytes_per_texel,c.texel,c.bytes_per_texel);
+            ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLED_FORMAT_INPUT case=%u name=%s format=%u bytes_per_texel=%u expected_bgra=%08x",
+                probe_case,c.name,c.format,c.bytes_per_texel,c.expected_bgra);
+        }
+    } else if(checkerboard) {
+        const uint32_t pixels[4]={0xff000000,0xffffffff,0xffffffff,0xff000000};
+        memcpy(mapped,pixels,sizeof(pixels));
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+        size_t offset=0;
+        for(uint32_t level=0;level<t->mip_levels;++level) {
+            uint32_t w=t->width>>level?t->width>>level:1;
+            uint32_t h=t->height>>level?t->height>>level:1;
+            for(uint32_t i=0;i<w*h;++i)
+                ((uint32_t *)((unsigned char *)mapped+offset))[i]=colors[level];
+            offset+=(size_t)w*h*sizeof(uint32_t);
+        }
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_MIPMAP_INPUT levels=%u view_base=%u lod_bias=%d width=%u height=%u colors=red,green,blue bytes=%u",
+            t->mip_levels,PS5VK_MIP_VIEW_BASE,PS5VK_MIP_LOD_BIAS,
+            t->width,t->height,t->upload_bytes);
+    } else if(PS5VK_IMAGE_TARGET) {
+        const unsigned pixels=t->width*t->height;
+        for(unsigned slice=0;slice<t->slices;++slice)
+            for(unsigned i=0;i<pixels;++i)
+                ((uint32_t *)mapped)[slice*pixels+i]=
+                    PS5VK_IMAGE_TARGET==4?colors[(3u*i)/pixels]:colors[slice%3];
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_LAYERED_INPUT target=%s slices=%u width=%u height=%u",
+            layered_target_name(),
+            t->slices,t->width,t->height);
+    } else for(unsigned i=0;i<4;++i)((uint32_t *)mapped)[i]=colors[(i+frame)%3];
     VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=t->upload_memory,.size=VK_WHOLE_SIZE};
     CHECK(vkFlushMappedMemoryRanges(d,1,&range));vkUnmapMemory(d,t->upload_memory);
     VkImageMemoryBarrier barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.image=t->image,
         .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
-        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,t->mip_levels,0,
+            t->image_type==VK_IMAGE_TYPE_3D?1:t->slices}};
     vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
-    VkBufferImageCopy copy={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},.imageExtent={2,2,1}};
-    vkCmdCopyBufferToImage(cb,t->upload,t->image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
+    VkBufferImageCopy copies[PS5VK_MAX_TEXTURE_MIP_LEVELS]={0};
+    VkDeviceSize offset=0;
+    for(uint32_t level=0;level<t->mip_levels;++level) {
+        uint32_t w=t->width>>level?t->width>>level:1;
+        uint32_t h=t->height>>level?t->height>>level:1;
+        copies[level]=(VkBufferImageCopy){.bufferOffset=offset,
+            .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,level,0,
+                t->image_type==VK_IMAGE_TYPE_3D?1:t->slices},
+            .imageExtent={w,h,t->image_type==VK_IMAGE_TYPE_3D?
+                (t->slices>>level?t->slices>>level:1):1}};
+        offset+=(VkDeviceSize)w*h*(t->image_type==VK_IMAGE_TYPE_3D?
+            copies[level].imageExtent.depth:t->slices)*4u;
+    }
+    vkCmdCopyBufferToImage(cb,t->upload,t->image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        t->mip_levels,copies);
     barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
     vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&barrier);
-    ps5log_printf(PS5LOG_MARK,"PS5VK_TEXTURE_UPLOAD frame=%u pattern=%u width=2 height=2",frame,frame%3);
+    ps5log_printf(PS5LOG_MARK,"PS5VK_TEXTURE_UPLOAD frame=%u pattern=%s width=%u height=%u slices=%u levels=%u format=%u",
+        frame,PS5VK_GRAPHICS_SCISSOR_PROBE==10?"integer-sampled-solid":
+        (PS5VK_GRAPHICS_SCISSOR_PROBE==9?"sampled-format-checkerboard":
+        (PS5VK_GRAPHICS_SCISSOR_PROBE==7?"sampled-format-solid":
+        (PS5VK_GRAPHICS_SCISSOR_PROBE==12?"mipmap-rgb":
+        (PS5VK_IMAGE_TARGET?"layered-rgb":(checkerboard?"checkerboard":"rgb-cycle"))))),
+        t->width,t->height,t->slices,t->mip_levels,t->format);
 }
 static void texture_destroy(VkDevice d,struct texture_fixture *t)
 {
     vkDestroyDescriptorPool(d,t->pool,NULL);vkDestroySampler(d,t->sampler,NULL);
     vkDestroyImageView(d,t->view,NULL);vkDestroyImage(d,t->image,NULL);vkFreeMemory(d,t->memory,NULL);
     vkDestroyBuffer(d,t->upload,NULL);vkFreeMemory(d,t->upload_memory,NULL);
+}
+struct binding_fixture {
+    VkBuffer buffers[16];
+    VkDeviceMemory memory[16];
+    VkDeviceSize offsets[16];
+    uint32_t mask;
+};
+static struct binding_fixture binding_fixture_create(VkDevice d,unsigned test)
+{
+    struct binding_fixture f={0};
+    f.mask=test==1?0x8000u:(test==2?0x8008u:0xffffu);
+    for(unsigned b=0;b<16;++b) {
+        if(!(f.mask&(1u<<b)))continue;
+        VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size=512,.usage=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
+        CHECK(vkCreateBuffer(d,&bi,NULL,&f.buffers[b]));
+        VkMemoryRequirements req;vkGetBufferMemoryRequirements(d,f.buffers[b],&req);
+        VkMemoryAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize=req.size+req.alignment};
+        CHECK(vkAllocateMemory(d,&ai,NULL,&f.memory[b]));
+        CHECK(vkBindBufferMemory(d,f.buffers[b],f.memory[b],req.alignment));
+        void *mapped;CHECK(vkMapMemory(d,f.memory[b],0,VK_WHOLE_SIZE,0,&mapped));
+        memset(mapped,0xa5,(size_t)ai.allocationSize);
+        f.offsets[b]=25+2*b; /* Every used binding requires alignment repair. */
+        const float value[4]={(float)b+1,(float)b+2,(float)b+3,(float)b+4};
+        for(unsigned vertex=0;vertex<3;++vertex)
+            memcpy((unsigned char *)mapped+req.alignment+f.offsets[b]+
+                vertex*(48+4*b)+4*(b%3),value,sizeof(value));
+        VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=f.memory[b],.size=VK_WHOLE_SIZE};
+        CHECK(vkFlushMappedMemoryRanges(d,1,&range));vkUnmapMemory(d,f.memory[b]);
+    }
+    ps5log_printf(PS5LOG_MARK,"PS5VK_BINDINGS_INPUT case=%u mask=%04x declared=16 reversed_locations=1 distinct_buffers=1 odd_offsets=1",
+        test,f.mask);
+    return f;
+}
+static void binding_fixture_destroy(VkDevice d,struct binding_fixture *f)
+{
+    for(unsigned b=0;b<16;++b) {
+        vkDestroyBuffer(d,f->buffers[b],NULL);vkFreeMemory(d,f->memory[b],NULL);
+    }
 }
 static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass pass,
     VkPipelineLayout layout,VkDescriptorSetLayout set_layout,unsigned witness_index)
@@ -128,12 +386,14 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         CHECK(vkCreateImageView(d,&dv,NULL,&depth_view));
     }
     struct texture_fixture texture={0};
-    if(set_layout)texture=texture_create(d,set_layout);
+    if(set_layout)texture=texture_create(d,set_layout,witness_index);
     VkBuffer vertex_buffer=VK_NULL_HANDLE;VkDeviceMemory vertex_memory=VK_NULL_HANDLE;
     VkBuffer index_buffer=VK_NULL_HANDLE;VkDeviceMemory index_memory=VK_NULL_HANDLE;
     VkDeviceSize index_memory_offset=0;
     VkDeviceSize vertex_memory_offset=0;
-    if(pipeline->vertex_binding_count) {
+    struct binding_fixture bindings={0};
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)bindings=binding_fixture_create(d,witness_index);
+    if(pipeline->vertex_binding_count && PS5VK_GRAPHICS_SCISSOR_PROBE!=13) {
         VkBufferCreateInfo vb={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=PS5VK_GRAPHICS_SCENE?1536:384,.usage=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
         CHECK(vkCreateBuffer(d,&vb,NULL,&vertex_buffer));
         VkMemoryRequirements vr;vkGetBufferMemoryRequirements(d,vertex_buffer,&vr);
@@ -151,7 +411,10 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         VkMemoryAllocateInfo im={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=ir.size+ir.alignment};
         CHECK(vkAllocateMemory(d,&im,NULL,&index_memory));
         index_memory_offset=ir.alignment;CHECK(vkBindBufferMemory(d,index_buffer,index_memory,index_memory_offset));
-        ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_INPUT memory_offset=%llu binding_offset=24 first_vertex=1 stride=24",(unsigned long long)vr.alignment);
+        ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_INPUT memory_offset=%llu binding_offset=%u first_vertex=0 stride=%u",
+            (unsigned long long)vr.alignment,
+            PS5VK_GRAPHICS_SCISSOR_PROBE==8?25u:24u,
+            pipeline->vertex_binding.stride);
     }
     /* Scene resource reuse must also be exercised without presentation. */
     unsigned frames=PS5VK_GRAPHICS_SCENE?180:1;
@@ -202,11 +465,61 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
                 if(ps5vk_scene_sampler_uv(frame,&u,&numerator))fail("sampler-probe-input",-1);
                 for(unsigned v=0;v<3;++v){scene_vertices[v].uv_angle[0]=u;scene_vertices[v].uv_angle[1]=.25f;}
                 ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_PROBE_INPUT frame=%u u_numerator=%d denominator=8192 v_numerator=2048",frame,numerator);
+            } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
+                struct ps5vk_sampler_core_case c;
+                if(ps5vk_sampler_core_case(witness_index,&c))fail("sampler-core-case",-1);
+                if(c.minification) {
+                    /* This affine UV plane is centered at pixel (960.5,540.5)
+                     * and advances by two normalized texture coordinates per
+                     * screen pixel.  The 1x1 scissor below therefore selects
+                     * an unambiguous minification witness while preserving UV
+                     * 0.5 at the sampled fragment. */
+                    const float u[3]={-1152.5f,1151.5f,-0.5f};
+                    const float v[3]={-648.5f,-648.5f,647.5f};
+                    for(unsigned vertex=0;vertex<3;++vertex) {
+                        scene_vertices[vertex].uv_angle[0]=u[vertex];
+                        scene_vertices[vertex].uv_angle[1]=v[vertex];
+                    }
+                } else for(unsigned vertex=0;vertex<3;++vertex)
+                    scene_vertices[vertex].uv_angle[0]=scene_vertices[vertex].uv_angle[1]=c.uv;
+                ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_INPUT case=%u name=%s uv_milli=%d minification=%u expected_bgra=%08x",
+                    witness_index,c.name,(int)(c.uv*1000.0f),c.minification,c.expected_bgra);
+            } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==11 ||
+                      PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+                if(ps5vk_scene_probe_triangle_uv(scene_vertices))
+                    fail("scene-probe-uv",-1);
+            } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==9 ||
+                      PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
+                for(unsigned vertex=0;vertex<3;++vertex)
+                    scene_vertices[vertex].uv_angle[0]=scene_vertices[vertex].uv_angle[1]=0.5f;
             }
             memcpy((unsigned char *)vertices+vertex_memory_offset+48,scene_vertices,sizeof(scene_vertices));
             ps5log_printf(PS5LOG_MARK,"PS5VK_SCENE_INPUT frame=%u angle_milliradians=%u vertices=%u indices=%u fixture=%s",
                 frame,PS5VK_GRAPHICS_SCISSOR_PROBE>=3?0:(PS5VK_GRAPHICS_CONTINUOUS?(unsigned)(scene_angle*1000):frame*40),PS5VK_GRAPHICS_SCISSOR_PROBE>=3?3u:48u,PS5VK_GRAPHICS_SCISSOR_PROBE>=3?3u:72u,
                 PS5VK_GRAPHICS_SCISSOR_PROBE>=3?"planar-triangle":"two-cubes");
+        } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==8) {
+            struct ps5vk_vertex_format_case c;
+            if(ps5vk_vertex_format_case(witness_index,&c) ||
+               pipeline->vertex_attributes[0].format!=c.format ||
+               pipeline->vertex_binding.stride!=c.bytes)
+                fail("vertex-format-case",-1);
+            /* This probe isolates vertex conversion. Runtime indexed draws
+             * are a separate unsupported combination, so firstVertex=0 maps
+             * directly to the three records beginning at the binding offset. */
+            /* Vulkan vertex-buffer offsets and strides are byte granular.  An
+             * odd base deliberately proves that the native descriptor path
+             * does not silently retain its former dword-alignment contract. */
+            const size_t start=25u;
+            for(unsigned vertex=0;vertex<3;++vertex) {
+                unsigned char *record=(unsigned char *)vertices+
+                    vertex_memory_offset+start+vertex*pipeline->vertex_binding.stride;
+                memcpy(record,c.raw,c.bytes);
+            }
+            uint32_t raw_word=0;memcpy(&raw_word,c.raw,c.bytes<4?c.bytes:4);
+            ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_FORMAT_INPUT case=%u name=%s format=%u numeric=%s components=%u bytes=%u stride=%u binding_offset=%zu word=%08x",
+                witness_index,c.name,c.format,c.numeric==PS5VK_VERTEX_PROBE_SINT?"sint":
+                    (c.numeric==PS5VK_VERTEX_PROBE_UINT?"uint":"float"),
+                c.components,c.bytes,pipeline->vertex_binding.stride,start,raw_word);
         } else memcpy((unsigned char *)vertices+vertex_memory_offset+48,triangle,sizeof(triangle));
         VkMappedMemoryRange flush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=vertex_memory,.size=VK_WHOLE_SIZE};
         CHECK(vkFlushMappedMemoryRanges(d,1,&flush));vkUnmapMemory(d,vertex_memory);
@@ -231,7 +544,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         VkMappedMemoryRange iflush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=index_memory,.size=VK_WHOLE_SIZE};
         CHECK(vkFlushMappedMemoryRanges(d,1,&iflush));vkUnmapMemory(d,index_memory);
         ps5log_printf(PS5LOG_MARK,"PS5VK_INDEX_INPUT frame=%u bits=%u count=%u first_index=2 base_vertex=-2 binding_offset=4 memory_offset=%llu",
-            frame,element_bytes*8,PS5VK_GRAPHICS_SCISSOR_PROBE>=3?3u:(PS5VK_GRAPHICS_SCENE?72u:6u),(unsigned long long)index_memory_offset);
+            frame,element_bytes*8,(PS5VK_GRAPHICS_SCISSOR_PROBE>=3 && PS5VK_GRAPHICS_SCISSOR_PROBE!=8)?3u:(PS5VK_GRAPHICS_SCENE?72u:6u),(unsigned long long)index_memory_offset);
     }
 #if PS5VK_GRAPHICS_PRESENT
     unsigned slot=frame&1;
@@ -255,19 +568,29 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     VkCommandBuffer cb; CHECK(vkAllocateCommandBuffers(d,&ai,&cb));
     VkCommandBufferBeginInfo bi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     CHECK(vkBeginCommandBuffer(cb,&bi));
-    if(set_layout)texture_upload(d,&texture,cb,PS5VK_GRAPHICS_CONTINUOUS?ps5vk_scene_pattern(elapsed):(PS5VK_GRAPHICS_SCISSOR_PROBE==5?frame:(PS5VK_GRAPHICS_SCENE?frame/60:frame)));
+    if(set_layout)texture_upload(d,&texture,cb,
+        PS5VK_GRAPHICS_CONTINUOUS?ps5vk_scene_pattern(elapsed):
+        (PS5VK_GRAPHICS_SCISSOR_PROBE==5?frame:(PS5VK_GRAPHICS_SCENE?frame/60:frame)),
+        witness_index);
     VkRenderPassBeginInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,.renderPass=pass,
         .framebuffer=fb,.renderArea={{0,0},{1920,1080}}};
     VkClearValue clears[2]={0};clears[1].depthStencil.depth=1.0f;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==6 || PS5VK_GRAPHICS_SCISSOR_PROBE==9 ||
+       PS5VK_GRAPHICS_SCISSOR_PROBE==10)
+        clears[0].color.float32[0]=clears[0].color.float32[1]=clears[0].color.float32[2]=0.25f;
     clears[0].color.float32[3]=1.0f;
     if(depth_image || PS5VK_GRAPHICS_SCENE){ri.clearValueCount=depth_image?2:1;ri.pClearValues=clears;}
     vkCmdBeginRenderPass(cb,&ri,VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
     if(set_layout)vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&texture.set,0,NULL);
-    VkDeviceSize vertex_offset=24;
+    VkDeviceSize vertex_offset=PS5VK_GRAPHICS_SCISSOR_PROBE==8?25u:24u;
     unsigned draw_count=1;
     if(vertex_buffer)vkCmdBindVertexBuffers(cb,0,1,&vertex_buffer,&vertex_offset);
-    if(index_buffer) {
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)
+        for(unsigned b=0;b<16;++b)
+            if(bindings.mask&(1u<<b))vkCmdBindVertexBuffers(cb,b,1,&bindings.buffers[b],&bindings.offsets[b]);
+    if(index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8 &&
+       !(PS5VK_RUNTIME_GRAPHICS && PS5VK_GRAPHICS_SCISSOR_PROBE==12)) {
         vkCmdBindIndexBuffer(cb,index_buffer,4,(frame&1)?VK_INDEX_TYPE_UINT32:VK_INDEX_TYPE_UINT16);
         if(PS5VK_GRAPHICS_SCENE) {
             struct ps5vk_scene_draw draws[2];
@@ -280,10 +603,14 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         } else vkCmdDrawIndexed(cb,6,1,2,-2,0);
     } else vkCmdDraw(cb,3,1,0,0);
     vkCmdEndRenderPass(cb); CHECK(vkEndCommandBuffer(cb));
-    unsigned prelude=set_layout?3:0;
+    unsigned prelude=set_layout?(texture.mip_levels+2):0;
     if (cb->operation_count!=prelude+2+draw_count)fail("recorded-operation-count",-1);
     for(unsigned j=0;j<draw_count;++j)
-        if(cb->operations[prelude+1+j].type!=(index_buffer?PS5VK_DRAW_INDEXED:PS5VK_DRAW))fail("recorded-draw",-1);
+        if(cb->operations[prelude+1+j].type!=
+           ((index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8 &&
+             !(PS5VK_RUNTIME_GRAPHICS && PS5VK_GRAPHICS_SCISSOR_PROBE==12))?
+             PS5VK_DRAW_INDEXED:PS5VK_DRAW))
+            fail("recorded-draw",-1);
 #if PS5VK_GRAPHICS_DRAW
     void *mapped;
     CHECK(vkMapMemory(d,memory,0,VK_WHOLE_SIZE,0,&mapped));
@@ -300,7 +627,31 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
        (depth_image && depth_image->layout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
         fail("render-pass-layout-commit",-1);
     CHECK(vkInvalidateMappedMemoryRanges(d,1,&range));
-    const uint32_t background=PS5VK_GRAPHICS_SCENE?0xff000000:0x55aa11ee;
+    if(set_layout && PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+        struct ps5vk_texture_mip_layout mip_layout;
+        void *texture_bytes=NULL;
+        if(ps5vk_texture_mip_layout_for_slices(texture.format,texture.width,
+            texture.height,texture.slices,texture.mip_levels,&mip_layout))
+            fail("mipmap-layout-inspect",-1);
+        CHECK(vkMapMemory(d,texture.memory,0,VK_WHOLE_SIZE,0,&texture_bytes));
+        VkMappedMemoryRange texture_range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=texture.memory,.size=VK_WHOLE_SIZE};
+        CHECK(vkInvalidateMappedMemoryRanges(d,1,&texture_range));
+        for(uint32_t level=0;level<texture.mip_levels;++level) {
+            uint32_t first=0;
+            memcpy(&first,(unsigned char *)texture_bytes+
+                mip_layout.levels[level].offset,sizeof(first));
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_MIPMAP_STORAGE level=%u offset=%llu pitch=%u first=%08x",
+                level,(unsigned long long)mip_layout.levels[level].offset,
+                mip_layout.levels[level].row_pitch,first);
+        }
+        vkUnmapMemory(d,texture.memory);
+    }
+    const uint32_t background=(PS5VK_GRAPHICS_SCISSOR_PROBE==6 ||
+        PS5VK_GRAPHICS_SCISSOR_PROBE==9 ||
+        PS5VK_GRAPHICS_SCISSOR_PROBE==10)?0xff404040:
+        (PS5VK_GRAPHICS_SCENE?0xff000000:0x55aa11ee);
     struct ps5vk_triangle_readback stats=ps5vk_triangle_scan(pixels,words,background);
     int far_visible=depth_image && !pipeline->depth_test && !(frame&1);
     int valid=(far_visible?ps5vk_triangle_coverage_valid:ps5vk_triangle_readback_valid)(&stats,(uint32_t)pipeline->viewport.width*scale_quarters/4,
@@ -321,13 +672,103 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     }
     /* An empty scissor intersection is diagnostic evidence, not scene success.
      * Preserve the ordinary scene gate; permit this control to report and retire. */
-    if(PS5VK_GRAPHICS_SCISSOR_PROBE)valid=stats.changed<=
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==13) {
+        size_t expected=0,other=0;
+        for(size_t i=0;i<words;++i) {
+            expected+=pixels[i]==UINT32_MAX;
+            other+=pixels[i]!=UINT32_MAX && pixels[i]!=background;
+        }
+        valid=expected==471744u && !other;
+        ps5log_printf(PS5LOG_MARK,"PS5VK_BINDINGS_READBACK case=%u mask=%04x expected_white=%zu other=%zu valid=%d",
+            witness_index,bindings.mask,expected,other,valid);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==8) {
+        struct ps5vk_vertex_format_case c;size_t expected=0,other=0;
+        uint32_t first_other=0;
+        if(ps5vk_vertex_format_case(witness_index,&c))fail("vertex-format-case",-1);
+        for(size_t i=0;i<words;++i) {
+            if(pixels[i]==UINT32_MAX)++expected;
+            else if(pixels[i]!=background) {
+                if(!other)first_other=pixels[i];
+                ++other;
+            }
+        }
+        valid=expected==471744u && !other;
+        ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_FORMAT_READBACK case=%u name=%s format=%u numeric=%s components=%u expected_white=%zu other=%zu first_other=%08x valid=%d",
+            witness_index,c.name,c.format,c.numeric==PS5VK_VERTEX_PROBE_SINT?"sint":
+                (c.numeric==PS5VK_VERTEX_PROBE_UINT?"uint":"float"),
+            c.components,expected,other,first_other,valid);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
+        struct ps5vk_integer_sampled_case c;size_t expected=0,other=0;
+        uint32_t first_other=0;
+        if(ps5vk_integer_sampled_case(PS5VK_INTEGER_SAMPLED_SIGN==2,
+                                      witness_index,&c))
+            fail("integer-sampled-case",-1);
+        for(size_t i=0;i<words;++i) {
+            if(pixels[i]==c.expected_bgra)++expected;
+            else if(pixels[i]!=background) {
+                if(!other)first_other=pixels[i];
+                ++other;
+            }
+        }
+        /* The owned fixture is one triangle covering exactly half of 1920x1080. */
+        valid=expected==PS5VK_INTEGER_SAMPLED_EXPECTED_PIXELS && !other;
+        ps5log_printf(PS5LOG_MARK,"PS5VK_INTEGER_SAMPLED_READBACK case=%u name=%s sign=%s format=%u expected_bgra=%08x expected=%zu other=%zu first_other=%08x valid=%d",
+            witness_index,c.name,PS5VK_INTEGER_SAMPLED_SIGN==2?"sint":"uint",
+            c.format,c.expected_bgra,expected,other,first_other,valid);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==7) {
+        struct ps5vk_sampled_format_case c;size_t expected=0,other=0;
+        uint32_t first_other=0;
+        if(ps5vk_sampled_format_case(witness_index,&c))fail("sampled-format-case",-1);
+        for(size_t i=0;i<words;++i) {
+            if(pixels[i]==c.expected_bgra)++expected;
+            else if(pixels[i]!=background) {
+                if(!other)first_other=pixels[i];
+                ++other;
+            }
+        }
+        valid=expected==373248u && !other;
+        ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLED_FORMAT_READBACK case=%u name=%s format=%u expected_bgra=%08x expected=%zu other=%zu first_other=%08x valid=%d",
+            witness_index,c.name,c.format,c.expected_bgra,expected,other,first_other,valid);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==9) {
+        struct ps5vk_sampled_format_case c;size_t expected=0,other=0;
+        uint8_t black[16],white[16];
+        uint32_t nearest_bgra,linear_bgra,first_other=0;
+        unsigned case_index=witness_index/PS5VK_SAMPLED_FORMAT_FILTER_TRIALS;
+        unsigned linear=witness_index%PS5VK_SAMPLED_FORMAT_FILTER_TRIALS;
+        if(ps5vk_sampled_format_case(case_index,&c) ||
+           ps5vk_sampled_format_filter_texels(case_index,black,white,
+                                               &nearest_bgra,&linear_bgra))
+            fail("sampled-format-filter-case",-1);
+        uint32_t expected_bgra=linear?linear_bgra:nearest_bgra;
+        for(size_t i=0;i<words;++i) {
+            if(pixels[i]==expected_bgra)++expected;
+            else if(pixels[i]!=background) {
+                if(!other)first_other=pixels[i];
+                ++other;
+            }
+        }
+        valid=expected==373248u && !other;
+        ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLED_FILTER_READBACK trial=%u case=%u name=%s format=%u filter=%s expected_bgra=%08x expected=%zu other=%zu first_other=%08x valid=%d",
+            witness_index,case_index,c.name,c.format,linear?"linear":"nearest",
+            expected_bgra,expected,other,first_other,valid);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
+        struct ps5vk_sampler_core_case c;size_t expected=0,other=0;
+        if(ps5vk_sampler_core_case(witness_index,&c))fail("sampler-core-case",-1);
+        for(size_t i=0;i<words;++i) {
+            if(pixels[i]==c.expected_bgra)++expected;
+            else if(pixels[i]!=background)++other;
+        }
+        valid=expected==(c.minification?1u:373248u) && !other;
+        ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_READBACK case=%u name=%s expected_bgra=%08x expected=%zu other=%zu valid=%d",
+            witness_index,c.name,c.expected_bgra,expected,other,valid);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE)valid=stats.changed<=
         (uint64_t)pipeline->scissor.extent.width*pipeline->scissor.extent.height && !stats.bad_alpha && !stats.bad_sum;
     ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_API_READBACK changed_words=%llu total_words=%zu bad_alpha=%llu bad_sum=%llu viewport=%ux%u valid=%d",
         (unsigned long long)stats.changed,words,(unsigned long long)stats.bad_alpha,(unsigned long long)stats.bad_sum,
         (unsigned)pipeline->viewport.width,(unsigned)pipeline->viewport.height,valid);
     if(!valid)fail("triangle-readback",-1);
-    if(PS5VK_GRAPHICS_SCISSOR_PROBE) {
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=7 &&
+       PS5VK_GRAPHICS_SCISSOR_PROBE!=8 && PS5VK_GRAPHICS_SCISSOR_PROBE!=9) {
         uint64_t selected=0;
         for(unsigned ty=0;ty<8;++ty)for(unsigned tx=0;tx<15;++tx) {
             struct ps5vk_scene_region region;
@@ -344,7 +785,11 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         /* Report discrepancies without hiding blocks or replacing GPU output.
          * This diagnostic still follows the normal retirement/close path. */
     }
-    if(PS5VK_GRAPHICS_SCENE && !PS5VK_GRAPHICS_CONTINUOUS && !PS5VK_GRAPHICS_WITNESSES && frame%45==0) {
+    if(PS5VK_GRAPHICS_SCENE && PS5VK_GRAPHICS_SCISSOR_PROBE!=6 &&
+       PS5VK_GRAPHICS_SCISSOR_PROBE!=7 && PS5VK_GRAPHICS_SCISSOR_PROBE!=9 &&
+       PS5VK_GRAPHICS_SCISSOR_PROBE!=10 &&
+       !PS5VK_GRAPHICS_CONTINUOUS &&
+       !PS5VK_GRAPHICS_WITNESSES && frame%45==0) {
         for(unsigned ty=2;ty<6;++ty)for(unsigned tx=6;tx<10;++tx) {
             struct ps5vk_scene_region region;
             if(ps5vk_scene_region_scan(pixels,words,tx,ty,&region))fail("region-range",-1);
@@ -353,7 +798,9 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
             if(region.unexpected)fail("region-color",-1);
         }
     }
-    if(set_layout) {
+    if(set_layout && PS5VK_GRAPHICS_SCISSOR_PROBE!=6 &&
+       PS5VK_GRAPHICS_SCISSOR_PROBE!=7 && PS5VK_GRAPHICS_SCISSOR_PROBE!=9 &&
+       PS5VK_GRAPHICS_SCISSOR_PROBE!=10) {
         size_t histogram[3]={0},unexpected=0;
         for(size_t i=0;i<words;++i) {
             uint32_t p=pixels[i];if(p==background)continue;
@@ -362,6 +809,28 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         }
         ps5log_printf(PS5LOG_MARK,"PS5VK_TEXTURE_READBACK frame=%u red=%zu green=%zu blue=%zu unexpected=%zu",
             frame,histogram[0],histogram[1],histogram[2],unexpected);
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+            int mip_valid=!unexpected;
+            if(PS5VK_MIP_LOD_BIAS<0)
+                mip_valid=mip_valid && histogram[0]==186624 && !histogram[1] && !histogram[2];
+            else if(PS5VK_MIP_LOD_BIAS>0)
+                mip_valid=mip_valid && !histogram[0] && !histogram[1] && histogram[2]==186624;
+            else
+                mip_valid=mip_valid && histogram[0]==103680 && histogram[1]==62208 && histogram[2]==20736;
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_MIPMAP_READBACK levels=%u lod_bias=%d red=%zu green=%zu blue=%zu unexpected=%zu valid=%d",
+                texture.mip_levels,PS5VK_MIP_LOD_BIAS,
+                histogram[0],histogram[1],histogram[2],unexpected,mip_valid);
+            if(!mip_valid)fail("mipmap-readback",-1);
+        }
+        if(PS5VK_IMAGE_TARGET) {
+            int layered_valid=!unexpected && histogram[0] && histogram[1] && histogram[2];
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_LAYERED_READBACK target=%s red=%zu green=%zu blue=%zu unexpected=%zu valid=%d",
+                layered_target_name(),
+                histogram[0],histogram[1],histogram[2],unexpected,layered_valid);
+            if(!layered_valid)fail("layered-texture-readback",-1);
+        }
         if(unexpected || (!PS5VK_GRAPHICS_SCISSOR_PROBE && !PS5VK_GRAPHICS_WITNESSES && !far_visible && (!histogram[0] || !histogram[1] || !histogram[2])))fail("texture-readback",-1);
         /* This triangle's UV domain covers the repeated top-left/bottom-right
          * texel most, top-right second, bottom-left least. A red/blue swap
@@ -428,6 +897,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
 #endif
     vkDestroyImage(d,first,NULL); vkFreeMemory(d,memory,NULL);
     if(vertex_buffer){vkDestroyBuffer(d,vertex_buffer,NULL);vkFreeMemory(d,vertex_memory,NULL);}
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)binding_fixture_destroy(d,&bindings);
     if(index_buffer){vkDestroyBuffer(d,index_buffer,NULL);vkFreeMemory(d,index_memory,NULL);}
     if(set_layout)texture_destroy(d,&texture);
     if(depth_image){vkDestroyImageView(d,depth_view,NULL);vkDestroyImage(d,depth_image,NULL);vkFreeMemory(d,depth_memory,NULL);}
@@ -468,21 +938,53 @@ int main(void)
         CHECK(vkGetPhysicalDeviceImageFormatProperties(physical,query_formats[q],VK_IMAGE_TYPE_2D,
             VK_IMAGE_TILING_OPTIMAL,query_usages[q],0,&props));
         if(props.maxExtent.width<1920 || props.maxExtent.height<1080 || props.maxExtent.depth!=1 ||
-           props.maxMipLevels!=1 || props.maxArrayLayers!=1 || props.sampleCounts!=VK_SAMPLE_COUNT_1_BIT)
+           props.maxMipLevels!=(q==2?15u:1u) || props.maxArrayLayers!=(q==2?PS5VK_MAX_IMAGE_ARRAY_LAYERS:1u) ||
+           props.sampleCounts!=VK_SAMPLE_COUNT_1_BIT)
             fail("image-query-profile",-1);
         ps5log_printf(PS5LOG_MARK,"PS5VK_IMAGE_QUERY format=%u usage=%u max_width=%u max_height=%u max_bytes=%llu",
             query_formats[q],query_usages[q],props.maxExtent.width,props.maxExtent.height,
             (unsigned long long)props.maxResourceSize);
     }
+    if(PS5VK_IMAGE_TARGET) {
+        VkImageFormatProperties props;
+        VkImageType type=PS5VK_IMAGE_TARGET==3?VK_IMAGE_TYPE_3D:
+            (PS5VK_IMAGE_TARGET>=4?VK_IMAGE_TYPE_1D:VK_IMAGE_TYPE_2D);
+        VkImageCreateFlags flags=PS5VK_IMAGE_TARGET==2?
+            VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT:0;
+        CHECK(vkGetPhysicalDeviceImageFormatProperties(physical,VK_FORMAT_R8G8B8A8_UNORM,
+            type,VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,flags,&props));
+        uint32_t expected_dimension=PS5VK_IMAGE_TARGET==2?PS5VK_MAX_IMAGE_CUBE:
+            (PS5VK_IMAGE_TARGET==3?PS5VK_MAX_IMAGE_3D:
+            (PS5VK_IMAGE_TARGET>=4?PS5VK_MAX_IMAGE_1D:PS5VK_MAX_IMAGE_2D));
+        uint32_t expected_layers=(PS5VK_IMAGE_TARGET==1 || PS5VK_IMAGE_TARGET>=4)?
+            PS5VK_MAX_IMAGE_ARRAY_LAYERS:(PS5VK_IMAGE_TARGET==2?6u:1u);
+        if(props.maxExtent.width!=expected_dimension ||
+           props.maxExtent.height!=(PS5VK_IMAGE_TARGET>=4?1u:expected_dimension) ||
+           props.maxExtent.depth!=(PS5VK_IMAGE_TARGET==3?PS5VK_MAX_IMAGE_3D:1u) ||
+           props.maxArrayLayers!=expected_layers)fail("layered-image-query",-1);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_LAYERED_QUERY target=%s dimension=%u depth=%u layers=%u",
+            layered_target_name(),
+            props.maxExtent.width,props.maxExtent.depth,props.maxArrayLayers);
+    }
     VkPhysicalDeviceProperties device_props;vkGetPhysicalDeviceProperties(physical,&device_props);
-    if(device_props.limits.maxImageDimension2D<1920 || device_props.limits.maxVertexInputBindings!=1 ||
+    if(device_props.limits.maxImageDimension1D<PS5VK_MAX_IMAGE_1D ||
+       device_props.limits.maxImageDimension2D<1920 ||
+       device_props.limits.maxImageDimension3D<PS5VK_MAX_IMAGE_3D ||
+       device_props.limits.maxImageDimensionCube<PS5VK_MAX_IMAGE_CUBE ||
+       device_props.limits.maxImageArrayLayers<PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
+       !ps5vk_graphics_vertex_bindings_available(&device_props.limits,
+           PS5VK_GRAPHICS_SCISSOR_PROBE==13?16u:1u) ||
        device_props.limits.maxViewports!=1 || device_props.limits.maxColorAttachments!=1 ||
        device_props.limits.maxPerStageDescriptorSamplers!=1 || device_props.limits.maxPerStageDescriptorSampledImages!=1 ||
        device_props.limits.maxDescriptorSetSamplers!=1 || device_props.limits.maxDescriptorSetSampledImages!=1 ||
        !device_props.limits.maxSamplerAllocationCount)
         fail("graphics-limits-profile",-1);
-    ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_LIMITS image_2d=%u framebuffer=%ux%u vertex_stride=%u bindings=%u viewports=%u",
-        device_props.limits.maxImageDimension2D,device_props.limits.maxFramebufferWidth,
+    ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_LIMITS image_1d=%u image_2d=%u image_3d=%u image_cube=%u image_layers=%u framebuffer=%ux%u vertex_stride=%u bindings=%u viewports=%u",
+        device_props.limits.maxImageDimension1D,device_props.limits.maxImageDimension2D,device_props.limits.maxImageDimension3D,
+        device_props.limits.maxImageDimensionCube,device_props.limits.maxImageArrayLayers,
+        device_props.limits.maxFramebufferWidth,
         device_props.limits.maxFramebufferHeight,device_props.limits.maxVertexInputBindingStride,
         device_props.limits.maxVertexInputBindings,device_props.limits.maxViewports);
     ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLED_LIMITS stage_samplers=%u stage_images=%u set_samplers=%u set_images=%u allocations=%u",
@@ -523,11 +1025,52 @@ int main(void)
     VkPipelineLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     const struct ps5vk_graphics_key *key=&graphics_library.programs[0].key;
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
-    const struct ps5vk_graphics_key runtime_key={
-        .vertex={.words=ps5vk_runtime_vertex,.word_count=sizeof(ps5vk_runtime_vertex)/4,.entry="main"},
-        .fragment={.words=ps5vk_runtime_fragment,.word_count=sizeof(ps5vk_runtime_fragment)/4,.entry="main"},
+    VkVertexInputBindingDescription runtime_binding={0,
+        PS5VK_GRAPHICS_SCISSOR_PROBE==12?24:16,VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription runtime_attributes[2]={
+        {0,0,PS5VK_GRAPHICS_SCISSOR_PROBE==12?VK_FORMAT_R32G32B32_SFLOAT:
+            VK_FORMAT_R32G32B32A32_SINT,0},
+        {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}};
+    struct ps5vk_set_signature runtime_sampled={0};
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+        runtime_sampled.count=1;runtime_sampled.binding[0].count=1;
+        runtime_sampled.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+        runtime_sampled.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        for(unsigned binding_index=1;binding_index<PS5VK_MAX_BINDINGS;++binding_index)
+            runtime_sampled.binding[binding_index].first=1;
+    }
+    struct ps5vk_graphics_key runtime_key={
+        .vertex={.words=PS5VK_GRAPHICS_SCISSOR_PROBE==12?ps5vk_runtime_mipmap_vertex:
+                (PS5VK_GRAPHICS_SCISSOR_PROBE==8?ps5vk_runtime_vertex_sint:ps5vk_runtime_vertex),
+            .word_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?sizeof(ps5vk_runtime_mipmap_vertex)/4:
+                (PS5VK_GRAPHICS_SCISSOR_PROBE==8?sizeof(ps5vk_runtime_vertex_sint)/4:sizeof(ps5vk_runtime_vertex)/4),.entry="main"},
+        .fragment={.words=PS5VK_GRAPHICS_SCISSOR_PROBE==12?ps5vk_runtime_texture_fragment:
+                (PS5VK_GRAPHICS_SCISSOR_PROBE==8?ps5vk_runtime_vertex_format_fragment:ps5vk_runtime_fragment),
+            .word_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?sizeof(ps5vk_runtime_texture_fragment)/4:
+                (PS5VK_GRAPHICS_SCISSOR_PROBE==8?sizeof(ps5vk_runtime_vertex_format_fragment)/4:sizeof(ps5vk_runtime_fragment)/4),.entry="main"},
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .vertex_binding_count=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?1:0,
+        .vertex_attribute_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?2:(PS5VK_GRAPHICS_SCISSOR_PROBE==8?1:0),
+        .vertex_bindings=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?&runtime_binding:NULL,
+        .vertex_attributes=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?runtime_attributes:NULL,
+        .descriptor_set_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?1:0,
+        .descriptor_sets=PS5VK_GRAPHICS_SCISSOR_PROBE==12?&runtime_sampled:NULL};
+    VkVertexInputBindingDescription multiple_bindings[16];
+    VkVertexInputAttributeDescription multiple_attributes[16];
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==13) {
+        for(unsigned location=0;location<16;++location) {
+            unsigned b=15-location;
+            multiple_bindings[location]=(VkVertexInputBindingDescription){b,48+4*b,VK_VERTEX_INPUT_RATE_VERTEX};
+            multiple_attributes[location]=(VkVertexInputAttributeDescription){location,b,VK_FORMAT_R32G32B32A32_SFLOAT,4*(b%3)};
+        }
+        runtime_key.vertex=(struct ps5vk_graphics_module_key){
+            .words=ps5vk_runtime_vertex_bindings,.word_count=sizeof(ps5vk_runtime_vertex_bindings)/4,.entry="main"};
+        runtime_key.fragment=(struct ps5vk_graphics_module_key){
+            .words=ps5vk_runtime_vertex_format_fragment,.word_count=sizeof(ps5vk_runtime_vertex_format_fragment)/4,.entry="main"};
+        runtime_key.vertex_binding_count=runtime_key.vertex_attribute_count=16;
+        runtime_key.vertex_bindings=multiple_bindings;runtime_key.vertex_attributes=multiple_attributes;
+    }
     key=&runtime_key;
     const struct ps5vk_graphics_program *unexpected=NULL;
     if(ps5vk_graphics_resolve(&graphics_library,key,&unexpected)!=VK_ERROR_FEATURE_NOT_PRESENT)
@@ -544,15 +1087,33 @@ int main(void)
         li.setLayoutCount=1;li.pSetLayouts=&set_layout;
     }
     VkPipelineLayout layout; CHECK(vkCreatePipelineLayout(device,&li,NULL,&layout));
-    const struct ps5vk_graphics_module_key *modules[2]={&key->vertex,&key->fragment};
-    VkShaderModule shaders[2]; VkPipelineShaderStageCreateInfo stages[2];
-    for (unsigned j=0;j<2;++j) {
+    const struct ps5vk_graphics_module_key *modules[4]={&key->vertex,&key->fragment,NULL,NULL};
+    unsigned shader_count=2,fragment_shader=1;
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+    const struct ps5vk_graphics_module_key vertex_sint={
+        .words=ps5vk_runtime_vertex_sint,.word_count=sizeof(ps5vk_runtime_vertex_sint)/4,.entry="main"};
+    const struct ps5vk_graphics_module_key vertex_uint={
+        .words=ps5vk_runtime_vertex_uint,.word_count=sizeof(ps5vk_runtime_vertex_uint)/4,.entry="main"};
+    const struct ps5vk_graphics_module_key vertex_unorm={
+        .words=ps5vk_runtime_vertex_unorm,.word_count=sizeof(ps5vk_runtime_vertex_unorm)/4,.entry="main"};
+    const struct ps5vk_graphics_module_key vertex_format_fragment={
+        .words=ps5vk_runtime_vertex_format_fragment,
+        .word_count=sizeof(ps5vk_runtime_vertex_format_fragment)/4,.entry="main"};
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==8) {
+        modules[0]=&vertex_sint;modules[1]=&vertex_uint;modules[2]=&vertex_unorm;
+        modules[3]=&vertex_format_fragment;shader_count=4;fragment_shader=3;
+    }
+#endif
+    VkShaderModule shaders[4]; VkPipelineShaderStageCreateInfo stages[2];
+    for (unsigned j=0;j<shader_count;++j) {
         VkShaderModuleCreateInfo si={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .codeSize=modules[j]->word_count*4,.pCode=modules[j]->words};
         CHECK(vkCreateShaderModule(device,&si,NULL,&shaders[j]));
-        stages[j]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage=j ? VK_SHADER_STAGE_FRAGMENT_BIT : VK_SHADER_STAGE_VERTEX_BIT,.module=shaders[j],.pName="main"};
     }
+    stages[0]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=shaders[0],.pName="main"};
+    stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=shaders[fragment_shader],.pName="main"};
     VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount=key->vertex_binding_count,.pVertexBindingDescriptions=key->vertex_bindings,
         .vertexAttributeDescriptionCount=key->vertex_attribute_count,.pVertexAttributeDescriptions=key->vertex_attributes};
@@ -571,8 +1132,37 @@ int main(void)
     VkPipelineDepthStencilStateCreateInfo depth={.sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable=VK_TRUE,.depthWriteEnable=VK_TRUE,.depthCompareOp=VK_COMPARE_OP_LESS};
     if(use_depth)pi.pDepthStencilState=&depth;
-    for (unsigned iteration=0;iteration<(PS5VK_GRAPHICS_WITNESSES?(PS5VK_GRAPHICS_WITNESSES==2?4u:6u):((PS5VK_GRAPHICS_SCISSOR_PROBE==2 || PS5VK_GRAPHICS_SCISSOR_PROBE==3)?10u:(PS5VK_GRAPHICS_SCENE?1u:3u)));++iteration) {
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+    VkSpecializationMapEntry component_entries[4]={{0,0,sizeof(uint32_t)},
+        {1,sizeof(uint32_t),sizeof(uint32_t)},
+        {2,2*sizeof(uint32_t),sizeof(uint32_t)},
+        {3,3*sizeof(uint32_t),sizeof(uint32_t)}};
+    union ps5vk_vertex_probe_expected expected_components;
+    VkSpecializationInfo component_specialization={4,component_entries,
+        sizeof(expected_components),&expected_components};
+    uint32_t binding_mode=0;
+    VkSpecializationMapEntry binding_entry={0,0,sizeof(binding_mode)};
+    VkSpecializationInfo binding_specialization={1,&binding_entry,sizeof(binding_mode),&binding_mode};
+#endif
+    for (unsigned iteration=0;iteration<diagnostic_iterations();++iteration) {
         unsigned witness_index=PS5VK_GRAPHICS_WITNESSES==2 && iteration==3?5:iteration;
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==13) {
+            binding_mode=iteration%3;
+            stages[0].pSpecializationInfo=&binding_specialization;
+        }
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==8) {
+            struct ps5vk_vertex_format_case c;
+            if(ps5vk_vertex_format_case(witness_index,&c))fail("vertex-format-case",-1);
+            runtime_binding.stride=c.bytes;
+            runtime_attributes[0].format=c.format;
+            memcpy(&expected_components,&c.expected,sizeof(expected_components));
+            for(unsigned j=0;j<4;++j)component_entries[j].offset=j*sizeof(uint32_t);
+            stages[0].module=shaders[c.numeric==PS5VK_VERTEX_PROBE_SINT?0:
+                (c.numeric==PS5VK_VERTEX_PROBE_UINT?1:2)];
+            stages[0].pSpecializationInfo=&component_specialization;
+        }
+#endif
 #if PS5VK_GRAPHICS_DRAW
         ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_COMPUTE_CONTROL phase=before-graphics iteration=%u",iteration);
         ps5vk_compute_regression(device);
@@ -581,9 +1171,10 @@ int main(void)
             depth.depthTestEnable=PS5VK_GRAPHICS_WITNESSES==2?VK_FALSE:VK_TRUE;
             viewport.width=1920;viewport.height=1080;
             scissor=(VkRect2D){{(int32_t)ps5vk_scene_witnesses[witness_index].x,(int32_t)ps5vk_scene_witnesses[witness_index].y},{1,1}};
-        } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==4 || PS5VK_GRAPHICS_SCISSOR_PROBE==5) {
+        } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==13 || ps5vk_scene_full_frame_probe(PS5VK_GRAPHICS_SCISSOR_PROBE)) {
             depth.depthTestEnable=VK_FALSE;
-            scissor=(VkRect2D){{0,0},{1920,1080}};
+            scissor=PS5VK_GRAPHICS_SCISSOR_PROBE==6 && witness_index>=6 ?
+                (VkRect2D){{960,540},{1,1}}:(VkRect2D){{0,0},{1920,1080}};
         } else if(PS5VK_GRAPHICS_SCISSOR_PROBE>=2) {
             unsigned region=iteration%5;
             depth.depthTestEnable=iteration<5;
@@ -604,7 +1195,7 @@ int main(void)
         ps5vk_compute_regression(device);
 #endif
     }
-    for (unsigned j=0;j<2;++j) vkDestroyShaderModule(device,shaders[j],NULL);
+    for (unsigned j=0;j<shader_count;++j) vkDestroyShaderModule(device,shaders[j],NULL);
     vkDestroyPipelineLayout(device,layout,NULL); vkDestroyRenderPass(device,pass,NULL);
     if(set_layout)vkDestroyDescriptorSetLayout(device,set_layout,NULL);
     vkDestroyDevice(device,NULL); vkDestroyInstance(instance,NULL);

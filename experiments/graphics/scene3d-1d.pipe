@@ -1,0 +1,76 @@
+[Version]
+version = 65
+
+[VsGlsl]
+#version 450
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 texcoord;
+layout(location = 0) out vec2 uv;
+void main() {
+    float c = cos(texcoord.z), s = sin(texcoord.z);
+    vec3 p = vec3(c*position.x + s*position.z, position.y,
+                  -s*position.x + c*position.z);
+    float cx = 0.939372713, sx = 0.342897807;
+    p = vec3(p.x, cx*p.y-sx*p.z, sx*p.y+cx*p.z);
+    float distance = 4.0-p.z;
+    float nearPlane = 0.1, farPlane = 20.0;
+    gl_Position = vec4(p.x*1.2, p.y*2.133333333,
+        farPlane/(farPlane-nearPlane)*distance -
+        farPlane*nearPlane/(farPlane-nearPlane), distance);
+    uv = texcoord.xy;
+}
+
+[VsInfo]
+entryPoint = main
+
+[FsGlsl]
+#version 450
+layout(set = 0, binding = 0) uniform sampler1D surface_texture;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() {
+    float x = uv.x < 0.333333 ? (1.0/6.0) :
+        (uv.x < 0.666667 ? 0.5 : (5.0/6.0));
+    color = texture(surface_texture, x);
+}
+
+[FsInfo]
+entryPoint = main
+
+[ResourceMapping]
+userDataNode[0].visibility = 2
+userDataNode[0].type = IndirectUserDataVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].indirectUserDataCount = 1
+userDataNode[1].visibility = 64
+userDataNode[1].type = DescriptorTableVaPtr
+userDataNode[1].offsetInDwords = 0
+userDataNode[1].sizeInDwords = 1
+userDataNode[1].next[0].type = DescriptorCombinedTexture
+userDataNode[1].next[0].offsetInDwords = 0
+userDataNode[1].next[0].sizeInDwords = 12
+userDataNode[1].next[0].set = 0
+userDataNode[1].next[0].binding = 0
+
+[GraphicsPipelineState]
+topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+nggState.enableNgg = 1
+nggState.enableGsUse = 0
+colorBuffer[0].format = VK_FORMAT_B8G8R8A8_UNORM
+colorBuffer[0].channelWriteMask = 15
+colorBuffer[0].blendEnable = 0
+
+[VertexInputState]
+binding[0].binding = 0
+binding[0].stride = 24
+binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+attribute[0].location = 0
+attribute[0].binding = 0
+attribute[0].format = VK_FORMAT_R32G32B32_SFLOAT
+attribute[0].offset = 0
+attribute[1].location = 1
+attribute[1].binding = 0
+attribute[1].format = VK_FORMAT_R32G32B32_SFLOAT
+attribute[1].offset = 12
+

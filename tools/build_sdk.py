@@ -105,6 +105,7 @@ def main():
             (ROOT / "src/graphics_program.c", []),
             (ROOT / "src/vk_transfer.c", []),
             (ROOT / "src/texture_copy.c", []),
+            (ROOT / "src/texture_format.c", []),
             (ROOT / "src/texture_layout.c", []),
             (ROOT / "src/vk_device.c", []),
             (ROOT / "src/vk_dispatch.c", []),
@@ -261,7 +262,7 @@ def main():
         "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
         "src/vk_image_view.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/graphics_program.c",
-        "src/vk_transfer.c", "src/texture_copy.c", "src/texture_layout.c", "src/color_clear.c",
+        "src/vk_transfer.c", "src/texture_copy.c", "src/texture_format.c", "src/texture_layout.c", "src/color_clear.c",
         "src/vk_device.c", "src/vk_dispatch.c", "src/platform_host.c",
         "src/ps5vk_present.c"
     ]

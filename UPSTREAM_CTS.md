@@ -657,3 +657,55 @@ Close Game. The image-transfer contribution to those runs is the four bounded
 RGBA8 copy leaves described above; the 93-case total also protects the existing
 compute, graphics, synchronization, memory and buffer-transfer oracles from
 regression. It does not widen the image profile or establish conformance.
+
+## Mandatory Vulkan 1.0 feature reporting expansion
+
+The current manifest contains 94 acceptance cases. The added original upstream
+leaf is `dEQP-VK.info.device_mandatory_features`, whose generated oracle requires
+`robustBufferAccess` for this Vulkan 1.0 profile. The rebuilt payload used SELF
+SHA-256
+`b7c485340e03fe66cbba572cdf678c7b7ac2f61643721f63d3eade411298429b`
+and selection SHA-256
+`5f853eb7d53226b7eda4f758aecaa70be857a80270f213d546d7bcae28015e41`.
+Two independent launches produced these ps5log/1 runs:
+
+- `20260913T181536286Z_PPSA99994_upstream-cts_0x52560710bc64`
+- `20260913T181557404Z_PPSA99994_upstream-cts_0x525af1f50de2`
+
+Both reconstructed complete QPA reports, passed 94/94 with zero `Fail`,
+`NotSupported` or `Skip`, returned exit code zero and stopped through verified
+Close Game. This proves the reported mandatory bit and its device-creation
+contract on that exact build. At that stage it did not prove out-of-bounds
+execution; the following expansion closes the selected scalar buffer subset.
+
+## Executable robust-buffer expansion
+
+The current manifest contains 106 acceptance cases. It adds 12 unchanged
+upstream `robustness.buffer_access.compute.scalar_copy.r32_uint` leaves:
+out-of-bounds UBO and SSBO reads plus SSBO writes, each at 1-, 3-, 4- and
+32-byte descriptor ranges. Registration alone is pruned to this bounded family;
+the Khronos shaders, device/resource setup, support checks and result oracles
+remain unchanged.
+
+The first diagnostic exposed two independent driver gaps before shader
+execution: the native backend rejected the CTS auxiliary logical device, then
+descriptor layouts rejected the valid `VK_SHADER_STAGE_ALL` visibility mask.
+The backend now reference-counts a serialized process AGC session across
+logical devices, and descriptor layouts accept valid core stage masks while
+pipeline creation remains responsible for executable-stage support.
+
+Two independent launches of the corrected candidate used SELF SHA-256
+`43dd8803a47028ac5086434771d668e119aa662b4483581e72bc3e7ce571a175`
+and selection SHA-256
+`344a278e325846f6918903e48b3262e2551178aab2caa022c67e8dd3539f5b62`:
+
+- `20260913T183926998Z_PPSA99994_upstream-cts_0x53a3233107e6`
+- `20260913T183952333Z_PPSA99994_upstream-cts_0x53a909315ae1`
+
+Both reconstructed all 106 results, reported 106 `Pass` with zero `Fail`,
+`NotSupported` or `Skip`, returned exit code zero and stopped through verified
+Close Game. Their QPA SHA-256 values are
+`8137f2254731850c9b70d59119875df82c12db16815a8b544fe2f1f5847161da`
+and `046002260dfa35dd7bf3db02349368eac110a253f44ef8c7a2f587712220b4f0`.
+This is executable evidence for the selected scalar buffer family, not a Vulkan
+conformance claim or evidence for every robustness permutation.

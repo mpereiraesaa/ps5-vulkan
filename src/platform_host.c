@@ -45,6 +45,7 @@ __attribute__((weak)) VkResult ps5vk_platform_query(struct ps5vk_platform *p)
     p->close = host_close_backend;
     p->max_allocation = 64 * 1024 * 1024;
     p->queue_flags = VK_QUEUE_COMPUTE_BIT;
+    p->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
     const struct ps5vk_physical_profile_info profile = {
         .name = "ps5vk host platform",
         .heap_size = p->max_allocation,

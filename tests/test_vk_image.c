@@ -26,7 +26,13 @@ int main(void)
     VkImage image;
     assert(vkCreateImage(&d, &info, NULL, &image) == VK_ERROR_FEATURE_NOT_PRESENT && !calls);
     d.graphics_enabled=1;
-    assert(vkCreateImage(&d, &info, NULL, &image) == VK_SUCCESS && calls == 1);
+    VkImageCreateInfo delegated = info;
+    delegated.format = VK_FORMAT_R8_UNORM;
+    delegated.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkImage delegated_image;
+    assert(vkCreateImage(&d, &delegated, NULL, &delegated_image) == VK_SUCCESS && calls == 1);
+    vkDestroyImage(&d, delegated_image, NULL);
+    assert(vkCreateImage(&d, &info, NULL, &image) == VK_SUCCESS && calls == 2);
     VkMemoryRequirements req; vkGetImageMemoryRequirements(&d, image, &req);
     assert(req.size == 4096 && req.alignment == 256);
     VkSubresourceLayout layout = {.rowPitch = 1234, .size = 5678};
@@ -103,6 +109,6 @@ int main(void)
     assert(ps5vk_image_span(&d, image, &resolved, &span) == VK_ERROR_UNKNOWN && !resolved && !span);
     vkDestroyImage(&d, image, NULL); assert(!d.images && !d.graphics_objects && !d.memories);
     info.mipLevels=32;
-    assert(vkCreateImage(&d, &info, NULL, &image) == VK_ERROR_UNKNOWN && calls == 1);
+    assert(vkCreateImage(&d, &info, NULL, &image) == VK_ERROR_UNKNOWN && calls == 2);
     puts("Image layout delegation, binding and lifetime: host backend only");
 }

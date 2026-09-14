@@ -1,6 +1,9 @@
+/* Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later */
 #include "vk_internal.h"
 #include "depth_layout.h"
 #include "texture_layout.h"
+#include "texture_format.h"
 #include "graphics_formats.h"
 #include <string.h>
 
@@ -13,10 +16,36 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     if(!ps5vk_graphics_image_usage(info->format,info->usage))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     int depth = info->format == VK_FORMAT_D32_SFLOAT;
+    int sampled = ps5vk_texture_format_sampled_image(info->format);
     int color = info->format == VK_FORMAT_B8G8R8A8_UNORM || info->format == VK_FORMAT_R8G8B8A8_UNORM;
-    if ((!depth && !color) || info->imageType != VK_IMAGE_TYPE_2D ||
-        info->mipLevels != 1 || info->arrayLayers != 1 || info->extent.depth != 1 ||
+    if ((!depth && !color && !sampled) ||
+        info->mipLevels > PS5VK_MAX_TEXTURE_MIP_LEVELS ||
         info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL)
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    const int attachment=(info->usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0;
+    const int cube=info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    if ((info->flags && !cube) ||
+        (attachment && (info->flags || info->imageType!=VK_IMAGE_TYPE_2D ||
+                        info->arrayLayers!=1 || info->extent.depth!=1)) ||
+        (!attachment && info->imageType==VK_IMAGE_TYPE_1D &&
+         (cube || info->extent.height!=1 || info->extent.depth!=1 ||
+          !info->arrayLayers || info->arrayLayers>PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
+          info->extent.width>PS5VK_MAX_IMAGE_1D)) ||
+        (!attachment && info->imageType==VK_IMAGE_TYPE_2D &&
+         (info->extent.depth!=1 || !info->arrayLayers ||
+          info->arrayLayers>PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
+          (cube && (info->arrayLayers!=6 ||
+                    info->extent.width!=info->extent.height ||
+                    info->extent.width>PS5VK_MAX_IMAGE_CUBE)))) ||
+        (!attachment && info->imageType==VK_IMAGE_TYPE_3D &&
+         (cube || info->arrayLayers!=1 || !info->extent.depth ||
+          info->extent.width>PS5VK_MAX_IMAGE_3D ||
+          info->extent.height>PS5VK_MAX_IMAGE_3D ||
+          info->extent.depth>PS5VK_MAX_IMAGE_3D)) ||
+        (!attachment && info->imageType!=VK_IMAGE_TYPE_1D &&
+         info->imageType!=VK_IMAGE_TYPE_2D &&
+         info->imageType!=VK_IMAGE_TYPE_3D))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     /* Padded linear layout: the sampled/upload role and the pure transfer role
      * (copy source and/or destination) share one host-visible layout, so the
@@ -24,9 +53,13 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     if((info->usage & (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
             VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
         !(info->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
-        struct ps5vk_texture_layout texture;
-        if(info->format!=VK_FORMAT_R8G8B8A8_UNORM ||
-            ps5vk_texture_layout(info->extent.width,info->extent.height,&texture))return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        struct ps5vk_texture_mip_layout texture;
+        const uint32_t slices=info->imageType==VK_IMAGE_TYPE_3D?
+            info->extent.depth:info->arrayLayers;
+        if(!sampled || (info->mipLevels!=1 && !(info->usage&VK_IMAGE_USAGE_SAMPLED_BIT)) ||
+           ps5vk_texture_mip_layout_for_slices(info->format,
+            info->extent.width,info->extent.height,slices,info->mipLevels,&texture))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
         *out=(VkMemoryRequirements){texture.bytes,texture.alignment,1};return VK_SUCCESS;
     }
     struct ps5vk_depth_layout layout;

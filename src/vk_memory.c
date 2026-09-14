@@ -327,21 +327,33 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO) return INVALID;
     if (!d->graphics_enabled || !d->image_requirements) return VK_ERROR_FEATURE_NOT_PRESENT;
-    if (info->pNext || info->flags || info->imageType != VK_IMAGE_TYPE_2D ||
-        info->arrayLayers != 1 || info->samples != VK_SAMPLE_COUNT_1_BIT ||
+    if (info->pNext ||
+        (info->flags && info->flags != VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
+        (info->imageType != VK_IMAGE_TYPE_1D && info->imageType != VK_IMAGE_TYPE_2D &&
+         info->imageType != VK_IMAGE_TYPE_3D) ||
+        !info->arrayLayers || info->samples != VK_SAMPLE_COUNT_1_BIT ||
         info->sharingMode != VK_SHARING_MODE_EXCLUSIVE || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
-        info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED ||
-        (info->format != VK_FORMAT_R8G8B8A8_UNORM && info->format != VK_FORMAT_B8G8R8A8_UNORM &&
-         info->format != VK_FORMAT_D32_SFLOAT)) return VK_ERROR_FEATURE_NOT_PRESENT;
+        info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED) return VK_ERROR_FEATURE_NOT_PRESENT;
     const VkImageUsageFlags supported = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     if (!info->usage || info->usage & ~supported || !info->extent.width || !info->extent.height ||
-        info->extent.depth != 1 || !info->mipLevels) return INVALID;
+        !info->extent.depth || !info->mipLevels ||
+        (info->imageType==VK_IMAGE_TYPE_1D &&
+         (info->extent.height!=1 || info->extent.depth!=1)) ||
+        (info->imageType==VK_IMAGE_TYPE_2D && info->extent.depth!=1) ||
+        (info->imageType==VK_IMAGE_TYPE_3D && info->arrayLayers!=1) ||
+        (info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
+         (info->imageType!=VK_IMAGE_TYPE_2D || info->arrayLayers!=6 ||
+          info->extent.width!=info->extent.height))) return INVALID;
     uint32_t dim = info->extent.width > info->extent.height ? info->extent.width : info->extent.height;
+    if(info->extent.depth>dim)dim=info->extent.depth;
     uint32_t levels = 0; for (; dim; dim >>= 1) ++levels;
     if (info->mipLevels > levels ||
         (info->format == VK_FORMAT_D32_SFLOAT ? (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
          (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) return INVALID;
+    /* The backend owns format/usage support. Keeping a second format whitelist
+     * here made newly validated native formats impossible to create even when
+     * the query and requirements paths accepted them. */
     VkMemoryRequirements requirements = {0};
     VkResult rc = d->image_requirements(d, info, &requirements);
     if (rc != VK_SUCCESS) return rc;

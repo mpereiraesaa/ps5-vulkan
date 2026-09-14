@@ -3,6 +3,7 @@
 
 VkResult ps5vk_descriptor_encode(VkDevice device,
     const struct ps5vk_compiled_program *program, uint32_t set_index, VkDescriptorSet set,
+    const VkDeviceSize dynamic_offsets[PS5VK_MAX_DESCRIPTORS],
     uint32_t *table, size_t capacity_dwords)
 {
     if (!device || !program || !set || !set->pool || set->pool->device != device ||
@@ -56,8 +57,11 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
             continue;
         }
         const VkDescriptorBufferInfo *info = &set->buffers[index];
+        VkDeviceSize dynamic = ps5vk_dynamic_descriptor_type(p->type) ?
+            dynamic_offsets[i] : 0;
+        if (dynamic > UINT64_MAX - info->offset) return VK_ERROR_UNKNOWN;
         void *address = NULL; VkDeviceSize bytes = 0;
-        VkResult result = ps5vk_buffer_span(device, info->buffer, info->offset,
+        VkResult result = ps5vk_buffer_span(device, info->buffer, info->offset + dynamic,
                                            info->range, &address, &bytes);
         if (result != VK_SUCCESS) return result;
         uint64_t gpu = (uintptr_t)address;

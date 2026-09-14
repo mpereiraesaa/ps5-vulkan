@@ -216,8 +216,8 @@ static const VkVertexInputAttributeDescription graphics_attributes[2] = {
         library += f'static const uint32_t graphics_{stage}_spirv[] = {{' + ','.join(map(str, words)) + '};\n'
     library += '''static const struct ps5vk_graphics_program graphics_program = {
     .key = {
-        .vertex = {graphics_vertex_spirv, sizeof(graphics_vertex_spirv)/4, "main"},
-        .fragment = {graphics_fragment_spirv, sizeof(graphics_fragment_spirv)/4, "main"},
+        .vertex = {.words=graphics_vertex_spirv, .word_count=sizeof(graphics_vertex_spirv)/4, .entry="main"},
+        .fragment = {.words=graphics_fragment_spirv, .word_count=sizeof(graphics_fragment_spirv)/4, .entry="main"},
         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .color_format = VK_FORMAT_B8G8R8A8_UNORM,
         .samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = 15,
@@ -233,9 +233,16 @@ static const struct ps5vk_graphics_library graphics_library = {&graphics_program
             '        .vertex_bindings=&graphics_binding, .vertex_attributes=graphics_attributes,')
         manifest['header_adapter']['profile'] = 'interleaved-float-vertex-table-base-vertex-instance'
     if textured:
-        signature = 'static const struct ps5vk_set_signature graphics_set = {.count=1, .combined_image={[0]=1}, .binding={\n'
-        signature += '[0]={1,0,VK_SHADER_STAGE_FRAGMENT_BIT},\n'
-        signature += ',\n'.join(f'[{i}]={{0,1,0}}' for i in range(1,32)) + '}};\n'
+        empty_bindings = ',\n'.join(
+            f'        [{i}]={{.count=0,.first=1,.stages=0}}' for i in range(1, 32))
+        signature = ('static const struct ps5vk_set_signature graphics_set = {\n'
+            '    .count=1,\n'
+            '    .type={[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},\n'
+            '    .binding={\n'
+            '        [0]={.count=1,.first=0,.stages=VK_SHADER_STAGE_FRAGMENT_BIT},\n' +
+            empty_bindings + '\n'
+            '    },\n'
+            '};\n')
         library = library.replace('static const struct ps5vk_graphics_program graphics_program',
             signature + 'static const struct ps5vk_graphics_program graphics_program')
         library = library.replace('.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = 15,',
@@ -244,7 +251,10 @@ static const struct ps5vk_graphics_library graphics_library = {&graphics_program
         manifest['header_adapter']['profile']='vertex-table-fragment-combined-texture-set0-binding0'
     (out / 'graphics_library.h').write_text(library)
     manifest['graphics_library_sha256'] = digest(out / 'graphics_library.h')
-    manifest['native_input_version'] = 2
+    # Version 3 makes the complete 32-binding set signature explicit.  Version
+    # 2 left the empty binding offsets implicitly zero, which no longer matches
+    # the fail-closed descriptor-signature invariant after binding zero.
+    manifest['native_input_version'] = 3
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(out / "manifest.json")
 

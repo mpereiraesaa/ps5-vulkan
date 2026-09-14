@@ -1,12 +1,45 @@
 #include "vk_internal.h"
 #include "graphics_formats.h"
 #include "physical_device_profile.h"
+#include "device_profile_report.h"
 #include <assert.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
+#include <setjmp.h>
+
+/* Compile the *consumer's* independent assertions unchanged against the real
+ * public query entry points. Only platform discovery is mocked here. */
+static jmp_buf consumer_rejection;
+static int expect_consumer_rejection;
+static const char *consumer_failed_contract;
+static void consumer_require(int condition, const char *message)
+{
+    if (condition) return;
+    consumer_failed_contract = message;
+    if (expect_consumer_rejection) longjmp(consumer_rejection, 1);
+    fprintf(stderr, "Consumer contract failed: %s\n", message);
+    abort();
+}
+static void consumer_log(int level, const char *fmt, ...)
+{
+    (void)level;
+    va_list ap;
+    va_start(ap, fmt); vprintf(fmt, ap); va_end(ap);
+    putchar('\n');
+}
+#define REQUIRE(c, m) consumer_require(!!(c), (m))
+#define PS5LOG_MARK 0
+#define ps5log_printf consumer_log
+#define ps5log_line(level, message) consumer_log(level, "%s", message)
+#include "../examples/native_consumer/physical_device_contract.h"
+#undef REQUIRE
+#undef PS5LOG_MARK
+#undef ps5log_printf
+#undef ps5log_line
 
 static unsigned opened, closed;
 static VkResult query_result, open_result;
@@ -33,7 +66,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     if (query_result) return query_result;
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
-                               .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT};
+                               .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT,
+                               .supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU",
         .heap_size = 65536,
@@ -92,7 +126,11 @@ static void lifecycle(void)
     ps5vk_graphics_limits(&gl);
     assert(gl.maxComputeWorkGroupInvocations==1024 && gl.nonCoherentAtomSize==64);
     assert(gl.maxPerStageDescriptorStorageBuffers==128 && gl.maxDescriptorSetStorageBuffers==128 && gl.maxPerStageResources==128);
-    assert(gl.maxImageDimension2D==16383 && gl.maxImageArrayLayers==1);
+    assert(gl.maxImageDimension1D==PS5VK_MAX_IMAGE_1D &&
+        gl.maxImageDimension2D==16383 &&
+        gl.maxImageDimension3D==PS5VK_MAX_IMAGE_3D &&
+        gl.maxImageDimensionCube==PS5VK_MAX_IMAGE_CUBE &&
+        gl.maxImageArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
     assert(gl.maxPerStageDescriptorSamplers==1 && gl.maxPerStageDescriptorSampledImages==1);
     assert(gl.maxDescriptorSetSamplers==1 && gl.maxDescriptorSetSampledImages==1);
     assert(gl.maxSamplerAllocationCount==PS5VK_MAX_SAMPLERS && PS5VK_MAX_SAMPLERS==4096);
@@ -109,15 +147,92 @@ static void lifecycle(void)
     assert(gl.maxFramebufferWidth==16383 && gl.maxFramebufferHeight==16383);
     assert(gl.maxFramebufferLayers==1 && gl.maxColorAttachments==1);
     assert(gl.framebufferColorSampleCounts==1 && gl.framebufferDepthSampleCounts==1);
-    assert(gl.sampledImageColorSampleCounts==1 && !gl.sampledImageDepthSampleCounts);
+    assert(gl.sampledImageColorSampleCounts==1 &&
+        gl.sampledImageIntegerSampleCounts==1 && !gl.sampledImageDepthSampleCounts);
     assert(gl.maxViewports==1 && gl.maxViewportDimensions[0]==16384 && gl.maxViewportDimensions[1]==16384);
     assert(gl.viewportBoundsRange[0]==-32768 && gl.viewportBoundsRange[1]==32767);
-    assert(gl.maxVertexInputBindings==1 && gl.maxVertexInputAttributes==32);
+    assert(gl.maxVertexInputBindings==16 && gl.maxVertexInputAttributes==32);
+    assert(ps5vk_graphics_vertex_bindings_available(&gl,1));
+    assert(ps5vk_graphics_vertex_bindings_available(&gl,16));
+    assert(!ps5vk_graphics_vertex_bindings_available(&gl,17));
+    VkPhysicalDeviceLimits old_binding_limit=gl;old_binding_limit.maxVertexInputBindings=1;
+    assert(ps5vk_graphics_vertex_bindings_available(&old_binding_limit,1));
+    assert(!ps5vk_graphics_vertex_bindings_available(&old_binding_limit,16));
     assert(gl.maxVertexInputBindingStride==16380 && gl.maxVertexInputAttributeOffset==16376);
     assert(gl.maxDrawIndexedIndexValue==UINT32_MAX);
     assert(gl.subPixelPrecisionBits==8);
     /* Raster quantization is not a claim about sampler/viewport precision. */
-    assert(!gl.subTexelPrecisionBits && !gl.mipmapPrecisionBits && !gl.viewportSubPixelBits);
+    assert(!gl.viewportSubPixelBits);
+    /* The full graphics profile reports the Vulkan 1.0 mandatory floors for
+     * texture precision and the compiled VS/FS interface, plus the fixed 1.0
+     * sizes implied by largePoints/wideLines being VK_FALSE. Those come from
+     * the shared initializer, so they hold for every shipped profile, and the
+     * validator rejects a report that drops any of them. */
+    {
+        VkPhysicalDeviceProperties profile;
+        VkPhysicalDeviceMemoryProperties profile_memory;
+        ps5vk_device_profile_init(&profile, &profile_memory, VK_TRUE, VK_TRUE);
+        const VkPhysicalDeviceLimits *pl = &profile.limits;
+        assert(pl->subTexelPrecisionBits==PS5VK_REQUIRED_SUBTEXEL_BITS);
+        assert(pl->mipmapPrecisionBits==PS5VK_REQUIRED_MIPMAP_PRECISION_BITS);
+        assert(pl->maxVertexOutputComponents==PS5VK_REQUIRED_INTERFACE_COMPONENTS);
+        assert(pl->maxFragmentInputComponents==PS5VK_REQUIRED_INTERFACE_COMPONENTS);
+        assert(pl->maxSampleMaskWords==PS5VK_REQUIRED_SAMPLE_MASK_WORDS);
+        assert(pl->sampledImageIntegerSampleCounts==VK_SAMPLE_COUNT_1_BIT);
+        assert(pl->pointSizeRange[0]==PS5VK_REQUIRED_POINT_SIZE &&
+               pl->pointSizeRange[1]==PS5VK_REQUIRED_POINT_SIZE);
+        assert(pl->lineWidthRange[0]==PS5VK_REQUIRED_LINE_WIDTH &&
+               pl->lineWidthRange[1]==PS5VK_REQUIRED_LINE_WIDTH);
+        assert(strcmp(profile.deviceName, PS5VK_PROFILE_GRAPHICS_NAME)==0);
+        assert(profile_memory.memoryHeaps[0].size==PS5VK_PROFILE_GRAPHICS_HEAP_BYTES);
+        /* The compute-only profile shares the same floors. */
+        VkPhysicalDeviceProperties compute_profile;
+        VkPhysicalDeviceMemoryProperties compute_memory;
+        ps5vk_device_profile_init(&compute_profile, &compute_memory, VK_FALSE, VK_FALSE);
+        assert(compute_profile.limits.subTexelPrecisionBits==PS5VK_REQUIRED_SUBTEXEL_BITS);
+        assert(compute_profile.limits.pointSizeRange[1]==PS5VK_REQUIRED_POINT_SIZE);
+        assert(compute_profile.limits.sampledImageIntegerSampleCounts==VK_SAMPLE_COUNT_1_BIT);
+        assert(strcmp(compute_profile.deviceName, PS5VK_PROFILE_COMPUTE_NAME)==0);
+        assert(compute_memory.memoryHeaps[0].size==PS5VK_PROFILE_COMPUTE_HEAP_BYTES);
+        const VkDeviceSize max_allocation = PS5VK_PROFILE_GRAPHICS_HEAP_BYTES;
+        const VkQueueFlags queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+        assert(ps5vk_physical_profile_valid(&profile, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        VkPhysicalDeviceProperties broken = profile;
+        broken.limits.subTexelPrecisionBits = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.sampledImageIntegerSampleCounts = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.mipmapPrecisionBits = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxVertexOutputComponents = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxFragmentInputComponents = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxSampleMaskWords = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.pointSizeRange[0] = 0.0f;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.lineWidthRange[1] = 0.0f;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        assert(ps5vk_physical_profile_valid(&profile, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+    }
     /* Enumerate all combinations of known core image role bits, not only the
      * three happy paths. Mixed executable/non-executable roles must fail. */
     for(unsigned usage=0;usage<256;++usage) {
@@ -125,9 +240,10 @@ static void lifecycle(void)
             (usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_D32_SFLOAT,usage)==
             (usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
-        assert(!!ps5vk_graphics_image_usage(VK_FORMAT_R8G8B8A8_UNORM,usage)==
+    assert(!!ps5vk_graphics_image_usage(VK_FORMAT_R8G8B8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_SAMPLED_BIT || usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
              usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
              usage==VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
              usage==(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)));
@@ -140,8 +256,11 @@ static void lifecycle(void)
     VkPhysicalDeviceMemoryProperties memory;
     vkGetPhysicalDeviceMemoryProperties(p, &memory);
     assert(memory.memoryHeapCount == 1 && memory.memoryHeaps[0].size == 65536);
-    VkPhysicalDeviceFeatures features, zero = {0}; memset(&features, 0xff, sizeof(features));
-    vkGetPhysicalDeviceFeatures(p, &features); assert(!memcmp(&features, &zero, sizeof(zero)));
+    VkPhysicalDeviceFeatures features, expected_features = {0};
+    expected_features.robustBufferAccess = VK_TRUE;
+    memset(&features, 0xff, sizeof(features));
+    vkGetPhysicalDeviceFeatures(p, &features);
+    assert(!memcmp(&features, &expected_features, sizeof(expected_features)));
     VkQueueFamilyProperties queues[2];
     memset(queues, 0xa5, sizeof(queues));
     uint32_t count = 0;
@@ -168,55 +287,217 @@ static void lifecycle(void)
         VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,0,&ip)
         ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     p->platform.image_properties=ps5vk_graphics_image_properties;
-    const VkFormat image_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_D32_SFLOAT};
-    for(unsigned f=0;f<3;++f)for(unsigned usage=0;usage<256;++usage) {
+    const VkFormat image_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_D32_SFLOAT,VK_FORMAT_R8_UNORM,VK_FORMAT_R8G8_UNORM,VK_FORMAT_R8G8B8A8_SRGB,
+        VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8B8A8_SNORM,
+        VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_R32G32B32A32_SFLOAT,VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT,
+        VK_FORMAT_R8_UINT,VK_FORMAT_R8_SINT,VK_FORMAT_R8G8_UINT,VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8B8A8_UINT,VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_R16_UINT,VK_FORMAT_R16_SINT,VK_FORMAT_R16G16_UINT,VK_FORMAT_R16G16_SINT,
+        VK_FORMAT_R16G16B16A16_UINT,VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R32_UINT,VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_UINT,VK_FORMAT_R32G32_SINT,
+        VK_FORMAT_R32G32B32A32_UINT,VK_FORMAT_R32G32B32A32_SINT};
+    for(unsigned f=0;f<sizeof(image_formats)/sizeof(image_formats[0]);++f)
+    for(unsigned usage=0;usage<256;++usage) {
         memset(&ip,0xff,sizeof(ip));
         VkResult result=vkGetPhysicalDeviceImageFormatProperties(p,image_formats[f],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,usage,0,&ip);
         if(ps5vk_graphics_image_usage(image_formats[f],usage)) {
             assert(result==VK_SUCCESS && ip.maxExtent.width==(f==0?16383u:16384u));
             assert(ip.maxExtent.height==ip.maxExtent.width && ip.maxExtent.depth==1);
-            assert(ip.maxMipLevels==1 && ip.maxArrayLayers==1 && ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT);
+            const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0;
+            const VkBool32 transfer_only=image_formats[f]==VK_FORMAT_R8G8B8A8_UNORM && usage &&
+                !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                                             VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+            const uint32_t expected_mips=!attachment &&
+                (usage&VK_IMAGE_USAGE_SAMPLED_BIT)?15u:1u;
+            assert(ip.maxMipLevels==expected_mips &&
+                ip.maxArrayLayers==(attachment||transfer_only?1u:PS5VK_MAX_IMAGE_ARRAY_LAYERS) &&
+                ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT);
             assert(ip.maxResourceSize==p->platform.max_allocation);
         } else assert(result==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     }
-    for(unsigned variant=0;variant<4;++variant) {
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_1D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)==VK_SUCCESS &&
+        ip.maxExtent.width==PS5VK_MAX_IMAGE_1D && ip.maxExtent.height==1 &&
+        ip.maxExtent.depth==1 && ip.maxArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_3D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)==VK_SUCCESS &&
+        ip.maxExtent.width==PS5VK_MAX_IMAGE_3D && ip.maxExtent.height==PS5VK_MAX_IMAGE_3D &&
+        ip.maxExtent.depth==PS5VK_MAX_IMAGE_3D && ip.maxArrayLayers==1);
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,&ip)==VK_SUCCESS &&
+        ip.maxExtent.width==PS5VK_MAX_IMAGE_CUBE && ip.maxExtent.height==PS5VK_MAX_IMAGE_CUBE &&
+        ip.maxExtent.depth==1 && ip.maxArrayLayers==6);
+    for(unsigned variant=0;variant<2;++variant) {
         memset(&ip,0xff,sizeof(ip));
         assert(vkGetPhysicalDeviceImageFormatProperties(p,
-            variant==3?VK_FORMAT_UNDEFINED:VK_FORMAT_R8G8B8A8_UNORM,
-            variant==0?VK_IMAGE_TYPE_3D:VK_IMAGE_TYPE_2D,
-            variant==1?VK_IMAGE_TILING_LINEAR:VK_IMAGE_TILING_OPTIMAL,
-            VK_IMAGE_USAGE_SAMPLED_BIT,variant==2?VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT:0,&ip)
+            variant==1?VK_FORMAT_UNDEFINED:VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_TYPE_2D,
+            variant==0?VK_IMAGE_TILING_LINEAR:VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)
             ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     }
     const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
-        VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT};
-    const VkFormatFeatureFlags bits[] = {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, 0, 0};
-    for (unsigned n=0; n<5; ++n) {
+        VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM,
+        VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8B8A8_SNORM,
+        VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_R32G32B32A32_SFLOAT,VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT};
+    for (unsigned n=0; n<sizeof(formats)/sizeof(formats[0]); ++n) {
         memset(&fp, 0xff, sizeof(fp));
         vkGetPhysicalDeviceFormatProperties(p, formats[n], &fp);
-        assert(!fp.linearTilingFeatures && !fp.bufferFeatures && fp.optimalTilingFeatures==bits[n]);
+        VkFormatFeatureFlags buffer_bits=ps5vk_vertex_format_size(formats[n])?
+            VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
+        if(formats[n]==VK_FORMAT_R32_SFLOAT)
+            buffer_bits|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
+        VkFormatFeatureFlags optimal_bits=0;
+        const struct ps5vk_texture_format *sampled=
+            ps5vk_texture_format_lookup(formats[n]);
+        /* The published bits come from the witnessed column only. */
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
+            optimal_bits=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+            if(sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR)
+                optimal_bits|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        }
+        if(formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
+            optimal_bits=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+        else if(formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
+            optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+        else if(formats[n]==VK_FORMAT_D32_SFLOAT)
+            optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
+            fp.optimalTilingFeatures==optimal_bits);
     }
+    /* Query/create coherence: for every format the capability table knows, the
+     * (format, optimal tiling, usage) answer of the image-format query must
+     * agree with the feature bits the format query reports. A format whose
+     * sampled encoding is implemented but not yet witnessed is reported as
+     * unsupported and refused, never silently creatable. */
+    const struct { VkFormat format; VkImageUsageFlags usage; VkFormatFeatureFlags bit; }
+        coherence[] = {
+        {VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_FORMAT_FEATURE_TRANSFER_DST_BIT},
+        {VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_FORMAT_FEATURE_TRANSFER_SRC_BIT},
+        {VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT},
+        {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT},
+        {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+         VK_FORMAT_FEATURE_TRANSFER_SRC_BIT},
+        {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT},
+        {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT},
+        {VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+         VK_FORMAT_FEATURE_TRANSFER_DST_BIT},
+        {VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+         VK_FORMAT_FEATURE_TRANSFER_DST_BIT},
+        {VK_FORMAT_A8B8G8R8_SRGB_PACK32, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+        {VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_SAMPLED_BIT,
+         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT},
+    };
+    for (unsigned n = 0; n < sizeof(coherence) / sizeof(coherence[0]); ++n) {
+        vkGetPhysicalDeviceFormatProperties(p, coherence[n].format, &fp);
+        memset(&ip, 0xff, sizeof(ip));
+        VkResult result = vkGetPhysicalDeviceImageFormatProperties(p, coherence[n].format,
+            VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, coherence[n].usage, 0, &ip);
+        if (fp.optimalTilingFeatures & coherence[n].bit)
+            assert(result == VK_SUCCESS);
+        else
+            assert(result == VK_ERROR_FORMAT_NOT_SUPPORTED &&
+                   !memcmp(&ip, &zero_ip, sizeof(ip)));
+    }
+    /* Packed rows expose sampled/upload and non-integer filtering, but no
+     * unrelated render-target, storage-image or blit role. */
+    VkFormatFeatureFlags packed_sampled = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+        VK_FORMAT_FEATURE_TRANSFER_DST_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+    vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_A8B8G8R8_UNORM_PACK32, &fp);
+    assert(fp.optimalTilingFeatures == packed_sampled &&
+        fp.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+    vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_A8B8G8R8_SRGB_PACK32, &fp);
+    assert(fp.optimalTilingFeatures == packed_sampled && !fp.bufferFeatures &&
+        !fp.linearTilingFeatures);
+
     p->platform.queue_flags=VK_QUEUE_GRAPHICS_BIT;
     const VkFormat vertex_formats[]={VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT,
-        VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT};
-    for(unsigned n=0;n<4;++n) {
+        VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_SINT,VK_FORMAT_R32G32B32_SINT,
+        VK_FORMAT_R32G32B32A32_SINT,VK_FORMAT_R32_UINT,VK_FORMAT_R32G32_UINT,
+        VK_FORMAT_R32G32B32_UINT,VK_FORMAT_R32G32B32A32_UINT,
+        VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32};
+    for(unsigned n=0;n<sizeof(vertex_formats)/sizeof(vertex_formats[0]);++n) {
         vkGetPhysicalDeviceFormatProperties(p,vertex_formats[n],&fp);
         VkFormatFeatureFlags expected=VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
-            (vertex_formats[n]==VK_FORMAT_R32_SFLOAT?VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT:0);
+            ((vertex_formats[n]==VK_FORMAT_R32_SFLOAT ||
+              vertex_formats[n]==VK_FORMAT_R32_SINT ||
+              vertex_formats[n]==VK_FORMAT_R32_UINT)?VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT:0);
         assert(fp.bufferFeatures==expected);
-        assert(!fp.linearTilingFeatures && !fp.optimalTilingFeatures);
-        assert(ps5vk_vertex_format_size(vertex_formats[n])==4*(n+1));
-        assert(vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
-            VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)
-            ==VK_ERROR_FORMAT_NOT_SUPPORTED);
+        assert(!fp.linearTilingFeatures);
+        VkFormatFeatureFlags expected_optimal=0;
+        const struct ps5vk_texture_format *sampled=
+            ps5vk_texture_format_lookup(vertex_formats[n]);
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
+            expected_optimal=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+            if(sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR)
+                expected_optimal|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        }
+        if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
+            expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+        else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
+            expected_optimal=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+        assert(fp.optimalTilingFeatures==expected_optimal);
+        assert(ps5vk_vertex_format_size(vertex_formats[n])==(n<12?4*((n%4)+1):4));
+        VkResult image_result=vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
+            VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip);
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE))
+            assert(image_result==VK_SUCCESS);
+        else assert(image_result==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }
-    vkGetPhysicalDeviceFormatProperties(p,VK_FORMAT_R32_UINT,&fp);
-    assert(fp.bufferFeatures==VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT &&
-        !ps5vk_vertex_format_size(VK_FORMAT_R32_UINT));
+    const VkFormat narrow_vertex_formats[]={
+        VK_FORMAT_R8_UNORM,VK_FORMAT_R8_SNORM,VK_FORMAT_R8_UINT,VK_FORMAT_R8_SINT,
+        VK_FORMAT_R8G8_UNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8_UINT,VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8B8A8_SNORM,VK_FORMAT_R8G8B8A8_UINT,VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32,VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32,VK_FORMAT_A8B8G8R8_SINT_PACK32,
+        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_UINT,
+        VK_FORMAT_R16_SINT,VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_UINT,
+        VK_FORMAT_R16G16_SINT,VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R16G16B16A16_UINT,VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R16G16B16A16_SFLOAT};
+    for(unsigned n=0;n<sizeof(narrow_vertex_formats)/sizeof(narrow_vertex_formats[0]);++n) {
+        vkGetPhysicalDeviceFormatProperties(p,narrow_vertex_formats[n],&fp);
+        assert(fp.bufferFeatures&VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+        assert(ps5vk_vertex_format_size(narrow_vertex_formats[n])>0);
+    }
+    vkGetPhysicalDeviceFormatProperties(p,VK_FORMAT_R8_USCALED,&fp);
+    assert(!fp.bufferFeatures && !ps5vk_vertex_format_size(VK_FORMAT_R8_USCALED));
     count=1; vkGetPhysicalDeviceQueueFamilyProperties(p, &count, queues);
     assert(count==1 && queues[0].queueFlags==VK_QUEUE_GRAPHICS_BIT);
     p->platform.queue_flags=VK_QUEUE_COMPUTE_BIT;
@@ -385,19 +666,57 @@ static void negative(void)
     info.enabledExtensionCount = 0; info.ppEnabledExtensionNames = NULL;
     VkPhysicalDeviceFeatures features = {.shaderInt64 = VK_TRUE}; info.pEnabledFeatures = &features;
     assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT);
-    /* The profile advertises no optional core features. Verify every field,
-     * including graphics ones, rejects before a backend/device is opened. */
+    /* robustBufferAccess is the one supported Vulkan 1.0 core feature.  Every
+     * other field must reject before a backend/device is opened. */
     _Static_assert(sizeof(features)%sizeof(VkBool32)==0,"feature word layout");
     for(size_t offset=0;offset<sizeof(features);offset+=sizeof(VkBool32)) {
         memset(&features,0,sizeof(features));
         const VkBool32 enabled=VK_TRUE;
         memcpy((unsigned char *)&features+offset,&enabled,sizeof(enabled));
         d=(VkDevice)(uintptr_t)1;
-        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT);
-        assert(!d && opened==before && !i->devices);
+        if (offset == offsetof(VkPhysicalDeviceFeatures, robustBufferAccess)) {
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == PS5VK_FEATURE_ROBUST_BUFFER_ACCESS);
+            vkDestroyDevice(d, NULL);
+            before = opened;
+        } else {
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!d && opened==before && !i->devices);
+        }
     }
+    memset(&features, 0, sizeof(features));
+    features.robustBufferAccess = 2;
+    d=(VkDevice)(uintptr_t)1;
+    assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+    features.robustBufferAccess = VK_TRUE;
+    p->platform.supported_features &= ~PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+    d=(VkDevice)(uintptr_t)1;
+    assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    p->platform.supported_features |= PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
     info.pEnabledFeatures = NULL; priority = NAN;
-    assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS); priority = 0;
+    assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
+    priority = 0.0f;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS &&
+           d->queue.priority_class == 0);
+    vkDestroyDevice(d, NULL);
+    priority = 0.499f;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS &&
+           d->queue.priority_class == 0);
+    vkDestroyDevice(d, NULL);
+    priority = 0.5f;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS &&
+           d->queue.priority_class == 1);
+    vkDestroyDevice(d, NULL);
+    priority = 1.0f;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS &&
+           d->queue.priority_class == 1);
+    vkDestroyDevice(d, NULL);
+    priority = -0.001f;
+    assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS && !d);
+    priority = 1.001f;
+    assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS && !d);
+    priority = 1.0f;
+    before = opened;
     q.queueFamilyIndex = 1; assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
     q.queueFamilyIndex = 0; assert(opened == before);
     open_result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -445,7 +764,8 @@ static void narrow_storage_features(void)
     assert(vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceFeatures2KHR") ==
            (PFN_vkVoidFunction)vkGetPhysicalDeviceFeatures2KHR);
     p->platform.supported_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
-                                     PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
+                                     PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+                                     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
     p->platform.format_properties = ps5vk_graphics_format_properties;
     p->platform.image_properties = ps5vk_graphics_image_properties;
 
@@ -526,15 +846,14 @@ static void narrow_storage_features(void)
     assert(vkGetPhysicalDeviceImageFormatProperties2KHR(
         p, &image_info2, &wrong_image2) == VK_ERROR_UNKNOWN);
     assert(!memcmp(&wrong_image2, &saved_wrong_image2, sizeof(wrong_image2)));
-    VkPhysicalDeviceImageFormatInfo2 unsupported_info2 = image_info2;
-    unsupported_info2.format = VK_FORMAT_R8G8B8A8_SRGB;
+    VkPhysicalDeviceImageFormatInfo2 supported_srgb_info2 = image_info2;
+    supported_srgb_info2.format = VK_FORMAT_R8G8B8A8_SRGB;
     memset(&image2.imageFormatProperties, 0xa5,
            sizeof(image2.imageFormatProperties));
+    supported_srgb_info2.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     assert(vkGetPhysicalDeviceImageFormatProperties2KHR(
-        p, &unsupported_info2, &image2) == VK_ERROR_FORMAT_NOT_SUPPORTED);
-    VkImageFormatProperties zero_image_properties = {0};
-    assert(!memcmp(&image2.imageFormatProperties, &zero_image_properties,
-                   sizeof(zero_image_properties)));
+        p, &supported_srgb_info2, &image2) == VK_SUCCESS);
+    assert(image2.imageFormatProperties.maxExtent.width == PS5VK_MAX_IMAGE_2D);
 
     VkPhysicalDeviceSparseImageFormatInfo2 sparse_info2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2,
@@ -574,8 +893,9 @@ static void narrow_storage_features(void)
     VkPhysicalDeviceFeatures2 feature_query = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &feature8};
     vkGetPhysicalDeviceFeatures2KHR(p, &feature_query);
-    VkPhysicalDeviceFeatures zero = {0};
-    assert(!memcmp(&feature_query.features, &zero, sizeof(zero)));
+    VkPhysicalDeviceFeatures expected = {0};
+    expected.robustBufferAccess = VK_TRUE;
+    assert(!memcmp(&feature_query.features, &expected, sizeof(expected)));
     assert(feature8.storageBuffer8BitAccess && !feature8.uniformAndStorageBuffer8BitAccess &&
            !feature8.storagePushConstant8);
     assert(feature16.storageBuffer16BitAccess && !feature16.uniformAndStorageBuffer16BitAccess &&
@@ -601,7 +921,8 @@ static void narrow_storage_features(void)
     VkDevice device = VK_NULL_HANDLE;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
     assert(device->enabled_features == (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
-                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT));
+                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+                                        PS5VK_FEATURE_ROBUST_BUFFER_ACCESS));
     vkDestroyDevice(device, NULL);
 
     protected_features.protectedMemory = VK_TRUE;
@@ -678,8 +999,43 @@ static void allocator_lifetimes(void)
     vkDestroyBuffer(d, b, NULL); vkDestroyDevice(d, NULL); vkDestroyInstance(i, &a);
     assert(!c.live && c.instance == 2 && c.device == 2 && c.object == 1);
 }
+static void stale_consumer_formats(VkFormat format, VkFormatProperties *out)
+{
+    ps5vk_graphics_format_properties(format, out);
+    if (format == VK_FORMAT_R8G8B8A8_UNORM)
+        out->bufferFeatures &= ~VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
+}
+static void consumer_physical_queries(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    ps5vk_device_profile_init(&p->platform.properties,
+                             &p->platform.memory_properties, 1, 1);
+    p->platform.queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+    p->platform.max_allocation = UINT64_C(268435456);
+    p->platform.format_properties = ps5vk_graphics_format_properties;
+    p->platform.image_properties = ps5vk_graphics_image_properties;
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(p, &props);
+    report_physical_device_contract(i, p, &props);
+
+    /* A lost advertised role must fail the exact native consumer contract,
+     * not silently regenerate its oracle from the implementation. */
+    p->platform.format_properties = stale_consumer_formats;
+    expect_consumer_rejection = 1;
+    consumer_failed_contract = NULL;
+    if (setjmp(consumer_rejection) == 0) {
+        report_physical_device_contract(i, p, &props);
+        assert(!"consumer accepted a stale format report");
+    }
+    assert(consumer_failed_contract &&
+           !strcmp(consumer_failed_contract, "exact format-property matrix"));
+    expect_consumer_rejection = 0;
+    vkDestroyInstance(i, NULL);
+}
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
+    consumer_physical_queries();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

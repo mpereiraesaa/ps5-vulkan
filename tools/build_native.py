@@ -31,8 +31,19 @@ def main():
     if observe_scene not in ("0", "1") or (observe_scene == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_OBSERVE requires graphics profile API and must be 0 or 1")
     scissor_probe = os.environ.get("PS5VK_GRAPHICS_SCISSOR_PROBE", "0")
-    if scissor_probe not in ("0", "1", "2", "3", "4", "5") or (scissor_probe != "0" and not graphics_api):
-        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0 off, 1 tile, 2 cube quadrants, 3 planar quadrants, 4 sampler UV ladder, 5 RGB presentation")
+    if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13") or (scissor_probe != "0" and not graphics_api):
+        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0-10 existing diagnostics, 11 layered images, 12 mipmaps, 13 vertex bindings")
+    mip_view_base=os.environ.get("PS5VK_MIP_VIEW_BASE","0")
+    if mip_view_base not in ("0","1") or (mip_view_base!="0" and scissor_probe!="12"):
+        raise SystemExit("PS5VK_MIP_VIEW_BASE must be 0, or 1 only for mipmap diagnostic")
+    mip_force_lod=os.environ.get("PS5VK_MIP_FORCE_LOD","-1")
+    if mip_force_lod not in ("-1","0","1","2") or (mip_force_lod!="-1" and scissor_probe!="12"):
+        raise SystemExit("PS5VK_MIP_FORCE_LOD must be -1, 0, 1, or 2 only for mipmap diagnostic")
+    mip_lod_bias=os.environ.get("PS5VK_MIP_LOD_BIAS","0")
+    if mip_lod_bias not in ("-2","0","2") or (mip_lod_bias!="0" and scissor_probe!="12"):
+        raise SystemExit("PS5VK_MIP_LOD_BIAS must be -2, 0, or 2 only for mipmap diagnostic")
+    if mip_lod_bias!="0" and mip_force_lod!="-1":
+        raise SystemExit("PS5VK_MIP_LOD_BIAS cannot be combined with a forced LOD clamp")
     scene_split = os.environ.get("PS5VK_GRAPHICS_SCENE_SPLIT", "0")
     if scene_split not in ("0", "1") or (scene_split == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_SCENE_SPLIT requires graphics profile API and must be 0 or 1")
@@ -58,6 +69,19 @@ def main():
         graphics = graphics_api
     if graphics and compute:
         raise SystemExit("Choose one native variant")
+    graphics_manifest = None
+    if graphics:
+        graphics = Path(graphics).resolve()
+        if ROOT / "build/graphics" not in graphics.parents:
+            raise SystemExit("Use a project-local graphics control")
+        graphics_manifest = json.loads((graphics / "manifest.json").read_text())
+        if graphics_manifest.get("scope") == "compiler-inspection-only":
+            raise SystemExit("Compiler inspection is not a native ABI/library adapter")
+        if graphics_manifest.get("native_input_version") != 3:
+            raise SystemExit("Graphics control lacks current interpolation ABI; recompile the owned .pipe")
+        quantization = graphics_manifest.get("shader_context", {}).get("vertex_quantization", {})
+        if quantization.get("byte_address") != 0x28be4 or quantization.get("value") != 0x2d:
+            raise SystemExit("Graphics control lacks audited vertex quantization; recompile the owned .pipe")
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     pin = subprocess.check_output(["git", "-C", str(foundation),
@@ -78,17 +102,6 @@ def main():
     out = ROOT / ("build/native-compute" if compute else "build/native")
     dist = ROOT / ("dist-compute/PPSA99994" if compute else "dist/PPSA99994")
     if graphics:
-        graphics = Path(graphics).resolve()
-        if ROOT / "build/graphics" not in graphics.parents:
-            raise SystemExit("Use a project-local graphics control")
-        graphics_manifest = json.loads((graphics / "manifest.json").read_text())
-        if graphics_manifest.get("scope") == "compiler-inspection-only":
-            raise SystemExit("Compiler inspection is not a native ABI/library adapter")
-        if graphics_manifest.get("native_input_version") != 2:
-            raise SystemExit("Graphics control lacks current interpolation ABI; recompile the owned .pipe")
-        quantization = graphics_manifest.get("shader_context", {}).get("vertex_quantization", {})
-        if quantization.get("byte_address") != 0x28be4 or quantization.get("value") != 0x2d:
-            raise SystemExit("Graphics control lacks audited vertex quantization; recompile the owned .pipe")
         out, dist = ROOT / "build/native-graphics-link", ROOT / "dist-graphics-link/PPSA99994"
         if graphics_api:
             out, dist = ROOT / "build/native-graphics-api", ROOT / "dist-graphics-api/PPSA99994"
@@ -144,7 +157,7 @@ def main():
                        "-DPS5VK_RUNTIME_COMPILER=1"]
         sources = [(p.stem, p, []) for p in sorted((ROOT / "src").glob("vk_*.c"))]
         compute_srcs = [ROOT / "native/compute_main.c",
-            ROOT / "src/graphics_program.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_layout.c",
+            ROOT / "src/graphics_program.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
             ROOT / "native/platform_ps5.c", ROOT / "native/memory_ps5.c", ROOT / "native/queue_ps5.c",
             ROOT / "src/compute_commands.c", ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c"]
         if use_runtime_compiler:
@@ -163,7 +176,40 @@ def main():
                     ("net", logger / "ps5log_ps5_net.c", [])]
         if graphics_api:
             sources = [s for s in sources if s[0] != "graphics_link_main"]
-            scene = not use_runtime_graphics and graphics_manifest.get("source") == "experiments/graphics/scene3d.pipe"
+            graphics_source = graphics_manifest.get("source")
+            scene = (not use_runtime_graphics or scissor_probe == "12") and graphics_source in (
+                "experiments/graphics/scene3d.pipe",
+                "experiments/graphics/scene3d-uint.pipe",
+                "experiments/graphics/scene3d-sint.pipe",
+                "experiments/graphics/scene3d-array.pipe",
+                "experiments/graphics/scene3d-cube.pipe",
+                "experiments/graphics/scene3d-3d.pipe",
+                "experiments/graphics/scene3d-1d.pipe",
+                "experiments/graphics/scene3d-1d-array.pipe",
+                "experiments/graphics/scene3d-mipmap.pipe")
+            image_target={
+                "experiments/graphics/scene3d-array.pipe":1,
+                "experiments/graphics/scene3d-cube.pipe":2,
+                "experiments/graphics/scene3d-3d.pipe":3,
+                "experiments/graphics/scene3d-1d.pipe":4,
+                "experiments/graphics/scene3d-1d-array.pipe":5,
+            }.get(graphics_source,0)
+            if scissor_probe=="11" and not image_target:
+                raise SystemExit("Layered sampled diagnostic requires scene3d-array.pipe, scene3d-cube.pipe or scene3d-3d.pipe")
+            if image_target and scissor_probe!="11":
+                raise SystemExit("Layered sampled controls require PS5VK_GRAPHICS_SCISSOR_PROBE=11")
+            if scissor_probe=="12" and graphics_source!="experiments/graphics/scene3d-mipmap.pipe":
+                raise SystemExit("Mipmap diagnostic requires scene3d-mipmap.pipe")
+            if graphics_source=="experiments/graphics/scene3d-mipmap.pipe" and scissor_probe!="12":
+                raise SystemExit("scene3d-mipmap.pipe requires PS5VK_GRAPHICS_SCISSOR_PROBE=12")
+            integer_sampled_sign = 0
+            if scissor_probe == "10":
+                integer_sampled_sign = {
+                    "experiments/graphics/scene3d-uint.pipe": 1,
+                    "experiments/graphics/scene3d-sint.pipe": 2,
+                }.get(graphics_source, 0)
+                if not integer_sampled_sign:
+                    raise SystemExit("Integer sampled diagnostic requires scene3d-uint.pipe or scene3d-sint.pipe")
             if witnesses != "0" and (not scene or continuous != "0" or observe_scene != "0" or
                     scissor_probe != "0" or scene_split != "0" or exit_control or keep_agc_module or
                     os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
@@ -179,9 +225,16 @@ def main():
             if observe_scene == "1" and (not scene or scissor_probe != "0" or os.environ.get("PS5VK_GRAPHICS_PRESENT") != "1"):
                 raise SystemExit("Scene observation requires the normal presented scene, without scissor diagnostics")
             common += ["-DPS5VK_GRAPHICS_OBSERVE=" + observe_scene]
-            if scissor_probe != "0" and not scene:
+            if scissor_probe != "0" and not scene and not (scissor_probe in ("8", "13") and use_runtime_graphics):
                 raise SystemExit("Scissor diagnostic requires scene3d.pipe")
+            if scissor_probe in ("8", "13") and not use_runtime_graphics:
+                raise SystemExit("Vertex-format diagnostic requires runtime graphics")
             common += ["-DPS5VK_GRAPHICS_SCISSOR_PROBE=" + scissor_probe]
+            common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
+            common += ["-DPS5VK_MIP_FORCE_LOD=" + mip_force_lod]
+            common += ["-DPS5VK_MIP_LOD_BIAS=" + mip_lod_bias]
+            common += ["-DPS5VK_IMAGE_TARGET=" + str(image_target)]
+            common += ["-DPS5VK_INTEGER_SAMPLED_SIGN=" + str(integer_sampled_sign)]
             if scene_split == "1" and not scene:
                 raise SystemExit("Split-draw diagnostic requires scene3d.pipe")
             common += ["-DPS5VK_GRAPHICS_SCENE_SPLIT=" + scene_split]
@@ -194,9 +247,9 @@ def main():
                        "-I" + str(ROOT / "build/program-library")]
             sources += [(p.stem, p, []) for p in sorted((ROOT / "src").glob("vk_*.c"))]
             sources += [(p.stem, p, []) for p in (
-                ROOT / "native/graphics_main.c", ROOT / "native/compute_main.c", ROOT / "native/platform_ps5.c", ROOT / "src/scene_geometry.c", ROOT / "src/scene_region.c", ROOT / "src/color_clear.c", ROOT / "src/color_detile.c",
+                ROOT / "native/graphics_main.c", ROOT / "native/compute_main.c", ROOT / "native/platform_ps5.c", ROOT / "src/scene_geometry.c", ROOT / "src/scene_region.c", ROOT / "src/sampler_core_probe.c", ROOT / "src/sampled_format_probe.c", ROOT / "src/integer_sampled_probe.c", ROOT / "src/vertex_format_probe.c", ROOT / "src/color_clear.c", ROOT / "src/color_detile.c",
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
-                ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_layout.c",
+                ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
                 ROOT / "native/command_arena_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
@@ -209,7 +262,7 @@ def main():
                 gears / "src/ps5_agc_writer.c", gears / "src/ps5_gpu_span.c",
                 ROOT / "src/graphics_program.c", ROOT / "src/compute_commands.c",
                 ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c",
-                ROOT / "src/compilation_cache.c", ROOT / "src/vk_pipeline_cache.c")]
+                ROOT / "src/compilation_cache.c")]
     if use_runtime_graphics:
         run(sys.executable,ROOT / "tools/prepare_runtime_graphics.py","--out",out / "runtime_graphics_spirv.h")
         common += ["-DPS5VK_RUNTIME_GRAPHICS=1", "-I" + str(ROOT / "third_party/psbc-reference")]
@@ -223,8 +276,13 @@ def main():
         # Only application/test-oracle objects remain outside libps5vk.a.
         # The harness can inspect internals, but cannot supply backend objects.
         application_sources = {"graphics_main", "compute_main", "scene_geometry",
-                               "scene_region", "triangle_readback"}
+                               "scene_region", "sampled_format_probe", "integer_sampled_probe", "vertex_format_probe",
+                               "triangle_readback"}
         sources = [item for item in sources if item[0] in application_sources]
+    source_names = [name for name, _, _ in sources]
+    if len(source_names) != len(set(source_names)):
+        duplicates = sorted({name for name in source_names if source_names.count(name) > 1})
+        raise SystemExit("Duplicate native object stems: " + ", ".join(duplicates))
     for name, source, extra in sources:
         obj = out / (name + ".o")
         run(*cc, "-std=c11", *common, *extra, "-c", source, "-o", obj, env=env)
@@ -300,11 +358,27 @@ def main():
         manifest.update(stage="graphics-native-link-only", submit_enabled=False,
                         graphics=json.loads((graphics / "manifest.json").read_text()))
         if graphics_api:
+            geometry_fixture={1:"sampled-image-array",2:"sampled-image-cube",
+                              3:"sampled-image-3d",4:"sampled-image-1d",
+                              5:"sampled-image-1d-array"}.get(image_target)
+            if not geometry_fixture:
+                geometry_fixture=("sampler-uv-ladder" if scissor_probe == "4" else
+                    ("sampler-core-addressing" if scissor_probe == "6" else
+                    ("sampled-format-candidates" if scissor_probe == "7" else
+                    ("vertex-format-cases" if scissor_probe == "8" else
+                    ("sampled-format-filtering" if scissor_probe == "9" else
+                    ("integer-sampled-formats" if scissor_probe == "10" else
+                    ("sampled-image-mipmaps" if scissor_probe == "12" else
+                    ("planar-triangle" if int(scissor_probe)>=3 else "source-default"))))))))
             manifest.update(stage="graphics-api-creation-only", submit_enabled=False,
                             scene="two-cubes" if scene else "triangle-controls",
                             scissor_probe=int(scissor_probe),
+                            mip_lod_bias=int(mip_lod_bias),
                             scissor_depth_comparison=scissor_probe in ("2", "3"),
-                            geometry_fixture="sampler-uv-ladder" if scissor_probe == "4" else ("planar-triangle" if int(scissor_probe)>=3 else "source-default"),
+                            geometry_fixture=geometry_fixture,
+                            image_target={1:"2d-array",2:"cube",3:"3d",4:"1d",
+                                          5:"1d-array"}.get(image_target),
+                            integer_sampled_sign={1:"uint",2:"sint"}.get(integer_sampled_sign),
                             visual_hold_seconds=10 if scissor_probe in ("3", "5") else 0,
                             observation_frame_pause_us=60000 if observe_scene == "1" else 0,
                             exact_interior_witnesses=int(witnesses),
@@ -322,15 +396,25 @@ def main():
         manifest.update(stage={1:"graphics-exit-control-no-graphics",2:"graphics-exit-control-device",3:"graphics-exit-control-logging-load"}[exit_control], submit_enabled=False,
                         scene=None)
     if use_runtime_graphics:
+        vertex_probe = scissor_probe == "8"
         manifest.update(compiler="runtime-psbc-aco", target_gfx=1013,
-                        graphics_shader_source="owned-runtime-triangle",
+                        graphics_shader_source="owned-runtime-vertex-formats" if vertex_probe else "owned-runtime-triangle",
                         graphics_offline_library_role="negative-lookup-control-only")
+        runtime_inputs = (("vertex", "runtime_triangle.vert"), ("fragment", "runtime_triangle.frag"))
+        if scissor_probe == "13":
+            manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
+            manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"
+            runtime_inputs = (("vertex", "runtime_vertex_bindings_probe.vert"),
+                              ("fragment", "runtime_vertex_format.frag"))
+        if vertex_probe:
+            runtime_inputs = (("vertex_sint", "runtime_vertex_sint.vert"),
+                              ("vertex_uint", "runtime_vertex_uint.vert"),
+                              ("vertex_unorm", "runtime_vertex_unorm.vert"),
+                              ("fragment", "runtime_vertex_format.frag"))
         manifest["runtime_graphics_inputs"] = {
-            stage: {"glsl_sha256": hashlib.sha256(
-                        (ROOT / f"experiments/graphics/runtime_triangle.{extension}").read_bytes()).hexdigest(),
-                    "spirv_sha256": hashlib.sha256(
-                        (out / f"runtime_triangle.{extension}.spv").read_bytes()).hexdigest()}
-            for stage, extension in (("vertex", "vert"), ("fragment", "frag"))
+            stage: {"glsl_sha256": hashlib.sha256((ROOT / "experiments/graphics" / source).read_bytes()).hexdigest(),
+                    "spirv_sha256": hashlib.sha256((out / (source + ".spv")).read_bytes()).hexdigest()}
+            for stage, source in runtime_inputs
         }
     if compute or graphics:
         # Local public-safe source identity; never hash/archive dev.conf contents

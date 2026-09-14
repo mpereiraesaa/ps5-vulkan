@@ -27,23 +27,34 @@ int main(void)
         .descriptors = {{0, 1, 0, 0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
                         {0, 0, 0, 8,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
     uint32_t table[16], saved[16]; memset(table, 0xab, sizeof(table));
-    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, table, 16) == VK_SUCCESS);
+    VkDeviceSize dynamic[PS5VK_MAX_DESCRIPTORS]={0};
+    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, dynamic, table, 16) == VK_SUCCESS);
     assert(table[0] == 0x6100 && table[1] == 2 && table[2] == 2048);
     assert(table[8] == 0x4080 && table[9] == 1 && table[10] == 4096);
     assert(table[3] == 0x31016fac && table[11] == 0x31016fac);
     assert(!table[4] && !table[7] && table[12] == 0xabababab);
+    set.signature.type[1]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+    p.descriptors[0].type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+    dynamic[0]=256;
+    assert(ps5vk_descriptor_encode(&device,&p,0,&set,dynamic,table,16)==VK_SUCCESS);
+    assert(table[0]==0x6200 && table[1]==2 && table[2]==2048);
+    dynamic[0]=UINT64_MAX;
+    assert(ps5vk_descriptor_encode(&device,&p,0,&set,dynamic,table,16)!=VK_SUCCESS);
+    dynamic[0]=0;set.signature.type[1]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    p.descriptors[0].type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    assert(ps5vk_descriptor_encode(&device,&p,0,&set,dynamic,table,16)==VK_SUCCESS);
     memcpy(saved, table, sizeof(table));
     set.signature.binding[0].count = 2;
-    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, table, 16) == VK_SUCCESS);
+    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, dynamic, table, 16) == VK_SUCCESS);
     assert(!memcmp(saved, table, sizeof(table))); /* Scalar shader uses element zero. */
     set.signature.binding[0].count = 1;
-    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, table, 11) != VK_SUCCESS);
+    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, dynamic, table, 11) != VK_SUCCESS);
     set.defined[0] = VK_FALSE;
-    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, table, 16) != VK_SUCCESS);
+    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, dynamic, table, 16) != VK_SUCCESS);
     set.defined[0] = VK_TRUE; set.buffers[0].range = UINT64_C(1) << 32;
-    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, table, 16) != VK_SUCCESS);
+    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, dynamic, table, 16) != VK_SUCCESS);
     set.buffers[0].range = 4096; p.descriptors[1].table_dword = 0;
-    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, table, 16) != VK_SUCCESS);
+    assert(ps5vk_descriptor_encode(&device, &p, 0, &set, dynamic, table, 16) != VK_SUCCESS);
     assert(!memcmp(saved, table, sizeof(table)));
     struct VkBufferView_T view={.device=&device,.buffer=(VkBuffer)(uintptr_t)0x200004000,
         .format=VK_FORMAT_R32_UINT,.offset=64,.range=256};
@@ -53,7 +64,7 @@ int main(void)
     struct ps5vk_compiled_program typed={.gfx=1013,.descriptor_count=1,
         .descriptors={{1,0,0,0,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER}}};
     memset(table,0,sizeof(table));
-    assert(ps5vk_descriptor_encode(&device,&typed,1,&texel,table,16)==VK_SUCCESS);
+    assert(ps5vk_descriptor_encode(&device,&typed,1,&texel,dynamic,table,16)==VK_SUCCESS);
     assert(table[0]==0x4040 && table[1]==0x00040002 && table[2]==64 &&
         table[3]==0x11014204);
     /* GFX10 buffer SRD: R32_UINT plus Vulkan identity completion (X,0,0,1).

@@ -241,6 +241,10 @@ def main() -> int:
             for p in sorted(module_root.rglob("*.cpp"))
         )
         searchable = integration_text + "\n" + tree_text
+        generated_format_segments = {
+            token[len("VK_FORMAT_"):].lower()
+            for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text)
+        }
         generated_segments = (
             _dynamic_state_compute_generated_segments(text)
             if source_path.name == "vktDynamicStateComputeTests.cpp" else set()
@@ -248,6 +252,7 @@ def main() -> int:
         for segment in segments[1:-1]:
             if (not re.search(r'"' + re.escape(segment) + r'"', searchable) and
                     segment not in generated_segments and
+                    segment not in generated_format_segments and
                     not (source_path.name == "vktMemoryMappingTests.cpp" and
                          _mapping_group_segment(text, segment))):
                 failures.append(

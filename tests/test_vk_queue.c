@@ -415,6 +415,20 @@ int main(void)
     assert(vkBeginCommandBuffer(c, &begin) == VK_SUCCESS);
     vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
+    struct VkDescriptorPool_T sampled_pool={.device=&d};
+    struct VkDescriptorSet_T sampled_sets[4]={0};VkDescriptorSet sampled_handles[4];
+    struct VkPipelineLayout_T sampled_layout={.device=&d,.set_count=4};
+    pipeline.set_count=4;
+    for(unsigned s=0;s<4;++s) {
+        sampled_sets[s].pool=&sampled_pool;sampled_sets[s].generation=8+s;
+        sampled_sets[s].signature.count=1;
+        sampled_sets[s].signature.binding[7]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_FRAGMENT_BIT};
+        sampled_sets[s].signature.type[7]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        for(unsigned b=8;b<PS5VK_MAX_BINDINGS;++b)sampled_sets[s].signature.binding[b].first=1;
+        sampled_layout.sets[s]=pipeline.sets[s]=sampled_sets[s].signature;
+        sampled_handles[s]=sampled_sets+s;
+    }
+    vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&sampled_layout,0,4,sampled_handles,0,NULL);
     vkCmdDraw(c, 3, 1, 0, 0); vkCmdDraw(c, 3, 1, 0, 0);
     vkCmdEndRenderPass(c); assert(vkEndCommandBuffer(c) == VK_SUCCESS);
     unsigned before = f.prepares;
@@ -424,14 +438,21 @@ int main(void)
     assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) != VK_SUCCESS && f.prepares == before);
     assert(!d.submission && !image->pending);
     image->display_busy = VK_FALSE;
+    sampled_sets[3].generation++;
+    assert(vkQueueSubmit(&d.queue,1,&submit,NULL)!=VK_SUCCESS && f.prepares==before && !d.submission);
+    for(unsigned s=0;s<4;++s)assert(!sampled_sets[s].pending);
+    sampled_sets[3].generation--;
     assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    for(unsigned s=0;s<4;++s)assert(sampled_sets[s].pending==2);
     assert(pass.pending == 1 && fb.pending == 1 && view.pending == 1 && image->pending == 1 && pipeline.pending == 2);
     vkFreeMemory(&d, memory, NULL); assert(d.memories == memory);
     f.complete = f.wrong = 1;
     assert(ps5vk_queue_poll(&d) == VK_ERROR_DEVICE_LOST);
     assert(image->pending == 1 && pipeline.pending == 2);
+    for(unsigned s=0;s<4;++s)assert(sampled_sets[s].pending==2);
     recover_fixture(&d, &f);
     assert(!pass.pending && !fb.pending && !view.pending && !image->pending && !pipeline.pending);
+    for(unsigned s=0;s<4;++s)assert(!sampled_sets[s].pending);
     assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
     assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && !image->pending);
     vkFreeMemory(&d, memory, NULL);

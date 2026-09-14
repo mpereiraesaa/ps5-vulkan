@@ -22,16 +22,32 @@ static VkResult enumerate_extensions(const VkExtensionProperties *properties,
     return written < total ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-static int all_core_features_disabled(const VkPhysicalDeviceFeatures *features)
+static void get_core_features(const struct ps5vk_platform *platform,
+                              VkPhysicalDeviceFeatures *features)
 {
-    if (!features) return 1;
-    const unsigned char *bytes = (const unsigned char *)features;
-    for (size_t offset = 0; offset < sizeof(*features); offset += sizeof(VkBool32)) {
-        VkBool32 enabled;
-        memcpy(&enabled, bytes + offset, sizeof(enabled));
-        if (enabled) return 0;
+    memset(features, 0, sizeof(*features));
+    features->robustBufferAccess =
+        !!(platform->supported_features & PS5VK_FEATURE_ROBUST_BUFFER_ACCESS);
+}
+
+static VkResult enable_core_features(const VkPhysicalDeviceFeatures *requested,
+                                     uint32_t supported, uint32_t *enabled)
+{
+    if (!requested) return VK_SUCCESS;
+    const unsigned char *bytes = (const unsigned char *)requested;
+    const size_t robust_offset = offsetof(VkPhysicalDeviceFeatures,
+                                          robustBufferAccess);
+    for (size_t offset = 0; offset < sizeof(*requested); offset += sizeof(VkBool32)) {
+        VkBool32 value;
+        memcpy(&value, bytes + offset, sizeof(value));
+        if (!value) continue;
+        if (value != VK_TRUE) return INVALID;
+        if (offset != robust_offset ||
+            !(supported & PS5VK_FEATURE_ROBUST_BUFFER_ACCESS))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        *enabled |= PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
     }
-    return 1;
+    return VK_SUCCESS;
 }
 
 static int valid_bool(VkBool32 value)
@@ -105,13 +121,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice 
                                                               VkPhysicalDeviceMemoryProperties *out)
 { if (p && out) *out = p->platform.memory_properties; }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures(VkPhysicalDevice p, VkPhysicalDeviceFeatures *out)
-{ if (p && out) memset(out, 0, sizeof(*out)); }
+{ if (p && out) get_core_features(&p->platform, out); }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                                                            VkPhysicalDeviceFeatures2 *out)
 {
     if (!p || !out || out->sType != VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
         return;
-    memset(&out->features, 0, sizeof(out->features));
+    get_core_features(&p->platform, &out->features);
     for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext; next;
          next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES) {
@@ -321,8 +337,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             saw_features2 = VK_TRUE;
             const VkPhysicalDeviceFeatures2 *features =
                 (const VkPhysicalDeviceFeatures2 *)next;
-            if (!all_core_features_disabled(&features->features))
-                return VK_ERROR_FEATURE_NOT_PRESENT;
+            VkResult core_result = enable_core_features(&features->features,
+                p->platform.supported_features, &enabled_features);
+            if (core_result != VK_SUCCESS) return core_result;
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES) {
             if (saw8 || !extension8) return VK_ERROR_FEATURE_NOT_PRESENT;
             saw8 = VK_TRUE;
@@ -371,9 +388,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             return VK_ERROR_FEATURE_NOT_PRESENT;
         }
     }
-    if (!all_core_features_disabled(info->pEnabledFeatures)) {
-        return VK_ERROR_FEATURE_NOT_PRESENT;
-    }
+    VkResult core_result = enable_core_features(info->pEnabledFeatures,
+        p->platform.supported_features, &enabled_features);
+    if (core_result != VK_SUCCESS) return core_result;
     if (info->queueCreateInfoCount != 1 || !info->pQueueCreateInfos) {
         return INVALID;
     }
@@ -394,6 +411,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     }
     if (result != VK_SUCCESS) { ps5vk_object_free(d, &saved, custom); return result; }
     d->physical = p; d->queue.device = d; d->queue.next_serial = 1;
+    d->queue.priority_class = q->pQueuePriorities[0] >= 0.5f ? 1u : 0u;
     d->enabled_features = enabled_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

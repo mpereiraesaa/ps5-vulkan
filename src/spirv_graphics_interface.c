@@ -5,9 +5,12 @@
 
 enum { ID_LIMIT=65536, LOCATIONS=32 };
 struct id_info {
-    unsigned op, type, count, storage, location, builtin, forbidden, selected;
+    unsigned op, type, count, signedness, storage, location, builtin, forbidden, selected;
 };
-struct interface { unsigned inputs[LOCATIONS],outputs[LOCATIONS]; };
+struct interface_slot { unsigned components, numeric; };
+struct interface {
+    struct interface_slot inputs[LOCATIONS], outputs[LOCATIONS];
+};
 
 /* gl_PerVertex may declare unused builtin arrays. Actual clip/cull/streamout
  * usage is independently rejected by the native compiler metadata adapter. */
@@ -68,6 +71,10 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
             if(op==21 || op==22) {
                 if(n!=(op==21?4u:3u))goto done;
                 d->count=w[2];
+                if(op==21) {
+                    if(w[3]>1)goto done;
+                    d->signedness=w[3];
+                }
             } else if(op==23 || op==32) {
                 if(n!=4)goto done;
                 d->type=op==23?w[2]:w[3];
@@ -105,10 +112,15 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
             if(components<2 || components>4 || !type->type || type->type>=bound)goto done;
             type=&ids[type->type];
         }
-        if(type->op!=22 || type->count!=32 || d->location>=LOCATIONS)goto done;
-        unsigned *locations=d->storage==1?out->inputs:out->outputs;
-        if(locations[d->location])goto done;
-        locations[d->location]=components;
+        unsigned numeric=PS5VK_VERTEX_NUMERIC_NONE;
+        if(type->op==22 && type->count==32)numeric=PS5VK_VERTEX_NUMERIC_FLOAT;
+        else if(type->op==21 && type->count==32)
+            numeric=type->signedness?PS5VK_VERTEX_NUMERIC_SINT:PS5VK_VERTEX_NUMERIC_UINT;
+        else goto done;
+        if(d->location>=LOCATIONS)goto done;
+        struct interface_slot *locations=d->storage==1?out->inputs:out->outputs;
+        if(locations[d->location].components)goto done;
+        locations[d->location]=(struct interface_slot){components,numeric};
     }
     valid=1;
 done:
@@ -119,18 +131,27 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
 {
     struct interface vs={0},fs={0};
     if(!key || !reflect(&key->vertex,0,&vs) || !reflect(&key->fragment,4,&fs))return 0;
-    if(fs.outputs[0]!=4)return 0;
+    if(fs.outputs[0].components!=4 ||
+       fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
     for(unsigned i=0;i<LOCATIONS;++i) {
         unsigned matched=0;
         for(uint32_t a=0;a<key->vertex_attribute_count;++a)
             if(key->vertex_attributes[a].location==i) {
-                uint32_t size=ps5vk_vertex_format_size(key->vertex_attributes[a].format);
-                if(!size || size/4u!=vs.inputs[i])return 0;
+                struct ps5vk_vertex_format format=
+                    ps5vk_vertex_format_info(key->vertex_attributes[a].format);
+                /* Vulkan component completion/discard permits the attribute
+                 * format and shader input to have different component counts.
+                 * Their scalar numeric categories must still agree. */
+                if(!format.bytes || !vs.inputs[i].components ||
+                   format.numeric!=vs.inputs[i].numeric)return 0;
                 ++matched;
             }
-        if((vs.inputs[i] && matched!=1) || (!vs.inputs[i] && matched))return 0;
-        if(i && fs.outputs[i])return 0;
-        if(fs.inputs[i] && fs.inputs[i]!=vs.outputs[i])return 0;
+        if((vs.inputs[i].components && matched!=1) ||
+           (!vs.inputs[i].components && matched))return 0;
+        if(i && fs.outputs[i].components)return 0;
+        if(fs.inputs[i].components &&
+           (fs.inputs[i].components!=vs.outputs[i].components ||
+            fs.inputs[i].numeric!=vs.outputs[i].numeric))return 0;
     }
     return 1;
 }

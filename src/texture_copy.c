@@ -1,24 +1,128 @@
+/*
+ * Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 #include "texture_copy.h"
 #include "texture_layout.h"
-VkResult ps5vk_texture_copy_plan(uint32_t width,uint32_t height,VkDeviceSize source_bytes,
-    VkDeviceSize destination_bytes,const VkBufferImageCopy *r,struct ps5vk_texture_copy *out)
+#include "texture_format.h"
+#include "vk_image.h"
+
+/* Overflow-checked arithmetic: a rejected plan must leave the caller's
+ * structure untouched, so every quantity is computed into a local first. */
+static int mul64(uint64_t a, uint64_t b, uint64_t *out)
+{
+    if (a && b > UINT64_MAX / a) return -1;
+    *out = a * b;
+    return 0;
+}
+static int add64(uint64_t a, uint64_t b, uint64_t *out)
+{
+    if (b > UINT64_MAX - a) return -1;
+    *out = a + b;
+    return 0;
+}
+
+static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
+    uint32_t base_slices,uint32_t mip_levels,VkBool32 is_3d,VkDeviceSize source_bytes,
+    VkDeviceSize destination_bytes,const VkBufferImageCopy *r,
+    struct ps5vk_texture_copy *out)
 {
     if(!r || !out)return VK_ERROR_UNKNOWN;
-    struct ps5vk_texture_layout layout;
-    if(ps5vk_texture_layout(width,height,&layout) || destination_bytes<layout.bytes ||
-        r->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || r->imageSubresource.mipLevel ||
-        r->imageSubresource.baseArrayLayer || r->imageSubresource.layerCount!=1 ||
-        r->imageOffset.x<0 || r->imageOffset.y<0 || r->imageOffset.z || r->imageExtent.depth!=1 ||
-        !r->imageExtent.width || !r->imageExtent.height || r->bufferOffset%4)return VK_ERROR_UNKNOWN;
+    /* A format without an implemented padded-linear encoding has no copy plan;
+     * this covers formats that exist in the capability table for another role
+     * (colour attachment, depth, vertex) but are not sampleable. */
+    if(!ps5vk_texture_format_sampled_encoding(format))return VK_ERROR_UNKNOWN;
+    const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(format);
+    struct ps5vk_texture_mip_layout layout;
+    if(!entry || ps5vk_texture_mip_layout_for_slices(format,width,height,base_slices,
+            mip_levels,&layout) || r->imageSubresource.mipLevel>=mip_levels ||
+        destination_bytes<layout.bytes ||
+        r->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
+        !r->imageSubresource.layerCount ||
+        r->imageOffset.x<0 || r->imageOffset.y<0 || r->imageOffset.z<0 ||
+        !r->imageExtent.width || !r->imageExtent.height || !r->imageExtent.depth ||
+        r->bufferOffset%entry->bytes_per_texel)return VK_ERROR_UNKNOWN;
+    const uint32_t level=r->imageSubresource.mipLevel;
+    const uint32_t mip_width=width>>level?width>>level:1;
+    const uint32_t mip_height=height>>level?height>>level:1;
+    const uint32_t image_slices=is_3d?(base_slices>>level?base_slices>>level:1):base_slices;
     uint32_t x=(uint32_t)r->imageOffset.x,y=(uint32_t)r->imageOffset.y;
-    if(x>width || y>height || r->imageExtent.width>width-x || r->imageExtent.height>height-y ||
-        (r->bufferRowLength && r->bufferRowLength<r->imageExtent.width) ||
-        (r->bufferImageHeight && r->bufferImageHeight<r->imageExtent.height))return VK_ERROR_UNKNOWN;
-    uint64_t pitch=4ull*(r->bufferRowLength?r->bufferRowLength:r->imageExtent.width);
-    uint64_t row_bytes=4ull*r->imageExtent.width,rows_before=r->imageExtent.height-1;
-    if(r->bufferOffset>source_bytes || row_bytes>source_bytes-r->bufferOffset ||
-        rows_before>(source_bytes-r->bufferOffset-row_bytes)/pitch)return VK_ERROR_UNKNOWN;
-    *out=(struct ps5vk_texture_copy){r->bufferOffset,(uint64_t)y*layout.row_pitch+4ull*x,
-        pitch,layout.row_pitch,(uint32_t)row_bytes,r->imageExtent.height};
+    if(x>mip_width || y>mip_height || r->imageExtent.width>mip_width-x ||
+       r->imageExtent.height>mip_height-y ||
+       (r->bufferRowLength && r->bufferRowLength<r->imageExtent.width) ||
+       (r->bufferImageHeight && r->bufferImageHeight<r->imageExtent.height))
+        return VK_ERROR_UNKNOWN;
+    uint32_t first_slice=0,slices=0;
+    if(is_3d) {
+        if(r->imageSubresource.baseArrayLayer || r->imageSubresource.layerCount!=1 ||
+           (uint32_t)r->imageOffset.z>image_slices ||
+           r->imageExtent.depth>image_slices-(uint32_t)r->imageOffset.z)
+            return VK_ERROR_UNKNOWN;
+        first_slice=(uint32_t)r->imageOffset.z;slices=r->imageExtent.depth;
+    } else {
+        if(r->imageOffset.z || r->imageExtent.depth!=1 ||
+           r->imageSubresource.baseArrayLayer>=image_slices ||
+           r->imageSubresource.layerCount>
+                image_slices-r->imageSubresource.baseArrayLayer)
+            return VK_ERROR_UNKNOWN;
+        first_slice=r->imageSubresource.baseArrayLayer;
+        slices=r->imageSubresource.layerCount;
+    }
+    uint64_t pitch,row_bytes,source_slice,source_span;
+    if(mul64(entry->bytes_per_texel,
+             r->bufferRowLength?r->bufferRowLength:r->imageExtent.width,&pitch) ||
+       mul64(entry->bytes_per_texel,r->imageExtent.width,&row_bytes) ||
+       row_bytes>UINT32_MAX ||
+       mul64(pitch,(r->bufferImageHeight?r->bufferImageHeight:r->imageExtent.height),
+             &source_slice) ||
+       mul64(slices-1,source_slice,&source_span) ||
+       add64(source_span,(uint64_t)(r->imageExtent.height-1)*pitch,&source_span) ||
+       add64(source_span,row_bytes,&source_span))
+        return VK_ERROR_UNKNOWN;
+    const struct ps5vk_texture_mip_level *mip=&layout.levels[level];
+    uint64_t destination_offset,destination_span;
+    if(mul64(first_slice,layout.layer_stride,&destination_offset) ||
+       add64(destination_offset,mip->offset,&destination_offset) ||
+       add64(destination_offset,(uint64_t)y*mip->row_pitch,&destination_offset) ||
+       add64(destination_offset,(uint64_t)entry->bytes_per_texel*x,&destination_offset) ||
+       mul64(slices-1,layout.layer_stride,&destination_span) ||
+       add64(destination_span,(uint64_t)(r->imageExtent.height-1)*mip->row_pitch,
+             &destination_span) ||
+       add64(destination_span,row_bytes,&destination_span))
+        return VK_ERROR_UNKNOWN;
+    if(r->bufferOffset>source_bytes || source_span>source_bytes-r->bufferOffset ||
+       destination_offset>destination_bytes ||
+       destination_span>destination_bytes-destination_offset)
+        return VK_ERROR_UNKNOWN;
+    *out=(struct ps5vk_texture_copy){r->bufferOffset,destination_offset,pitch,
+        mip->row_pitch,(uint32_t)row_bytes,r->imageExtent.height,
+        source_slice,layout.layer_stride,slices};
     return VK_SUCCESS;
+}
+
+VkResult ps5vk_texture_copy_plan_for_format(VkFormat format,uint32_t width,
+    uint32_t height,VkDeviceSize source_bytes,VkDeviceSize destination_bytes,
+    const VkBufferImageCopy *r,struct ps5vk_texture_copy *out)
+{
+    return plan(format,width,height,1,1,VK_FALSE,source_bytes,destination_bytes,r,out);
+}
+
+VkResult ps5vk_texture_copy_plan_for_image(VkImage image,VkDeviceSize source_bytes,
+    VkDeviceSize destination_bytes,const VkBufferImageCopy *r,
+    struct ps5vk_texture_copy *out)
+{
+    if(!image)return VK_ERROR_UNKNOWN;
+    const uint32_t slices=image->info.imageType==VK_IMAGE_TYPE_3D?
+        image->info.extent.depth:image->info.arrayLayers;
+    return plan(image->info.format,image->info.extent.width,image->info.extent.height,
+        slices,image->info.mipLevels,image->info.imageType==VK_IMAGE_TYPE_3D,
+        source_bytes,destination_bytes,r,out);
+}
+
+VkResult ps5vk_texture_copy_plan(uint32_t width,uint32_t height,
+    VkDeviceSize source_bytes,VkDeviceSize destination_bytes,
+    const VkBufferImageCopy *r,struct ps5vk_texture_copy *out)
+{
+    return ps5vk_texture_copy_plan_for_format(VK_FORMAT_R8G8B8A8_UNORM,
+        width,height,source_bytes,destination_bytes,r,out);
 }

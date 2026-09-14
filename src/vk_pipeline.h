@@ -62,7 +62,10 @@ struct VkPipeline_T {
     VkCompareOp depth_compare;
     VkFormat color_format, depth_format;
     uint32_t vertex_binding_count, vertex_attribute_count;
-    VkVertexInputBindingDescription vertex_binding;
+    union {
+        VkVertexInputBindingDescription vertex_binding; /* first description */
+        VkVertexInputBindingDescription vertex_bindings[16];
+    };
     VkVertexInputAttributeDescription vertex_attributes[32];
     uint32_t code[];
 };

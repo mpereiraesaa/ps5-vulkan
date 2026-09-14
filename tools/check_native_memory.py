@@ -34,7 +34,7 @@ def main():
                    ROOT / "native/index_emit_ps5.c",
                    ROOT / "src/vk_framebuffer.c",
                    ROOT / "src/depth_layout.c",
-                   ROOT / "src/texture_layout.c",
+                   ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                    ROOT / "src/texture_descriptor.c",
                    ROOT / "src/texture_copy.c",
                    ROOT / "src/texture_dma.c",

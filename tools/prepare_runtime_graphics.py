@@ -17,10 +17,20 @@ def main():
         raise SystemExit("Set PS5VK_GLSLANG to glslangValidator or install glslang-tools")
     args.out.parent.mkdir(parents=True,exist_ok=True)
     declarations=["/* Generated from owned GLSL. Contains SPIR-V, not GPU machine code. */"]
-    for extension,stage in (("vert","vertex"),("frag","fragment")):
-        binary=args.out.parent/f"runtime_triangle.{extension}.spv"
-        subprocess.run([compiler,"-V",str(ROOT/f"experiments/graphics/runtime_triangle.{extension}"),
-                        "-o",str(binary)],check=True)
+    modules = (
+        ("experiments/graphics/runtime_vertex_bindings_probe.vert", "runtime_vertex_bindings_probe.vert.spv", "vertex_bindings"),
+        ("experiments/graphics/runtime_triangle.vert", "runtime_triangle.vert.spv", "vertex"),
+        ("experiments/graphics/runtime_triangle.frag", "runtime_triangle.frag.spv", "fragment"),
+        ("experiments/graphics/runtime_vertex_sint.vert", "runtime_vertex_sint.vert.spv", "vertex_sint"),
+        ("experiments/graphics/runtime_vertex_uint.vert", "runtime_vertex_uint.vert.spv", "vertex_uint"),
+        ("experiments/graphics/runtime_vertex_unorm.vert", "runtime_vertex_unorm.vert.spv", "vertex_unorm"),
+        ("experiments/graphics/runtime_vertex_format.frag", "runtime_vertex_format.frag.spv", "vertex_format_fragment"),
+        ("experiments/graphics/runtime_texture.frag", "runtime_texture.frag.spv", "texture_fragment"),
+        ("experiments/graphics/runtime_mipmap.vert", "runtime_mipmap.vert.spv", "mipmap_vertex"),
+    )
+    for source_name,binary_name,stage in modules:
+        binary=args.out.parent/binary_name
+        subprocess.run([compiler,"-V",str(ROOT/source_name),"-o",str(binary)],check=True)
         data=binary.read_bytes()
         words=struct.unpack(f"<{len(data)//4}I",data)
         declarations.append(f"static const uint32_t ps5vk_runtime_{stage}[]={{"+

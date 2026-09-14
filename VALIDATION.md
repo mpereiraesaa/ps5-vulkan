@@ -3,7 +3,156 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Multi-set fragment samplers: connected backend and hardware diagnostic
+
+The canonical descriptor-table layout is shared by compiler options and
+job-owned native table encoding. It preserves offsets across stage filtering,
+sparse binding numbers, arrays, 16-byte buffer and 48-byte combined sampler
+records. Host compiler tests cover mixed layouts; executable graphics resource
+tables currently accept only fragment-stage combined image/samplers.
+
+The connected runtime carries up to four fragment-table pointers from PSBC
+metadata through command recording, per-set generation/signature validation,
+pending ownership, predicted image layouts, native descriptor encoding,
+flush and register emission. Draw-owned tables survive until retirement.
+Missing pointers, incomplete descriptors, generation mismatch, register
+collisions and encoding failures are covered by host rejection/rollback tests.
+Procedural vertices do not require a dummy vertex buffer.
+
+On PS5 GFX1013 / firmware 12.02, 2026-09-14, the independently compiled
+public-SDK consumer passed two identical-artifact runs:
+
+- SELF SHA-256:
+  `be0ad0727d920fbdcf12afa8b4be72b259376bef0fb8b199bbd030e683380dc4`.
+- Complete TCP log SHA-256:
+  `171fd417f4b90ca66ce85272cf980220bb20682599fdee2fd263556e6d3c48bf`
+  and `d04d10c9a70562f936056213139e7b95ca623b04cfef6012f2c326c912101145`.
+- Four sets, binding 7, 24 sampler-array elements each, bound in descending
+  set order. All 96 elements select from four uploaded RGBA8 textures using
+  a different deterministic pattern in each of four rounds.
+- An owned fragment shader sums samples with distinct weights 1–96.
+  Independent CPU references and strict verifier literals require BGRA words
+  `914c503b`, `914b4d4f`, `914a4643`, `913a5449`.
+  Each round checked 471,744 non-background pixels with zero mismatches.
+- Each run also passed the earlier public consumer's compute/storage-width,
+  synchronization, 18-frame fixed-function and VideoOut checks: 40 graphics
+  submissions total, clean TCP finalization, zero tracked allocations at
+  teardown, and independently confirmed exact-title Close Game.
+
+**Qualification boundary:** this new stress fixture deliberately exceeds the
+currently advertised sampler limits. It exercises the backend through public
+headers, not a portable application obeying the published limits, and is not
+upstream CTS or conformance evidence. The advertised sampler counts remain
+one. Vertex-stage sampling, non-sampler graphics resources, statically unused
+individual bindings, broader sampler/state combinations and applicable CTS
+must be addressed before a general limit promotion. The diagnostic uses
+procedural vertices, one nearest sampler and four level-0 RGBA8 source images;
+it does not validate every format, filter, image dimensionality or vertex path
+in combination with these arrays.
+
+The first candidate stopped before GPU work because its old physical-format
+assertion still treated newly supported roles as absent. The corrected
+consumer uses `VK_FORMAT_UNDEFINED` as the unsupported witness. Its identical
+physical-query contract now runs in the host device test against the public
+entry points and native reporting configuration; an injected lost format role
+must fail. This prevents a second independent copy of those assertions from
+drifting. The rejected run is not counted as hardware success.
+
 ## Observed results
+
+### Packed sampled images and filtering
+
+On PS5 GFX1013 / firmware 12.02, 2026-09-14, four diagnostic binaries each
+passed two consecutive identical-artifact runs. The promotion adds sampled
+image/transfer-destination support for `A8B8G8R8_UNORM_PACK32`,
+`A8B8G8R8_SNORM_PACK32`, `A8B8G8R8_SRGB_PACK32`, `A8B8G8R8_UINT_PACK32` and
+`A8B8G8R8_SINT_PACK32`; only the first three expose linear filtering.
+
+| Diagnostic | Cases per run | SELF SHA-256 |
+| --- | ---: | --- |
+| normalized/sRGB sampling | 23 | `dbad7e701b4203f7ea19080e8f8e0ca1b316c9a954b56a8347ce12d2f6c46607` |
+| nearest/linear discriminator | 46 | `cb7b50aea118b015ef8f83e25ca47b4d0e0b6b7e4a320d2ec6747b387e8e4233` |
+| typed unsigned sampling | 10 | `854b60687f3a4754cbeb33ea882776963e2d93c64ac9c1d5b3377e3f9a30bac4` |
+| typed signed sampling | 10 | `8cdf6ceaea24a72d5291075c1692d00e4e8f93a8253274b39deb395b64ae00b3` |
+
+Complete TCP log SHA-256 pairs, in the same order:
+
+- Sampling: `ebba816ee063d8a0bf68b6783e2af5cd20a5805840242ea91dfc0cb1538f7bd7`,
+  `3e36477c514bd364677d03ff58635e0b7089f6f12747c97185359f188f95589b`.
+- Filtering: `810fa91c663c89a9d4297c7975a4969221baab3cb770dd925716163f019dbaa3`,
+  `c7eb3e0ff7636add9c0befbf65492cbb789bcab4aa91ac8e7cc3264ac3c4fca7`.
+- UINT: `d35793639a624ed5ed0c2d61f8307577b3cc60100e1cada86bf6310f3975c313`,
+  `995a17d818c7d968fe7ec809772c0565257d7a624af6500f43e79140bdc34831`.
+- SINT: `a3a7091c0f41ce651db18d278d340fdca79414987ece48db0289479832233c9e`,
+  `5f139f54dd0700a11b67552da37863a7946b13af7d1493a898740fb329bcad96`.
+
+The 178 GPU trials include the earlier formats as regressions. Each float/filter
+trial verified 373,248 interior pixels; each integer trial verified 1,036,800
+pixels, with zero unexpected pixels. Asymmetric source bytes distinguish
+component order, SNORM/sRGB conversion and signed/unsigned shader interfaces.
+All three packed filter pairs produce opaque black with nearest and
+`0xff808080` with linear. The UNORM readback word is `0xff4080c0` in this
+BGRA8 target, not the byte-reversed word from an RGBA8 target.
+
+Every run has complete `ps5log/1` sequence/identity/hash verification and BYE,
+six checked compute rounds before and after each graphics trial, matching
+submission/completion serials, VideoOut retirement and zero retained allocation
+bytes. `run_format_diagnostic.py` separately confirmed exact-title Close Game
+after all eight runs. Exact FTP SELF readback and mount refresh were checked
+before each diagnostic pair; those deployment checks are separate from the
+log verifier. The final Remote Play capture shows the home screen without an
+error dialog. Raw captures, telemetry, deployment receipts and binaries remain
+private.
+
+These diagnostics use owned, precompiled scene shaders. They validate texture
+roles, not runtime shader compilation, every mip level, all sampling precision,
+storage images, new color attachments, blits, or upstream CTS conformance.
+Runtime compiler/SDK witnesses are listed separately below. In the scoped
+format inventory, eight of the 287 baseline deficit cells are now satisfied;
+279 require further backend work. The whole reporting matrix still has 620
+documented deficit rows, which is neither a CTS score nor a conformance result.
+
+### Sixteen and sparse runtime vertex bindings
+
+Two consecutive PS5 GFX1013 / firmware 12.02 runs on 2026-09-14 used identical
+SELF SHA-256
+`c48f75fad391c0072130e23953a4386e290769d5de1bd99cb62f66c831102376`.
+Their complete TCP log digests are:
+
+- `f1dd3b7408eaf5665ac6eb9b731835857e7aa982f8bb6627b750946dce69b4cb`
+- `204ed9c6245b5e687c7f20b32d2242339bab605811c8283ba9ca1193f8c920cd`
+
+Each 1,784-record run reported 16 available bindings and passed four draws:
+all 16 buffers, binding 15 alone, bindings 3/15, and the full layout again from
+the runtime cache. The observed optimized masks were `ffff/8000/8008/ffff`.
+All buffers had distinct values, reversed location-to-binding order, varying
+strides/attribute offsets and odd binding addresses. Exact aligned-copy byte
+counts were `7552/457/938/7552`. Unused buffers were not allocated or bound.
+Each draw produced exactly 471,744 white pixels and zero unexpected pixels.
+Three cold compiled pairs and one warm hit were observed.
+
+Both runs also passed compute controls before and after each draw, GPU completion,
+VideoOut presentation, BYE and zero retained allocation accounting. The deployed
+SELF was read back byte-for-byte; independent Close Game/status checks confirmed
+process termination. These are bounded native diagnostic witnesses, not upstream
+vertex-input CTS or a public-header-only consumer claim.
+
+An intermediate reporting-only build aborted before device/GPU initialization:
+the diagnostic still required `maxVertexInputBindings == 1`. It is classified
+as a stale diagnostic invariant, not a GPU failure. The consumer now checks
+whether the workload fits the reported capacity; host regression tests cover
+both old one-binding and expanded sixteen-binding reports. The final two runs
+above include this correction.
+
+The vertex-layout cache correction and multiple-binding preparation described
+in [VERTEX_INPUT.md](VERTEX_INPUT.md) have host contract/compiler tests and the
+bounded hardware witnesses documented below.
+The cache tests use real PSBC compilation and distinguish stride, offset and
+format changes while retaining warm reuse for an unchanged layout. Preparation
+tests cover 16 binding spans, sparse compiler masks, optimized-away inputs,
+alignment copies and allocation failure. PSBC metadata version 11 connects the
+optimized binding-use mask to native descriptor preparation. Older runs do not
+establish support for this path; only the explicit multi-binding witnesses do.
 
 Two consecutive launches of the same executable each completed:
 
@@ -27,6 +176,69 @@ See [BUILDING.md](BUILDING.md) for the SDK-linked diagnostic and the
 `verify_graphics_runtime.py` receipt verifier. Local validation includes
 `make check`, `make check-sanitize` and the runtime graphics compiler/cache
 test with ASan/UBSan enabled. The PSBC static archive itself is not instrumented.
+
+### Runtime sampled images and explicit mip LOD
+
+The GPL-compatible `ps5-opengl` reference informed the earlier runtime-graphics
+adapter for exactly one fragment-stage combined image sampler at set 0,
+binding 0. The compiler metadata, user-SGPR slot, 48-byte descriptor table,
+descending mip layout and cache identity were validated on the host; that
+revision rejected other descriptor shapes. The multi-set extension above is
+separately qualified. The public `ps5-opengl` mipmap test was also compiled
+and run unchanged on the same console; its explicit LOD and generated-mipmap
+oracles passed. A temporary PSBC diagnostic then showed that both projects
+lower the fragment operation to the same GFX1013 `image_sample_l` instruction.
+
+The first ps5-vulkan diagnostic run
+(`20260914T050039610Z_PPSA99994_ps5vk_0x75893aacacda`) was correctly rejected:
+it returned only level 0. Comparing its runtime input to the working GPL test
+identified the actual harness defects, not a driver defect: all three probe
+vertices had zero UVs, and the scissor covered only half the intended domain.
+The fixture now assigns the explicit `(0,0), (1,0), (0.5,1)` domain and uses the
+full 1920x1080 scissor. Unit tests prevent either input from silently drifting.
+
+The corrected **public-SDK-linked** payload produced run
+`20260914T055702207Z_PPSA99994_ps5vk_0x789cca84a41b`, executable SELF SHA-256
+`99844fe54a3a7c6b510fdeb870e13d46a34be098e17100131daca47e89c8c1c9`
+and transcript SHA-256
+`d4706a2930e0a798123e40e27f5ed84143840ffda16c1f647f8fc1221680a8b6`.
+It compiled the owned vertex and fragment SPIR-V at runtime, uploaded three
+solid RGBA8 levels, verified their descending backing offsets and read back
+red/green/blue counts `103680/62208/20736`, with zero unexpected pixels and
+`PS5VK_MIPMAP_READBACK valid=1`. The pre/post compute regression passed,
+VideoOut presented the matching completion event, all native allocations were
+released, BYE was complete, and exact-title Close Game completed in 100 ms.
+`tools/verify_mipmaps.py` binds those claims to the transcript, artifact profile
+and SELF identity and fails closed on missing colors, storage drift, partial
+descriptor traces, transport gaps or false success.
+
+This establishes the bounded shared mip-chain layout, descriptor and explicit
+LOD path. It is not broad shader coverage, generated-mipmap support in Vulkan,
+anisotropy, or a claim of Khronos conformance.
+
+The next public-SDK-linked pair qualifies the Vulkan 1.0 sampler LOD-bias
+floor at both ends of the advertised interval. It reused the exact three-level
+red/green/blue resource and runtime `textureLod` shader, changing only
+`VkSamplerCreateInfo::mipLodBias`:
+
+- `+2`: run `20260914T061907811Z_PPSA99994_ps5vk_0x79d16d7ca240`, SELF
+  SHA-256 `12e7012d0bd51c9af8ad8967416c43391c4243b68e617a14b55313b5a33cc6d1`,
+  transcript SHA-256
+  `77d4f0b82fdf64089fc6aea481cc54d7ca06aedde2eba2d0e09920437cfb2443`;
+  all 186,624 covered pixels selected the blue level.
+- `-2`: run `20260914T062019027Z_PPSA99994_ps5vk_0x79e201f1c3c8`, SELF
+  SHA-256 `79f249cdf73fdfe20c784bfca3c3e12b71741f737f10c602b7c2f1697bdea559`,
+  transcript SHA-256
+  `3fcb376fd9224ddfbe14ff0ac86d24651b23fb1dfab2f988db596512435c5241`;
+  all 186,624 covered pixels selected the red level.
+
+Both 256-record streams had zero unexpected pixels, passed the pre/post
+compute regression, matched VideoOut completion, ended with BYE and zero live
+native allocation bytes, and completed exact-title Close Game. The same strict
+verifier accepts the unbiased and both boundary profiles and checks the signed
+descriptor word when private descriptor telemetry is present. Values outside
+`[-2, 2]` and NaN are rejected at sampler creation. This closes one mandatory
+graphics-profile limit blocker without claiming the wider native field range.
 
 ## Vulkan API contract suite validation (CTS-modeled)
 
@@ -466,3 +678,452 @@ image leaves independently judge bounded `vkCmdCopyImage`. Their clear variant
 uses the same red value as the destination initializer, so `vkCmdClearColorImage`
 still has deterministic host evidence rather than an independent native pixel
 oracle. The 137/137 result remains structural coverage, not Vulkan conformance.
+
+## Mandatory core feature reporting
+
+The Vulkan 1.0 profile now reports and accepts its mandatory
+`robustBufferAccess` bit while rejecting all other unreported core feature
+requests. The exact 94-case upstream payload used SELF SHA-256
+`b7c485340e03fe66cbba572cdf678c7b7ac2f61643721f63d3eade411298429b`
+and selection SHA-256
+`5f853eb7d53226b7eda4f758aecaa70be857a80270f213d546d7bcae28015e41`.
+Two independent native runs were captured:
+
+- `20260913T181536286Z_PPSA99994_upstream-cts_0x52560710bc64`, QPA SHA-256
+  `a6f94c96dc62537558c970e48d97009bd3c5fca60159bd67769e933156a18b24`
+- `20260913T181557404Z_PPSA99994_upstream-cts_0x525af1f50de2`, QPA SHA-256
+  `9febc48ffd1618ac5b356ab97cb4a02d14eca4aeddb8a61fb1fac97dc93dad08`
+
+Each passed 94/94 genuine upstream cases with zero failures, unsupported cases
+or skips, complete QPA reconstruction, exit code zero and verified Close Game.
+That earlier case proves mandatory feature reporting and negotiation. It did
+not by itself establish executable semantics; the next subsection records the
+selected executable buffer coverage added afterward.
+
+### Executable buffer robustness
+
+The next exact payload added 12 original upstream compute scalar `R32_UINT`
+robust-buffer cases, covering UBO/SSBO OOB reads and SSBO OOB writes at 1-, 3-,
+4- and 32-byte descriptor ranges. The unchanged upstream tests initially found
+two pre-execution defects: only one native logical device could join the AGC
+session, and descriptor layouts rejected `VK_SHADER_STAGE_ALL`. Both defects
+are now covered by host regressions and native CTS execution.
+
+The corrected candidate used SELF SHA-256
+`43dd8803a47028ac5086434771d668e119aa662b4483581e72bc3e7ce571a175`
+and selection SHA-256
+`344a278e325846f6918903e48b3262e2551178aab2caa022c67e8dd3539f5b62`:
+
+- `20260913T183926998Z_PPSA99994_upstream-cts_0x53a3233107e6`, QPA SHA-256
+  `8137f2254731850c9b70d59119875df82c12db16815a8b544fe2f1f5847161da`
+- `20260913T183952333Z_PPSA99994_upstream-cts_0x53a909315ae1`, QPA SHA-256
+  `046002260dfa35dd7bf3db02349368eac110a253f44ef8c7a2f587712220b4f0`
+
+Each reconstructed a complete report and passed 106/106 with zero failures,
+unsupported cases or skips, exit code zero and verified Close Game. This closes
+the selected scalar compute buffer semantics only; vector, other-format and
+vertex-access permutations remain unclaimed until selected and measured.
+
+## Vulkan 1.0 device-reporting audit (2026-09-13)
+
+The reported device surface was audited against the pinned Khronos core tables
+and the pinned CTS consumer rules, with the reported values taken from the real
+public query paths rather than from a copied table:
+
+- `tools/dump_device_reporting.c` builds its platform with the same initializer
+  as the console platform and prints every `VkPhysicalDeviceLimits` member, all
+  1.0 feature bits, the extension feature structs, the format matrix and the
+  image-format query results.
+- `tools/check_reporting_matrix.py` joins that dump with
+  `conformance_inventory/core_target.json`, the pinned registry header and
+  `vktApiFeatureInfo.cpp`, and writes
+  `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
+  report fails the gate; only documented blockers are accepted.
+
+Result on the shipped profiles: 134 mandatory limits satisfied, 64 documented
+blockers (real frontend restrictions, not inflated), 656 limits not applicable
+to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
+the code path that enforces them, 106 mandatory format-feature cells satisfied
+with 556 documented per-format blockers, 60 format-query consistency
+checks, and twelve shader-capability rows satisfied with two precision rows
+recorded as not-audited because the compiler's per-mode behaviour is not
+measured.
+
+The dump inventory is also checked against every public image and vertex format
+named by the implementation. This exposed five supported sampled formats that
+the hand-written dump list had omitted; adding those queries removed eight
+false blockers without changing runtime capabilities. A future public format
+that is absent from the dumper now fails the host gate instead of silently
+appearing unsupported in the generated matrix.
+
+Seven unset values that were below the mandatory floor were corrected to the
+minimum the specification allows (`subTexelPrecisionBits`, `mipmapPrecisionBits`,
+`maxVertexOutputComponents`, `maxFragmentInputComponents`,
+`maxSampleMaskWords`, `pointSizeRange`, `lineWidthRange`); the shared validator
+now rejects a profile that drops any of them, and `tests/test_vk_device.c`
+checks both the values and the rejections.
+
+This is host-only evidence about the report itself. It does not establish
+hardware behaviour behind those limits and it does not make the profile
+conformant: the documented blockers include the mandatory image-type, attachment
+count, descriptor-count, multisample and format-family gaps. No console run was
+performed for this increment, so no new hardware claim is made.
+
+## Core sampler addressing, fixed borders and linear filtering (2026-09-13)
+
+The sampler implementation now encodes core repeat, mirrored-repeat,
+clamp-to-edge and clamp-to-border modes independently for U/V/W. Its native
+GFX10.3 encodings are adapted under GPL-3.0-or-later from the pinned
+`blackbearreloaded/ps5-opengl` revision recorded in `LICENSING.md`.
+
+Two runs used the byte-identical SELF SHA-256
+`6e33efe473cf7d150d7fe21132413496203348261d83b95159ad5a95f60b234d`:
+
+- `20260913T195835833Z_PPSA99994_ps5vk_0x57f4cbddf1f2`, log SHA-256
+  `4fed9e38cbc37dcf582af1da45ba3754a2d2d911a7829fb43a856062ddcdba25`
+- `20260913T195933454Z_PPSA99994_ps5vk_0x5802365bfd81`, log SHA-256
+  `333a80f2bea6e81ed18397ec2bf72686d11ff89d04f756fdf1486a0ef1e0d804`
+
+Each ps5log/1 stream contained 1,840 ordered records and cleanly ended after
+API teardown with native allocation accounting at zero. Four ordered GPU draws
+and detiled readbacks each produced exactly 373,248 expected pixels and zero
+other pixels: mirrored repeat at UV -0.25, then transparent black, opaque black
+and opaque white with clamp-to-border at UV -2.0. The compute regression also
+completed before and after every draw. Close Game was confirmed after each run,
+with `PPSA99994` absent from the running-title query.
+
+The follow-up linear-filter payload had exact SELF SHA-256
+`cb59949794ab13fefb2381c01faaa8b6188d93e2e9c4b7628d9e2214fabe000c`.
+Two byte-identical executions produced complete 3,668-record ps5log/1 streams:
+
+- `20260913T202952199Z_PPSA99994_ps5vk_0x59a9aaa3c9de`, log SHA-256
+  `69425e45dbca66a347d782969bad3622e5598aed58d21c9ec302833a654b69d3`
+- `20260913T203035331Z_PPSA99994_ps5vk_0x59b3b575cbf6`, log SHA-256
+  `48b8040c94ed2561cb7afeddd699827184d3a78bacb6c7ee39306691444d977f`
+
+Each repeated the four addressing/border oracles and added four checkerboard
+oracles. At UV 0.5, nearest magnification produced opaque black while linear
+magnification produced exact 50% gray (`0xff808080`) across 373,248 pixels.
+A one-pixel high-derivative witness then used opposite `magFilter`/`minFilter`
+pairs: nearest minification produced opaque black and linear minification
+produced the same exact gray, proving that the minification selector—not the
+magnification selector—controlled the result. Every case had zero unexpected
+pixels, the compute regression completed before and after each draw, both
+streams ended cleanly with zero native allocation bytes, and Close Game was
+verified after each run.
+
+At that stage this established nearest and linear magnification/minification
+for the single-level RGBA8 UNORM sampled-image path. That pair of runs did not
+establish mip chains, anisotropy, custom border colors, mirror-clamp extension
+support, filtering for the additional formats below or Vulkan conformance; the
+later explicit-LOD witness above independently closes only the mip-chain item.
+
+### GPL texture formats promoted by hardware evidence
+
+The sampled-format table derived from the exact GPLv3 `ps5-opengl` revision
+pinned in `LICENSING.md` now publicly supports twenty additional formats spanning UNORM,
+SNORM, sRGB, packed/shared-exponent and 16/32-bit float texels. Texture layout and
+buffer-upload planning use each format's 1/2/4/8/16-byte texel width rather
+than assuming four bytes.
+
+Two runs used byte-identical SELF SHA-256
+`666e441796ae90c1cb06b3dcbacac121f246356235f1525a77c9ffef99dc7e32`:
+
+- `20260913T212518327Z_PPSA99994_ps5vk_0x5cb014618428`, log SHA-256
+  `f7b427cc393add2b802d4d85f15e12484d7fa6e97532a5b2f1ed5c900ce970ce`
+- `20260913T212630352Z_PPSA99994_ps5vk_0x5cc0d96c574c`, log SHA-256
+  `063be2d9a994e36a92be3823088d181d0796ff8c16fbe3672896dd31db53e2c1`
+
+Each complete 1,029-record ps5log/1 stream performed creation, GPU upload,
+layout transitions, descriptor sampling and exact detiled readback for the
+three newly enabled formats. Every case produced exactly 373,248 expected
+pixels and zero others. R8 yielded `(R,0,0,1)`, RG8 yielded `(R,G,0,1)`, and
+the sRGB input `0x80,0x40,0x20` decoded to linear UNORM8 `0x37,0x0d,0x04`.
+Thirty-six compute rounds surrounded the three graphics cases, resource
+accounting returned to zero, both streams ended with BYE and Close Game stopped
+the title in 100 ms. At this tranche the new formats were validated with nearest
+sampling only; the later filter matrix below supersedes that boundary. This is bounded format
+evidence, not general format coverage or Vulkan conformance.
+
+A second GPL-derived tranche added `R8_SNORM`, `R8G8_SNORM`,
+`R8G8B8A8_SNORM`, `E5B9G9R9_UFLOAT_PACK32`, `R16G16B16A16_SFLOAT` and
+`R32G32B32A32_SFLOAT`. Two independent launches used byte-identical SELF
+SHA-256 `de459dfffebcb6a03337d5054e0e6a8263500364e2252b45bb08b460b497d9e9`:
+
+- `20260914T010455716Z_PPSA99994_ps5vk_0x68ac24913444`, log SHA-256
+  `6f4e550061b1432c7b51fb1fd3eadc2e8f4c69587f153dbc086896cddc4d6836`
+- `20260914T010520787Z_PPSA99994_ps5vk_0x68b1faf20fa6`, log SHA-256
+  `6ccd000fec1bf0041c666bba28fbfbedd736dc45788885ae140350ffb12f0f96`
+
+Each complete 3,063-record ps5log/1 stream executed all nine sampled-format
+cases, with 373,248 exact pixels and zero others per case, pre/post compute
+regressions, BYE and zero retained allocations. The shared-exponent case also
+caught and corrected a Vulkan-specific semantic difference from the source
+OpenGL table: a format without alpha must select constant one rather than a
+nonexistent W component. Close Game stopped the exact title in 100 ms after
+each run. At this tranche linear filtering remained advertised only for RGBA8
+UNORM; the later filter matrix below supersedes that boundary.
+
+A third GPL-derived tranche promoted eleven further rows from the pinned Mesa
+GFX10 format table: `R16_UNORM`, `R16_SNORM`, `R16_SFLOAT`, `R16G16_UNORM`,
+`R16G16_SNORM`, `R16G16_SFLOAT`, `R16G16B16A16_UNORM`,
+`R16G16B16A16_SNORM`, `R32_SFLOAT`, `R32G32_SFLOAT` and
+`B10G11R11_UFLOAT_PACK32`. Together with the previous nine cases this forms
+the twenty-format executable probe. Two launches used byte-identical SELF
+SHA-256 `db6983e64ee8a5d016641e8e5d227fbab39421699f7377debd519fd905298b9b`:
+
+- `20260914T013155992Z_PPSA99994_ps5vk_0x6a25639cbe9a`, log SHA-256
+  `7299f83bed5adde02dc0c34cfda99f803a32c32ebf0717c3f82fb0540be013aa`
+- `20260914T013250320Z_PPSA99994_ps5vk_0x6a3209ca7d20`, log SHA-256
+  `a0c7564384c20616b14cc6748ee3d1752a7de007914a7864dad2d79796f1a47d`
+
+Each complete 6,792-record `ps5log/1` stream executed all twenty cases with
+exact format identity and texel width, 373,248 expected pixels and zero other
+pixels per case, plus pre/post compute regressions. Both runs ended with BYE,
+zero retained native allocations and exact-title Close Game in 100 ms. The
+new reporting removes four mandatory sampled-image blockers; normalized and
+floating-point rows whose sampled-image bit is not independently mandatory do
+not inflate that count. The later filter matrix below adds per-format filtering
+evidence. Those per-format runs did not exercise mip selection; the later
+explicit-LOD section above establishes the shared mip path with RGBA8 only.
+
+### Per-format nearest and linear filtering
+
+The twenty GPL-derived sampled formats were exercised with explicit opaque
+black/white checkerboards under both `VK_FILTER_NEAREST` and
+`VK_FILTER_LINEAR`; the previously established RGBA8 UNORM discriminator
+completes the twenty-one-format public table. The probe uses a gray clear
+sentinel distinct from both nearest and linear outputs, and accounts for the
+four-wide R8 fixture required to keep one-byte rows DWORD aligned.
+
+Two launches used byte-identical SELF SHA-256
+`43bd3115d9896b9708a7d33f4dde6403144718d3d1ab204cb8e89c5f53246be6`:
+
+- `20260914T020040371Z_PPSA99994_ps5vk_0x6bb6ddd97c9d`, log SHA-256
+  `482eee7766d80c60963d65fe4d2d6a75aee3e8bf40554add67f97424f9bd9136`
+- `20260914T020126402Z_PPSA99994_ps5vk_0x6bc195846c29`, log SHA-256
+  `beb82e742fc200c48849833f6c468d0309156cc38cd276f460258835e3f85e95`
+
+Each complete 13,572-record `ps5log/1` stream passed all forty trials with
+373,248 exact triangle pixels and zero unexpected pixels per trial. Both runs
+also preserved pre/post compute regressions, emitted BYE with zero retained
+native allocations and stopped the exact title through Close Game in 100 ms.
+The reporting matrix therefore promotes the linear-filter bit on every
+validated filterable sampled-image row and removes eight mandatory format
+blockers. It does not establish mip filtering, anisotropy, arrays or general
+image-format coverage.
+
+### Typed integer sampled images
+
+Eighteen GPL-derived GFX1013 format mappings were promoted only after dedicated
+Vulkan integer-shader evidence: R/RG/RGBA signed and unsigned formats at 8, 16
+and 32 bits. The two payloads use distinct `isampler2D` and `usampler2D`
+fragment interfaces, exact typed texels and a gray clear sentinel. Every case
+produced exactly 1,036,800 expected pixels—the owned triangle covers half of a
+1920x1080 target—with no other non-background pixels.
+
+The unsigned payload had SELF SHA-256
+`6b7af00e6fd80558141e83d71c69ee2bd6ec401e046daf96f4318d92f0b2e4bd`:
+
+- `20260914T023601661Z_PPSA99994_ps5vk_0x6da4c30c934c`, log SHA-256
+  `c4a8edd59f9a1e523290ed576d071aa728e7e88541826ed5d4d86c25989724d0`
+- `20260914T023630716Z_PPSA99994_ps5vk_0x6dab86bfd458`, log SHA-256
+  `229e8540cfbc99bb5c532d4a39aeacbfd9a9b1b75bb20b062afd9b6e1c8a18c1`
+
+The signed payload had SELF SHA-256
+`aa7951e029010a7d5b64d4a1c8c9a5374666d78ec253a3d350a346e15ea69297`:
+
+- `20260914T023733094Z_PPSA99994_ps5vk_0x6dba0cb7278c`, log SHA-256
+  `0be72bc28270f8dc293ba94255570d21cbd0e11ecd05719522ffe393f9218aff`
+- `20260914T023754064Z_PPSA99994_ps5vk_0x6dbeee9493c0`, log SHA-256
+  `7e8d3b743f722a64d82e982de6d7ef84475a6165379a0b7a96a05ef84e74cde8`
+
+Each run contained 4,152 ordered `ps5log/1` records, pre/post compute
+regressions for all nine cases, BYE, zero retained native allocations and an
+exact-title Close Game confirmed in 100 ms. The public table consequently
+advertises sampled-image and transfer-destination support for these rows plus
+single-sample integer sampling. It deliberately does not advertise linear
+filtering, which Vulkan does not define for integer sampled formats. This is
+bounded single-level 2D evidence, not general image-format conformance.
+
+### GPL integer and packed UNORM vertex formats promoted by hardware evidence
+
+The vertex-format table adapted from the pinned GPLv3 `ps5-opengl` revision
+now exposes the `R32`, `R32G32`, `R32G32B32` and `R32G32B32A32` signed- and
+unsigned-integer rows as vertex buffers. Two runs used byte-identical SELF
+SHA-256 `2d0ad4667084f3127b38ca0d0e6cf4f9fab1339b6e34f0e2af496f86aa2ffba6`:
+
+- `20260913T225439880Z_PPSA99994_ps5vk_0x619065cfab35`, log SHA-256
+  `fb9582f5b10926ce0edb18538698d4568e355805d84b43061b22de2b4506d76c`
+- `20260913T225542599Z_PPSA99994_ps5vk_0x619f001c2d7a`, log SHA-256
+  `e1e42287e1d169eb93f392222496dde13a609641763ebeb608f53546230b237b`
+
+Each complete 1,534-record `ps5log/1` stream compiled the signed and unsigned
+vertex shaders at runtime, created eight independent pipelines, fetched three
+vertices per case and verified exactly 471,744 white pixels with zero other
+pixels. The scalar, vec2 and vec3 cases additionally prove Vulkan's missing
+component completion (`0,0,1`) without conflating the integer input category
+with the smooth float output passed to the fragment stage. Ninety-six compute
+rounds surrounded the graphics cases, resource accounting returned to zero,
+both streams ended with BYE and exact-title Close Game completed in 100 ms.
+
+The probe deliberately uses `vkCmdDraw`: the runtime shader emitter still
+rejects indexed draws, while the separate offline-program path retains its
+validated indexed support. This evidence therefore promotes eight vertex-format
+bits, not general runtime indexed rendering or broad format conformance.
+
+Two subsequent runs promoted the packed `R8G8B8A8_UNORM` and
+`B8G8R8A8_UNORM` vertex rows using byte-identical SELF SHA-256
+`f76e366d5d96d9eb5234235764216f7a18df197d9b74cdba2f28a450b9bf9029`:
+
+- `20260913T232331033Z_PPSA99994_ps5vk_0x63237537f92a`, log SHA-256
+  `cebb92f009c7b1586cebf36f0cc39108735dcec2fab4d39624001ab0cd628755`
+- `20260913T232410710Z_PPSA99994_ps5vk_0x632cb2222841`, log SHA-256
+  `408613181e9b90de6c45bcda3d4e645daf1367a0db48334e5396eb080b4d8419`
+
+Each complete 3,104-record `ps5log/1` stream executed all ten vertex cases.
+The packed cases used raw word `0xffaa5511`; the RGBA shader expected logical
+components `(17,85,170,255)/255`, while the BGRA shader expected
+`(170,85,17,255)/255`. Both produced exactly 471,744 white pixels and zero
+others, proving normalized conversion and the R/B permutation independently of
+the framebuffer result. Resource accounting returned to zero, both streams
+ended with BYE and exact-title Close Game completed in 100 ms. This adds two
+specific packed rows; it does not imply other normalized vertex formats.
+
+The mandatory 10-bit `A2B10G10R10_UNORM_PACK32` vertex row was then added with
+byte-identical SELF SHA-256
+`87b30f8dd5026ce5c37a830ae5c514208d9fe5dc000f363647d99184ab38802b`:
+
+- `20260913T234617293Z_PPSA99994_ps5vk_0x64618f4c3bad`, log SHA-256
+  `85144d4c84a3745999cca8115fb80b662e64aca48a9170687d528be85b4c2dd0`
+- `20260913T234715734Z_PPSA99994_ps5vk_0x646f2aae85da`, log SHA-256
+  `e6fa278609b91995e55aca5f8cda91efb2eceb640e76498a87d2ccf00acfa92a`
+
+Each complete 3,413-record stream executed all eleven vertex cases. The new
+case used raw word `0xbffaa955` and checked logical RGBA values
+`(341/1023,682/1023,1,2/3)`, including the distinct two-bit alpha conversion.
+It again produced exactly 471,744 white pixels and zero others; both runs had
+zero retained allocations, BYE and exact-title Close Game in 100 ms.
+
+### Core 8/16-bit vertex families and unaligned bindings
+
+The runtime compiler dependency was advanced to the reviewed PSBC merge commit
+`75f4066fd98ecc0cd0c6aa394ec8e1cdb6de8a88`. It adds the exact Mesa
+`PIPE_FORMAT` mappings needed by the Vulkan 1.0 `R8`/`R8G8`, packed RGBA8 and
+`R16`/`R16G16`/`R16G16B16A16` vertex families. Two runs then used the
+byte-identical SELF SHA-256
+`16f96c2e112044d1689de23bb856b3bb303ed196a0bd829f7228d4e763405e96`:
+
+- `20260914T003253606Z_PPSA99994_ps5vk_0x66ec9e7ca947`, log SHA-256
+  `ab3f1da00c2f2db5e596625bcb756f5eb5aa899c44b50945fa8035a70591560f`
+- `20260914T003415349Z_PPSA99994_ps5vk_0x66ffa6a47149`, log SHA-256
+  `98f6db04d6df59354e3ea6c9e91630356ac4f81ea22fc293d5a66050826f19a3`
+
+Each complete 12,724-record `ps5log/1` stream passed all 41 typed vertex
+conversion cases. Every case produced exactly 471,744 white pixels and zero
+other pixels, with exact component values supplied independently through
+specialization constants. Coverage includes UNORM, SNORM, UINT, SINT and
+half-float conversion; missing-component defaults; `A8B8G8R8` packed order;
+1- and 2-byte strides; and a deliberately unaligned binding offset of 25.
+
+The first diagnostic run showed that a raw GFX1013 structured SRD discards the
+two low base-address bits (`ff03ffff` output instead of the expected white
+triangle). The accepted implementation therefore stages an unaligned
+accessible buffer span into aligned storage owned by the prepared draw. Every
+accepted run recorded one bounded 359-byte bounce per case, preserved compute
+regressions before and after each draw, ended with BYE and zero retained native
+allocations, and returned to the PS5 menu after exact-title Close Game. This is
+evidence for these vertex input combinations, not general format or Vulkan
+conformance.
+
+The earlier dynamic-buffer descriptor increment removes four of those
+limit blockers across the compute and graphics profiles. It implements distinct
+dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
+alignment validation and native descriptor-address adjustment with checked
+ranges. Queue priority reporting subsequently removed two more blockers: both
+profiles report the required two discrete priority classes, and device creation
+maps every valid normalized priority deterministically to low or high. The
+signed sampler-LOD-bias implementation removes another graphics limit blocker.
+The reporting matrix now records 133 satisfied mandatory limit rows, 65 limit
+blockers and 629 blockers overall.
+
+Two byte-identical public-SDK consumer runs then exercised that path on the
+owned PS5. Runs
+`20260913T192239874Z_PPSA99994_ps5vk_0x55fed4aef4a8` and
+`20260913T192252217Z_PPSA99994_ps5vk_0x5601b45b2478` used executable SELF
+SHA-256 `2f90929ff30eb069cc66bfdb86d991b0ebaf08c07d1878be2ee522e02c95e0d7`.
+Each strictly verified three descriptor sets, two dynamic storage buffers, one
+dynamic uniform buffer, offsets `256,256,256`, an independently non-zero
+update-time base plus dynamic offset, 64 deterministic compute results and 192
+intact guard words. The existing graphics/readback tail also completed, the
+`ps5log/1` transcript was complete, and Close Game was verified after both
+runs. Transcript SHA-256 values are
+`05296089284398c4377224943904a26e3c466808352a441fd5b8cbd9788be77a` and
+`cf7f31e5815b9e03a9bebca3627fc578231130e38ce66bdf5ccd29ec0fe29f3a`.
+This evidence validates that exact bounded path; it is not blanket coverage of
+every descriptor array, pipeline layout or shader combination.
+
+The core-feature reporting audit also distinguishes feature negotiation from
+object validation. For every `VkPhysicalDeviceFeatures` member reported false,
+`vkCreateDevice` walks the complete structure and rejects a true request before
+opening the backend. `tests/test_vk_device.c` exhaustively sets each member in
+turn, proving that only the advertised `robustBufferAccess` bit can enable.
+This closes the previous 26 `not-audited` rows (13 features in each profile):
+the matrix now has 110/110 satisfied feature-reporting rows. It does not claim
+that those optional features are implemented; it proves precisely that they
+are reported unavailable and cannot be negotiated accidentally.
+
+## Layered sampled images derived from ps5-opengl (2026-09-14)
+
+The GPL-compatible integration of the pinned `ps5-opengl` GFX1013 texture
+descriptor contract now covers distinct single-level 1D, 1D-array, 2D-array,
+cube and 3D resource types. The Vulkan frontend adds bounded image creation,
+view ranges, multi-slice layout and buffer-upload planning; it does not link
+Mesa/Gallium or expose an OpenGL API.
+
+Three independently built RGBA8 payloads exercised the exact paths on firmware
+12.02. Each used a 64x64 source with one solid color per layer, face or volume
+slice, selected three different coordinates in the fragment shader, preserved
+the compute regression before and after the draw, emitted BYE, released all
+native allocations and returned cleanly through exact-title Close Game:
+
+- 2D array: run `20260914T033255434Z_PPSA99994_ps5vk_0x70bf955a1933`,
+  SELF SHA-256 `46c2aa6de518a7f5642c1631273d073ee6193e0174907f816649cae6dbb7591c`,
+  log SHA-256 `448fbab89293fde9ef330114159895a1dfdf9f5e8720cf8963e238315296039a`;
+  readback was red/green/blue `82944/207360/82944`.
+- Cube: run `20260914T033409959Z_PPSA99994_ps5vk_0x70d0ef5f31b1`,
+  SELF SHA-256 `c7715a4555326fcb2e8a846bae0acf06d8fd8259a44c63c09efbcb088536855c`,
+  log SHA-256 `d201d846a7fce4ada5e6b9b8e9fd4ffa92103737379e94253d4cb338a12d0c6a`;
+  readback was `82944/82944/207360`.
+- 3D: run `20260914T033459547Z_PPSA99994_ps5vk_0x70dc7af14826`,
+  SELF SHA-256 `f54b6cef2328bdc98f5b11e1d371383344baa1863be8739352f7e390cd781955`,
+  log SHA-256 `767a86a15d38d6bb7bb6201c3741679b5ff4f7358d131983fdfd92725c3e4325`;
+  readback was `82944/207360/82944`.
+
+All three reported zero unexpected pixels. The reporting matrix can therefore
+expose the Vulkan 1.0 floors of 256 array layers, 4096 cube dimension and 512
+3D dimension without retaining the previous false “unsupported image type”
+blockers. Those values are bounds of the implemented descriptor and allocation
+contract; these small witnesses do not claim exhaustive execution at the
+maximum dimensions, cube arrays or general descriptor arrays. The later 2D
+RGBA8 mip witness is documented above and must not be generalized into layered
+mipmap coverage.
+
+Two later independent payloads validated the remaining Vulkan 1D image type
+rather than inferring it from the 2D layout. Both emitted 407 ordered records,
+preserved the pre/post compute regression, reported zero unexpected pixels,
+released all allocations and returned through exact-title Close Game:
+
+- 1D: run `20260914T035618318Z_PPSA99994_ps5vk_0x720636c8b4ca`, SELF
+  SHA-256 `3f931e503cf55dee3d5a6efad6fb6353801cb797862f12febe52b383140a2f2f`,
+  log SHA-256 `8f0782095b4c8ca7277ab88c379a43eadceb3e9efbb043480ce4965caec30aad`;
+  three independently colored regions produced red/green/blue
+  `82944/207360/82944`.
+- 1D array: run `20260914T035708018Z_PPSA99994_ps5vk_0x7211c91f6e55`, SELF
+  SHA-256 `80525965827292498f2ab0c882c5ad701c385ddfe8b34d98cd727c8cc45b301c`,
+  log SHA-256 `18c8c8b6a0331dd4eb953462cba83894adb0d10fa03b4184a8225cd909716441`;
+  three independently colored layers produced the same exact histogram.
+
+The graphics profile consequently reports `maxImageDimension1D=4096` and
+removes that real blocker. This is still a bounded contract, not an exhaustive
+maximum-sized allocation test.

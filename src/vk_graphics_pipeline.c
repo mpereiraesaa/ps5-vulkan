@@ -57,7 +57,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (in->sType != VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO || !in->layout ||
         in->layout->device != d || !in->renderPass || in->renderPass->device != d) return VK_ERROR_UNKNOWN;
     if (in->pNext || in->flags || in->subpass || in->stageCount != 2 || !in->pStages ||
-        in->layout->set_count>1)
+        in->layout->set_count>PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkBool32 dynamic_viewport,dynamic_scissor;
     if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor))
@@ -88,11 +88,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         m->sType != VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO ||
         vp->sType != VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO ||
         b->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO) return VK_ERROR_UNKNOWN;
-    if (v->vertexBindingDescriptionCount>1 || v->vertexAttributeDescriptionCount>32 ||
-        (v->vertexBindingDescriptionCount && (!v->pVertexBindingDescriptions ||
-         v->pVertexBindingDescriptions[0].binding ||
-         v->pVertexBindingDescriptions[0].inputRate!=VK_VERTEX_INPUT_RATE_VERTEX)) ||
+    if (v->vertexBindingDescriptionCount>16 || v->vertexAttributeDescriptionCount>32 ||
+        (v->vertexBindingDescriptionCount && !v->pVertexBindingDescriptions) ||
         (v->vertexAttributeDescriptionCount && !v->pVertexAttributeDescriptions))return VK_ERROR_FEATURE_NOT_PRESENT;
+    for(uint32_t i=0;i<v->vertexBindingDescriptionCount;++i) {
+        const VkVertexInputBindingDescription *binding=&v->pVertexBindingDescriptions[i];
+        if(binding->binding>=16 || binding->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
+           !binding->stride || binding->stride>0x3fff)return VK_ERROR_FEATURE_NOT_PRESENT;
+        for(uint32_t j=0;j<i;++j)
+            if(v->pVertexBindingDescriptions[j].binding==binding->binding)return VK_ERROR_UNKNOWN;
+    }
     for(uint32_t a=0;a<v->vertexAttributeDescriptionCount;++a)
         if(v->pVertexAttributeDescriptions[a].location>=32)return VK_ERROR_FEATURE_NOT_PRESENT;
     if (v->pNext || v->flags ||
@@ -181,7 +186,8 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
            sizeof(p->push_constant_stages));
     p->cull_mode=r->cullMode; p->front_face=r->frontFace; p->color_format=key.color_format;
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
-    if(key.vertex_binding_count)p->vertex_binding=*key.vertex_bindings;
+    if(key.vertex_binding_count)memcpy(p->vertex_bindings,key.vertex_bindings,
+        key.vertex_binding_count*sizeof(*key.vertex_bindings));
     if(key.vertex_attribute_count)memcpy(p->vertex_attributes,key.vertex_attributes,
         key.vertex_attribute_count*sizeof(*key.vertex_attributes));
     if (pass->depth.attachment != VK_ATTACHMENT_UNUSED) {

@@ -5,13 +5,51 @@ PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely. Each
 capability below states its evidence boundary when it is narrower than native
 hardware acceptance.
 
+## Core feature negotiation
+
+- `robustBufferAccess` is the one Vulkan 1.0 core feature currently reported
+  true. Device creation accepts it through either `pEnabledFeatures` or the
+  `VkPhysicalDeviceFeatures2` chain, rejects malformed booleans, and rejects
+  every unreported core feature.
+- Storage and uniform buffer descriptors carry their actual byte extent and
+  use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
+  the bound buffer span. This is the implementation basis for the feature, not
+  an inference from the GPU name.
+- The focused suite contains the original upstream
+  `device_mandatory_features` oracle plus 12 executable compute scalar
+  `R32_UINT` robustness cases: UBO/SSBO OOB reads and SSBO OOB writes over
+  1-, 3-, 4- and 32-byte descriptor ranges. Two exact 106/106 hardware runs
+  passed. Wider scalar/vector formats and vertex-fetch robustness remain
+  separate coverage work; they are not inferred from these cases.
+- Multiple logical devices share one serialized process-level AGC session and
+  direct-memory budget. The module and shared graphics compiler cache are
+  released only after the final device closes; each device still owns and must
+  destroy its Vulkan objects independently.
+
 ## Graphics
 
 - Exactly one vertex stage and one fragment stage per graphics pipeline.
 - Triangle-list topology, fill rasterization and line width 1.
-- One vertex binding at binding 0, per-vertex input, with up to 32 attribute
-  locations. Supported attributes are one- through four-component 32-bit float
-  formats.
+- Up to 16 vertex bindings numbered 0–15, per-vertex input, with up to 32 attribute
+  locations. Supported attributes are `R8` and `R8G8` UNORM/SNORM/UINT/SINT;
+  `R8G8B8A8` UNORM/SNORM/UINT/SINT; packed `A8B8G8R8`
+  UNORM/SNORM/UINT/SINT; `R16`, `R16G16` and `R16G16B16A16`
+  UNORM/SNORM/UINT/SINT/SFLOAT; `R32`, `R32G32`, `R32G32B32` and
+  `R32G32B32A32` SFLOAT/SINT/UINT; `B8G8R8A8_UNORM`; and
+  `A2B10G10R10_UNORM_PACK32`. Forty-one typed conversion rows have exact
+  hardware evidence on non-indexed runtime draws. The suite verifies missing
+  components, normalized conversion, packed channel order, the two-bit alpha
+  field, 1/2-byte strides and an unaligned Vulkan binding offset. Because a
+  GFX1013 structured SRD drops its two low base-address bits, native submission
+  copies an unaligned accessible span into aligned job-owned storage and
+  releases it after exact completion.
+  The runtime compiler exports its optimized descriptor-use mask: sparse binding
+  numbers are packed in ascending used-bit order and optimized-away bindings
+  need not be bound. Separate-buffer, sparse, odd-offset and specialization/cache
+  hardware witnesses are documented in [VERTEX_INPUT.md](VERTEX_INPUT.md).
+  Instance-rate and zero-stride input remain unsupported.
+  Runtime-shader indexed draws remain a separate unsupported combination;
+  indexed draws remain available through the audited offline-program path.
 - Indexed and non-indexed draws. Index buffers support `uint16` and `uint32`,
   including offsets and signed base vertex.
 - One viewport and scissor, supplied statically at pipeline creation or through
@@ -37,13 +75,38 @@ draws.
 
 ## Images and sampling
 
+The GFX1013 texture-format table records exact descriptor encodings, Vulkan
+component completion and texel sizes for thirty-nine public sampled formats, adapted
+from the pinned GPLv3 `ps5-opengl` reference and then validated against Vulkan
+oracles on PS5. Two byte-identical runs of each promoted tranche established
+image creation, transfer upload, descriptor sampling and deterministic
+readback. Each format query exposes only the operations actually established.
+
 | Format | Supported role |
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
 | `VK_FORMAT_D32_SFLOAT` | Depth attachment |
-| `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled/upload image, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
+| `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8_SNORM`, `VK_FORMAT_R8G8_UNORM`, `VK_FORMAT_R8G8_SNORM` | Sampled/upload image with nearest/linear filtering and Vulkan completion of missing components |
+| `VK_FORMAT_R8G8B8A8_UNORM` | Sampled/upload image with nearest/linear filtering and hardware-validated explicit mip LOD, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
+| `VK_FORMAT_R8G8B8A8_SNORM`, `VK_FORMAT_R8G8B8A8_SRGB` | Sampled/upload image with signed-normalized or hardware sRGB conversion and nearest/linear filtering |
+| `VK_FORMAT_E5B9G9R9_UFLOAT_PACK32` | Sampled/upload image with shared-exponent decode, nearest/linear filtering and alpha completion to one |
+| `VK_FORMAT_B10G11R11_UFLOAT_PACK32` | Sampled/upload packed floating-point image with nearest/linear filtering and alpha completion to one |
+| `VK_FORMAT_R16_UNORM`, `VK_FORMAT_R16_SNORM`, `VK_FORMAT_R16_SFLOAT`, `VK_FORMAT_R16G16_UNORM`, `VK_FORMAT_R16G16_SNORM`, `VK_FORMAT_R16G16_SFLOAT` | Sampled/upload 16-bit normalized or floating-point image with nearest/linear filtering and Vulkan completion of missing components |
+| `VK_FORMAT_R16G16B16A16_UNORM`, `VK_FORMAT_R16G16B16A16_SNORM`, `VK_FORMAT_R16G16B16A16_SFLOAT` | Sampled/upload four-component 16-bit image with nearest/linear filtering |
+| `VK_FORMAT_R32_SFLOAT`, `VK_FORMAT_R32G32_SFLOAT`, `VK_FORMAT_R32G32B32A32_SFLOAT` | Sampled/upload 32-bit floating-point image with nearest/linear filtering and Vulkan completion where applicable |
+| `VK_FORMAT_R8_UINT`, `VK_FORMAT_R8_SINT`, `VK_FORMAT_R8G8_UINT`, `VK_FORMAT_R8G8_SINT`, `VK_FORMAT_R8G8B8A8_UINT`, `VK_FORMAT_R8G8B8A8_SINT` | Typed integer sampled/upload image with nearest filtering and Vulkan completion of missing components |
+| `VK_FORMAT_R16_UINT`, `VK_FORMAT_R16_SINT`, `VK_FORMAT_R16G16_UINT`, `VK_FORMAT_R16G16_SINT`, `VK_FORMAT_R16G16B16A16_UINT`, `VK_FORMAT_R16G16B16A16_SINT` | Typed 16-bit integer sampled/upload image with nearest filtering |
+| `VK_FORMAT_R32_UINT`, `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32G32_UINT`, `VK_FORMAT_R32G32_SINT`, `VK_FORMAT_R32G32B32A32_UINT`, `VK_FORMAT_R32G32B32A32_SINT` | Typed 32-bit integer sampled/upload image with nearest filtering |
+| `VK_FORMAT_A8B8G8R8_UNORM_PACK32`, `VK_FORMAT_A8B8G8R8_SNORM_PACK32`, `VK_FORMAT_A8B8G8R8_SRGB_PACK32` | Packed sampled/upload image with native conversion and nearest/linear filtering; no color-attachment or storage-image role |
+| `VK_FORMAT_A8B8G8R8_UINT_PACK32`, `VK_FORMAT_A8B8G8R8_SINT_PACK32` | Packed typed integer sampled/upload image, nearest only |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
+
+The shared layout and query path exposes bounded complete mip chains for these
+sampled formats. Direct multi-level hardware evidence currently covers 2D
+`VK_FORMAT_R8G8B8A8_UNORM`; the other formats combine their independently
+validated texel encodings with the shared mip-layout contract and have not each
+received a separate multi-level hardware run.
 
 Texture uploads use the GPU transfer path and require the sequence
 `UNDEFINED -> TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL`. Image layout
@@ -65,11 +128,39 @@ layout transitions are bookkeeping and are validated against the image's
 committed layout. Anything outside the padded linear geometry stays refused
 rather than being approximated with a linear write.
 
-Nearest sampling has native visual and deterministic readback evidence. Linear
-filter, address-mode and mipmap-mode encodings have host-contract coverage, but
-linear filtering is not advertised as a hardware-supported format feature.
-Mip chains, anisotropy, image arrays and general descriptor arrays are not
-supported.
+Nearest and linear sampling have native deterministic readback evidence for all
+24 filterable sampled formats. 20 additional signed and unsigned
+integer rows have typed `isampler2D`/`usampler2D` nearest-sampling evidence and
+do not expose linear filtering. R8 and RG8 verify Vulkan completion of missing
+components;
+the R16/RG16 and R32/RG32 rows extend that completion evidence to wider
+components, while both packed floating-point formats verify alpha completion
+to one. SNORM, sRGB, packed-float and 16/32-bit float conversions are checked with
+asymmetric or exact source values before the fragment result is written.
+Core `REPEAT`, `MIRRORED_REPEAT`, `CLAMP_TO_EDGE` and `CLAMP_TO_BORDER` are encoded
+per axis. Two byte-identical hardware runs deterministically verified mirrored
+repeat, transparent-black, opaque-black and opaque-white border results, then
+separate nearest-versus-linear magnification and minification discriminators;
+both float and integer variants of the six fixed `VkBorderColor` enums map to
+those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
+unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
+is advertised only for the 24 validated filterable rows. Valid sampled
+images can carry complete mip chains up to the per-type query limit. A
+public-SDK-linked 2D RGBA8 witness uploaded three levels and selected all three
+with runtime-compiled explicit LOD, producing deterministic GPU readback.
+`mipLodBias` is accepted from -2 through +2 and encoded as signed 8.8 sampler
+state; values outside the reported interval and non-finite values fail closed.
+Single-level 1D, 1D-array, 2D-array, cube and 3D view witnesses separately
+supported for the sampled-image role. The implementation encodes the distinct
+GFX1013 resource types, retains layer/depth bounds in the view, and uploads
+multi-layer or multi-slice regions with ordered DMA packets. Exact RGBA8
+hardware witnesses select three 1D regions, array layers, cube faces or volume
+slices and verify distinct RGB output. The reported 4096 1D dimension, 256
+array layers, 4096 cube dimension and 512 3D dimension are frontend floors
+backed by descriptor/layout arithmetic and allocation bounds; the hardware
+witnesses use small resources and are not exhaustive tests at those maximum
+dimensions. The multi-level hardware witness is 2D RGBA8; it does not establish
+layered mip selection, anisotropy, cube arrays or general descriptor arrays.
 
 ## Compute
 
@@ -77,8 +168,10 @@ supported.
   `VK_KHR_get_physical_device_properties2`,
   `VK_KHR_storage_buffer_storage_class`, `VK_KHR_8bit_storage` and
   `VK_KHR_16bit_storage`.
-- `vkGetPhysicalDeviceFeatures2KHR` reports and `vkCreateDevice` accepts exactly
-  `storageBuffer8BitAccess` and `storageBuffer16BitAccess` for this slice.
+- `vkGetPhysicalDeviceFeatures2KHR` reports and `vkCreateDevice` accepts
+  `robustBufferAccess` in the core feature block plus exactly
+  `storageBuffer8BitAccess` and `storageBuffer16BitAccess` for the narrow
+  storage slice.
   `uniformAndStorageBuffer8BitAccess`, `storagePushConstant8`,
   `uniformAndStorageBuffer16BitAccess`, `storagePushConstant16` and
   `storageInputOutput16` remain false.
@@ -92,6 +185,15 @@ supported.
 - Storage buffers, uniform buffers and uniform texel buffers. The validated
   texel format is `VK_FORMAT_R32_UINT`, including Vulkan's `(R,0,0,1)`
   one-component completion; broader format support is not implied.
+- Dynamic storage and uniform-buffer descriptors use the same executable
+  compiler ABI as their static forms. `vkCmdBindDescriptorSets` consumes one
+  offset for every dynamic descriptor in increasing set, binding and array
+  element order; the offsets are immutable snapshots of the recorded dispatch.
+  Counts, alignments, integer overflow and the final base-plus-dynamic range are
+  checked fail-closed. The reported per-set floors are four dynamic storage
+  buffers and eight dynamic uniform buffers. Host contracts currently prove
+  this API state machine; hardware evidence is stated only when a corresponding
+  native receipt is listed in `VALIDATION.md`.
 - Partial descriptor-set binding is accepted, but every set and descriptor used
   by the compiled shader must be bound and defined before dispatch.
 - Pipeline layouts expose up to 256 bytes of 4-byte-aligned push constants.
@@ -104,6 +206,10 @@ supported.
 - A single serial native queue with Vulkan 1.0 binary semaphore signal, wait
   and consumption across ordered `VkSubmitInfo` records. Signals become visible
   only when their record retires; the final fence follows the final record.
+  `vkCreateDevice` maps the normalized queue priority to explicit low/high
+  classes and the physical device conservatively reports the Vulkan 1.0 floor
+  of two discrete priorities. Because the family exposes one queue, the two
+  classes cannot compete and do not imply a multi-queue scheduler.
   Multi-queue, timeline semaphore and synchronization2 contracts are absent.
 - Vulkan 1.0 events support host and recorded device set/reset plus waits inside
   or across primary command buffers. Event transitions are segmented from GPU
@@ -236,13 +342,16 @@ complete push-range stage signature. Specialization-dependent `LocalSizeId`
 workgroup dimensions are not yet supported; local size must remain literal.
 
 Runtime graphics uses the same pinned PSBC/NIR/ACO stack for vertex and
-fragment SPIR-V. The current profile supports procedural or single-binding
-float32 vertex input for triangle lists, smooth float32 scalar/vector interfaces
+fragment SPIR-V. The current profile supports procedural or up to 16-binding
+8/16/32-bit typed and packed RGBA8/BGRA8/RGB10A2 UNORM vertex input
+for triangle lists, smooth float32 scalar/vector interfaces
 at matching whole locations 0–31, one vec4 fragment output at location 0,
 BGRA8/RGBA8 UNORM sample-1 targets and full color writes. VertexIndex, push
-constants and scalar specialization constants are supported. Graphics
-descriptors, blending, additional targets and other interpolation modes are
-rejected by this runtime-compiled profile. Interface
+constants and scalar specialization constants are supported. Fragment combined
+image/sampler descriptors have a connected four-set array backend, with the
+qualification boundary below. Other graphics resource types, vertex-stage
+samplers, blending, additional targets and other interpolation modes remain
+unsupported by this runtime-compiled profile. Interface
 reflection is bounded to 65,536 IDs and is not a complete SPIR-V validator;
 use developer-owned valid shader modules.
 
@@ -283,8 +392,19 @@ version, target, layout, specialization and push-range state), and
 inputs (vendor/device, GFX1013 target, driver version, compiler identity and
 cache ABI revision) so any change invalidates previously exported data.
 
-The existing textured scene retains its offline exact-program path. Its
-capabilities must not be inferred for the narrower runtime graphics profile.
+The runtime backend accepts fragment-only combined-image sampler arrays across
+four sets and sparse binding numbers, within the canonical layout and compiler
+declaration bounds. An independent public-header diagnostic has qualified 24
+elements in each of four sets, four descriptor-update rounds and exact weighted
+pixel readback. This stress fixture exceeds the currently advertised sampler
+counts of one: it is backend qualification, not a portable Vulkan consumer or
+a limit promotion. Earlier single-sampler level-0 and three-level explicit-LOD
+results remain separate evidence. Every binding in an active table must be
+defined; per-binding static-use elimination, vertex sampling and mixed graphics
+buffer/image resource delivery are not complete. See [VALIDATION.md](VALIDATION.md).
+Recording also conservatively requires all nonempty layout sets to be bound,
+even if compilation later eliminates a whole set. That is a remaining Vulkan
+semantic gap, not an application requirement of the full API.
 
 ## Memory and presentation
 

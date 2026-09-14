@@ -5,10 +5,11 @@ int ps5vk_vertex_descriptor(uint32_t out[4],uint64_t address,uint64_t bytes,
 {
     const uint64_t limit=UINT64_C(1)<<48;
     if(!out || !address || address%4 || address>=limit || !bytes || bytes>limit-address ||
-       !stride || stride>0x3fff || stride%4 || !attribute_extent || attribute_extent%4 ||
-       attribute_extent>stride || bytes<stride || bytes/stride>UINT32_MAX)return -1;
+       !stride || stride>0x3fff || !attribute_extent || bytes<attribute_extent)return -1;
+    uint64_t records=1+(bytes-attribute_extent)/stride;
+    if(records>UINT32_MAX)return -1;
     uint32_t words[4]={(uint32_t)address,(uint32_t)(address>>32)|(stride<<16),
-                      (uint32_t)(bytes/stride),UINT32_C(0x11014fac)};
+                      (uint32_t)records,UINT32_C(0x11014fac)};
     /* Gears' validated gfx1013 typed/structured SRD control word. NUM_RECORDS
      * is a record count, unlike the stride-zero compute byte-span descriptor.
      * Typed load formats/attribute offsets come from the compiled VS. */

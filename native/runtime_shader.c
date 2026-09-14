@@ -28,13 +28,57 @@ static const PsbcRegisterWrite *find(const PsbcRegisterWrite *r, uint32_t n, uns
 static ps5_agc_register convert(PsbcRegisterWrite r)
 { return (ps5_agc_register){r.offset,r.value}; }
 
+static int descriptors_valid(const PsbcShaderMetadata *m)
+{
+    if(m->descriptor_binding_count>PSBC_MAX_DESCRIPTOR_BINDINGS ||
+       m->descriptor_set0_valid!=m->descriptor_set_valid[0] ||
+       m->descriptor_set0_user_data_dword!=m->descriptor_set_user_data_dword[0])return 0;
+    uint32_t declared=0,counts[PSBC_MAX_DESCRIPTOR_SETS]={0};
+    for(unsigned i=0;i<m->descriptor_binding_count;++i) {
+        const PsbcDescriptorBinding *b=&m->descriptor_bindings[i];
+        uint32_t stride=0;
+        switch(b->type) {
+        case PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER:stride=48;break;
+        case PSBC_DESCRIPTOR_UNIFORM_BUFFER:
+        case PSBC_DESCRIPTOR_STORAGE_BUFFER:
+        case PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER:stride=16;break;
+        default:return 0;
+        }
+        if(b->set>=PSBC_MAX_DESCRIPTOR_SETS || b->binding>=32 || !b->array_size ||
+           b->array_size>128 || b->stride!=stride || b->offset%16 ||
+           b->offset>6144 || b->array_size>(6144-b->offset)/stride)return 0;
+        counts[b->set]+=b->array_size;if(counts[b->set]>128)return 0;
+        uint32_t end=b->offset+b->array_size*stride;
+        for(unsigned j=0;j<i;++j) {
+            const PsbcDescriptorBinding *a=&m->descriptor_bindings[j];
+            if(a->set!=b->set)continue;
+            if(a->binding==b->binding ||
+               (b->offset<a->offset+a->array_size*a->stride && a->offset<end))return 0;
+        }
+        declared|=1u<<b->set;
+    }
+    uint32_t used=0;
+    for(unsigned s=0;s<PSBC_MAX_DESCRIPTOR_SETS;++s) {
+        uint32_t slot=m->descriptor_set_user_data_dword[s];
+        if(m->descriptor_set_valid[s]) {
+            if(!(declared&(1u<<s)) || slot>=m->user_sgpr_count || slot>=16 ||
+               (used&(1u<<slot)))return 0;
+            used|=1u<<slot;
+        } else if(slot)return 0;
+    }
+    return 1;
+}
+
 int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
     const PsbcShaderMetadata *f,struct ps5vk_runtime_draw_abi *out)
 {
-    if(!v || !f || !out || v->source_stage!=PSBC_STAGE_VERTEX ||
+    if(!v || !f || !out || v->version!=PSBC_SHADER_METADATA_VERSION || f->version!=PSBC_SHADER_METADATA_VERSION ||
+       v->vertex_buffer_per_attribute || f->vertex_buffer_usage_mask || f->vertex_buffer_per_attribute ||
+       v->source_stage!=PSBC_STAGE_VERTEX ||
        v->hardware_stage!=PSBC_HW_STAGE_NGG || f->source_stage!=PSBC_STAGE_FRAGMENT ||
        f->hardware_stage!=PSBC_HW_STAGE_PIXEL || !v->ngg_lds_layout_valid ||
-       v->output_semantic_count>PSBC_MAX_SEMANTICS || f->input_semantic_count>PSBC_MAX_SEMANTICS)
+       v->output_semantic_count>PSBC_MAX_SEMANTICS || f->input_semantic_count>PSBC_MAX_SEMANTICS ||
+       !descriptors_valid(v) || !descriptors_valid(f))
         return -1;
     for(uint32_t i=0;i<f->input_semantic_count;++i) {
         unsigned matches=0;
@@ -48,14 +92,25 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .start_instance_slot=v->start_instance_valid?v->start_instance_user_data_dword:UINT32_MAX,
         .vertex_buffer_valid=v->vertex_buffer_table_valid,
         .vertex_buffer_slot=v->vertex_buffer_table_user_data_dword,
+        .vertex_buffer_usage_mask=v->vertex_buffer_usage_mask,
         .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout,
         .vertex_push_slot=v->push_constants_valid?v->push_constants_user_data_dword:UINT32_MAX,
         .fragment_push_slot=f->push_constants_valid?f->push_constants_user_data_dword:UINT32_MAX,
         .push_constant_size=v->push_constant_size>f->push_constant_size?
             v->push_constant_size:f->push_constant_size};
+    uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+    _Static_assert(PS5VK_RUNTIME_DESCRIPTOR_SETS==PSBC_MAX_DESCRIPTOR_SETS,"descriptor set ABI");
+    for(unsigned s=0;s<PS5VK_RUNTIME_DESCRIPTOR_SETS;++s) {
+        abi.vertex_descriptor_valid[s]=v->descriptor_set_valid[s];
+        abi.fragment_descriptor_valid[s]=f->descriptor_set_valid[s];
+        abi.vertex_descriptor_slot[s]=v->descriptor_set_user_data_dword[s];
+        abi.fragment_descriptor_slot[s]=f->descriptor_set_user_data_dword[s];
+        if(abi.vertex_descriptor_valid[s] || abi.fragment_descriptor_valid[s])tables[s]=16*(s+1);
+    }
     uint32_t vertex[16],pixel[16];
-    if(ps5vk_runtime_draw_values(&abi,0,0,abi.vertex_buffer_valid?16:0,
-        abi.push_constant_size?4:0,vertex,pixel))return -1;
+    if(ps5vk_runtime_draw_values_sets(&abi,0,0,abi.vertex_buffer_valid?16:0,
+        abi.push_constant_size?4:0,tables,
+        vertex,pixel))return -1;
     *out=abi;
     return 0;
 }
@@ -70,17 +125,16 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
         m->address32_hi!=2 || m->user_sgpr_count>16 || m->scratch_valid ||
         m->scratch_bytes_per_wave || m->scratch_size_per_thread || m->streamout_valid ||
-        m->descriptor_binding_count || m->descriptor_set0_valid ||
         m->clip_distance_mask || m->cull_distance_mask ||
         m->input_semantic_count>PSBC_MAX_SEMANTICS || m->output_semantic_count>PSBC_MAX_SEMANTICS ||
         (vs && m->input_semantic_count) || (fs && m->output_semantic_count) ||
         (m->unresolved_fields & ~(PSBC_UNRESOLVED_PROGRAM_CHECKSUM |
             (vs ? PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE : 0)))) return -2;
     if (m->vertex_buffer_table_valid ?
-        (!vs || m->vertex_buffer_table_user_data_dword>=m->user_sgpr_count) :
-        m->vertex_buffer_table_user_data_dword) return -2;
-    for(uint32_t set=0;set<PSBC_MAX_DESCRIPTOR_SETS;++set)
-        if(m->descriptor_set_valid[set])return -2;
+        (!vs || m->vertex_buffer_table_user_data_dword>=m->user_sgpr_count ||
+         !m->vertex_buffer_usage_mask || m->vertex_buffer_usage_mask>0xffffu || m->vertex_buffer_per_attribute) :
+        (m->vertex_buffer_table_user_data_dword || m->vertex_buffer_usage_mask || m->vertex_buffer_per_attribute)) return -2;
+    if(!descriptors_valid(m))return -2;
     if (m->push_constants_valid ?
         (!m->push_constant_size || m->push_constant_size>256 ||
          m->push_constants_user_data_dword>=m->user_sgpr_count) :

@@ -29,20 +29,39 @@ static int span(uint64_t base,uint64_t offset,uint64_t pitch,uint32_t bytes,uint
 size_t ps5vk_texture_dma(uint32_t *out,size_t capacity,uint64_t source,uint64_t destination,
     const struct ps5vk_texture_copy *p)
 {
-    if(!out || !p || !p->rows || !p->row_bytes || p->row_bytes%4 || p->row_bytes>0x1fffff ||
-        p->rows>capacity/7)return 0;
+    if(!out || !p || !p->rows || !p->slices || !p->row_bytes ||
+        p->row_bytes%4 || p->row_bytes>0x1fffff ||
+        p->slices>SIZE_MAX/p->rows || (size_t)p->slices*p->rows>capacity/7)
+        return 0;
     uint64_t src,src_end,dst,dst_end;
     if(!span(source,p->source_offset,p->source_pitch,p->row_bytes,p->rows,&src,&src_end) ||
-        !span(destination,p->destination_offset,p->destination_pitch,p->row_bytes,p->rows,&dst,&dst_end) ||
-        (src<dst_end && dst<src_end))return 0;
+        !span(destination,p->destination_offset,p->destination_pitch,p->row_bytes,p->rows,&dst,&dst_end))
+        return 0;
+    uint64_t src_slice_bytes=src_end-src,dst_slice_bytes=dst_end-dst;
+    if(p->source_slice_pitch<src_slice_bytes ||
+       p->destination_slice_pitch<dst_slice_bytes ||
+       (p->slices-1)>(UINT64_MAX-src_end)/p->source_slice_pitch ||
+       (p->slices-1)>(UINT64_MAX-dst_end)/p->destination_slice_pitch)
+        return 0;
+    uint64_t src_all_end=src_end+(uint64_t)(p->slices-1)*p->source_slice_pitch;
+    uint64_t dst_all_end=dst_end+(uint64_t)(p->slices-1)*p->destination_slice_pitch;
+    if(src<dst_all_end && dst<src_all_end)return 0;
     /* Mesa RADV radv_cs_emit_cp_dma + public pkt3.json: DMA_DATA opcode 0x50,
      * source/destination selectors 3 use TC L2; graphics CP_SYNC is bit 31. */
-    for(uint32_t row=0;row<p->rows;++row) {
-        uint32_t *w=out+7*(size_t)row;
-        w[0]=0xc0055000u;w[1]=0x60300000u|(row+1==p->rows?0x80000000u:0);
-        w[2]=(uint32_t)src;w[3]=(uint32_t)(src>>32);
-        w[4]=(uint32_t)dst;w[5]=(uint32_t)(dst>>32);w[6]=p->row_bytes;
-        src+=p->source_pitch;dst+=p->destination_pitch;
+    size_t packet=0;
+    for(uint32_t slice=0;slice<p->slices;++slice) {
+        uint64_t slice_src=src+(uint64_t)slice*p->source_slice_pitch;
+        uint64_t slice_dst=dst+(uint64_t)slice*p->destination_slice_pitch;
+        for(uint32_t row=0;row<p->rows;++row,++packet) {
+            uint32_t *w=out+7*packet;
+            w[0]=0xc0055000u;
+            w[1]=0x60300000u|
+                (packet+1==(size_t)p->slices*p->rows?0x80000000u:0);
+            w[2]=(uint32_t)slice_src;w[3]=(uint32_t)(slice_src>>32);
+            w[4]=(uint32_t)slice_dst;w[5]=(uint32_t)(slice_dst>>32);
+            w[6]=p->row_bytes;
+            slice_src+=p->source_pitch;slice_dst+=p->destination_pitch;
+        }
     }
-    return (size_t)p->rows*7;
+    return packet*7;
 }

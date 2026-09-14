@@ -21,11 +21,14 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
 {
     /* Validation bounds each module at 4M words and entry names at 63 bytes.
      * Fixed 64-byte strings and explicit lengths prevent concatenation aliases. */
-    enum { HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2 };
+    enum { DESCRIPTOR_WORDS=1+PS5VK_MAX_SETS*(1+PS5VK_MAX_BINDINGS*4),
+        VERTEX_WORDS=2+16*4+32*5,
+        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS };
     size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count;
     uint32_t *words=calloc(count,sizeof(*words));
     if(!words)return NULL;
-    words[0]=2; /* adapter/profile version */
+    words[0]=5; /* optimized vertex-table usage in metadata v11 */
+    words[13]=PSBC_SHADER_METADATA_VERSION;
     words[1]=(uint32_t)key->vertex.word_count;
     words[2]=(uint32_t)key->fragment.word_count;
     words[3]=key->topology;words[4]=key->color_format;
@@ -48,10 +51,41 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
         words[at++]=modules[stage]->specializations[i].size;
         memcpy(words+at,modules[stage]->specializations[i].data,8);at+=2;
     }
+    words[at++]=key->descriptor_set_count;
+    for(unsigned set=0;set<PS5VK_MAX_SETS;++set) {
+        const struct ps5vk_set_signature *sig=set<key->descriptor_set_count?
+            &key->descriptor_sets[set]:NULL;
+        words[at++]=sig?sig->count:0;
+        for(unsigned binding=0;binding<PS5VK_MAX_BINDINGS;++binding) {
+            words[at++]=sig?sig->binding[binding].count:0;
+            words[at++]=sig?sig->binding[binding].first:0;
+            words[at++]=sig?sig->binding[binding].stages:0;
+            words[at++]=sig?sig->type[binding]:0;
+        }
+    }
+    words[at++]=key->vertex_binding_count;
+    words[at++]=key->vertex_attribute_count;
+    /* PSBC bakes type conversions, offsets and strides into vertex ISA.
+     * Vulkan description order is irrelevant, so serialize by binding and
+     * location, including explicit presence markers for empty slots. */
+    for(unsigned binding=0;binding<16;++binding) {
+        const VkVertexInputBindingDescription *b=NULL;
+        for(unsigned i=0;i<key->vertex_binding_count;++i)
+            if(key->vertex_bindings[i].binding==binding)b=&key->vertex_bindings[i];
+        words[at++]=b!=NULL;words[at++]=b?b->binding:0;
+        words[at++]=b?b->stride:0;words[at++]=b?b->inputRate:0;
+    }
+    for(unsigned location=0;location<32;++location) {
+        const VkVertexInputAttributeDescription *a=NULL;
+        for(unsigned i=0;i<key->vertex_attribute_count;++i)
+            if(key->vertex_attributes[i].location==location)a=&key->vertex_attributes[i];
+        words[at++]=a!=NULL;words[at++]=a?a->location:0;
+        words[at++]=a?a->binding:0;words[at++]=a?a->format:0;words[at++]=a?a->offset:0;
+    }
     if(at!=HEADER_WORDS){free(words);return NULL;}
     memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
     memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
-    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v1",
+    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v5",
             VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,cache_key)) {
         free(words);return NULL;
     }

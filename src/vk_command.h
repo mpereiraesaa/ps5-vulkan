@@ -68,6 +68,9 @@ struct ps5vk_operation {
     VkPipeline pipeline;
     VkDescriptorSet sets[PS5VK_MAX_SETS];
     uint64_t generations[PS5VK_MAX_SETS];
+    /* Parallel to VkPipeline_T::program.descriptors.  Static descriptors carry
+     * zero; dynamic buffer descriptors carry the offset captured at bind. */
+    VkDeviceSize descriptor_dynamic_offsets[PS5VK_MAX_DESCRIPTORS];
     uint32_t groups[3];
     uint32_t push_constant_size;
     uint8_t push_constants[PS5VK_MAX_PUSH_CONSTANT_BYTES];
@@ -84,9 +87,11 @@ struct VkCommandBuffer_T {
     VkPipeline pipeline;
     VkDescriptorSet sets[PS5VK_MAX_SETS];
     struct ps5vk_set_signature set_signatures[PS5VK_MAX_SETS];
+    VkDeviceSize set_dynamic_offsets[PS5VK_MAX_SETS][PS5VK_MAX_DESCRIPTORS];
     VkPipeline graphics_pipeline;
     VkDescriptorSet graphics_sets[PS5VK_MAX_SETS];
     struct ps5vk_set_signature graphics_set_signatures[PS5VK_MAX_SETS];
+    VkDeviceSize graphics_set_dynamic_offsets[PS5VK_MAX_SETS][PS5VK_MAX_DESCRIPTORS];
     VkBool32 push_constants_valid;
     VkShaderStageFlags push_constant_stages[PS5VK_MAX_PUSH_CONSTANT_DWORDS];
     uint8_t push_constants[PS5VK_MAX_PUSH_CONSTANT_BYTES];

@@ -21,6 +21,7 @@ struct VkImageView_T {
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
     VkImage image;
+    VkImageViewType view_type;
     VkImageSubresourceRange range;
     VkFormat format;
     unsigned pending, framebuffers;
