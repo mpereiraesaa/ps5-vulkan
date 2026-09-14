@@ -45,7 +45,8 @@ static inline VkResult ps5vk_descriptor_table_layout_build(uint32_t set_count,
     if (set_count > PS5VK_MAX_SETS) return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_descriptor_table_layout result = {0};
     const VkShaderStageFlags stages = VK_SHADER_STAGE_VERTEX_BIT |
-        VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+        VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
     for (uint32_t s = 0; s < set_count; ++s) {
         uint32_t prefix = 0, offset = 0;
         if (sets[s].count > PS5VK_MAX_DESCRIPTORS) return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -58,7 +59,10 @@ static inline VkResult ps5vk_descriptor_table_layout_build(uint32_t set_count,
                 if (binding->stages || sets[s].type[b]) return VK_ERROR_UNKNOWN;
                 continue;
             }
-            if (!binding->stages || (binding->stages & ~stages)) return VK_ERROR_UNKNOWN;
+            /* Visibility does not instantiate a shader stage. ALL is a
+             * reserved convenience mask, not merely the OR of core bits. */
+            if (!binding->stages || (binding->stages != VK_SHADER_STAGE_ALL &&
+                    (binding->stages & ~stages))) return VK_ERROR_UNKNOWN;
             uint32_t stride = ps5vk_descriptor_record_bytes(sets[s].type[b]);
             if (!stride) return VK_ERROR_FEATURE_NOT_PRESENT;
             if (binding->count > (UINT32_MAX - offset) / stride) return VK_ERROR_UNKNOWN;

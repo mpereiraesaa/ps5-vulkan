@@ -46,13 +46,25 @@ int main(void)
             assert(out.binding[s][b].byte_offset==32 && !out.binding[s][b].byte_stride);
     }
     struct ps5vk_set_signature good=sets[0];
+    struct ps5vk_descriptor_table_layout reference=out;
+    const VkShaderStageFlags visibility[]={VK_SHADER_STAGE_ALL,VK_SHADER_STAGE_ALL_GRAPHICS,
+        VK_SHADER_STAGE_GEOMETRY_BIT,VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT};
+    for(unsigned i=0;i<sizeof(visibility)/sizeof(visibility[0]);++i) {
+        sets[0].binding[7].stages=visibility[i];
+        assert(ps5vk_descriptor_table_layout_build(4,sets,&out)==VK_SUCCESS);
+        assert(!memcmp(&reference,&out,sizeof(out))); /* no offset/size compaction */
+        assert(sets[0].binding[7].stages==visibility[i]);
+    }
+    sets[0]=good;
     sets[0].binding[7].first++;rejects(4,sets);sets[0]=good;
     sets[0].binding[7].count=UINT32_MAX;rejects(4,sets);sets[0]=good;
     sets[0].count--;rejects(4,sets);sets[0]=good;
     sets[0].binding[0].stages=VK_SHADER_STAGE_VERTEX_BIT;rejects(4,sets);sets[0]=good;
     sets[0].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;rejects(4,sets);sets[0]=good;
     sets[0].binding[7].stages=0;rejects(4,sets);sets[0]=good;
-    sets[0].binding[7].stages=VK_SHADER_STAGE_GEOMETRY_BIT;rejects(4,sets);sets[0]=good;
+    sets[0].binding[7].stages=UINT32_C(0x40000000);rejects(4,sets);sets[0]=good;
     sets[0].type[7]=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;rejects(4,sets);
     memset(sets,0,sizeof(sets));
     for(unsigned s=0;s<4;++s) {

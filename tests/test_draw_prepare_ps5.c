@@ -218,6 +218,25 @@ int main(void)
             assert(prepared.descriptor_tables[s][12*e+w]==100+w+256*(1+24*s+e));
     }
     ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+    const VkShaderStageFlags visibility[]={VK_SHADER_STAGE_ALL,VK_SHADER_STAGE_ALL_GRAPHICS,
+        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT};
+    for(unsigned i=0;i<sizeof(visibility)/sizeof(visibility[0]);++i) {
+        sets[1].signature.binding[3].stages=visibility[i];p.sets[1]=sets[1].signature;
+        assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)==VK_SUCCESS);
+        assert(prepared.bytes==expected_bytes);
+        for(unsigned s=0;s<4;++s) {
+            assert(prepared.descriptor_bytes[s]==24*48);
+            for(unsigned e=0;e<24;++e)for(unsigned w=0;w<12;++w)
+                assert(prepared.descriptor_tables[s][12*e+w]==100+w+256*(1+24*s+e));
+        }
+        assert(sets[1].signature.binding[3].stages==visibility[i]);
+        ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+    }
+    sets[1].signature.binding[3].stages=UINT32_C(0x40000000);p.sets[1]=sets[1].signature;
+    allocated=allocations;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS &&
+           allocations==allocated && !prepared.backing);
+    sets[1].signature.binding[3].stages=VK_SHADER_STAGE_VERTEX_BIT;p.sets[1]=sets[1].signature;
     /* A vertex-only set is just as mandatory as a fragment set. */
     allocated=allocations;op.sets[1]=NULL;
     assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS &&
