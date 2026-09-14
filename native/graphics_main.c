@@ -8,6 +8,7 @@
 #include "command_arena_ps5.h"
 #include "graphics_sync.h"
 #include "graphics_limits.h"
+#include "vk_image_transfer.h"
 #include "texture_layout.h"
 #include "triangle_readback.h"
 #include "scene_geometry.h"
@@ -377,6 +378,10 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     VkImage depth_image=VK_NULL_HANDLE;VkImageView depth_view=VK_NULL_HANDLE;VkDeviceMemory depth_memory=VK_NULL_HANDLE;
     if(pipeline->depth_format!=VK_FORMAT_UNDEFINED) {
         VkImageCreateInfo di=ii;di.format=VK_FORMAT_D32_SFLOAT;di.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        /* The explicit-clear witness owns the depth buffer through
+         * vkCmdClearDepthStencilImage instead of a render-pass load op, which
+         * Vulkan requires transfer-destination usage for. */
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==14)di.usage|=VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         CHECK(vkCreateImage(d,&di,NULL,&depth_image));
         VkMemoryRequirements dr;vkGetImageMemoryRequirements(d,depth_image,&dr);
         VkMemoryAllocateInfo da={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=dr.size};
@@ -428,6 +433,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     if(PS5VK_GRAPHICS_SCISSOR_PROBE || PS5VK_GRAPHICS_WITNESSES!=0)frames=1;
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==4)frames=PS5VK_SAMPLER_PROBE_CASES;
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==5)frames=3;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==14)frames=2;
     const uint64_t scene_start=scene_now_ns();
     if(PS5VK_GRAPHICS_CONTINUOUS)ps5log_line(PS5LOG_MARK,"PS5VK_SCENE_LOOP mode=continuous animation=monotonic period_ns=6000000000 pause_us=0 readback=per-frame");
     for(uint64_t sequence=0;PS5VK_GRAPHICS_CONTINUOUS || sequence<frames;++sequence) {
@@ -572,6 +578,64 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         PS5VK_GRAPHICS_CONTINUOUS?ps5vk_scene_pattern(elapsed):
         (PS5VK_GRAPHICS_SCISSOR_PROBE==5?frame:(PS5VK_GRAPHICS_SCENE?frame/60:frame)),
         witness_index);
+    /* Explicit depth clear witness. The render pass LOADS depth for this
+     * scenario, so the only thing that can establish the buffer is this clear,
+     * which runs as its OWN submission and must retire before the render pass
+     * is recorded: only a completed clear commits the attachment layout the
+     * render pass then requires. Geometry sits at z=0.4 and z=0.8 under
+     * VK_COMPARE_OP_LESS, so clearing to 1.0 lets the draw through and clearing
+     * to 0.0 stops it, and the colour readback reports which happened. */
+    const float witness_depth=(PS5VK_GRAPHICS_SCISSOR_PROBE==14 && (frame&1))?0.0f:1.0f;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==14) {
+        if(!depth_image)fail("depth-clear-witness-target",-1);
+        const VkImageSubresourceRange depth_range={VK_IMAGE_ASPECT_DEPTH_BIT,0,
+            VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
+        VkCommandBuffer clear_cb;
+        CHECK(vkAllocateCommandBuffers(d,&ai,&clear_cb));
+        CHECK(vkBeginCommandBuffer(clear_cb,&bi));
+        VkImageMemoryBarrier acquire={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+            .image=depth_image,.subresourceRange=depth_range};
+        vkCmdPipelineBarrier(clear_cb,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&acquire);
+        /* stencil = 0x10 on purpose: the member must be ignored for a
+         * depth-only range, exactly as the pinned upstream CTS expects. */
+        const VkClearDepthStencilValue witness_value={witness_depth,0x10};
+        vkCmdClearDepthStencilImage(clear_cb,depth_image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            &witness_value,1,&depth_range);
+        VkImageMemoryBarrier to_attachment={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+            .image=depth_image,.subresourceRange=depth_range};
+        vkCmdPipelineBarrier(clear_cb,VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+            0,0,NULL,0,NULL,1,&to_attachment);
+        CHECK(vkEndCommandBuffer(clear_cb));
+        if(clear_cb->operation_count!=3)fail("depth-clear-witness-record",-1);
+        uint32_t witness_word=0;
+        if(!ps5vk_depth_clear_word(witness_depth,&witness_word))fail("depth-clear-witness-word",-1);
+        VkQueue clear_queue;vkGetDeviceQueue(d,0,0,&clear_queue);
+        VkSubmitInfo clear_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount=1,.pCommandBuffers=&clear_cb};
+        CHECK(vkQueueSubmit(clear_queue,1,&clear_submit,VK_NULL_HANDLE));
+        CHECK(vkQueueWaitIdle(clear_queue));
+        /* The committed layout is the driver's own proof that the clear
+         * submission retired against its GPU completion label. */
+        if(depth_image->layout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+            fail("depth-clear-witness-commit",-1);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_DEPTH_CLEAR_RECORDED frame=%u clear_depth_word=%08x stencil_ignored=0x10 operations=%u committed_layout=%d",
+            frame,witness_word,clear_cb->operation_count,(int)depth_image->layout);
+    }
     VkRenderPassBeginInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,.renderPass=pass,
         .framebuffer=fb,.renderArea={{0,0},{1920,1080}}};
     VkClearValue clears[2]={0};clears[1].depthStencil.depth=1.0f;
@@ -657,6 +721,20 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     int valid=(far_visible?ps5vk_triangle_coverage_valid:ps5vk_triangle_readback_valid)(&stats,(uint32_t)pipeline->viewport.width*scale_quarters/4,
         (uint32_t)pipeline->viewport.height*scale_quarters/4);
     if(PS5VK_GRAPHICS_SCENE)valid=stats.changed>1000 && stats.changed<words && !stats.bad_alpha && !stats.bad_sum;
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==14) {
+        /* The GPU-visible oracle. depth cleared to 1.0 lets the z=0.4/0.8
+         * geometry through VK_COMPARE_OP_LESS and the colour target changes;
+         * depth cleared to 0.0 stops every fragment and the target must be
+         * untouched. Nothing else differs between the two frames, so a
+         * difference here is the explicit clear and nothing else. */
+        const int expect_visible=witness_depth>0.5f;
+        valid=expect_visible?(stats.changed>1000 && stats.changed<words):
+                             (stats.changed==0);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_DEPTH_CLEAR_WITNESS frame=%u clear_depth_word=%08x expect_visible=%d changed=%llu total=%zu bad_alpha=%llu valid=%d",
+            frame,expect_visible?0x3f800000u:0u,expect_visible,
+            (unsigned long long)stats.changed,words,(unsigned long long)stats.bad_alpha,valid);
+    }
     if(PS5VK_GRAPHICS_WITNESSES) {
         const struct ps5vk_scene_witness *w=&ps5vk_scene_witnesses[witness_index];
         uint32_t expected_bgra=PS5VK_GRAPHICS_WITNESSES==2?w->off_bgra:w->bgra;
@@ -1016,8 +1094,13 @@ int main(void)
         .loadOp=PS5VK_GRAPHICS_SCENE?VK_ATTACHMENT_LOAD_OP_CLEAR:VK_ATTACHMENT_LOAD_OP_DONT_CARE,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
     VkAttachmentReference colorref={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    /* The witness LOADS depth so the render pass contributes nothing to its
+     * contents; whatever the depth test reads came from the explicit clear. */
     VkAttachmentDescription attachments[2]={attachment,{.format=VK_FORMAT_D32_SFLOAT,.samples=VK_SAMPLE_COUNT_1_BIT,
-        .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+        .loadOp=PS5VK_GRAPHICS_SCISSOR_PROBE==14?VK_ATTACHMENT_LOAD_OP_LOAD:VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout=PS5VK_GRAPHICS_SCISSOR_PROBE==14?
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
     VkAttachmentReference depthref={1,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
     VkSubpassDescription subpass={.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,.colorAttachmentCount=1,.pColorAttachments=&colorref};

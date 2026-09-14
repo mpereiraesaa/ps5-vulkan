@@ -324,7 +324,20 @@ resolve remain fail-closed entry points.
   is accepted because a pipeline may test depth at either stage. Nothing else
   is: the depth target never becomes a transfer source or a sampled image, the
   reverse transition is not part of the contract, and the colour roles keep
-  their own transitions.
+  their own transitions. The clear is GPU work on a tiled attachment, so the
+  queue router sends it to the graphics backend rather than executing it on the
+  host.
+- Hardware qualification: a native scenario renders with the depth attachment's
+  load op set to `LOAD`, so the render pass contributes nothing to the depth
+  buffer and only the explicit clear can establish it. The clear runs as its own
+  submission and must retire before the render pass is recorded. With scene
+  geometry at z=0.4 and z=0.8 under `VK_COMPARE_OP_LESS`, two frames differing
+  in nothing but the clear value produced opposite, deterministic results on
+  PS5: clearing to 1.0 let the draw reach the colour target (139968 changed
+  words of 2228224) and clearing to 0.0 rejected every fragment (0 changed),
+  twice, from the same signed artifact, with `allocations_bytes=0` and a clean
+  exit. The clear value carried `stencil = 0x10` in both frames, so the ignored
+  stencil member is qualified on hardware as well as in host tests.
 - `vkCmdClearAttachments` is structurally exposed and always invalidates
   recording: a mid-render-pass attachment clear would need a DCB clear path
   that does not exist yet. `vkCmdBlitImage` and `vkCmdResolveImage` likewise

@@ -30,6 +30,10 @@ static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **out
             case PS5VK_DRAW_INDIRECT: case PS5VK_DRAW_INDEXED_INDIRECT:
             case PS5VK_COPY_BUFFER_IMAGE: case PS5VK_COPY_IMAGE_BUFFER:
             case PS5VK_IMAGE_BARRIER:
+            /* The depth clear is GPU work on a tiled attachment, so it routes
+             * to the graphics backend like the other image transfers rather
+             * than being executed on the host. */
+            case PS5VK_CLEAR_DEPTH_STENCIL_IMAGE:
                 graphics=1; break;
             default: return VK_ERROR_FEATURE_NOT_PRESENT;
             }
