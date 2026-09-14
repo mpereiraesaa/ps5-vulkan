@@ -14,8 +14,8 @@ int main(void)
     assert(rgba && rgba->bytes_per_texel==4 && rgba->descriptor_format_word==0x03800000u);
     assert(srgb && srgb->bytes_per_texel==4 && srgb->descriptor_format_word==0x08200000u);
     assert(r->validated && rg->validated && rgba->validated && srgb->validated);
-    assert(!r->linear_filter_validated && !rg->linear_filter_validated &&
-        rgba->linear_filter_validated && !srgb->linear_filter_validated);
+    assert(r->linear_filter_validated && rg->linear_filter_validated &&
+        rgba->linear_filter_validated && srgb->linear_filter_validated);
     assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8B8A8_UNORM));
     assert(ps5vk_texture_format_supported(VK_FORMAT_R8_UNORM));
     assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8_UNORM));
@@ -36,7 +36,7 @@ int main(void)
     const unsigned sizes[]={1,2,4,4,8,16,4,2,2,2,4,4,4,8,8,4,8};
     for(unsigned i=0;i<sizeof(added)/sizeof(added[0]);++i) {
         const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(added[i]);
-        assert(entry && entry->validated && !entry->linear_filter_validated &&
+        assert(entry && entry->validated && entry->linear_filter_validated &&
             entry->descriptor_format_word==words[i] && entry->bytes_per_texel==sizes[i]);
     }
     const struct ps5vk_texture_format *rgb9e5=

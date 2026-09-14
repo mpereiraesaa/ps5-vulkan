@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 64 mandatory format-feature cells satisfied
-with 598 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 72 mandatory format-feature cells satisfied
+with 590 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -601,7 +601,7 @@ the additional formats below or Vulkan conformance.
 ### GPL texture formats promoted by hardware evidence
 
 The sampled-format table derived from the exact GPLv3 `ps5-opengl` revision
-pinned in `LICENSING.md` now publicly supports twenty formats spanning UNORM,
+pinned in `LICENSING.md` now publicly supports twenty additional formats spanning UNORM,
 SNORM, sRGB, packed/shared-exponent and 16/32-bit float texels. Texture layout and
 buffer-upload planning use each format's 1/2/4/8/16-byte texel width rather
 than assuming four bytes.
@@ -621,8 +621,8 @@ pixels and zero others. R8 yielded `(R,0,0,1)`, RG8 yielded `(R,G,0,1)`, and
 the sRGB input `0x80,0x40,0x20` decoded to linear UNORM8 `0x37,0x0d,0x04`.
 Thirty-six compute rounds surrounded the three graphics cases, resource
 accounting returned to zero, both streams ended with BYE and Close Game stopped
-the title in 100 ms. Linear filtering remains advertised only for RGBA8 UNORM;
-the new formats were validated with nearest sampling. This is bounded format
+the title in 100 ms. At this tranche the new formats were validated with nearest
+sampling only; the later filter matrix below supersedes that boundary. This is bounded format
 evidence, not general format coverage or Vulkan conformance.
 
 A second GPL-derived tranche added `R8_SNORM`, `R8G8_SNORM`,
@@ -641,7 +641,8 @@ regressions, BYE and zero retained allocations. The shared-exponent case also
 caught and corrected a Vulkan-specific semantic difference from the source
 OpenGL table: a format without alpha must select constant one rather than a
 nonexistent W component. Close Game stopped the exact title in 100 ms after
-each run. Linear filtering remains advertised only for RGBA8 UNORM.
+each run. At this tranche linear filtering remained advertised only for RGBA8
+UNORM; the later filter matrix below supersedes that boundary.
 
 A third GPL-derived tranche promoted eleven further rows from the pinned Mesa
 GFX10 format table: `R16_UNORM`, `R16_SNORM`, `R16_SFLOAT`, `R16G16_UNORM`,
@@ -662,8 +663,34 @@ pixels per case, plus pre/post compute regressions. Both runs ended with BYE,
 zero retained native allocations and exact-title Close Game in 100 ms. The
 new reporting removes four mandatory sampled-image blockers; normalized and
 floating-point rows whose sampled-image bit is not independently mandatory do
-not inflate that count. Filtering beyond the separately validated RGBA8 UNORM
-path, mip chains and broader image combinations remain unadvertised.
+not inflate that count. The later filter matrix below adds per-format filtering
+evidence. Mip chains and broader image combinations remain unadvertised.
+
+### Per-format nearest and linear filtering
+
+The twenty GPL-derived sampled formats were exercised with explicit opaque
+black/white checkerboards under both `VK_FILTER_NEAREST` and
+`VK_FILTER_LINEAR`; the previously established RGBA8 UNORM discriminator
+completes the twenty-one-format public table. The probe uses a gray clear
+sentinel distinct from both nearest and linear outputs, and accounts for the
+four-wide R8 fixture required to keep one-byte rows DWORD aligned.
+
+Two launches used byte-identical SELF SHA-256
+`43bd3115d9896b9708a7d33f4dde6403144718d3d1ab204cb8e89c5f53246be6`:
+
+- `20260914T020040371Z_PPSA99994_ps5vk_0x6bb6ddd97c9d`, log SHA-256
+  `482eee7766d80c60963d65fe4d2d6a75aee3e8bf40554add67f97424f9bd9136`
+- `20260914T020126402Z_PPSA99994_ps5vk_0x6bc195846c29`, log SHA-256
+  `beb82e742fc200c48849833f6c468d0309156cc38cd276f460258835e3f85e95`
+
+Each complete 13,572-record `ps5log/1` stream passed all forty trials with
+373,248 exact triangle pixels and zero unexpected pixels per trial. Both runs
+also preserved pre/post compute regressions, emitted BYE with zero retained
+native allocations and stopped the exact title through Close Game in 100 ms.
+The reporting matrix therefore promotes the linear-filter bit on every
+executable sampled-image row and removes eight mandatory format blockers. It
+does not establish mip filtering, anisotropy, arrays or general image-format
+coverage.
 
 ### GPL integer and packed UNORM vertex formats promoted by hardware evidence
 
@@ -763,7 +790,7 @@ ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
 reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
-blockers and 670 blockers overall.
+blockers and 662 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

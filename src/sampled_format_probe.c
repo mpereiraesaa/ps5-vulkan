@@ -1,4 +1,5 @@
 #include "sampled_format_probe.h"
+#include <string.h>
 
 int ps5vk_sampled_format_case(unsigned index,
     struct ps5vk_sampled_format_case *out)
@@ -62,5 +63,64 @@ int ps5vk_sampled_format_case(unsigned index,
         "sampled-format case count");
     if (!out || index >= sizeof(cases) / sizeof(cases[0])) return -1;
     *out = cases[index];
+    return 0;
+}
+
+int ps5vk_sampled_format_filter_texels(unsigned index,
+    uint8_t black[16], uint8_t white[16], uint32_t *nearest_bgra,
+    uint32_t *linear_bgra)
+{
+    static const uint8_t black_texels[PS5VK_SAMPLED_FORMAT_CASES][16] = {
+        {0}, {0}, {0,0,0,0xff}, {0}, {0}, {0,0,0,0x7f}, {0},
+        {0,0,0,0,0,0,0,0x3c},
+        {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x80,0x3f},
+        {0}, {0}, {0}, {0}, {0}, {0},
+        {0,0,0,0,0,0,0xff,0xff},
+        {0,0,0,0,0,0,0xff,0x7f}, {0}, {0}, {0},
+    };
+    static const uint8_t white_texels[PS5VK_SAMPLED_FORMAT_CASES][16] = {
+        {0xff}, {0xff,0xff}, {0xff,0xff,0xff,0xff}, {0x7f},
+        {0x7f,0x7f}, {0x7f,0x7f,0x7f,0x7f},
+        {0x00,0x01,0x02,0x84},
+        {0x00,0x3c,0x00,0x3c,0x00,0x3c,0x00,0x3c},
+        {0x00,0x00,0x80,0x3f,0x00,0x00,0x80,0x3f,
+         0x00,0x00,0x80,0x3f,0x00,0x00,0x80,0x3f},
+        {0xff,0xff}, {0xff,0x7f}, {0x00,0x3c},
+        {0xff,0xff,0xff,0xff}, {0xff,0x7f,0xff,0x7f},
+        {0x00,0x3c,0x00,0x3c},
+        {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff},
+        {0xff,0x7f,0xff,0x7f,0xff,0x7f,0xff,0x7f},
+        {0x00,0x00,0x80,0x3f},
+        {0x00,0x00,0x80,0x3f,0x00,0x00,0x80,0x3f},
+        {0xc0,0x03,0x1e,0x78},
+    };
+    static const uint32_t nearest_expected[PS5VK_SAMPLED_FORMAT_CASES] = {
+        /* R8 fixtures are four texels wide so a row is one DWORD; their
+         * centre sample selects white. All other fixtures are 2x2 and their
+         * centre sample selects black. */
+        UINT32_C(0xffff0000), UINT32_C(0xff000000), UINT32_C(0xff000000),
+        UINT32_C(0xffff0000), UINT32_C(0xff000000), UINT32_C(0xff000000),
+        UINT32_C(0xff000000), UINT32_C(0xff000000), UINT32_C(0xff000000),
+        UINT32_C(0xff000000), UINT32_C(0xff000000), UINT32_C(0xff000000),
+        UINT32_C(0xff000000), UINT32_C(0xff000000), UINT32_C(0xff000000),
+        UINT32_C(0xff000000), UINT32_C(0xff000000), UINT32_C(0xff000000),
+        UINT32_C(0xff000000), UINT32_C(0xff000000),
+    };
+    static const uint32_t linear_expected[PS5VK_SAMPLED_FORMAT_CASES] = {
+        UINT32_C(0xff800000), UINT32_C(0xff808000), UINT32_C(0xff808080),
+        UINT32_C(0xff800000), UINT32_C(0xff808000), UINT32_C(0xff808080),
+        UINT32_C(0xff808080), UINT32_C(0xff808080), UINT32_C(0xff808080),
+        UINT32_C(0xff800000), UINT32_C(0xff800000), UINT32_C(0xff800000),
+        UINT32_C(0xff808000), UINT32_C(0xff808000), UINT32_C(0xff808000),
+        UINT32_C(0xff808080), UINT32_C(0xff808080), UINT32_C(0xff800000),
+        UINT32_C(0xff808000), UINT32_C(0xff808080),
+    };
+    if(index>=PS5VK_SAMPLED_FORMAT_CASES || !black || !white ||
+       !nearest_bgra || !linear_bgra)
+        return -1;
+    memcpy(black,black_texels[index],16);
+    memcpy(white,white_texels[index],16);
+    *nearest_bgra=nearest_expected[index];
+    *linear_bgra=linear_expected[index];
     return 0;
 }

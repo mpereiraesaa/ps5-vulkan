@@ -2555,7 +2555,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8_UNORM lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8_UNORM reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R8_UNORM",
       "kind": "format-cell",
@@ -2563,7 +2563,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -2683,7 +2683,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8_SNORM lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8_SNORM reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R8_SNORM",
       "kind": "format-cell",
@@ -2691,7 +2691,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -2955,7 +2955,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8_UNORM lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8_UNORM reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R8G8_UNORM",
       "kind": "format-cell",
@@ -2963,7 +2963,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3083,7 +3083,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8_SNORM lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8_SNORM reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R8G8_SNORM",
       "kind": "format-cell",
@@ -3091,7 +3091,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3515,7 +3515,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8B8A8_SNORM lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8B8A8_SNORM reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SNORM",
       "kind": "format-cell",
@@ -3523,7 +3523,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5195,7 +5195,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16_SFLOAT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16_SFLOAT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R16_SFLOAT",
       "kind": "format-cell",
@@ -5203,7 +5203,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5547,7 +5547,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16_SFLOAT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16_SFLOAT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R16G16_SFLOAT",
       "kind": "format-cell",
@@ -5555,7 +5555,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5963,7 +5963,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16B16A16_SFLOAT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16B16A16_SFLOAT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R16G16B16A16_SFLOAT",
       "kind": "format-cell",
@@ -5971,7 +5971,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -25975,9 +25975,9 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 598,
+      "blocker": 590,
       "not-applicable": 2,
-      "satisfied": 64
+      "satisfied": 72
     },
     "limits": {
       "blocker": 72,

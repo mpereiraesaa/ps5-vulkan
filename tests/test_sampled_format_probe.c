@@ -1,9 +1,11 @@
 #include "sampled_format_probe.h"
 #include <assert.h>
+#include <string.h>
 
 int main(void)
 {
     struct ps5vk_sampled_format_case c;
+    uint8_t black[16],white[16];uint32_t nearest,linear;
     assert(!ps5vk_sampled_format_case(0,&c));
     assert(c.format==VK_FORMAT_R8_UNORM && c.bytes_per_texel==1 &&
         c.texel[0]==0x40 && c.expected_bgra==0xff400000u);
@@ -28,6 +30,30 @@ int main(void)
     assert(!ps5vk_sampled_format_case(19,&c));
     assert(c.format==VK_FORMAT_B10G11R11_UFLOAT_PACK32 && c.bytes_per_texel==4 &&
         c.texel[0]==0x80 && c.texel[3]==0x60 && c.expected_bgra==0xff804020u);
+    assert(!ps5vk_sampled_format_filter_texels(0,black,white,&nearest,&linear));
+    assert(black[0]==0 && white[0]==0xff && nearest==UINT32_C(0xffff0000) &&
+        linear==UINT32_C(0xff800000));
+    assert(!ps5vk_sampled_format_filter_texels(2,black,white,&nearest,&linear));
+    assert(black[3]==0xff && white[0]==0xff && nearest==UINT32_C(0xff000000) &&
+        linear==UINT32_C(0xff808080));
+    assert(!ps5vk_sampled_format_filter_texels(3,black,white,&nearest,&linear));
+    assert(nearest==UINT32_C(0xffff0000));
+    assert(!ps5vk_sampled_format_filter_texels(4,black,white,&nearest,&linear));
+    assert(nearest==UINT32_C(0xff000000));
+    assert(!ps5vk_sampled_format_filter_texels(6,black,white,&nearest,&linear));
+    assert(!memcmp(white,(uint8_t[]){0x00,0x01,0x02,0x84},4) &&
+        linear==UINT32_C(0xff808080));
+    assert(!ps5vk_sampled_format_filter_texels(7,black,white,&nearest,&linear));
+    assert(black[7]==0x3c && white[0]==0x00 && white[1]==0x3c);
+    assert(!ps5vk_sampled_format_filter_texels(15,black,white,&nearest,&linear));
+    assert(black[6]==0xff && black[7]==0xff);
+    assert(!ps5vk_sampled_format_filter_texels(19,black,white,&nearest,&linear));
+    assert(!memcmp(white,(uint8_t[]){0xc0,0x03,0x1e,0x78},4) &&
+        linear==UINT32_C(0xff808080));
     assert(ps5vk_sampled_format_case(PS5VK_SAMPLED_FORMAT_CASES,&c));
     assert(ps5vk_sampled_format_case(0,0));
+    assert(ps5vk_sampled_format_filter_texels(PS5VK_SAMPLED_FORMAT_CASES,
+        black,white,&nearest,&linear));
+    assert(ps5vk_sampled_format_filter_texels(0,NULL,white,&nearest,&linear));
+    assert(ps5vk_sampled_format_filter_texels(0,black,white,NULL,&linear));
 }
