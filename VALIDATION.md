@@ -23,9 +23,9 @@ the focused test also passes ASan/UBSan.
 At the upload-only revision, the three upstream cases completed their uploads
 on GFX1013 but next encountered an initial color-attachment barrier: its
 write-only access scope was rejected. The follow-up below resolves that
-restriction; the later independent-readback fix lets the vertex case pass
-its full oracle. The three-case diagnostic selection remains outside strict
-acceptance. No sampler limits or conformance claim change.
+restriction; the later readback and flat-interface fixes let all three cases
+pass their full oracles (see below). They are not yet added to the canonical
+106-case selection. No sampler limits or conformance claim change.
 Upload completion alone is not verification of the uploaded texture pixels.
 
 Regression validation: two runs of the existing **106-case** upstream selection
@@ -81,8 +81,8 @@ On 2026-09-14, two identical-artifact runs of the original three-case sampler
 diagnostic each returned **one Pass and two Fail**. The vertex-only case now
 passes the unchanged upstream bilinear image comparison, covering its separate
 upload, color transition, textured draw and image readback. Fragment and
-combined-stage cases still fail graphics-pipeline creation. Full diagnostic
-acceptance remains false; no failing case was skipped or counted as supported.
+combined-stage cases still failed graphics-pipeline creation at this revision.
+Full diagnostic acceptance was false; no failing case was skipped or counted as supported.
 Transport reassembly and expected package identity were checked independently
 of that failing acceptance verdict, and both runs confirmed Close Game.
 
@@ -95,6 +95,45 @@ and sanitizer gates also pass. Two identical-SELF runs of the unchanged strict
 106-case regression selection passed every original oracle, identity/QPA
 verification, zero tracked allocations and confirmed Close Game. This bounded
 result does not promote advertised sampler counts or establish Vulkan conformance.
+
+### Flat fragment interfaces and independent input bases
+
+The sampler pipeline failures had two separate causes. The frontend rejected
+the `Flat` decoration outright. After admitting valid flat interfaces, PSBC
+still rejected their linkage metadata: standalone SPIR-V input variables had
+no assigned driver locations, so different inputs lowered to attribute base
+zero. The compiler now uses Mesa's `nir_recompute_io_bases` for fragment inputs
+after IO lowering and before RADV shader-info/ACO processing. Vertex descriptor
+locations remain unchanged. PSBC is pinned to
+`b30c2e380850adc1d76063d4d5498f2c6305cc39`.
+
+The frontend records `Flat`, checks its instruction shape and requires it for
+integer fragment inputs. It preserves location/type matching without requiring
+VS and FS interpolation decorations to match. A paired owned shader fixture
+tests smooth values and flat float, signed integer and unsigned vector values.
+Real PSBC compilation, semantic flags, native-header preservation and VS/FS
+linkage are checked; malformed decorations and integer inputs lacking `Flat`
+are rejected. The compiler's own test additionally checks sparse locations and
+both provoking-vertex modes. These host tests do not prove provoking-vertex
+selection on hardware.
+
+On 2026-09-14, two identical-SELF executions of the original three-case sampler
+selection each passed **3/3**, including the unchanged bilinear image oracle
+for vertex-only, fragment-only and shared-stage sampling. Exact deployment
+readback preceded remount; TCP QPA/selection/identity verification and Close Game
+passed on both runs. Signed SELF SHA-256:
+`ea441cb1b82199ee54e0a0ec65892f3ed24dc46f08fa8c0eedc73d39dde91dcd`.
+The diagnostic selection SHA-256 is
+`b3355e976a932437d98ec69b49705302ed0e3b1c498065b08eb15262f5e9d882`.
+This is genuine upstream pixel evidence for these specific cases, not a
+general sampler-limit promotion or complete interpolation qualification.
+Two further identical-SELF runs passed the unchanged canonical 106-case
+selection, strict QPA/identity verification and Close Game. All four runs
+ended with zero tracked allocations and successful TCP BYE. A decoded
+post-close image showed Home without an error dialog, and the CLI stream was
+stopped. The integrated host gate and sanitizer gate passed with this pinned
+compiler. Runtime SELF identity remains a manifest echo, separate from the
+exact deployment readback check.
 
 ## Shared-stage sampler hardware qualification
 

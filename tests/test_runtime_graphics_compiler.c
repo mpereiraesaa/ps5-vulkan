@@ -214,8 +214,74 @@ static void check_interfaces(struct ps5vk_graphics_key *key)
     assert(!ps5vk_spirv_graphics_interface(key));words[5]=first;
     assert(ps5vk_spirv_graphics_interface(key));
 }
+static void check_flat_interfaces(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/flat.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/flat.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    const struct ps5vk_runtime_graphics_program *p=compiled;
+    const PsbcShaderMetadata *fs=&p->fragment.metadata;
+    assert(p->vertex.machine_code_size && p->fragment.machine_code_size);
+    assert(fs->input_semantic_count==4);
+    unsigned flat=0,smooth=0;
+    for(unsigned i=0;i<fs->input_semantic_count;++i) {
+        flat+=!!(fs->input_semantics[i]&(1u<<22));
+        smooth+=!(fs->input_semantics[i]&(1u<<22));
+    }
+    assert(flat==3 && smooth==1); /* float, signed int, unsigned vector. */
+    struct ps5vk_runtime_shader header;
+    assert(!ps5vk_runtime_shader_build(&header,&p->fragment));
+    assert(header.header.num_input_semantics==4 &&
+        !memcmp(header.inputs,fs->input_semantics,4*sizeof(uint32_t)));
+    struct ps5vk_runtime_draw_abi abi;
+    assert(!ps5vk_runtime_draw_abi_build(&p->vertex.metadata,fs,&abi));
+    ps5vk_runtime_graphics_free(NULL,compiled);
+
+    uint32_t *words=(void *)key.fragment.words;
+    unsigned flat_integer=0,flat_ids[4]={0};
+    for(size_t at=5;at<key.fragment.word_count;at+=words[at]>>16) {
+        uint32_t *w=words+at;
+        if((w[0]&65535)==71 && w[2]==30 && w[3]<4)flat_ids[w[3]]=w[1];
+    }
+    assert(flat_ids[1] && flat_ids[2] && flat_ids[3]);
+    for(size_t at=5;at<key.fragment.word_count;at+=words[at]>>16) {
+        uint32_t *w=words+at;
+        if((w[0]&65535)!=71 || w[2]!=14)continue;
+        assert((w[0]>>16)==3);
+        w[2]=13; /* NoPerspective has not been qualified by this path. */
+        assert(!ps5vk_spirv_graphics_interface(&key));
+        w[2]=0; /* RelaxedPrecision: remove Flat without breaking SPIR-V shape. */
+        if(w[1]==flat_ids[1])assert(ps5vk_spirv_graphics_interface(&key));
+        else {
+            assert(!ps5vk_spirv_graphics_interface(&key));
+            const void *rejected=(void *)1;
+            assert(ps5vk_runtime_graphics_compile(NULL,&key,&rejected)==VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!rejected);++flat_integer;
+        }
+        w[2]=14;
+        uint32_t opcode=w[0];w[0]=(4u<<16)|71u; /* Flat takes no operands. */
+        assert(!ps5vk_spirv_graphics_interface(&key));w[0]=opcode;
+    }
+    assert(flat_integer==2 && ps5vk_spirv_graphics_interface(&key));
+    /* Interpolation is chosen by FS; VS decorations need not be identical. */
+    words=(void *)key.vertex.words;
+    for(size_t at=5;at<key.vertex.word_count;at+=words[at]>>16)
+        if((words[at]&65535)==71 && words[at+2]==14)words[at+2]=0;
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS);
+    p=compiled;
+    assert(p->fragment.metadata.input_semantic_count==4);
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
 int main(void)
 {
+    check_flat_interfaces();
     check_descriptor_options();
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
