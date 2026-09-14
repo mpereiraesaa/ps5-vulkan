@@ -79,6 +79,25 @@ int main(void)
     /* Mock cleanup only: this test submitted no hardware work. */
     device.submit_backend.release(&device,job);
 
+    /* The depth clear is GPU work on a tiled attachment, so it must route to
+     * the GRAPHICS backend. A host-only classification would have made the
+     * operation unreachable: the router would refuse the submission before any
+     * backend saw it, which no packet-shape test can catch. */
+    ps5vk_queue_router_configure(&device,compute,graphics);
+    command.operation_count=1;
+    command.operations[0].type=PS5VK_CLEAR_DEPTH_STENCIL_IMAGE;
+    void *depth_job=NULL;
+    const unsigned graphics_prepared=prepared[1],compute_prepared=prepared[0];
+    assert(device.submit_backend.prepare(&device,&s,&depth_job)==VK_SUCCESS && depth_job);
+    assert(prepared[1]==graphics_prepared+1 && prepared[0]==compute_prepared);
+    device.submit_backend.release(&device,depth_job);
+    /* Mixing it with a dispatch stays refused, like every other graphics op. */
+    ps5vk_queue_router_configure(&device,compute,graphics);
+    command.operation_count=2; command.operations[1].type=PS5VK_DISPATCH;
+    depth_job=(void *)1;
+    assert(device.submit_backend.prepare(&device,&s,&depth_job)==VK_ERROR_FEATURE_NOT_PRESENT &&
+           !depth_job);
+
     /* A partial range reaches the selected backend unchanged.  Event opcodes
      * on either side are never copied into, or observed by, the child job. */
     command.operation_count=4;

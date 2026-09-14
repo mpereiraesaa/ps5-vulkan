@@ -1,6 +1,7 @@
 #ifndef PS5VK_UPLOAD_COMMANDS_PS5_H
 #define PS5VK_UPLOAD_COMMANDS_PS5_H
 #include "vk_command.h"
+#include "vk_image_transfer.h"
 #include "image_layout_state.h"
 #include "texture_copy.h"
 #include "texture_dma.h"
@@ -47,6 +48,26 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
                  b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
                  b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT && b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT) ||
+                /* The cleared depth target becoming a depth attachment. This is
+                 * the transition that makes an explicit clear controllable by a
+                 * later depth test, so it is bounded to exactly that: a D32
+                 * clear target, the transfer write it just received, and the
+                 * depth/stencil attachment access the fragment tests perform.
+                 * The destination stage mask may name either fragment-test
+                 * stage or both: a pipeline may test depth at either, and the
+                 * emitted ordering is the same conservative acquire, so
+                 * demanding both would refuse a narrower valid barrier. */
+                (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+                 ps5vk_depth_clear_image(b->image) &&
+                 b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                 b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
+                 op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                 (op->dst_stage & (VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)) &&
+                 !(op->dst_stage & ~(VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT))) ||
                 ((!color || b->image==color) && ps5vk_color_discard_barrier(b))))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);
@@ -66,6 +87,23 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
             if(rc!=VK_SUCCESS)return rc;
             flush(source,(size_t)source_bytes);
             n=ps5vk_texture_dma(*cursor,(size_t)(end-*cursor),(uintptr_t)source,(uintptr_t)destination,&copy);
+        } else if(op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE) {
+            /* The same uniform-DWORD fill the render pass emits for its depth
+             * load-op clear. Every texel of the one-sample D32 surface takes
+             * the identical word, so the whole allocation is filled and the
+             * 64KB_Z_X pixel equations are not needed or claimed. */
+            if(!ps5vk_depth_clear_image(op->image_destination))return VK_ERROR_FEATURE_NOT_PRESENT;
+            void *destination;VkDeviceSize destination_bytes;
+            VkResult rc=ps5vk_layout_require(layouts,op->image_destination,
+                op->image_destination_layout);
+            if(rc!=VK_SUCCESS)return rc;
+            rc=ps5vk_image_span(d,op->image_destination,&destination,&destination_bytes);
+            if(rc!=VK_SUCCESS)return rc;
+            /* Drop any stale host lines over the target before the GPU writes
+             * it, exactly as the render-pass depth clear does. */
+            flush(destination,(size_t)destination_bytes);
+            n=ps5vk_dma_fill(*cursor,(size_t)(end-*cursor),(uintptr_t)destination,
+                destination_bytes,op->clear_word);
         } else return VK_ERROR_FEATURE_NOT_PRESENT;
         if(!n)return VK_ERROR_UNKNOWN;
         *cursor+=n;

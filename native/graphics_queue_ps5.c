@@ -106,7 +106,8 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     while(first<range_end && cb->operations[first].type!=PS5VK_BEGIN_RENDER_PASS) {
         unsigned type=cb->operations[first].type;
         if(type!=PS5VK_BARRIER && type!=PS5VK_IMAGE_BARRIER &&
-           type!=PS5VK_COPY_BUFFER_IMAGE && type!=PS5VK_COPY_IMAGE_BUFFER)
+           type!=PS5VK_COPY_BUFFER_IMAGE && type!=PS5VK_COPY_IMAGE_BUFFER &&
+           type!=PS5VK_CLEAR_DEPTH_STENCIL_IMAGE)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         ++first;
     }

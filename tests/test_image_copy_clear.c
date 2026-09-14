@@ -17,6 +17,7 @@
 #include "texture_copy.h"
 #include "texture_layout.h"
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -425,13 +426,265 @@ int main(void)
     vkCmdClearColorImage(bad, attachment, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
     assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
 
-    /* depth clears and in-render-pass attachment clears fail closed */
+    /* --- whole-subresource depth clear --------------------------------------
+     * A depth target that carries the transfer-destination usage records a real
+     * operation; one that does not stays fail-closed, because Vulkan requires
+     * that usage on the cleared image. */
     VkImage depth = make_image(VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, NULL);
     bad = begin();
     vkCmdClearDepthStencilImage(bad, depth, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                 &(VkClearDepthStencilValue){.depth = 1.0f, .stencil = 0}, 1,
                                 &(VkImageSubresourceRange){VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1});
     assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+
+    VkImage depth_dst = make_image(VK_FORMAT_D32_SFLOAT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, NULL);
+    const VkImageSubresourceRange whole_depth = {VK_IMAGE_ASPECT_DEPTH_BIT, 0,
+        VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
+    VkCommandBuffer cleared = begin();
+    vkCmdClearDepthStencilImage(cleared, depth_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                &(VkClearDepthStencilValue){.depth = 1.0f, .stencil = 0}, 1,
+                                &whole_depth);
+    assert(cleared->state == PS5VK_RECORDING && cleared->operation_count == 1);
+    assert(cleared->operations[0].type == PS5VK_CLEAR_DEPTH_STENCIL_IMAGE);
+    assert(cleared->operations[0].image_destination == depth_dst);
+    assert(cleared->operations[0].image_destination_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    assert(cleared->operations[0].image_region_count == 1);
+    /* The recorded word is the exact D32_SFLOAT bit pattern of 1.0f, which is
+     * what the render pass load-op clear writes for the same value. */
+    assert(cleared->operations[0].clear_word == 0x3f800000u);
+    /* The range array is owned: a later caller mutation cannot change it. */
+    const VkImageSubresourceRange *owned =
+        (const VkImageSubresourceRange *)cleared->operations[0].owned_payload;
+    assert(owned && owned != &whole_depth && owned->aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT);
+    assert(cleared->operations[0].owned_payload_size == sizeof(whole_depth));
+    /* The explicit one-level/one-layer spelling of the same whole subresource
+     * is equally accepted, and GENERAL is a valid clear layout. */
+    cleared = begin();
+    vkCmdClearDepthStencilImage(cleared, depth_dst, VK_IMAGE_LAYOUT_GENERAL,
+                                &(VkClearDepthStencilValue){.depth = 0.0f, .stencil = 0}, 1,
+                                &(VkImageSubresourceRange){VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1});
+    assert(cleared->state == PS5VK_RECORDING && cleared->operations[0].clear_word == 0u);
+
+    /* The stencil member is IGNORED for a depth-only range, not rejected:
+     * Vulkan reads it only when the aspect mask includes the stencil bit. The
+     * pinned upstream CTS depends on this, clearing a D32_SFLOAT image with
+     * makeClearValueDepthStencil(0.1f, 0x10), so a nonzero stencil must record
+     * exactly the same depth clear as a zero one. */
+    VkCommandBuffer stencil_zero = begin();
+    vkCmdClearDepthStencilImage(stencil_zero, depth_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                &(VkClearDepthStencilValue){.depth = 0.1f, .stencil = 0}, 1,
+                                &whole_depth);
+    VkCommandBuffer stencil_set = begin();
+    vkCmdClearDepthStencilImage(stencil_set, depth_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                &(VkClearDepthStencilValue){.depth = 0.1f, .stencil = 0x10}, 1,
+                                &whole_depth);
+    assert(stencil_zero->state == PS5VK_RECORDING && stencil_set->state == PS5VK_RECORDING);
+    assert(stencil_zero->operation_count == 1 && stencil_set->operation_count == 1);
+    assert(stencil_set->operations[0].type == PS5VK_CLEAR_DEPTH_STENCIL_IMAGE);
+    /* Byte-identical recorded work: the same D32 word, the same range payload. */
+    assert(stencil_set->operations[0].clear_word == stencil_zero->operations[0].clear_word);
+    assert(stencil_set->operations[0].clear_word == 0x3dcccccdu);
+    assert(stencil_set->operations[0].image_region_count ==
+           stencil_zero->operations[0].image_region_count);
+    assert(stencil_set->operations[0].owned_payload_size ==
+           stencil_zero->operations[0].owned_payload_size);
+    assert(!memcmp(stencil_set->operations[0].owned_payload,
+                   stencil_zero->operations[0].owned_payload,
+                   stencil_set->operations[0].owned_payload_size));
+    /* The maximum stencil value is equally ignored. */
+    bad = begin();
+    vkCmdClearDepthStencilImage(bad, depth_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                &(VkClearDepthStencilValue){.depth = 1.0f, .stencil = 0xffffffffu},
+                                1, &whole_depth);
+    assert(bad->state == PS5VK_RECORDING && bad->operations[0].clear_word == 0x3f800000u);
+
+    /* Everything that would need 64KB_Z_X pixel addressing, an aspect this
+     * format does not have, or a value the surface cannot store, stays closed
+     * and records nothing. */
+    const VkClearDepthStencilValue one = {.depth = 1.0f, .stencil = 0};
+    const struct { VkImageLayout layout; VkClearDepthStencilValue value; VkImageSubresourceRange range; }
+    refused[] = {
+        /* stencil aspect: D32_SFLOAT has no stencil plane */
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, one, {VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1}},
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, one,
+         {VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1}},
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, one, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}},
+        /* partial ranges need per-pixel addressing */
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, one, {VK_IMAGE_ASPECT_DEPTH_BIT, 1, 1, 0, 1}},
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, one, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 1, 1}},
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, one, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 0, 1}},
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, one, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 0}},
+        /* values outside the storable range, including NaN */
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {.depth = 1.5f},
+         {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}},
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {.depth = -0.5f},
+         {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}},
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {.depth = (float)NAN},
+         {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}},
+        /* layouts that are not a transfer destination */
+        {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, one, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}},
+        {VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, one,
+         {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}},
+        {VK_IMAGE_LAYOUT_UNDEFINED, one, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}},
+    };
+    for (unsigned i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
+        bad = begin();
+        vkCmdClearDepthStencilImage(bad, depth_dst, refused[i].layout, &refused[i].value,
+                                    1, &refused[i].range);
+        assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+    }
+    /* A second range that is invalid rejects the whole call, leaving nothing. */
+    const VkImageSubresourceRange pair[2] = {{VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+                                             {VK_IMAGE_ASPECT_DEPTH_BIT, 1, 1, 0, 1}};
+    bad = begin();
+    vkCmdClearDepthStencilImage(bad, depth_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &one, 2, pair);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+    /* Null and empty forms. */
+    bad = begin();
+    vkCmdClearDepthStencilImage(bad, depth_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &one, 0, &whole_depth);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+    bad = begin();
+    vkCmdClearDepthStencilImage(bad, depth_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, NULL, 1, &whole_depth);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+    bad = begin();
+    vkCmdClearDepthStencilImage(bad, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &one, 1, &whole_depth);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+    /* The colour transfer role is not a depth target. */
+    bad = begin();
+    vkCmdClearDepthStencilImage(bad, destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &one, 1, &whole_depth);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+
+    /* The advertised TRANSFER_DST bit is reachable in every form, which is why
+     * it may be advertised at all: a D32 image created ONLY as a transfer
+     * destination is a valid clear target, keeps the tiled depth footprint
+     * rather than a padded linear one, and clears through the same path. The
+     * feature bits themselves are pinned in tests/test_texture_format.c. */
+    VkImage clear_only = make_image(VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT, NULL);
+    VkMemoryRequirements depth_requirements, clear_only_requirements;
+    vkGetImageMemoryRequirements(device, depth_dst, &depth_requirements);
+    vkGetImageMemoryRequirements(device, clear_only, &clear_only_requirements);
+    assert(clear_only_requirements.size == depth_requirements.size &&
+           clear_only_requirements.alignment == depth_requirements.alignment);
+    cleared = begin();
+    vkCmdClearDepthStencilImage(cleared, clear_only, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                &one, 1, &whole_depth);
+    assert(cleared->state == PS5VK_RECORDING && cleared->operation_count == 1 &&
+           cleared->operations[0].type == PS5VK_CLEAR_DEPTH_STENCIL_IMAGE);
+
+    /* --- the cleared depth target becoming a depth attachment ---------------
+     * Without this transition the clear cannot control anything: the whole
+     * point of an explicit depth clear is that a later depth-tested draw reads
+     * what it wrote. The contract is bounded to exactly that pair of scopes. */
+    const VkImageSubresourceRange depth_range = {VK_IMAGE_ASPECT_DEPTH_BIT, 0,
+        VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
+    VkImageMemoryBarrier to_attachment = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = depth_dst, .subresourceRange = depth_range};
+    VkCommandBuffer ordered = begin();
+    vkCmdPipelineBarrier(ordered, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        0, 0, NULL, 0, NULL, 1, &to_attachment);
+    assert(ordered->state == PS5VK_RECORDING && ordered->operation_count == 1);
+    assert(ordered->operations[0].type == PS5VK_IMAGE_BARRIER);
+    assert(ordered->operations[0].image_barrier.newLayout ==
+           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    /* The whole sequence a witness records: acquire the target, clear it, then
+     * hand it to the depth tests. */
+    ordered = begin();
+    VkImageMemoryBarrier acquire = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = depth_dst, .subresourceRange = depth_range};
+    vkCmdPipelineBarrier(ordered, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &acquire);
+    vkCmdClearDepthStencilImage(ordered, depth_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                &one, 1, &whole_depth);
+    vkCmdPipelineBarrier(ordered, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        0, 0, NULL, 0, NULL, 1, &to_attachment);
+    assert(ordered->state == PS5VK_RECORDING && ordered->operation_count == 3);
+    assert(ordered->operations[1].type == PS5VK_CLEAR_DEPTH_STENCIL_IMAGE);
+
+    /* A pipeline may test depth at either fragment-test stage, so a narrower
+     * single-stage destination mask is a valid barrier and must not be
+     * refused; the emitted ordering is the same conservative acquire. */
+    for (unsigned stage = 0; stage < 2; ++stage) {
+        VkCommandBuffer narrow = begin();
+        vkCmdPipelineBarrier(narrow, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            stage ? VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT
+                  : VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+            0, 0, NULL, 0, NULL, 1, &to_attachment);
+        assert(narrow->state == PS5VK_RECORDING && narrow->operation_count == 1);
+    }
+
+    /* Anything outside that exact contract records nothing. */
+    struct { VkPipelineStageFlags src, dst; VkAccessFlags src_access, dst_access;
+             VkImageLayout old_layout, new_layout; VkImageAspectFlags aspect; } refused_barrier[] = {
+        /* the colour aspect never orders a depth target */
+        {VK_PIPELINE_STAGE_TRANSFER_BIT,
+         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+         VK_ACCESS_TRANSFER_WRITE_BIT,
+         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+         VK_IMAGE_ASPECT_COLOR_BIT},
+        /* read without write */
+        {VK_PIPELINE_STAGE_TRANSFER_BIT,
+         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+         VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+         VK_IMAGE_ASPECT_DEPTH_BIT},
+        /* a colour attachment scope on a depth target */
+        {VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+         VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+         VK_IMAGE_ASPECT_DEPTH_BIT},
+        /* the reverse transition is not part of the contract */
+        {VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+         VK_PIPELINE_STAGE_TRANSFER_BIT,
+         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+         VK_IMAGE_ASPECT_DEPTH_BIT},
+        /* the depth target never becomes a sampled image */
+        {VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+         VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+         VK_IMAGE_ASPECT_DEPTH_BIT},
+    };
+    for (unsigned i = 0; i < sizeof(refused_barrier) / sizeof(refused_barrier[0]); ++i) {
+        VkImageMemoryBarrier b = to_attachment;
+        b.srcAccessMask = refused_barrier[i].src_access;
+        b.dstAccessMask = refused_barrier[i].dst_access;
+        b.oldLayout = refused_barrier[i].old_layout;
+        b.newLayout = refused_barrier[i].new_layout;
+        b.subresourceRange.aspectMask = refused_barrier[i].aspect;
+        bad = begin();
+        vkCmdPipelineBarrier(bad, refused_barrier[i].src, refused_barrier[i].dst,
+                             0, 0, NULL, 0, NULL, 1, &b);
+        assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+    }
+    /* The colour transfer role keeps its own contract: the depth transition is
+     * not reachable for it. */
+    VkImageMemoryBarrier colour_to_depth = to_attachment;
+    colour_to_depth.image = destination;
+    bad = begin();
+    vkCmdPipelineBarrier(bad, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        0, 0, NULL, 0, NULL, 1, &colour_to_depth);
+    assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
+
+    /* in-render-pass attachment clears fail closed */
     bad = begin();
     vkCmdClearAttachments(bad, 1, &(VkClearAttachment){VK_IMAGE_ASPECT_COLOR_BIT, 0, {.color.float32 = {0, 0, 0, 1}}},
                           1, &(VkClearRect){.rect = {{0, 0}, {WIDTH, HEIGHT}}, .baseArrayLayer = 0, .layerCount = 1});
@@ -462,12 +715,14 @@ int main(void)
     vkDestroyImage(device, alias_destination, NULL);
     vkDestroyImage(device, alias_source, NULL);
     vkDestroyImage(device, attachment, NULL);
+    vkDestroyImage(device, clear_only, NULL);
+    vkDestroyImage(device, depth_dst, NULL);
     vkDestroyImage(device, depth, NULL);
     vkDestroyImage(device, destination, NULL);
     vkDestroyImage(device, source, NULL);
     vkDestroyCommandPool(device, pool, NULL);
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
-    puts("image copy and colour clear: pass (clear, copy, guards, padding, fail-closed)");
+    puts("image copy, colour clear and whole-subresource depth clear: pass");
     return 0;
 }

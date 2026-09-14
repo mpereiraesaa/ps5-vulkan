@@ -105,8 +105,11 @@ static void report_physical_device_contract(VkInstance instance,
                  VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                  VK_FORMAT_FEATURE_TRANSFER_DST_BIT) &&
             !depth.linearTilingFeatures && !depth.bufferFeatures &&
+            /* TRANSFER_DST is the whole-subresource vkCmdClearDepthStencilImage
+             * this profile executes; no depth transfer source exists. */
             depth.optimalTilingFeatures ==
-                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT &&
+                (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT) &&
             texel.bufferFeatures == (VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT |
                                      VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) &&
             !texel.linearTilingFeatures &&

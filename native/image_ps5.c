@@ -22,8 +22,11 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         info->mipLevels > PS5VK_MAX_TEXTURE_MIP_LEVELS ||
         info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL)
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    /* A D32 image is the tiled depth surface whether it is used as an
+     * attachment, as the destination of a whole-subresource depth clear, or
+     * both: there is no linear depth layout for it to fall back to. */
     const int attachment=(info->usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0;
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 || depth;
     const int cube=info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     if ((info->flags && !cube) ||
         (attachment && (info->flags || info->imageType!=VK_IMAGE_TYPE_2D ||
@@ -50,7 +53,7 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     /* Padded linear layout: the sampled/upload role and the pure transfer role
      * (copy source and/or destination) share one host-visible layout, so the
      * upload path and both transfer directions address the same bytes. */
-    if((info->usage & (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+    if(!depth && (info->usage & (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
             VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
         !(info->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
         struct ps5vk_texture_mip_layout texture;

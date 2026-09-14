@@ -1,6 +1,7 @@
 #include "vk_command.h"
 #include "vk_query_pool.h"
 #include "vk_image.h"
+#include "vk_image_transfer.h"
 #include "vk_sync.h"
 #include "color_barrier.h"
 #include <float.h>
@@ -675,6 +676,9 @@ static int texture_layout_supported(VkImageLayout layout)
     return layout==VK_IMAGE_LAYOUT_GENERAL || layout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
         layout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
         layout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
+        /* Reachable only through the depth clear-target profile below; every
+         * other usage profile refuses it. */
+        layout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
         layout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
@@ -685,12 +689,16 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     const VkAccessFlags supported=VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
         VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
         VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
         VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
         VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
     if(!stages || (stages & ~allowed) || (access & ~supported))return 0;
     if(!access)return 1;
@@ -707,6 +715,13 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & VK_ACCESS_INDIRECT_COMMAND_READ_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* Depth/stencil attachment access happens in the fragment tests, which is
+     * where a depth-tested draw reads the value an explicit clear wrote. */
+    if((access & (VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) &&
+        !(stages & (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     /* MEMORY_READ/WRITE select every read/write access available in the stage
      * mask and are valid with any non-empty supported stage mask. */
     return 1;
@@ -753,6 +768,19 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
          b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT);
+    /* Depth clear target: the transition that lets an explicit
+     * vkCmdClearDepthStencilImage control a later depth-tested draw. Bounded to
+     * exactly the write the clear performed and the access the fragment tests
+     * perform; the image never becomes a transfer source or a sampled image. */
+    if(ps5vk_depth_clear_image(image))return
+        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+         b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT));
     if(readback)return
         ps5vk_color_discard_barrier(b) ||
         (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
@@ -821,7 +849,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
             !image || image->device!=c->pool->device ||
             !image_barrier_profile(b) ||
-            b->subresourceRange.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
+            /* A depth target is ordered through its depth aspect; every other
+             * role in this profile is colour. */
+            b->subresourceRange.aspectMask!=(ps5vk_depth_clear_image(image)?
+                (VkImageAspectFlags)VK_IMAGE_ASPECT_DEPTH_BIT:
+                (VkImageAspectFlags)VK_IMAGE_ASPECT_COLOR_BIT) ||
             b->subresourceRange.baseMipLevel || b->subresourceRange.baseArrayLayer ||
             (b->subresourceRange.levelCount!=image->info.mipLevels &&
              b->subresourceRange.levelCount!=VK_REMAINING_MIP_LEVELS) ||

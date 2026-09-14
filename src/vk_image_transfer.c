@@ -244,16 +244,63 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage(VkCommandBuffer c, VkImage source,
     ps5vk_command_invalidate(c);
 }
 
+/* Whole-subresource depth clear.
+ *
+ * The surface is 64KB_Z_X tiled and this codebase deliberately does not claim
+ * the pipe XOR pixel equations (src/depth_layout.h). It does not need them
+ * here: every texel of the one-sample D32 surface receives the SAME 32-bit
+ * word, so writing that word over the entire allocation is tiling-invariant
+ * and produces exactly the image a per-pixel clear would. The native emitter
+ * is the uniform-DWORD DMA fill the render pass already uses for its depth
+ * load-op clear on hardware (ps5vk_dma_fill, src/texture_dma.c).
+ *
+ * Consequently only the whole subresource is accepted. A partial range, a
+ * rectangle, a stencil aspect, a combined depth/stencil format, a second mip
+ * or layer and any multisample image stay fail-closed, because each of those
+ * does need the pixel addressing this driver has not proven.
+ *
+ * value->stencil is IGNORED, not rejected. Vulkan uses that member only for a
+ * range whose aspect mask includes VK_IMAGE_ASPECT_STENCIL_BIT, and the only
+ * range accepted here is depth-only, so a nonzero stencil is a valid call that
+ * clears depth alone. The pinned upstream CTS relies on exactly that: the
+ * depth/stencil copy tests clear a D32_SFLOAT image with
+ * makeClearValueDepthStencil(0.1f, 0x10). Rejecting it would refuse a
+ * conformant call and fail those cases. */
 VKAPI_ATTR void VKAPI_CALL vkCmdClearDepthStencilImage(VkCommandBuffer c, VkImage image,
     VkImageLayout image_layout, const VkClearDepthStencilValue *value,
     uint32_t range_count, const VkImageSubresourceRange *ranges)
 {
-    (void)image_layout; (void)value; (void)ranges;
-    if (!c || c->state != PS5VK_RECORDING) { ps5vk_command_invalidate(c); return; }
-    if (!image || !value || !range_count || !ranges) { ps5vk_command_invalidate(c); return; }
-    /* Fail closed: the depth image role is 64KB_Z_X tiled and this codebase has
-     * no pixel addressing for it, so no honest clear exists yet. */
-    ps5vk_command_invalidate(c);
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !value ||
+        !range_count || !ranges) { ps5vk_command_invalidate(c); return; }
+    VkDevice d = c->pool->device;
+    void *address = NULL;
+    VkDeviceSize bytes = 0;
+    uint32_t word = 0;
+    if (!image || image->device != d || !ps5vk_depth_clear_image(image) ||
+        !layout_is_transfer_destination(image_layout) ||
+        !ps5vk_depth_clear_word(value->depth, &word) ||
+        ps5vk_image_span(d, image, &address, &bytes) != VK_SUCCESS) {
+        ps5vk_command_invalidate(c);
+        return;
+    }
+    for (uint32_t i = 0; i < range_count; ++i) {
+        const VkImageSubresourceRange *r = &ranges[i];
+        if (r->aspectMask != VK_IMAGE_ASPECT_DEPTH_BIT || r->baseMipLevel ||
+            (r->levelCount != 1 && r->levelCount != VK_REMAINING_MIP_LEVELS) ||
+            r->baseArrayLayer ||
+            (r->layerCount != 1 && r->layerCount != VK_REMAINING_ARRAY_LAYERS)) {
+            ps5vk_command_invalidate(c);
+            return;
+        }
+    }
+    struct ps5vk_operation *op = ps5vk_command_reserve_operation_with_payload(c,
+        PS5VK_CLEAR_DEPTH_STENCIL_IMAGE, PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
+        ranges, range_count * sizeof(*ranges));
+    if (!op) return;
+    op->image_destination = image;
+    op->image_destination_layout = image_layout;
+    op->clear_word = word;
+    op->image_region_count = range_count;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdClearAttachments(VkCommandBuffer c,

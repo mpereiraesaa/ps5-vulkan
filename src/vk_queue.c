@@ -277,11 +277,31 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             continue;
         }
         if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE ||
-           op->type==PS5VK_COPY_IMAGE_BUFFER) {
-            VkImage image=op->type==PS5VK_IMAGE_BARRIER?op->image_barrier.image:op->copy_image;
+           op->type==PS5VK_COPY_IMAGE_BUFFER ||
+           op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE) {
+            VkImage image=op->type==PS5VK_IMAGE_BARRIER?op->image_barrier.image:
+                op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE?op->image_destination:op->copy_image;
             void *address;VkDeviceSize bytes;
             if(!d->graphics_enabled || !d->graphics_submit_enabled || !image || image->display_busy ||
                 ps5vk_image_span(d,image,&address,&bytes)!=VK_SUCCESS)return 0;
+            /* The recorded depth clear is re-checked against live device state:
+             * the role, the owned range payload and the tracked layout. The
+             * value itself is already a validated D32 word. */
+            if(op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE) {
+                const VkImageSubresourceRange *ranges=
+                    (const VkImageSubresourceRange *)op->owned_payload;
+                if(!ps5vk_depth_clear_image(image) || !op->image_region_count || !ranges ||
+                   op->owned_payload_size!=(size_t)op->image_region_count*sizeof(*ranges) ||
+                   (op->image_destination_layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                    op->image_destination_layout!=VK_IMAGE_LAYOUT_GENERAL))return 0;
+                for(uint32_t r=0;r<op->image_region_count;++r)
+                    if(ranges[r].aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT ||
+                       ranges[r].baseMipLevel || ranges[r].baseArrayLayer ||
+                       (ranges[r].levelCount!=1 &&
+                        ranges[r].levelCount!=VK_REMAINING_MIP_LEVELS) ||
+                       (ranges[r].layerCount!=1 &&
+                        ranges[r].layerCount!=VK_REMAINING_ARRAY_LAYERS))return 0;
+            }
             if(op->type==PS5VK_COPY_IMAGE_BUFFER &&
                ps5vk_buffer_span(d,op->copy_destination,0,VK_WHOLE_SIZE,&address,&bytes)!=VK_SUCCESS)
                 return 0;

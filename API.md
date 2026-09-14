@@ -286,9 +286,60 @@ resolve remain fail-closed entry points.
   rejected before mutation.
 - The tiled colour-attachment role is deliberately not copyable or clearable
   here, because 64KB_R_X has no linear addressing in this codebase.
-  `vkCmdClearDepthStencilImage` and `vkCmdClearAttachments` are structurally
-  exposed and always invalidate recording: the depth role has no pixel
-  addressing and a mid-render-pass attachment clear would need a DCB clear path
+- `vkCmdClearDepthStencilImage` clears the **whole subresource** of a
+  one-sample `VK_FORMAT_D32_SFLOAT` 2D target in `TRANSFER_DST_OPTIMAL` or
+  `GENERAL` with a depth value in `[0,1]`. The image needs
+  `VK_IMAGE_USAGE_TRANSFER_DST_BIT`, which Vulkan requires of any cleared
+  image, and that is the only usage it needs: **both** accepted profiles are
+  `TRANSFER_DST` alone, which is a clear-only target, and
+  `DEPTH_STENCIL_ATTACHMENT | TRANSFER_DST`, which is a depth attachment that
+  may also be cleared. Every D32 image is the same tiled depth surface, so the
+  two profiles differ only in what else the image may be used for.
+  `pDepthStencil->stencil` is **ignored, not rejected**: Vulkan reads that
+  member only for a range whose aspect mask includes
+  `VK_IMAGE_ASPECT_STENCIL_BIT`, and the only accepted range here is
+  depth-only, so a nonzero stencil is a conformant call that clears depth
+  alone. The surface is
+  64KB_Z_X tiled and this driver still does not claim the pipe XOR pixel
+  equations; it does not need them here, because a constant depth value is the
+  same 32-bit word in every texel, so filling the whole allocation with that
+  word is tiling-invariant and yields exactly the image a per-pixel clear
+  would. The work is emitted as the same uniform-DWORD GPU DMA fill the render
+  pass already uses for its depth load-op clear, ordered at the queue head like
+  the other transfers, and the host never writes the surface. Accordingly
+  `VK_FORMAT_D32_SFLOAT` advertises `VK_FORMAT_FEATURE_TRANSFER_DST_BIT`, which
+  exists solely for this clear and is reachable in both usage profiles above,
+  so the bit never advertises something the driver would refuse to create. No
+  transfer-source, sampled or blit role is claimed for the format. Everything that would require the missing pixel addressing stays
+  fail-closed and records nothing: a partial mip or array range, any stencil
+  aspect, a combined depth/stencil format, a multisample image, and a
+  rectangle.
+- A cleared depth target reaches a depth-tested draw through one bounded
+  transition: `TRANSFER_DST_OPTIMAL` to `DEPTH_STENCIL_ATTACHMENT_OPTIMAL`,
+  source access `VK_ACCESS_TRANSFER_WRITE_BIT` in
+  `VK_PIPELINE_STAGE_TRANSFER_BIT`, destination access
+  `DEPTH_STENCIL_ATTACHMENT_READ | DEPTH_STENCIL_ATTACHMENT_WRITE` in either or
+  both of `EARLY_FRAGMENT_TESTS` and `LATE_FRAGMENT_TESTS`, with the depth
+  aspect over the whole subresource. A narrower single-stage destination mask
+  is accepted because a pipeline may test depth at either stage. Nothing else
+  is: the depth target never becomes a transfer source or a sampled image, the
+  reverse transition is not part of the contract, and the colour roles keep
+  their own transitions. The clear is GPU work on a tiled attachment, so the
+  queue router sends it to the graphics backend rather than executing it on the
+  host.
+- Hardware qualification: a native scenario renders with the depth attachment's
+  load op set to `LOAD`, so the render pass contributes nothing to the depth
+  buffer and only the explicit clear can establish it. The clear runs as its own
+  submission and must retire before the render pass is recorded. With scene
+  geometry at z=0.4 and z=0.8 under `VK_COMPARE_OP_LESS`, two frames differing
+  in nothing but the clear value produced opposite, deterministic results on
+  PS5: clearing to 1.0 let the draw reach the colour target (139968 changed
+  words of 2228224) and clearing to 0.0 rejected every fragment (0 changed),
+  twice, from the same signed artifact, with `allocations_bytes=0` and a clean
+  exit. The clear value carried `stencil = 0x10` in both frames, so the ignored
+  stencil member is qualified on hardware as well as in host tests.
+- `vkCmdClearAttachments` is structurally exposed and always invalidates
+  recording: a mid-render-pass attachment clear would need a DCB clear path
   that does not exist yet. `vkCmdBlitImage` and `vkCmdResolveImage` likewise
   always invalidate recording because no proven scaling/filter or multisample
   contract exists.

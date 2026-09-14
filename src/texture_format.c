@@ -139,8 +139,12 @@ static const struct ps5vk_texture_format formats[] = {
     /* --- roles without a sampled-image encoding --------------------------- */
     /* VideoOut target and vertex input; deliberately not sampled. */
     BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_VERTEX),
-    /* 64KB_Z_X depth target; no pixel addressing for a clear or a copy. */
-    BUFFER(VK_FORMAT_D32_SFLOAT, CAP_DEPTH),
+    /* 64KB_Z_X depth target. TRANSFER_DST is the whole-subresource clear only:
+     * vkCmdClearDepthStencilImage writes one uniform 32-bit word over the
+     * entire surface, which is tiling-invariant and needs no pixel equations.
+     * No pixel addressing exists for a copy or a partial write, so no
+     * TRANSFER_SRC, no sampled role and no blit role is claimed. */
+    BUFFER(VK_FORMAT_D32_SFLOAT, CAP_DEPTH | CAP_DST),
     /* Three-component rows are vertex-only: GFX1013 has no 96-bit image
      * data format, so no sampled encoding is claimed for them. */
     BUFFER(VK_FORMAT_R32G32B32_SFLOAT, CAP_VERTEX),
@@ -278,5 +282,11 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
     if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
         usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) && usage == depth) return VK_TRUE;
+    /* Depth target that vkCmdClearDepthStencilImage may clear. Vulkan requires
+     * the transfer-destination usage on the cleared image, so the combination
+     * has to exist for the command to be reachable at all. */
+    if ((w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) &&
+        (w & PS5VK_FORMAT_CAP_TRANSFER_DST) &&
+        usage == (depth | VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;
     return VK_FALSE;
 }
