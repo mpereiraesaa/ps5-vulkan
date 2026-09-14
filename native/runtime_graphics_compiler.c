@@ -31,10 +31,11 @@ static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned m
         }
         if(op==59) {
             if(n<4)return 0;
-            /* UniformConstant is admitted only through the separately checked
-             * sampled descriptor profile; general buffer resources remain
-             * outside this bounded graphics compiler. */
-            if(w[3]==2 || w[3]==12)return 0;
+            /* Sampled images (UniformConstant) and uniform blocks (Uniform) are
+             * admitted only through the separately checked descriptor profile,
+             * which now delivers both record kinds from one table. Storage
+             * buffers stay outside this bounded graphics compiler. */
+            if(w[3]==12)return 0;
         }
         if(op==54) {
             if(n!=5 || in_function)return 0;
@@ -66,10 +67,15 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_set_signature *set=&key->descriptor_sets[s];
             /* The canonical table validates the full core visibility mask;
-             * descriptor options project it onto the executing VS/FS stage. */
+             * descriptor options project it onto the executing VS/FS stage.
+             * Combined image samplers coexist with the mandatory uniform-buffer
+             * resources a real pipeline layout carries; every other descriptor
+             * type stays outside the profile instead of being half-delivered. */
             if(set->binding[b].count &&
                 (!(set->binding[b].stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)) ||
-                set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER))return 0;
+                (set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
+                 set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+                 set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)))return 0;
         }
     return 1;
 }
