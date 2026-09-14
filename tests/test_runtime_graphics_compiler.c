@@ -15,6 +15,55 @@ static struct ps5vk_graphics_module_key read_module(const char *path)
     assert(fread(code,1,(size_t)bytes,f)==(size_t)bytes);fclose(f);
     return (struct ps5vk_graphics_module_key){.words=code,.word_count=(size_t)bytes/4,.entry="main"};
 }
+/* A four-set layout whose fragment shader dereferences one sampler and whose
+ * vertex shader dereferences none: the declaration survives in the metadata,
+ * but only the set the optimized NIR really reads becomes a native requirement.
+ * This is the contract that stops an unused layout set from being demanded. */
+static void check_sparse_layout_static_use(void)
+{
+    struct ps5vk_set_signature sets[PS5VK_MAX_SETS]={0};
+    for(unsigned s=0;s<PS5VK_MAX_SETS;++s) {
+        sets[s].count=1;
+        sets[s].binding[0].count=1;sets[s].binding[0].first=0;
+        sets[s].binding[0].stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+        sets[s].type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)sets[s].binding[b].first=1;
+    }
+    VkVertexInputBindingDescription binding={.binding=0,.stride=24,
+        .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription attributes[2]={
+        {.location=0,.binding=0,.format=VK_FORMAT_R32G32B32_SFLOAT,.offset=0},
+        {.location=1,.binding=0,.format=VK_FORMAT_R32G32B32_SFLOAT,.offset=12}};
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/mipmap.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/texture.frag.spv"),
+        .descriptor_set_count=PS5VK_MAX_SETS,.descriptor_sets=sets,
+        .vertex_binding_count=1,.vertex_attribute_count=2,
+        .vertex_bindings=&binding,.vertex_attributes=attributes,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->fragment.metadata.descriptor_binding_count==PS5VK_MAX_SETS);
+    assert(p->fragment.metadata.descriptor_set_valid[0]);
+    for(unsigned s=1;s<PS5VK_MAX_SETS;++s) {
+        assert(!p->fragment.metadata.descriptor_set_valid[s]);
+        assert(!p->arguments.fragment_descriptor_valid[s]);
+        assert(!p->arguments.vertex_descriptor_valid[s]);
+    }
+    assert(p->arguments.fragment_descriptor_valid[0] &&
+           !p->arguments.vertex_descriptor_valid[0]);
+    /* Only the used set may require a table; the other three stay empty. */
+    const uint32_t tables[PS5VK_MAX_SETS]={UINT32_C(0x1000),0,0,0};
+    uint32_t vertex[16],pixel[16];
+    assert(!ps5vk_runtime_draw_values_sets(&p->arguments,0,0,
+        p->arguments.vertex_buffer_valid?16u:0u,0,tables,vertex,pixel));
+    assert(pixel[p->arguments.fragment_descriptor_slot[0]]==UINT32_C(0x1000));
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 static void check_descriptor_options(void)
 {
     struct ps5vk_set_signature sets[4]={0};
@@ -283,6 +332,7 @@ int main(void)
 {
     check_flat_interfaces();
     check_descriptor_options();
+    check_sparse_layout_static_use();
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
@@ -326,11 +376,13 @@ int main(void)
     sampled.binding[0].stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
     assert(ps5vk_runtime_graphics_compile(NULL,&textured,&out)==VK_SUCCESS && out);
     p=out;
-    /* Pinned PSBC ORs option-provided sets into desc_set_used_mask, so even
-     * unused vertex visibility conservatively reserves a pointer. This test
-     * records the real ABI, not successful static-use elimination. */
-    assert(p->arguments.vertex_descriptor_valid[0] &&
+    /* The layout declares vertex and fragment visibility, but only the fragment
+     * shader dereferences the sampler: the vertex stage must not reserve a
+     * descriptor pointer for a binding it never reads. */
+    assert(!p->arguments.vertex_descriptor_valid[0] &&
             p->arguments.fragment_descriptor_valid[0]);
+    for(unsigned s=0;s<PS5VK_MAX_SETS;++s)
+        assert(!p->arguments.vertex_descriptor_valid[s]);
     ps5vk_runtime_graphics_free(NULL,out);
     sampled.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
     sampled.type[0]=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
