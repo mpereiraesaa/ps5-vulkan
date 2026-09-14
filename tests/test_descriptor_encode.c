@@ -75,5 +75,33 @@ int main(void)
     assert(((table[3] >> 3) & 7u) == 0u);
     assert(((table[3] >> 6) & 7u) == 0u);
     assert(((table[3] >> 9) & 7u) == 1u);
+    /* A four-component row must encode its own GFX10 word and the
+     * (X,Y,Z,W) completion. Without this, an RGBA8 texel buffer would be read
+     * back through the one-component (X,0,0,1) mapping, or through another
+     * row's format word, and no console run of the R32 path would notice. */
+    view.format = VK_FORMAT_R8G8B8A8_UNORM;
+    memset(table, 0, sizeof(table));
+    assert(ps5vk_descriptor_encode(&device, &typed, 1, &texel, dynamic, table, 16) == VK_SUCCESS);
+    assert(table[0] == 0x4040 && table[1] == 0x00040002 && table[2] == 64);
+    assert(((table[3] >> 12) & 0x7fu) == 56u);
+    assert(((table[3] >> 0) & 7u) == 4u);
+    assert(((table[3] >> 3) & 7u) == 5u);
+    assert(((table[3] >> 6) & 7u) == 6u);
+    assert(((table[3] >> 9) & 7u) == 7u);
+    assert((table[3] & ~UINT32_C(0x7ffff)) == UINT32_C(0x11000000));
+    view.format = VK_FORMAT_R8G8B8A8_SINT;
+    assert(ps5vk_descriptor_encode(&device, &typed, 1, &texel, dynamic, table, 16) == VK_SUCCESS);
+    assert(((table[3] >> 12) & 0x7fu) == 61u);
+    /* A format without the implemented role is refused before any mutation:
+     * the sRGB member of the same byte size, the BGRA row whose completion
+     * would differ, and an unknown format. */
+    const VkFormat refused[] = { VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM,
+                                 (VkFormat)0x7fffffff };
+    for (unsigned i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
+        view.format = refused[i];
+        memset(table, 0xab, sizeof(table));
+        assert(ps5vk_descriptor_encode(&device, &typed, 1, &texel, dynamic, table, 16) != VK_SUCCESS);
+        for (unsigned j = 0; j < 16; ++j) assert(table[j] == 0xabababab);
+    }
     puts("Compiler-ordered raw descriptor table: pass (host only)");
 }

@@ -188,6 +188,43 @@ int main(void)
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
                                VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    /* --- implemented-but-unpublished uniform texel buffer family ----------
+     * The four R8G8B8A8 rows carry the role in the implemented mask while the
+     * published mask withholds it, so the encoder is exercisable by host tests
+     * and the console witness still decides the feature bit. The derivation
+     * helpers must return the pinned reference values: the GFX10 combined
+     * 8_8_8_8 words are 56/57/60/61, four-component identity completion is
+     * (X,Y,Z,W) = 0xfac, and a one-component row keeps (X,0,0,1) = 0x204. */
+    const VkFormat texel_formats[] = {
+        VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
+        VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_R8G8B8A8_SINT,
+    };
+    const uint32_t texel_words[] = {56u, 57u, 60u, 61u};
+    for (unsigned i = 0; i < sizeof(texel_formats) / sizeof(texel_formats[0]); ++i) {
+        const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(texel_formats[i]);
+        assert(entry && entry->bytes_per_texel == 4);
+        assert(ps5vk_texture_format_has(texel_formats[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(texel_formats[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_gfx10_format(entry) == texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0xfac));
+        ps5vk_texture_format_properties(texel_formats[i], &properties);
+        assert(!(properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+    assert(ps5vk_texture_format_gfx10_format(
+        ps5vk_texture_format_lookup(VK_FORMAT_R32_UINT)) == 20u);
+    assert(ps5vk_texture_format_dst_sel(
+        ps5vk_texture_format_lookup(VK_FORMAT_R32_UINT)) == UINT32_C(0x204));
+    assert(!ps5vk_texture_format_gfx10_format(NULL));
+    assert(!ps5vk_texture_format_dst_sel(NULL));
+    /* A row with no such implementation stays out of the role, including the
+     * sRGB member of the same byte size and the BGRA row whose channel order
+     * would need its own completion. */
+    assert(!ps5vk_texture_format_has(VK_FORMAT_R8G8B8A8_SRGB,
+                                     PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+    assert(!ps5vk_texture_format_has(VK_FORMAT_B8G8R8A8_UNORM,
+                                     PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
     ps5vk_texture_format_properties(VK_FORMAT_R32G32B32_SFLOAT, &properties);
     assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
     assert(!properties.optimalTilingFeatures);

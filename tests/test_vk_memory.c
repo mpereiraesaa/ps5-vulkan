@@ -188,6 +188,68 @@ static void test_failures_and_allocators(void)
     bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; bi.size = UINT64_MAX;
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_OUT_OF_DEVICE_MEMORY);
 }
+static void test_buffer_views(void)
+{
+    struct mock mock = {0}; struct VkDevice_T d = device(&mock), other = device(&mock);
+    VkDeviceMemory m = memory(&d, 4096);
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 256, .usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer b;
+    assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, b, m, 0) == VK_SUCCESS);
+    VkBufferViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+        .buffer = b, .format = VK_FORMAT_R32_UINT, .offset = 4, .range = VK_WHOLE_SIZE};
+    VkBufferView base = VK_NULL_HANDLE, view = VK_NULL_HANDLE;
+    assert(vkCreateBufferView(&d, &vi, NULL, &base) == VK_SUCCESS && base);
+    /* A row whose role is implemented but still waiting for its console
+     * witness must not be creatable: creation follows the witnessed mask, so
+     * the reported set and the creatable set stay identical rather than merely
+     * nested. All four pending RGBA8 formats are refused without output
+     * mutation while the already-witnessed R32 rows still create. */
+    const VkFormat pending[] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
+                                VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_R8G8B8A8_SINT};
+    for (unsigned i = 0; i < sizeof(pending) / sizeof(pending[0]); ++i) {
+        vi.format = pending[i]; vi.offset = 0;
+        assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+    }
+    const VkFormat witnessed[] = {VK_FORMAT_R32_UINT, VK_FORMAT_R32_SINT, VK_FORMAT_R32_SFLOAT};
+    VkBufferView extra[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    for (unsigned i = 0; i < sizeof(witnessed) / sizeof(witnessed[0]); ++i) {
+        vi.format = witnessed[i]; vi.offset = 0;
+        assert(vkCreateBufferView(&d, &vi, NULL, &extra[i]) == VK_SUCCESS && extra[i]);
+    }
+    vi.format = VK_FORMAT_R8G8B8A8_UNORM;
+    /* Negatives: no implemented role (sRGB and BGRA), unknown format,
+     * misaligned offset for that row, another device, and a buffer that was
+     * not created with the uniform-texel-buffer usage. */
+    const VkFormat refused[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM,
+                                (VkFormat)0x7fffffff};
+    for (unsigned i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
+        vi.format = refused[i]; vi.offset = 0;
+        assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+    }
+    /* The alignment bound is the texel size of the row itself, exercised on a
+     * witnessed row so the refusal is about alignment and not about the role. */
+    vi.format = VK_FORMAT_R32_UINT; vi.offset = 2;
+    assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+    vi.offset = 4;
+    vi.format = VK_FORMAT_R8G8B8A8_UNORM;
+    assert(vkCreateBufferView(&other, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+    VkBuffer plain = buffer(&d, 256);
+    vi.buffer = plain;
+    vi.format = VK_FORMAT_R32_UINT;
+    assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+    vkDestroyBuffer(&d, plain, NULL);
+    for (unsigned i = 0; i < sizeof(extra) / sizeof(extra[0]); ++i)
+        vkDestroyBufferView(&d, extra[i], NULL);
+    vkDestroyBufferView(&d, base, NULL);
+    /* The buffer can only be destroyed once its views are gone. */
+    vkDestroyBuffer(&d, b, NULL);
+    vkFreeMemory(&d, m, NULL);
+    assert(mock.allocations == mock.releases);
+}
+
 static void test_commitment(void)
 {
     struct mock mock = {0}; struct VkDevice_T d = device(&mock);
@@ -212,7 +274,8 @@ static void test_commitment(void)
 }
 int main(void)
 {
-    test_binding(); test_mapping(); test_failures_and_allocators(); test_commitment();
+    test_binding(); test_mapping(); test_failures_and_allocators(); test_buffer_views();
+    test_commitment();
     puts("Vulkan memory contracts: pass (host mock only, no GPU evidence)");
     return 0;
 }
