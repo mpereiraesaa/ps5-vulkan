@@ -64,6 +64,70 @@ int main(void)
             vkDestroySampler(&d,candidate,NULL);
             assert(d.sampler_objects==1); /* Original fixture stays alive. */
         }
+    /* The GPL ps5-opengl descriptor contract is exposed through Vulkan image
+     * and view semantics, including array subsets, one cube and 3D slices. */
+    d.max_allocation=16384;
+    VkMemoryAllocateInfo layered_ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=8192};
+    VkDeviceMemory layered_memory;
+    assert(vkAllocateMemory(&d,&layered_ai,NULL,&layered_memory)==VK_SUCCESS);
+    VkImageCreateInfo layered_ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .extent={64,4,1},.mipLevels=1,.arrayLayers=3,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_SAMPLED_BIT|
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    VkImage layered_image;
+    assert(vkCreateImage(&d,&layered_ii,NULL,&layered_image)==VK_SUCCESS &&
+        layered_image->requirements.size==3072);
+    assert(vkBindImageMemory(&d,layered_image,layered_memory,0)==VK_SUCCESS);
+    VkImageViewCreateInfo layered_vi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=layered_image,.viewType=VK_IMAGE_VIEW_TYPE_2D_ARRAY,.format=layered_ii.format,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,1,2}};
+    VkImageView layered_view;
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&layered_view)==VK_SUCCESS);
+    uint32_t layered_words[12];
+    assert(ps5vk_texture_descriptor(&d,layered_view,sampler,layered_words)==VK_SUCCESS);
+    void *layered_base;VkDeviceSize layered_bytes;
+    assert(ps5vk_image_span(&d,layered_image,&layered_base,&layered_bytes)==VK_SUCCESS);
+    assert(layered_words[0]==(uint32_t)((uintptr_t)layered_base>>8) &&
+        layered_words[3]==0xd0000fac && layered_words[4]==0x00010002);
+    vkDestroyImageView(&d,layered_view,NULL);
+    layered_vi.viewType=VK_IMAGE_VIEW_TYPE_2D;
+    layered_vi.subresourceRange.baseArrayLayer=2;
+    layered_vi.subresourceRange.layerCount=1;
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&layered_view)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,layered_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[0]==(uint32_t)(((uintptr_t)layered_base+2048)>>8) &&
+        layered_words[3]==0x90000fac && !layered_words[4]);
+    vkDestroyImageView(&d,layered_view,NULL);
+    vkDestroyImage(&d,layered_image,NULL);
+
+    layered_ii.flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    layered_ii.extent=(VkExtent3D){4,4,1};layered_ii.arrayLayers=6;
+    assert(vkCreateImage(&d,&layered_ii,NULL,&layered_image)==VK_SUCCESS &&
+        layered_image->requirements.size==6144);
+    assert(vkBindImageMemory(&d,layered_image,layered_memory,0)==VK_SUCCESS);
+    layered_vi=(VkImageViewCreateInfo){.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=layered_image,.viewType=VK_IMAGE_VIEW_TYPE_CUBE,.format=layered_ii.format,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6}};
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&layered_view)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,layered_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[3]==0xb0000fac && !layered_words[4]);
+    vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
+
+    layered_ii.flags=0;layered_ii.imageType=VK_IMAGE_TYPE_3D;
+    layered_ii.extent=(VkExtent3D){4,4,3};layered_ii.arrayLayers=1;
+    assert(vkCreateImage(&d,&layered_ii,NULL,&layered_image)==VK_SUCCESS &&
+        layered_image->requirements.size==3072);
+    assert(vkBindImageMemory(&d,layered_image,layered_memory,0)==VK_SUCCESS);
+    layered_vi=(VkImageViewCreateInfo){.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=layered_image,.viewType=VK_IMAGE_VIEW_TYPE_3D,.format=layered_ii.format,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&layered_view)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,layered_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[3]==0xa0000fac && layered_words[4]==2);
+    vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
+    vkFreeMemory(&d,layered_memory,NULL);
     uint32_t saved[12];memcpy(saved,words,sizeof(words));
     image->info.usage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     assert(ps5vk_texture_descriptor(&d,view,sampler,words)!=VK_SUCCESS && !memcmp(saved,words,sizeof(words)));

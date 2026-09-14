@@ -198,8 +198,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(rc!=VK_SUCCESS)goto fail;
             rc=ps5vk_image_span(d,op->copy_image,&destination,&destination_bytes);
             if(rc!=VK_SUCCESS)goto fail;
-            rc=ps5vk_texture_copy_plan_for_format(op->copy_image->info.format,
-                op->copy_image->info.extent.width,op->copy_image->info.extent.height,
+            rc=ps5vk_texture_copy_plan_for_image(op->copy_image,
                 source_bytes,destination_bytes,&op->copy_region,&copy);
             if(rc!=VK_SUCCESS)goto fail;
             cache(source,(size_t)source_bytes);

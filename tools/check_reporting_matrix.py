@@ -250,9 +250,6 @@ CTS_GATED_OFF_REQUIREMENT = {
 # than a claim. A violation that is not in this table fails the gate.
 KNOWN_BLOCKERS = {
     "maxImageDimension1D": "2D-only image model: vkCreateImage accepts VK_IMAGE_TYPE_2D and rejects 1D images",
-    "maxImageDimension3D": "2D-only image model: 3D images are rejected",
-    "maxImageDimensionCube": "2D-only image model: cube images are rejected",
-    "maxImageArrayLayers": "single-layer images only (vkCreateImage requires arrayLayers 1)",
     "maxColorAttachments": "one color attachment per render pass",
     "maxFragmentOutputAttachments": "one color attachment per render pass",
     "maxFragmentCombinedOutputResources": "one color attachment plus the single sampled descriptor",
@@ -278,6 +275,9 @@ KNOWN_BLOCKERS = {
     "sampledImageDepthSampleCounts": "single-sample sampling only: multisampled sampled images are not supported",
     "sampledImageStencilSampleCounts": "single-sample sampling only: multisampled sampled images are not supported",
     "maxImageDimension2D": "compute-only build: graphics limits are not applied to this profile",
+    "maxImageDimension3D": "compute-only build: graphics limits are not applied to this profile",
+    "maxImageDimensionCube": "compute-only build: graphics limits are not applied to this profile",
+    "maxImageArrayLayers": "compute-only build: graphics limits are not applied to this profile",
     "maxFramebufferWidth": "compute-only build: graphics limits are not applied to this profile",
     "maxFramebufferHeight": "compute-only build: graphics limits are not applied to this profile",
     "maxVertexInputAttributes": "compute-only build: graphics limits are not applied to this profile",

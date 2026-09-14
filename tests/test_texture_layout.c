@@ -14,7 +14,10 @@ int main(void)
     assert(!ps5vk_texture_layout_for_format(VK_FORMAT_R8G8_UNORM,129,2,&l) &&
         l.row_pitch==512 && l.bytes==1024);
     assert(!ps5vk_texture_layout_for_format(VK_FORMAT_R8G8B8A8_SRGB,65,2,&l) &&
-        l.row_pitch==512 && l.bytes==1024);
+        l.row_pitch==512 && l.slice_pitch==1024 && l.bytes==1024);
+    assert(!ps5vk_texture_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,64,3,6,&l) &&
+        l.row_pitch==256 && l.slice_pitch==768 && l.bytes==4608);
+    assert(ps5vk_texture_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,64,3,0,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_B8G8R8A8_UNORM,1,1,&l));
     VkImageCreateInfo i={.imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
         .extent={65,3,1},.mipLevels=1,.arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,

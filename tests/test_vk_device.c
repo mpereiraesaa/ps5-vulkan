@@ -94,7 +94,10 @@ static void lifecycle(void)
     ps5vk_graphics_limits(&gl);
     assert(gl.maxComputeWorkGroupInvocations==1024 && gl.nonCoherentAtomSize==64);
     assert(gl.maxPerStageDescriptorStorageBuffers==128 && gl.maxDescriptorSetStorageBuffers==128 && gl.maxPerStageResources==128);
-    assert(gl.maxImageDimension2D==16383 && gl.maxImageArrayLayers==1);
+    assert(gl.maxImageDimension2D==16383 &&
+        gl.maxImageDimension3D==PS5VK_MAX_IMAGE_3D &&
+        gl.maxImageDimensionCube==PS5VK_MAX_IMAGE_CUBE &&
+        gl.maxImageArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
     assert(gl.maxPerStageDescriptorSamplers==1 && gl.maxPerStageDescriptorSampledImages==1);
     assert(gl.maxDescriptorSetSamplers==1 && gl.maxDescriptorSetSampledImages==1);
     assert(gl.maxSamplerAllocationCount==PS5VK_MAX_SAMPLERS && PS5VK_MAX_SAMPLERS==4096);
@@ -268,17 +271,33 @@ static void lifecycle(void)
         if(ps5vk_graphics_image_usage(image_formats[f],usage)) {
             assert(result==VK_SUCCESS && ip.maxExtent.width==(f==0?16383u:16384u));
             assert(ip.maxExtent.height==ip.maxExtent.width && ip.maxExtent.depth==1);
-            assert(ip.maxMipLevels==1 && ip.maxArrayLayers==1 && ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT);
+            const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0;
+            const VkBool32 transfer_only=image_formats[f]==VK_FORMAT_R8G8B8A8_UNORM && usage &&
+                !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                                             VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+            assert(ip.maxMipLevels==1 &&
+                ip.maxArrayLayers==(attachment||transfer_only?1u:PS5VK_MAX_IMAGE_ARRAY_LAYERS) &&
+                ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT);
             assert(ip.maxResourceSize==p->platform.max_allocation);
         } else assert(result==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     }
-    for(unsigned variant=0;variant<4;++variant) {
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_3D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)==VK_SUCCESS &&
+        ip.maxExtent.width==PS5VK_MAX_IMAGE_3D && ip.maxExtent.height==PS5VK_MAX_IMAGE_3D &&
+        ip.maxExtent.depth==PS5VK_MAX_IMAGE_3D && ip.maxArrayLayers==1);
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,&ip)==VK_SUCCESS &&
+        ip.maxExtent.width==PS5VK_MAX_IMAGE_CUBE && ip.maxExtent.height==PS5VK_MAX_IMAGE_CUBE &&
+        ip.maxExtent.depth==1 && ip.maxArrayLayers==6);
+    for(unsigned variant=0;variant<2;++variant) {
         memset(&ip,0xff,sizeof(ip));
         assert(vkGetPhysicalDeviceImageFormatProperties(p,
-            variant==3?VK_FORMAT_UNDEFINED:VK_FORMAT_R8G8B8A8_UNORM,
-            variant==0?VK_IMAGE_TYPE_3D:VK_IMAGE_TYPE_2D,
-            variant==1?VK_IMAGE_TILING_LINEAR:VK_IMAGE_TILING_OPTIMAL,
-            VK_IMAGE_USAGE_SAMPLED_BIT,variant==2?VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT:0,&ip)
+            variant==1?VK_FORMAT_UNDEFINED:VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_TYPE_2D,
+            variant==0?VK_IMAGE_TILING_LINEAR:VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)
             ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     }
     const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,

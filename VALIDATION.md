@@ -528,7 +528,7 @@ public query paths rather than from a copied table:
   `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
   report fails the gate; only documented blockers are accepted.
 
-Result on the shipped profiles: 128 mandatory limits satisfied, 70 documented
+Result on the shipped profiles: 131 mandatory limits satisfied, 67 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
 the code path that enforces them, 98 mandatory format-feature cells satisfied
@@ -829,8 +829,8 @@ alignment validation and native descriptor-address adjustment with checked
 ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
-reporting matrix now records 128 satisfied mandatory limit rows, 70 limit
-blockers and 634 blockers overall.
+reporting matrix now records 131 satisfied mandatory limit rows, 67 limit
+blockers and 631 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs
@@ -857,3 +857,37 @@ This closes the previous 26 `not-audited` rows (13 features in each profile):
 the matrix now has 110/110 satisfied feature-reporting rows. It does not claim
 that those optional features are implemented; it proves precisely that they
 are reported unavailable and cannot be negotiated accidentally.
+
+## Layered sampled images derived from ps5-opengl (2026-09-14)
+
+The GPL-compatible integration of the pinned `ps5-opengl` GFX1013 texture
+descriptor contract now covers distinct single-level 2D-array, cube and 3D
+resource types. The Vulkan frontend adds bounded image creation, view ranges,
+multi-slice layout and buffer-upload planning; it does not link Mesa/Gallium or
+expose an OpenGL API.
+
+Three independently built RGBA8 payloads exercised the exact paths on firmware
+12.02. Each used a 64x64 source with one solid color per layer, face or volume
+slice, selected three different coordinates in the fragment shader, preserved
+the compute regression before and after the draw, emitted BYE, released all
+native allocations and returned cleanly through exact-title Close Game:
+
+- 2D array: run `20260914T033255434Z_PPSA99994_ps5vk_0x70bf955a1933`,
+  SELF SHA-256 `46c2aa6de518a7f5642c1631273d073ee6193e0174907f816649cae6dbb7591c`,
+  log SHA-256 `448fbab89293fde9ef330114159895a1dfdf9f5e8720cf8963e238315296039a`;
+  readback was red/green/blue `82944/207360/82944`.
+- Cube: run `20260914T033409959Z_PPSA99994_ps5vk_0x70d0ef5f31b1`,
+  SELF SHA-256 `c7715a4555326fcb2e8a846bae0acf06d8fd8259a44c63c09efbcb088536855c`,
+  log SHA-256 `d201d846a7fce4ada5e6b9b8e9fd4ffa92103737379e94253d4cb338a12d0c6a`;
+  readback was `82944/82944/207360`.
+- 3D: run `20260914T033459547Z_PPSA99994_ps5vk_0x70dc7af14826`,
+  SELF SHA-256 `f54b6cef2328bdc98f5b11e1d371383344baa1863be8739352f7e390cd781955`,
+  log SHA-256 `767a86a15d38d6bb7bb6201c3741679b5ff4f7358d131983fdfd92725c3e4325`;
+  readback was `82944/207360/82944`.
+
+All three reported zero unexpected pixels. The reporting matrix can therefore
+expose the Vulkan 1.0 floors of 256 array layers, 4096 cube dimension and 512
+3D dimension without retaining the previous false “unsupported image type”
+blockers. Those values are bounds of the implemented descriptor and allocation
+contract; these small witnesses do not claim exhaustive execution at the
+maximum dimensions, mipmaps, cube arrays or general descriptor arrays.

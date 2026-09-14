@@ -1,4 +1,5 @@
 #include "texture_copy.h"
+#include "vk_image.h"
 #include <assert.h>
 int main(void)
 {
@@ -29,4 +30,20 @@ int main(void)
     BAD(imageExtent.width,UINT32_MAX);BAD(imageExtent.height,0);BAD(imageExtent.depth,2);
     BAD(imageSubresource.layerCount,2);BAD(imageSubresource.mipLevel,1);
     BAD(imageSubresource.aspectMask,VK_IMAGE_ASPECT_DEPTH_BIT);
+#undef BAD
+    struct VkImage_T array={.info={.imageType=VK_IMAGE_TYPE_2D,
+        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={64,4,1},.arrayLayers=3}};
+    VkBufferImageCopy layers={.bufferOffset=16,.bufferRowLength=66,.bufferImageHeight=6,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,1,2},
+        .imageOffset={1,1,0},.imageExtent={3,2,1}};
+    assert(ps5vk_texture_copy_plan_for_image(&array,4096,3072,&layers,&p)==VK_SUCCESS);
+    assert(p.source_offset==16 && p.destination_offset==1284 && p.source_pitch==264 &&
+        p.destination_pitch==256 && p.row_bytes==12 && p.rows==2 &&
+        p.source_slice_pitch==1584 && p.destination_slice_pitch==1024 && p.slices==2);
+    struct VkImage_T volume={.info={.imageType=VK_IMAGE_TYPE_3D,
+        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={64,4,3},.arrayLayers=1}};
+    layers.imageSubresource.baseArrayLayer=0;layers.imageSubresource.layerCount=1;
+    layers.imageOffset.z=1;layers.imageExtent.depth=2;
+    assert(ps5vk_texture_copy_plan_for_image(&volume,4096,3072,&layers,&p)==VK_SUCCESS &&
+        p.destination_offset==1284 && p.slices==2);
 }

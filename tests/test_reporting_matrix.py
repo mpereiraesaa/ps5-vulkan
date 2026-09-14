@@ -52,11 +52,17 @@ class TestReportingMatrix(unittest.TestCase):
         # Documented blockers are the accepted way to stay below the floor; the
         # mapping happens once, after evaluation, and an unlisted limit would
         # keep its "violation" verdict and fail the gate.
-        self.assertIn("maxImageArrayLayers", matrix.KNOWN_BLOCKERS)
         array_row = next(r for r in core["limits"]["rows"]
                          if r["limit"] == "maxImageArrayLayers")
         verdict, _ = matrix.evaluate_limit(array_row, 1, {})
         self.assertEqual(verdict, "violation")
+        committed = json.loads(
+            (ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        array_rows = {r["profile"]: r for r in committed["limits"]
+                      if r["limit"] == "maxImageArrayLayers"}
+        self.assertEqual(array_rows["graphics"]["verdict"], "satisfied")
+        self.assertEqual(array_rows["compute"]["verdict"], "blocker")
+        self.assertIn("maxColorAttachments", matrix.KNOWN_BLOCKERS)
 
     def test_every_blocker_still_describes_a_real_below_floor_report(self):
         """A blocker entry cannot be used to excuse a value that already passes."""

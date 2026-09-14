@@ -196,12 +196,13 @@ and it never depends on console state, dumps or proprietary material.
 ## Known Vulkan 1.0 deficits
 
 Truthful reporting intentionally exposes several failures against the complete
-Vulkan 1.0 graphics requirements. Among them are missing 1D, 3D, cube and array
-image profiles, only sample count one, one array layer, a graphics allocation
-count below the Vulkan 1.0 minimum, no host-coherent memory type, and only the
-small format matrix above. The compute-only 64 MiB profile also reports a
-storage-buffer range below the Vulkan 1.0 minimum for a complete
-implementation.
+Vulkan 1.0 graphics requirements. The graphics profile now implements bounded
+single-level 2D-array, cube and 3D sampled images and reports the corresponding
+core floors; the compute-only profile still has no graphics image model. Other
+gaps include 1D images, sample counts above one, a graphics allocation count
+below the Vulkan 1.0 minimum, no host-coherent memory type, and only the small
+format matrix above. The compute-only 64 MiB profile also reports a
+storage-buffer range below the Vulkan 1.0 minimum for a complete implementation.
 
 Consequently, original upstream `device_properties` and
 `device_memory_properties` cases are useful diagnostics, not acceptance cases,

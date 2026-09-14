@@ -107,9 +107,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
     /* Two destinations are real: the sampled role uploaded by the GPU prelude,
      * and the host-visible padded-linear transfer role. */
     const VkImageUsageFlags usage=image->info.usage;
-    const int sampled_upload=
-        (usage&(VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT))==
-            (VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT) &&
+    const int sampled_upload=(usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+        ps5vk_texture_format_supported(image->info.format) &&
         !(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
     const int linear_upload=ps5vk_pure_transfer_image(image) &&
         (usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -127,8 +126,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
          * upload path, so the shared planner is the record-time gate for both;
          * ps5vk_image_transfer.c keeps a queue-group-local copy of the same
          * arithmetic, and tests/test_image_copy_clear.c asserts they agree. */
-        if(ps5vk_texture_copy_plan_for_format(image->info.format,image->info.extent.width,image->info.extent.height,
-            src_bytes,dst_bytes,&regions[i],&plan)!=VK_SUCCESS) {invalid(c);return;}
+        if(ps5vk_texture_copy_plan_for_image(image,src_bytes,dst_bytes,
+            &regions[i],&plan)!=VK_SUCCESS) {invalid(c);return;}
     }
     struct ps5vk_operation *ops=ps5vk_command_reserve_operations(c,PS5VK_COPY_BUFFER_IMAGE,
         PS5VK_OPERATION_OUTSIDE_RENDER_PASS,count);

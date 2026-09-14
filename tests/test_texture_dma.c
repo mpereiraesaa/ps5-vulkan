@@ -4,14 +4,21 @@
 int main(void)
 {
     uint32_t out[21],saved[21];memset(out,0x55,sizeof(out));memcpy(saved,out,sizeof(out));
-    struct ps5vk_texture_copy p={16,512,32,256,12,2};
+    struct ps5vk_texture_copy p={16,512,32,256,12,2,64,512,1};
     assert(!ps5vk_texture_dma(out,13,0x100000000,0x200000000,&p) && !memcmp(out,saved,sizeof(out)));
     assert(ps5vk_texture_dma(out,21,0x100000000,0x200000000,&p)==14);
     assert(out[0]==0xc0055000 && out[1]==0x60300000 && out[2]==16 && out[3]==1);
     assert(out[4]==512 && out[5]==2 && out[6]==12);
     assert(out[7]==0xc0055000 && out[8]==0xe0300000 && out[9]==48 && out[11]==768 && out[13]==12);
+    struct ps5vk_texture_copy layered={0,0,16,32,8,2,64,96,2};
+    memset(out,0,sizeof(out));
+    assert(ps5vk_texture_dma(out,28,0x100000000,0x200000000,&layered)==28);
+    assert(out[2]==0 && out[4]==0 && out[9]==16 && out[11]==32);
+    assert(out[16]==64 && out[18]==96 && out[23]==80 && out[25]==128);
+    assert(!(out[1]&0x80000000u) && (out[22]&0x80000000u));
     memcpy(saved,out,sizeof(out));
-    assert(!ps5vk_texture_dma(out,21,0x1000,0x1000,&(struct ps5vk_texture_copy){0,4,16,16,12,2}));
+    assert(!ps5vk_texture_dma(out,21,0x1000,0x1000,
+        &(struct ps5vk_texture_copy){0,4,16,16,12,2,32,32,1}));
     p.source_offset=UINT64_MAX;
     assert(!ps5vk_texture_dma(out,21,0x1000,0x2000,&p) && !memcmp(out,saved,sizeof(out)));
     p.source_offset=0;p.source_pitch=UINT64_MAX;

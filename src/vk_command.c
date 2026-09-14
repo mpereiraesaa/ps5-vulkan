@@ -819,11 +819,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
             !image || image->device!=c->pool->device ||
-            image->info.mipLevels!=1 || image->info.arrayLayers!=1 || !image_barrier_profile(b) ||
+            image->info.mipLevels!=1 || !image_barrier_profile(b) ||
             b->subresourceRange.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
             b->subresourceRange.baseMipLevel || b->subresourceRange.baseArrayLayer ||
             (b->subresourceRange.levelCount!=1 && b->subresourceRange.levelCount!=VK_REMAINING_MIP_LEVELS) ||
-            (b->subresourceRange.layerCount!=1 && b->subresourceRange.layerCount!=VK_REMAINING_ARRAY_LAYERS) ||
+            (b->subresourceRange.layerCount!=VK_REMAINING_ARRAY_LAYERS &&
+             b->subresourceRange.layerCount!=image->info.arrayLayers) ||
             ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS) {invalid(c);return;}
     }
     /* Append only after every member validates: a rejected mixed dependency

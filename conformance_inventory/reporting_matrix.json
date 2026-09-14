@@ -17879,12 +17879,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 256; blocker: single-layer images only (vkCreateImage requires arrayLayers 1)",
+      "detail": "core: reported 256 must be >= 256",
       "kind": "limit",
       "limit": "maxImageArrayLayers",
       "profile": "graphics",
-      "reported": 1,
-      "verdict": "blocker"
+      "reported": 256,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -17894,7 +17894,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 256; blocker: single-layer images only (vkCreateImage requires arrayLayers 1)",
+      "detail": "core: reported 0 must be >= 256; blocker: compute-only build: graphics limits are not applied to this profile",
       "kind": "limit",
       "limit": "maxImageArrayLayers",
       "profile": "compute",
@@ -17969,12 +17969,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 256; blocker: 2D-only image model: 3D images are rejected",
+      "detail": "core: reported 512 must be >= 256",
       "kind": "limit",
       "limit": "maxImageDimension3D",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 512,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -17984,7 +17984,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 256; blocker: 2D-only image model: 3D images are rejected",
+      "detail": "core: reported 0 must be >= 256; blocker: compute-only build: graphics limits are not applied to this profile",
       "kind": "limit",
       "limit": "maxImageDimension3D",
       "profile": "compute",
@@ -17999,12 +17999,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 4096; blocker: 2D-only image model: cube images are rejected",
+      "detail": "core: reported 4096 must be >= 4096",
       "kind": "limit",
       "limit": "maxImageDimensionCube",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 4096,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -18014,7 +18014,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 4096; blocker: 2D-only image model: cube images are rejected",
+      "detail": "core: reported 0 must be >= 4096; blocker: compute-only build: graphics limits are not applied to this profile",
       "kind": "limit",
       "limit": "maxImageDimensionCube",
       "profile": "compute",
@@ -25980,9 +25980,9 @@
       "satisfied": 98
     },
     "limits": {
-      "blocker": 70,
+      "blocker": 67,
       "not-applicable": 656,
-      "satisfied": 128
+      "satisfied": 131
     },
     "shader_capabilities": {
       "not-audited": 2,
