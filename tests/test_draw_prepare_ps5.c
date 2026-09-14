@@ -13,10 +13,24 @@ static size_t expected_bytes=sizeof(struct ps5vk_draw_state);
 static VkResult fetch_rc;
 static VkResult texture_rc;
 static VkImageView texture_fail_view;
+static VkResult buffer_rc;
+static VkBuffer buffer_fail;
+static VkDeviceSize last_buffer_dynamic, first_set_buffer_dynamic;
+static unsigned buffer_calls;
 static struct ps5vk_runtime_draw_abi runtime;
 VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView v,VkSampler s,uint32_t out[12])
 {(void)d;(void)s;for(unsigned i=0;i<12;++i)out[i]=100+i+256*(uintptr_t)v;
  return texture_fail_view && v==texture_fail_view?VK_ERROR_UNKNOWN:texture_rc;}
+/* The audited GFX1013 buffer record is exercised by its own encoder test; this
+ * fixture owns placement, ordering and fail-closed behaviour in the graphics
+ * table. */
+VkResult ps5vk_buffer_descriptor(VkDevice d,const VkDescriptorBufferInfo *info,
+    VkDeviceSize dynamic,uint32_t out[4])
+{(void)d;unsigned index=(unsigned)(uintptr_t)info->buffer;
+ ++buffer_calls;last_buffer_dynamic=dynamic;
+ if((uintptr_t)info->buffer==1)first_set_buffer_dynamic=dynamic;
+ for(unsigned i=0;i<4;++i)out[i]=200+i+256*index;
+ return buffer_fail && info->buffer==buffer_fail?VK_ERROR_UNKNOWN:buffer_rc;}
 static const void *fetch_address=vertex_source;
 static unsigned fetch_count=1;
 VkResult ps5vk_vertex_fetch_used_spans(VkDevice d,const struct ps5vk_graphics_key *k,
@@ -265,4 +279,97 @@ int main(void)
     assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)==VK_SUCCESS);
     assert(!prepared.descriptor_tables[1] && !prepared.descriptor_tables[2] && prepared.descriptor_tables[3]);
     ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+    /* Mixed resource delivery: a mandatory uniform buffer coexists with the
+     * sampler array inside the same set and the same four-set ABI. The sparse
+     * binding numbers (5 and 7) are what a real layout carries. */
+    {
+        struct VkDescriptorPool_T mixed_pool={.device=&d};
+        struct VkPipeline_T mixed_pipeline={.device=&d};
+        struct VkDescriptorSet_T mixed[4]={0};
+        struct ps5vk_runtime_draw_abi mixed_runtime={.enabled=1};
+        struct ps5vk_operation mixed_op=op;
+        mixed_op.pipeline=&mixed_pipeline;mixed_op.pipeline->set_count=4;
+        for(unsigned s=0;s<4;++s) {
+            uint32_t prefix=0;
+            for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+                struct ps5vk_binding *binding=&mixed[s].signature.binding[b];
+                binding->first=prefix;
+                if(b==5) {
+                    binding->count=1;binding->stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+                    mixed[s].signature.type[b]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;prefix+=1;
+                } else if(b==7) {
+                    binding->count=24;binding->stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+                    mixed[s].signature.type[b]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                    prefix+=24;
+                }
+            }
+            mixed[s].signature.count=prefix;mixed[s].pool=&mixed_pool;
+            mixed[s].generation=21+s;
+            for(unsigned e=0;e<25;++e)mixed[s].defined[e]=VK_TRUE;
+            /* Buffer handles are opaque here; the encoder stub owns indexing. */
+            mixed[s].buffers[0]=(VkDescriptorBufferInfo){
+                (VkBuffer)(uintptr_t)(1+s),0,64};
+            for(unsigned e=0;e<24;++e)
+                mixed[s].images[1+e].imageView=(VkImageView)(uintptr_t)(1+24*s+e);
+            mixed_pipeline.sets[s]=mixed[s].signature;
+            mixed_op.sets[s]=mixed+s;mixed_op.generations[s]=mixed[s].generation;
+            mixed_runtime.fragment_descriptor_valid[s]=1;
+        }
+        unsigned mixed_allocated=allocations;
+        expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+4*(16+24*48);
+        unsigned mixed_buffer_calls=buffer_calls;
+        /* The runtime draw ABI is what the native path receives. */
+        runtime=mixed_runtime;
+        assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)==
+            VK_SUCCESS);
+        assert(prepared.bytes==expected_bytes && allocations==mixed_allocated+1);
+        /* Four buffer records were really encoded, each with no dynamic offset. */
+        assert(buffer_calls==mixed_buffer_calls+4 && last_buffer_dynamic==0 &&
+            first_set_buffer_dynamic==0);
+        for(unsigned s=0;s<4;++s) {
+            assert(prepared.descriptor_bytes[s]==16+24*48);
+            for(unsigned w=0;w<4;++w)
+                assert(prepared.descriptor_tables[s][w]==200+w+256*(unsigned)(1+s));
+            for(unsigned e=0;e<24;++e)for(unsigned w=0;w<12;++w)
+                assert(prepared.descriptor_tables[s][4+12*e+w]==100+w+256*(1+24*s+e));
+        }
+        ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+        mixed_allocated=allocations;
+        /* An undefined mandatory uniform buffer fails closed before any
+         * allocation, exactly like an undefined sampler element. */
+        mixed[2].defined[0]=VK_FALSE;
+        assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==mixed_allocated && !prepared.backing);
+        mixed[2].defined[0]=VK_TRUE;
+        /* A null or foreign buffer must not be encoded as a base address. */
+        mixed[2].buffers[0].buffer=NULL;
+        assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==mixed_allocated && !prepared.backing);
+        mixed[2].buffers[0].buffer=(VkBuffer)(uintptr_t)3;
+        /* A descriptor type outside the bounded profile stays unsupported
+         * rather than being half-delivered. */
+        mixed[1].signature.type[5]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        mixed_pipeline.sets[1]=mixed[1].signature;
+        assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)==
+            VK_ERROR_FEATURE_NOT_PRESENT && allocations==mixed_allocated && !prepared.backing);
+        mixed[1].signature.type[5]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        mixed_pipeline.sets[1]=mixed[1].signature;
+        /* Encoder failure releases the whole prepared block. */
+        buffer_fail=(VkBuffer)(uintptr_t)4;
+        assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==mixed_allocated+1 && allocations==releases &&
+            !prepared.backing && !prepared.descriptor_tables[0]);
+        buffer_fail=NULL;
+        /* A dynamic uniform buffer adds its recorded offset to the record. */
+        mixed[0].signature.type[5]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        mixed_pipeline.sets[0]=mixed[0].signature;
+        mixed_op.descriptor_dynamic_offsets[0]=256;
+        assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)==
+            VK_SUCCESS);
+        assert(first_set_buffer_dynamic==256);
+        for(unsigned w=0;w<4;++w)
+            assert(prepared.descriptor_tables[0][w]==200+w+256*(unsigned)1);
+        ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+        runtime.enabled=1;
+    }
 }

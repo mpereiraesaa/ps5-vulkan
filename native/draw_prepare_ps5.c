@@ -3,7 +3,24 @@
 #include "vertex_descriptor.h"
 #include "texture_descriptor.h"
 #include "descriptor_table_layout.h"
+#include "descriptor_encode.h"
 #include <string.h>
+
+/* The runtime graphics profile delivers combined image samplers and mandatory
+ * uniform buffers from the same per-set table. Every other descriptor type
+ * stays out of the profile rather than being silently accepted. */
+static int graphics_descriptor_type(VkDescriptorType type)
+{
+    return type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+}
+
+static int graphics_buffer_type(VkDescriptorType type)
+{
+    return type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+}
 
 static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
     const struct ps5vk_runtime_draw_abi *runtime,struct ps5vk_descriptor_table_layout *tables,
@@ -31,11 +48,18 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_binding *binding=&set->signature.binding[b];
             if(!binding->count)continue;
-            if(set->signature.type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+            if(!graphics_descriptor_type(set->signature.type[b]) ||
                !(binding->stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
-            for(unsigned e=0;e<binding->count;++e)
-                if(!set->defined[binding->first+e])return VK_ERROR_UNKNOWN;
+            for(unsigned e=0;e<binding->count;++e) {
+                unsigned index=binding->first+e;
+                if(!set->defined[index])return VK_ERROR_UNKNOWN;
+                /* A null buffer never reaches the encoder. Ownership and the
+                 * resolved span are validated by ps5vk_buffer_descriptor,
+                 * which is the only place that can read a buffer handle. */
+                if(graphics_buffer_type(set->signature.type[b]) &&
+                   !set->buffers[index].buffer)return VK_ERROR_UNKNOWN;
+            }
         }
     }
     return VK_SUCCESS;
@@ -152,10 +176,17 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_binding *binding=&set->signature.binding[b];
             for(unsigned e=0;e<binding->count;++e) {
-                const VkDescriptorImageInfo *image=&set->images[binding->first+e];
+                unsigned index=binding->first+e;
                 uint32_t *words=table+(tables.binding[s][b].byte_offset+
                     e*tables.binding[s][b].byte_stride)/4;
-                rc=ps5vk_texture_descriptor(d,image->imageView,image->sampler,words);
+                if(graphics_buffer_type(set->signature.type[b])) {
+                    VkDeviceSize dynamic=ps5vk_dynamic_descriptor_type(
+                        set->signature.type[b])?op->descriptor_dynamic_offsets[index]:0;
+                    rc=ps5vk_buffer_descriptor(d,&set->buffers[index],dynamic,words);
+                } else {
+                    const VkDescriptorImageInfo *image=&set->images[index];
+                    rc=ps5vk_texture_descriptor(d,image->imageView,image->sampler,words);
+                }
                 if(rc!=VK_SUCCESS){ps5vk_native_release_draw(&result);return rc;}
             }
         }
