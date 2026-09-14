@@ -58,10 +58,14 @@ def check_isolation(dep_file: Path, obj_file: Path):
 def main():
     parser = argparse.ArgumentParser(description="Build independent native consumer")
     parser.add_argument("--continuous", action="store_true", help="Compile in continuous rendering mode")
+    parser.add_argument("--shared-stage-samplers", action="store_true",
+                        help="Finite backend qualification: shared VS/FS samplers above advertised limits")
     parser.add_argument("--check-only", action="store_true", help="Only verify header and symbol isolation")
     parser.add_argument("--use-staged-sdk", action="store_true",
                         help="Reuse dist-sdk without rebuilding it (caller guarantees freshness)")
     args = parser.parse_args()
+    if args.continuous and args.shared_stage_samplers:
+        parser.error("Shared-stage qualification requires the finite consumer")
 
     # A merely present archive may predate the source tree.  Fresh staging is
     # the safe default for a standalone consumer and prevents false link
@@ -122,6 +126,8 @@ def main():
     ]
     if args.continuous:
         cflags.append("-DCONSUMER_CONTINUOUS=1")
+    if args.shared_stage_samplers:
+        cflags.append("-DCONSUMER_SHARED_STAGE_SAMPLERS=1")
 
     has_native_toolchain = clang_wrapper.is_file() and linker.is_file() and builder.is_file()
 
@@ -270,9 +276,14 @@ def main():
         },
         "sampled_graphics": {
             "sets": 4, "descriptors": 96, "rounds": 4,
-            "shader_spirv_sha256": hashlib.sha256(sampled_shader_header.with_suffix(".spv").read_bytes()).hexdigest(),
+            "stage_profile": "vertex-fragment" if args.shared_stage_samplers else "fragment",
+            "shader_spirv_sha256": hashlib.sha256(sampled_shader_header.with_suffix(
+                ".shared.frag.spv" if args.shared_stage_samplers else ".spv").read_bytes()).hexdigest(),
         },
     }
+    if args.shared_stage_samplers:
+        artifact["sampled_graphics"]["vertex_spirv_sha256"] = hashlib.sha256(
+            sampled_shader_header.with_suffix(".shared.vert.spv").read_bytes()).hexdigest()
     artifact_path = DIST_DIR.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")
 

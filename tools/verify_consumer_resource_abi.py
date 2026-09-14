@@ -69,12 +69,23 @@ def validate(log, receipt, artifact):
         "dynamic_scissor": True,
     }, "fixed-function artifact contract")
     sampled = artifact.get("sampled_graphics")
+    sampled_profile = None
     if sampled is not None:
+        # Archived fragment-only artifacts predate stage_profile. No shared-stage
+        # evidence can use that fallback: both its vertex digest and start row differ.
+        sampled_profile = sampled.get("stage_profile", "fragment")
+        require(sampled_profile in ("fragment", "vertex-fragment"), "sampled stage profile")
         require(sampled.get("sets") == 4 and sampled.get("descriptors") == 96 and
                 sampled.get("rounds") == 4 and
                 len(sampled.get("shader_spirv_sha256", "")) == 64 and
                 all(c in "0123456789abcdef" for c in sampled["shader_spirv_sha256"]),
                 "sampled-graphics artifact contract")
+        if sampled_profile == "vertex-fragment":
+            vertex_digest = sampled.get("vertex_spirv_sha256", "")
+            require(isinstance(vertex_digest, str) and len(vertex_digest) == 64 and
+                    all(c in "0123456789abcdef" for c in vertex_digest), "sampled vertex digest")
+        else:
+            require("vertex_spirv_sha256" not in sampled, "vertex digest in fragment-only artifact")
     require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"),
             "log hash")
     require(receipt.get("protocol") == "ps5log/1" and
@@ -303,14 +314,21 @@ def validate(log, receipt, artifact):
     if sampled is None:
         require(not sampled_rows, "sampled graphics without artifact contract")
     else:
+        start = "PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"
+        if sampled_profile == "vertex-fragment":
+            start += (f" stages=vertex-fragment vs_sha256={sampled['vertex_spirv_sha256']}"
+                      f" fs_sha256={sampled['shader_spirv_sha256']}")
         require(len(sampled_rows) == 6 and sampled_rows[0][1] ==
-                "PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4" and
+                start and
                 sampled_rows[-1][1] == "PS5VK_CONSUMER_SAMPLED_SETS_RETIRED" and
                 sync_retired[0] < sampled_rows[0][0] < sampled_rows[-1][0] < graphics_start[0],
                 "sampled-graphics scope")
         # Literal independent reference values from the owned four-palette,
         # weighted 96-element shader. This is not a pass flag from the app.
         expected_words = ("914c503b", "914b4d4f", "914a4643", "913a5449")
+        if sampled_profile == "vertex-fragment":
+            # (FS forward weights + 2 * VS reverse weights) / 32768.
+            expected_words = ("6d3a3b2f", "6d373d35", "6d42392a", "6d2e4135")
         previous = sampled_rows[0][0]
         for round_index, expected_word in enumerate(expected_words):
             row = sampled_rows[round_index + 1]
@@ -357,6 +375,7 @@ def validate(log, receipt, artifact):
         "sampled_graphics_sets_checked": 4 if sampled is not None else 0,
         "sampled_graphics_descriptors_per_round": 96 if sampled is not None else 0,
         "sampled_graphics_rounds_checked": 4 if sampled is not None else 0,
+        "sampled_graphics_stage_profile": sampled_profile,
         "sampled_graphics_exceeds_advertised_limits": sampled is not None,
         "dynamic_viewport_scissor": True,
         "attachment_load_preservation": True,

@@ -1,4 +1,7 @@
 import hashlib
+from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 
 from tools.verify_consumer_resource_abi import APP, TITLE, validate
@@ -99,7 +102,8 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 
 
 class ConsumerResourceAbiTests(unittest.TestCase):
-    def fixture(self, edit=None, sampled=False):
+    def fixture(self, edit=None, sampled=False, shared=False):
+        sampled = sampled or shared
         messages = list(MESSAGES)
         if sampled:
             for index,message in enumerate(messages):
@@ -108,7 +112,11 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                     serial,tail=rest.split(" ",1)
                     messages[index]=f"{prefix} serial={int(serial)+4} {tail}"
             rows=["PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"]
-            for round_index,word in enumerate(("914c503b","914b4d4f","914a4643","913a5449")):
+            words=("914c503b","914b4d4f","914a4643","913a5449")
+            if shared:
+                rows[0]+=" stages=vertex-fragment vs_sha256="+"e"*64+" fs_sha256="+"f"*64
+                words=("6d3a3b2f","6d373d35","6d42392a","6d2e4135")
+            for round_index,word in enumerate(words):
                 serial=13+round_index
                 rows.extend([
                     f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
@@ -176,7 +184,55 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         if sampled:
             artifact["sampled_graphics"]={"sets":4,"descriptors":96,"rounds":4,
                                          "shader_spirv_sha256":"f"*64}
+            if shared:
+                artifact["sampled_graphics"].update(stage_profile="vertex-fragment", vertex_spirv_sha256="e"*64)
         return log, receipt, artifact
+
+    def test_shared_sampler_profile_and_hashes_are_bound_to_evidence(self):
+        result=validate(*self.fixture(shared=True))
+        self.assertEqual(result["sampled_graphics_stage_profile"],"vertex-fragment")
+        self.assertTrue(result["sampled_graphics_exceeds_advertised_limits"])
+        for key,value in (("stage_profile","fragment"),("stage_profile","unknown"),
+                          ("vertex_spirv_sha256","d"*64),("shader_spirv_sha256","c"*64),
+                          ("vertex_spirv_sha256","bad")):
+            log,receipt,artifact=self.fixture(shared=True)
+            artifact["sampled_graphics"][key]=value
+            with self.subTest(key=key,value=value),self.assertRaises(ValueError):
+                validate(log,receipt,artifact)
+        for key in ("stage_profile","vertex_spirv_sha256","shader_spirv_sha256"):
+            log,receipt,artifact=self.fixture(shared=True)
+            del artifact["sampled_graphics"][key]
+            with self.subTest(missing=key),self.assertRaises(ValueError):validate(log,receipt,artifact)
+
+    def test_shared_sampler_rejects_missing_duplicate_or_wrong_stage_contribution(self):
+        for old,new in (("expected=6d3a3b2f","expected=914c503b"),
+                        ("expected=6d3a3b2f","expected=00000000"),
+                        ("round=3","round=2"),("changed=471744","changed=0"),
+                        ("bad=0","bad=1")):
+            def edit(messages):
+                index=next(i for i,m in enumerate(messages) if old in m)
+                messages[index]=messages[index].replace(old,new)
+            with self.subTest(old=old),self.assertRaises(ValueError):validate(*self.fixture(edit,shared=True))
+        for prefix in ("PS5VK_CONSUMER_SAMPLED_SETS_START","PS5VK_CONSUMER_SAMPLED_SETS_RESULT",
+                       "PS5VK_CONSUMER_SAMPLED_SETS_RETIRED","PS5VK_GRAPHICS_COMPLETED serial=13"):
+            def edit(messages):
+                messages.pop(next(i for i,m in enumerate(messages) if m.startswith(prefix)))
+            with self.subTest(prefix=prefix),self.assertRaises(ValueError):validate(*self.fixture(edit,shared=True))
+
+    def test_both_c_pixel_oracles_match_independent_literals(self):
+        # Compile the actual consumer's oracle prefix, not a Python reimplementation.
+        source=(Path(__file__).resolve().parents[1]/"examples/native_consumer/sampled_sets.h").read_text()
+        source=source.split("static void run_sampled_sets",1)[0].replace(
+            '#include "sampled_set_shaders.h"','#include <stdint.h>\n#include <stdio.h>')
+        source+='\nint main(void){for(unsigned i=0;i<4;++i)printf("%08x\\n",sampled_expected(i));}\n'
+        with tempfile.TemporaryDirectory() as directory:
+            binary=Path(directory)/"oracle"
+            for shared,expected in ((False,["914c503b","914b4d4f","914a4643","913a5449"]),
+                                    (True,["6d3a3b2f","6d373d35","6d42392a","6d2e4135"])):
+                flags=["-DCONSUMER_SHARED_STAGE_SAMPLERS=1"] if shared else []
+                subprocess.run(["cc","-std=c11","-Wall","-Werror",*flags,"-x","c","-","-o",str(binary)],
+                               input=source,text=True,check=True,capture_output=True)
+                self.assertEqual(subprocess.check_output([str(binary)],text=True).splitlines(),expected)
 
     def test_sampled_sets_reference_and_mutations(self):
         result=validate(*self.fixture(sampled=True))
