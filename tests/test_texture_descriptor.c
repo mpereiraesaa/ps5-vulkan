@@ -168,6 +168,11 @@ int main(void)
         layered_words[3]==0x90020fac && layered_words[5]==0x00400020 &&
         layered_words[9]==0x00200000 && layered_words[10]==0x08000000);
     vkDestroySampler(&d,mip_sampler,NULL);
+    mip_si.mipLodBias=-2.0f;
+    assert(vkCreateSampler(&d,&mip_si,NULL,&mip_sampler)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,layered_view,mip_sampler,layered_words)==VK_SUCCESS &&
+        layered_words[10]==0x08003e00);
+    vkDestroySampler(&d,mip_sampler,NULL);
     vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
     vkFreeMemory(&d,layered_memory,NULL);
     uint32_t saved[12];memcpy(saved,words,sizeof(words));

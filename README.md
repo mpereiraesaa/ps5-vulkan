@@ -48,7 +48,9 @@ results; visual output is not the sole correctness signal.
   implemented. Nearest/linear filtering is validated for the twenty-one
   filterable rows; the eighteen integer rows use typed samplers and correctly
   remain nearest-only. A three-level RGBA8 chain has deterministic explicit-LOD
-  GPU readback through the staged public SDK
+  GPU readback through the staged public SDK; signed sampler LOD bias is
+  implemented and hardware-qualified at both Vulkan 1.0 boundary values, -2
+  and +2
 - 1D, 1D-array, 2D-array, cubemap and 3D sampled-image views with layered
   buffer uploads; their current per-region, layer, face or slice RGBA8
   witnesses use one level, while the explicit mip witness is 2D

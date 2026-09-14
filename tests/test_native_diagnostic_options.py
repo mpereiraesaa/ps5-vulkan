@@ -80,6 +80,16 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertIn("PS5VK_INTEGER_SAMPLED_READBACK", source)
         self.assertIn("PS5VK_GRAPHICS_SCISSOR_PROBE!=10", source)
 
+    def test_mip_lod_bias_is_bounded_and_mipmap_only(self):
+        self.rejected({"PS5VK_MIP_LOD_BIAS": "1"}, "must be -2, 0, or 2")
+        self.rejected({"PS5VK_MIP_LOD_BIAS": "2"}, "only for mipmap diagnostic")
+
+    def test_mip_lod_bias_cannot_hide_behind_forced_clamp(self):
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_GRAPHICS_SCISSOR_PROBE": "12",
+                       "PS5VK_MIP_LOD_BIAS": "2", "PS5VK_MIP_FORCE_LOD": "1"},
+                      "cannot be combined")
+
     def test_vertex_format_probe_is_nonindexed_runtime_draw(self):
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8", source)

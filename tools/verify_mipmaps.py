@@ -16,7 +16,11 @@ EXPECTED_DESCRIPTOR = {
     5: "00400020", 6: "00000000", 7: "00000000", 8: "00000092",
     9: "00200000", 10: "04000000", 11: "00000000",
 }
-EXPECTED_HISTOGRAM = {"red": "103680", "green": "62208", "blue": "20736"}
+EXPECTED_HISTOGRAM = {
+    -2: {"red": "186624", "green": "0", "blue": "0"},
+    0: {"red": "103680", "green": "62208", "blue": "20736"},
+    2: {"red": "0", "green": "0", "blue": "186624"},
+}
 
 
 def require(value, message):
@@ -35,6 +39,8 @@ def validate(log, metadata, artifact):
             artifact.get("geometry_fixture") == "sampled-image-mipmaps" and
             artifact.get("termination") == "shell-close-after-cleanup",
             "artifact profile")
+    lod_bias = artifact.get("mip_lod_bias", 0)
+    require(lod_bias in EXPECTED_HISTOGRAM, "mipmap LOD bias profile")
     require(hashlib.sha256(log).hexdigest() == metadata.get("sha256"), "log hash")
     require(metadata.get("clean") is True and metadata.get("bye") is True and
             metadata.get("gaps") == [] and metadata.get("transport") == "tcp" and
@@ -83,8 +89,10 @@ def validate(log, metadata, artifact):
                 [int(fields.get("word", "-1")) for _, fields in descriptors] == list(range(12)),
                 "complete descriptor")
         values = {int(fields["word"]): fields.get("value", "") for _, fields in descriptors}
+        expected_descriptor = dict(EXPECTED_DESCRIPTOR)
+        expected_descriptor[10] = f"{0x04000000 | ((lod_bias * 256) & 0x3fff):08x}"
         require(int(values[0], 16) != 0 and (int(values[0], 16) & 0xff) == 0 and
-                all(values.get(word) == value for word, value in EXPECTED_DESCRIPTOR.items()),
+                all(values.get(word) == value for word, value in expected_descriptor.items()),
                 "mipmap descriptor")
     submit = one("PS5VK_GRAPHICS_SUBMIT")
     complete = one("PS5VK_GRAPHICS_COMPLETED")
@@ -98,13 +106,17 @@ def validate(log, metadata, artifact):
     end = one("PS5VK_GRAPHICS_REUSE_END")
     platform = one("PS5VK_PLATFORM_CLOSE")
     cleanup = one("PS5VK_GRAPHICS_API_CLEANUP_COMPLETE")
-    require(source[1] == {"levels": "3", "view_base": "0", "width": "64",
-                          "height": "64", "colors": "red,green,blue", "bytes": "21504"},
+    source_fields = dict(source[1])
+    source_bias = int(source_fields.pop("lod_bias", "0"))
+    require(source_bias == lod_bias and source_fields ==
+            {"levels": "3", "view_base": "0", "width": "64", "height": "64",
+             "colors": "red,green,blue", "bytes": "21504"},
             "mipmap source")
     require(upload[0][1].get("levels") == "3" and upload[0][1].get("format") == "37",
             "mipmap upload profile")
-    require(readback[1].get("levels") == "3" and
-            all(readback[1].get(key) == value for key, value in EXPECTED_HISTOGRAM.items()) and
+    require(int(readback[1].get("lod_bias", "0")) == lod_bias and
+            readback[1].get("levels") == "3" and
+            all(readback[1].get(key) == value for key, value in EXPECTED_HISTOGRAM[lod_bias].items()) and
             readback[1].get("unexpected") == "0" and readback[1].get("valid") == "1",
             "explicit mip readback")
     require(runtime[1].get("rc") == "0" and runtime[1].get("compiled_pairs") == "1" and
@@ -123,7 +135,7 @@ def validate(log, metadata, artifact):
     require(platform[1].get("rc") == "0" and
             platform[1].get("allocations_bytes") == "0", "resource cleanup")
     return {"self_sha256": identity, "levels": 3, "explicit_lod": True,
-            "histogram": EXPECTED_HISTOGRAM, "gpu_readback": True,
+            "mip_lod_bias": lod_bias, "histogram": EXPECTED_HISTOGRAM[lod_bias], "gpu_readback": True,
             "process_exit_verified": False}
 
 

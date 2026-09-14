@@ -15,6 +15,9 @@ enum {
     PS5VK_MAX_COLOR_DIMENSION = 16383,
     PS5VK_MAX_VERTEX_STRIDE = 16380,
     PS5VK_MAX_VERTEX_ATTRIBUTE_OFFSET = 16376,
+    /* Vulkan 1.0 mandatory floor. The signed 8.8 GFX1013 sampler field has a
+     * wider range; expose only the hardware-qualified core interval. */
+    PS5VK_MAX_SAMPLER_LOD_BIAS = 2,
     /* PA_SU_VTX_CNTL QUANT_MODE=5 selects 1/256 framebuffer coordinates.
      * Compiler, pair preparation and draw-state gates require word 0x2d. */
     PS5VK_SUBPIXEL_BITS = 8,
@@ -59,7 +62,7 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxVertexInputAttributeOffset=PS5VK_MAX_VERTEX_ATTRIBUTE_OFFSET;
     limits->maxDrawIndexedIndexValue=UINT32_MAX;
     limits->subPixelPrecisionBits=PS5VK_SUBPIXEL_BITS;
-    limits->maxSamplerLodBias=0.0f;
+    limits->maxSamplerLodBias=(float)PS5VK_MAX_SAMPLER_LOD_BIAS;
     limits->maxSamplerAnisotropy=1.0f;
 }
 #endif

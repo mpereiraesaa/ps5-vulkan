@@ -20459,12 +20459,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 2; blocker: vkCreateSampler rejects mipLodBias/minLod/maxLod",
+      "detail": "core: reported 2 must be >= 2",
       "kind": "limit",
       "limit": "maxSamplerLodBias",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 2,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -20474,7 +20474,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 2; blocker: vkCreateSampler rejects mipLodBias/minLod/maxLod",
+      "detail": "core: reported 0 must be >= 2; blocker: vkCreateSampler encodes and bounds signed mipLodBias to the reported interval",
       "kind": "limit",
       "limit": "maxSamplerLodBias",
       "profile": "compute",
@@ -25980,9 +25980,9 @@
       "satisfied": 98
     },
     "limits": {
-      "blocker": 66,
+      "blocker": 65,
       "not-applicable": 656,
-      "satisfied": 132
+      "satisfied": 133
     },
     "shader_capabilities": {
       "not-audited": 2,

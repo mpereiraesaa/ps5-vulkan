@@ -66,6 +66,30 @@ This establishes the bounded shared mip-chain layout, descriptor and explicit
 LOD path. It is not broad shader coverage, generated-mipmap support in Vulkan,
 anisotropy, or a claim of Khronos conformance.
 
+The next public-SDK-linked pair qualifies the Vulkan 1.0 sampler LOD-bias
+floor at both ends of the advertised interval. It reused the exact three-level
+red/green/blue resource and runtime `textureLod` shader, changing only
+`VkSamplerCreateInfo::mipLodBias`:
+
+- `+2`: run `20260914T061907811Z_PPSA99994_ps5vk_0x79d16d7ca240`, SELF
+  SHA-256 `12e7012d0bd51c9af8ad8967416c43391c4243b68e617a14b55313b5a33cc6d1`,
+  transcript SHA-256
+  `77d4f0b82fdf64089fc6aea481cc54d7ca06aedde2eba2d0e09920437cfb2443`;
+  all 186,624 covered pixels selected the blue level.
+- `-2`: run `20260914T062019027Z_PPSA99994_ps5vk_0x79e201f1c3c8`, SELF
+  SHA-256 `79f249cdf73fdfe20c784bfca3c3e12b71741f737f10c602b7c2f1697bdea559`,
+  transcript SHA-256
+  `3fcb376fd9224ddfbe14ff0ac86d24651b23fb1dfab2f988db596512435c5241`;
+  all 186,624 covered pixels selected the red level.
+
+Both 256-record streams had zero unexpected pixels, passed the pre/post
+compute regression, matched VideoOut completion, ended with BYE and zero live
+native allocation bytes, and completed exact-title Close Game. The same strict
+verifier accepts the unbiased and both boundary profiles and checks the signed
+descriptor word when private descriptor telemetry is present. Values outside
+`[-2, 2]` and NaN are rejected at sampler creation. This closes one mandatory
+graphics-profile limit blocker without claiming the wider native field range.
+
 ## Vulkan API contract suite validation (CTS-modeled)
 
 A suite of 26 synthetic Vulkan API contract tests modeled after the Khronos `VK-GL-CTS`
@@ -869,8 +893,9 @@ alignment validation and native descriptor-address adjustment with checked
 ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
-reporting matrix now records 132 satisfied mandatory limit rows, 66 limit
-blockers and 630 blockers overall.
+signed sampler-LOD-bias implementation removes another graphics limit blocker.
+The reporting matrix now records 133 satisfied mandatory limit rows, 65 limit
+blockers and 629 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

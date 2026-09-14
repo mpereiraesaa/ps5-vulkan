@@ -38,16 +38,24 @@ static uint32_t unsigned_lod(float value)
     if(value>=15)return 15u<<8;
     return (uint32_t)(value*256.0f);
 }
+static uint32_t signed_lod_bias(float value)
+{
+    /* GFX10 S# LOD_BIAS is signed 8.8 in the low fourteen bits. Creation has
+     * already bounded the public Vulkan interval to [-2, 2]. */
+    return (uint32_t)(int32_t)(value*256.0f)&0x3fffu;
+}
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateInfo *info,
     const VkAllocationCallbacks *a,VkSampler *out)
 {
     if(!out)return VK_ERROR_UNKNOWN;
     *out=VK_NULL_HANDLE;
     if(!d || !info || info->sType!=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO)return VK_ERROR_UNKNOWN;
-    /* Initial single-level normalized RGBA profile. Reject rather than clamp
-     * unsupported state or silently enable approximate sampling behavior. */
+    /* Reject rather than clamp unsupported state or silently enable
+     * approximate sampling behavior. */
     if(!d->graphics_enabled || info->pNext || info->flags || info->anisotropyEnable ||
-        info->compareEnable || info->unnormalizedCoordinates || info->mipLodBias!=0 ||
+        info->compareEnable || info->unnormalizedCoordinates ||
+        !(info->mipLodBias>=-(float)PS5VK_MAX_SAMPLER_LOD_BIAS &&
+          info->mipLodBias<=(float)PS5VK_MAX_SAMPLER_LOD_BIAS) ||
         !(info->minLod>=0 && info->maxLod>=info->minLod && info->maxLod<=FLT_MAX) ||
         (info->mipmapMode!=VK_SAMPLER_MIPMAP_MODE_NEAREST && info->mipmapMode!=VK_SAMPLER_MIPMAP_MODE_LINEAR) ||
         (info->magFilter!=VK_FILTER_NEAREST && info->magFilter!=VK_FILTER_LINEAR) ||
@@ -67,7 +75,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
      * Xash3D's ps5_gfx1013_build_ssharp, with independent axis/filter inputs. */
     s->words[0]=(uint32_t)u|((uint32_t)v<<3)|((uint32_t)w<<6);
     s->words[1]=unsigned_lod(info->minLod)|(unsigned_lod(info->maxLod)<<12);
-    s->words[2]=((info->magFilter==VK_FILTER_LINEAR?1u:0u)<<20)|
+    s->words[2]=signed_lod_bias(info->mipLodBias)|
+        ((info->magFilter==VK_FILTER_LINEAR?1u:0u)<<20)|
         ((info->minFilter==VK_FILTER_LINEAR?1u:0u)<<22)|
         ((info->mipmapMode==VK_SAMPLER_MIPMAP_MODE_LINEAR?2u:1u)<<26);
     s->words[3]=(uint32_t)border<<30;

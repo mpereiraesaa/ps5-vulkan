@@ -3150,7 +3150,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Info cases check a subset; behavioural limits are checked by their own groups. Reporting audit: every mandatory limit row classified against the reported matrix; 132 satisfied and 66 documented blockers.",
+        "note": "Info cases check a subset; behavioural limits are checked by their own groups. Reporting audit: every mandatory limit row classified against the reported matrix; 133 satisfied and 65 documented blockers.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt; the requirement spans several aspects and this single case is not complete coverage."
       },

@@ -39,6 +39,11 @@ def main():
     mip_force_lod=os.environ.get("PS5VK_MIP_FORCE_LOD","-1")
     if mip_force_lod not in ("-1","0","1","2") or (mip_force_lod!="-1" and scissor_probe!="12"):
         raise SystemExit("PS5VK_MIP_FORCE_LOD must be -1, 0, 1, or 2 only for mipmap diagnostic")
+    mip_lod_bias=os.environ.get("PS5VK_MIP_LOD_BIAS","0")
+    if mip_lod_bias not in ("-2","0","2") or (mip_lod_bias!="0" and scissor_probe!="12"):
+        raise SystemExit("PS5VK_MIP_LOD_BIAS must be -2, 0, or 2 only for mipmap diagnostic")
+    if mip_lod_bias!="0" and mip_force_lod!="-1":
+        raise SystemExit("PS5VK_MIP_LOD_BIAS cannot be combined with a forced LOD clamp")
     scene_split = os.environ.get("PS5VK_GRAPHICS_SCENE_SPLIT", "0")
     if scene_split not in ("0", "1") or (scene_split == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_SCENE_SPLIT requires graphics profile API and must be 0 or 1")
@@ -227,6 +232,7 @@ def main():
             common += ["-DPS5VK_GRAPHICS_SCISSOR_PROBE=" + scissor_probe]
             common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
             common += ["-DPS5VK_MIP_FORCE_LOD=" + mip_force_lod]
+            common += ["-DPS5VK_MIP_LOD_BIAS=" + mip_lod_bias]
             common += ["-DPS5VK_IMAGE_TARGET=" + str(image_target)]
             common += ["-DPS5VK_INTEGER_SAMPLED_SIGN=" + str(integer_sampled_sign)]
             if scene_split == "1" and not scene:
@@ -367,6 +373,7 @@ def main():
             manifest.update(stage="graphics-api-creation-only", submit_enabled=False,
                             scene="two-cubes" if scene else "triangle-controls",
                             scissor_probe=int(scissor_probe),
+                            mip_lod_bias=int(mip_lod_bias),
                             scissor_depth_comparison=scissor_probe in ("2", "3"),
                             geometry_fixture=geometry_fixture,
                             image_target={1:"2d-array",2:"cube",3:"3d",4:"1d",

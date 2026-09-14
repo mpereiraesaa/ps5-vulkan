@@ -5,15 +5,16 @@ from tools.verify_mipmaps import EXPECTED_DESCRIPTOR, EXPECTED_HISTOGRAM, EXPECT
 
 
 class MipmapVerifier(unittest.TestCase):
-    def fixture(self):
+    def fixture(self, bias=0):
         messages = [
             "PS5VK_IMAGE_QUERY format=37 usage=6 max_width=16384 max_height=16384 max_bytes=268435456",
             "PS5VK_COMPUTE_END rounds=6 dispatches=12",
             "PS5VK_RUNTIME_GRAPHICS_CACHE rc=0 hit=0 compiled_pairs=1 hits=0 misses=1 entries=1 bytes=19136",
-            "PS5VK_MIPMAP_INPUT levels=3 view_base=0 width=64 height=64 colors=red,green,blue bytes=21504",
+            f"PS5VK_MIPMAP_INPUT levels=3 view_base=0 lod_bias={bias} width=64 height=64 colors=red,green,blue bytes=21504",
             "PS5VK_TEXTURE_UPLOAD frame=0 pattern=mipmap-rgb width=64 height=64 slices=1 levels=3 format=37",
         ]
-        descriptor = {0: "02080400", **EXPECTED_DESCRIPTOR}
+        descriptor = {0: "02080400", **EXPECTED_DESCRIPTOR,
+                      10: f"{0x04000000 | ((bias * 256) & 0x3fff):08x}"}
         messages += [f"PS5VK_TEXTURE_DESCRIPTOR serial=7 draw=0 word={word} value={descriptor[word]}"
                      for word in range(12)]
         messages += [
@@ -24,9 +25,9 @@ class MipmapVerifier(unittest.TestCase):
             level, fields["offset"], fields["pitch"], fields["first"])
             for level, fields in EXPECTED_STORAGE.items()]
         messages += [
-            "PS5VK_MIPMAP_READBACK levels=3 red={} green={} blue={} unexpected=0 valid=1".format(
-                EXPECTED_HISTOGRAM["red"], EXPECTED_HISTOGRAM["green"],
-                EXPECTED_HISTOGRAM["blue"]),
+            "PS5VK_MIPMAP_READBACK levels=3 lod_bias={} red={} green={} blue={} unexpected=0 valid=1".format(
+                bias, EXPECTED_HISTOGRAM[bias]["red"], EXPECTED_HISTOGRAM[bias]["green"],
+                EXPECTED_HISTOGRAM[bias]["blue"]),
             "PS5VK_VIDEO_PRESENTED token=1 fence=0 matching_event=1 hold_seconds=0",
             "PS5VK_GRAPHICS_REUSE_END frame=0 slot=0 displayed=0",
             "PS5VK_COMPUTE_END rounds=6 dispatches=12",
@@ -44,12 +45,18 @@ class MipmapVerifier(unittest.TestCase):
         artifact = {"stage": "graphics-api-native-presentation-reuse",
                     "runtime_graphics": True, "runtime_sdk": True,
                     "scissor_probe": 12, "geometry_fixture": "sampled-image-mipmaps",
+                    "mip_lod_bias": bias,
                     "termination": "shell-close-after-cleanup",
                     "files": {"eboot.bin": "a" * 64}}
         return log, metadata, artifact
 
     def test_accepts_exact_explicit_lod_witness(self):
         self.assertTrue(validate(*self.fixture())["explicit_lod"])
+
+    def test_accepts_both_core_lod_bias_boundaries(self):
+        for bias in (-2, 2):
+            with self.subTest(bias=bias):
+                self.assertEqual(validate(*self.fixture(bias))["mip_lod_bias"], bias)
 
     def test_public_sdk_run_does_not_require_private_descriptor_tracing(self):
         log, metadata, artifact = self.fixture()

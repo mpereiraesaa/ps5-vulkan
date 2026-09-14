@@ -31,7 +31,7 @@ Current derived or adapted files are:
 | --- | --- | --- |
 | `native/runtime_shader.c` | `src/platform/ps5_agc_package.c` | AGC compiler-metadata/package ABI adaptation |
 | `src/color_detile.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_tiled_color_offset` | General 1/2/4/8/16-byte `SW_64K_R_X` tiled-address equations and surface sizing |
-| `src/vk_sampler.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_wrap` and fixed-border handling | GFX10.3 repeat, mirrored-repeat, edge/border clamp and fixed border-color encodings |
+| `src/vk_sampler.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_wrap`, `ps5_texture_descriptor_lod_bias` and fixed-border handling | GFX10.3 repeat, mirrored-repeat, edge/border clamp, signed 8.8 LOD-bias and fixed border-color encodings |
 | `src/texture_format.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_format`, `ps5_texture_descriptor_swizzle` and `ps5_texture_format_size` | GFX10.3 sampled-image format words, component selectors and texel sizes; public rows require ps5-vulkan-owned typed shader and readback evidence |
 | `src/texture_descriptor.c` | `src/gallium/ps5/ps5_screen.c`, texture resource descriptor construction | GFX10.3 1D, 1D-array, 2D, 2D-array, cube and 3D resource-type and dimension-field adaptation; ps5-vulkan supplies the Vulkan image/view validation and hardware readback gates |
 | `src/texture_layout.c` | `src/gallium/ps5/ps5_screen.c`, linear sampled-resource allocation | Descending, 256-byte-aligned GFX1013 mip-level packing and complete-chain-per-layer layout; ps5-vulkan supplies Vulkan mip bounds, transfer planning and memory-overflow gates |

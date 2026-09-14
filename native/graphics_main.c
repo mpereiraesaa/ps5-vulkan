@@ -32,6 +32,9 @@
 #ifndef PS5VK_MIP_FORCE_LOD
 #define PS5VK_MIP_FORCE_LOD -1
 #endif
+#ifndef PS5VK_MIP_LOD_BIAS
+#define PS5VK_MIP_LOD_BIAS 0
+#endif
 #ifndef PS5VK_RUNTIME_GRAPHICS
 #define PS5VK_RUNTIME_GRAPHICS 0
 #endif
@@ -160,6 +163,7 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
         si.magFilter=si.minFilter=VK_FILTER_NEAREST;
         si.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        si.mipLodBias=(float)PS5VK_MIP_LOD_BIAS;
         si.maxLod=2.0f;
         if(PS5VK_MIP_FORCE_LOD>=0)
             si.minLod=si.maxLod=(float)PS5VK_MIP_FORCE_LOD;
@@ -253,8 +257,9 @@ static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer 
             offset+=(size_t)w*h*sizeof(uint32_t);
         }
         ps5log_printf(PS5LOG_MARK,
-            "PS5VK_MIPMAP_INPUT levels=%u view_base=%u width=%u height=%u colors=red,green,blue bytes=%u",
-            t->mip_levels,PS5VK_MIP_VIEW_BASE,t->width,t->height,t->upload_bytes);
+            "PS5VK_MIPMAP_INPUT levels=%u view_base=%u lod_bias=%d width=%u height=%u colors=red,green,blue bytes=%u",
+            t->mip_levels,PS5VK_MIP_VIEW_BASE,PS5VK_MIP_LOD_BIAS,
+            t->width,t->height,t->upload_bytes);
     } else if(PS5VK_IMAGE_TARGET) {
         const unsigned pixels=t->width*t->height;
         for(unsigned slice=0;slice<t->slices;++slice)
@@ -749,10 +754,17 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         ps5log_printf(PS5LOG_MARK,"PS5VK_TEXTURE_READBACK frame=%u red=%zu green=%zu blue=%zu unexpected=%zu",
             frame,histogram[0],histogram[1],histogram[2],unexpected);
         if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
-            int mip_valid=!unexpected && histogram[0] && histogram[1] && histogram[2];
+            int mip_valid=!unexpected;
+            if(PS5VK_MIP_LOD_BIAS<0)
+                mip_valid=mip_valid && histogram[0]==186624 && !histogram[1] && !histogram[2];
+            else if(PS5VK_MIP_LOD_BIAS>0)
+                mip_valid=mip_valid && !histogram[0] && !histogram[1] && histogram[2]==186624;
+            else
+                mip_valid=mip_valid && histogram[0]==103680 && histogram[1]==62208 && histogram[2]==20736;
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_MIPMAP_READBACK levels=%u red=%zu green=%zu blue=%zu unexpected=%zu valid=%d",
-                texture.mip_levels,histogram[0],histogram[1],histogram[2],unexpected,mip_valid);
+                "PS5VK_MIPMAP_READBACK levels=%u lod_bias=%d red=%zu green=%zu blue=%zu unexpected=%zu valid=%d",
+                texture.mip_levels,PS5VK_MIP_LOD_BIAS,
+                histogram[0],histogram[1],histogram[2],unexpected,mip_valid);
             if(!mip_valid)fail("mipmap-readback",-1);
         }
         if(PS5VK_IMAGE_TARGET) {

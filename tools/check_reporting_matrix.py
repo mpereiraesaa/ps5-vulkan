@@ -263,7 +263,7 @@ KNOWN_BLOCKERS = {
     "maxPerStageDescriptorInputAttachments": "no input attachment support (subpass dependencies rejected)",
     "maxDescriptorSetInputAttachments": "no input attachment support (subpass dependencies rejected)",
     "maxMemoryAllocationCount": "allocator policy: heap size divided by the minimum allocation charge",
-    "maxSamplerLodBias": "vkCreateSampler rejects mipLodBias/minLod/maxLod",
+    "maxSamplerLodBias": "vkCreateSampler encodes and bounds signed mipLodBias to the reported interval",
     "minTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "maxTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "storageImageSampleCounts": "no storage image format is advertised",

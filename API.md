@@ -141,6 +141,8 @@ is advertised only for the twenty-one validated filterable rows. Valid sampled
 images can carry complete mip chains up to the per-type query limit. A
 public-SDK-linked 2D RGBA8 witness uploaded three levels and selected all three
 with runtime-compiled explicit LOD, producing deterministic GPU readback.
+`mipLodBias` is accepted from -2 through +2 and encoded as signed 8.8 sampler
+state; values outside the reported interval and non-finite values fail closed.
 Single-level 1D, 1D-array, 2D-array, cube and 3D view witnesses separately
 supported for the sampled-image role. The implementation encodes the distinct
 GFX1013 resource types, retains layer/depth bounds in the view, and uploads

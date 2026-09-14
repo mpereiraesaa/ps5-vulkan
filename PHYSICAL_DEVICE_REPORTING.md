@@ -81,7 +81,7 @@ case:
 | Attachments: `maxColorAttachments`, `maxFragmentOutputAttachments`, `maxFragmentCombinedOutputResources` | 1 | 4 |
 | Vertex input: `maxVertexInputBindings` | 1 | 16 |
 | Descriptors: `maxPerStageDescriptorSamplers`, `maxPerStageDescriptorSampledImages`, `maxPerStageDescriptorStorageImages`, `maxPerStageDescriptorInputAttachments`, `maxDescriptorSetSamplers`, `maxDescriptorSetSampledImages`, `maxDescriptorSetStorageImages`, `maxDescriptorSetInputAttachments` | 0-1 | 4-96 |
-| Sampling: `maxSamplerLodBias`, color/depth/stencil `sampledImage*SampleCounts`, `framebuffer*SampleCounts`, `storageImageSampleCounts` | 0-1 | 2 / 1+4 |
+| Sampling: color/depth/stencil `sampledImage*SampleCounts`, `framebuffer*SampleCounts`, `storageImageSampleCounts` | 0-1 | 1+4 |
 | Other: `maxMemoryAllocationCount`, `minTexelOffset`, `maxTexelOffset` | 2048 / 0 / 0 | 4096 / -8 / 7 |
 
 The graphics profile now reaches the Vulkan 1.0 floors for 1D, 2D, 3D, cube
@@ -94,6 +94,12 @@ continues to classify those rows as blockers for that separate profile.
 `sampledImageIntegerSampleCounts` now reports `VK_SAMPLE_COUNT_1_BIT` in both
 profiles, matching the typed integer sampled-image table and its native
 readback evidence. Multisampled integer sampling remains unsupported.
+
+The graphics profile reports `maxSamplerLodBias = 2`, the Vulkan 1.0 mandatory
+floor. Sampler creation accepts the closed interval `[-2, 2]`, rejects NaN and
+out-of-range values, and encodes the signed GFX1013 8.8 field without clamping.
+Public-SDK-linked hardware runs qualify both boundaries with deterministic mip
+selection; their identities and strict oracle are recorded in `VALIDATION.md`.
 
 The compute-only profile additionally leaves every graphics-object limit at
 zero because `ps5vk_graphics_limits` is applied only by the graphics build.
