@@ -1,10 +1,14 @@
 import base64
+import contextlib
+import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import re
 import tempfile
 import unittest
+from unittest import mock
 
 from cts.upstream_runner import (
     parse_upstream_log_lines,
@@ -13,6 +17,7 @@ from cts.upstream_runner import (
     verify_run_identity,
     UpstreamVerificationError
 )
+import tools.check_upstream_selection as upstream_selection
 from tools.build_upstream_cts import (
     write_focused_buffer_copy_source,
     write_focused_robust_buffer_source,
@@ -1039,5 +1044,187 @@ void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
         self.assertEqual((dist / "selection_hash.txt").read_text(encoding="utf-8").strip(),
                          expected_hash)
 
-    if __name__ == "__main__":
-        unittest.main()
+
+class TestSamplerBindingModelPromotion(unittest.TestCase):
+    """The three promoted original binding-model combined-sampler cases.
+
+    These leaves became strict acceptance only after their unchanged upstream
+    oracles measured `Pass` twice on one signed artifact.  The promotion is a
+    registration and selection change: no Khronos test body, shader, support
+    check, reference image or result oracle is modified.  The tests below keep
+    the promotion from being dropped, renamed, duplicated or replaced, and keep
+    the strict verifier honest if any of those four edits is made.
+    """
+
+    PROMOTED = {
+        "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind."
+        "combined_image_sampler_mutable.vertex.single_descriptor.2d",
+        "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind."
+        "combined_image_sampler_mutable.fragment.single_descriptor.2d",
+        "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind."
+        "combined_image_sampler_mutable.vertex_fragment.single_descriptor.2d",
+    }
+    PROMOTED_SOURCE = ("external/vulkancts/modules/vulkan/binding_model/"
+                       "vktBindingShaderAccessTests.cpp:9698")
+    UPSTREAM_SOURCE = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                       "modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp")
+
+    @staticmethod
+    def _qpa(paths):
+        blocks = "".join(
+            f"#beginTestCaseResult {path}\n"
+            f'<TestCaseResult CasePath="{path}">\n'
+            '  <Result StatusCode="Pass">Pass</Result>\n'
+            "</TestCaseResult>\n"
+            "#endTestCaseResult\n"
+            for path in paths
+        )
+        return ("#sessionInfo releaseName 1.3.8.4\n#beginSession\n"
+                + blocks + "#endSession\n")
+
+    @staticmethod
+    def _bounded_manifest(paths):
+        return {"cases": [{"path": path} for path in sorted(paths)]}
+
+    @staticmethod
+    def _run_selection_gate(manifest):
+        """Run the frozen-selection gate against a candidate manifest."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with mock.patch.object(upstream_selection, "MANIFEST", path), \
+                    contextlib.redirect_stdout(stdout), \
+                    contextlib.redirect_stderr(stderr):
+                code = upstream_selection.main()
+            return code, stdout.getvalue() + stderr.getvalue()
+
+    def test_promoted_cases_are_strict_acceptance_and_original(self):
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        accepted = {case["path"]: case for case in manifest["cases"]}
+        diagnostics = {case["path"] for case in manifest.get("diagnostics", [])}
+        self.assertEqual(self.PROMOTED, self.PROMOTED & set(accepted))
+        self.assertFalse(self.PROMOTED & diagnostics)
+        for path in sorted(self.PROMOTED):
+            case = accepted[path]
+            self.assertEqual("graphics-sampler", case["category"], path)
+            self.assertEqual("Pass", case["expected_status"], path)
+            self.assertEqual([], case["features_required"], path)
+            self.assertEqual(self.PROMOTED_SOURCE, case["source"], path)
+            self.assertTrue(case["rationale"], path)
+
+        # The integration registers the upstream access-test family wholesale
+        # and the build compiles its module, so selection alone promotes them.
+        integration = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text(
+            encoding="utf-8")
+        builder = (REPO_ROOT / "tools/build_upstream_cts.py").read_text(
+            encoding="utf-8")
+        self.assertIn("createShaderAccessTests", integration)
+        self.assertIn("vktBindingShaderAccessTests.cpp", builder)
+
+        if not self.UPSTREAM_SOURCE.is_file():
+            return
+        text = self.UPSTREAM_SOURCE.read_text(encoding="utf-8")
+        function = _source_function_at_line(text, 9698)
+        self.assertIn("createShaderAccessTests", function)
+        for leaf in ("combined_image_sampler_mutable", "single_descriptor"):
+            self.assertIn(f'"{leaf}"', text)
+        for stage in ("vertex", "fragment", "vertex_fragment"):
+            self.assertIn(f'"{stage}"', text)
+
+    def test_selection_gate_rejects_a_duplicated_promoted_case(self):
+        """A repeated entry is not a larger selection and must fail closed."""
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        duplicated = copy.deepcopy(manifest)
+        duplicated["cases"].append(copy.deepcopy(
+            next(case for case in duplicated["cases"]
+                 if case["path"] in self.PROMOTED)))
+        code, output = self._run_selection_gate(duplicated)
+        self.assertEqual(1, code, output)
+        self.assertIn("selected twice", output)
+        # The same leaf cannot be both acceptance and diagnostic either.
+        conflicted = copy.deepcopy(manifest)
+        conflicted["diagnostics"].append(copy.deepcopy(
+            next(case for case in conflicted["cases"]
+                 if case["path"] in self.PROMOTED)))
+        code, output = self._run_selection_gate(conflicted)
+        self.assertEqual(1, code, output)
+        self.assertIn("selected twice", output)
+
+    def test_selection_gate_rejects_a_renamed_promoted_case(self):
+        """An invented leaf must not be traceable to the pinned factory."""
+        if not upstream_selection.UPSTREAM.is_dir():
+            self.skipTest("pinned vk-gl-cts checkout not present")
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        for suffix in ("vertex", "fragment", "vertex_fragment"):
+            renamed = copy.deepcopy(manifest)
+            original = ("dEQP-VK.binding_model.shader_access.primary_cmd_buf."
+                        "bind.combined_image_sampler_mutable."
+                        f"{suffix}.single_descriptor.2d")
+            replacement = original.replace(
+                "single_descriptor.2d", "single_descriptor.2d_invented")
+            for case in renamed["cases"]:
+                if case["path"] == original:
+                    case["path"] = replacement
+            code, output = self._run_selection_gate(renamed)
+            self.assertEqual(1, code, output)
+            self.assertIn("is not registered in", output)
+
+    def test_selection_gate_rejects_a_replaced_promoted_case(self):
+        """A replacement must still name a group the pinned sources produce."""
+        if not upstream_selection.UPSTREAM.is_dir():
+            self.skipTest("pinned vk-gl-cts checkout not present")
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        for suffix in ("vertex", "fragment", "vertex_fragment"):
+            replaced = copy.deepcopy(manifest)
+            original = ("dEQP-VK.binding_model.shader_access.primary_cmd_buf."
+                        "bind.combined_image_sampler_mutable."
+                        f"{suffix}.single_descriptor.2d")
+            invented = ("dEQP-VK.binding_model.shader_access.primary_cmd_buf."
+                        "bind.combined_image_sampler_invented."
+                        f"{suffix}.single_descriptor.2d")
+            for case in replaced["cases"]:
+                if case["path"] == original:
+                    case["path"] = invented
+            code, output = self._run_selection_gate(replaced)
+            self.assertEqual(1, code, output)
+            self.assertIn("combined_image_sampler_invented", output)
+
+    def test_strict_acceptance_rejects_dropped_renamed_or_duplicated_results(self):
+        """The verifier must reject the same four edits on the measurement side."""
+        bounded = self._bounded_manifest(self.PROMOTED)
+        meta = {"exit_code": 0}
+
+        complete = parse_qpa_results(self._qpa(sorted(self.PROMOTED)))
+        verified = verify_upstream_acceptance(bounded, meta, complete)
+        self.assertTrue(verified["strict_verified"])
+        self.assertEqual(3, verified["pass_count"])
+
+        # Dropping one promotion from the expected set makes its result extra.
+        dropped_path = sorted(self.PROMOTED)[0]
+        dropped = self._bounded_manifest(self.PROMOTED - {dropped_path})
+        verified = verify_upstream_acceptance(dropped, meta, complete)
+        self.assertFalse(verified["strict_verified"])
+        self.assertEqual([dropped_path], verified["unexpected"])
+        self.assertEqual([], verified["missing"])
+
+        # Renaming the reported case loses the expected leaf and adds a stranger.
+        renamed_path = dropped_path + "_renamed"
+        renamed_results = parse_qpa_results(self._qpa(
+            sorted((self.PROMOTED - {dropped_path}) | {renamed_path})))
+        verified = verify_upstream_acceptance(bounded, meta, renamed_results)
+        self.assertFalse(verified["strict_verified"])
+        self.assertEqual([dropped_path], verified["missing"])
+        self.assertEqual([renamed_path], verified["unexpected"])
+
+        # Reporting the same leaf twice is not two passing cases.
+        duplicated_results = parse_qpa_results(self._qpa(
+            sorted(self.PROMOTED) + [dropped_path]))
+        verified = verify_upstream_acceptance(bounded, meta, duplicated_results)
+        self.assertFalse(verified["strict_verified"])
+        self.assertEqual([dropped_path], verified["duplicates"])
+        self.assertEqual(4, verified["total_reported"])
+
+
+if __name__ == "__main__":
+    unittest.main()

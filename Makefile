@@ -1,5 +1,6 @@
 PYTHON ?= python3
 CC ?= cc
+CXX ?= c++
 # Sibling lab projects (ps5-agc-gears, logging_server). The canonical layout has
 # them next to this checkout, so the default is the parent directory; out-of-tree
 # worktrees override LAB_SIBLINGS with the lab's projects directory.
@@ -337,6 +338,9 @@ native-bootstrap:
 # Host-only contract checks for the upstream CTS selection and verifier. These
 # never require the console, so CI can run them.
 check-upstream-cts:
+	mkdir -p build/tests
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -I$(LAB_SIBLINGS)/logging_server/client cts/upstream/log_sink_ps5.cpp tests/test_qpa_sink.cpp -Wl,--wrap=fopen,--wrap=fprintf,--wrap=fputs,--wrap=fputc,--wrap=fwrite,--wrap=fseek,--wrap=fflush,--wrap=fclose -o build/tests/test_qpa_sink
+	./build/tests/test_qpa_sink
 	$(PYTHON) tools/check_upstream_selection.py
 	$(PYTHON) -m unittest tests.test_upstream_runner tests.test_upstream_run_orchestrator -v
 upstream-cts:

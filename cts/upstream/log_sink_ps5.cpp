@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <pthread.h>
+#include <errno.h>
+#include <stdarg.h>
 #include <stdint.h>
+#include <sys/types.h>
 #include "ps5log.h"
 
 namespace
@@ -155,53 +156,130 @@ static void base64_encode(const uint8_t *in, size_t in_len, char *out)
     out[j] = '\0';
 }
 
-/* Pipe sink state */
-static int s_pipe_fds[2] = { -1, -1 };
-static pthread_t s_pump_thread;
-static int s_pump_active = 0;
+enum
+{
+    QPA_RAW_CHUNK_BYTES = 384,
+    QPA_BASE64_BYTES = 516,
+    QPA_FORMAT_STACK_BYTES = 2048,
+    QPA_FORMAT_MAX_BYTES = 1024 * 1024
+};
+
+typedef struct
+{
+    uint8_t pending[QPA_RAW_CHUNK_BYTES];
+    size_t pending_bytes;
+    size_t chunk_seq;
+    size_t total_bytes;
+    SHA256_CTX sha;
+    int open_seen;
+    int active;
+    int completed;
+    int failed;
+} QpaSink;
+
+static QpaSink s_sink;
 
 static char s_run_id[64] = "unknown";
 static char s_selection_hash[65] = "0";
 static char s_eboot_sha256[65] = "0";
 
-void *qpa_pump_worker(void *arg)
+static int emit_chunk(const uint8_t *data, size_t size)
 {
-    (void)arg;
-    uint8_t raw_buf[384];
-    char b64_buf[516];
-    size_t chunk_seq = 0;
-    size_t total_bytes = 0;
+    char b64_buf[QPA_BASE64_BYTES];
+    base64_encode(data, size, b64_buf);
+    if (ps5log_printf("QPA", "CHUNK seq=%zu size=%zu data=%s",
+                      s_sink.chunk_seq, size, b64_buf) != 0)
+        return -1;
 
-    SHA256_CTX sha_ctx;
-    sha256_init(&sha_ctx);
+    sha256_update(&s_sink.sha, data, size);
+    s_sink.chunk_seq++;
+    s_sink.total_bytes += size;
+    return 0;
+}
 
-    ps5log_printf("MARK", "UPSTREAM_CTS_START run_id=%s selection_hash=%s eboot_sha256=%s",
-                  s_run_id, s_selection_hash, s_eboot_sha256);
+static ssize_t qpa_sink_write(const char *data, size_t size)
+{
+    QpaSink *sink = &s_sink;
+    size_t consumed = 0;
 
-    ssize_t n;
-    while ((n = read(s_pipe_fds[0], raw_buf, sizeof(raw_buf))) > 0)
+    if ((!data && size != 0) || !sink->active || sink->completed || sink->failed)
     {
-        sha256_update(&sha_ctx, raw_buf, (size_t)n);
-        base64_encode(raw_buf, (size_t)n, b64_buf);
-        ps5log_printf("QPA", "CHUNK seq=%zu size=%zu data=%s", chunk_seq++, (size_t)n, b64_buf);
-        total_bytes += (size_t)n;
+        errno = EIO;
+        return -1;
     }
 
-    close(s_pipe_fds[0]);
-    s_pipe_fds[0] = -1;
+    while (consumed < size)
+    {
+        size_t available = QPA_RAW_CHUNK_BYTES - sink->pending_bytes;
+        size_t take = size - consumed;
+        if (take > available)
+            take = available;
+
+        memcpy(sink->pending + sink->pending_bytes, data + consumed, take);
+        sink->pending_bytes += take;
+        consumed += take;
+
+        if (sink->pending_bytes == QPA_RAW_CHUNK_BYTES)
+        {
+            if (emit_chunk(sink->pending, sink->pending_bytes) != 0)
+            {
+                sink->failed = 1;
+                errno = EIO;
+                return -1;
+            }
+            sink->pending_bytes = 0;
+        }
+    }
+
+    return (ssize_t)size;
+}
+
+static int qpa_sink_close(void)
+{
+    QpaSink *sink = &s_sink;
+    if (!sink->active || sink->completed)
+    {
+        errno = EIO;
+        return -1;
+    }
+
+    if (!sink->failed && sink->pending_bytes > 0)
+    {
+        if (emit_chunk(sink->pending, sink->pending_bytes) != 0)
+            sink->failed = 1;
+        sink->pending_bytes = 0;
+    }
+
+    sink->active = 0;
+    sink->completed = 1;
+    if (sink->failed)
+    {
+        errno = EIO;
+        return -1;
+    }
 
     uint8_t hash[32];
-    sha256_final(&sha_ctx, hash);
+    sha256_final(&sink->sha, hash);
 
     char hash_hex[65];
     for (int i = 0; i < 32; i++)
         snprintf(hash_hex + (i * 2), 3, "%02x", hash[i]);
     hash_hex[64] = '\0';
 
-    ps5log_printf("MARK", "UPSTREAM_CTS_END chunks=%zu total_bytes=%zu sha256=%s",
-                  chunk_seq, total_bytes, hash_hex);
+    if (ps5log_printf("MARK", "UPSTREAM_CTS_END chunks=%zu total_bytes=%zu sha256=%s",
+                      sink->chunk_seq, sink->total_bytes, hash_hex) != 0)
+    {
+        sink->failed = 1;
+        errno = EIO;
+        return -1;
+    }
 
-    return NULL;
+    return 0;
+}
+
+static int is_qpa_stream(FILE *stream)
+{
+    return stream == (FILE *)&s_sink;
 }
 
 } // anonymous namespace
@@ -210,48 +288,204 @@ extern "C" {
 
 void cts_qpa_sink_init(const char *run_id, const char *selection_hash, const char *eboot_sha256)
 {
-    if (run_id) strncpy(s_run_id, run_id, sizeof(s_run_id) - 1);
-    if (selection_hash) strncpy(s_selection_hash, selection_hash, sizeof(s_selection_hash) - 1);
-    if (eboot_sha256) strncpy(s_eboot_sha256, eboot_sha256, sizeof(s_eboot_sha256) - 1);
-}
+    memset(&s_sink, 0, sizeof(s_sink));
+    sha256_init(&s_sink.sha);
 
-void cts_qpa_sink_wait_completion(void)
-{
-    if (s_pump_active)
+    strcpy(s_run_id, "unknown");
+    strcpy(s_selection_hash, "0");
+    strcpy(s_eboot_sha256, "0");
+
+    if (run_id)
     {
-        pthread_join(s_pump_thread, NULL);
-        s_pump_active = 0;
+        strncpy(s_run_id, run_id, sizeof(s_run_id) - 1);
+        s_run_id[sizeof(s_run_id) - 1] = '\0';
+    }
+    if (selection_hash)
+    {
+        strncpy(s_selection_hash, selection_hash, sizeof(s_selection_hash) - 1);
+        s_selection_hash[sizeof(s_selection_hash) - 1] = '\0';
+    }
+    if (eboot_sha256)
+    {
+        strncpy(s_eboot_sha256, eboot_sha256, sizeof(s_eboot_sha256) - 1);
+        s_eboot_sha256[sizeof(s_eboot_sha256) - 1] = '\0';
     }
 }
 
+int cts_qpa_sink_wait_completion(void)
+{
+    if (!s_sink.completed || s_sink.failed)
+    {
+        ps5log_printf("ERR", "QPA sink incomplete completed=%d failed=%d bytes=%zu chunks=%zu",
+                      s_sink.completed, s_sink.failed,
+                      s_sink.total_bytes, s_sink.chunk_seq);
+        return -1;
+    }
+    return 0;
+}
+
 FILE *__real_fopen(const char *path, const char *mode);
+int __real_fputs(const char *text, FILE *stream);
+int __real_fputc(int character, FILE *stream);
+size_t __real_fwrite(const void *data, size_t size, size_t count, FILE *stream);
+int __real_fseek(FILE *stream, long offset, int origin);
+int __real_fflush(FILE *stream);
+int __real_fclose(FILE *stream);
 
 FILE *__wrap_fopen(const char *path, const char *mode)
 {
     if (path && (strstr(path, ".qpa") != NULL || strcmp(path, "TestResults.qpa") == 0))
     {
-        if (pipe(s_pipe_fds) != 0)
+        if (s_sink.open_seen || s_sink.active)
         {
-            ps5log_printf("ERR", "Failed to create QPA pipe");
+            errno = EBUSY;
+            ps5log_printf("ERR", "QPA sink rejects a second log stream");
             return NULL;
         }
 
-        s_pump_active = 1;
-        if (pthread_create(&s_pump_thread, NULL, qpa_pump_worker, NULL) != 0)
+        (void)mode;
+        s_sink.open_seen = 1;
+        s_sink.active = 1;
+
+        if (ps5log_printf("MARK", "UPSTREAM_CTS_START run_id=%s selection_hash=%s eboot_sha256=%s",
+                          s_run_id, s_selection_hash, s_eboot_sha256) != 0)
         {
-            ps5log_printf("ERR", "Failed to create QPA pump thread");
-            close(s_pipe_fds[0]);
-            close(s_pipe_fds[1]);
-            s_pipe_fds[0] = s_pipe_fds[1] = -1;
-            s_pump_active = 0;
+            s_sink.failed = 1;
+            s_sink.active = 0;
+            s_sink.completed = 1;
+            errno = EIO;
             return NULL;
         }
 
-        FILE *f = fdopen(s_pipe_fds[1], mode);
-        return f;
+        return (FILE *)&s_sink;
     }
 
     return __real_fopen(path, mode);
+}
+
+int __wrap_fprintf(FILE *stream, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+
+    if (!is_qpa_stream(stream))
+    {
+        const int result = vfprintf(stream, format, args);
+        va_end(args);
+        return result;
+    }
+
+    char stack[QPA_FORMAT_STACK_BYTES];
+    va_list measure;
+    va_copy(measure, args);
+    const int required = vsnprintf(stack, sizeof(stack), format, measure);
+    va_end(measure);
+    if (required < 0 || required > QPA_FORMAT_MAX_BYTES)
+    {
+        va_end(args);
+        s_sink.failed = 1;
+        errno = required < 0 ? EIO : EOVERFLOW;
+        return -1;
+    }
+
+    char *text = stack;
+    if ((size_t)required >= sizeof(stack))
+    {
+        text = (char *)malloc((size_t)required + 1);
+        if (!text)
+        {
+            va_end(args);
+            s_sink.failed = 1;
+            errno = ENOMEM;
+            return -1;
+        }
+        if (vsnprintf(text, (size_t)required + 1, format, args) != required)
+        {
+            free(text);
+            va_end(args);
+            s_sink.failed = 1;
+            errno = EIO;
+            return -1;
+        }
+    }
+    va_end(args);
+
+    const ssize_t written = qpa_sink_write(text, (size_t)required);
+    if (text != stack)
+        free(text);
+    return written == required ? required : -1;
+}
+
+int __wrap_fputs(const char *text, FILE *stream)
+{
+    if (!is_qpa_stream(stream))
+        return __real_fputs(text, stream);
+    if (!text)
+    {
+        s_sink.failed = 1;
+        errno = EINVAL;
+        return EOF;
+    }
+    return qpa_sink_write(text, strlen(text)) < 0 ? EOF : 0;
+}
+
+int __wrap_fputc(int character, FILE *stream)
+{
+    if (!is_qpa_stream(stream))
+        return __real_fputc(character, stream);
+    const unsigned char byte = (unsigned char)character;
+    return qpa_sink_write((const char *)&byte, 1) == 1 ? byte : EOF;
+}
+
+size_t __wrap_fwrite(const void *data, size_t size, size_t count, FILE *stream)
+{
+    if (!is_qpa_stream(stream))
+        return __real_fwrite(data, size, count, stream);
+    if (size != 0 && count > SIZE_MAX / size)
+    {
+        s_sink.failed = 1;
+        errno = EOVERFLOW;
+        return 0;
+    }
+    const size_t bytes = size * count;
+    if (bytes > QPA_FORMAT_MAX_BYTES)
+    {
+        s_sink.failed = 1;
+        errno = EOVERFLOW;
+        return 0;
+    }
+    return qpa_sink_write((const char *)data, bytes) == (ssize_t)bytes ? count : 0;
+}
+
+int __wrap_fseek(FILE *stream, long offset, int origin)
+{
+    if (!is_qpa_stream(stream))
+        return __real_fseek(stream, offset, origin);
+
+    // qpTestLogWriteRaw() seeks to the end solely to preserve append order.
+    // The synchronous sink is intrinsically append-only, so this exact form
+    // is a no-op; every other seek is rejected rather than invented.
+    if (offset != 0 || origin != SEEK_END || !s_sink.active || s_sink.failed)
+    {
+        s_sink.failed = 1;
+        errno = EINVAL;
+        return -1;
+    }
+    return 0;
+}
+
+int __wrap_fflush(FILE *stream)
+{
+    if (!is_qpa_stream(stream))
+        return __real_fflush(stream);
+    return s_sink.active && !s_sink.failed ? 0 : EOF;
+}
+
+int __wrap_fclose(FILE *stream)
+{
+    if (!is_qpa_stream(stream))
+        return __real_fclose(stream);
+    return qpa_sink_close();
 }
 
 } // extern "C"

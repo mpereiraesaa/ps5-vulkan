@@ -201,6 +201,29 @@ def _copy_and_blit_simple_image_leaf_names(function_text: str) -> set[str]:
     }
 
 
+def _duplicate_selection_failures(manifest: dict) -> list[str]:
+    """Reject a selection that names the same upstream case more than once.
+
+    A repeated path is not a larger selection.  The packaged case list is
+    generated one line per manifest entry, so a duplicate would make the
+    payload execute the same leaf twice, inflate the reported case count and
+    could hide a case that was dropped in the same edit.  The invariant only
+    reads the manifest, so it is enforced even when the pinned upstream
+    checkout is unavailable.
+    """
+    failures = []
+    seen: dict[str, str] = {}
+    for label, key in (("acceptance", "cases"), ("diagnostic", "diagnostics")):
+        for case in manifest.get(key, []):
+            path = case["path"]
+            if path in seen:
+                failures.append(
+                    f"{path}: selected twice ({seen[path]} and {label})")
+            else:
+                seen[path] = label
+    return failures
+
+
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     # Diagnostics are frozen upstream cases that are executed but are known not
@@ -208,11 +231,18 @@ def main() -> int:
     # cases so that a failing case cannot be relabelled from an invented name.
     cases = manifest["cases"] + manifest.get("diagnostics", [])
 
+    duplicate_failures = _duplicate_selection_failures(manifest)
+
     if not UPSTREAM.is_dir():
+        if duplicate_failures:
+            print("upstream selection check failed:", file=sys.stderr)
+            for failure in duplicate_failures:
+                print(f"  {failure}", file=sys.stderr)
+            return 1
         print("upstream vk-gl-cts checkout not present; selection check skipped")
         return 0
 
-    failures = []
+    failures = list(duplicate_failures)
     integration_text = INTEGRATION_SOURCE.read_text(encoding="utf-8")
 
     for case in cases:
