@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 
-#define PS5VK_SAMPLED_FORMAT_CASES 9u
+#define PS5VK_SAMPLED_FORMAT_CASES 20u
 
 struct ps5vk_sampled_format_case {
     const char *name;

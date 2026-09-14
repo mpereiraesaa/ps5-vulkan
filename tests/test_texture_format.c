@@ -22,10 +22,18 @@ int main(void)
     assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8B8A8_SRGB));
     const VkFormat added[]={VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,
         VK_FORMAT_R8G8B8A8_SNORM,VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
-        VK_FORMAT_R16G16B16A16_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT};
+        VK_FORMAT_R16G16B16A16_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT};
     const uint32_t words[]={0x00200000u,0x00f00000u,0x03900000u,
-        0x08400000u,0x04700000u,0x04d00000u};
-    const unsigned sizes[]={1,2,4,4,8,16};
+        0x08400000u,0x04700000u,0x04d00000u,0x02400000u,
+        0x00700000u,0x00800000u,0x00d00000u,
+        0x01700000u,0x01800000u,0x01d00000u,
+        0x04100000u,0x04200000u,0x01600000u,0x04000000u};
+    const unsigned sizes[]={1,2,4,4,8,16,4,2,2,2,4,4,4,8,8,4,8};
     for(unsigned i=0;i<sizeof(added)/sizeof(added[0]);++i) {
         const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(added[i]);
         assert(entry && entry->validated && !entry->linear_filter_validated &&
@@ -35,5 +43,9 @@ int main(void)
         ps5vk_texture_format_lookup(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32);
     assert(rgb9e5->selectors[0]==4 && rgb9e5->selectors[1]==5 &&
         rgb9e5->selectors[2]==6 && rgb9e5->selectors[3]==1);
+    const struct ps5vk_texture_format *rg32=
+        ps5vk_texture_format_lookup(VK_FORMAT_R32G32_SFLOAT);
+    assert(rg32->selectors[0]==4 && rg32->selectors[1]==5 &&
+        rg32->selectors[2]==0 && rg32->selectors[3]==1);
     assert(!ps5vk_texture_format_lookup(VK_FORMAT_B8G8R8A8_UNORM));
 }

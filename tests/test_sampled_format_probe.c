@@ -22,6 +22,12 @@ int main(void)
     assert(!ps5vk_sampled_format_case(8,&c));
     assert(c.format==VK_FORMAT_R32G32B32A32_SFLOAT && c.bytes_per_texel==16 &&
         c.texel[3]==0x3f && c.texel[15]==0x3f);
+    assert(!ps5vk_sampled_format_case(9,&c));
+    assert(c.format==VK_FORMAT_R16_UNORM && c.bytes_per_texel==2 &&
+        c.texel[1]==0x80 && c.expected_bgra==0xff800000u);
+    assert(!ps5vk_sampled_format_case(19,&c));
+    assert(c.format==VK_FORMAT_B10G11R11_UFLOAT_PACK32 && c.bytes_per_texel==4 &&
+        c.texel[0]==0x80 && c.texel[3]==0x60 && c.expected_bgra==0xff804020u);
     assert(ps5vk_sampled_format_case(PS5VK_SAMPLED_FORMAT_CASES,&c));
     assert(ps5vk_sampled_format_case(0,0));
 }

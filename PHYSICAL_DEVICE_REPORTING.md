@@ -148,12 +148,18 @@ at 1-, 3-, 4- and 32-byte ranges. Two exact 106/106 native runs passed that
 combined selection. This evidence does not silently generalize to unselected
 vector, format or vertex-fetch cases.
 
-The current graphics format matrix is deliberately small:
+The current graphics format matrix remains deliberately bounded:
 
 | Format | Reported feature |
 | --- | --- |
 | `B8G8R8A8_UNORM` | optimal color attachment |
-| `R8G8B8A8_UNORM` | optimal sampled image |
+| `R8_UNORM`, `R8_SNORM`, `R8G8_UNORM`, `R8G8_SNORM` | optimal sampled image and transfer destination |
+| `R8G8B8A8_UNORM` | optimal sampled image, linear filtering, color attachment and transfer source/destination |
+| `R8G8B8A8_SNORM`, `R8G8B8A8_SRGB` | optimal sampled image and transfer destination |
+| `E5B9G9R9_UFLOAT_PACK32`, `B10G11R11_UFLOAT_PACK32` | optimal sampled image and transfer destination |
+| `R16_UNORM`, `R16_SNORM`, `R16_SFLOAT`, `R16G16_UNORM`, `R16G16_SNORM`, `R16G16_SFLOAT` | optimal sampled image and transfer destination; vertex-buffer support also applies where independently listed by the vertex table |
+| `R16G16B16A16_UNORM`, `R16G16B16A16_SNORM`, `R16G16B16A16_SFLOAT` | optimal sampled image and transfer destination; vertex-buffer support also applies where independently listed by the vertex table |
+| `R32_SFLOAT`, `R32G32_SFLOAT`, `R32G32B32A32_SFLOAT` | optimal sampled image and transfer destination; vertex-buffer support also applies |
 | `D32_SFLOAT` | optimal depth/stencil attachment |
 | `R32_SFLOAT` | vertex buffer and uniform texel buffer |
 | `R32_SINT`, `R32_UINT` | uniform texel buffer |

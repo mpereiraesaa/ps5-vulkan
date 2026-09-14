@@ -242,7 +242,11 @@ static void lifecycle(void)
         VK_FORMAT_D32_SFLOAT,VK_FORMAT_R8_UNORM,VK_FORMAT_R8G8_UNORM,VK_FORMAT_R8G8B8A8_SRGB,
         VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8B8A8_SNORM,
         VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,VK_FORMAT_R16G16B16A16_SFLOAT,
-        VK_FORMAT_R32G32B32A32_SFLOAT};
+        VK_FORMAT_R32G32B32A32_SFLOAT,VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT};
     for(unsigned f=0;f<sizeof(image_formats)/sizeof(image_formats[0]);++f)
     for(unsigned usage=0;usage<256;++usage) {
         memset(&ip,0xff,sizeof(ip));
@@ -269,28 +273,36 @@ static void lifecycle(void)
         VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT,
         VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8B8A8_SNORM,
         VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,VK_FORMAT_R16G16B16A16_SFLOAT,
-        VK_FORMAT_R32G32B32A32_SFLOAT};
-    const VkFormatFeatureFlags bits[] = {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
-            VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT, 0,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
+        VK_FORMAT_R32G32B32A32_SFLOAT,VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT};
     for (unsigned n=0; n<sizeof(formats)/sizeof(formats[0]); ++n) {
         memset(&fp, 0xff, sizeof(fp));
         vkGetPhysicalDeviceFormatProperties(p, formats[n], &fp);
         VkFormatFeatureFlags buffer_bits=ps5vk_vertex_format_size(formats[n])?
             VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
+        if(formats[n]==VK_FORMAT_R32_SFLOAT)
+            buffer_bits|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
+        VkFormatFeatureFlags optimal_bits=0;
+        const struct ps5vk_texture_format *sampled=
+            ps5vk_texture_format_lookup(formats[n]);
+        if(sampled && sampled->validated) {
+            optimal_bits=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+            if(sampled->linear_filter_validated)
+                optimal_bits|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        }
+        if(formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
+            optimal_bits=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+        else if(formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
+            optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+        else if(formats[n]==VK_FORMAT_D32_SFLOAT)
+            optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
         assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
-            fp.optimalTilingFeatures==bits[n]);
+            fp.optimalTilingFeatures==optimal_bits);
     }
     p->platform.queue_flags=VK_QUEUE_GRAPHICS_BIT;
     const VkFormat vertex_formats[]={VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT,
@@ -308,22 +320,25 @@ static void lifecycle(void)
               vertex_formats[n]==VK_FORMAT_R32_UINT)?VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT:0);
         assert(fp.bufferFeatures==expected);
         assert(!fp.linearTilingFeatures);
+        VkFormatFeatureFlags expected_optimal=0;
+        const struct ps5vk_texture_format *sampled=
+            ps5vk_texture_format_lookup(vertex_formats[n]);
+        if(sampled && sampled->validated) {
+            expected_optimal=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+            if(sampled->linear_filter_validated)
+                expected_optimal|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        }
         if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
-            assert(fp.optimalTilingFeatures==(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-                VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
-                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_DST_BIT));
+            expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
-            assert(fp.optimalTilingFeatures==VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
-        else if(vertex_formats[n]==VK_FORMAT_R32G32B32A32_SFLOAT)
-            assert(fp.optimalTilingFeatures==(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_DST_BIT));
-        else assert(!fp.optimalTilingFeatures);
+            expected_optimal=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+        assert(fp.optimalTilingFeatures==expected_optimal);
         assert(ps5vk_vertex_format_size(vertex_formats[n])==(n<12?4*((n%4)+1):4));
         VkResult image_result=vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip);
-        if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM ||
-           vertex_formats[n]==VK_FORMAT_R32G32B32A32_SFLOAT)
+        if(sampled && sampled->validated)
             assert(image_result==VK_SUCCESS);
         else assert(image_result==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }

@@ -40,7 +40,7 @@ class SampledFormatVerifier(unittest.TestCase):
 
     def test_accepts_complete_gpu_witness(self):
         result = validate(*self.fixture())
-        self.assertEqual(result["cases"], 9)
+        self.assertEqual(result["cases"], 20)
         self.assertEqual(result["formats"], [case[0] for case in CASES])
 
     def test_rejects_wrong_srgb_decode(self):

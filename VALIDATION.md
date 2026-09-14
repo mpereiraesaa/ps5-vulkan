@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 60 mandatory format-feature cells satisfied
-with 602 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 64 mandatory format-feature cells satisfied
+with 598 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -601,8 +601,8 @@ the additional formats below or Vulkan conformance.
 ### GPL texture formats promoted by hardware evidence
 
 The sampled-format table derived from the exact GPLv3 `ps5-opengl` revision
-pinned in `LICENSING.md` now publicly supports ten formats spanning UNORM,
-SNORM, sRGB, shared-exponent and 16/32-bit float texels. Texture layout and
+pinned in `LICENSING.md` now publicly supports twenty formats spanning UNORM,
+SNORM, sRGB, packed/shared-exponent and 16/32-bit float texels. Texture layout and
 buffer-upload planning use each format's 1/2/4/8/16-byte texel width rather
 than assuming four bytes.
 
@@ -642,6 +642,28 @@ caught and corrected a Vulkan-specific semantic difference from the source
 OpenGL table: a format without alpha must select constant one rather than a
 nonexistent W component. Close Game stopped the exact title in 100 ms after
 each run. Linear filtering remains advertised only for RGBA8 UNORM.
+
+A third GPL-derived tranche promoted eleven further rows from the pinned Mesa
+GFX10 format table: `R16_UNORM`, `R16_SNORM`, `R16_SFLOAT`, `R16G16_UNORM`,
+`R16G16_SNORM`, `R16G16_SFLOAT`, `R16G16B16A16_UNORM`,
+`R16G16B16A16_SNORM`, `R32_SFLOAT`, `R32G32_SFLOAT` and
+`B10G11R11_UFLOAT_PACK32`. Together with the previous nine cases this forms
+the twenty-format executable probe. Two launches used byte-identical SELF
+SHA-256 `db6983e64ee8a5d016641e8e5d227fbab39421699f7377debd519fd905298b9b`:
+
+- `20260914T013155992Z_PPSA99994_ps5vk_0x6a25639cbe9a`, log SHA-256
+  `7299f83bed5adde02dc0c34cfda99f803a32c32ebf0717c3f82fb0540be013aa`
+- `20260914T013250320Z_PPSA99994_ps5vk_0x6a3209ca7d20`, log SHA-256
+  `a0c7564384c20616b14cc6748ee3d1752a7de007914a7864dad2d79796f1a47d`
+
+Each complete 6,792-record `ps5log/1` stream executed all twenty cases with
+exact format identity and texel width, 373,248 expected pixels and zero other
+pixels per case, plus pre/post compute regressions. Both runs ended with BYE,
+zero retained native allocations and exact-title Close Game in 100 ms. The
+new reporting removes four mandatory sampled-image blockers; normalized and
+floating-point rows whose sampled-image bit is not independently mandatory do
+not inflate that count. Filtering beyond the separately validated RGBA8 UNORM
+path, mip chains and broader image combinations remain unadvertised.
 
 ### GPL integer and packed UNORM vertex formats promoted by hardware evidence
 
@@ -741,7 +763,7 @@ ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
 reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
-blockers and 674 blockers overall.
+blockers and 670 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs
