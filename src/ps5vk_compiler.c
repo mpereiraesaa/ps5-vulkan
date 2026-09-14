@@ -54,6 +54,8 @@ VkResult ps5vk_runtime_compile_compute_features(
     opts.optimise = true;
     opts.address32_hi = 2;
     opts.force_indirect_push_constants = layout->push_constant_size != 0;
+    /* EXPERIMENT: ask the compiler for honest static descriptor use. */
+    opts.static_descriptor_use = true;
     if (feature_mask & ~(PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                          PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
                          PS5VK_FEATURE_ROBUST_BUFFER_ACCESS))
@@ -86,7 +88,10 @@ VkResult ps5vk_runtime_compile_compute_features(
     if (layout->set_count > PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Every Vulkan set remains a distinct RADV table. Offsets are local to a
-     * set, while the compiler metadata identifies its direct user-SGPR slot. */
+     * set, while the compiler metadata identifies its direct user-SGPR slot.
+     * The layout only declares the canonical offsets here; which of these
+     * bindings become a requirement is decided from the compiled metadata. */
+    uint32_t declared_descriptor_count = 0;
     for (uint32_t set = 0; set < layout->set_count; ++set) {
         const struct ps5vk_set_signature *sig = &layout->sets[set];
         for (uint32_t b = 0; b < PS5VK_MAX_BINDINGS; b++) {
@@ -102,7 +107,7 @@ VkResult ps5vk_runtime_compile_compute_features(
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 }
                 if (opts.descriptor_binding_count == PSBC_MAX_DESCRIPTOR_BINDINGS ||
-                    sig->binding[b].count > PS5VK_MAX_DESCRIPTORS-out_program->descriptor_count)
+                    sig->binding[b].count > PS5VK_MAX_DESCRIPTORS-declared_descriptor_count)
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 uint32_t idx = opts.descriptor_binding_count++;
                 opts.descriptor_bindings[idx].set = set;
@@ -111,13 +116,7 @@ VkResult ps5vk_runtime_compile_compute_features(
                 opts.descriptor_bindings[idx].array_size = sig->binding[b].count;
                 opts.descriptor_bindings[idx].offset = sig->binding[b].first * 16;
                 opts.descriptor_bindings[idx].stride = 16;
-                for (uint32_t element=0;element<sig->binding[b].count;++element) {
-                    struct ps5vk_program_descriptor *desc =
-                        &out_program->descriptors[out_program->descriptor_count++];
-                    desc->set=set;desc->binding=b;desc->element=element;
-                    desc->table_dword=(sig->binding[b].first+element)*4;
-                    desc->type=sig->type[b];
-                }
+                declared_descriptor_count += sig->binding[b].count;
             }
         }
     }
@@ -150,9 +149,18 @@ VkResult ps5vk_runtime_compile_compute_features(
     uint32_t expected_set_mask=0;
     for(uint32_t i=0;i<opts.descriptor_binding_count;++i)
         expected_set_mask|=1u<<opts.descriptor_bindings[i].set;
+    /* A layout is a declaration, not evidence of use: only the sets and
+     * bindings the optimized NIR dereferences become requirements. */
+    uint32_t used_set_mask=0;
+    for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
+        if(out.metadata.descriptor_set_valid[set])used_set_mask|=1u<<set;
+    if(used_set_mask&~expected_set_mask) {
+        psbc_free_output(&out);
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     uint32_t direct_set_count=0;
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
-        direct_set_count+=(expected_set_mask>>set)&1u;
+        direct_set_count+=(used_set_mask>>set)&1u;
     uint32_t base_user_sgprs=2+direct_set_count;
     VkBool32 expects_push = layout->push_constant_size != 0;
     if (expects_push) ++base_user_sgprs;
@@ -164,7 +172,7 @@ VkResult ps5vk_runtime_compile_compute_features(
         return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) {
-        VkBool32 expected=(expected_set_mask&(1u<<set))!=0;
+        VkBool32 expected=(used_set_mask&(1u<<set))!=0;
         if(out.metadata.descriptor_set_valid[set]!=expected ||
            (expected && out.metadata.descriptor_set_user_data_dword[set]>=user_sgprs)) {
             psbc_free_output(&out);return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -183,6 +191,31 @@ VkResult ps5vk_runtime_compile_compute_features(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(code, out.machine_code, out.machine_code_size);
+
+    /* Keep only the descriptors the compiled stage really dereferences. A used
+     * set whose binding the compiler could not name keeps its whole
+     * declaration, so an unknown entry can never be treated as unused. */
+    out_program->descriptor_count = 0;
+    for (uint32_t set = 0; set < layout->set_count; ++set) {
+        if (!(used_set_mask & (1u << set))) continue;
+        const uint64_t named = out.metadata.descriptor_used_binding_mask[set];
+        const struct ps5vk_set_signature *sig = &layout->sets[set];
+        for (uint32_t b = 0; b < PS5VK_MAX_BINDINGS; ++b) {
+            const struct ps5vk_binding *binding = &sig->binding[b];
+            if (!binding->count || !(binding->stages & VK_SHADER_STAGE_COMPUTE_BIT) ||
+                (named && !(named & (UINT64_C(1) << b))))
+                continue;
+            for (uint32_t element = 0; element < binding->count; ++element) {
+                struct ps5vk_program_descriptor *desc =
+                    &out_program->descriptors[out_program->descriptor_count++];
+                desc->set = set;
+                desc->binding = b;
+                desc->element = element;
+                desc->table_dword = (binding->first + element) * 4;
+                desc->type = sig->type[b];
+            }
+        }
+    }
 
     out_program->spirv = spirv;
     out_program->spirv_words = spirv_words;
@@ -204,7 +237,7 @@ VkResult ps5vk_runtime_compile_compute_features(
     out_program->grid_size_sgpr = user_sgprs == base_user_sgprs+3 ? base_user_sgprs : 0;
     out_program->push_constant_size = out.metadata.push_constant_size;
     out_program->push_constant_sgpr = out.metadata.push_constants_user_data_dword;
-    out_program->descriptor_set_mask=expected_set_mask;
+    out_program->descriptor_set_mask=used_set_mask;
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
         out_program->descriptor_set_sgpr[set]=out.metadata.descriptor_set_user_data_dword[set];
     out_program->lds_size = lds_size;

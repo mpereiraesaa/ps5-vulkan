@@ -105,6 +105,8 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         abi.fragment_descriptor_valid[s]=f->descriptor_set_valid[s];
         abi.vertex_descriptor_slot[s]=v->descriptor_set_user_data_dword[s];
         abi.fragment_descriptor_slot[s]=f->descriptor_set_user_data_dword[s];
+        abi.vertex_used_bindings[s]=v->descriptor_used_binding_mask[s];
+        abi.fragment_used_bindings[s]=f->descriptor_used_binding_mask[s];
         if(abi.vertex_descriptor_valid[s] || abi.fragment_descriptor_valid[s])tables[s]=16*(s+1);
     }
     uint32_t vertex[16],pixel[16];

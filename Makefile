@@ -241,6 +241,10 @@ check:
 	./build/tests/test_descriptor_encode
 	$(PYTHON) tools/prepare_vulkan_headers.py --check
 	$(PYTHON) tools/check_command_surface.py --check
+	# Build the reporting fixture before Python discovery: reporting-matrix
+	# regression tests invoke the checker in process and must not skip for a
+	# fixture that this same target only planned to create later.
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tools/dump_device_reporting.c -o build/tests/dump_device_reporting
 	$(PYTHON) -m unittest discover -s tests -v
 	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include tests/test_submit_suspend.c -o build/tests/test_submit_suspend
 	./build/tests/test_submit_suspend
@@ -263,7 +267,6 @@ check:
 	./build/tests/test_vk_device
 	# Reporting audit: dump what the public query paths report and check it
 	# against the pinned specification tables and the pinned CTS consumer rules.
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tools/dump_device_reporting.c -o build/tests/dump_device_reporting
 	$(PYTHON) tools/check_reporting_matrix.py --check
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_pipeline_cache.c -o build/tests/test_pipeline_cache
 	./build/tests/test_pipeline_cache

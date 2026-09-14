@@ -22,7 +22,16 @@ enum {
      * Compiler, pair preparation and draw-state gates require word 0x2d. */
     PS5VK_SUBPIXEL_BITS = 8,
     /* Software object budget, not a measured hardware sampler limit. */
-    PS5VK_MAX_SAMPLERS = 4096
+    PS5VK_MAX_SAMPLERS = 4096,
+    /* Sampled-descriptor minima this frontend actually reaches. They are the
+     * single source for the four reported values below and for the matching
+     * profile validation, so the report cannot drift from the contract it was
+     * qualified against. Evidence: VALIDATION.md records 96 combined image
+     * samplers inside one set, and 96 across four sets from one stage. The
+     * implemented capacity of one set and of one stage is PS5VK_MAX_DESCRIPTORS
+     * records (vk_descriptor.h), which is what the validation bounds. */
+    PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS = 16,
+    PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS = 96
 };
 /* Diagnostic consumers ask whether their workload fits, not whether a device
  * still reports the historical ceiling. Hardware-limit policy lives below. */
@@ -44,13 +53,16 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxColorAttachments=1;
     limits->maxFragmentOutputAttachments=1;
     limits->maxFragmentCombinedOutputResources=1;
-    /* The native sampled draw consumes one combined image/sampler at set 0,
-     * binding 0. These count against both sampler and sampled-image limits.
-     * Preserve compute storage-buffer limits and the shared resource ceiling. */
-    limits->maxPerStageDescriptorSamplers=1;
-    limits->maxPerStageDescriptorSampledImages=1;
-    limits->maxDescriptorSetSamplers=1;
-    limits->maxDescriptorSetSampledImages=1;
+    /* The sampled descriptor limits are the qualified minima from the shared
+     * constants above, not independent report literals: one set carries the
+     * whole descriptor table the runtime draw ABI addresses, and the stage
+     * reads as many records as the table layout reserves. Samplers and sampled
+     * images share the table, so both limit pairs carry the same values.
+     * Compute storage-buffer limits and the shared resource ceiling stay. */
+    limits->maxPerStageDescriptorSamplers=PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS;
+    limits->maxPerStageDescriptorSampledImages=PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS;
+    limits->maxDescriptorSetSamplers=PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS;
+    limits->maxDescriptorSetSampledImages=PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS;
     limits->maxSamplerAllocationCount=PS5VK_MAX_SAMPLERS;
     limits->maxFramebufferWidth=PS5VK_MAX_COLOR_DIMENSION;
     limits->maxFramebufferHeight=PS5VK_MAX_COLOR_DIMENSION;
