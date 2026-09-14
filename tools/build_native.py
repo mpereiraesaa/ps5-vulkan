@@ -227,7 +227,6 @@ def main():
             common += ["-DPS5VK_GRAPHICS_SCISSOR_PROBE=" + scissor_probe]
             common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
             common += ["-DPS5VK_MIP_FORCE_LOD=" + mip_force_lod]
-            common += ["-DPS5VK_ENABLE_MIPMAP_CANDIDATE=" + ("1" if scissor_probe == "12" else "0")]
             common += ["-DPS5VK_IMAGE_TARGET=" + str(image_target)]
             common += ["-DPS5VK_INTEGER_SAMPLED_SIGN=" + str(integer_sampled_sign)]
             if scene_split == "1" and not scene:

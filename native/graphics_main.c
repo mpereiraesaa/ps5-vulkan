@@ -435,13 +435,10 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
                     scene_vertices[vertex].uv_angle[0]=scene_vertices[vertex].uv_angle[1]=c.uv;
                 ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_INPUT case=%u name=%s uv_milli=%d minification=%u expected_bgra=%08x",
                     witness_index,c.name,(int)(c.uv*1000.0f),c.minification,c.expected_bgra);
-            } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==11) {
-                static const float u[3]={0.0f,1.0f,0.5f};
-                static const float v[3]={0.0f,0.0f,1.0f};
-                for(unsigned vertex=0;vertex<3;++vertex) {
-                    scene_vertices[vertex].uv_angle[0]=u[vertex];
-                    scene_vertices[vertex].uv_angle[1]=v[vertex];
-                }
+            } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==11 ||
+                      PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+                if(ps5vk_scene_probe_triangle_uv(scene_vertices))
+                    fail("scene-probe-uv",-1);
             } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==9 ||
                       PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
                 for(unsigned vertex=0;vertex<3;++vertex)
@@ -1082,7 +1079,7 @@ int main(void)
             depth.depthTestEnable=PS5VK_GRAPHICS_WITNESSES==2?VK_FALSE:VK_TRUE;
             viewport.width=1920;viewport.height=1080;
             scissor=(VkRect2D){{(int32_t)ps5vk_scene_witnesses[witness_index].x,(int32_t)ps5vk_scene_witnesses[witness_index].y},{1,1}};
-        } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==4 || PS5VK_GRAPHICS_SCISSOR_PROBE==5 || PS5VK_GRAPHICS_SCISSOR_PROBE==6 || PS5VK_GRAPHICS_SCISSOR_PROBE==7 || PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==9 || PS5VK_GRAPHICS_SCISSOR_PROBE==10 || PS5VK_GRAPHICS_SCISSOR_PROBE==11) {
+        } else if(ps5vk_scene_full_frame_probe(PS5VK_GRAPHICS_SCISSOR_PROBE)) {
             depth.depthTestEnable=VK_FALSE;
             scissor=PS5VK_GRAPHICS_SCISSOR_PROBE==6 && witness_index>=6 ?
                 (VkRect2D){{960,540},{1,1}}:(VkRect2D){{0,0},{1920,1080}};

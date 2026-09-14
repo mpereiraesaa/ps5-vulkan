@@ -171,7 +171,7 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         width=height=depth=PS5VK_MAX_IMAGE_3D;
     } else return VK_ERROR_FORMAT_NOT_SUPPORTED;
     uint32_t mip_levels=1;
-    if(sampled && PS5VK_ENABLE_MIPMAP_CANDIDATE) {
+    if(sampled && (usage&VK_IMAGE_USAGE_SAMPLED_BIT)) {
         uint32_t dimension=width>height?width:height;
         if(depth>dimension)dimension=depth;
         mip_levels=0;

@@ -48,6 +48,16 @@ int main(void)
         assert(fabsf(sx-expected[i][0])<.001f && fabsf(sy-expected[i][1])<.001f);
         assert(other[i]==i && b[i].uv_angle[0]==0 && b[i].uv_angle[1]==0 && b[i].uv_angle[2]==0);
     }
+    assert(!ps5vk_scene_probe_triangle_uv(b));
+    const float expected_uv[3][2]={{0,0},{1,0},{.5f,1}};
+    for(unsigned i=0;i<3;++i) {
+        assert(b[i].uv_angle[0]==expected_uv[i][0]);
+        assert(b[i].uv_angle[1]==expected_uv[i][1]);
+        assert(b[i].uv_angle[2]==0);
+    }
+    assert(ps5vk_scene_probe_triangle_uv(NULL));
+    for(unsigned probe=0;probe<=13;++probe)
+        assert(ps5vk_scene_full_frame_probe(probe)==(probe>=4 && probe<=12));
     for(unsigned i=3;i<PS5VK_SCENE_VERTICES;++i)for(unsigned j=0;j<3;++j)
         assert(b[i].position[j]==0 && b[i].uv_angle[j]==0);
     for(unsigned i=3;i<PS5VK_SCENE_INDICES;++i)assert(other[i]==0);

@@ -175,10 +175,11 @@ The current graphics format matrix remains deliberately bounded:
 | `R32_SINT`, `R32_UINT` | uniform texel buffer |
 | `R32G32_SFLOAT`, `R32G32B32_SFLOAT`, `R32G32B32A32_SFLOAT` | vertex buffer |
 
-Image-format queries accept only 2D, optimal-tiling, single-level,
-single-layer, sample-count-one combinations that have an implemented native
-role. Unsupported combinations return `VK_ERROR_FORMAT_NOT_SUPPORTED` and a
-zeroed property structure.
+Image-format queries accept optimal-tiling, sample-count-one combinations that
+have an implemented native role. Sampled 1D, 2D, cube-compatible and 3D images
+report their bounded dimensions, layers and complete mip count; attachment and
+pure-transfer roles remain single-level. Unsupported combinations return
+`VK_ERROR_FORMAT_NOT_SUPPORTED` and a zeroed property structure.
 
 ### Pipeline cache identity
 
@@ -203,9 +204,9 @@ and it never depends on console state, dumps or proprietary material.
 
 Truthful reporting intentionally exposes several failures against the complete
 Vulkan 1.0 graphics requirements. The graphics profile now implements bounded
-single-level 1D, 1D-array, 2D-array, cube and 3D sampled images and reports the corresponding
+1D, 1D-array, 2D-array, cube and 3D sampled images and reports the corresponding
 core floors; the compute-only profile still has no graphics image model. Other
-gaps include 1D images, sample counts above one, a graphics allocation count
+gaps include sample counts above one, a graphics allocation count
 below the Vulkan 1.0 minimum, no host-coherent memory type, and only the small
 format matrix above. The compute-only 64 MiB profile also reports a
 storage-buffer range below the Vulkan 1.0 minimum for a complete implementation.

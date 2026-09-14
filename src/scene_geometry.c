@@ -24,6 +24,20 @@ int ps5vk_scene_probe_triangle(struct ps5vk_scene_vertex *vertices,uint16_t *ind
     }
     return 0;
 }
+int ps5vk_scene_probe_triangle_uv(struct ps5vk_scene_vertex *vertices)
+{
+    if(!vertices)return -1;
+    static const float uv[3][2]={{0,0},{1,0},{.5f,1}};
+    for(unsigned i=0;i<3;++i) {
+        vertices[i].uv_angle[0]=uv[i][0];
+        vertices[i].uv_angle[1]=uv[i][1];
+    }
+    return 0;
+}
+int ps5vk_scene_full_frame_probe(unsigned probe)
+{
+    return probe>=4 && probe<=12;
+}
 unsigned ps5vk_scene_draws(int split, struct ps5vk_scene_draw out[2])
 {
     if(!out || (split!=0 && split!=1))return 0;

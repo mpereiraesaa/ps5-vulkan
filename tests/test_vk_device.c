@@ -277,7 +277,9 @@ static void lifecycle(void)
             const VkBool32 transfer_only=image_formats[f]==VK_FORMAT_R8G8B8A8_UNORM && usage &&
                 !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                                              VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-            assert(ip.maxMipLevels==1 &&
+            const uint32_t expected_mips=!attachment &&
+                (usage&VK_IMAGE_USAGE_SAMPLED_BIT)?15u:1u;
+            assert(ip.maxMipLevels==expected_mips &&
                 ip.maxArrayLayers==(attachment||transfer_only?1u:PS5VK_MAX_IMAGE_ARRAY_LAYERS) &&
                 ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT);
             assert(ip.maxResourceSize==p->platform.max_allocation);

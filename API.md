@@ -81,19 +81,25 @@ readback. Each format query exposes only the operations actually established.
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
 | `VK_FORMAT_D32_SFLOAT` | Depth attachment |
-| `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8_SNORM`, `VK_FORMAT_R8G8_UNORM`, `VK_FORMAT_R8G8_SNORM` | Single-level sampled/upload image with nearest/linear filtering and Vulkan completion of missing components |
-| `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled/upload image with nearest/linear filtering, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
-| `VK_FORMAT_R8G8B8A8_SNORM`, `VK_FORMAT_R8G8B8A8_SRGB` | Single-level sampled/upload image with signed-normalized or hardware sRGB conversion and nearest/linear filtering |
-| `VK_FORMAT_E5B9G9R9_UFLOAT_PACK32` | Single-level sampled/upload image with shared-exponent decode, nearest/linear filtering and alpha completion to one |
-| `VK_FORMAT_B10G11R11_UFLOAT_PACK32` | Single-level sampled/upload packed floating-point image with nearest/linear filtering and alpha completion to one |
-| `VK_FORMAT_R16_UNORM`, `VK_FORMAT_R16_SNORM`, `VK_FORMAT_R16_SFLOAT`, `VK_FORMAT_R16G16_UNORM`, `VK_FORMAT_R16G16_SNORM`, `VK_FORMAT_R16G16_SFLOAT` | Single-level sampled/upload 16-bit normalized or floating-point image with nearest/linear filtering and Vulkan completion of missing components |
-| `VK_FORMAT_R16G16B16A16_UNORM`, `VK_FORMAT_R16G16B16A16_SNORM`, `VK_FORMAT_R16G16B16A16_SFLOAT` | Single-level sampled/upload four-component 16-bit image with nearest/linear filtering |
-| `VK_FORMAT_R32_SFLOAT`, `VK_FORMAT_R32G32_SFLOAT`, `VK_FORMAT_R32G32B32A32_SFLOAT` | Single-level sampled/upload 32-bit floating-point image with nearest/linear filtering and Vulkan completion where applicable |
-| `VK_FORMAT_R8_UINT`, `VK_FORMAT_R8_SINT`, `VK_FORMAT_R8G8_UINT`, `VK_FORMAT_R8G8_SINT`, `VK_FORMAT_R8G8B8A8_UINT`, `VK_FORMAT_R8G8B8A8_SINT` | Single-level typed integer sampled/upload image with nearest filtering and Vulkan completion of missing components |
-| `VK_FORMAT_R16_UINT`, `VK_FORMAT_R16_SINT`, `VK_FORMAT_R16G16_UINT`, `VK_FORMAT_R16G16_SINT`, `VK_FORMAT_R16G16B16A16_UINT`, `VK_FORMAT_R16G16B16A16_SINT` | Single-level typed 16-bit integer sampled/upload image with nearest filtering |
-| `VK_FORMAT_R32_UINT`, `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32G32_UINT`, `VK_FORMAT_R32G32_SINT`, `VK_FORMAT_R32G32B32A32_UINT`, `VK_FORMAT_R32G32B32A32_SINT` | Single-level typed 32-bit integer sampled/upload image with nearest filtering |
+| `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8_SNORM`, `VK_FORMAT_R8G8_UNORM`, `VK_FORMAT_R8G8_SNORM` | Sampled/upload image with nearest/linear filtering and Vulkan completion of missing components |
+| `VK_FORMAT_R8G8B8A8_UNORM` | Sampled/upload image with nearest/linear filtering and hardware-validated explicit mip LOD, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
+| `VK_FORMAT_R8G8B8A8_SNORM`, `VK_FORMAT_R8G8B8A8_SRGB` | Sampled/upload image with signed-normalized or hardware sRGB conversion and nearest/linear filtering |
+| `VK_FORMAT_E5B9G9R9_UFLOAT_PACK32` | Sampled/upload image with shared-exponent decode, nearest/linear filtering and alpha completion to one |
+| `VK_FORMAT_B10G11R11_UFLOAT_PACK32` | Sampled/upload packed floating-point image with nearest/linear filtering and alpha completion to one |
+| `VK_FORMAT_R16_UNORM`, `VK_FORMAT_R16_SNORM`, `VK_FORMAT_R16_SFLOAT`, `VK_FORMAT_R16G16_UNORM`, `VK_FORMAT_R16G16_SNORM`, `VK_FORMAT_R16G16_SFLOAT` | Sampled/upload 16-bit normalized or floating-point image with nearest/linear filtering and Vulkan completion of missing components |
+| `VK_FORMAT_R16G16B16A16_UNORM`, `VK_FORMAT_R16G16B16A16_SNORM`, `VK_FORMAT_R16G16B16A16_SFLOAT` | Sampled/upload four-component 16-bit image with nearest/linear filtering |
+| `VK_FORMAT_R32_SFLOAT`, `VK_FORMAT_R32G32_SFLOAT`, `VK_FORMAT_R32G32B32A32_SFLOAT` | Sampled/upload 32-bit floating-point image with nearest/linear filtering and Vulkan completion where applicable |
+| `VK_FORMAT_R8_UINT`, `VK_FORMAT_R8_SINT`, `VK_FORMAT_R8G8_UINT`, `VK_FORMAT_R8G8_SINT`, `VK_FORMAT_R8G8B8A8_UINT`, `VK_FORMAT_R8G8B8A8_SINT` | Typed integer sampled/upload image with nearest filtering and Vulkan completion of missing components |
+| `VK_FORMAT_R16_UINT`, `VK_FORMAT_R16_SINT`, `VK_FORMAT_R16G16_UINT`, `VK_FORMAT_R16G16_SINT`, `VK_FORMAT_R16G16B16A16_UINT`, `VK_FORMAT_R16G16B16A16_SINT` | Typed 16-bit integer sampled/upload image with nearest filtering |
+| `VK_FORMAT_R32_UINT`, `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32G32_UINT`, `VK_FORMAT_R32G32_SINT`, `VK_FORMAT_R32G32B32A32_UINT`, `VK_FORMAT_R32G32B32A32_SINT` | Typed 32-bit integer sampled/upload image with nearest filtering |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
+
+The shared layout and query path exposes bounded complete mip chains for these
+sampled formats. Direct multi-level hardware evidence currently covers 2D
+`VK_FORMAT_R8G8B8A8_UNORM`; the other formats combine their independently
+validated texel encodings with the shared mip-layout contract and have not each
+received a separate multi-level hardware run.
 
 Texture uploads use the GPU transfer path and require the sequence
 `UNDEFINED -> TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL`. Image layout
@@ -131,9 +137,11 @@ separate nearest-versus-linear magnification and minification discriminators;
 both float and integer variants of the six fixed `VkBorderColor` enums map to
 those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
 unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
-is advertised only for the twenty-one validated filterable rows. Mipmap-mode
-and LOD encodings retain host contract coverage, but no mip-chain execution has
-been established. Single-level 1D, 1D-array, 2D-array, cube and 3D views are
+is advertised only for the twenty-one validated filterable rows. Valid sampled
+images can carry complete mip chains up to the per-type query limit. A
+public-SDK-linked 2D RGBA8 witness uploaded three levels and selected all three
+with runtime-compiled explicit LOD, producing deterministic GPU readback.
+Single-level 1D, 1D-array, 2D-array, cube and 3D view witnesses separately
 supported for the sampled-image role. The implementation encodes the distinct
 GFX1013 resource types, retains layer/depth bounds in the view, and uploads
 multi-layer or multi-slice regions with ordered DMA packets. Exact RGBA8
@@ -142,8 +150,8 @@ slices and verify distinct RGB output. The reported 4096 1D dimension, 256
 array layers, 4096 cube dimension and 512 3D dimension are frontend floors
 backed by descriptor/layout arithmetic and allocation bounds; the hardware
 witnesses use small resources and are not exhaustive tests at those maximum
-dimensions. Mip chains, anisotropy, cube arrays and general descriptor arrays
-are not supported.
+dimensions. The multi-level hardware witness is 2D RGBA8; it does not establish
+layered mip selection, anisotropy, cube arrays or general descriptor arrays.
 
 ## Compute
 
@@ -373,11 +381,11 @@ version, target, layout, specialization and push-range state), and
 inputs (vendor/device, GFX1013 target, driver version, compiler identity and
 cache ABI revision) so any change invalidates previously exported data.
 
-The established textured scene retains its offline exact-program path. A
-separate candidate runtime profile accepts exactly one fragment combined-image
-sampler at set 0/binding 0 and compiles it through PSBC/ACO. That candidate has
-proved descriptor delivery and level-0 sampling, but explicit mip LOD remains
-red in strict readback and is not advertised as a public capability.
+The runtime profile accepts exactly one fragment combined-image sampler at set
+0/binding 0 and compiles it through PSBC/ACO. Descriptor delivery, level-0
+sampling and three-level explicit LOD have deterministic public-SDK-linked GPU
+readback. Wider descriptor layouts and arbitrary sampler arrays remain
+fail-closed.
 
 ## Memory and presentation
 

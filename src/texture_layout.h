@@ -7,9 +7,6 @@ struct ps5vk_texture_layout {
     uint64_t bytes, alignment, slice_pitch;
 };
 #define PS5VK_MAX_TEXTURE_MIP_LEVELS 16u
-#ifndef PS5VK_ENABLE_MIPMAP_CANDIDATE
-#define PS5VK_ENABLE_MIPMAP_CANDIDATE 0
-#endif
 struct ps5vk_texture_mip_level {
     uint64_t offset;
     uint32_t row_pitch, storage_width, storage_height;

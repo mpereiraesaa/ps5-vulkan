@@ -28,23 +28,43 @@ See [BUILDING.md](BUILDING.md) for the SDK-linked diagnostic and the
 `make check`, `make check-sanitize` and the runtime graphics compiler/cache
 test with ASan/UBSan enabled. The PSBC static archive itself is not instrumented.
 
-### Runtime sampled-image and mipmap candidate
+### Runtime sampled images and explicit mip LOD
 
 The GPL-compatible `ps5-opengl` reference informed a bounded runtime-graphics
 adapter for exactly one fragment-stage combined image sampler at set 0,
 binding 0. The compiler metadata, user-SGPR slot, 48-byte descriptor table,
 descending mip layout and cache identity are validated on the host and reject
-other descriptor shapes.
+other descriptor shapes. The public `ps5-opengl` mipmap test was also compiled
+and run unchanged on the same console; its explicit LOD and generated-mipmap
+oracles passed. A temporary PSBC diagnostic then showed that both projects
+lower the fragment operation to the same GFX1013 `image_sample_l` instruction.
 
-A native GFX1013 diagnostic on 2026-09-14 compiled both owned SPIR-V stages at
-runtime, submitted successfully and verified the backing bytes for three mip
-levels. Its readback selected level 0 for every explicit LOD, however, so the
-run intentionally ended as a failure (`PS5VK_MIPMAP_READBACK valid=0`). The
-ps5log/1 run was
-`20260914T050039610Z_PPSA99994_ps5vk_0x75893aacacda`, executable SHA-256
-`c65e7bbf98370d004b8eda6054c5eb60cec97d230fa277089a891c0b92714bff`.
-This is diagnostic evidence for the descriptor/compiler path, not mipmap
-support or Vulkan acceptance; public image limits remain single-level.
+The first ps5-vulkan diagnostic run
+(`20260914T050039610Z_PPSA99994_ps5vk_0x75893aacacda`) was correctly rejected:
+it returned only level 0. Comparing its runtime input to the working GPL test
+identified the actual harness defects, not a driver defect: all three probe
+vertices had zero UVs, and the scissor covered only half the intended domain.
+The fixture now assigns the explicit `(0,0), (1,0), (0.5,1)` domain and uses the
+full 1920x1080 scissor. Unit tests prevent either input from silently drifting.
+
+The corrected **public-SDK-linked** payload produced run
+`20260914T055702207Z_PPSA99994_ps5vk_0x789cca84a41b`, executable SELF SHA-256
+`99844fe54a3a7c6b510fdeb870e13d46a34be098e17100131daca47e89c8c1c9`
+and transcript SHA-256
+`d4706a2930e0a798123e40e27f5ed84143840ffda16c1f647f8fc1221680a8b6`.
+It compiled the owned vertex and fragment SPIR-V at runtime, uploaded three
+solid RGBA8 levels, verified their descending backing offsets and read back
+red/green/blue counts `103680/62208/20736`, with zero unexpected pixels and
+`PS5VK_MIPMAP_READBACK valid=1`. The pre/post compute regression passed,
+VideoOut presented the matching completion event, all native allocations were
+released, BYE was complete, and exact-title Close Game completed in 100 ms.
+`tools/verify_mipmaps.py` binds those claims to the transcript, artifact profile
+and SELF identity and fails closed on missing colors, storage drift, partial
+descriptor traces, transport gaps or false success.
+
+This establishes the bounded shared mip-chain layout, descriptor and explicit
+LOD path. It is not broad shader coverage, generated-mipmap support in Vulkan,
+anisotropy, or a claim of Khronos conformance.
 
 ## Vulkan API contract suite validation (CTS-modeled)
 
@@ -618,10 +638,11 @@ pixels, the compute regression completed before and after each draw, both
 streams ended cleanly with zero native allocation bytes, and Close Game was
 verified after each run.
 
-This establishes nearest and linear magnification/minification for the
-single-level RGBA8 UNORM sampled-image path. It does not establish mip chains,
-anisotropy, custom border colors, mirror-clamp extension support, filtering for
-the additional formats below or Vulkan conformance.
+At that stage this established nearest and linear magnification/minification
+for the single-level RGBA8 UNORM sampled-image path. That pair of runs did not
+establish mip chains, anisotropy, custom border colors, mirror-clamp extension
+support, filtering for the additional formats below or Vulkan conformance; the
+later explicit-LOD witness above independently closes only the mip-chain item.
 
 ### GPL texture formats promoted by hardware evidence
 
@@ -689,7 +710,8 @@ zero retained native allocations and exact-title Close Game in 100 ms. The
 new reporting removes four mandatory sampled-image blockers; normalized and
 floating-point rows whose sampled-image bit is not independently mandatory do
 not inflate that count. The later filter matrix below adds per-format filtering
-evidence. Mip chains and broader image combinations remain unadvertised.
+evidence. Those per-format runs did not exercise mip selection; the later
+explicit-LOD section above establishes the shared mip path with RGBA8 only.
 
 ### Per-format nearest and linear filtering
 
@@ -908,7 +930,9 @@ expose the Vulkan 1.0 floors of 256 array layers, 4096 cube dimension and 512
 3D dimension without retaining the previous false “unsupported image type”
 blockers. Those values are bounds of the implemented descriptor and allocation
 contract; these small witnesses do not claim exhaustive execution at the
-maximum dimensions, mipmaps, cube arrays or general descriptor arrays.
+maximum dimensions, cube arrays or general descriptor arrays. The later 2D
+RGBA8 mip witness is documented above and must not be generalized into layered
+mipmap coverage.
 
 Two later independent payloads validated the remaining Vulkan 1D image type
 rather than inferring it from the 2D layout. Both emitted 407 ordered records,

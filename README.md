@@ -40,17 +40,18 @@ results; visual output is not the sole correctness signal.
   offsets
 - One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
   plus an optional D32 depth attachment
-- Thirty-nine single-level sampled texture formats spanning 8/16/32-bit UNORM,
+- Thirty-nine sampled texture formats spanning 8/16/32-bit UNORM,
   SNORM, signed/unsigned integer and floating-point families, RGBA8 sRGB,
   RGB9E5 and B10G11R11 packed floating point, with GPU
   upload transitions and deterministic hardware readback; core repeat,
   mirrored-repeat, edge/border clamp and the six fixed border-color enums are
   implemented. Nearest/linear filtering is validated for the twenty-one
   filterable rows; the eighteen integer rows use typed samplers and correctly
-  remain nearest-only
-- Single-level 1D, 1D-array, 2D-array, cubemap and 3D sampled-image views with
-  layered buffer uploads; RGBA8 variants have deterministic per-region,
-  layer, face or slice GPU readback on PS5
+  remain nearest-only. A three-level RGBA8 chain has deterministic explicit-LOD
+  GPU readback through the staged public SDK
+- 1D, 1D-array, 2D-array, cubemap and 3D sampled-image views with layered
+  buffer uploads; their current per-region, layer, face or slice RGBA8
+  witnesses use one level, while the explicit mip witness is 2D
 - One static or dynamic viewport/scissor pair, depth testing and face culling
 - Recording support for all Vulkan 1.0 dynamic-state setters; only dynamic
   viewport/scissor currently participate in native draws
@@ -75,16 +76,16 @@ verifiers; neither is a claim of Vulkan conformance.
 
 This is not a Vulkan-conformant driver or ICD, and it does not yet provide WSI,
 swapchains, broad format coverage, general image transfer/blit/resolve, multiple queues,
-timeline semaphores, blending, MSAA, mipmaps, anisotropy or arbitrary shader
+timeline semaphores, blending, MSAA, anisotropy or arbitrary shader
 programs. The single-queue Vulkan 1.0 profile includes binary semaphores and
 host/device events; it does not imply multi-queue or synchronization2 support.
 Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
 backend and cached under a bounded in-memory policy. Runtime vertex/fragment
 compilation now supports procedural or single-binding typed triangles with
 matching smooth interfaces, BGRA8/RGBA8 targets, push/specialization constants
-and no graphics descriptors. Compiled pairs
-reuse the bounded cache. The textured scene still uses its audited offline
-program library; it does not imply textured runtime-shader support.
+and one fragment combined-image sampler at set 0/binding 0. Compiled pairs
+reuse the bounded cache. Wider descriptor layouts and arbitrary textured
+runtime-shader profiles remain unsupported.
 The 8/16-bit slice covers storage-buffer access only; narrow integer/float
 arithmetic and other narrow storage classes remain unadvertised.
 
