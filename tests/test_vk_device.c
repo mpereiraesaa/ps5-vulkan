@@ -274,7 +274,8 @@ static void lifecycle(void)
     for (unsigned n=0; n<7; ++n) {
         memset(&fp, 0xff, sizeof(fp));
         vkGetPhysicalDeviceFormatProperties(p, formats[n], &fp);
-        VkFormatFeatureFlags buffer_bits=n<2?VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
+        VkFormatFeatureFlags buffer_bits=(n<2 || n==3 || n==4)?
+            VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
         assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
             fp.optimalTilingFeatures==bits[n]);
     }
@@ -309,8 +310,26 @@ static void lifecycle(void)
             assert(image_result==VK_SUCCESS);
         else assert(image_result==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }
-    vkGetPhysicalDeviceFormatProperties(p,VK_FORMAT_R16_UINT,&fp);
-    assert(!fp.bufferFeatures && !ps5vk_vertex_format_size(VK_FORMAT_R16_UINT));
+    const VkFormat narrow_vertex_formats[]={
+        VK_FORMAT_R8_UNORM,VK_FORMAT_R8_SNORM,VK_FORMAT_R8_UINT,VK_FORMAT_R8_SINT,
+        VK_FORMAT_R8G8_UNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8_UINT,VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8B8A8_SNORM,VK_FORMAT_R8G8B8A8_UINT,VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32,VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32,VK_FORMAT_A8B8G8R8_SINT_PACK32,
+        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_UINT,
+        VK_FORMAT_R16_SINT,VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_UINT,
+        VK_FORMAT_R16G16_SINT,VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R16G16B16A16_UINT,VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R16G16B16A16_SFLOAT};
+    for(unsigned n=0;n<sizeof(narrow_vertex_formats)/sizeof(narrow_vertex_formats[0]);++n) {
+        vkGetPhysicalDeviceFormatProperties(p,narrow_vertex_formats[n],&fp);
+        assert(fp.bufferFeatures&VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+        assert(ps5vk_vertex_format_size(narrow_vertex_formats[n])>0);
+    }
+    vkGetPhysicalDeviceFormatProperties(p,VK_FORMAT_R8_USCALED,&fp);
+    assert(!fp.bufferFeatures && !ps5vk_vertex_format_size(VK_FORMAT_R8_USCALED));
     count=1; vkGetPhysicalDeviceQueueFamilyProperties(p, &count, queues);
     assert(count==1 && queues[0].queueFlags==VK_QUEUE_GRAPHICS_BIT);
     p->platform.queue_flags=VK_QUEUE_COMPUTE_BIT;

@@ -7,12 +7,13 @@ from tools.verify_vertex_formats import CASES, validate
 class VertexFormatVerifier(unittest.TestCase):
     def fixture(self):
         messages = []
-        for case, (name, format_number, numeric, components, stride, word) in enumerate(CASES):
+        for case, (name, format_number, numeric, components, byte_count, word) in enumerate(CASES):
             messages += [f"PS5VK_COMPUTE_RESULT round={round_index} outputs=0 guards=0"
                          for round_index in range(6)]
             messages += ["PS5VK_COMPUTE_END rounds=6 dispatches=12"]
             messages += [
-                f"PS5VK_VERTEX_FORMAT_INPUT case={case} name={name} format={format_number} numeric={numeric} components={components} stride={stride} word={word}",
+                f"PS5VK_VERTEX_FORMAT_INPUT case={case} name={name} format={format_number} numeric={numeric} components={components} bytes={byte_count} stride={byte_count} binding_offset=25 word={word}",
+                f"PS5VK_VERTEX_BOUNCE serial={case+1} draw=0 bytes=359 alignment=4",
                 f"PS5VK_GRAPHICS_SUBMIT serial={case+1} rc=0",
                 f"PS5VK_GRAPHICS_COMPLETED serial={case+1} image_bytes=8912896",
                 f"PS5VK_VERTEX_FORMAT_READBACK case={case} name={name} format={format_number} numeric={numeric} components={components} expected_white=471744 other=0 first_other=00000000 valid=1",
@@ -42,9 +43,10 @@ class VertexFormatVerifier(unittest.TestCase):
 
     def test_accepts_complete_gpu_witness(self):
         result = validate(*self.fixture())
-        self.assertEqual(result["cases"], 11)
+        self.assertEqual(result["cases"], 41)
         self.assertTrue(result["component_completion"])
         self.assertTrue(result["normalized_channel_order"])
+        self.assertTrue(result["byte_granular_vertex_input"])
 
     def test_rejects_wrong_component_completion(self):
         log, metadata, artifact = self.fixture()
@@ -65,8 +67,15 @@ class VertexFormatVerifier(unittest.TestCase):
 
     def test_rejects_wrong_packed_channel_witness(self):
         log, metadata, artifact = self.fixture()
-        log = log.replace(b"case=9 name=bgra8-unorm format=44 numeric=unorm components=4 stride=4 word=ffaa5511",
-                          b"case=9 name=bgra8-unorm format=44 numeric=unorm components=4 stride=4 word=ff1155aa", 1)
+        log = log.replace(b"case=9 name=bgra8-unorm format=44 numeric=float components=4 bytes=4 stride=4 binding_offset=25 word=ffaa5511",
+                          b"case=9 name=bgra8-unorm format=44 numeric=float components=4 bytes=4 stride=4 binding_offset=25 word=ff1155aa", 1)
+        metadata["sha256"] = hashlib.sha256(log).hexdigest()
+        with self.assertRaisesRegex(ValueError, "case identity"):
+            validate(log, metadata, artifact)
+
+    def test_rejects_reintroduced_dword_binding_alignment(self):
+        log, metadata, artifact = self.fixture()
+        log = log.replace(b"binding_offset=25", b"binding_offset=24", 1)
         metadata["sha256"] = hashlib.sha256(log).hexdigest()
         with self.assertRaisesRegex(ValueError, "case identity"):
             validate(log, metadata, artifact)

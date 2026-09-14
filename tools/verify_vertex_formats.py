@@ -15,9 +15,39 @@ CASES = (
     ("rg32-uint", "101", "uint", "2", "8", "ffffffff"),
     ("rgb32-uint", "104", "uint", "3", "12", "ffffffff"),
     ("rgba32-uint", "107", "uint", "4", "16", "ffffffff"),
-    ("rgba8-unorm", "37", "unorm", "4", "4", "ffaa5511"),
-    ("bgra8-unorm", "44", "unorm", "4", "4", "ffaa5511"),
-    ("a2b10g10r10-unorm", "64", "unorm", "4", "4", "bffaa955"),
+    ("rgba8-unorm", "37", "float", "4", "4", "ffaa5511"),
+    ("bgra8-unorm", "44", "float", "4", "4", "ffaa5511"),
+    ("a2b10g10r10-unorm", "64", "float", "4", "4", "bffaa955"),
+    ("r8-unorm", "9", "float", "1", "1", "00000040"),
+    ("r8-snorm", "10", "float", "1", "1", "00000040"),
+    ("r8-uint", "13", "uint", "1", "1", "00000011"),
+    ("r8-sint", "14", "sint", "1", "1", "000000f1"),
+    ("rg8-unorm", "16", "float", "2", "2", "0000c040"),
+    ("rg8-snorm", "17", "float", "2", "2", "0000c040"),
+    ("rg8-uint", "20", "uint", "2", "2", "0000c911"),
+    ("rg8-sint", "21", "sint", "2", "2", "000051f1"),
+    ("rgba8-snorm", "38", "float", "4", "4", "e020c040"),
+    ("rgba8-uint", "41", "uint", "4", "4", "f1aa5511"),
+    ("rgba8-sint", "42", "sint", "4", "4", "44b322f1"),
+    ("a8b8g8r8-unorm", "51", "float", "4", "4", "ffaa5511"),
+    ("a8b8g8r8-snorm", "52", "float", "4", "4", "e020c040"),
+    ("a8b8g8r8-uint", "55", "uint", "4", "4", "f1aa5511"),
+    ("a8b8g8r8-sint", "56", "sint", "4", "4", "44b322f1"),
+    ("r16-unorm", "70", "float", "1", "2", "00004000"),
+    ("r16-snorm", "71", "float", "1", "2", "00004000"),
+    ("r16-uint", "74", "uint", "1", "2", "00001234"),
+    ("r16-sint", "75", "sint", "1", "2", "0000ff85"),
+    ("r16-sfloat", "76", "float", "1", "2", "00003800"),
+    ("rg16-unorm", "77", "float", "2", "4", "c0004000"),
+    ("rg16-snorm", "78", "float", "2", "4", "c0004000"),
+    ("rg16-uint", "81", "uint", "2", "4", "cdef1234"),
+    ("rg16-sint", "82", "sint", "2", "4", "04d2ff85"),
+    ("rg16-sfloat", "83", "float", "2", "4", "bc003800"),
+    ("rgba16-unorm", "91", "float", "4", "8", "40001000"),
+    ("rgba16-snorm", "92", "float", "4", "8", "c0004000"),
+    ("rgba16-uint", "95", "uint", "4", "8", "cdef1234"),
+    ("rgba16-sint", "96", "sint", "4", "8", "04d2ff85"),
+    ("rgba16-sfloat", "97", "float", "4", "8", "bc003800"),
 )
 
 
@@ -67,6 +97,7 @@ def validate(log, metadata, artifact):
                 if record == name]
 
     inputs = matching("PS5VK_VERTEX_FORMAT_INPUT")
+    bounces = matching("PS5VK_VERTEX_BOUNCE")
     results = matching("PS5VK_VERTEX_FORMAT_READBACK")
     compute_results = matching("PS5VK_COMPUTE_RESULT")
     compute_ends = matching("PS5VK_COMPUTE_END")
@@ -75,15 +106,15 @@ def validate(log, metadata, artifact):
     presents = matching("PS5VK_VIDEO_PRESENTED")
     ends = matching("PS5VK_GRAPHICS_REUSE_END")
     require(all(len(group) == len(CASES) for group in
-                (inputs, results, submits, completes, presents, ends)), "all GPU cases")
+                (inputs, bounces, results, submits, completes, presents, ends)), "all GPU cases")
     require(len(compute_results) == 12 * len(CASES) and
             len(compute_ends) == 2 * len(CASES) and
             all(fields.get("rounds") == "6" and fields.get("dispatches") == "12"
                 for _, fields in compute_ends), "compute regression")
     last = -1
-    for case, (name, format_number, numeric, components, stride, word) in enumerate(CASES):
+    for case, (name, format_number, numeric, components, byte_count, word) in enumerate(CASES):
         ordered = [group[case][0] for group in
-                   (inputs, submits, completes, results, presents, ends)]
+                   (inputs, bounces, submits, completes, results, presents, ends)]
         pre_compute = compute_ends[2 * case][0]
         post_compute = compute_ends[2 * case + 1][0]
         require(last < pre_compute < ordered[0] and
@@ -96,8 +127,11 @@ def validate(log, metadata, artifact):
                 source.get("format") == result.get("format") == format_number and
                 source.get("numeric") == result.get("numeric") == numeric and
                 source.get("components") == result.get("components") == components and
-                source.get("stride") == stride and source.get("word") == word,
+                source.get("bytes") == source.get("stride") == byte_count and
+                source.get("binding_offset") == "25" and source.get("word") == word,
                 "case identity")
+        require(bounces[case][1].get("bytes") == "359" and
+                bounces[case][1].get("alignment") == "4", "vertex bounce")
         require(result.get("expected_white") == "471744" and
                 result.get("other") == "0" and result.get("first_other") == "00000000" and
                 result.get("valid") == "1" and submits[case][1].get("rc") == "0",
@@ -110,6 +144,7 @@ def validate(log, metadata, artifact):
     return {"self_sha256": identity, "cases": len(CASES),
             "formats": [case[0] for case in CASES], "gpu_readback": True,
             "component_completion": True, "normalized_channel_order": True,
+            "byte_granular_vertex_input": True,
             "process_exit_verified": False}
 
 

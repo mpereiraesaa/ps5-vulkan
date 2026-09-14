@@ -31,13 +31,18 @@ hardware acceptance.
 - Exactly one vertex stage and one fragment stage per graphics pipeline.
 - Triangle-list topology, fill rasterization and line width 1.
 - One vertex binding at binding 0, per-vertex input, with up to 32 attribute
-  locations. Supported attributes are one- through four-component 32-bit
-  float, signed-integer and unsigned-integer formats, plus packed
-  `R8G8B8A8_UNORM`, `B8G8R8A8_UNORM` and
-  `A2B10G10R10_UNORM_PACK32`. Eleven rows have exact hardware evidence
-  for fetch and numeric category; the scalar/vector integer cases also cover
-  Vulkan component completion, while asymmetric 8- and 10-bit packed words
-  cover UNORM conversion, BGRA channel order and the two-bit alpha field.
+  locations. Supported attributes are `R8` and `R8G8` UNORM/SNORM/UINT/SINT;
+  `R8G8B8A8` UNORM/SNORM/UINT/SINT; packed `A8B8G8R8`
+  UNORM/SNORM/UINT/SINT; `R16`, `R16G16` and `R16G16B16A16`
+  UNORM/SNORM/UINT/SINT/SFLOAT; `R32`, `R32G32`, `R32G32B32` and
+  `R32G32B32A32` SFLOAT/SINT/UINT; `B8G8R8A8_UNORM`; and
+  `A2B10G10R10_UNORM_PACK32`. Forty-one typed conversion rows have exact
+  hardware evidence on non-indexed runtime draws. The suite verifies missing
+  components, normalized conversion, packed channel order, the two-bit alpha
+  field, 1/2-byte strides and an unaligned Vulkan binding offset. Because a
+  GFX1013 structured SRD drops its two low base-address bits, native submission
+  copies an unaligned accessible span into aligned job-owned storage and
+  releases it after exact completion.
   Runtime-shader indexed draws remain a separate unsupported combination;
   indexed draws remain available through the audited offline-program path.
 - Indexed and non-indexed draws. Index buffers support `uint16` and `uint32`,
@@ -301,7 +306,7 @@ workgroup dimensions are not yet supported; local size must remain literal.
 
 Runtime graphics uses the same pinned PSBC/NIR/ACO stack for vertex and
 fragment SPIR-V. The current profile supports procedural or single-binding
-32-bit float/signed/unsigned and packed RGBA8/BGRA8/RGB10A2 UNORM vertex input
+8/16/32-bit typed and packed RGBA8/BGRA8/RGB10A2 UNORM vertex input
 for triangle lists, smooth float32 scalar/vector interfaces
 at matching whole locations 0–31, one vec4 fragment output at location 0,
 BGRA8/RGBA8 UNORM sample-1 targets and full color writes. VertexIndex, push

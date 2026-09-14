@@ -33,10 +33,11 @@ results; visual output is not the sole correctness signal.
 - Occlusion query-pool lifetime (result retrieval deferred) and empty sparse image queries
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list draws;
-  one- through four-component 32-bit float, signed-integer and unsigned-integer
-  vertex formats plus packed `R8G8B8A8_UNORM`, `B8G8R8A8_UNORM` and
-  `A2B10G10R10_UNORM_PACK32`; the integer and packed rows have exact GPU
-  readback evidence on non-indexed runtime draws
+  core 8-, 16- and 32-bit float/normalized/integer vertex families plus the
+  packed `A8B8G8R8_*` and `A2B10G10R10_UNORM` forms currently listed in
+  [API.md](API.md). Forty-one conversion cases have exact GPU readback on
+  non-indexed runtime draws, including byte strides and unaligned binding
+  offsets
 - One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
   plus an optional D32 depth attachment
 - Single-level R8, RG8, RGBA8 UNORM and RGBA8 sRGB sampled textures with GPU
@@ -72,7 +73,7 @@ programs. The single-queue Vulkan 1.0 profile includes binary semaphores and
 host/device events; it does not imply multi-queue or synchronization2 support.
 Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
 backend and cached under a bounded in-memory policy. Runtime vertex/fragment
-compilation now supports procedural or single-binding float32 triangles with
+compilation now supports procedural or single-binding typed triangles with
 matching smooth interfaces, BGRA8/RGBA8 targets, push/specialization constants
 and no graphics descriptors. Compiled pairs
 reuse the bounded cache. The textured scene still uses its audited offline

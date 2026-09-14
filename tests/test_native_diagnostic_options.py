@@ -56,7 +56,11 @@ class NativeDiagnosticOptions(unittest.TestCase):
     def test_vertex_format_probe_is_nonindexed_runtime_draw(self):
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8", source)
-        self.assertIn("const size_t start=24u;", source)
+        # Deliberately exercise a legal byte-granular Vulkan offset which the
+        # native GFX1013 SRD cannot encode directly.  Draw preparation must
+        # preserve 25 rather than silently rounding it down to 24.
+        self.assertIn("const size_t start=25u;", source)
+        self.assertIn("binding_offset=%zu", source)
 
     def rejected(self, options, message):
         env = {k: v for k, v in os.environ.items() if not k.startswith("PS5VK_")}

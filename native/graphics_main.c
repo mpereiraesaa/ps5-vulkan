@@ -197,8 +197,10 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         VkMemoryAllocateInfo im={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=ir.size+ir.alignment};
         CHECK(vkAllocateMemory(d,&im,NULL,&index_memory));
         index_memory_offset=ir.alignment;CHECK(vkBindBufferMemory(d,index_buffer,index_memory,index_memory_offset));
-        ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_INPUT memory_offset=%llu binding_offset=24 first_vertex=1 stride=%u",
-            (unsigned long long)vr.alignment,pipeline->vertex_binding.stride);
+        ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_INPUT memory_offset=%llu binding_offset=%u first_vertex=0 stride=%u",
+            (unsigned long long)vr.alignment,
+            PS5VK_GRAPHICS_SCISSOR_PROBE==8?25u:24u,
+            pipeline->vertex_binding.stride);
     }
     /* Scene resource reuse must also be exercised without presentation. */
     unsigned frames=PS5VK_GRAPHICS_SCENE?180:1;
@@ -277,23 +279,25 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
             struct ps5vk_vertex_format_case c;
             if(ps5vk_vertex_format_case(witness_index,&c) ||
                pipeline->vertex_attributes[0].format!=c.format ||
-               pipeline->vertex_binding.stride!=(c.numeric==PS5VK_VERTEX_PROBE_UNORM?4u:c.components*4u))
+               pipeline->vertex_binding.stride!=c.bytes)
                 fail("vertex-format-case",-1);
             /* This probe isolates vertex conversion. Runtime indexed draws
              * are a separate unsupported combination, so firstVertex=0 maps
              * directly to the three records beginning at the binding offset. */
-            const size_t start=24u;
+            /* Vulkan vertex-buffer offsets and strides are byte granular.  An
+             * odd base deliberately proves that the native descriptor path
+             * does not silently retain its former dword-alignment contract. */
+            const size_t start=25u;
             for(unsigned vertex=0;vertex<3;++vertex) {
-                uint32_t *record=(uint32_t *)((unsigned char *)vertices+
-                    vertex_memory_offset+start+vertex*pipeline->vertex_binding.stride);
-                if(c.numeric==PS5VK_VERTEX_PROBE_UNORM)*record=c.raw_word;
-                else for(unsigned component=0;component<c.components;++component)
-                    record[component]=c.raw_word;
+                unsigned char *record=(unsigned char *)vertices+
+                    vertex_memory_offset+start+vertex*pipeline->vertex_binding.stride;
+                memcpy(record,c.raw,c.bytes);
             }
-            ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_FORMAT_INPUT case=%u name=%s format=%u numeric=%s components=%u stride=%u word=%08x",
+            uint32_t raw_word=0;memcpy(&raw_word,c.raw,c.bytes<4?c.bytes:4);
+            ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_FORMAT_INPUT case=%u name=%s format=%u numeric=%s components=%u bytes=%u stride=%u binding_offset=%zu word=%08x",
                 witness_index,c.name,c.format,c.numeric==PS5VK_VERTEX_PROBE_SINT?"sint":
-                    (c.numeric==PS5VK_VERTEX_PROBE_UINT?"uint":"unorm"),
-                c.components,pipeline->vertex_binding.stride,c.raw_word);
+                    (c.numeric==PS5VK_VERTEX_PROBE_UINT?"uint":"float"),
+                c.components,c.bytes,pipeline->vertex_binding.stride,start,raw_word);
         } else memcpy((unsigned char *)vertices+vertex_memory_offset+48,triangle,sizeof(triangle));
         VkMappedMemoryRange flush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=vertex_memory,.size=VK_WHOLE_SIZE};
         CHECK(vkFlushMappedMemoryRanges(d,1,&flush));vkUnmapMemory(d,vertex_memory);
@@ -356,7 +360,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     vkCmdBeginRenderPass(cb,&ri,VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
     if(set_layout)vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&texture.set,0,NULL);
-    VkDeviceSize vertex_offset=24;
+    VkDeviceSize vertex_offset=PS5VK_GRAPHICS_SCISSOR_PROBE==8?25u:24u;
     unsigned draw_count=1;
     if(vertex_buffer)vkCmdBindVertexBuffers(cb,0,1,&vertex_buffer,&vertex_offset);
     if(index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8) {
@@ -430,7 +434,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         valid=expected==471744u && !other;
         ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_FORMAT_READBACK case=%u name=%s format=%u numeric=%s components=%u expected_white=%zu other=%zu first_other=%08x valid=%d",
             witness_index,c.name,c.format,c.numeric==PS5VK_VERTEX_PROBE_SINT?"sint":
-                (c.numeric==PS5VK_VERTEX_PROBE_UINT?"uint":"unorm"),
+                (c.numeric==PS5VK_VERTEX_PROBE_UINT?"uint":"float"),
             c.components,expected,other,first_other,valid);
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==7) {
         struct ps5vk_sampled_format_case c;size_t expected=0,other=0;
@@ -738,33 +742,21 @@ int main(void)
     VkSpecializationMapEntry component_entries[4]={{0,0,sizeof(uint32_t)},
         {1,sizeof(float),sizeof(float)},{2,2*sizeof(float),sizeof(float)},
         {3,3*sizeof(float),sizeof(float)}};
-    uint32_t component_count=4;
-    float expected_components[4];
-    VkSpecializationInfo component_specialization={1,component_entries,
-        sizeof(component_count),&component_count};
+    union ps5vk_vertex_probe_expected expected_components;
+    VkSpecializationInfo component_specialization={4,component_entries,
+        sizeof(expected_components),&expected_components};
     for (unsigned iteration=0;iteration<(PS5VK_GRAPHICS_WITNESSES?(PS5VK_GRAPHICS_WITNESSES==2?4u:6u):(PS5VK_GRAPHICS_SCISSOR_PROBE==8?PS5VK_VERTEX_FORMAT_CASES:(PS5VK_GRAPHICS_SCISSOR_PROBE==7?PS5VK_SAMPLED_FORMAT_CASES:(PS5VK_GRAPHICS_SCISSOR_PROBE==6?PS5VK_SAMPLER_CORE_CASES:((PS5VK_GRAPHICS_SCISSOR_PROBE==2 || PS5VK_GRAPHICS_SCISSOR_PROBE==3)?10u:(PS5VK_GRAPHICS_SCENE?1u:3u))))));++iteration) {
         unsigned witness_index=PS5VK_GRAPHICS_WITNESSES==2 && iteration==3?5:iteration;
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
         if(PS5VK_GRAPHICS_SCISSOR_PROBE==8) {
             struct ps5vk_vertex_format_case c;
             if(ps5vk_vertex_format_case(witness_index,&c))fail("vertex-format-case",-1);
-            runtime_binding.stride=c.numeric==PS5VK_VERTEX_PROBE_UNORM?4u:c.components*4u;
+            runtime_binding.stride=c.bytes;
             runtime_attribute.format=c.format;
-            component_count=c.components;
-            if(c.numeric==PS5VK_VERTEX_PROBE_UNORM) {
-                memcpy(expected_components,c.expected,sizeof(expected_components));
-                for(unsigned j=0;j<4;++j)component_entries[j].offset=j*sizeof(float);
-                component_specialization.mapEntryCount=4;
-                component_specialization.dataSize=sizeof(expected_components);
-                component_specialization.pData=expected_components;
-                stages[0].module=shaders[2];
-            } else {
-                component_entries[0].offset=0;
-                component_specialization.mapEntryCount=1;
-                component_specialization.dataSize=sizeof(component_count);
-                component_specialization.pData=&component_count;
-                stages[0].module=shaders[c.numeric==PS5VK_VERTEX_PROBE_SINT?0:1];
-            }
+            memcpy(&expected_components,&c.expected,sizeof(expected_components));
+            for(unsigned j=0;j<4;++j)component_entries[j].offset=j*sizeof(uint32_t);
+            stages[0].module=shaders[c.numeric==PS5VK_VERTEX_PROBE_SINT?0:
+                (c.numeric==PS5VK_VERTEX_PROBE_UINT?1:2)];
             stages[0].pSpecializationInfo=&component_specialization;
         }
 #endif

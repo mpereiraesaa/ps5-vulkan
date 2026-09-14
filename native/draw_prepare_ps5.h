@@ -9,6 +9,8 @@ struct ps5vk_prepared_draw {
     size_t bytes;
     const uint32_t *vertex_table;
     const uint32_t *texture_table;
+    const void *vertex_bounce;
+    size_t vertex_bounce_bytes;
 };
 /* Prepare only: translate the recorded Vulkan objects into owned, flushed
  * indirect register storage. Submission must pin source resources separately.

@@ -131,7 +131,7 @@ ADVERTISED_FEATURES = {
     "robustBufferAccess": {
         "citations": (
             ("src/descriptor_encode.c", "out[3] = 0x31016fac;"),
-            ("src/vertex_descriptor.c", "bytes/stride"),
+            ("src/vertex_descriptor.c", "1+(bytes-attribute_extent)/stride"),
         ),
         "detail": ("raw storage/uniform descriptors carry the byte span and "
                    "vertex descriptors carry the bounded record count"),

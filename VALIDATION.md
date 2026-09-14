@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 27 mandatory format-feature cells satisfied
-with 635 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 55 mandatory format-feature cells satisfied
+with 607 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -683,6 +683,37 @@ case used raw word `0xbffaa955` and checked logical RGBA values
 It again produced exactly 471,744 white pixels and zero others; both runs had
 zero retained allocations, BYE and exact-title Close Game in 100 ms.
 
+### Core 8/16-bit vertex families and unaligned bindings
+
+The runtime compiler dependency was advanced to the reviewed PSBC merge commit
+`75f4066fd98ecc0cd0c6aa394ec8e1cdb6de8a88`. It adds the exact Mesa
+`PIPE_FORMAT` mappings needed by the Vulkan 1.0 `R8`/`R8G8`, packed RGBA8 and
+`R16`/`R16G16`/`R16G16B16A16` vertex families. Two runs then used the
+byte-identical SELF SHA-256
+`16f96c2e112044d1689de23bb856b3bb303ed196a0bd829f7228d4e763405e96`:
+
+- `20260914T003253606Z_PPSA99994_ps5vk_0x66ec9e7ca947`, log SHA-256
+  `ab3f1da00c2f2db5e596625bcb756f5eb5aa899c44b50945fa8035a70591560f`
+- `20260914T003415349Z_PPSA99994_ps5vk_0x66ffa6a47149`, log SHA-256
+  `98f6db04d6df59354e3ea6c9e91630356ac4f81ea22fc293d5a66050826f19a3`
+
+Each complete 12,724-record `ps5log/1` stream passed all 41 typed vertex
+conversion cases. Every case produced exactly 471,744 white pixels and zero
+other pixels, with exact component values supplied independently through
+specialization constants. Coverage includes UNORM, SNORM, UINT, SINT and
+half-float conversion; missing-component defaults; `A8B8G8R8` packed order;
+1- and 2-byte strides; and a deliberately unaligned binding offset of 25.
+
+The first diagnostic run showed that a raw GFX1013 structured SRD discards the
+two low base-address bits (`ff03ffff` output instead of the expected white
+triangle). The accepted implementation therefore stages an unaligned
+accessible buffer span into aligned storage owned by the prepared draw. Every
+accepted run recorded one bounded 359-byte bounce per case, preserved compute
+regressions before and after each draw, ended with BYE and zero retained native
+allocations, and returned to the PS5 menu after exact-title Close Game. This is
+evidence for these vertex input combinations, not general format or Vulkan
+conformance.
+
 The earlier dynamic-buffer descriptor increment removes four of those
 limit blockers across the compute and graphics profiles. It implements distinct
 dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
@@ -691,7 +722,7 @@ ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
 reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
-blockers and 707 blockers overall.
+blockers and 679 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

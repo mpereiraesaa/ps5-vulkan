@@ -33,14 +33,34 @@ int main(void)
         VK_FORMAT_R32G32B32A32_SINT,VK_FORMAT_R32_UINT,VK_FORMAT_R32G32_UINT,
         VK_FORMAT_R32G32B32_UINT,VK_FORMAT_R32G32B32A32_UINT,
         VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM,
-        VK_FORMAT_A2B10G10R10_UNORM_PACK32};
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+        VK_FORMAT_R8_UNORM,VK_FORMAT_R8_SNORM,VK_FORMAT_R8_UINT,VK_FORMAT_R8_SINT,
+        VK_FORMAT_R8G8_UNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8_UINT,VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8B8A8_SNORM,VK_FORMAT_R8G8B8A8_UINT,VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32,VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32,VK_FORMAT_A8B8G8R8_SINT_PACK32,
+        VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_UINT,
+        VK_FORMAT_R16_SINT,VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_UINT,
+        VK_FORMAT_R16G16_SINT,VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R16G16B16A16_UINT,VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R16G16B16A16_SFLOAT};
     key.vertex_attribute_count=1;
     for(unsigned n=0;n<sizeof(supported)/sizeof(supported[0]);++n) {
         attrs[0].format=supported[n];
         assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_SUCCESS);
     }
-    attrs[0].format=VK_FORMAT_R16_UINT;
+    attrs[0].format=VK_FORMAT_R8_USCALED;
     assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_ERROR_FEATURE_NOT_PRESENT);
+    attrs[0].format=VK_FORMAT_R8_UNORM;binding.stride=1;op.first_vertex=2;
+    op.vertices[0].offset=25;
+    struct ps5vk_vertex_fetch fetch={0};
+    assert(ps5vk_vertex_fetch_span(&d,&key,&op,&fetch)==VK_SUCCESS &&
+        fetch.address==(unsigned char *)mapped+256+25 && fetch.bytes==215 &&
+        fetch.stride==1 && fetch.attribute_extent==1);
+    assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_ERROR_UNKNOWN);
+    op.vertices[0].offset=24;binding.stride=24;
     attrs[0].format=VK_FORMAT_R32G32B32_SFLOAT;key.vertex_attribute_count=2;
     assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_SUCCESS);
     op.first_vertex=7;assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)!=VK_SUCCESS);

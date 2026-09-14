@@ -1,6 +1,7 @@
 #include "runtime_graphics_compiler.h"
 #include "compilation_cache.h"
 #include "spirv_graphics_interface.h"
+#include "vertex_format_probe.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -194,6 +195,33 @@ int main(void)
         ps5vk_runtime_graphics_free(NULL,out);
     }
     free((void *)packed_input.vertex.words);free((void *)packed_input.fragment.words);
+
+    struct ps5vk_graphics_module_key probe_modules[3]={
+        read_module("build/runtime-graphics/vertex_sint.vert.spv"),
+        read_module("build/runtime-graphics/vertex_uint.vert.spv"),
+        read_module("build/runtime-graphics/vertex_unorm.vert.spv")};
+    struct ps5vk_graphics_module_key probe_fragment=
+        read_module("build/runtime-graphics/vertex_input.frag.spv");
+    for(unsigned i=0;i<PS5VK_VERTEX_FORMAT_CASES;++i) {
+        struct ps5vk_vertex_format_case c;
+        assert(!ps5vk_vertex_format_case(i,&c));
+        unsigned module=c.numeric==PS5VK_VERTEX_PROBE_SINT?0:
+            (c.numeric==PS5VK_VERTEX_PROBE_UINT?1:2);
+        binding.stride=c.bytes;binding.inputRate=VK_VERTEX_INPUT_RATE_VERTEX;
+        attribute.format=c.format;attribute.offset=0;
+        struct ps5vk_graphics_key probe_input={
+            .vertex=probe_modules[module],.fragment=probe_fragment,
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .color_format=VK_FORMAT_R8G8B8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+            .vertex_binding_count=1,.vertex_attribute_count=1,
+            .vertex_bindings=&binding,.vertex_attributes=&attribute};
+        assert(ps5vk_spirv_graphics_interface(&probe_input));
+        assert(ps5vk_runtime_graphics_compile(NULL,&probe_input,&out)==VK_SUCCESS && out);
+        ps5vk_runtime_graphics_free(NULL,out);
+    }
+    for(unsigned i=0;i<3;++i)free((void *)probe_modules[i].words);
+    free((void *)probe_fragment.words);
 
     cache=ps5vk_compilation_cache_create(4,1024*1024);
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&parameters,&cold)==VK_SUCCESS);

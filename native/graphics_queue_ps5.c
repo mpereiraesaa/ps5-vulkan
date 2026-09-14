@@ -242,6 +242,9 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         if(rc!=VK_SUCCESS)goto fail;
         ++j->count;
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+        if(draw->vertex_bounce)
+            ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_BOUNCE serial=%llu draw=%u bytes=%zu alignment=4",
+                (unsigned long long)j->serial,j->count-1,draw->vertex_bounce_bytes);
         /* Private TCP evidence of the exact prepared block, not inferred API
          * intent. Include duplicate offsets and order; later writes can win. */
         for(unsigned k=0;k<draw->state->cx_count;++k)

@@ -1,29 +1,34 @@
 #include "vertex_format_probe.h"
+#include "graphics_formats.h"
 #include <assert.h>
 #include <string.h>
 
 int main(void)
 {
-    static const char *names[PS5VK_VERTEX_FORMAT_CASES] = {
-        "r32-sint", "rg32-sint", "rgb32-sint", "rgba32-sint",
-        "r32-uint", "rg32-uint", "rgb32-uint", "rgba32-uint",
-        "rgba8-unorm", "bgra8-unorm", "a2b10g10r10-unorm",
-    };
-    struct ps5vk_vertex_format_case c;
+    struct ps5vk_vertex_format_case cases[PS5VK_VERTEX_FORMAT_CASES];
     for (unsigned i = 0; i < PS5VK_VERTEX_FORMAT_CASES; ++i) {
-        assert(!ps5vk_vertex_format_case(i, &c));
-        assert(!strcmp(c.name, names[i]));
-        assert(c.components == (i < 8 ? i % 4 + 1 : 4));
-        assert(c.numeric == (i < 4 ? PS5VK_VERTEX_PROBE_SINT :
-            (i < 8 ? PS5VK_VERTEX_PROBE_UINT : PS5VK_VERTEX_PROBE_UNORM)));
-        assert(c.raw_word == (i < 8 ? UINT32_MAX :
-            (i < 10 ? UINT32_C(0xffaa5511) : UINT32_C(0xbffaa955))));
-        if (i == 8) assert(c.expected[0] < c.expected[2]);
-        if (i == 9) assert(c.expected[0] > c.expected[2]);
-        if (i == 10) assert(c.expected[0] < c.expected[1] &&
-            c.expected[1] < c.expected[2] && c.expected[3] == c.expected[1]);
+        struct ps5vk_vertex_format_case *c=&cases[i];
+        assert(!ps5vk_vertex_format_case(i,c));
+        assert(c->name && *c->name && c->bytes && c->bytes<=sizeof(c->raw));
+        assert(c->components>=1 && c->components<=4);
+        struct ps5vk_vertex_format format=ps5vk_vertex_format_info(c->format);
+        assert(format.bytes==c->bytes && format.components==c->components);
+        enum ps5vk_vertex_numeric numeric=c->numeric==PS5VK_VERTEX_PROBE_SINT ?
+            PS5VK_VERTEX_NUMERIC_SINT : c->numeric==PS5VK_VERTEX_PROBE_UINT ?
+            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT;
+        assert(format.numeric==numeric);
+        for(unsigned j=0;j<i;++j) {
+            assert(cases[j].format!=c->format);
+            assert(strcmp(cases[j].name,c->name));
+        }
     }
-    assert(ps5vk_vertex_format_case(PS5VK_VERTEX_FORMAT_CASES, &c));
-    assert(ps5vk_vertex_format_case(0, 0));
+    assert(!strcmp(cases[11].name,"r8-unorm") && cases[11].bytes==1 &&
+        cases[11].expected.f[3]==1.0f);
+    assert(!strcmp(cases[22].name,"a8b8g8r8-unorm") &&
+        cases[22].raw[0]==0x11 && cases[22].raw[3]==0xff);
+    assert(!strcmp(cases[40].name,"rgba16-sfloat") && cases[40].bytes==8 &&
+        cases[40].expected.f[2]==2.5f);
+    assert(ps5vk_vertex_format_case(PS5VK_VERTEX_FORMAT_CASES,&cases[0]));
+    assert(ps5vk_vertex_format_case(0,0));
     return 0;
 }

@@ -1,20 +1,30 @@
 #include "draw_prepare_ps5.h"
+#include "vertex_fetch.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 static unsigned allocations, releases, targets;
 static VkResult target_rc, flush_rc;
+static VkDeviceSize fail_allocation_size;
 static uintptr_t latest_address;
 static _Alignas(4096) unsigned char storage[4096];
+static _Alignas(4) unsigned char vertex_source[32];
 static size_t expected_bytes=sizeof(struct ps5vk_draw_state);
 static VkResult fetch_rc;
 static VkResult texture_rc;
 VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView v,VkSampler s,uint32_t out[12])
 {(void)d;(void)v;(void)s;for(unsigned i=0;i<12;++i)out[i]=100+i;return texture_rc;}
-VkResult ps5vk_vertex_fetch_descriptor(VkDevice d,const struct ps5vk_graphics_key *k,
-    const struct ps5vk_operation *op,uint32_t out[4])
-{(void)d;(void)k;(void)op;for(unsigned i=0;i<4;++i)out[i]=i+10;return fetch_rc;}
+static const void *fetch_address=vertex_source;
+VkResult ps5vk_vertex_fetch_span(VkDevice d,const struct ps5vk_graphics_key *k,
+    const struct ps5vk_operation *op,struct ps5vk_vertex_fetch *out)
+{(void)d;(void)k;(void)op;if(fetch_rc==VK_SUCCESS)*out=(struct ps5vk_vertex_fetch){fetch_address,16,4,4};return fetch_rc;}
 static VkResult allocate(void *c, VkDeviceSize n, void **a, void **b)
-{ (void)c; assert(n<=sizeof(storage));++allocations; *a = *b = storage; latest_address=(uintptr_t)*a;return VK_SUCCESS; }
+{
+    (void)c;
+    assert(n<=sizeof(storage));
+    if(n==fail_allocation_size)return VK_ERROR_OUT_OF_HOST_MEMORY;
+    ++allocations; *a = *b = storage; latest_address=(uintptr_t)*a;return VK_SUCCESS;
+}
 static void release(void *c, void *b) { (void)c; assert(b==storage);++releases; }
 static VkResult flush(void *c, void *b, VkDeviceSize o, VkDeviceSize n)
 { (void)c; assert(b && !o && n == expected_bytes); return flush_rc; }
@@ -60,10 +70,31 @@ int main(void)
     /* Fixed aligned allocation fixture makes the aperture test deterministic. */
     uint64_t shader_address=latest_address;
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)==VK_SUCCESS);
-    assert(prepared.vertex_table && (uintptr_t)prepared.vertex_table%16==0);
-    for(unsigned i=0;i<4;++i)assert(prepared.vertex_table[i]==i+10);
+    assert(prepared.vertex_table && (uintptr_t)prepared.vertex_table%16==0 && !prepared.vertex_bounce);
+    assert(prepared.vertex_table[0]==(uint32_t)(uintptr_t)vertex_source &&
+        (prepared.vertex_table[1]&0xffff)==(uintptr_t)vertex_source>>32 &&
+        prepared.vertex_table[1]>>16==4 && prepared.vertex_table[2]==4);
     assert(prepared.bytes==expected_bytes);
     ps5vk_native_release_draw(&prepared);
+    for(unsigned i=0;i<sizeof(vertex_source);++i)vertex_source[i]=(unsigned char)(i+1);
+    fetch_address=vertex_source+1;
+    expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+16+16;
+    assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)==VK_SUCCESS);
+    assert(prepared.vertex_bounce && (uintptr_t)prepared.vertex_bounce%4==0 &&
+        prepared.vertex_bounce_bytes==16 && !memcmp(prepared.vertex_bounce,vertex_source+1,16));
+    assert(prepared.vertex_table[0]==(uint32_t)(uintptr_t)prepared.vertex_bounce &&
+        (prepared.vertex_table[1]&0xffff)==(uintptr_t)prepared.vertex_bounce>>32);
+    ps5vk_native_release_draw(&prepared);
+    /* An unencodable byte-granular source may need an aligned bounce.  Failure
+     * to allocate it is deterministic and leaves no partial prepared draw. */
+    unsigned bounce_allocated=allocations;
+    fail_allocation_size=expected_bytes;
+    assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)==
+        VK_ERROR_OUT_OF_HOST_MEMORY);
+    assert(allocations==bounce_allocated && releases==allocations &&
+        !prepared.backing && !prepared.vertex_bounce);
+    fail_allocation_size=0;fetch_address=vertex_source;
+    expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+16;
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address^(UINT64_C(1)<<32),&prepared)==VK_ERROR_MEMORY_MAP_FAILED);
     assert(allocations==releases && !prepared.backing);
     unsigned allocated=allocations;fetch_rc=VK_ERROR_UNKNOWN;

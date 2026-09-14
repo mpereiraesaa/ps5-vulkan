@@ -3000,7 +3000,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 27 mandatory format-feature cells satisfied and 635 per-format blockers recorded.",
+        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 55 mandatory format-feature cells satisfied and 607 per-format blockers recorded.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt, vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
@@ -3600,7 +3600,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "Integer and packed vertex formats are mandatory in core but are not in the documented profile.",
+      "review_notes": "The documented profile now covers the audited 8/16/32-bit and packed vertex rows; remaining mandatory format and vertex-input combinations stay explicit blockers.",
       "classification_basis": "core-cumulative-required"
     },
     {

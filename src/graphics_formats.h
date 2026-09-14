@@ -26,9 +26,8 @@ struct ps5vk_vertex_format {
 /* Vertex format metadata is shared by capability queries, SPIR-V interface
  * matching, the PSBC adapter and the bounded fetch descriptor.  The 32-bit
  * integer rows follow the PSBC/Gallium mapping used by the pinned GPL
- * ps5-opengl implementation. RGBA8/BGRA8 and A2B10G10R10 UNORM are enabled by
- * their own conversion gate; other narrower integer and normalized rows remain
- * disabled until their complete conversion contract is wired. */
+ * ps5-opengl implementation. The 8/16-bit families are exposed only together
+ * with the pinned PSBC lowering and ps5-vulkan's conversion oracles. */
 static inline struct ps5vk_vertex_format ps5vk_vertex_format_info(VkFormat format)
 {
     switch (format) {
@@ -44,10 +43,57 @@ static inline struct ps5vk_vertex_format ps5vk_vertex_format_info(VkFormat forma
     case VK_FORMAT_R32G32_UINT: return (struct ps5vk_vertex_format){8,2,PS5VK_VERTEX_NUMERIC_UINT};
     case VK_FORMAT_R32G32B32_UINT: return (struct ps5vk_vertex_format){12,3,PS5VK_VERTEX_NUMERIC_UINT};
     case VK_FORMAT_R32G32B32A32_UINT: return (struct ps5vk_vertex_format){16,4,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R8_UNORM:
+    case VK_FORMAT_R8_SNORM:
+        return (struct ps5vk_vertex_format){1,1,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R8_UINT:
+        return (struct ps5vk_vertex_format){1,1,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R8_SINT:
+        return (struct ps5vk_vertex_format){1,1,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R8G8_UNORM:
+    case VK_FORMAT_R8G8_SNORM:
+        return (struct ps5vk_vertex_format){2,2,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R8G8_UINT:
+        return (struct ps5vk_vertex_format){2,2,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R8G8_SINT:
+        return (struct ps5vk_vertex_format){2,2,PS5VK_VERTEX_NUMERIC_SINT};
     case VK_FORMAT_R8G8B8A8_UNORM:
     case VK_FORMAT_B8G8R8A8_UNORM:
+    case VK_FORMAT_R8G8B8A8_SNORM:
+    case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+    case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
     case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
         return (struct ps5vk_vertex_format){4,4,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R8G8B8A8_UINT:
+    case VK_FORMAT_A8B8G8R8_UINT_PACK32:
+        return (struct ps5vk_vertex_format){4,4,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R8G8B8A8_SINT:
+    case VK_FORMAT_A8B8G8R8_SINT_PACK32:
+        return (struct ps5vk_vertex_format){4,4,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R16_UNORM:
+    case VK_FORMAT_R16_SNORM:
+    case VK_FORMAT_R16_SFLOAT:
+        return (struct ps5vk_vertex_format){2,1,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R16_UINT:
+        return (struct ps5vk_vertex_format){2,1,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R16_SINT:
+        return (struct ps5vk_vertex_format){2,1,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R16G16_UNORM:
+    case VK_FORMAT_R16G16_SNORM:
+    case VK_FORMAT_R16G16_SFLOAT:
+        return (struct ps5vk_vertex_format){4,2,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R16G16_UINT:
+        return (struct ps5vk_vertex_format){4,2,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R16G16_SINT:
+        return (struct ps5vk_vertex_format){4,2,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R16G16B16A16_UNORM:
+    case VK_FORMAT_R16G16B16A16_SNORM:
+    case VK_FORMAT_R16G16B16A16_SFLOAT:
+        return (struct ps5vk_vertex_format){8,4,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R16G16B16A16_UINT:
+        return (struct ps5vk_vertex_format){8,4,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R16G16B16A16_SINT:
+        return (struct ps5vk_vertex_format){8,4,PS5VK_VERTEX_NUMERIC_SINT};
     default: return (struct ps5vk_vertex_format){0};
     }
 }

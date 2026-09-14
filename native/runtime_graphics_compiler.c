@@ -85,10 +85,40 @@ static PsbcVertexFormat vertex_format(VkFormat format)
     case VK_FORMAT_R32G32_UINT: return PSBC_VERTEX_FORMAT_R32G32_UINT;
     case VK_FORMAT_R32G32B32_UINT: return PSBC_VERTEX_FORMAT_R32G32B32_UINT;
     case VK_FORMAT_R32G32B32A32_UINT: return PSBC_VERTEX_FORMAT_R32G32B32A32_UINT;
+    case VK_FORMAT_R8_UNORM: return PSBC_VERTEX_FORMAT_R8_UNORM;
+    case VK_FORMAT_R8_SNORM: return PSBC_VERTEX_FORMAT_R8_SNORM;
+    case VK_FORMAT_R8_UINT: return PSBC_VERTEX_FORMAT_R8_UINT;
+    case VK_FORMAT_R8_SINT: return PSBC_VERTEX_FORMAT_R8_SINT;
+    case VK_FORMAT_R8G8_UNORM: return PSBC_VERTEX_FORMAT_R8G8_UNORM;
+    case VK_FORMAT_R8G8_SNORM: return PSBC_VERTEX_FORMAT_R8G8_SNORM;
+    case VK_FORMAT_R8G8_UINT: return PSBC_VERTEX_FORMAT_R8G8_UINT;
+    case VK_FORMAT_R8G8_SINT: return PSBC_VERTEX_FORMAT_R8G8_SINT;
     case VK_FORMAT_R8G8B8A8_UNORM: return PSBC_VERTEX_FORMAT_R8G8B8A8_UNORM;
     case VK_FORMAT_B8G8R8A8_UNORM: return PSBC_VERTEX_FORMAT_B8G8R8A8_UNORM;
+    case VK_FORMAT_A8B8G8R8_UNORM_PACK32: return PSBC_VERTEX_FORMAT_R8G8B8A8_UNORM;
+    case VK_FORMAT_R8G8B8A8_SNORM:
+    case VK_FORMAT_A8B8G8R8_SNORM_PACK32: return PSBC_VERTEX_FORMAT_R8G8B8A8_SNORM;
+    case VK_FORMAT_R8G8B8A8_UINT:
+    case VK_FORMAT_A8B8G8R8_UINT_PACK32: return PSBC_VERTEX_FORMAT_R8G8B8A8_UINT;
+    case VK_FORMAT_R8G8B8A8_SINT:
+    case VK_FORMAT_A8B8G8R8_SINT_PACK32: return PSBC_VERTEX_FORMAT_R8G8B8A8_SINT;
     case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
         return PSBC_VERTEX_FORMAT_R10G10B10A2_UNORM;
+    case VK_FORMAT_R16_UNORM: return PSBC_VERTEX_FORMAT_R16_UNORM;
+    case VK_FORMAT_R16_SNORM: return PSBC_VERTEX_FORMAT_R16_SNORM;
+    case VK_FORMAT_R16_UINT: return PSBC_VERTEX_FORMAT_R16_UINT;
+    case VK_FORMAT_R16_SINT: return PSBC_VERTEX_FORMAT_R16_SINT;
+    case VK_FORMAT_R16_SFLOAT: return PSBC_VERTEX_FORMAT_R16_FLOAT;
+    case VK_FORMAT_R16G16_UNORM: return PSBC_VERTEX_FORMAT_R16G16_UNORM;
+    case VK_FORMAT_R16G16_SNORM: return PSBC_VERTEX_FORMAT_R16G16_SNORM;
+    case VK_FORMAT_R16G16_UINT: return PSBC_VERTEX_FORMAT_R16G16_UINT;
+    case VK_FORMAT_R16G16_SINT: return PSBC_VERTEX_FORMAT_R16G16_SINT;
+    case VK_FORMAT_R16G16_SFLOAT: return PSBC_VERTEX_FORMAT_R16G16_FLOAT;
+    case VK_FORMAT_R16G16B16A16_UNORM: return PSBC_VERTEX_FORMAT_R16G16B16A16_UNORM;
+    case VK_FORMAT_R16G16B16A16_SNORM: return PSBC_VERTEX_FORMAT_R16G16B16A16_SNORM;
+    case VK_FORMAT_R16G16B16A16_UINT: return PSBC_VERTEX_FORMAT_R16G16B16A16_UINT;
+    case VK_FORMAT_R16G16B16A16_SINT: return PSBC_VERTEX_FORMAT_R16G16B16A16_SINT;
+    case VK_FORMAT_R16G16B16A16_SFLOAT: return PSBC_VERTEX_FORMAT_R16G16B16A16_FLOAT;
     default: return PSBC_VERTEX_FORMAT_NONE;
     }
 }
@@ -119,12 +149,13 @@ static int apply_parameters(PsbcCompileOptions *options,
                 if(key->vertex_bindings[j].binding==source->binding)binding=&key->vertex_bindings[j];
             PsbcVertexFormat format=vertex_format(source->format);
             if(!binding || !format || binding->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
-               !binding->stride || binding->stride>0x3fff || binding->stride%4 || source->offset%4)
+               !binding->stride || binding->stride>0x3fff)
                 return 0;
             options->vertex_attributes[options->vertex_attribute_count++]=(PsbcVertexAttribute){
                 .location=(uint8_t)source->location,.binding=(uint8_t)source->binding,
                 .format=format,.offset=source->offset,.stride=binding->stride,
-                .alignment=4,.instance_divisor=0};
+                /* Vulkan vertex bindings and offsets are byte-granular. */
+                .alignment=1,.instance_divisor=0};
         }
     }
     return 1;
