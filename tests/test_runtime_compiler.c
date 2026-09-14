@@ -226,6 +226,22 @@ int main(void)
     res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &multiset_layout, NULL, &bad_prog, &bad_code);
     assert(res==VK_SUCCESS && bad_prog.descriptor_set_mask==1);free(bad_code);bad_code=NULL;
 
+    /* A declared set the shader never dereferences is a declaration, not a
+     * requirement: no second table pointer, no extra user SGPR, and no extra
+     * program descriptor. The previous contract reserved all of them. */
+    struct VkPipelineLayout_T sparse_layout = multiset_layout;
+    sparse_layout.sets[1].count = 1;
+    sparse_layout.sets[1].binding[0].count = 1;
+    sparse_layout.sets[1].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    sparse_layout.sets[1].type[0] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &sparse_layout, NULL, &bad_prog, &bad_code);
+    assert(res==VK_SUCCESS && bad_prog.descriptor_set_mask==1 &&
+        bad_prog.descriptor_count==2 && bad_prog.user_sgprs==3);
+    free(bad_code);bad_code=NULL;
+    /* A used set the layout does not declare still fails closed. */
+    assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &empty_layout,
+        NULL, &bad_prog, &bad_code) != VK_SUCCESS);
+
     /* 5. Verify CPU reference computation semantics for both programs */
     for (uint32_t i = 0; i < 1024; i++) {
         uint32_t in_val = (i * UINT32_C(2654435761)) ^ 0x79bd2468;
