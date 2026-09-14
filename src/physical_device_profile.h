@@ -2,6 +2,7 @@
 #define PS5VK_PHYSICAL_DEVICE_PROFILE_H
 
 #include "vk_descriptor.h"
+#include "graphics_limits.h"
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
@@ -244,6 +245,21 @@ static inline int ps5vk_physical_profile_valid(
 
     if (!!has_format_properties != !!has_image_properties) return 0;
     if (queue_flags & VK_QUEUE_GRAPHICS_BIT) {
+        /* The four sampled-descriptor limits must stay between the qualified
+         * minima the witnesses reach and the capacity the descriptor table
+         * layout implements. A graphics profile that drops below the floor, or
+         * claims more records than one table can carry, fails closed here
+         * instead of reaching the report. The compute-only build applies no
+         * graphics limits and keeps reporting them as documented blockers. */
+        if (limits->maxPerStageDescriptorSamplers < PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS ||
+            limits->maxPerStageDescriptorSamplers > PS5VK_MAX_DESCRIPTORS ||
+            limits->maxPerStageDescriptorSampledImages < PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS ||
+            limits->maxPerStageDescriptorSampledImages > PS5VK_MAX_DESCRIPTORS ||
+            limits->maxDescriptorSetSamplers < PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS ||
+            limits->maxDescriptorSetSamplers > PS5VK_MAX_DESCRIPTORS ||
+            limits->maxDescriptorSetSampledImages < PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS ||
+            limits->maxDescriptorSetSampledImages > PS5VK_MAX_DESCRIPTORS)
+            return 0;
         if (!has_format_properties || !limits->maxImageDimension2D ||
             !limits->maxFramebufferWidth || !limits->maxFramebufferHeight)
             return 0;

@@ -3,6 +3,7 @@ import hashlib
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -74,6 +75,47 @@ class TestReportingMatrix(unittest.TestCase):
             [sys.executable, str(ROOT / "tools/check_reporting_matrix.py"), "--check"],
             capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_sampled_descriptor_floors_are_reported_and_still_bound(self):
+        """The four sampled-descriptor floors are satisfied in graphics only."""
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        rows = {(row["profile"], row["limit"]): row for row in data["limits"]}
+        for name, value in (("maxPerStageDescriptorSamplers", 16),
+                            ("maxPerStageDescriptorSampledImages", 16),
+                            ("maxDescriptorSetSamplers", 96),
+                            ("maxDescriptorSetSampledImages", 96)):
+            row = rows[("graphics", name)]
+            self.assertEqual(row["reported"], value, name)
+            self.assertEqual(row["verdict"], "satisfied", name)
+            # The compute-only build applies no graphics limits and stays a
+            # documented blocker rather than a claim.
+            compute = rows[("compute", name)]
+            self.assertEqual(compute["verdict"], "blocker", name)
+            self.assertIn("compute-only build", compute["detail"], name)
+        # A dropped value is still a violation unless it is a documented blocker.
+        core = json.loads((ROOT / "conformance_inventory/core_target.json").read_text())
+        sampler_row = next(r for r in core["limits"]["rows"]
+                           if r["limit"] == "maxPerStageDescriptorSamplers")
+        verdict, _ = matrix.evaluate_limit(sampler_row, 15, {})
+        self.assertEqual(verdict, "violation")
+        sampler_set_row = next(r for r in core["limits"]["rows"]
+                               if r["limit"] == "maxDescriptorSetSamplers")
+        verdict, _ = matrix.evaluate_limit(sampler_set_row, 95, {})
+        self.assertEqual(verdict, "violation")
+
+    def test_manifest_report_mismatch_fails_the_gate(self):
+        """A selection the committed matrix does not record is a gate failure."""
+        manifest = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        manifest["cases"] = manifest["cases"][:-1]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest))
+            original, argv = matrix.MANIFEST, sys.argv
+            matrix.MANIFEST, sys.argv = path, ["check_reporting_matrix.py", "--check"]
+            try:
+                self.assertEqual(matrix.main(), 1)
+            finally:
+                matrix.MANIFEST, sys.argv = original, argv
 
     def test_below_floor_report_without_a_blocker_is_a_violation(self):
         """A new below-floor value must fail the gate, not be silently accepted."""

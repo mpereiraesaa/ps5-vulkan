@@ -131,8 +131,13 @@ static void lifecycle(void)
         gl.maxImageDimension3D==PS5VK_MAX_IMAGE_3D &&
         gl.maxImageDimensionCube==PS5VK_MAX_IMAGE_CUBE &&
         gl.maxImageArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
-    assert(gl.maxPerStageDescriptorSamplers==1 && gl.maxPerStageDescriptorSampledImages==1);
-    assert(gl.maxDescriptorSetSamplers==1 && gl.maxDescriptorSetSampledImages==1);
+    /* Sampled descriptors report the qualified Vulkan 1.0 floors, not the old
+     * one-descriptor contract: one set carries the whole table the runtime draw
+     * ABI addresses and one stage reads as many records as the layout reserves. */
+    assert(gl.maxPerStageDescriptorSamplers==PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS &&
+        gl.maxPerStageDescriptorSampledImages==PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS);
+    assert(gl.maxDescriptorSetSamplers==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS &&
+        gl.maxDescriptorSetSampledImages==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS);
     assert(gl.maxSamplerAllocationCount==PS5VK_MAX_SAMPLERS && PS5VK_MAX_SAMPLERS==4096);
     assert(gl.maxFragmentOutputAttachments==1 && gl.maxFragmentCombinedOutputResources==1);
     const VkFormat guarantee_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_D32_SFLOAT};
@@ -228,6 +233,49 @@ static void lifecycle(void)
             queue_flags, 1, 1));
         broken = profile;
         broken.limits.lineWidthRange[1] = 0.0f;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        /* Sampled-descriptor limits: the shipped graphics profile reports the
+         * qualified minima, and both a dropped value and an inflated claim past
+         * the descriptor table capacity fail the profile. */
+        assert(profile.limits.maxPerStageDescriptorSamplers ==
+               PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS &&
+               profile.limits.maxPerStageDescriptorSampledImages ==
+               PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS &&
+               profile.limits.maxDescriptorSetSamplers ==
+               PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS &&
+               profile.limits.maxDescriptorSetSampledImages ==
+               PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS);
+        broken = profile;
+        broken.limits.maxPerStageDescriptorSamplers = PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS - 1;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxPerStageDescriptorSamplers = PS5VK_MAX_DESCRIPTORS + 1;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxPerStageDescriptorSampledImages = PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS - 1;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxPerStageDescriptorSampledImages = PS5VK_MAX_DESCRIPTORS + 1;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxDescriptorSetSamplers = PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS - 1;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxDescriptorSetSamplers = PS5VK_MAX_DESCRIPTORS + 1;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxDescriptorSetSampledImages = PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS - 1;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxDescriptorSetSampledImages = PS5VK_MAX_DESCRIPTORS + 1;
         assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
             queue_flags, 1, 1));
         assert(ps5vk_physical_profile_valid(&profile, &profile_memory, max_allocation,
