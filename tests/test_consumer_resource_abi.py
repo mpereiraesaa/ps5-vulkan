@@ -103,8 +103,9 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 
 
 class ConsumerResourceAbiTests(unittest.TestCase):
-    def fixture(self, edit=None, sampled=False, shared=False, visibility=None):
-        sampled = sampled or shared
+    def fixture(self, edit=None, sampled=False, shared=False, visibility=None,
+                single=False, mixed=False):
+        sampled = sampled or shared or single or mixed
         messages = list(MESSAGES)
         if sampled:
             for index,message in enumerate(messages):
@@ -112,12 +113,28 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                     prefix,rest=message.split(" serial=")
                     serial,tail=rest.split(" ",1)
                     messages[index]=f"{prefix} serial={int(serial)+4} {tail}"
-            rows=["PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"]
-            words=("914c503b","914b4d4f","914a4643","913a5449")
-            if shared:
-                rows[0]+=" stages=vertex-fragment vs_sha256="+"e"*64+" fs_sha256="+"f"*64
-                if visibility is not None:rows[0]+=f" visibility={visibility:08x}"
-                words=("6d3a3b2f","6d373d35","6d42392a","6d2e4135")
+            if single:
+                rows=["PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_START sets=1 descriptors=96"
+                      " elements=96 rounds=4 visibility=00000010 fs_sha256="+"f"*64]
+                marker="PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_RESULT"
+                retired="PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_RETIRED"
+                words=("914c503b","914b4d4f","914a4643","913a5449")
+            elif mixed:
+                rows=["PS5VK_CONSUMER_MIXED_SETS_START sets=4 descriptors=96"
+                      " uniform_buffers=4 rounds=4 visibility=00000010"
+                      " fs_sha256="+"f"*64]
+                words=("381e1f17","4b29272a","5d2d2c2c","6f2c4038")
+                marker="PS5VK_CONSUMER_MIXED_SETS_RESULT"
+                retired="PS5VK_CONSUMER_MIXED_SETS_RETIRED"
+            else:
+                rows=["PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"]
+                marker="PS5VK_CONSUMER_SAMPLED_SETS_RESULT"
+                retired="PS5VK_CONSUMER_SAMPLED_SETS_RETIRED"
+                words=("914c503b","914b4d4f","914a4643","913a5449")
+                if shared:
+                    rows[0]+=" stages=vertex-fragment vs_sha256="+"e"*64+" fs_sha256="+"f"*64
+                    if visibility is not None:rows[0]+=f" visibility={visibility:08x}"
+                    words=("6d3a3b2f","6d373d35","6d42392a","6d2e4135")
             for round_index,word in enumerate(words):
                 serial=13+round_index
                 rows.extend([
@@ -125,9 +142,9 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                     f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
                     f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0",
                     f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=8388608",
-                    f"PS5VK_CONSUMER_SAMPLED_SETS_RESULT round={round_index} expected={word} changed=471744 bad=0",
+                    f"{marker} round={round_index} expected={word} changed=471744 bad=0",
                 ])
-            rows.append("PS5VK_CONSUMER_SAMPLED_SETS_RETIRED")
+            rows.append(retired)
             at=messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
             messages[at:at]=rows
         if edit:
@@ -186,7 +203,15 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         if sampled:
             artifact["sampled_graphics"]={"sets":4,"descriptors":96,"rounds":4,
                                          "shader_spirv_sha256":"f"*64}
-            if shared:
+            if single:
+                artifact["sampled_graphics"].update(stage_profile="single-set",sets=1,
+                                                    elements_per_set=96,
+                                                    visibility_mask=0x10)
+            elif mixed:
+                artifact["sampled_graphics"].update(stage_profile="mixed-resources",
+                                                    uniform_buffers=4,
+                                                    visibility_mask=0x10)
+            elif shared:
                 artifact["sampled_graphics"].update(stage_profile="vertex-fragment", vertex_spirv_sha256="e"*64)
                 if visibility is not None:artifact["sampled_graphics"]["visibility_mask"]=visibility
         return log, receipt, artifact
@@ -198,8 +223,60 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             for wrong in (0,0x40000000,0x10,"all",None,True,0x11 if mask!=0x11 else 0x1f):
                 artifact["sampled_graphics"]["visibility_mask"]=wrong
                 with self.subTest(mask=mask,wrong=wrong),self.assertRaises(ValueError):validate(log,receipt,artifact)
-            del artifact["sampled_graphics"]["visibility_mask"]
-            with self.assertRaises(ValueError):validate(log,receipt,artifact)
+
+    def test_mixed_profile_is_strict_and_cannot_be_confused_with_sampler_only(self):
+        log,receipt,artifact=self.fixture(mixed=True)
+        result=validate(log,receipt,artifact)
+        self.assertEqual(result["mixed_resource_uniform_buffers"],4)
+
+        def mutated(edit):
+            log,receipt,artifact=self.fixture(mixed=True,edit=edit)
+            with self.assertRaises(ValueError):
+                validate(log,receipt,artifact)
+
+        def drop_round(messages):
+            messages.remove(next(m for m in messages
+                if m.startswith("PS5VK_CONSUMER_MIXED_SETS_RESULT round=2")))
+        def duplicate_round(messages):
+            row=next(m for m in messages
+                     if m.startswith("PS5VK_CONSUMER_MIXED_SETS_RESULT round=1"))
+            messages.insert(messages.index(row),row)
+        def wrong_pixel(messages):
+            index=messages.index(next(m for m in messages
+                if m.startswith("PS5VK_CONSUMER_MIXED_SETS_RESULT round=3")))
+            messages[index]=messages[index].replace("expected=6f2c4038","expected=6f2c4039")
+        def leaked_sampler_markers(messages):
+            messages.insert(messages.index("PS5VK_CONSUMER_MIXED_SETS_RETIRED"),
+                            "PS5VK_CONSUMER_SAMPLED_SETS_RESULT round=0 "
+                            "expected=914c503b changed=471744 bad=0")
+        def missing_uniform_marker(messages):
+            index=messages.index(next(m for m in messages
+                if m.startswith("PS5VK_CONSUMER_MIXED_SETS_START")))
+            messages[index]=messages[index].replace(" uniform_buffers=4","")
+
+        for edit in (drop_round,duplicate_round,wrong_pixel,leaked_sampler_markers,
+                     missing_uniform_marker):
+            with self.subTest(edit=edit.__name__):
+                mutated(edit)
+
+        # Artifact-side claims must match the run: a stale shader hash, a wrong
+        # uniform count, a downgraded visibility mask or a sampler-only artifact
+        # presented with mixed markers are all rejected.
+        for key,value in (("shader_spirv_sha256","0"*64),
+                          ("uniform_buffers",3),
+                          ("visibility_mask",0x11),
+                          ("stage_profile","fragment")):
+            log,receipt,artifact=self.fixture(mixed=True)
+            artifact["sampled_graphics"][key]=value
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                validate(log,receipt,artifact)
+        # A sampler-only artifact cannot claim the mixed profile.
+        log,receipt,artifact=self.fixture(sampled=True)
+        artifact["sampled_graphics"]["uniform_buffers"]=4
+        with self.assertRaises(ValueError):
+            validate(log,receipt,artifact)
+
+    def test_shared_visibility_default_and_absence_are_exact(self):
         log,receipt,artifact=self.fixture(shared=True)
         self.assertEqual(validate(log,receipt,artifact)["sampled_graphics_visibility_mask"],0x11)
         artifact["sampled_graphics"]["visibility_mask"]=0x7fffffff
@@ -207,11 +284,75 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         log,receipt,artifact=self.fixture(sampled=True)
         artifact["sampled_graphics"]["visibility_mask"]=0x10
         with self.assertRaises(ValueError):validate(log,receipt,artifact)
+        # An explicit mask in the log cannot be dropped from the artifact.
+        log,receipt,artifact=self.fixture(shared=True,visibility=0x1f)
+        del artifact["sampled_graphics"]["visibility_mask"]
+        with self.assertRaises(ValueError):validate(log,receipt,artifact)
+        artifact["sampled_graphics"]["visibility_mask"]=0x10
+        with self.assertRaises(ValueError):validate(log,receipt,artifact)
+
+    def test_single_set_capacity_is_strict_and_bound_to_one_set(self):
+        log,receipt,artifact=self.fixture(single=True)
+        result=validate(log,receipt,artifact)
+        self.assertEqual(result["single_set_sampler_elements"],96)
+        self.assertEqual(result["sampled_graphics_stage_profile"],"single-set")
+
+        def mutated(edit):
+            with self.assertRaises(ValueError):
+                validate(*self.fixture(edit,single=True))
+
+        def drop_round(messages):
+            messages.remove(next(m for m in messages
+                if m.startswith("PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_RESULT round=2")))
+        def duplicate_round(messages):
+            row=next(m for m in messages
+                     if m.startswith("PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_RESULT round=1"))
+            messages.insert(messages.index(row),row)
+        def wrong_pixel(messages):
+            index=messages.index(next(m for m in messages
+                if m.startswith("PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_RESULT round=0")))
+            messages[index]=messages[index].replace("expected=914c503b","expected=914c503c")
+        def missing_elements(messages):
+            index=messages.index(next(m for m in messages
+                if m.startswith("PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_START")))
+            messages[index]=messages[index].replace(" elements=96","")
+        def leaked_four_set_marker(messages):
+            messages.insert(messages.index("PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_RETIRED"),
+                            "PS5VK_CONSUMER_SAMPLED_SETS_RESULT round=0 "
+                            "expected=914c503b changed=471744 bad=0")
+
+        for edit in (drop_round,duplicate_round,wrong_pixel,missing_elements,
+                     leaked_four_set_marker):
+            with self.subTest(edit=edit.__name__):
+                mutated(edit)
+
+        # The artifact must claim exactly the one-set ninety-six-element profile
+        # the run proves; a four-set shape or any wrong count is rejected.
+        for key,value in (("sets",4),("elements_per_set",95),("elements_per_set",97),
+                          ("descriptors",95),("visibility_mask",0x11),
+                          ("shader_spirv_sha256","0"*64)):
+            log,receipt,artifact=self.fixture(single=True)
+            artifact["sampled_graphics"][key]=value
+            with self.subTest(key=key,value=value),self.assertRaises(ValueError):
+                validate(log,receipt,artifact)
+        log,receipt,artifact=self.fixture(single=True)
+        artifact["sampled_graphics"]={"sets":4,"descriptors":96,"rounds":4,
+                                      "shader_spirv_sha256":"f"*64}
+        with self.assertRaises(ValueError):
+            validate(log,receipt,artifact)
+        # And a single-set artifact cannot carry four-set markers.
+        log,receipt,artifact=self.fixture(sampled=True)
+        artifact["sampled_graphics"].update(stage_profile="single-set",sets=1,
+                                            elements_per_set=96,visibility_mask=0x10)
+        with self.assertRaises(ValueError):
+            validate(log,receipt,artifact)
 
     def test_visibility_cli_rejects_unknown_or_unexecuted_modes(self):
         builder=Path(__file__).resolve().parents[1]/"tools/build_consumer.py"
         for args in (("--sampler-visibility","unknown"),("--sampler-visibility","all"),
-                     ("--continuous","--shared-stage-samplers","--sampler-visibility","all")):
+                     ("--continuous","--shared-stage-samplers","--sampler-visibility","all"),
+                     ("--continuous","--single-set-samplers"),
+                     ("--shared-stage-samplers","--single-set-samplers")):
             result=subprocess.run([sys.executable,str(builder),*args],capture_output=True,text=True)
             self.assertEqual(result.returncode,2,result.stdout+result.stderr)
 

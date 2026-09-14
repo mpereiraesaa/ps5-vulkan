@@ -1,6 +1,32 @@
 #include "descriptor_encode.h"
 #include <string.h>
 
+VkResult ps5vk_buffer_descriptor(VkDevice device, const VkDescriptorBufferInfo *info,
+                                 VkDeviceSize dynamic_offset, uint32_t out[4])
+{
+    if (!device || !info || !info->buffer || !out ||
+        dynamic_offset > UINT64_MAX - info->offset)
+        return VK_ERROR_UNKNOWN;
+    void *address = NULL;
+    VkDeviceSize bytes = 0;
+    VkResult result = ps5vk_buffer_span(device, info->buffer,
+                                        info->offset + dynamic_offset, info->range,
+                                        &address, &bytes);
+    if (result != VK_SUCCESS) return result;
+    uint64_t gpu = (uintptr_t)address;
+    if (!bytes || bytes > UINT32_MAX || gpu >= (UINT64_C(1) << 48) ||
+        bytes > (UINT64_C(1) << 48) - gpu)
+        return VK_ERROR_UNKNOWN;
+    out[0] = (uint32_t)gpu;
+    out[1] = (uint32_t)(gpu >> 32);
+    out[2] = (uint32_t)bytes;
+    /* The audited byte-addressed raw descriptor: stride zero, byte extent. A
+     * typed/structured form with NUM_RECORDS in elements is not equivalent for
+     * these byte-granular loads. */
+    out[3] = 0x31016fac;
+    return VK_SUCCESS;
+}
+
 VkResult ps5vk_descriptor_encode(VkDevice device,
     const struct ps5vk_compiled_program *program, uint32_t set_index, VkDescriptorSet set,
     const VkDeviceSize dynamic_offsets[PS5VK_MAX_DESCRIPTORS],
@@ -59,20 +85,9 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
         const VkDescriptorBufferInfo *info = &set->buffers[index];
         VkDeviceSize dynamic = ps5vk_dynamic_descriptor_type(p->type) ?
             dynamic_offsets[i] : 0;
-        if (dynamic > UINT64_MAX - info->offset) return VK_ERROR_UNKNOWN;
-        void *address = NULL; VkDeviceSize bytes = 0;
-        VkResult result = ps5vk_buffer_span(device, info->buffer, info->offset + dynamic,
-                                           info->range, &address, &bytes);
-        if (result != VK_SUCCESS) return result;
-        uint64_t gpu = (uintptr_t)address;
-        if (!bytes || bytes > UINT32_MAX || gpu >= (UINT64_C(1) << 48) ||
-            bytes > (UINT64_C(1) << 48) - gpu) return VK_ERROR_UNKNOWN;
         uint32_t *out = scratch + p->table_dword;
-        out[0] = (uint32_t)gpu; out[1] = (uint32_t)(gpu >> 32);
-        out[2] = (uint32_t)bytes;
-        /* bootstrap compute profile's validated byte-addressed raw descriptor: stride zero, byte
-         * extent. Do not replace NUM_RECORDS with a count of uint32 elements. */
-        out[3] = 0x31016fac;
+        VkResult result = ps5vk_buffer_descriptor(device, info, dynamic, out);
+        if (result != VK_SUCCESS) return result;
         if (extent < p->table_dword + 4) extent = p->table_dword + 4;
     }
     if(!extent)return VK_ERROR_UNKNOWN;

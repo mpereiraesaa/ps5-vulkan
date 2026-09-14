@@ -106,7 +106,10 @@
       "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_1_byte",
       "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_3_bytes",
       "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_4_bytes",
-      "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_32_bytes"
+      "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_32_bytes",
+      "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex.single_descriptor.2d",
+      "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.fragment.single_descriptor.2d",
+      "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex_fragment.single_descriptor.2d"
     ],
     "diagnostics": [
       "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.update_buffer_second_part",

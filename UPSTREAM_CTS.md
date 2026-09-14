@@ -48,10 +48,10 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 106 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 109 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
-  pipeline, push-constant, storage-width, fixed-function, buffer-transfer and
-  image-copy cases). Only these
+  pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
+  image-copy and binding-model combined-sampler cases). Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -709,3 +709,60 @@ Close Game. Their QPA SHA-256 values are
 and `046002260dfa35dd7bf3db02349368eac110a253f44ef8c7a2f587712220b4f0`.
 This is executable evidence for the selected scalar buffer family, not a Vulkan
 conformance claim or evidence for every robustness permutation.
+
+## Binding-model combined-sampler expansion (2026-09-14)
+
+The current manifest contains 109 acceptance cases. It adds three unchanged
+upstream `binding_model.shader_access.primary_cmd_buf.bind.
+combined_image_sampler_mutable` leaves, all of them the `single_descriptor.2d`
+variant, one per stage combination:
+
+- `...combined_image_sampler_mutable.vertex.single_descriptor.2d`
+- `...combined_image_sampler_mutable.fragment.single_descriptor.2d`
+- `...combined_image_sampler_mutable.vertex_fragment.single_descriptor.2d`
+
+The factory the manifest cites is
+`external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9698`.
+No Khronos test body, shader, support check, reference image or result oracle was
+modified, and the integration already registers that factory wholesale and
+compiles its module, so this is a selection change only: the packaged case list
+grows by exactly three lines. Each case binds one mutable combined image sampler
+into a 2D RGBA8 target and compares the rendered quadrants against the upstream
+four-quadrant oracle.
+
+Selection is not acceptance on its own. The three leaves were first executed as
+a private three-case candidate selection against the unchanged upstream bodies;
+only after both runs passed every original oracle were they promoted here.
+
+The promotion was validated with one signed payload deployed through exact FTP
+readback, SELF SHA-256
+`afc5464712c54f176b52f7e2e00c966ee81cfce1ff7d38e85aa3ece5d61e1c95`
+and selection SHA-256
+`b74617b2e99d1ebcc9ff3bc1c12f51ece38c82b6bd96db1fdca142b3294eaf1d`:
+
+- run `run-159167454934290`, QPA SHA-256
+  `57be15fefc8bd5fd1d8db836225611fdc29cb51ec470b2be148f1778e5993b8d`
+- run `run-159192559716276`, QPA SHA-256
+  `f81d2a1bf5fc5cc57d64a36be020b174caf48ad6a20618b757d41b7cc0503284`
+
+Each run reconstructed all 109 results, reported exactly 109 `Pass` with zero
+`Fail`, `NotSupported` or `Skip`, no missing, unexpected or duplicate cases,
+returned exit code zero, completed the `ps5log/1` transport with a
+`complete-success` BYE, reported zero tracked allocations at teardown and
+stopped through a verified Close Game of the exact title. The run identity is
+the deployed package's own selection hash and SELF hash, checked against the
+locally built package, and the independent artifact check is the exact FTP
+readback of the deployed SELF rather than a hash echoed by the process.
+
+This is executable evidence for those three bounded original oracles. It does
+not advertise a descriptor or sampler limit, does not establish general
+multi-set sampling support and is not a Vulkan conformance claim; the reported
+sampler and sampled-image limits are unchanged, and the separate
+96-descriptor stress diagnostic remains backend qualification rather than
+portable capability.
+
+The selection gate that guards this list was hardened in the same change: a
+manifest that names the same case twice is rejected outright, including an
+acceptance/diagnostic conflict, and regression tests fail if a promoted case is
+dropped, renamed, duplicated or replaced by a path the pinned sources do not
+produce.
