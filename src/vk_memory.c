@@ -1,6 +1,7 @@
 #include "vk_internal.h"
 #include "vk_descriptor.h"
 #include "vk_image.h"
+#include "texture_format.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -222,12 +223,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateBufferView(VkDevice d,const VkBufferViewC
     if(!out)return INVALID;
     *out=VK_NULL_HANDLE;
     if(!d || !info || info->sType!=VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO || info->pNext ||
-       info->flags || !ps5vk_buffer_usage(d,info->buffer,VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT) ||
-       (info->format!=VK_FORMAT_R32_UINT && info->format!=VK_FORMAT_R32_SINT &&
-        info->format!=VK_FORMAT_R32_SFLOAT) || info->offset%4)return VK_ERROR_FEATURE_NOT_PRESENT;
+       info->flags || !ps5vk_buffer_usage(d,info->buffer,VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Creation follows the WITNESSED capability, exactly like the published
+     * VkFormatProperties: a format whose uniform-texel role is implemented but
+     * still waiting for its console witness must not become a public success
+     * path, so the reported set and the creatable set stay identical instead
+     * of merely nested. The alignment bound is the texel size of the same
+     * capability row. */
+    const struct ps5vk_texture_format *texel=ps5vk_texture_format_lookup(info->format);
+    const uint32_t element=texel?texel->bytes_per_texel:0;
+    if(!ps5vk_texture_format_witnessed(info->format,PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER) ||
+       !element || info->offset%element)return VK_ERROR_FEATURE_NOT_PRESENT;
     void *address;VkDeviceSize range;
     if(ps5vk_buffer_span(d,info->buffer,info->offset,info->range,&address,&range)!=VK_SUCCESS ||
-       range%4 || (uintptr_t)address%4)return INVALID;
+       range%element || (uintptr_t)address%element)return INVALID;
     VkAllocationCallbacks saved={0};VkBool32 custom=VK_FALSE;
     VkBufferView view=object_alloc(d,allocator,sizeof(*view),&saved,&custom);
     if(!view)return VK_ERROR_OUT_OF_HOST_MEMORY;

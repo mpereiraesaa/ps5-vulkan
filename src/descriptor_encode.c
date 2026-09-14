@@ -1,4 +1,5 @@
 #include "descriptor_encode.h"
+#include "texture_format.h"
 #include <string.h>
 
 VkResult ps5vk_buffer_descriptor(VkDevice device, const VkDescriptorBufferInfo *info,
@@ -59,26 +60,35 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
         if (p->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
             VkBufferView view = set->texel_views[index];
             if (!view || view->device != device || !view->buffer) return VK_ERROR_UNKNOWN;
+            const struct ps5vk_texture_format *entry =
+                ps5vk_texture_format_lookup(view->format);
+            if (!entry ||
+                !(entry->capabilities & PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER) ||
+                !entry->bytes_per_texel || entry->bytes_per_texel > 16)
+                return VK_ERROR_UNKNOWN;
+            const uint32_t element = entry->bytes_per_texel;
             void *address = NULL; VkDeviceSize bytes = 0;
             VkResult result = ps5vk_buffer_span(device, view->buffer, view->offset,
                                                 view->range, &address, &bytes);
-            if (result != VK_SUCCESS || !bytes || bytes / 4 > UINT32_MAX) return VK_ERROR_UNKNOWN;
+            if (result != VK_SUCCESS || !bytes || bytes % element ||
+                bytes / element > UINT32_MAX)
+                return VK_ERROR_UNKNOWN;
             uint64_t gpu = (uintptr_t)address;
-            uint32_t format = view->format == VK_FORMAT_R32_UINT ? 20u :
-                view->format == VK_FORMAT_R32_SINT ? 21u : 22u;
             uint32_t *out = scratch + p->table_dword;
-            /* Match RADV's gfx10 texel-buffer descriptor contract: a 4-byte
-             * structured element, NUM_RECORDS in texels, structured OOB
-             * selection, and RESOURCE_LEVEL set.  A raw/stride-zero descriptor
-             * is valid for SSBO byte addressing but makes typed texel loads
-             * return the OOB value on this path. */
+            /* Match RADV's gfx10 texel-buffer descriptor contract: a
+             * structured element the size of one texel, NUM_RECORDS in texels,
+             * structured OOB selection and RESOURCE_LEVEL set. A
+             * raw/stride-zero descriptor is valid for SSBO byte addressing but
+             * makes typed texel loads return the OOB value on this path. The
+             * element format and the component completion both come from the
+             * capability row, so no promoted format can be encoded with
+             * another row's word or another row's channel order. */
             out[0] = (uint32_t)gpu;
-            out[1] = (uint32_t)(gpu >> 32) | (4u << 16);
-            out[2] = (uint32_t)(bytes / 4);
-            /* Vulkan's identity component mapping for a one-component format
-             * is (R, 0, 0, 1), not the buffer SRD's generic XYZW mapping.
-             * GFX10 DST_SEL encodes X=4, constant-0=0 and constant-1=1. */
-            out[3] = UINT32_C(0x11000204) | (format << 12);
+            out[1] = (uint32_t)(gpu >> 32) | (element << 16);
+            out[2] = (uint32_t)(bytes / element);
+            out[3] = UINT32_C(0x11000000) |
+                (ps5vk_texture_format_gfx10_format(entry) << 12) |
+                ps5vk_texture_format_dst_sel(entry);
             if (extent < p->table_dword + 4) extent = p->table_dword + 4;
             continue;
         }

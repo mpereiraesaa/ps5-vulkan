@@ -94,8 +94,7 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     words[0]=(uint32_t)(address>>8);
     words[1]=(uint32_t)(address>>40)|format->descriptor_format_word|((width&3u)<<30);
     words[2]=(width>>2)|((image->info.extent.height-1)<<14)|(1u<<31);
-    words[3]=format->selectors[0]|((uint32_t)format->selectors[1]<<3)|
-        ((uint32_t)format->selectors[2]<<6)|((uint32_t)format->selectors[3]<<9)|type_word|
+    words[3]=ps5vk_texture_format_dst_sel(format)|type_word|
         (view->range.baseMipLevel<<12)|
         ((view->range.baseMipLevel+view->range.levelCount-1)<<16);
     words[4]=dimension_word;

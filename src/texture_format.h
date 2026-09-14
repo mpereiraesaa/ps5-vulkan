@@ -101,6 +101,16 @@ const struct ps5vk_texture_format *ps5vk_texture_format_lookup(VkFormat format);
 unsigned ps5vk_texture_format_count(void);
 const struct ps5vk_texture_format *ps5vk_texture_format_at(unsigned index);
 
+/* The GFX10 DST_SEL completion word of a row: X at bits 0-2, Y at 3-5, Z at
+ * 6-8 and W at 9-11. Sampled-image and buffer descriptors share this encoding,
+ * so it is derived from the row's selectors instead of being written twice. */
+uint32_t ps5vk_texture_format_dst_sel(const struct ps5vk_texture_format *format);
+
+/* The 7-bit combined GFX10 DATA_FORMAT/NUM_FORMAT value of a row. It sits at
+ * bits 20-26 of the sampled-image descriptor word and at bits 12-18 of a
+ * buffer descriptor, which is the only difference between the two uses. */
+uint32_t ps5vk_texture_format_gfx10_format(const struct ps5vk_texture_format *format);
+
 /* Implemented / witnessed capability queries. Unknown formats answer zero. */
 uint32_t ps5vk_texture_format_capabilities(VkFormat format);
 VkBool32 ps5vk_texture_format_has(VkFormat format, uint32_t capability);

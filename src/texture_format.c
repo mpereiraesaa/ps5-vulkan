@@ -62,9 +62,9 @@ static const struct ps5vk_texture_format formats[] = {
      * back; the readback pair is a separate capability from the bare
      * attachment usage. */
     SAMPLED(VK_FORMAT_R8G8B8A8_UNORM, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
-            CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK, 0),
+            CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R8G8B8A8_SNORM, 4, UINT32_C(0x03900000), 4, 5, 6, 7,
-            CAP_LINEAR | CAP_VERTEX, 0),
+            CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R8G8B8A8_SRGB, 4, UINT32_C(0x08200000), 4, 5, 6, 7,
             CAP_LINEAR, 0),
     SAMPLED(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32, 4, UINT32_C(0x08400000), 4, 5, 6, 1,
@@ -102,8 +102,8 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R8_SINT, 1, UINT32_C(0x00600000), 4, 0, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R8G8_UINT, 2, UINT32_C(0x01200000), 4, 5, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R8G8_SINT, 2, UINT32_C(0x01300000), 4, 5, 0, 1, CAP_VERTEX, 0),
-    SAMPLED(VK_FORMAT_R8G8B8A8_UINT, 4, UINT32_C(0x03c00000), 4, 5, 6, 7, CAP_VERTEX, 0),
-    SAMPLED(VK_FORMAT_R8G8B8A8_SINT, 4, UINT32_C(0x03d00000), 4, 5, 6, 7, CAP_VERTEX, 0),
+    SAMPLED(VK_FORMAT_R8G8B8A8_UINT, 4, UINT32_C(0x03c00000), 4, 5, 6, 7, CAP_VERTEX, CAP_UTEXEL),
+    SAMPLED(VK_FORMAT_R8G8B8A8_SINT, 4, UINT32_C(0x03d00000), 4, 5, 6, 7, CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16_UINT, 2, UINT32_C(0x00b00000), 4, 0, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R16_SINT, 2, UINT32_C(0x00c00000), 4, 0, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R16G16_UINT, 4, UINT32_C(0x01b00000), 4, 5, 0, 1, CAP_VERTEX, 0),
@@ -169,6 +169,20 @@ unsigned ps5vk_texture_format_count(void)
 const struct ps5vk_texture_format *ps5vk_texture_format_at(unsigned index)
 {
     return index < ps5vk_texture_format_count() ? &formats[index] : 0;
+}
+
+uint32_t ps5vk_texture_format_dst_sel(const struct ps5vk_texture_format *format)
+{
+    if (!format) return 0;
+    return (uint32_t)format->selectors[0] |
+        ((uint32_t)format->selectors[1] << 3) |
+        ((uint32_t)format->selectors[2] << 6) |
+        ((uint32_t)format->selectors[3] << 9);
+}
+
+uint32_t ps5vk_texture_format_gfx10_format(const struct ps5vk_texture_format *format)
+{
+    return format ? ((format->descriptor_format_word >> 20) & 0x7fu) : 0;
 }
 
 uint32_t ps5vk_texture_format_capabilities(VkFormat format)
