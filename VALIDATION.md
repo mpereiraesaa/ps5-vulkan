@@ -1400,3 +1400,48 @@ released all allocations and returned through exact-title Close Game:
 The graphics profile consequently reports `maxImageDimension1D=4096` and
 removes that real blocker. This is still a bounded contract, not an exhaustive
 maximum-sized allocation test.
+
+## Mandatory uniform buffers beside sampled sets (2026-09-14)
+
+A legal Vulkan graphics layout may carry mandatory uniform buffers next to its
+combined image samplers. The runtime graphics profile previously rejected every
+non-sampler descriptor type, so such a pipeline failed to create
+(`vkCreateGraphicsPipelines -> VK_ERROR_FEATURE_NOT_PRESENT` with the runtime
+graphics cache reporting `rc=-8`). The profile now admits
+`VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER` and `UNIFORM_BUFFER_DYNAMIC` bindings and the
+`Uniform` storage class, delivers both descriptor kinds from one canonical table
+and validates them per element; storage buffers remain outside this bounded
+profile.
+
+The public SDK consumer's mixed-resource workload exercises that path: four sets,
+each with one uniform buffer at the sparse binding 5 and a 24-element combined
+image sampler array at binding 7, 96 sampled descriptors plus 4 uniform buffers
+in total. The uniform record is rewritten and re-published as a descriptor write
+between the four rounds, and the shader scales each set's whole contribution by
+it, so a missing, stale or cross-wired record changes the pixel.
+
+One signed artifact, `dist-consumer/artifact.json` profile `mixed-resources`,
+SELF SHA-256
+`592ac57858b7da62792ad2638523d59a0d9c986f86f00b3cc49951af3041f2b7`,
+fragment shader SHA-256
+`44b88cb20c7c11baff96ca4f3b82a8faa3b6449bdaca810e6fbd8a9166d6866a`,
+was deployed through exact FTP readback and ShadowMountPlus refresh. Two
+identical-artifact runs on the owned PS5:
+
+- `20260914T141642731Z_PPSA99994_ps5vk_0x93e114d27a53`, log SHA-256
+  `87377f8cbe9fa7b8653f5d9d57ba5a1dfb04c88cfd3c9be731b9e8b1c009f2e8`
+- `20260914T141725539Z_PPSA99994_ps5vk_0x93eb0c34f770`, log SHA-256
+  `6a7685224e7c63a5b3774d18c6194fc9afa46a9989fc442b8795917770132226`
+
+Each round reported `changed=471744` with `bad=0` against the in-run model, and
+the four expected words `381e1f17`, `4b29272a`, `5d2d2c2c` and `6f2c4038` match a
+separately computed reference exactly (the verifier rejected an earlier,
+incorrectly mapped attempt at those literals). Both runs ended with
+`PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1`, a complete
+`ps5log/1` transport (`BYE reason=consumer-finite-end`) and a verified
+exact-title Close Game.
+
+This qualifies the mixed delivery path for that bounded workload only. No
+descriptor or sampler limit is advertised here, storage buffers and other
+descriptor types stay rejected, and the reported sampler and sampled-image
+limits are unchanged; the limit derivation remains a separate change.

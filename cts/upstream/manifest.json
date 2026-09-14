@@ -844,6 +844,24 @@
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
       "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
       "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with a 32-byte descriptor range."
+    },
+    {
+      "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex.single_descriptor.2d",
+      "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9698",
+      "category": "graphics-sampler", "expected_status": "Pass", "features_required": [],
+      "rationale": "Original upstream single-descriptor mutable combined-image-sampler body and four-quadrant image oracle, executed from the vertex stage only. Measured Pass twice on the same signed artifact before acceptance."
+    },
+    {
+      "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.fragment.single_descriptor.2d",
+      "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9698",
+      "category": "graphics-sampler", "expected_status": "Pass", "features_required": [],
+      "rationale": "Original upstream single-descriptor mutable combined-image-sampler body and four-quadrant image oracle, executed from the fragment stage only. Measured Pass twice on the same signed artifact before acceptance."
+    },
+    {
+      "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex_fragment.single_descriptor.2d",
+      "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9698",
+      "category": "graphics-sampler", "expected_status": "Pass", "features_required": [],
+      "rationale": "Original upstream single-descriptor mutable combined-image-sampler body and four-quadrant image oracle, executed from the vertex and fragment stages together. Measured Pass twice on the same signed artifact before acceptance."
     }
   ],
   "diagnostics": [

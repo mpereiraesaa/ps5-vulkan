@@ -74,7 +74,8 @@ def validate(log, receipt, artifact):
         # Archived fragment-only artifacts predate stage_profile. No shared-stage
         # evidence can use that fallback: both its vertex digest and start row differ.
         sampled_profile = sampled.get("stage_profile", "fragment")
-        require(sampled_profile in ("fragment", "vertex-fragment", "single-set"),
+        require(sampled_profile in ("fragment", "vertex-fragment", "single-set",
+                                    "mixed-resources"),
                 "sampled stage profile")
         require(sampled.get("sets") in (1, 4) and sampled.get("descriptors") == 96 and
                 sampled.get("rounds") == 4 and
@@ -87,7 +88,14 @@ def validate(log, receipt, artifact):
                     type(sampled.get("visibility_mask")) is int and
                     sampled["visibility_mask"] == 0x10,
                     "single-set artifact contract")
+        elif sampled_profile == "mixed-resources":
+            require(sampled.get("sets") == 4 and sampled.get("uniform_buffers") == 4 and
+                    type(sampled.get("visibility_mask")) is int and
+                    sampled["visibility_mask"] == 0x10,
+                    "mixed-resource artifact contract")
         elif sampled_profile == "vertex-fragment":
+            require("uniform_buffers" not in sampled,
+                    "sampler-only artifact must not claim uniform buffers")
             if "visibility_mask" in sampled:
                 require(type(sampled["visibility_mask"]) is int and
                         sampled["visibility_mask"] in (0x11, 0x1f, 0x7fffffff), "sampled visibility mask")
@@ -97,6 +105,8 @@ def validate(log, receipt, artifact):
         else:
             require("vertex_spirv_sha256" not in sampled, "vertex digest in fragment-only artifact")
             require("visibility_mask" not in sampled, "shared visibility in fragment-only artifact")
+            require("uniform_buffers" not in sampled,
+                    "sampler-only artifact must not claim uniform buffers")
     require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"),
             "log hash")
     require(receipt.get("protocol") == "ps5log/1" and
@@ -323,8 +333,10 @@ def validate(log, receipt, artifact):
                 "graphics completion pairing and ordering")
     sampled_rows = matching("PS5VK_CONSUMER_SAMPLED_SETS_")
     single_rows = matching("PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_")
+    mixed_rows = matching("PS5VK_CONSUMER_MIXED_SETS_")
+    mixed_profile = sampled_profile == "mixed-resources"
     if sampled is None:
-        require(not sampled_rows and not single_rows,
+        require(not sampled_rows and not single_rows and not mixed_rows,
                 "sampled graphics without artifact contract")
     elif sampled_profile == "single-set":
         # One artifact profile only: the single-set run may not also claim the
@@ -354,8 +366,37 @@ def validate(log, receipt, artifact):
                     graphics_completed[round_index][0] < row[0] < single_rows[-1][0],
                     "single-set round completion")
             previous = row[0]
+    elif mixed_profile:
+        # One artifact profile only: a mixed run may not also claim the
+        # sampler-only scope, and the uniform-buffer count is part of the claim.
+        require(not sampled_rows, "mixed profile must not report sampler-only markers")
+        require(sampled.get("uniform_buffers") == 4, "mixed-resource uniform-buffer count")
+        start = (f"PS5VK_CONSUMER_MIXED_SETS_START sets=4 descriptors=96"
+                 f" uniform_buffers=4 rounds=4"
+                 f" visibility={sampled['visibility_mask']:08x}"
+                 f" fs_sha256={sampled['shader_spirv_sha256']}")
+        require(len(mixed_rows) == 6 and mixed_rows[0][1] == start and
+                mixed_rows[-1][1] == "PS5VK_CONSUMER_MIXED_SETS_RETIRED" and
+                sync_retired[0] < mixed_rows[0][0] < mixed_rows[-1][0] < graphics_start[0],
+                "mixed-resource scope and shader identity")
+        # Literal independent reference values for the mixed workload: the same
+        # weighted 96-element sampler sum as the sampler-only profile, scaled by
+        # the integer uniform weight 1 + set + round of that round. This is not a
+        # pass flag from the application.
+        expected_words = ("381e1f17", "4b29272a", "5d2d2c2c", "6f2c4038")
+        previous = mixed_rows[0][0]
+        for round_index, expected_word in enumerate(expected_words):
+            row = mixed_rows[round_index + 1]
+            require(row[1] == f"PS5VK_CONSUMER_MIXED_SETS_RESULT round={round_index} "
+                    f"expected={expected_word} changed=471744 bad=0",
+                    "mixed-resource pixel oracle")
+            require(previous < graphics_prepared[round_index][0] <
+                    graphics_completed[round_index][0] < row[0] < mixed_rows[-1][0],
+                    "mixed-resource round completion")
+            previous = row[0]
     else:
         require(not single_rows, "four-set profile must not report single-set markers")
+        require(not mixed_rows, "sampler-only profile must not report mixed markers")
         start = "PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"
         if sampled_profile == "vertex-fragment":
             start += (f" stages=vertex-fragment vs_sha256={sampled['vertex_spirv_sha256']}"
@@ -386,11 +427,12 @@ def validate(log, receipt, artifact):
                     "sampled-graphics round completion")
             previous = row[0]
 
-    return {
+    result = {
         "run_id": receipt.get("run_id"),
         "deployment_self_sha256": digest,
         "log_sha256": receipt["sha256"],
         "descriptor_sets": 3,
+        "mixed_resource_uniform_buffers": 4 if mixed_profile else 0,
         "storage_buffers": 2,
         "uniform_buffers": 1,
         "dynamic_storage_buffers": 2,
@@ -432,6 +474,7 @@ def validate(log, receipt, artifact):
         "clean_tcp": True,
         "os_close": "requires independent lifecycle evidence",
     }
+    return result
 
 
 def main():

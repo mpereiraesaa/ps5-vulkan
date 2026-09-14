@@ -154,8 +154,9 @@ int main(int argc, char **argv)
         exitStatus = EXIT_FAILURE;
     }
 
-    // Wait for QPA transport to finish pumping and emit UPSTREAM_CTS_END
-    cts_qpa_sink_wait_completion();
+    // A complete authenticated QPA stream is part of the device verdict.
+    if (cts_qpa_sink_wait_completion() != 0)
+        exitStatus = EXIT_FAILURE;
 
     ps5log_printf(PS5LOG_INFO, "UPSTREAM_CTS_COMPLETE status=%d", exitStatus);
     ps5log_close(exitStatus == EXIT_SUCCESS ? "complete-success" : "complete-failure");

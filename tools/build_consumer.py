@@ -60,6 +60,8 @@ def main():
     parser.add_argument("--continuous", action="store_true", help="Compile in continuous rendering mode")
     parser.add_argument("--shared-stage-samplers", action="store_true",
                         help="Finite backend qualification: shared VS/FS samplers above advertised limits")
+    parser.add_argument("--mixed-resources", action="store_true",
+                        help="Qualify uniform buffers alongside the sampled sets")
     parser.add_argument("--sampler-visibility", choices=("vertex-fragment", "all-graphics", "all"),
                         default="vertex-fragment", help="Descriptor visibility for the shared-stage diagnostic")
     parser.add_argument("--single-set-samplers", action="store_true",
@@ -72,7 +74,10 @@ def main():
         parser.error("Shared-stage qualification requires the finite consumer")
     if args.continuous and args.single_set_samplers:
         parser.error("Single-set qualification requires the finite consumer")
-    if args.shared_stage_samplers and args.single_set_samplers:
+    if args.continuous and args.mixed_resources:
+        parser.error("Mixed-resource qualification requires the finite consumer")
+    if sum((args.shared_stage_samplers, args.single_set_samplers,
+            args.mixed_resources)) > 1:
         parser.error("Choose one sampled-descriptor profile")
     if args.sampler_visibility != "vertex-fragment" and not args.shared_stage_samplers:
         parser.error("Wider sampler visibility requires --shared-stage-samplers")
@@ -142,6 +147,8 @@ def main():
         cflags.append(f"-DCONSUMER_SAMPLER_VISIBILITY={sampler_visibility}")
     if args.single_set_samplers:
         cflags.append("-DCONSUMER_SINGLE_SET_SAMPLERS=1")
+    if args.mixed_resources:
+        cflags.append("-DCONSUMER_MIXED_RESOURCES=1")
 
     has_native_toolchain = clang_wrapper.is_file() and linker.is_file() and builder.is_file()
 
@@ -291,15 +298,21 @@ def main():
         "sampled_graphics": {
             "sets": 4, "descriptors": 96, "rounds": 4,
             "stage_profile": ("single-set" if args.single_set_samplers else
+                              "mixed-resources" if args.mixed_resources else
                               "vertex-fragment" if args.shared_stage_samplers else "fragment"),
             "shader_spirv_sha256": hashlib.sha256(sampled_shader_header.with_suffix(
                 ".single.spv" if args.single_set_samplers else
+                ".mixed.frag.spv" if args.mixed_resources else
                 ".shared.frag.spv" if args.shared_stage_samplers else ".spv").read_bytes()).hexdigest(),
         },
     }
     if args.single_set_samplers:
         artifact["sampled_graphics"]["sets"] = 1
         artifact["sampled_graphics"]["elements_per_set"] = 96
+    if args.mixed_resources:
+        artifact["sampled_graphics"]["uniform_buffers"] = 4
+        # VK_SHADER_STAGE_FRAGMENT_BIT: the mixed workload is fragment-only, so
+        # its uniform buffers carry the same visibility as its sampled sets.
         artifact["sampled_graphics"]["visibility_mask"] = 0x10
     if args.shared_stage_samplers:
         artifact["sampled_graphics"]["visibility_mask"] = sampler_visibility

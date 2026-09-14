@@ -233,14 +233,27 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             }
             for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
                 const struct ps5vk_binding *binding=&set->signature.binding[b];
-                if(binding->count && set->signature.type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+                const VkDescriptorType type=set->signature.type[b];
+                const int buffer_type=type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+                    type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                if(binding->count && type!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
+                   !buffer_type) {
                     rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
                 }
                 if(binding->first>PS5VK_MAX_DESCRIPTORS ||
                    binding->count>PS5VK_MAX_DESCRIPTORS-binding->first){rc=VK_ERROR_UNKNOWN;goto fail;}
                 for(unsigned e=0;e<binding->count;++e) {
                     unsigned index=binding->first+e;
-                    if(!set->defined[index] || !set->image_resources[index] ||
+                    if(!set->defined[index]){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+                    if(buffer_type) {
+                        /* The encoder resolves and validates the base address;
+                         * a null handle must never be encoded. */
+                        if(!set->buffers[index].buffer) {
+                            rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                        }
+                        continue;
+                    }
+                    if(!set->image_resources[index] ||
                        set->images[index].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
                         rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
                     }
