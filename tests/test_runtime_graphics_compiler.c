@@ -174,13 +174,57 @@ int main(void)
     for(unsigned i=0;i<16;++i)many_bindings[i]=(VkVertexInputBindingDescription){15-i,16,VK_VERTEX_INPUT_RATE_VERTEX};
     vertex_input.vertex_binding_count=16;vertex_input.vertex_bindings=many_bindings;
     attribute.binding=15;
-    /* Candidate fetch code alone must not promote the compiler ABI. */
-    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(p->vertex.metadata.vertex_buffer_usage_mask==0x8000 &&
+        !p->vertex.metadata.vertex_buffer_per_attribute && p->arguments.vertex_buffer_usage_mask==0x8000);
+    ps5vk_runtime_graphics_free(NULL,out);
     many_bindings[0].binding=16;
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     many_bindings[0].binding=14;
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     vertex_input.vertex_binding_count=1;vertex_input.vertex_bindings=&binding;attribute.binding=0;
+    struct ps5vk_graphics_key multi=vertex_input;
+    multi.vertex=read_module("build/runtime-graphics/vertex_bindings.vert.spv");
+    VkVertexInputAttributeDescription many_attributes[16];
+    for(unsigned i=0;i<16;++i) {
+        many_bindings[i]=(VkVertexInputBindingDescription){15-i,16,VK_VERTEX_INPUT_RATE_VERTEX};
+        many_attributes[i]=(VkVertexInputAttributeDescription){i,15-i,VK_FORMAT_R32G32B32A32_SFLOAT,0};
+    }
+    multi.vertex_binding_count=multi.vertex_attribute_count=16;
+    multi.vertex_bindings=many_bindings;multi.vertex_attributes=many_attributes;
+    cache=ps5vk_compilation_cache_create(4,1024*1024);
+    for(unsigned variant=0;variant<2;++variant) {
+        multi.vertex.specialization_count=variant;
+        multi.vertex.specializations[0]=(struct ps5vk_graphics_specialization){.constant_id=0,.size=4};
+        assert(ps5vk_runtime_graphics_cached_acquire(cache,&multi,&cold)==VK_SUCCESS);
+        assert(ps5vk_runtime_graphics_cached_acquire(cache,&multi,&warm)==VK_SUCCESS);
+        p=warm;
+        assert(p->arguments.vertex_buffer_usage_mask==(variant?0x8000:0xffff));
+        assert(p->vertex.metadata.vertex_buffer_usage_mask==p->arguments.vertex_buffer_usage_mask);
+        ps5vk_runtime_graphics_cached_release(cache,warm);ps5vk_runtime_graphics_cached_release(cache,cold);
+    }
+    ps5vk_compilation_cache_destroy(cache);free((void *)multi.vertex.words);
+    multi.vertex=read_module("build/runtime-graphics/vertex_bindings_probe.vert.spv");
+    for(unsigned i=0;i<16;++i) {
+        unsigned b=15-i;
+        many_bindings[i].stride=48+4*b;
+        many_attributes[i].offset=4*(b%3);
+    }
+    cache=ps5vk_compilation_cache_create(4,1024*1024);
+    for(unsigned variant=0;variant<4;++variant) {
+        multi.vertex.specialization_count=1;
+        multi.vertex.specializations[0]=(struct ps5vk_graphics_specialization){
+            .constant_id=0,.size=4,.data={variant%3}};
+        assert(ps5vk_runtime_graphics_cached_acquire(cache,&multi,&cold)==VK_SUCCESS);
+        p=cold;
+        const uint32_t masks[3]={0xffff,0x8000,0x8008};
+        assert(p->arguments.vertex_buffer_usage_mask==masks[variant%3]);
+        ps5vk_runtime_graphics_cached_release(cache,cold);
+    }
+    ps5vk_compilation_cache_get_stats(cache,&stats);
+    assert(stats.compiles==3 && stats.hits==1);
+    ps5vk_compilation_cache_destroy(cache);free((void *)multi.vertex.words);
     assert(ps5vk_spirv_graphics_interface(&vertex_input));
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);

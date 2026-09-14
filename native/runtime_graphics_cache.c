@@ -27,7 +27,8 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count;
     uint32_t *words=calloc(count,sizeof(*words));
     if(!words)return NULL;
-    words[0]=4; /* adapter/profile version: canonical vertex layout included */
+    words[0]=5; /* optimized vertex-table usage in metadata v11 */
+    words[13]=PSBC_SHADER_METADATA_VERSION;
     words[1]=(uint32_t)key->vertex.word_count;
     words[2]=(uint32_t)key->fragment.word_count;
     words[3]=key->topology;words[4]=key->color_format;
@@ -84,7 +85,7 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     if(at!=HEADER_WORDS){free(words);return NULL;}
     memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
     memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
-    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v4",
+    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v5",
             VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,cache_key)) {
         free(words);return NULL;
     }

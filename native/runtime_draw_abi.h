@@ -17,6 +17,7 @@ struct ps5vk_runtime_draw_abi {
     uint32_t vertex_count, fragment_count;
     uint32_t base_vertex_slot, start_instance_slot;
     uint32_t vertex_buffer_valid, vertex_buffer_slot;
+    uint32_t vertex_buffer_usage_mask;
     uint32_t lds_slot, lds_value;
     uint32_t vertex_push_slot, fragment_push_slot, push_constant_size;
     uint32_t fragment_descriptor_set0_valid, fragment_descriptor_set0_slot;
@@ -31,6 +32,8 @@ static inline int ps5vk_runtime_draw_values(const struct ps5vk_runtime_draw_abi 
         a->fragment_count>16 || a->lds_slot>=a->vertex_count || a->lds_value>UINT16_MAX)
         return -1;
     if(a->vertex_buffer_valid>1 || a->fragment_descriptor_set0_valid>1)return -1;
+    if(a->vertex_buffer_valid ? (!a->vertex_buffer_usage_mask || a->vertex_buffer_usage_mask>0xffffu) :
+       a->vertex_buffer_usage_mask!=0)return -1;
     uint32_t slots[5]={a->base_vertex_slot,a->start_instance_slot,
         a->vertex_buffer_valid?a->vertex_buffer_slot:UINT32_MAX,
         a->lds_slot,a->vertex_push_slot};

@@ -24,6 +24,13 @@ enum {
     /* Software object budget, not a measured hardware sampler limit. */
     PS5VK_MAX_SAMPLERS = 4096
 };
+/* Diagnostic consumers ask whether their workload fits, not whether a device
+ * still reports the historical ceiling. Hardware-limit policy lives below. */
+static inline int ps5vk_graphics_vertex_bindings_available(
+    const VkPhysicalDeviceLimits *limits,uint32_t required)
+{
+    return limits && required<=limits->maxVertexInputBindings;
+}
 static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
 {
     /* Common guarantees across supported sampled-image types. Per-format 2D
@@ -56,7 +63,8 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxViewportDimensions[0]=limits->maxViewportDimensions[1]=PS5VK_MAX_IMAGE_2D;
     limits->viewportBoundsRange[0]=-32768.0f;
     limits->viewportBoundsRange[1]=32767.0f;
-    limits->maxVertexInputBindings=1;
+    /* Optimized PSBC mask drives dense native SRDs; see VERTEX_INPUT.md. */
+    limits->maxVertexInputBindings=16;
     limits->maxVertexInputAttributes=32;
     limits->maxVertexInputBindingStride=PS5VK_MAX_VERTEX_STRIDE;
     limits->maxVertexInputAttributeOffset=PS5VK_MAX_VERTEX_ATTRIBUTE_OFFSET;

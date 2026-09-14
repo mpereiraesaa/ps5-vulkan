@@ -1,9 +1,9 @@
 # Vertex input implementation
 
-The runtime currently advertises one vertex binding. Multiple-binding fetch
-preparation is implemented and host-tested, but is not enabled in production.
-The remaining prerequisite is compiler metadata describing the optimized
-vertex-buffer descriptor usage, followed by PS5 validation.
+The runtime graphics profile supports and reports 16 vertex bindings. The
+runtime compiler and native queue use the optimized descriptor mask described
+below. This is a qualified per-vertex, non-indexed path, not complete Vulkan
+vertex-input semantics.
 
 ## Descriptor order
 
@@ -13,11 +13,14 @@ the population count of the used-binding mask below the requested binding.
 For bindings 3 and 15, the native SRDs therefore occupy slots 0 and 1. If
 optimization removes binding 3, binding 15 occupies slot 0 instead.
 
-`libpsbc/psbc_compile.c` currently exports the vertex-table user SGPR through
-`PsbcShaderMetadata`, but does not export `vs.vb_desc_usage_mask` or
-`vs.use_per_attribute_vb_descs`. Inferring this mask from pipeline declarations
-would be incorrect when shader optimization removes inputs. Per-attribute
-descriptors also require a different mapping and must be identified explicitly.
+`PsbcShaderMetadata` version 11 exports the vertex-table user SGPR,
+`vertex_buffer_usage_mask` (from RADV `vs.vb_desc_usage_mask`) and
+`vertex_buffer_per_attribute` (from `vs.use_per_attribute_vb_descs`).
+The pinned compiler revision is
+`7ee039881a1e4a1ffc434be7249da562345e7dcb`. Rebuild callers and compiler together:
+the metadata structure grew. Inferring the mask from declarations is incorrect
+when optimization removes inputs. The native adapter rejects per-attribute
+indexing and inconsistent or older metadata instead of guessing its mapping.
 
 ## Implemented preparation
 
@@ -33,9 +36,9 @@ descriptor table and any alignment copies in one draw-owned allocation. Failure
 releases that allocation; successful preparation flushes the complete allocation
 before publication. Copies remain alive until the draw retires.
 
-The internal masked preparation entry point is tested with an explicit mask.
-The production entry point and compiler adapter retain the binding-zero gate.
-The physical-device report and conformance inventory have not been promoted.
+The production native queue now calls masked preparation using the compiled
+shader ABI, not the declaration count. Pipeline objects own copies of all
+binding descriptions, independently of the application's storage lifetime.
 
 ## Shader cache identity
 
@@ -46,14 +49,26 @@ Previously these fields were absent: two pipelines with identical shader
 modules but different vertex layouts could reuse the wrong compiled code.
 Compiler integration tests verify separate entries for stride, offset and
 format changes, followed by a warm hit for each unchanged layout.
+The cache key also includes metadata version 11 (adapter version 5); metadata
+and the optimized mask survive cold and warm pair acquisition.
 
 ## Remaining validation
 
-Export and version the optimized descriptor mask and indexing mode in PSBC;
-propagate them through the runtime shader ABI and cache; then validate separate
-vertex buffers, sparse bindings, all 16 bindings, unused shader inputs, odd
-binding offsets, indexed draws and allocation failure. Hardware acceptance must
-include deterministic readback, artifact identity, TCP telemetry and cleanup.
+The owned diagnostic (probe 13) checks 16 distinct buffers, reversed
+location-to-binding order, differing strides/attribute offsets and odd binding
+offsets. Specialization reduces live inputs to binding 15 or bindings 3/15;
+unused buffers are deliberately not created or bound. Repeating the full
+variant must hit the cache. Every draw requires exactly 471,744 white pixels
+and no unexpected pixels, with compute regression before and after it.
+
+`tools/verify_vertex_bindings.py` checks complete TCP streams, masks,
+alignment-copy sizes, serial ordering, pixel results, cache reuse and cleanup.
+Deployment readback and OS process termination are separate checks; the parser
+explicitly does not certify them. See VALIDATION.md for the measured artifact.
+
+Indexed draws with runtime shaders, per-attribute descriptor mode and exhaustive
+upstream CTS input permutations remain pending. Allocation failure is covered
+by host preparation/rollback tests, not by injected console failures.
 
 Instance-rate input and zero-stride bindings remain separate implementation
 gaps. The host preparation tests do not establish Vulkan vertex-input coverage

@@ -31,7 +31,9 @@ static ps5_agc_register convert(PsbcRegisterWrite r)
 int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
     const PsbcShaderMetadata *f,struct ps5vk_runtime_draw_abi *out)
 {
-    if(!v || !f || !out || v->source_stage!=PSBC_STAGE_VERTEX ||
+    if(!v || !f || !out || v->version!=PSBC_SHADER_METADATA_VERSION || f->version!=PSBC_SHADER_METADATA_VERSION ||
+       v->vertex_buffer_per_attribute || f->vertex_buffer_usage_mask || f->vertex_buffer_per_attribute ||
+       v->source_stage!=PSBC_STAGE_VERTEX ||
        v->hardware_stage!=PSBC_HW_STAGE_NGG || f->source_stage!=PSBC_STAGE_FRAGMENT ||
        f->hardware_stage!=PSBC_HW_STAGE_PIXEL || !v->ngg_lds_layout_valid ||
        v->output_semantic_count>PSBC_MAX_SEMANTICS || f->input_semantic_count>PSBC_MAX_SEMANTICS)
@@ -48,6 +50,7 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .start_instance_slot=v->start_instance_valid?v->start_instance_user_data_dword:UINT32_MAX,
         .vertex_buffer_valid=v->vertex_buffer_table_valid,
         .vertex_buffer_slot=v->vertex_buffer_table_user_data_dword,
+        .vertex_buffer_usage_mask=v->vertex_buffer_usage_mask,
         .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout,
         .vertex_push_slot=v->push_constants_valid?v->push_constants_user_data_dword:UINT32_MAX,
         .fragment_push_slot=f->push_constants_valid?f->push_constants_user_data_dword:UINT32_MAX,
@@ -80,8 +83,9 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
         (m->unresolved_fields & ~(PSBC_UNRESOLVED_PROGRAM_CHECKSUM |
             (vs ? PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE : 0)))) return -2;
     if (m->vertex_buffer_table_valid ?
-        (!vs || m->vertex_buffer_table_user_data_dword>=m->user_sgpr_count) :
-        m->vertex_buffer_table_user_data_dword) return -2;
+        (!vs || m->vertex_buffer_table_user_data_dword>=m->user_sgpr_count ||
+         !m->vertex_buffer_usage_mask || m->vertex_buffer_usage_mask>0xffffu || m->vertex_buffer_per_attribute) :
+        (m->vertex_buffer_table_user_data_dword || m->vertex_buffer_usage_mask || m->vertex_buffer_per_attribute)) return -2;
     if(vs && (m->descriptor_binding_count || m->descriptor_set0_valid))return -2;
     if(fs && m->descriptor_binding_count) {
         const PsbcDescriptorBinding *b=&m->descriptor_bindings[0];

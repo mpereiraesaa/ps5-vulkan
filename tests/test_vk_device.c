@@ -119,7 +119,13 @@ static void lifecycle(void)
         gl.sampledImageIntegerSampleCounts==1 && !gl.sampledImageDepthSampleCounts);
     assert(gl.maxViewports==1 && gl.maxViewportDimensions[0]==16384 && gl.maxViewportDimensions[1]==16384);
     assert(gl.viewportBoundsRange[0]==-32768 && gl.viewportBoundsRange[1]==32767);
-    assert(gl.maxVertexInputBindings==1 && gl.maxVertexInputAttributes==32);
+    assert(gl.maxVertexInputBindings==16 && gl.maxVertexInputAttributes==32);
+    assert(ps5vk_graphics_vertex_bindings_available(&gl,1));
+    assert(ps5vk_graphics_vertex_bindings_available(&gl,16));
+    assert(!ps5vk_graphics_vertex_bindings_available(&gl,17));
+    VkPhysicalDeviceLimits old_binding_limit=gl;old_binding_limit.maxVertexInputBindings=1;
+    assert(ps5vk_graphics_vertex_bindings_available(&old_binding_limit,1));
+    assert(!ps5vk_graphics_vertex_bindings_available(&old_binding_limit,16));
     assert(gl.maxVertexInputBindingStride==16380 && gl.maxVertexInputAttributeOffset==16376);
     assert(gl.maxDrawIndexedIndexValue==UINT32_MAX);
     assert(gl.subPixelPrecisionBits==8);

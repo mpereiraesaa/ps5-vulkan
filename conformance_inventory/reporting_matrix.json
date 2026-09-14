@@ -22079,12 +22079,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 1 must be >= 16; blocker: one vertex binding (src/graphics_limits.h, vertex-input gate)",
+      "detail": "untagged-core: reported 16 must be >= 16",
       "kind": "limit",
       "limit": "maxVertexInputBindings",
       "profile": "graphics",
-      "reported": 1,
-      "verdict": "blocker"
+      "reported": 16,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -22094,7 +22094,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 0 must be >= 16; blocker: one vertex binding (src/graphics_limits.h, vertex-input gate)",
+      "detail": "untagged-core: reported 0 must be >= 16; blocker: compute-only build: graphics limits are not applied; graphics supports 16 bindings (VERTEX_INPUT.md)",
       "kind": "limit",
       "limit": "maxVertexInputBindings",
       "profile": "compute",
@@ -25980,9 +25980,9 @@
       "satisfied": 98
     },
     "limits": {
-      "blocker": 65,
+      "blocker": 64,
       "not-applicable": 656,
-      "satisfied": 133
+      "satisfied": 134
     },
     "shader_capabilities": {
       "not-audited": 2,

@@ -101,6 +101,23 @@ int main(void)
     backend_fail=0;d.graphics_compiled_release=NULL;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
     assert(acquired==3);
+    d.graphics_compiled_release=compiled_release;
+    VkVertexInputBindingDescription bindings[16];
+    VkVertexInputAttributeDescription attributes[16];
+    for(unsigned i=0;i<16;++i) {
+        bindings[i]=(VkVertexInputBindingDescription){15-i,16+i,VK_VERTEX_INPUT_RATE_VERTEX};
+        attributes[i]=(VkVertexInputAttributeDescription){i,15-i,VK_FORMAT_R32_SFLOAT,0};
+    }
+    v.vertexBindingDescriptionCount=v.vertexAttributeDescriptionCount=16;
+    v.pVertexBindingDescriptions=bindings;v.pVertexAttributeDescriptions=attributes;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
+    for(unsigned i=0;i<16;++i)bindings[i].stride=999;
+    assert(runtime->vertex_binding_count==16 && runtime->vertex_attribute_count==16);
+    for(unsigned i=0;i<16;++i)assert(runtime->vertex_bindings[i].binding==15-i &&
+        runtime->vertex_bindings[i].stride==16+i);
+    vkDestroyPipeline(&d,runtime,NULL);
+    v.vertexBindingDescriptionCount=v.vertexAttributeDescriptionCount=0;
+    v.pVertexBindingDescriptions=NULL;v.pVertexAttributeDescriptions=NULL;
     d.graphics_acquire=NULL;d.graphics_library=&library;
     created=1;released=0;
     vkDestroyShaderModule(&d,modules[0],NULL); vkDestroyShaderModule(&d,modules[1],NULL);

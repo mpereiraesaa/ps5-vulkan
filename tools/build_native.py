@@ -31,8 +31,8 @@ def main():
     if observe_scene not in ("0", "1") or (observe_scene == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_OBSERVE requires graphics profile API and must be 0 or 1")
     scissor_probe = os.environ.get("PS5VK_GRAPHICS_SCISSOR_PROBE", "0")
-    if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12") or (scissor_probe != "0" and not graphics_api):
-        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0-10 existing diagnostics, 11 layered images, 12 mipmaps")
+    if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13") or (scissor_probe != "0" and not graphics_api):
+        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0-10 existing diagnostics, 11 layered images, 12 mipmaps, 13 vertex bindings")
     mip_view_base=os.environ.get("PS5VK_MIP_VIEW_BASE","0")
     if mip_view_base not in ("0","1") or (mip_view_base!="0" and scissor_probe!="12"):
         raise SystemExit("PS5VK_MIP_VIEW_BASE must be 0, or 1 only for mipmap diagnostic")
@@ -225,9 +225,9 @@ def main():
             if observe_scene == "1" and (not scene or scissor_probe != "0" or os.environ.get("PS5VK_GRAPHICS_PRESENT") != "1"):
                 raise SystemExit("Scene observation requires the normal presented scene, without scissor diagnostics")
             common += ["-DPS5VK_GRAPHICS_OBSERVE=" + observe_scene]
-            if scissor_probe != "0" and not scene and not (scissor_probe == "8" and use_runtime_graphics):
+            if scissor_probe != "0" and not scene and not (scissor_probe in ("8", "13") and use_runtime_graphics):
                 raise SystemExit("Scissor diagnostic requires scene3d.pipe")
-            if scissor_probe == "8" and not use_runtime_graphics:
+            if scissor_probe in ("8", "13") and not use_runtime_graphics:
                 raise SystemExit("Vertex-format diagnostic requires runtime graphics")
             common += ["-DPS5VK_GRAPHICS_SCISSOR_PROBE=" + scissor_probe]
             common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
@@ -401,6 +401,11 @@ def main():
                         graphics_shader_source="owned-runtime-vertex-formats" if vertex_probe else "owned-runtime-triangle",
                         graphics_offline_library_role="negative-lookup-control-only")
         runtime_inputs = (("vertex", "runtime_triangle.vert"), ("fragment", "runtime_triangle.frag"))
+        if scissor_probe == "13":
+            manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
+            manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"
+            runtime_inputs = (("vertex", "runtime_vertex_bindings_probe.vert"),
+                              ("fragment", "runtime_vertex_format.frag"))
         if vertex_probe:
             runtime_inputs = (("vertex_sint", "runtime_vertex_sint.vert"),
                               ("vertex_uint", "runtime_vertex_uint.vert"),

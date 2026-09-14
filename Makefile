@@ -15,6 +15,8 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_parameters.vert -o build/runtime-graphics/parameters.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_parameters.frag -o build/runtime-graphics/parameters.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_input.vert -o build/runtime-graphics/vertex_input.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_vertex_bindings.vert -o build/runtime-graphics/vertex_bindings.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_vertex_bindings_probe.vert -o build/runtime-graphics/vertex_bindings_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_input.frag -o build/runtime-graphics/vertex_input.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_uint.vert -o build/runtime-graphics/vertex_uint.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_sint.vert -o build/runtime-graphics/vertex_sint.vert.spv

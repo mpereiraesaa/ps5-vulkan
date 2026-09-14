@@ -103,7 +103,7 @@ int main(void)
      * runtime shaders with indexed emission. */
     state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=3,.fragment_count=2,
         .base_vertex_slot=1,.start_instance_slot=UINT32_MAX,
-        .vertex_buffer_valid=1,.vertex_buffer_slot=0,.lds_slot=2,.lds_value=0,
+        .vertex_buffer_valid=1,.vertex_buffer_slot=0,.vertex_buffer_usage_mask=1,.lds_slot=2,.lds_value=0,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     cursor=commands;calls=0;op.type=PS5VK_DRAW;op.instance_count=1;op.first_vertex=0;
     assert(ps5vk_native_emit_vertex_draw(&cursor,64,&state,&state,sizeof(state),&op,

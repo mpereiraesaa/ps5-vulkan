@@ -232,15 +232,22 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(!op->pipeline->vertex_binding_count){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
             rc=ps5vk_index_fetch_prepare(d,op,&indices);if(rc!=VK_SUCCESS)goto fail;
         }
-        if(op->pipeline->vertex_binding_count) {
+        const uint32_t vertex_usage=p->pair->runtime_arguments.enabled?
+            p->pair->runtime_arguments.vertex_buffer_usage_mask:
+            (op->pipeline->vertex_binding_count?1u:0u);
+        if(vertex_usage) {
             const struct ps5vk_graphics_key key={.vertex_binding_count=op->pipeline->vertex_binding_count,
                 .vertex_attribute_count=op->pipeline->vertex_attribute_count,
-                .vertex_bindings=&op->pipeline->vertex_binding,.vertex_attributes=op->pipeline->vertex_attributes};
-            rc=ps5vk_native_prepare_vertex_draw(d,op,&begin->render_area,defaults,&key,(uintptr_t)p->pair,draw);
+                .vertex_bindings=op->pipeline->vertex_bindings,.vertex_attributes=op->pipeline->vertex_attributes};
+            rc=ps5vk_native_prepare_vertex_draw_masked(d,op,&begin->render_area,defaults,&key,
+                (uintptr_t)p->pair,vertex_usage,draw);
         } else rc=ps5vk_native_prepare_draw(d,op,&begin->render_area,defaults,draw);
         if(rc!=VK_SUCCESS)goto fail;
         ++j->count;
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)
+            ps5log_printf(PS5LOG_MARK,"PS5VK_BINDINGS_PREPARED serial=%llu mask=%04x copied_bytes=%zu",
+                (unsigned long long)j->serial,vertex_usage,draw->vertex_bounce_bytes);
         if(draw->vertex_bounce)
             ps5log_printf(PS5LOG_MARK,"PS5VK_VERTEX_BOUNCE serial=%llu draw=%u bytes=%zu alignment=4",
                 (unsigned long long)j->serial,j->count-1,draw->vertex_bounce_bytes);
@@ -263,7 +270,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                     "PS5VK_TEXTURE_DESCRIPTOR serial=%llu draw=%u word=%u value=%08x",
                     (unsigned long long)j->serial,j->count-1,k,draw->texture_table[k]);
 #endif
-        if(op->pipeline->vertex_binding_count) {
+        if(vertex_usage) {
             if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;goto fail;}
             if(op->pipeline->set_count) {
                 if(!draw->texture_table){rc=VK_ERROR_UNKNOWN;goto fail;}

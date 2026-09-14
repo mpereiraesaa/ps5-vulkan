@@ -30,7 +30,7 @@ hardware acceptance.
 
 - Exactly one vertex stage and one fragment stage per graphics pipeline.
 - Triangle-list topology, fill rasterization and line width 1.
-- One vertex binding at binding 0, per-vertex input, with up to 32 attribute
+- Up to 16 vertex bindings numbered 0–15, per-vertex input, with up to 32 attribute
   locations. Supported attributes are `R8` and `R8G8` UNORM/SNORM/UINT/SINT;
   `R8G8B8A8` UNORM/SNORM/UINT/SINT; packed `A8B8G8R8`
   UNORM/SNORM/UINT/SINT; `R16`, `R16G16` and `R16G16B16A16`
@@ -43,6 +43,11 @@ hardware acceptance.
   GFX1013 structured SRD drops its two low base-address bits, native submission
   copies an unaligned accessible span into aligned job-owned storage and
   releases it after exact completion.
+  The runtime compiler exports its optimized descriptor-use mask: sparse binding
+  numbers are packed in ascending used-bit order and optimized-away bindings
+  need not be bound. Separate-buffer, sparse, odd-offset and specialization/cache
+  hardware witnesses are documented in [VERTEX_INPUT.md](VERTEX_INPUT.md).
+  Instance-rate and zero-stride input remain unsupported.
   Runtime-shader indexed draws remain a separate unsupported combination;
   indexed draws remain available through the audited offline-program path.
 - Indexed and non-indexed draws. Index buffers support `uint16` and `uint32`,

@@ -18,6 +18,7 @@ def main():
     args.out.parent.mkdir(parents=True,exist_ok=True)
     declarations=["/* Generated from owned GLSL. Contains SPIR-V, not GPU machine code. */"]
     modules = (
+        ("experiments/graphics/runtime_vertex_bindings_probe.vert", "runtime_vertex_bindings_probe.vert.spv", "vertex_bindings"),
         ("experiments/graphics/runtime_triangle.vert", "runtime_triangle.vert.spv", "vertex"),
         ("experiments/graphics/runtime_triangle.frag", "runtime_triangle.frag.spv", "fragment"),
         ("experiments/graphics/runtime_vertex_sint.vert", "runtime_vertex_sint.vert.spv", "vertex_sint"),

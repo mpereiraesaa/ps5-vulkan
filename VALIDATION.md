@@ -5,14 +5,47 @@ firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013
 
 ## Observed results
 
+### Sixteen and sparse runtime vertex bindings
+
+Two consecutive PS5 GFX1013 / firmware 12.02 runs on 2026-09-14 used identical
+SELF SHA-256
+`c48f75fad391c0072130e23953a4386e290769d5de1bd99cb62f66c831102376`.
+Their complete TCP log digests are:
+
+- `f1dd3b7408eaf5665ac6eb9b731835857e7aa982f8bb6627b750946dce69b4cb`
+- `204ed9c6245b5e687c7f20b32d2242339bab605811c8283ba9ca1193f8c920cd`
+
+Each 1,784-record run reported 16 available bindings and passed four draws:
+all 16 buffers, binding 15 alone, bindings 3/15, and the full layout again from
+the runtime cache. The observed optimized masks were `ffff/8000/8008/ffff`.
+All buffers had distinct values, reversed location-to-binding order, varying
+strides/attribute offsets and odd binding addresses. Exact aligned-copy byte
+counts were `7552/457/938/7552`. Unused buffers were not allocated or bound.
+Each draw produced exactly 471,744 white pixels and zero unexpected pixels.
+Three cold compiled pairs and one warm hit were observed.
+
+Both runs also passed compute controls before and after each draw, GPU completion,
+VideoOut presentation, BYE and zero retained allocation accounting. The deployed
+SELF was read back byte-for-byte; independent Close Game/status checks confirmed
+process termination. These are bounded native diagnostic witnesses, not upstream
+vertex-input CTS or a public-header-only consumer claim.
+
+An intermediate reporting-only build aborted before device/GPU initialization:
+the diagnostic still required `maxVertexInputBindings == 1`. It is classified
+as a stale diagnostic invariant, not a GPU failure. The consumer now checks
+whether the workload fits the reported capacity; host regression tests cover
+both old one-binding and expanded sixteen-binding reports. The final two runs
+above include this correction.
+
 The vertex-layout cache correction and multiple-binding preparation described
-in [VERTEX_INPUT.md](VERTEX_INPUT.md) have host contract/compiler tests only.
+in [VERTEX_INPUT.md](VERTEX_INPUT.md) have host contract/compiler tests and the
+bounded hardware witnesses documented below.
 The cache tests use real PSBC compilation and distinguish stride, offset and
 format changes while retaining warm reuse for an unchanged layout. Preparation
 tests cover 16 binding spans, sparse compiler masks, optimized-away inputs,
-alignment copies and allocation failure. Multiple bindings remain disabled in
-the production compiler adapter pending metadata export and PS5 qualification;
-the hardware runs below do not establish support for that candidate path.
+alignment copies and allocation failure. PSBC metadata version 11 connects the
+optimized binding-use mask to native descriptor preparation. Older runs do not
+establish support for this path; only the explicit multi-binding witnesses do.
 
 Two consecutive launches of the same executable each completed:
 

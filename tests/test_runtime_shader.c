@@ -43,7 +43,7 @@ int main(void)
     REJECT(linkage_user_vgpr_en.offset,0x25c);
     REJECT(source_stage,PSBC_STAGE_GEOMETRY);
 #undef REJECT
-    PsbcShaderMetadata fragment={.source_stage=PSBC_STAGE_FRAGMENT,
+    PsbcShaderMetadata fragment={.version=PSBC_SHADER_METADATA_VERSION,.source_stage=PSBC_STAGE_FRAGMENT,
         .hardware_stage=PSBC_HW_STAGE_PIXEL,.user_sgpr_count=2,
         .input_semantic_count=1,.input_semantics={15}};
     struct ps5vk_runtime_draw_abi abi;
@@ -63,9 +63,19 @@ int main(void)
     assert(vertex[0]==31 && vertex[2]==0x123400 && pixel[0]==0x123400);
     assert(ps5vk_runtime_draw_values(&abi,31,17,0,0,0,vertex,pixel));
     m->vertex_buffer_table_valid=true;m->vertex_buffer_table_user_data_dword=1;
+    m->vertex_buffer_usage_mask=0x8008;
     m->ngg_lds_layout_user_data_dword=3;m->user_sgpr_count=4;
     assert(!ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
     assert(abi.vertex_buffer_valid==1 && abi.vertex_buffer_slot==1);
+    assert(abi.vertex_buffer_usage_mask==0x8008);
+    m->vertex_buffer_per_attribute=true;
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    m->vertex_buffer_per_attribute=false;m->vertex_buffer_usage_mask=0;
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    m->vertex_buffer_usage_mask=0x10000;
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    m->vertex_buffer_usage_mask=0x8008;
+    assert(!ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
     assert(!ps5vk_runtime_draw_values(&abi,31,17,0x123410,0x123400,0,vertex,pixel));
     assert(vertex[1]==0x123410 && vertex[2]==0x123400);
     assert(ps5vk_runtime_draw_values(&abi,31,17,0x123414,0x123400,0,vertex,pixel));
@@ -85,6 +95,7 @@ int main(void)
     fragment.descriptor_set_valid[0]=false;fragment.descriptor_set0_user_data_dword=0;
     fragment.descriptor_set_user_data_dword[0]=0;
     m->vertex_buffer_table_valid=false;m->vertex_buffer_table_user_data_dword=0;
+    m->vertex_buffer_usage_mask=0;
     m->ngg_lds_layout_user_data_dword=1;m->user_sgpr_count=2;
     m->user_sgpr_count=2;m->push_constants_valid=false;
     m->push_constants_user_data_dword=0;m->push_constant_size=0;

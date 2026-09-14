@@ -11,6 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeDiagnosticOptions(unittest.TestCase):
+    def test_binding_diagnostic_uses_tested_workload_capacity_gate(self):
+        source = (ROOT / "native/graphics_main.c").read_text()
+        self.assertIn("ps5vk_graphics_vertex_bindings_available(&device_props.limits,", source)
+        self.assertNotIn("device_props.limits.maxVertexInputBindings!=1", source)
+        self.assertIn("PS5VK_GRAPHICS_SCISSOR_PROBE==13?16u:1u", source)
+
     def test_runtime_graphics_recipe_uses_system_close(self):
         result = subprocess.run(
             ["make", "-n", "native-runtime-graphics", "GRAPHICS_CONTROL=fixture",

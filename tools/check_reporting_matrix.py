@@ -253,7 +253,7 @@ KNOWN_BLOCKERS = {
     "maxColorAttachments": "one color attachment per render pass",
     "maxFragmentOutputAttachments": "one color attachment per render pass",
     "maxFragmentCombinedOutputResources": "one color attachment plus the single sampled descriptor",
-    "maxVertexInputBindings": "one vertex binding (src/graphics_limits.h, vertex-input gate)",
+    "maxVertexInputBindings": "compute-only build: graphics limits are not applied; graphics supports 16 bindings (VERTEX_INPUT.md)",
     "maxPerStageDescriptorSamplers": "one combined image/sampler descriptor",
     "maxDescriptorSetSamplers": "one combined image/sampler descriptor",
     "maxPerStageDescriptorSampledImages": "one sampled image descriptor",
