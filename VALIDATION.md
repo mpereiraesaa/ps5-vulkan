@@ -46,6 +46,15 @@ unchanged.
 
 ## Multi-set fragment samplers: connected backend and hardware diagnostic
 
+The first shared-stage consumer run stopped at descriptor layout creation,
+before graphics submission: combined samplers still had a fragment-only
+visibility check. The frontend now applies the same legal core visibility-mask
+validation as buffer descriptors and retains the exact mask in the signature.
+The regression covers vertex, fragment, both, all graphics, all stages and
+compute visibility, plus invalid masks and unchanged immutable-sampler/device
+guards. Visibility alone does not enable execution in those stages: pipeline
+compiler/backend restrictions remain, and GPU qualification is separate.
+
 Vertex texture barrier recording now accepts transfer-write to shader-read
 dependencies scoped to vertex, fragment or both shader stages. The host
 regression checks preservation of the recorded stage/access masks and rejects

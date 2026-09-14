@@ -255,6 +255,36 @@ static void image_pool_types(void)
     vkDestroyDescriptorPool(&d,pool,NULL);vkDestroyDescriptorSetLayout(&d,layout,NULL);
     assert(!d.descriptor_objects);
 }
+static void image_layout_visibility(void)
+{
+    struct VkDevice_T d={.graphics_enabled=VK_TRUE};
+    VkDescriptorSetLayoutBinding binding={.binding=7,
+        .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.descriptorCount=24};
+    VkDescriptorSetLayoutCreateInfo info={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount=1,.pBindings=&binding};
+    const VkShaderStageFlags masks[]={VK_SHADER_STAGE_VERTEX_BIT,VK_SHADER_STAGE_FRAGMENT_BIT,
+        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,VK_SHADER_STAGE_ALL,
+        VK_SHADER_STAGE_ALL_GRAPHICS,VK_SHADER_STAGE_COMPUTE_BIT};
+    VkDescriptorSetLayout layout;
+    for(unsigned i=0;i<sizeof(masks)/sizeof(masks[0]);++i) {
+        binding.stageFlags=masks[i];
+        assert(vkCreateDescriptorSetLayout(&d,&info,NULL,&layout)==VK_SUCCESS);
+        assert(layout->signature.binding[7].stages==masks[i] &&
+            layout->signature.binding[7].count==24 && layout->signature.count==24);
+        vkDestroyDescriptorSetLayout(&d,layout,NULL);
+        assert(!d.descriptor_objects);
+    }
+    binding.stageFlags=0;
+    assert(vkCreateDescriptorSetLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
+    binding.stageFlags=UINT32_C(0x40000000);
+    assert(vkCreateDescriptorSetLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
+    binding.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkSampler immutable[24]={0};binding.pImmutableSamplers=immutable;
+    assert(vkCreateDescriptorSetLayout(&d,&info,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+    binding.pImmutableSamplers=NULL;d.graphics_enabled=VK_FALSE;
+    assert(vkCreateDescriptorSetLayout(&d,&info,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+    assert(!d.descriptor_objects);
+}
 static void uniform_resources(void)
 {
     struct VkDevice_T d={.memory={NULL,backing_alloc,backing_free,cache,cache},
@@ -338,6 +368,6 @@ static void dynamic_buffer_resources(void)
 }
 int main(void)
 {
-    lifecycle(); rollback(); negative(); push_constant_layouts(); updates(); image_pool_types(); uniform_resources(); dynamic_buffer_resources();
+    lifecycle(); rollback(); negative(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }
