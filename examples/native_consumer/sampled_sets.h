@@ -16,6 +16,18 @@
 #define SAMPLED_DENOMINATOR 8192u
 #endif
 
+/* The four-set profile spreads 96 sampled descriptors over four sets; the
+ * single-set profile puts all 96 in one set so the per-set capacity is measured
+ * directly. Weights and source selection are element-for-element identical, so
+ * the exact aggregate, and therefore the frozen reference words, are the same. */
+#ifdef CONSUMER_SINGLE_SET_SAMPLERS
+#define SAMPLED_SET_COUNT 1u
+#define SAMPLED_ELEMENTS 96u
+#else
+#define SAMPLED_SET_COUNT 4u
+#define SAMPLED_ELEMENTS 24u
+#endif
+
 static unsigned sampled_source(unsigned set,unsigned element,unsigned round)
 {
     uint32_t x=(1+24*set+element)*UINT32_C(0x9e3779b9)+round*UINT32_C(0x7f4a7c15);
@@ -81,6 +93,10 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
     ps5log_printf(PS5LOG_MARK,"PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"
         " stages=vertex-fragment vs_sha256=" CONSUMER_SHARED_VERTEX_SPIRV_SHA256
         " fs_sha256=" CONSUMER_SHARED_FRAGMENT_SPIRV_SHA256 " visibility=%08x",
+        (unsigned)SAMPLED_VISIBILITY);
+#elif defined(CONSUMER_SINGLE_SET_SAMPLERS)
+    ps5log_printf(PS5LOG_MARK,"PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_START sets=1 descriptors=96"
+        " elements=96 rounds=4 visibility=%08x fs_sha256=" CONSUMER_SINGLE_SET_SPIRV_SHA256,
         (unsigned)SAMPLED_VISIBILITY);
 #else
     ps5log_line(PS5LOG_MARK,"PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4");
@@ -157,7 +173,7 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
 #endif
     VkDescriptorSetLayout set_layout,layouts[4];
     VkDescriptorSetLayoutBinding binding={.binding=7,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount=24,.stageFlags=SAMPLED_VISIBILITY};
+        .descriptorCount=SAMPLED_ELEMENTS,.stageFlags=SAMPLED_VISIBILITY};
     VkDescriptorSetLayoutCreateInfo set_info={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount=1,.pBindings=&binding};
 #ifdef CONSUMER_MIXED_RESOURCES
@@ -169,15 +185,15 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
     set_info.bindingCount=2;set_info.pBindings=mixed_bindings;
 #endif
     CHECK(vkCreateDescriptorSetLayout(device,&set_info,NULL,&set_layout));
-    for(unsigned s=0;s<4;++s)layouts[s]=set_layout;
+    for(unsigned s=0;s<SAMPLED_SET_COUNT;++s)layouts[s]=set_layout;
     VkPipelineLayout layout;
     VkPipelineLayoutCreateInfo layout_info={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount=4,.pSetLayouts=layouts};
+        .setLayoutCount=SAMPLED_SET_COUNT,.pSetLayouts=layouts};
     CHECK(vkCreatePipelineLayout(device,&layout_info,NULL,&layout));
     VkDescriptorPool descriptor_pool;VkDescriptorSet sets[4];
     VkDescriptorPoolSize pool_size={VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,96};
     VkDescriptorPoolCreateInfo pool_info={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets=4,.poolSizeCount=1,.pPoolSizes=&pool_size};
+        .maxSets=SAMPLED_SET_COUNT,.poolSizeCount=1,.pPoolSizes=&pool_size};
 #ifdef CONSUMER_MIXED_RESOURCES
     VkDescriptorPoolSize mixed_pool_sizes[2]={
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,96},{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,4}};
@@ -185,7 +201,7 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
 #endif
     CHECK(vkCreateDescriptorPool(device,&pool_info,NULL,&descriptor_pool));
     VkDescriptorSetAllocateInfo set_allocation={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool=descriptor_pool,.descriptorSetCount=4,.pSetLayouts=layouts};
+        .descriptorPool=descriptor_pool,.descriptorSetCount=SAMPLED_SET_COUNT,.pSetLayouts=layouts};
     CHECK(vkAllocateDescriptorSets(device,&set_allocation,sets));
     VkAttachmentDescription attachment={.format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
@@ -210,7 +226,9 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
 #ifdef CONSUMER_SHARED_STAGE_SAMPLERS
     module.codeSize=sizeof(consumer_shared_fragment_spirv);module.pCode=consumer_shared_fragment_spirv;
 #endif
-#ifdef CONSUMER_MIXED_RESOURCES
+#ifdef CONSUMER_SINGLE_SET_SAMPLERS
+    module.codeSize=sizeof(consumer_single_set_spirv);module.pCode=consumer_single_set_spirv;
+#elif defined(CONSUMER_MIXED_RESOURCES)
     module.codeSize=sizeof(consumer_mixed_sets_spirv);module.pCode=consumer_mixed_sets_spirv;
 #endif
     CHECK(vkCreateShaderModule(device,&module,NULL,modules+1));
@@ -245,6 +263,20 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
     uint32_t *pixels=NULL;CHECK(vkMapMemory(device,target_memory,0,VK_WHOLE_SIZE,0,(void **)&pixels));
     for(unsigned round=0;round<4;++round) {
         CHECK(vkResetCommandBuffer(command,0));
+#ifdef CONSUMER_SINGLE_SET_SAMPLERS
+        /* All ninety-six descriptors live in set 0. Element i keeps the same
+         * source and weight as element i of the four-set workload, so the
+         * aggregate and the frozen reference words are unchanged. */
+        VkDescriptorImageInfo single_images[SAMPLED_ELEMENTS];
+        for(unsigned e=0;e<SAMPLED_ELEMENTS;++e)
+            single_images[e]=(VkDescriptorImageInfo){sampler,
+                views[sampled_source(0,e,round)],VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet single_write={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet=sets[0],.dstBinding=7,.descriptorCount=SAMPLED_ELEMENTS,
+            .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo=single_images};
+        vkUpdateDescriptorSets(device,1,&single_write,0,NULL);
+#else
         for(unsigned s=0;s<4;++s) {
             VkDescriptorImageInfo images[24];
             for(unsigned e=0;e<24;++e)images[e]=(VkDescriptorImageInfo){sampler,
@@ -267,6 +299,7 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
             vkUpdateDescriptorSets(device,1,&mixed_write,0,NULL);
 #endif
         }
+#endif
         VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         CHECK(vkBeginCommandBuffer(command,&begin));
         if(!round)for(unsigned i=0;i<4;++i) {
@@ -290,7 +323,8 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
             .framebuffer=framebuffer,.renderArea={{0,0},{1920,1080}},.clearValueCount=1,.pClearValues=&clear};
         vkCmdBeginRenderPass(command,&begin_pass,VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
-        for(unsigned s=4;s--;)vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,s,1,sets+s,0,NULL);
+        for(unsigned s=SAMPLED_SET_COUNT;s--;)
+            vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,s,1,sets+s,0,NULL);
         vkCmdDraw(command,3,1,0,0);vkCmdEndRenderPass(command);CHECK(vkEndCommandBuffer(command));
         VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.commandBufferCount=1,.pCommandBuffers=&command};
         CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));CHECK(vkQueueWaitIdle(queue));
@@ -311,7 +345,13 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
             if(pixels[p]==0xff000000)continue;
             ++changed;bad+=pixels[p]!=expected;
         }
-        ps5log_printf(PS5LOG_MARK,"PS5VK_CONSUMER_SAMPLED_SETS_RESULT round=%u expected=%08x changed=%u bad=%u",
+        ps5log_printf(PS5LOG_MARK,
+#ifdef CONSUMER_SINGLE_SET_SAMPLERS
+            "PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_RESULT"
+#else
+            "PS5VK_CONSUMER_SAMPLED_SETS_RESULT"
+#endif
+            " round=%u expected=%08x changed=%u bad=%u",
             round,expected,changed,bad);
         REQUIRE(changed==471744 && !bad,"96 sampled descriptors: exact weighted GPU readback");
 #endif
@@ -326,7 +366,9 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
         vkDestroyImageView(device,views[i],NULL);vkDestroyImage(device,textures[i],NULL);vkFreeMemory(device,texture_memory[i],NULL);
     }
     vkDestroyBuffer(device,staging,NULL);vkFreeMemory(device,staging_memory,NULL);
-#ifdef CONSUMER_MIXED_RESOURCES
+#ifdef CONSUMER_SINGLE_SET_SAMPLERS
+    ps5log_line(PS5LOG_MARK,"PS5VK_CONSUMER_SINGLE_SET_SAMPLERS_RETIRED");
+#elif defined(CONSUMER_MIXED_RESOURCES)
     for(unsigned i=0;i<4;++i) {
         vkUnmapMemory(device,weight_memory[i]);
         vkDestroyBuffer(device,weight_buffers[i],NULL);

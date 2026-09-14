@@ -29,10 +29,23 @@ ifneq ($(CONSUMER_SHARED_STAGE_SAMPLERS),)
 ifneq ($(CONSUMER_CONTINUOUS),)
 $(error Shared-stage qualification requires the finite consumer)
 endif
+ifneq ($(CONSUMER_SINGLE_SET_SAMPLERS),)
+$(error Choose one sampled-descriptor profile)
+endif
 ifneq ($(CONSUMER_MIXED_RESOURCES),)
 $(error Choose one sampled-descriptor profile)
 endif
 CFLAGS += -DCONSUMER_SHARED_STAGE_SAMPLERS=1
+endif
+
+ifneq ($(CONSUMER_SINGLE_SET_SAMPLERS),)
+ifneq ($(CONSUMER_CONTINUOUS),)
+$(error Single-set qualification requires the finite consumer)
+endif
+ifneq ($(CONSUMER_MIXED_RESOURCES),)
+$(error Choose one sampled-descriptor profile)
+endif
+CFLAGS += -DCONSUMER_SINGLE_SET_SAMPLERS=1
 endif
 
 ifneq ($(CONSUMER_MIXED_RESOURCES),)
@@ -89,6 +102,7 @@ $(BUILD_DIR)/sync_shaders.h: ../../tools/prepare_consumer_sync_shaders.py \
 $(BUILD_DIR)/sampled_set_shaders.h: ../../tools/prepare_consumer_sampled_shaders.py \
                                  ../../tools/prepare_consumer_sync_shaders.py \
                                  ../../experiments/graphics/runtime_sampled_sets.frag \
+                                 ../../experiments/graphics/runtime_single_set_samplers.frag \
                                  ../../experiments/graphics/runtime_mixed_sets.frag \
                                  ../../experiments/graphics/runtime_shared_sets.vert \
                                  ../../experiments/graphics/runtime_shared_sets.frag | $(BUILD_DIR)

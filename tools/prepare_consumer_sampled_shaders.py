@@ -22,6 +22,7 @@ def main():
     header = "/* Generated from owned GLSL. */\n#include <stdint.h>\n"
     for source, suffix, name in (
         ("runtime_sampled_sets.frag", ".spv", "consumer_sampled_sets_spirv"),
+        ("runtime_single_set_samplers.frag", ".single.spv", "consumer_single_set_spirv"),
         ("runtime_mixed_sets.frag", ".mixed.frag.spv", "consumer_mixed_sets_spirv"),
         ("runtime_shared_sets.vert", ".shared.vert.spv", "consumer_shared_vertex_spirv"),
         ("runtime_shared_sets.frag", ".shared.frag.spv", "consumer_shared_fragment_spirv"),
