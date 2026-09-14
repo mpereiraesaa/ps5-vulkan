@@ -5,7 +5,7 @@
 
 enum { ID_LIMIT=65536, LOCATIONS=32 };
 struct id_info {
-    unsigned op, type, count, signedness, storage, location, builtin, forbidden, selected;
+    unsigned op, type, count, signedness, storage, location, builtin, forbidden, selected, flat;
 };
 struct interface_slot { unsigned components, numeric; };
 struct interface {
@@ -62,7 +62,10 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                 unsigned *field=w[2]==30?&d->location:&d->builtin;
                 if(*field!=~0u)goto done;
                 *field=w[3];
-            } else if(w[2]==13 || w[2]==14 || w[2]==16 || w[2]==17 ||
+            } else if(w[2]==14) {
+                if(n!=3)goto done;
+                d->flat=1;
+            } else if(w[2]==13 || w[2]==16 || w[2]==17 ||
                       w[2]==31 || w[2]==32) d->forbidden=1;
         } else if(op==21 || op==22 || op==23 || op==30 || op==32 || op==59) {
             unsigned id=op==59?(n>=3?w[2]:0):(n>=2?w[1]:0);
@@ -117,6 +120,11 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
         else if(type->op==21 && type->count==32)
             numeric=type->signedness?PS5VK_VERTEX_NUMERIC_SINT:PS5VK_VERTEX_NUMERIC_UINT;
         else goto done;
+        /* Integer FS inputs are not interpolatable. Flat floats are also
+         * valid; their PSBC semantic bit is preserved by the native header.
+         * Interpolation decorations need not match VS output decorations. */
+        if(model==4 && d->storage==1 && numeric!=PS5VK_VERTEX_NUMERIC_FLOAT && !d->flat)
+            goto done;
         if(d->location>=LOCATIONS)goto done;
         struct interface_slot *locations=d->storage==1?out->inputs:out->outputs;
         if(locations[d->location].components)goto done;

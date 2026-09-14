@@ -12,6 +12,8 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	mkdir -p build/runtime-graphics
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
+	$(GLSLANG) -V -S vert -DTEST_VERTEX=1 experiments/graphics/runtime_flat.glsl -o build/runtime-graphics/flat.vert.spv
+	$(GLSLANG) -V -S frag experiments/graphics/runtime_flat.glsl -o build/runtime-graphics/flat.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_parameters.vert -o build/runtime-graphics/parameters.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_parameters.frag -o build/runtime-graphics/parameters.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_input.vert -o build/runtime-graphics/vertex_input.vert.spv
