@@ -166,8 +166,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         if (b->descriptorCount && base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
             !d->uniform_buffer_alignment)
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        if (b->descriptorCount && (image ? (!d->graphics_enabled || b->pImmutableSamplers ||
-                b->stageFlags!=VK_SHADER_STAGE_FRAGMENT_BIT) :
+        /* Layout visibility is not shader-stage execution. The common mask
+         * validator above applies to images too; backend support is checked
+         * when a pipeline consumes the signature. */
+        if (b->descriptorCount && (image ? (!d->graphics_enabled || b->pImmutableSamplers) :
                 (!(buffer||texel) || b->pImmutableSamplers)))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount > PS5VK_MAX_DESCRIPTORS - signature.count)
