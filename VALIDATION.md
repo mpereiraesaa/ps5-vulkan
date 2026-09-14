@@ -1445,3 +1445,40 @@ This qualifies the mixed delivery path for that bounded workload only. No
 descriptor or sampler limit is advertised here, storage buffers and other
 descriptor types stay rejected, and the reported sampler and sampled-image
 limits are unchanged; the limit derivation remains a separate change.
+
+## Per-set descriptor capacity: 96 sampled descriptors in one set (2026-09-14)
+
+The Vulkan 1.0 floors `maxDescriptorSetSamplers = 96` and
+`maxDescriptorSetSampledImages = 96` apply to a **single** descriptor set. The
+existing 96-descriptor witness spreads its elements over four sets (24 per set),
+which bounds the per-stage count but not the per-set one, so it could not support
+those two floors on its own.
+
+The public SDK consumer's single-set profile puts all ninety-six combined image
+samplers in set 0, binding 7. Element `i` keeps the weight `1+i` and the palettes
+of the globally `i`-th element of the four-set workload, so the exact aggregate is
+identical and the frozen reference words are the same as for the four-set shape;
+matching them shows the per-set capacity rather than a different workload.
+
+One signed artifact, `dist-consumer/artifact.json` profile `single-set`, SELF
+SHA-256
+`e4857dd69b6545ebfd7ac82b66551140edcab280655b7e2ed5af7f439535fdcd`,
+fragment shader SHA-256
+`76225631c9e39e2e64be851ebd78e2ceed3cc0da6af610a963075ab4f8cc05b0`,
+was deployed through exact FTP readback and ShadowMountPlus refresh. Two
+identical-artifact runs:
+
+- `20260914T145418819Z_PPSA99994_ps5vk_0x95ee5c423c68`, log SHA-256
+  `6b16e9bd33748af9da12edb1bdd8907440d9e0d3bd7c7ecc202152122a2d7506`
+- `20260914T145426305Z_PPSA99994_ps5vk_0x95f01a62fd68`, log SHA-256
+  `7d999a4a850c111b523e77e4f4f530995044e4fb7e76880268f144f1c1f2cb11`
+
+Each round reported `changed=471744` with `bad=0` for the expected words
+`914c503b`, `914b4d4f`, `914a4643` and `913a5449`, and both runs ended with
+`PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1`, a complete
+`ps5log/1` transport and a verified exact-title Close Game.
+
+This is bounded evidence for one set of 96 combined image samplers in a
+fragment-only pipeline with four update rounds. It does not advertise a limit by
+itself, says nothing about other descriptor types or about other stages, and is
+not a conformance claim; the reported limits remain unchanged in this change.
