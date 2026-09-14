@@ -25,6 +25,13 @@ ifneq ($(CONSUMER_CONTINUOUS),)
 CFLAGS += -DCONSUMER_CONTINUOUS=1
 endif
 
+ifneq ($(CONSUMER_SHARED_STAGE_SAMPLERS),)
+ifneq ($(CONSUMER_CONTINUOUS),)
+$(error Shared-stage qualification requires the finite consumer)
+endif
+CFLAGS += -DCONSUMER_SHARED_STAGE_SAMPLERS=1
+endif
+
 LDFLAGS = -L$(PS5_PAYLOAD_SDK)/target/lib \
           -T $(SDK_DIR)/lib/ps5-pie.ld \
           --eh-frame-hdr \
@@ -46,9 +53,12 @@ LIBS = $(SDK_DIR)/lib/crt.o \
        $(SDK_DIR)/lib/libSceAgc.so \
        $(SDK_DIR)/lib/libSceAgcDriver.so
 
-.PHONY: all clean
+.PHONY: all clean FORCE
 
 all: $(TARGET_PIE)
+
+# Mode switches change preprocessor flags, not source timestamps.
+FORCE:
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -68,10 +78,12 @@ $(BUILD_DIR)/sync_shaders.h: ../../tools/prepare_consumer_sync_shaders.py \
 
 $(BUILD_DIR)/sampled_set_shaders.h: ../../tools/prepare_consumer_sampled_shaders.py \
                                  ../../tools/prepare_consumer_sync_shaders.py \
-                                 ../../experiments/graphics/runtime_sampled_sets.frag | $(BUILD_DIR)
+                                 ../../experiments/graphics/runtime_sampled_sets.frag \
+                                 ../../experiments/graphics/runtime_shared_sets.vert \
+                                 ../../experiments/graphics/runtime_shared_sets.frag | $(BUILD_DIR)
 	python3 ../../tools/prepare_consumer_sampled_shaders.py --out $@
 
-$(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h sampled_sets.h physical_device_contract.h \
+$(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h sampled_sets.h physical_device_contract.h FORCE \
                      $(BUILD_DIR)/sampled_set_shaders.h \
                      $(BUILD_DIR)/storage_width_shaders.h \
                      $(BUILD_DIR)/sync_shaders.h | $(BUILD_DIR)

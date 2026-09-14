@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate owned weighted sampler-array SPIR-V for the public SDK consumer."""
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -18,11 +19,19 @@ def main():
     if not compiler:
         raise SystemExit("glslangValidator is required")
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    spirv = args.out.with_suffix(".spv")
-    subprocess.run([compiler, "-V", str(ROOT / "experiments/graphics/runtime_sampled_sets.frag"),
-                    "-o", str(spirv)], check=True)
-    args.out.write_text("/* Generated from owned GLSL. */\n#include <stdint.h>\n" +
-                        emit_array("consumer_sampled_sets_spirv", spirv.read_bytes()))
+    header = "/* Generated from owned GLSL. */\n#include <stdint.h>\n"
+    for source, suffix, name in (
+        ("runtime_sampled_sets.frag", ".spv", "consumer_sampled_sets_spirv"),
+        ("runtime_shared_sets.vert", ".shared.vert.spv", "consumer_shared_vertex_spirv"),
+        ("runtime_shared_sets.frag", ".shared.frag.spv", "consumer_shared_fragment_spirv"),
+    ):
+        spirv = args.out.with_suffix(suffix)
+        subprocess.run([compiler, "-V", str(ROOT / "experiments/graphics" / source),
+                        "-o", str(spirv)], check=True)
+        data = spirv.read_bytes()
+        header += emit_array(name, data)
+        header += f'#define {name.upper()}_SHA256 "{hashlib.sha256(data).hexdigest()}"\n'
+    args.out.write_text(header)
 
 if __name__ == "__main__":
     main()

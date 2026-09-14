@@ -3,6 +3,16 @@
  * Included after the consumer's CHECK/REQUIRE and owned shader declarations. */
 #include "sampled_set_shaders.h"
 
+#ifdef CONSUMER_SHARED_STAGE_SAMPLERS
+#define SAMPLED_VISIBILITY (VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)
+#define SAMPLED_READ_STAGES (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+#define SAMPLED_DENOMINATOR 32768u
+#else
+#define SAMPLED_VISIBILITY VK_SHADER_STAGE_FRAGMENT_BIT
+#define SAMPLED_READ_STAGES VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+#define SAMPLED_DENOMINATOR 8192u
+#endif
+
 static unsigned sampled_source(unsigned set,unsigned element,unsigned round)
 {
     uint32_t x=(1+24*set+element)*UINT32_C(0x9e3779b9)+round*UINT32_C(0x7f4a7c15);
@@ -15,18 +25,31 @@ static uint32_t sampled_expected(unsigned round)
     unsigned sums[4]={0};
     for(unsigned s=0;s<4;++s)for(unsigned e=0;e<24;++e) {
         unsigned source=sampled_source(s,e,round),weight=1+24*s+e;
+#ifdef CONSUMER_SHARED_STAGE_SAMPLERS
+        /* FS uses w; VS uses 97-w and contributes twice through a varying. */
+        weight+=2*(97-weight);
+#endif
         for(unsigned component=0;component<4;++component)
             if(component==3 || source==3 || source==component)sums[component]+=weight;
     }
     /* BGRA8 readback; inputs are exactly 0/1 and weights are small integers. */
-    unsigned r=(sums[0]*255+4096)/8192,g=(sums[1]*255+4096)/8192;
-    unsigned b=(sums[2]*255+4096)/8192,a=(sums[3]*255+4096)/8192;
+    unsigned r=(sums[0]*255+SAMPLED_DENOMINATOR/2)/SAMPLED_DENOMINATOR;
+    unsigned g=(sums[1]*255+SAMPLED_DENOMINATOR/2)/SAMPLED_DENOMINATOR;
+    unsigned b=(sums[2]*255+SAMPLED_DENOMINATOR/2)/SAMPLED_DENOMINATOR;
+    unsigned a=(sums[3]*255+SAMPLED_DENOMINATOR/2)/SAMPLED_DENOMINATOR;
     return b|(g<<8)|(r<<16)|(a<<24);
 }
 
 static void run_sampled_sets(VkDevice device,VkQueue queue)
 {
+    /* Backend qualification beyond advertised sampler limits, not conformance. */
+#ifdef CONSUMER_SHARED_STAGE_SAMPLERS
+    ps5log_line(PS5LOG_MARK,"PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"
+        " stages=vertex-fragment vs_sha256=" CONSUMER_SHARED_VERTEX_SPIRV_SHA256
+        " fs_sha256=" CONSUMER_SHARED_FRAGMENT_SPIRV_SHA256);
+#else
     ps5log_line(PS5LOG_MARK,"PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4");
+#endif
     VkImage textures[4],target;VkImageView views[4],target_view;
     VkDeviceMemory texture_memory[4],target_memory,staging_memory;
     VkImageCreateInfo image_info={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -76,7 +99,7 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
     CHECK(vkCreateSampler(device,&sampler_info,NULL,&sampler));
     VkDescriptorSetLayout set_layout,layouts[4];
     VkDescriptorSetLayoutBinding binding={.binding=7,.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount=24,.stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT};
+        .descriptorCount=24,.stageFlags=SAMPLED_VISIBILITY};
     VkDescriptorSetLayoutCreateInfo set_info={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount=1,.pBindings=&binding};
     CHECK(vkCreateDescriptorSetLayout(device,&set_info,NULL,&set_layout));
@@ -108,8 +131,14 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
     VkShaderModule modules[2];
     VkShaderModuleCreateInfo module={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize=sizeof(consumer_vertex_spirv),.pCode=consumer_vertex_spirv};
+#ifdef CONSUMER_SHARED_STAGE_SAMPLERS
+    module.codeSize=sizeof(consumer_shared_vertex_spirv);module.pCode=consumer_shared_vertex_spirv;
+#endif
     CHECK(vkCreateShaderModule(device,&module,NULL,modules));
     module.codeSize=sizeof(consumer_sampled_sets_spirv);module.pCode=consumer_sampled_sets_spirv;
+#ifdef CONSUMER_SHARED_STAGE_SAMPLERS
+    module.codeSize=sizeof(consumer_shared_fragment_spirv);module.pCode=consumer_shared_fragment_spirv;
+#endif
     CHECK(vkCreateShaderModule(device,&module,NULL,modules+1));
     VkPipelineShaderStageCreateInfo stages[2]={
         {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,.stage=VK_SHADER_STAGE_VERTEX_BIT,.module=modules[0],.pName="main"},
@@ -165,7 +194,7 @@ static void run_sampled_sets(VkDevice device,VkQueue queue)
             vkCmdCopyBufferToImage(command,staging,textures[i],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
             barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
-            vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,SAMPLED_READ_STAGES,
                 0,0,NULL,0,NULL,1,&barrier);
         }
         VkClearValue clear={.color={.float32={0,0,0,1}}};
