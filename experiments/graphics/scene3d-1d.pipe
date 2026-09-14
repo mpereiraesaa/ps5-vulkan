@@ -73,4 +73,3 @@ attribute[1].location = 1
 attribute[1].binding = 0
 attribute[1].format = VK_FORMAT_R32G32B32_SFLOAT
 attribute[1].offset = 12
-
