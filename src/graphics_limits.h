@@ -38,6 +38,7 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->framebufferColorSampleCounts=VK_SAMPLE_COUNT_1_BIT;
     limits->framebufferDepthSampleCounts=VK_SAMPLE_COUNT_1_BIT;
     limits->sampledImageColorSampleCounts=VK_SAMPLE_COUNT_1_BIT;
+    limits->sampledImageIntegerSampleCounts=VK_SAMPLE_COUNT_1_BIT;
     limits->maxViewports=1;
     limits->maxViewportDimensions[0]=limits->maxViewportDimensions[1]=PS5VK_MAX_IMAGE_2D;
     limits->viewportBoundsRange[0]=-32768.0f;

@@ -111,7 +111,8 @@ static void lifecycle(void)
     assert(gl.maxFramebufferWidth==16383 && gl.maxFramebufferHeight==16383);
     assert(gl.maxFramebufferLayers==1 && gl.maxColorAttachments==1);
     assert(gl.framebufferColorSampleCounts==1 && gl.framebufferDepthSampleCounts==1);
-    assert(gl.sampledImageColorSampleCounts==1 && !gl.sampledImageDepthSampleCounts);
+    assert(gl.sampledImageColorSampleCounts==1 &&
+        gl.sampledImageIntegerSampleCounts==1 && !gl.sampledImageDepthSampleCounts);
     assert(gl.maxViewports==1 && gl.maxViewportDimensions[0]==16384 && gl.maxViewportDimensions[1]==16384);
     assert(gl.viewportBoundsRange[0]==-32768 && gl.viewportBoundsRange[1]==32767);
     assert(gl.maxVertexInputBindings==1 && gl.maxVertexInputAttributes==32);
@@ -135,6 +136,7 @@ static void lifecycle(void)
         assert(pl->maxVertexOutputComponents==PS5VK_REQUIRED_INTERFACE_COMPONENTS);
         assert(pl->maxFragmentInputComponents==PS5VK_REQUIRED_INTERFACE_COMPONENTS);
         assert(pl->maxSampleMaskWords==PS5VK_REQUIRED_SAMPLE_MASK_WORDS);
+        assert(pl->sampledImageIntegerSampleCounts==VK_SAMPLE_COUNT_1_BIT);
         assert(pl->pointSizeRange[0]==PS5VK_REQUIRED_POINT_SIZE &&
                pl->pointSizeRange[1]==PS5VK_REQUIRED_POINT_SIZE);
         assert(pl->lineWidthRange[0]==PS5VK_REQUIRED_LINE_WIDTH &&
@@ -147,6 +149,7 @@ static void lifecycle(void)
         ps5vk_device_profile_init(&compute_profile, &compute_memory, VK_FALSE, VK_FALSE);
         assert(compute_profile.limits.subTexelPrecisionBits==PS5VK_REQUIRED_SUBTEXEL_BITS);
         assert(compute_profile.limits.pointSizeRange[1]==PS5VK_REQUIRED_POINT_SIZE);
+        assert(compute_profile.limits.sampledImageIntegerSampleCounts==VK_SAMPLE_COUNT_1_BIT);
         assert(strcmp(compute_profile.deviceName, PS5VK_PROFILE_COMPUTE_NAME)==0);
         assert(compute_memory.memoryHeaps[0].size==PS5VK_PROFILE_COMPUTE_HEAP_BYTES);
         const VkDeviceSize max_allocation = PS5VK_PROFILE_GRAPHICS_HEAP_BYTES;
@@ -155,6 +158,10 @@ static void lifecycle(void)
             queue_flags, 1, 1));
         VkPhysicalDeviceProperties broken = profile;
         broken.limits.subTexelPrecisionBits = 0;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.sampledImageIntegerSampleCounts = 0;
         assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
             queue_flags, 1, 1));
         broken = profile;
@@ -246,7 +253,13 @@ static void lifecycle(void)
         VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_SFLOAT,
         VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_SFLOAT,
         VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
-        VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT};
+        VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT,
+        VK_FORMAT_R8_UINT,VK_FORMAT_R8_SINT,VK_FORMAT_R8G8_UINT,VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8B8A8_UINT,VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_R16_UINT,VK_FORMAT_R16_SINT,VK_FORMAT_R16G16_UINT,VK_FORMAT_R16G16_SINT,
+        VK_FORMAT_R16G16B16A16_UINT,VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R32_UINT,VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_UINT,VK_FORMAT_R32G32_SINT,
+        VK_FORMAT_R32G32B32A32_UINT,VK_FORMAT_R32G32B32A32_SINT};
     for(unsigned f=0;f<sizeof(image_formats)/sizeof(image_formats[0]);++f)
     for(unsigned usage=0;usage<256;++usage) {
         memset(&ip,0xff,sizeof(ip));

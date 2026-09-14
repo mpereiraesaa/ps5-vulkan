@@ -71,7 +71,7 @@ draws.
 ## Images and sampling
 
 The GFX1013 texture-format table records exact descriptor encodings, Vulkan
-component completion and texel sizes for twenty-one public sampled formats, adapted
+component completion and texel sizes for thirty-nine public sampled formats, adapted
 from the pinned GPLv3 `ps5-opengl` reference and then validated against Vulkan
 oracles on PS5. Two byte-identical runs of each promoted tranche established
 image creation, transfer upload, descriptor sampling and deterministic
@@ -89,6 +89,9 @@ readback. Each format query exposes only the operations actually established.
 | `VK_FORMAT_R16_UNORM`, `VK_FORMAT_R16_SNORM`, `VK_FORMAT_R16_SFLOAT`, `VK_FORMAT_R16G16_UNORM`, `VK_FORMAT_R16G16_SNORM`, `VK_FORMAT_R16G16_SFLOAT` | Single-level sampled/upload 16-bit normalized or floating-point image with nearest/linear filtering and Vulkan completion of missing components |
 | `VK_FORMAT_R16G16B16A16_UNORM`, `VK_FORMAT_R16G16B16A16_SNORM`, `VK_FORMAT_R16G16B16A16_SFLOAT` | Single-level sampled/upload four-component 16-bit image with nearest/linear filtering |
 | `VK_FORMAT_R32_SFLOAT`, `VK_FORMAT_R32G32_SFLOAT`, `VK_FORMAT_R32G32B32A32_SFLOAT` | Single-level sampled/upload 32-bit floating-point image with nearest/linear filtering and Vulkan completion where applicable |
+| `VK_FORMAT_R8_UINT`, `VK_FORMAT_R8_SINT`, `VK_FORMAT_R8G8_UINT`, `VK_FORMAT_R8G8_SINT`, `VK_FORMAT_R8G8B8A8_UINT`, `VK_FORMAT_R8G8B8A8_SINT` | Single-level typed integer sampled/upload image with nearest filtering and Vulkan completion of missing components |
+| `VK_FORMAT_R16_UINT`, `VK_FORMAT_R16_SINT`, `VK_FORMAT_R16G16_UINT`, `VK_FORMAT_R16G16_SINT`, `VK_FORMAT_R16G16B16A16_UINT`, `VK_FORMAT_R16G16B16A16_SINT` | Single-level typed 16-bit integer sampled/upload image with nearest filtering |
+| `VK_FORMAT_R32_UINT`, `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32G32_UINT`, `VK_FORMAT_R32G32_SINT`, `VK_FORMAT_R32G32B32A32_UINT`, `VK_FORMAT_R32G32B32A32_SINT` | Single-level typed 32-bit integer sampled/upload image with nearest filtering |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
 
@@ -113,7 +116,9 @@ committed layout. Anything outside the padded linear geometry stays refused
 rather than being approximated with a linear write.
 
 Nearest and linear sampling have native deterministic readback evidence for all
-twenty-one sampled formats. R8 and RG8 verify Vulkan completion of missing
+twenty-one filterable sampled formats. Eighteen additional signed and unsigned
+integer rows have typed `isampler2D`/`usampler2D` nearest-sampling evidence and
+do not expose linear filtering. R8 and RG8 verify Vulkan completion of missing
 components;
 the R16/RG16 and R32/RG32 rows extend that completion evidence to wider
 components, while both packed floating-point formats verify alpha completion
@@ -126,7 +131,7 @@ separate nearest-versus-linear magnification and minification discriminators;
 both float and integer variants of the six fixed `VkBorderColor` enums map to
 those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
 unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
-is advertised for every executable sampled-image row. Mipmap-mode and
+is advertised only for the twenty-one validated filterable rows. Mipmap-mode and
 LOD encodings retain host contract coverage, but no mip-chain execution has
 been established. Mip chains, anisotropy, image arrays and general descriptor
 arrays are not supported.

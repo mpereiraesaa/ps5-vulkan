@@ -68,6 +68,8 @@ check-sanitize:
 	./build/tests/test_vk_sampler_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/sampler_core_probe.c tests/test_sampler_core_probe.c -o build/tests/test_sampler_core_probe_sanitized
 	./build/tests/test_sampler_core_probe_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/integer_sampled_probe.c tests/test_integer_sampled_probe.c -o build/tests/test_integer_sampled_probe_sanitized
+	./build/tests/test_integer_sampled_probe_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Isrc src/color_detile.c tests/test_color_detile.c -o build/tests/test_color_detile_sanitized
 	./build/tests/test_color_detile_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format.c -o build/tests/test_texture_format_sanitized
@@ -140,6 +142,8 @@ check:
 	./build/tests/test_sampler_core_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/sampled_format_probe.c tests/test_sampled_format_probe.c -o build/tests/test_sampled_format_probe
 	./build/tests/test_sampled_format_probe
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/integer_sampled_probe.c tests/test_integer_sampled_probe.c -o build/tests/test_integer_sampled_probe
+	./build/tests/test_integer_sampled_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vertex_format_probe.c tests/test_vertex_format_probe.c -o build/tests/test_vertex_format_probe
 	./build/tests/test_vertex_format_probe
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state

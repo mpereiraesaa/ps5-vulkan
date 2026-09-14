@@ -110,6 +110,29 @@ class TestReportingMatrix(unittest.TestCase):
                             row.get("format") != "VK_FORMAT_R8G8B8A8_UNORM"
                             for row in rows))
 
+    def test_integer_sampling_is_reported_without_linear_filtering(self):
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        integer = {
+            f"VK_FORMAT_R{width}{suffix}_{sign}"
+            for width in (8, 16, 32)
+            for suffix in ("", f"G{width}", f"G{width}B{width}A{width}")
+            for sign in ("UINT", "SINT")
+        }
+        sampled = {row["format"] for row in data["formats"]
+                   if row.get("profile") == "graphics" and
+                   row.get("feature") == "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT" and
+                   row.get("verdict") == "satisfied"}
+        linear = {row["format"] for row in data["formats"]
+                  if row.get("profile") == "graphics" and
+                  row.get("feature") == "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT" and
+                  row.get("verdict") == "satisfied"}
+        self.assertTrue(integer <= sampled)
+        self.assertTrue(integer.isdisjoint(linear))
+        integer_limits = [row for row in data["limits"]
+                          if row.get("limit") == "sampledImageIntegerSampleCounts"]
+        self.assertEqual({row["profile"] for row in integer_limits}, {"compute", "graphics"})
+        self.assertTrue(all(row["verdict"] == "satisfied" for row in integer_limits))
+
     def test_documented_format_counts_follow_the_generated_matrix(self):
         """Narrative summaries must not retain stale format totals."""
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())

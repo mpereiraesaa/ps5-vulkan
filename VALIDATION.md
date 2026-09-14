@@ -528,11 +528,11 @@ public query paths rather than from a copied table:
   `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
   report fails the gate; only documented blockers are accepted.
 
-Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
+Result on the shipped profiles: 128 mandatory limits satisfied, 70 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 72 mandatory format-feature cells satisfied
-with 590 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 90 mandatory format-feature cells satisfied
+with 572 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -688,9 +688,42 @@ Each complete 13,572-record `ps5log/1` stream passed all forty trials with
 also preserved pre/post compute regressions, emitted BYE with zero retained
 native allocations and stopped the exact title through Close Game in 100 ms.
 The reporting matrix therefore promotes the linear-filter bit on every
-executable sampled-image row and removes eight mandatory format blockers. It
-does not establish mip filtering, anisotropy, arrays or general image-format
-coverage.
+validated filterable sampled-image row and removes eight mandatory format
+blockers. It does not establish mip filtering, anisotropy, arrays or general
+image-format coverage.
+
+### Typed integer sampled images
+
+Eighteen GPL-derived GFX1013 format mappings were promoted only after dedicated
+Vulkan integer-shader evidence: R/RG/RGBA signed and unsigned formats at 8, 16
+and 32 bits. The two payloads use distinct `isampler2D` and `usampler2D`
+fragment interfaces, exact typed texels and a gray clear sentinel. Every case
+produced exactly 1,036,800 expected pixels—the owned triangle covers half of a
+1920x1080 target—with no other non-background pixels.
+
+The unsigned payload had SELF SHA-256
+`6b7af00e6fd80558141e83d71c69ee2bd6ec401e046daf96f4318d92f0b2e4bd`:
+
+- `20260914T023601661Z_PPSA99994_ps5vk_0x6da4c30c934c`, log SHA-256
+  `c4a8edd59f9a1e523290ed576d071aa728e7e88541826ed5d4d86c25989724d0`
+- `20260914T023630716Z_PPSA99994_ps5vk_0x6dab86bfd458`, log SHA-256
+  `229e8540cfbc99bb5c532d4a39aeacbfd9a9b1b75bb20b062afd9b6e1c8a18c1`
+
+The signed payload had SELF SHA-256
+`aa7951e029010a7d5b64d4a1c8c9a5374666d78ec253a3d350a346e15ea69297`:
+
+- `20260914T023733094Z_PPSA99994_ps5vk_0x6dba0cb7278c`, log SHA-256
+  `0be72bc28270f8dc293ba94255570d21cbd0e11ecd05719522ffe393f9218aff`
+- `20260914T023754064Z_PPSA99994_ps5vk_0x6dbeee9493c0`, log SHA-256
+  `7e8d3b743f722a64d82e982de6d7ef84475a6165379a0b7a96a05ef84e74cde8`
+
+Each run contained 4,152 ordered `ps5log/1` records, pre/post compute
+regressions for all nine cases, BYE, zero retained native allocations and an
+exact-title Close Game confirmed in 100 ms. The public table consequently
+advertises sampled-image and transfer-destination support for these rows plus
+single-sample integer sampling. It deliberately does not advertise linear
+filtering, which Vulkan does not define for integer sampled formats. This is
+bounded single-level 2D evidence, not general image-format conformance.
 
 ### GPL integer and packed UNORM vertex formats promoted by hardware evidence
 
@@ -789,8 +822,8 @@ alignment validation and native descriptor-address adjustment with checked
 ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
-reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
-blockers and 662 blockers overall.
+reporting matrix now records 128 satisfied mandatory limit rows, 70 limit
+blockers and 642 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

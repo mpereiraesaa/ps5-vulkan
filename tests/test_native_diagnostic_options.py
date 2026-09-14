@@ -55,22 +55,30 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertIn("PS5VK_GRAPHICS_SCISSOR_PROBE!=7 && PS5VK_GRAPHICS_SCISSOR_PROBE!=9",
                       source)
 
-    def test_sampled_filter_probe_is_a_scene_diagnostic(self):
+    def test_sampled_filter_probe_has_exact_oracle(self):
         self.rejected({"PS5VK_GRAPHICS_SCISSOR_PROBE": "9"},
                       "requires graphics profile API")
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("PS5VK_SAMPLED_FORMAT_CASES*PS5VK_SAMPLED_FORMAT_FILTER_TRIALS",
                       source)
         self.assertIn("PS5VK_SAMPLED_FILTER_READBACK", source)
-        self.assertIn("PS5VK_GRAPHICS_SCISSOR_PROBE==6 || PS5VK_GRAPHICS_SCISSOR_PROBE==9", source)
+        self.assertIn("valid=expected==373248u && !other", source)
 
-    def test_sampled_filter_probe_is_a_scene_diagnostic(self):
+    def test_sampled_filter_probe_excludes_generic_scene_oracle(self):
         self.rejected({"PS5VK_GRAPHICS_SCISSOR_PROBE": "9"},
                       "requires graphics profile API")
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("PS5VK_GRAPHICS_SCISSOR_PROBE!=9 &&", source)
         self.assertIn("PS5VK_SAMPLED_FORMAT_CASES*PS5VK_SAMPLED_FORMAT_FILTER_TRIALS",
                       source)
+
+    def test_integer_sampled_probe_is_a_scene_diagnostic(self):
+        self.rejected({"PS5VK_GRAPHICS_SCISSOR_PROBE": "10"},
+                      "requires graphics profile API")
+        source = (ROOT / "native/graphics_main.c").read_text()
+        self.assertIn("PS5VK_INTEGER_SAMPLED_CASES_PER_SIGN", source)
+        self.assertIn("PS5VK_INTEGER_SAMPLED_READBACK", source)
+        self.assertIn("PS5VK_GRAPHICS_SCISSOR_PROBE!=10", source)
 
     def test_vertex_format_probe_is_nonindexed_runtime_draw(self):
         source = (ROOT / "native/graphics_main.c").read_text()

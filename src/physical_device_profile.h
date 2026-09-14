@@ -161,6 +161,9 @@ static inline void ps5vk_physical_profile_init(
     limits->maxPerStageDescriptorSampledImages = 1;
     limits->maxDescriptorSetSampledImages = 1;
     limits->maxPerStageResources = PS5VK_MAX_DESCRIPTORS;
+    /* The public format table has typed UINT/SINT sampled-image execution.
+     * Both profiles expose those query paths, conservatively at one sample. */
+    limits->sampledImageIntegerSampleCounts = VK_SAMPLE_COUNT_1_BIT;
 
     /* dispatch_encode.c enforces each dimension, the product and group count.
      * PSBC configures 64 KiB LDS per GFX1013 workgroup. */
@@ -213,6 +216,7 @@ static inline int ps5vk_physical_profile_valid(
         limits->pointSizeRange[0] < PS5VK_REQUIRED_POINT_SIZE ||
         limits->pointSizeRange[1] < PS5VK_REQUIRED_POINT_SIZE ||
         limits->lineWidthRange[0] < PS5VK_REQUIRED_LINE_WIDTH ||
+        !(limits->sampledImageIntegerSampleCounts & VK_SAMPLE_COUNT_1_BIT) ||
         limits->lineWidthRange[1] < PS5VK_REQUIRED_LINE_WIDTH ||
         !limits->maxSampleMaskWords ||
         limits->discreteQueuePriorities < PS5VK_REQUIRED_QUEUE_PRIORITIES ||

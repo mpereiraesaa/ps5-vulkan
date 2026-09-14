@@ -2731,7 +2731,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R8_UINT",
       "kind": "format-cell",
@@ -2739,7 +2739,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -2827,7 +2827,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R8_SINT",
       "kind": "format-cell",
@@ -2835,7 +2835,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3131,7 +3131,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R8G8_UINT",
       "kind": "format-cell",
@@ -3139,7 +3139,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3227,7 +3227,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R8G8_SINT",
       "kind": "format-cell",
@@ -3235,7 +3235,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3595,7 +3595,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8B8A8_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8B8A8_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R8G8B8A8_UINT",
       "kind": "format-cell",
@@ -3603,7 +3603,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3723,7 +3723,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8B8A8_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8B8A8_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SINT",
       "kind": "format-cell",
@@ -3731,7 +3731,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -4971,7 +4971,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R16_UINT",
       "kind": "format-cell",
@@ -4979,7 +4979,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5067,7 +5067,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R16_SINT",
       "kind": "format-cell",
@@ -5075,7 +5075,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5323,7 +5323,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R16G16_UINT",
       "kind": "format-cell",
@@ -5331,7 +5331,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5419,7 +5419,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R16G16_SINT",
       "kind": "format-cell",
@@ -5427,7 +5427,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5675,7 +5675,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16B16A16_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16B16A16_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R16G16B16A16_UINT",
       "kind": "format-cell",
@@ -5683,7 +5683,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5803,7 +5803,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16B16A16_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16B16A16_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R16G16B16A16_SINT",
       "kind": "format-cell",
@@ -5811,7 +5811,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6091,7 +6091,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R32_UINT",
       "kind": "format-cell",
@@ -6099,7 +6099,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6235,7 +6235,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R32_SINT",
       "kind": "format-cell",
@@ -6243,7 +6243,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6507,7 +6507,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R32G32_UINT",
       "kind": "format-cell",
@@ -6515,7 +6515,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6635,7 +6635,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R32G32_SINT",
       "kind": "format-cell",
@@ -6643,7 +6643,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6939,7 +6939,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32A32_UINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32A32_UINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R32G32B32A32_UINT",
       "kind": "format-cell",
@@ -6947,7 +6947,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7067,7 +7067,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32A32_SINT lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32A32_SINT reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R32G32B32A32_SINT",
       "kind": "format-cell",
@@ -7075,7 +7075,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -24041,12 +24041,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported mask 0x0 must include 0x1; blocker: no integer sampled image format is advertised",
+      "detail": "untagged-core: reported mask 0x1 must include 0x1",
       "kind": "limit",
       "limit": "sampledImageIntegerSampleCounts",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 1,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -24056,12 +24056,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported mask 0x0 must include 0x1; blocker: no integer sampled image format is advertised",
+      "detail": "untagged-core: reported mask 0x1 must include 0x1",
       "kind": "limit",
       "limit": "sampledImageIntegerSampleCounts",
       "profile": "compute",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 1,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -25975,14 +25975,14 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 590,
+      "blocker": 572,
       "not-applicable": 2,
-      "satisfied": 72
+      "satisfied": 90
     },
     "limits": {
-      "blocker": 72,
+      "blocker": 70,
       "not-applicable": 656,
-      "satisfied": 126
+      "satisfied": 128
     },
     "shader_capabilities": {
       "not-audited": 2,

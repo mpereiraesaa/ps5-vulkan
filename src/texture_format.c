@@ -12,8 +12,9 @@
 /* Vulkan identity swizzles: missing colour components read as zero and a
  * missing alpha component reads as one. GFX10 selectors are X/Y/Z/W=4/5/6/7,
  * constant zero/one=0/1. All rows have exact PS5 creation, upload, sampling
- * and readback evidence. Every row also has two byte-identical nearest/linear
- * checkerboard readback runs on GFX1013. */
+ * and readback evidence. Filterable rows additionally have two byte-identical
+ * nearest/linear checkerboard runs; integer rows have typed nearest-only runs,
+ * as required by Vulkan. */
 static const struct ps5vk_texture_format formats[] = {
     {VK_FORMAT_R8_UNORM,          1, UINT32_C(0x00100000), {4,0,0,1}, VK_TRUE, VK_TRUE},
     {VK_FORMAT_R8_SNORM,          1, UINT32_C(0x00200000), {4,0,0,1}, VK_TRUE, VK_TRUE},
@@ -36,6 +37,26 @@ static const struct ps5vk_texture_format formats[] = {
     {VK_FORMAT_R32_SFLOAT,        4, UINT32_C(0x01600000), {4,0,0,1}, VK_TRUE, VK_TRUE},
     {VK_FORMAT_R32G32_SFLOAT,     8, UINT32_C(0x04000000), {4,5,0,1}, VK_TRUE, VK_TRUE},
     {VK_FORMAT_R32G32B32A32_SFLOAT,16, UINT32_C(0x04d00000), {4,5,6,7}, VK_TRUE, VK_TRUE},
+    /* Integer rows use typed isampler/usampler interfaces. Vulkan forbids
+     * linear filtering for integer formats, so these remain nearest-only. */
+    {VK_FORMAT_R8_UINT,           1, UINT32_C(0x00500000), {4,0,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R8_SINT,           1, UINT32_C(0x00600000), {4,0,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R8G8_UINT,         2, UINT32_C(0x01200000), {4,5,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R8G8_SINT,         2, UINT32_C(0x01300000), {4,5,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R8G8B8A8_UINT,     4, UINT32_C(0x03c00000), {4,5,6,7}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R8G8B8A8_SINT,     4, UINT32_C(0x03d00000), {4,5,6,7}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R16_UINT,          2, UINT32_C(0x00b00000), {4,0,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R16_SINT,          2, UINT32_C(0x00c00000), {4,0,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R16G16_UINT,       4, UINT32_C(0x01b00000), {4,5,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R16G16_SINT,       4, UINT32_C(0x01c00000), {4,5,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R16G16B16A16_UINT,8, UINT32_C(0x04500000), {4,5,6,7}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R16G16B16A16_SINT,8, UINT32_C(0x04600000), {4,5,6,7}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R32_UINT,          4, UINT32_C(0x01400000), {4,0,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R32_SINT,          4, UINT32_C(0x01500000), {4,0,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R32G32_UINT,       8, UINT32_C(0x03e00000), {4,5,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R32G32_SINT,       8, UINT32_C(0x03f00000), {4,5,0,1}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R32G32B32A32_UINT,16,UINT32_C(0x04b00000), {4,5,6,7}, VK_FALSE, VK_TRUE},
+    {VK_FORMAT_R32G32B32A32_SINT,16,UINT32_C(0x04c00000), {4,5,6,7}, VK_FALSE, VK_TRUE},
 };
 
 const struct ps5vk_texture_format *ps5vk_texture_format_lookup(VkFormat format)

@@ -270,7 +270,6 @@ KNOWN_BLOCKERS = {
     "minTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "maxTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "storageImageSampleCounts": "no storage image format is advertised",
-    "sampledImageIntegerSampleCounts": "no integer sampled image format is advertised",
     "framebufferColorSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
     "framebufferDepthSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
     "framebufferStencilSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",

@@ -47,5 +47,25 @@ int main(void)
         ps5vk_texture_format_lookup(VK_FORMAT_R32G32_SFLOAT);
     assert(rg32->selectors[0]==4 && rg32->selectors[1]==5 &&
         rg32->selectors[2]==0 && rg32->selectors[3]==1);
+    const VkFormat integer_formats[]={
+        VK_FORMAT_R8_UINT,VK_FORMAT_R8_SINT,VK_FORMAT_R8G8_UINT,VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8B8A8_UINT,VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_R16_UINT,VK_FORMAT_R16_SINT,VK_FORMAT_R16G16_UINT,VK_FORMAT_R16G16_SINT,
+        VK_FORMAT_R16G16B16A16_UINT,VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R32_UINT,VK_FORMAT_R32_SINT,VK_FORMAT_R32G32_UINT,VK_FORMAT_R32G32_SINT,
+        VK_FORMAT_R32G32B32A32_UINT,VK_FORMAT_R32G32B32A32_SINT};
+    const uint32_t integer_words[]={
+        0x00500000u,0x00600000u,0x01200000u,0x01300000u,0x03c00000u,0x03d00000u,
+        0x00b00000u,0x00c00000u,0x01b00000u,0x01c00000u,0x04500000u,0x04600000u,
+        0x01400000u,0x01500000u,0x03e00000u,0x03f00000u,0x04b00000u,0x04c00000u};
+    const unsigned integer_sizes[]={1,1,2,2,4,4,2,2,4,4,8,8,4,4,8,8,16,16};
+    for(unsigned i=0;i<sizeof(integer_formats)/sizeof(integer_formats[0]);++i) {
+        const struct ps5vk_texture_format *entry=
+            ps5vk_texture_format_lookup(integer_formats[i]);
+        assert(entry && entry->validated && !entry->linear_filter_validated &&
+            entry->descriptor_format_word==integer_words[i] &&
+            entry->bytes_per_texel==integer_sizes[i]);
+        assert(ps5vk_texture_format_supported(integer_formats[i]));
+    }
     assert(!ps5vk_texture_format_lookup(VK_FORMAT_B8G8R8A8_UNORM));
 }

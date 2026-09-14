@@ -82,8 +82,12 @@ case:
 | Attachments: `maxColorAttachments`, `maxFragmentOutputAttachments`, `maxFragmentCombinedOutputResources` | 1 | 4 |
 | Vertex input: `maxVertexInputBindings` | 1 | 16 |
 | Descriptors: `maxPerStageDescriptorSamplers`, `maxPerStageDescriptorSampledImages`, `maxPerStageDescriptorStorageImages`, `maxPerStageDescriptorInputAttachments`, `maxDescriptorSetSamplers`, `maxDescriptorSetSampledImages`, `maxDescriptorSetStorageImages`, `maxDescriptorSetInputAttachments` | 0-1 | 4-96 |
-| Sampling: `maxSamplerLodBias`, `sampledImage*SampleCounts`, `framebuffer*SampleCounts`, `storageImageSampleCounts`, `sampledImageIntegerSampleCounts` | 0-1 | 2 / 1+4 / 1 |
+| Sampling: `maxSamplerLodBias`, color/depth/stencil `sampledImage*SampleCounts`, `framebuffer*SampleCounts`, `storageImageSampleCounts` | 0-1 | 2 / 1+4 |
 | Other: `discreteQueuePriorities`, `maxMemoryAllocationCount`, `minTexelOffset`, `maxTexelOffset` | 0 / 2048 / 0 / 0 | 2 / 4096 / -8 / 7 |
+
+`sampledImageIntegerSampleCounts` now reports `VK_SAMPLE_COUNT_1_BIT` in both
+profiles, matching the typed integer sampled-image table and its native
+readback evidence. Multisampled integer sampling remains unsupported.
 
 The compute-only profile additionally leaves every graphics-object limit at
 zero because `ps5vk_graphics_limits` is applied only by the graphics build.
