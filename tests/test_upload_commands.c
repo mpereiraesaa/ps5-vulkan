@@ -76,4 +76,32 @@ int main(void)
     assert(ps5vk_upload_commands(&device,ops+2,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
     ops[0].dst_access=VK_ACCESS_SHADER_WRITE_BIT;
     assert(ps5vk_upload_commands(&device,ops,1,NULL,&layouts,&cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT);
+    /* A color transition must also execute without a render pass or target.
+     * The real cache packet and tentative layout remain the same. */
+    image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    const VkAccessFlags scopes[]={0,VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT};
+    struct ps5vk_operation color={.type=PS5VK_IMAGE_BARRIER,.image_barrier={.image=&image,
+        .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,.newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+    for(unsigned i=0;i<sizeof(scopes)/sizeof(scopes[0]);++i) {
+        for(unsigned standalone=0;standalone<2;++standalone) {
+            layouts=(struct ps5vk_layout_state){0};cursor=words;
+            color.image_barrier.dstAccessMask=scopes[i];
+            assert(ps5vk_upload_commands(&device,&color,1,standalone?NULL:&image,
+                &layouts,&cursor,words+256,flush)==VK_SUCCESS);
+            assert(cursor-words==PS5VK_GRAPHICS_ACQUIRE_WORDS &&
+                image.layout==VK_IMAGE_LAYOUT_UNDEFINED && layouts.count==1);
+            assert(ps5vk_layout_require(&layouts,&image,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)==VK_SUCCESS);
+        }
+    }
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    color.image_barrier.dstAccessMask=VK_ACCESS_SHADER_WRITE_BIT;
+    assert(ps5vk_upload_commands(&device,&color,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    assert(cursor==words && !layouts.count);
+    color.image_barrier.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    image.info.usage=VK_IMAGE_USAGE_SAMPLED_BIT;
+    assert(ps5vk_upload_commands(&device,&color,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    assert(cursor==words && !layouts.count);
 }

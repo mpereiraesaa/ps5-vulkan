@@ -20,12 +20,12 @@ Host tests cover multi-layer DMA encoding, no pixel/layout mutation during
 preparation, rollback on span/planner/capacity failures and unsupported commands;
 the focused test also passes ASan/UBSan.
 
-The three upstream cases now complete their upload submissions on GFX1013, but
-**none passes its full oracle yet**: they next encounter the separate initial
-color-attachment barrier, whose write-only access scope is rejected by the
-current frontend. They remain outside strict acceptance; no sampler limits or
-conformance claim change. This is execution/completion evidence for the upload
-path, not yet independent verification of the uploaded texture pixels.
+At the upload-only revision, the three upstream cases completed their uploads
+on GFX1013 but next encountered an initial color-attachment barrier: its
+write-only access scope was rejected. The follow-up below resolves that
+restriction. **None passes its full oracle yet**; the three cases remain
+outside strict acceptance. No sampler limits or conformance claim change.
+Upload completion alone is not verification of the uploaded texture pixels.
 
 Regression validation: two runs of the existing **106-case** upstream selection
 passed all original oracles, with complete TCP QPA reconstruction, identity
@@ -37,6 +37,33 @@ the selection SHA-256 is
 Runtime identity fields echo the deployed manifest and do not independently
 hash the running SELF. Temporary rejection-location instrumentation was removed
 before this regression build.
+
+### Initial color-attachment transitions
+
+The frontend and native emitter now share the initial discard-transition
+contract. Empty, read-only, write-only, combined color-access scopes and generic
+memory-access aliases are accepted; stage/access compatibility, image usage,
+ownership and full-subresource checks still apply. A standalone transition
+uses the existing job completion and tentative-layout machinery, without
+requiring a render pass. Host regressions check scope preservation, invalid
+stage/access/usage rejection, real cache-packet emission and deferred layout
+commit; the focused tests also pass ASan/UBSan.
+
+The same three original sampler cases were executed again on 2026-09-14:
+all complete the separate color-transition submission. The vertex case also
+completes its draw, then fails the independent image-readback submission.
+The fragment and combined-stage cases instead fail graphics-pipeline creation.
+These are remaining implementation gaps, not CTS passes; upstream sources,
+oracles and the strict selection remain unchanged.
+
+The existing 106-case selection above passed with signed SELF SHA-256
+`7b74ade0920b1c77d42d867f0d3339c71307c6b84c291dd4b17bd1fd7ccc0b67`,
+verified by exact FTP readback before remount. Two independent runs passed
+all original oracles, strict TCP QPA/identity checks, zero tracked allocations
+and confirmed Close Game. A decoded post-close image showed the home menu
+without an error dialog; the automated stream was stopped afterward.
+The integrated host and sanitizer gates also passed. As above, runtime
+identity is a manifest echo, not an independent running-SELF measurement.
 
 ## Shared-stage sampler hardware qualification
 

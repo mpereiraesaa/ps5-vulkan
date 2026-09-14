@@ -2,6 +2,7 @@
 #include "vk_query_pool.h"
 #include "vk_image.h"
 #include "vk_sync.h"
+#include "color_barrier.h"
 #include <float.h>
 #include <string.h>
 
@@ -753,11 +754,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
          b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT);
     if(readback)return
-        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
-         b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-         !b->srcAccessMask &&
-         b->dstAccessMask==(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|
-                           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)) ||
+        ps5vk_color_discard_barrier(b) ||
         (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
