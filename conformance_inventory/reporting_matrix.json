@@ -15962,12 +15962,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 96; blocker: one sampled image descriptor",
+      "detail": "core: reported 96 must be >= 96",
       "kind": "limit",
       "limit": "maxDescriptorSetSampledImages",
       "profile": "graphics",
-      "reported": 1,
-      "verdict": "blocker"
+      "reported": 96,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -15977,7 +15977,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 96; blocker: one sampled image descriptor",
+      "detail": "core: reported 1 must be >= 96; blocker: compute-only build: graphics limits are not applied; graphics reports the floor of 96",
       "kind": "limit",
       "limit": "maxDescriptorSetSampledImages",
       "profile": "compute",
@@ -15992,12 +15992,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 96; blocker: one combined image/sampler descriptor",
+      "detail": "core: reported 96 must be >= 96",
       "kind": "limit",
       "limit": "maxDescriptorSetSamplers",
       "profile": "graphics",
-      "reported": 1,
-      "verdict": "blocker"
+      "reported": 96,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -16007,7 +16007,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 96; blocker: one combined image/sampler descriptor",
+      "detail": "core: reported 0 must be >= 96; blocker: compute-only build: graphics limits are not applied; graphics reports the floor of 96",
       "kind": "limit",
       "limit": "maxDescriptorSetSamplers",
       "profile": "compute",
@@ -19292,12 +19292,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 16; blocker: one sampled image descriptor",
+      "detail": "core: reported 16 must be >= 16",
       "kind": "limit",
       "limit": "maxPerStageDescriptorSampledImages",
       "profile": "graphics",
-      "reported": 1,
-      "verdict": "blocker"
+      "reported": 16,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -19307,7 +19307,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 16; blocker: one sampled image descriptor",
+      "detail": "core: reported 1 must be >= 16; blocker: compute-only build: graphics limits are not applied; graphics reports the floor of 16",
       "kind": "limit",
       "limit": "maxPerStageDescriptorSampledImages",
       "profile": "compute",
@@ -19322,12 +19322,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 16; blocker: one combined image/sampler descriptor",
+      "detail": "core: reported 16 must be >= 16",
       "kind": "limit",
       "limit": "maxPerStageDescriptorSamplers",
       "profile": "graphics",
-      "reported": 1,
-      "verdict": "blocker"
+      "reported": 16,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -19337,7 +19337,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 16; blocker: one combined image/sampler descriptor",
+      "detail": "core: reported 0 must be >= 16; blocker: compute-only build: graphics limits are not applied; graphics reports the floor of 16",
       "kind": "limit",
       "limit": "maxPerStageDescriptorSamplers",
       "profile": "compute",
@@ -25983,9 +25983,9 @@
       "satisfied": 106
     },
     "limits": {
-      "blocker": 64,
+      "blocker": 60,
       "not-applicable": 656,
-      "satisfied": 134
+      "satisfied": 138
     },
     "shader_capabilities": {
       "not-audited": 2,

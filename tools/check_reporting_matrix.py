@@ -254,10 +254,12 @@ KNOWN_BLOCKERS = {
     "maxFragmentOutputAttachments": "one color attachment per render pass",
     "maxFragmentCombinedOutputResources": "one color attachment plus the single sampled descriptor",
     "maxVertexInputBindings": "compute-only build: graphics limits are not applied; graphics supports 16 bindings (VERTEX_INPUT.md)",
-    "maxPerStageDescriptorSamplers": "one combined image/sampler descriptor",
-    "maxDescriptorSetSamplers": "one combined image/sampler descriptor",
-    "maxPerStageDescriptorSampledImages": "one sampled image descriptor",
-    "maxDescriptorSetSampledImages": "one sampled image descriptor",
+    # The graphics profile reports the Vulkan 1.0 floors for these four; only the
+    # compute-only build, which applies no graphics limits, stays below them.
+    "maxPerStageDescriptorSamplers": "compute-only build: graphics limits are not applied; graphics reports the floor of 16",
+    "maxDescriptorSetSamplers": "compute-only build: graphics limits are not applied; graphics reports the floor of 96",
+    "maxPerStageDescriptorSampledImages": "compute-only build: graphics limits are not applied; graphics reports the floor of 16",
+    "maxDescriptorSetSampledImages": "compute-only build: graphics limits are not applied; graphics reports the floor of 96",
     "maxPerStageDescriptorStorageImages": "no storage image descriptor type is accepted",
     "maxDescriptorSetStorageImages": "no storage image descriptor type is accepted",
     "maxPerStageDescriptorInputAttachments": "no input attachment support (subpass dependencies rejected)",
