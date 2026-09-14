@@ -531,8 +531,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 126 mandatory limits satisfied, 72 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 55 mandatory format-feature cells satisfied
-with 607 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 60 mandatory format-feature cells satisfied
+with 602 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -601,9 +601,10 @@ the additional formats below or Vulkan conformance.
 ### GPL texture formats promoted by hardware evidence
 
 The sampled-format table derived from the exact GPLv3 `ps5-opengl` revision
-pinned in `LICENSING.md` now publicly supports `R8_UNORM`, `R8G8_UNORM`,
-`R8G8B8A8_UNORM` and `R8G8B8A8_SRGB`. Texture layout and buffer-upload planning
-use each format's 1/2/4-byte texel width rather than assuming four bytes.
+pinned in `LICENSING.md` now publicly supports ten formats spanning UNORM,
+SNORM, sRGB, shared-exponent and 16/32-bit float texels. Texture layout and
+buffer-upload planning use each format's 1/2/4/8/16-byte texel width rather
+than assuming four bytes.
 
 Two runs used byte-identical SELF SHA-256
 `666e441796ae90c1cb06b3dcbacac121f246356235f1525a77c9ffef99dc7e32`:
@@ -623,6 +624,24 @@ accounting returned to zero, both streams ended with BYE and Close Game stopped
 the title in 100 ms. Linear filtering remains advertised only for RGBA8 UNORM;
 the new formats were validated with nearest sampling. This is bounded format
 evidence, not general format coverage or Vulkan conformance.
+
+A second GPL-derived tranche added `R8_SNORM`, `R8G8_SNORM`,
+`R8G8B8A8_SNORM`, `E5B9G9R9_UFLOAT_PACK32`, `R16G16B16A16_SFLOAT` and
+`R32G32B32A32_SFLOAT`. Two independent launches used byte-identical SELF
+SHA-256 `de459dfffebcb6a03337d5054e0e6a8263500364e2252b45bb08b460b497d9e9`:
+
+- `20260914T010455716Z_PPSA99994_ps5vk_0x68ac24913444`, log SHA-256
+  `6f4e550061b1432c7b51fb1fd3eadc2e8f4c69587f153dbc086896cddc4d6836`
+- `20260914T010520787Z_PPSA99994_ps5vk_0x68b1faf20fa6`, log SHA-256
+  `6ccd000fec1bf0041c666bba28fbfbedd736dc45788885ae140350ffb12f0f96`
+
+Each complete 3,063-record ps5log/1 stream executed all nine sampled-format
+cases, with 373,248 exact pixels and zero others per case, pre/post compute
+regressions, BYE and zero retained allocations. The shared-exponent case also
+caught and corrected a Vulkan-specific semantic difference from the source
+OpenGL table: a format without alpha must select constant one rather than a
+nonexistent W component. Close Game stopped the exact title in 100 ms after
+each run. Linear filtering remains advertised only for RGBA8 UNORM.
 
 ### GPL integer and packed UNORM vertex formats promoted by hardware evidence
 
@@ -722,7 +741,7 @@ ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
 reporting matrix now records 126 satisfied mandatory limit rows, 72 limit
-blockers and 679 blockers overall.
+blockers and 674 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs

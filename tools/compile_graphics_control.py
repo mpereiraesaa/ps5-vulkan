@@ -251,7 +251,10 @@ static const struct ps5vk_graphics_library graphics_library = {&graphics_program
         manifest['header_adapter']['profile']='vertex-table-fragment-combined-texture-set0-binding0'
     (out / 'graphics_library.h').write_text(library)
     manifest['graphics_library_sha256'] = digest(out / 'graphics_library.h')
-    manifest['native_input_version'] = 2
+    # Version 3 makes the complete 32-binding set signature explicit.  Version
+    # 2 left the empty binding offsets implicitly zero, which no longer matches
+    # the fail-closed descriptor-signature invariant after binding zero.
+    manifest['native_input_version'] = 3
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(out / "manifest.json")
 

@@ -38,17 +38,18 @@ static void fail(const char *call, int rc)
 struct texture_fixture {
     VkImage image;VkImageView view;VkSampler sampler;VkDeviceMemory memory,upload_memory;
     VkBuffer upload;VkDescriptorPool pool;VkDescriptorSet set;
-    VkFormat format;uint32_t width,height;
+    VkFormat format;uint32_t width,height,upload_bytes;
 };
 static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout layout,unsigned probe_case)
 {
     struct texture_fixture t={0};
     VkFormat format=VK_FORMAT_R8G8B8A8_UNORM;
-    uint32_t width=2,height=2;
+    uint32_t width=2,height=2,bytes_per_texel=4;
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==7) {
         struct ps5vk_sampled_format_case c;
         if(ps5vk_sampled_format_case(probe_case,&c))fail("sampled-format-case",-1);
         format=c.format;
+        bytes_per_texel=c.bytes_per_texel;
         /* CP DMA copies DWORD-aligned rows. A four-wide R8 solid fixture keeps
          * its 4-byte rows native without changing the full-screen oracle. */
         if(c.bytes_per_texel==1)width=4;
@@ -76,7 +77,8 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
         if(c.minification)si.maxLod=15.0f;
     }
     CHECK(vkCreateSampler(d,&si,NULL,&t.sampler));
-    VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=16,.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
+    t.upload_bytes=width*height*bytes_per_texel;
+    VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=t.upload_bytes,.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
     CHECK(vkCreateBuffer(d,&bi,NULL,&t.upload));vkGetBufferMemoryRequirements(d,t.upload,&req);
     mi.allocationSize=req.size;CHECK(vkAllocateMemory(d,&mi,NULL,&t.upload_memory));
     CHECK(vkBindBufferMemory(d,t.upload,t.upload_memory,0));
@@ -98,7 +100,7 @@ static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer 
     unsigned frame,unsigned probe_case)
 {
     void *mapped;CHECK(vkMapMemory(d,t->upload_memory,0,VK_WHOLE_SIZE,0,&mapped));
-    memset(mapped,0,16);
+    memset(mapped,0,t->upload_bytes);
     const uint32_t colors[3]={0xff0000ff,0xff00ff00,0xffff0000}; /* RGBA8 */
     unsigned checkerboard=0;
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
@@ -739,12 +741,15 @@ int main(void)
     VkPipelineDepthStencilStateCreateInfo depth={.sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable=VK_TRUE,.depthWriteEnable=VK_TRUE,.depthCompareOp=VK_COMPARE_OP_LESS};
     if(use_depth)pi.pDepthStencilState=&depth;
+#if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
     VkSpecializationMapEntry component_entries[4]={{0,0,sizeof(uint32_t)},
-        {1,sizeof(float),sizeof(float)},{2,2*sizeof(float),sizeof(float)},
-        {3,3*sizeof(float),sizeof(float)}};
+        {1,sizeof(uint32_t),sizeof(uint32_t)},
+        {2,2*sizeof(uint32_t),sizeof(uint32_t)},
+        {3,3*sizeof(uint32_t),sizeof(uint32_t)}};
     union ps5vk_vertex_probe_expected expected_components;
     VkSpecializationInfo component_specialization={4,component_entries,
         sizeof(expected_components),&expected_components};
+#endif
     for (unsigned iteration=0;iteration<(PS5VK_GRAPHICS_WITNESSES?(PS5VK_GRAPHICS_WITNESSES==2?4u:6u):(PS5VK_GRAPHICS_SCISSOR_PROBE==8?PS5VK_VERTEX_FORMAT_CASES:(PS5VK_GRAPHICS_SCISSOR_PROBE==7?PS5VK_SAMPLED_FORMAT_CASES:(PS5VK_GRAPHICS_SCISSOR_PROBE==6?PS5VK_SAMPLER_CORE_CASES:((PS5VK_GRAPHICS_SCISSOR_PROBE==2 || PS5VK_GRAPHICS_SCISSOR_PROBE==3)?10u:(PS5VK_GRAPHICS_SCENE?1u:3u))))));++iteration) {
         unsigned witness_index=PS5VK_GRAPHICS_WITNESSES==2 && iteration==3?5:iteration;
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS

@@ -40,7 +40,8 @@ results; visual output is not the sole correctness signal.
   offsets
 - One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
   plus an optional D32 depth attachment
-- Single-level R8, RG8, RGBA8 UNORM and RGBA8 sRGB sampled textures with GPU
+- Ten single-level sampled texture formats spanning R8/RG8/RGBA8 UNORM and
+  SNORM, RGBA8 sRGB, shared-exponent RGB9E5 and RGBA16F/RGBA32F, with GPU
   upload transitions and deterministic hardware readback; core repeat,
   mirrored-repeat, edge/border clamp and the six fixed border-color enums are
   implemented, with nearest/linear filtering validated for RGBA8 UNORM

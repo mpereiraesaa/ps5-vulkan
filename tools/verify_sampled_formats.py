@@ -10,6 +10,12 @@ CASES = (
     ("r8-unorm", "9", "1", "ff400000"),
     ("rg8-unorm", "16", "2", "ff408000"),
     ("rgba8-srgb", "43", "4", "ff370d04"),
+    ("r8-snorm", "10", "1", "ff800000"),
+    ("rg8-snorm", "17", "2", "ff804000"),
+    ("rgba8-snorm", "38", "4", "ff4080c1"),
+    ("e5b9g9r9-ufloat", "123", "4", "ff804020"),
+    ("rgba16-sfloat", "97", "8", "ff804020"),
+    ("rgba32-sfloat", "109", "16", "ff804020"),
 )
 
 
@@ -63,7 +69,7 @@ def validate(log, metadata, artifact):
     presents = matching("PS5VK_VIDEO_PRESENTED")
     ends = matching("PS5VK_GRAPHICS_REUSE_END")
     require(all(len(group) == len(CASES) for group in
-                (inputs, results, submits, completes, presents, ends)), "three GPU cases")
+                (inputs, results, submits, completes, presents, ends)), "all GPU cases")
     require(len(compute_results) == 12 * len(CASES) and
             len(compute_ends) == 2 * len(CASES) and
             all(fields.get("rounds") == "6" and fields.get("dispatches") == "12"

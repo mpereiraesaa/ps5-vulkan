@@ -239,8 +239,12 @@ static void lifecycle(void)
         ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     p->platform.image_properties=ps5vk_graphics_image_properties;
     const VkFormat image_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,
-        VK_FORMAT_D32_SFLOAT,VK_FORMAT_R8_UNORM,VK_FORMAT_R8G8_UNORM,VK_FORMAT_R8G8B8A8_SRGB};
-    for(unsigned f=0;f<6;++f)for(unsigned usage=0;usage<256;++usage) {
+        VK_FORMAT_D32_SFLOAT,VK_FORMAT_R8_UNORM,VK_FORMAT_R8G8_UNORM,VK_FORMAT_R8G8B8A8_SRGB,
+        VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8B8A8_SNORM,
+        VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_R32G32B32A32_SFLOAT};
+    for(unsigned f=0;f<sizeof(image_formats)/sizeof(image_formats[0]);++f)
+    for(unsigned usage=0;usage<256;++usage) {
         memset(&ip,0xff,sizeof(ip));
         VkResult result=vkGetPhysicalDeviceImageFormatProperties(p,image_formats[f],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,usage,0,&ip);
@@ -262,7 +266,10 @@ static void lifecycle(void)
     }
     const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
         VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM,
-        VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT};
+        VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8B8A8_SNORM,
+        VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_R32G32B32A32_SFLOAT};
     const VkFormatFeatureFlags bits[] = {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
             VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
@@ -270,11 +277,17 @@ static void lifecycle(void)
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT, 0};
-    for (unsigned n=0; n<7; ++n) {
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT, 0,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
+    for (unsigned n=0; n<sizeof(formats)/sizeof(formats[0]); ++n) {
         memset(&fp, 0xff, sizeof(fp));
         vkGetPhysicalDeviceFormatProperties(p, formats[n], &fp);
-        VkFormatFeatureFlags buffer_bits=(n<2 || n==3 || n==4)?
+        VkFormatFeatureFlags buffer_bits=ps5vk_vertex_format_size(formats[n])?
             VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
         assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
             fp.optimalTilingFeatures==bits[n]);
@@ -302,11 +315,15 @@ static void lifecycle(void)
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT));
         else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
             assert(fp.optimalTilingFeatures==VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+        else if(vertex_formats[n]==VK_FORMAT_R32G32B32A32_SFLOAT)
+            assert(fp.optimalTilingFeatures==(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT));
         else assert(!fp.optimalTilingFeatures);
         assert(ps5vk_vertex_format_size(vertex_formats[n])==(n<12?4*((n%4)+1):4));
         VkResult image_result=vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip);
-        if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
+        if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM ||
+           vertex_formats[n]==VK_FORMAT_R32G32B32A32_SFLOAT)
             assert(image_result==VK_SUCCESS);
         else assert(image_result==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }

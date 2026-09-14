@@ -20,5 +20,20 @@ int main(void)
     assert(ps5vk_texture_format_supported(VK_FORMAT_R8_UNORM));
     assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8_UNORM));
     assert(ps5vk_texture_format_supported(VK_FORMAT_R8G8B8A8_SRGB));
+    const VkFormat added[]={VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,
+        VK_FORMAT_R8G8B8A8_SNORM,VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+        VK_FORMAT_R16G16B16A16_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT};
+    const uint32_t words[]={0x00200000u,0x00f00000u,0x03900000u,
+        0x08400000u,0x04700000u,0x04d00000u};
+    const unsigned sizes[]={1,2,4,4,8,16};
+    for(unsigned i=0;i<sizeof(added)/sizeof(added[0]);++i) {
+        const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(added[i]);
+        assert(entry && entry->validated && !entry->linear_filter_validated &&
+            entry->descriptor_format_word==words[i] && entry->bytes_per_texel==sizes[i]);
+    }
+    const struct ps5vk_texture_format *rgb9e5=
+        ps5vk_texture_format_lookup(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32);
+    assert(rgb9e5->selectors[0]==4 && rgb9e5->selectors[1]==5 &&
+        rgb9e5->selectors[2]==6 && rgb9e5->selectors[3]==1);
     assert(!ps5vk_texture_format_lookup(VK_FORMAT_B8G8R8A8_UNORM));
 }

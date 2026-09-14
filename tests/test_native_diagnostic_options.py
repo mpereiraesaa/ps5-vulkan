@@ -1,8 +1,10 @@
 """Reject conflicting lifecycle experiments before compilation or deployment."""
+import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +63,21 @@ class NativeDiagnosticOptions(unittest.TestCase):
         # preserve 25 rather than silently rounding it down to 24.
         self.assertIn("const size_t start=25u;", source)
         self.assertIn("binding_offset=%zu", source)
+
+    def test_stale_graphics_library_signature_is_rejected(self):
+        parent = ROOT / "build/graphics"
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="stale-contract-", dir=parent) as folder:
+            Path(folder, "manifest.json").write_text(json.dumps({
+                "scope": "host-graphics-control-only",
+                "native_input_version": 2,
+            }))
+            env = {k: v for k, v in os.environ.items() if not k.startswith("PS5VK_")}
+            env["PS5VK_GRAPHICS_API"] = folder
+            result = subprocess.run([sys.executable, "tools/build_native.py"], cwd=ROOT,
+                                    env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("lacks current interpolation ABI", result.stderr)
 
     def rejected(self, options, message):
         env = {k: v for k, v in os.environ.items() if not k.startswith("PS5VK_")}

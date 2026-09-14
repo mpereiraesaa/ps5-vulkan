@@ -70,21 +70,22 @@ draws.
 
 ## Images and sampling
 
-The GFX1013 texture-format table records exact descriptor encodings, identity
-component completion and texel sizes for `R8_UNORM`, `R8G8_UNORM`,
-`R8G8B8A8_UNORM` and `R8G8B8A8_SRGB`, adapted from the pinned GPLv3
-`ps5-opengl` reference. All four rows are public sampled/upload formats after
-two byte-identical PS5 runs validated image creation, transfer upload,
-descriptor sampling and deterministic readback. Each format query exposes only
-the operations that were actually established.
+The GFX1013 texture-format table records exact descriptor encodings, Vulkan
+component completion and texel sizes for ten public sampled formats, adapted
+from the pinned GPLv3 `ps5-opengl` reference and then validated against Vulkan
+oracles on PS5. Two byte-identical runs of each promoted tranche established
+image creation, transfer upload, descriptor sampling and deterministic
+readback. Each format query exposes only the operations actually established.
 
 | Format | Supported role |
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
 | `VK_FORMAT_D32_SFLOAT` | Depth attachment |
-| `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8G8_UNORM` | Single-level sampled/upload image with nearest filtering |
+| `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8_SNORM`, `VK_FORMAT_R8G8_UNORM`, `VK_FORMAT_R8G8_SNORM` | Single-level sampled/upload image with nearest filtering and Vulkan completion of missing components |
 | `VK_FORMAT_R8G8B8A8_UNORM` | Single-level sampled/upload image, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
-| `VK_FORMAT_R8G8B8A8_SRGB` | Single-level sampled/upload image with hardware sRGB decode and nearest filtering |
+| `VK_FORMAT_R8G8B8A8_SNORM`, `VK_FORMAT_R8G8B8A8_SRGB` | Single-level sampled/upload image with signed-normalized or hardware sRGB conversion and nearest filtering |
+| `VK_FORMAT_E5B9G9R9_UFLOAT_PACK32` | Single-level sampled/upload image with shared-exponent decode, nearest filtering and alpha completion to one |
+| `VK_FORMAT_R16G16B16A16_SFLOAT`, `VK_FORMAT_R32G32B32A32_SFLOAT` | Single-level sampled/upload floating-point image with nearest filtering |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
 
@@ -108,10 +109,12 @@ layout transitions are bookkeeping and are validated against the image's
 committed layout. Anything outside the padded linear geometry stays refused
 rather than being approximated with a linear write.
 
-Nearest sampling has native deterministic readback evidence for all four
-sampled formats. R8 and RG8 also verify Vulkan identity completion of missing
-components, while RGBA8 sRGB verifies nonlinear-to-linear decode before the
-fragment result is written. Nearest and linear sampling have separate evidence
+Nearest sampling has native deterministic readback evidence for all ten
+sampled formats. R8 and RG8 verify Vulkan completion of missing components;
+shared-exponent RGB additionally verifies alpha completion to one. SNORM,
+sRGB, shared-exponent and 16/32-bit float conversions are checked with
+asymmetric or exact source values before the fragment result is written.
+Nearest and linear sampling have separate evidence
 for single-level `VK_FORMAT_R8G8B8A8_UNORM` images. Core
 `REPEAT`, `MIRRORED_REPEAT`, `CLAMP_TO_EDGE` and `CLAMP_TO_BORDER` are encoded
 per axis. Two byte-identical hardware runs deterministically verified mirrored

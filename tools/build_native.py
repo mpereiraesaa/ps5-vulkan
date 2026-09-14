@@ -84,7 +84,7 @@ def main():
         graphics_manifest = json.loads((graphics / "manifest.json").read_text())
         if graphics_manifest.get("scope") == "compiler-inspection-only":
             raise SystemExit("Compiler inspection is not a native ABI/library adapter")
-        if graphics_manifest.get("native_input_version") != 2:
+        if graphics_manifest.get("native_input_version") != 3:
             raise SystemExit("Graphics control lacks current interpolation ABI; recompile the owned .pipe")
         quantization = graphics_manifest.get("shader_context", {}).get("vertex_quantization", {})
         if quantization.get("byte_address") != 0x28be4 or quantization.get("value") != 0x2d:
