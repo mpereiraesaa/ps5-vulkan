@@ -34,7 +34,8 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     const struct ps5vk_draw_state *state, const void *mapping, size_t mapping_bytes,
     const struct ps5vk_operation *op, uint32_t global_table_low,
     uint32_t vertex_table_low, int vertex_input,
-    const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit_index,const uint32_t *texture_low)
+    const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit_index,const uint32_t *texture_low,
+    const uint32_t *descriptor_tables)
 {
     if (!cursor || !*cursor || !state || !op || op->type != (indices?PS5VK_DRAW_INDEXED:PS5VK_DRAW) ||
         !state->cx_count || state->cx_count > PS5VK_DRAW_CX_CAPACITY || !state->modifier ||
@@ -44,10 +45,11 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     uint32_t runtime_vertex[16],runtime_pixel[16];
     uint32_t sh_count=state->sh_count?state->sh_count:12;
     if(sh_count>16)return VK_ERROR_UNKNOWN;
+    const uint32_t single_table[PS5VK_RUNTIME_DESCRIPTOR_SETS]={texture_low?*texture_low:0,0,0,0};
     if(state->runtime.enabled && (indices ||
-        ps5vk_runtime_draw_values(&state->runtime,op->first_vertex,op->first_instance,
+        ps5vk_runtime_draw_values_sets(&state->runtime,op->first_vertex,op->first_instance,
                                  vertex_input?vertex_table_low:0,state->push_constant_low,
-                                 texture_low?*texture_low:0,
+                                 descriptor_tables?descriptor_tables:single_table,
                                  runtime_vertex,runtime_pixel))) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (capacity < 13) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;
@@ -92,7 +94,7 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
 VkResult ps5vk_native_emit_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t mapping_bytes,
     const struct ps5vk_operation *op,uint32_t global_table_low)
-{ return emit_draw(cursor,capacity,state,mapping,mapping_bytes,op,global_table_low,0,0,NULL,NULL,NULL); }
+{ return emit_draw(cursor,capacity,state,mapping,mapping_bytes,op,global_table_low,0,0,NULL,NULL,NULL,NULL); }
 
 VkResult ps5vk_native_emit_vertex_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t mapping_bytes,
@@ -101,7 +103,7 @@ VkResult ps5vk_native_emit_vertex_draw(uint32_t **cursor,uint32_t capacity,
     /* Only the audited four-user-SGPR compiler ABI. This low word is not a
      * substitute for the caller's full-address aperture/lifetime validation. */
     if(vertex_table_low%16)return VK_ERROR_UNKNOWN;
-    return emit_draw(cursor,capacity,state,mapping,mapping_bytes,op,global_table_low,vertex_table_low,1,NULL,NULL,NULL);
+    return emit_draw(cursor,capacity,state,mapping,mapping_bytes,op,global_table_low,vertex_table_low,1,NULL,NULL,NULL,NULL);
 }
 VkResult ps5vk_native_emit_indexed_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t bytes,
@@ -109,7 +111,7 @@ VkResult ps5vk_native_emit_indexed_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit)
 {
     if(!indices || !emit || table%16)return VK_ERROR_UNKNOWN;
-    return emit_draw(cursor,capacity,state,mapping,bytes,op,global,table,1,indices,emit,NULL);
+    return emit_draw(cursor,capacity,state,mapping,bytes,op,global,table,1,indices,emit,NULL,NULL);
 }
 VkResult ps5vk_native_emit_textured_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t bytes,
@@ -117,5 +119,17 @@ VkResult ps5vk_native_emit_textured_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit)
 {
     if(vertex%16 || texture%16 || (indices && !emit))return VK_ERROR_UNKNOWN;
-    return emit_draw(cursor,capacity,state,mapping,bytes,op,global,vertex,1,indices,emit,&texture);
+    return emit_draw(cursor,capacity,state,mapping,bytes,op,global,vertex,1,indices,emit,&texture,NULL);
+}
+
+VkResult ps5vk_native_emit_runtime_draw(uint32_t **cursor,uint32_t capacity,
+    const struct ps5vk_draw_state *state,const void *mapping,size_t bytes,
+    const struct ps5vk_operation *op,uint32_t vertex,
+    const uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS],
+    const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit)
+{
+    if(!state || !state->runtime.enabled || !tables || vertex%16 || (indices && !emit))
+        return VK_ERROR_UNKNOWN;
+    return emit_draw(cursor,capacity,state,mapping,bytes,op,0,vertex,
+        state->runtime.vertex_buffer_valid,indices,emit,NULL,tables);
 }

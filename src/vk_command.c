@@ -588,8 +588,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if(p->push_constant_size && (!c->push_constants_valid ||
         memcmp(p->push_constant_stages,c->push_constant_stages,
                sizeof(c->push_constant_stages)))) {invalid(c);return;}
-    if(p->set_count && (p->set_count!=1 || !c->graphics_sets[0] ||
-        memcmp(&p->sets[0],&c->graphics_set_signatures[0],sizeof(p->sets[0])))) {invalid(c);return;}
+    if(p->set_count>PS5VK_MAX_SETS){invalid(c);return;}
+    for(unsigned s=0;s<p->set_count;++s)if(p->sets[s].count &&
+        (!c->graphics_sets[s] ||
+         memcmp(&p->sets[s],&c->graphics_set_signatures[s],sizeof(p->sets[s])))) {invalid(c);return;}
     VkRenderPass pass = c->render_pass;
     VkFormat depth = pass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
         pass->attachments[pass->depth.attachment].format;
@@ -605,9 +607,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     memcpy(op->vertices,c->vertices,sizeof(c->vertices));
     op->push_constant_size=p->push_constant_size;
     if(p->push_constant_size)memcpy(op->push_constants,c->push_constants,p->push_constant_size);
-    if(p->set_count) {
-        op->sets[0]=c->graphics_sets[0];
-        op->generations[0]=c->graphics_sets[0]->generation;
+    for(unsigned s=0;s<p->set_count;++s)if(p->sets[s].count) {
+        op->sets[s]=c->graphics_sets[s];
+        op->generations[s]=c->graphics_sets[s]->generation;
     }
     for(uint32_t j=0;j<p->program.descriptor_count;++j) {
         const struct ps5vk_program_descriptor *binding=&p->program.descriptors[j];

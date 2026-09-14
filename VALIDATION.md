@@ -3,33 +3,60 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
-## Multi-set compiler and argument preparation (host only)
+## Multi-set fragment samplers: connected backend and hardware diagnostic
 
-The descriptor-table layout is now shared by graphics compiler options and
-the existing native single-sampler preparation check. It preserves byte offsets
-across stage filtering, sparse binding numbers, mixed 16-byte buffer records
-and 48-byte combined image/sampler records, and arrays in four sets.
+The canonical descriptor-table layout is shared by compiler options and
+job-owned native table encoding. It preserves offsets across stage filtering,
+sparse binding numbers, arrays, 16-byte buffer and 48-byte combined sampler
+records. Host compiler tests cover mixed layouts; executable graphics resource
+tables currently accept only fragment-stage combined image/samplers.
 
-`test-runtime-graphics-compiler` compiles the owned
-`experiments/graphics/runtime_descriptor_arrays.frag` with real PSBC/ACO for
-GFX1013. Its loop addresses 24 sampler elements in each of four sets. The test
-checks machine-code production, four active table-pointer slots, each declared
-array's 48-byte stride and 32-byte offset after vertex-only uniform buffers,
-native shader-header construction, and argument preparation using an actual
-compiled vertex shader. Synthetic tests separately check shared VS/FS table
-addresses, collisions with push/LDS/vertex arguments, malformed metadata,
-missing/misaligned addresses, descriptor bounds, and unchanged outputs on
-failure. Compiler options exceeding PSBC's binding-declaration bound fail.
+The connected runtime carries up to four fragment-table pointers from PSBC
+metadata through command recording, per-set generation/signature validation,
+pending ownership, predicted image layouts, native descriptor encoding,
+flush and register emission. Draw-owned tables survive until retirement.
+Missing pointers, incomplete descriptors, generation mismatch, register
+collisions and encoding failures are covered by host rejection/rollback tests.
+Procedural vertices do not require a dummy vertex buffer.
 
-This is compiler/host evidence, **not GPU execution of 96 samplers**, an
-upstream CTS result, or a capability promotion. Public graphics pipeline
-creation still admits only its existing single combined fragment sampler;
-the one-table emitter rejects multi-set programs with missing table addresses.
-Job-owned multi-set table encoding, command emission, resource/layout tracking,
-an independent public-SDK hardware consumer and applicable CTS coverage remain
-to be connected and validated before increasing the advertised limits. Earlier
-hardware results below identify their own binaries; they do not validate this
-new argument preparation merely because host regressions pass.
+On PS5 GFX1013 / firmware 12.02, 2026-09-14, the independently compiled
+public-SDK consumer passed two identical-artifact runs:
+
+- SELF SHA-256:
+  `be0ad0727d920fbdcf12afa8b4be72b259376bef0fb8b199bbd030e683380dc4`.
+- Complete TCP log SHA-256:
+  `171fd417f4b90ca66ce85272cf980220bb20682599fdee2fd263556e6d3c48bf`
+  and `d04d10c9a70562f936056213139e7b95ca623b04cfef6012f2c326c912101145`.
+- Four sets, binding 7, 24 sampler-array elements each, bound in descending
+  set order. All 96 elements select from four uploaded RGBA8 textures using
+  a different deterministic pattern in each of four rounds.
+- An owned fragment shader sums samples with distinct weights 1–96.
+  Independent CPU references and strict verifier literals require BGRA words
+  `914c503b`, `914b4d4f`, `914a4643`, `913a5449`.
+  Each round checked 471,744 non-background pixels with zero mismatches.
+- Each run also passed the earlier public consumer's compute/storage-width,
+  synchronization, 18-frame fixed-function and VideoOut checks: 40 graphics
+  submissions total, clean TCP finalization, zero tracked allocations at
+  teardown, and independently confirmed exact-title Close Game.
+
+**Qualification boundary:** this new stress fixture deliberately exceeds the
+currently advertised sampler limits. It exercises the backend through public
+headers, not a portable application obeying the published limits, and is not
+upstream CTS or conformance evidence. The advertised sampler counts remain
+one. Vertex-stage sampling, non-sampler graphics resources, statically unused
+individual bindings, broader sampler/state combinations and applicable CTS
+must be addressed before a general limit promotion. The diagnostic uses
+procedural vertices, one nearest sampler and four level-0 RGBA8 source images;
+it does not validate every format, filter, image dimensionality or vertex path
+in combination with these arrays.
+
+The first candidate stopped before GPU work because its old physical-format
+assertion still treated newly supported roles as absent. The corrected
+consumer uses `VK_FORMAT_UNDEFINED` as the unsupported witness. Its identical
+physical-query contract now runs in the host device test against the public
+entry points and native reporting configuration; an injected lost format role
+must fail. This prevents a second independent copy of those assertions from
+drifting. The rejected run is not counted as hardware success.
 
 ## Observed results
 
@@ -152,11 +179,12 @@ test with ASan/UBSan enabled. The PSBC static archive itself is not instrumented
 
 ### Runtime sampled images and explicit mip LOD
 
-The GPL-compatible `ps5-opengl` reference informed a bounded runtime-graphics
+The GPL-compatible `ps5-opengl` reference informed the earlier runtime-graphics
 adapter for exactly one fragment-stage combined image sampler at set 0,
 binding 0. The compiler metadata, user-SGPR slot, 48-byte descriptor table,
-descending mip layout and cache identity are validated on the host and reject
-other descriptor shapes. The public `ps5-opengl` mipmap test was also compiled
+descending mip layout and cache identity were validated on the host; that
+revision rejected other descriptor shapes. The multi-set extension above is
+separately qualified. The public `ps5-opengl` mipmap test was also compiled
 and run unchanged on the same console; its explicit LOD and generated-mipmap
 oracles passed. A temporary PSBC diagnostic then showed that both projects
 lower the fragment operation to the same GFX1013 `image_sample_l` instruction.

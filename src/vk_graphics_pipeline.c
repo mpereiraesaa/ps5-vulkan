@@ -57,7 +57,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (in->sType != VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO || !in->layout ||
         in->layout->device != d || !in->renderPass || in->renderPass->device != d) return VK_ERROR_UNKNOWN;
     if (in->pNext || in->flags || in->subpass || in->stageCount != 2 || !in->pStages ||
-        in->layout->set_count>1)
+        in->layout->set_count>PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkBool32 dynamic_viewport,dynamic_scissor;
     if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor))

@@ -99,8 +99,27 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 
 
 class ConsumerResourceAbiTests(unittest.TestCase):
-    def fixture(self, edit=None):
+    def fixture(self, edit=None, sampled=False):
         messages = list(MESSAGES)
+        if sampled:
+            for index,message in enumerate(messages):
+                if message.startswith("PS5VK_GRAPHICS_") and " serial=" in message:
+                    prefix,rest=message.split(" serial=")
+                    serial,tail=rest.split(" ",1)
+                    messages[index]=f"{prefix} serial={int(serial)+4} {tail}"
+            rows=["PS5VK_CONSUMER_SAMPLED_SETS_START sets=4 descriptors=96 rounds=4"]
+            for round_index,word in enumerate(("914c503b","914b4d4f","914a4643","913a5449")):
+                serial=13+round_index
+                rows.extend([
+                    f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
+                    f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
+                    f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0",
+                    f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=8388608",
+                    f"PS5VK_CONSUMER_SAMPLED_SETS_RESULT round={round_index} expected={word} changed=471744 bad=0",
+                ])
+            rows.append("PS5VK_CONSUMER_SAMPLED_SETS_RETIRED")
+            at=messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
+            messages[at:at]=rows
         if edit:
             edit(messages)
         log = (f"HELLO ps5log/1 title={TITLE} app={APP} boot=test\n" +
@@ -154,10 +173,42 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                 "dynamic_scissor": True,
             },
         }
+        if sampled:
+            artifact["sampled_graphics"]={"sets":4,"descriptors":96,"rounds":4,
+                                         "shader_spirv_sha256":"f"*64}
         return log, receipt, artifact
+
+    def test_sampled_sets_reference_and_mutations(self):
+        result=validate(*self.fixture(sampled=True))
+        self.assertTrue(result["sampled_graphics_exceeds_advertised_limits"])
+        self.assertEqual(result["graphics_submissions_checked"],40)
+        self.assertEqual(result["sampled_graphics_descriptors_per_round"],96)
+        for old,new in (("bad=0","bad=1"),("changed=471744","changed=1"),
+                        ("expected=914c503b","expected=ffffffff"),
+                        ("round=3","round=2"),("serial=13 image_bytes","serial=14 image_bytes")):
+            def edit(messages):
+                index=next(i for i,m in enumerate(messages) if old in m)
+                messages[index]=messages[index].replace(old,new)
+            with self.subTest(old=old),self.assertRaises(ValueError):
+                validate(*self.fixture(edit,sampled=True))
+
+    def test_sampled_sets_evidence_cannot_be_omitted(self):
+        for prefix in ("PS5VK_CONSUMER_SAMPLED_SETS_START", "PS5VK_CONSUMER_SAMPLED_SETS_RESULT",
+                       "PS5VK_CONSUMER_SAMPLED_SETS_RETIRED", "PS5VK_GRAPHICS_COMPLETED serial=13"):
+            def edit(messages):
+                messages.pop(next(i for i,m in enumerate(messages) if m.startswith(prefix)))
+            with self.subTest(prefix=prefix),self.assertRaises(ValueError):
+                validate(*self.fixture(edit,sampled=True))
+        log,receipt,artifact=self.fixture(sampled=True)
+        del artifact["sampled_graphics"]
+        with self.assertRaises(ValueError):validate(log,receipt,artifact)
+        log,receipt,artifact=self.fixture()
+        artifact["sampled_graphics"]={"sets":4,"descriptors":96,"rounds":4,"shader_spirv_sha256":"f"*64}
+        with self.assertRaises(ValueError):validate(log,receipt,artifact)
 
     def test_reference(self):
         result = validate(*self.fixture())
+        self.assertFalse(result["sampled_graphics_exceeds_advertised_limits"])
         self.assertEqual(result["descriptor_sets"], 3)
         self.assertEqual(result["guard_words_checked"], 192)
         self.assertEqual(result["dynamic_storage_buffers"], 2)

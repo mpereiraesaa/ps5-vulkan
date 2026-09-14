@@ -84,11 +84,13 @@ programs. The single-queue Vulkan 1.0 profile includes binary semaphores and
 host/device events; it does not imply multi-queue or synchronization2 support.
 Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
 backend and cached under a bounded in-memory policy. Runtime vertex/fragment
-compilation now supports procedural or single-binding typed triangles with
+compilation now supports procedural or multi-binding typed triangles with
 matching smooth interfaces, BGRA8/RGBA8 targets, push/specialization constants
-and one fragment combined-image sampler at set 0/binding 0. Compiled pairs
-reuse the bounded cache. Wider descriptor layouts and arbitrary textured
-runtime-shader profiles remain unsupported.
+and fragment combined-image samplers. A four-set/96-element sampler stress
+fixture now has exact GPU readback, but exceeds the still-conservative published
+sampler limits; it is not a portable consumer or a limit promotion.
+Compiled pairs reuse the bounded cache. Vertex-stage samplers, other graphics
+resource types and arbitrary textured runtime-shader profiles remain unsupported.
 The 8/16-bit slice covers storage-buffer access only; narrow integer/float
 arithmetic and other narrow storage classes remain unadvertised.
 

@@ -71,8 +71,7 @@ static void check_descriptor_options(void)
     ps5vk_runtime_graphics_free(NULL,compiled);
     free((void *)base.vertex.words);free((void *)base.fragment.words);
     psbc_free_output(&output);free((void *)module.words);
-    /* Compiler-only evidence: the public pipeline is deliberately still gated
-     * until the matching per-set native submission ABI is implemented. */
+    /* Buffer resources are not yet in the enabled graphics profile. */
     assert(!ps5vk_runtime_graphics_supported(&key));
     assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_VERTEX_BIT,&options)==VK_SUCCESS);
     assert(options.descriptor_binding_count==4);
@@ -93,6 +92,32 @@ static void check_descriptor_options(void)
     }
     assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_FRAGMENT_BIT,&options)==VK_ERROR_FEATURE_NOT_PRESENT);
     assert(!memcmp(&saved,&options,sizeof(options)));
+    memset(sets,0,sizeof(sets));
+    for(unsigned s=0;s<4;++s) {
+        sets[s].count=24;sets[s].binding[7]=(struct ps5vk_binding){24,0,VK_SHADER_STAGE_FRAGMENT_BIT};
+        sets[s].type[7]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        for(unsigned b=8;b<PS5VK_MAX_BINDINGS;++b)sets[s].binding[b].first=24;
+    }
+    key.vertex=read_module("build/runtime-graphics/triangle.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/descriptor_arrays.frag.spv");
+    key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;key.color_format=VK_FORMAT_B8G8R8A8_UNORM;
+    key.samples=VK_SAMPLE_COUNT_1_BIT;key.color_write_mask=15;
+    struct ps5vk_compilation_cache *cache=ps5vk_compilation_cache_create(4,1024*1024);
+    assert(cache);
+    const void *cold,*warm;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&cold)==VK_SUCCESS);
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&warm)==VK_SUCCESS);
+    const struct ps5vk_runtime_graphics_program *actual=warm;
+    for(unsigned s=0;s<4;++s) {
+        assert(actual->arguments.fragment_descriptor_valid[s]);
+        assert(actual->fragment.metadata.descriptor_bindings[s].array_size==24);
+        assert(actual->fragment.metadata.descriptor_bindings[s].offset==0);
+    }
+    struct ps5vk_cache_stats stats;ps5vk_compilation_cache_get_stats(cache,&stats);
+    assert(stats.compiles==1 && stats.hits==1);
+    ps5vk_runtime_graphics_cached_release(cache,warm);ps5vk_runtime_graphics_cached_release(cache,cold);
+    ps5vk_compilation_cache_destroy(cache);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
     puts("Descriptor compiler: four sets / 96 array elements lowered by real PSBC; GPU proof pending");
 }
 static void check_interfaces(struct ps5vk_graphics_key *key)

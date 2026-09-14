@@ -118,6 +118,28 @@ int main(void)
     assert(ps5vk_native_emit_textured_draw(&cursor,64,&state,&state,sizeof(state),&op,
         0x123400,0x567800,0x900000,NULL,NULL)==VK_SUCCESS);
     assert(commands[8]==0xc && commands[9]==2 && commands[10]==0x900000);
+    state.runtime.fragment_count=4;
+    uint32_t tables[4]={0x10000,0x20000,0x30000,0x40000};
+    for(unsigned s=0;s<4;++s) {
+        state.runtime.fragment_descriptor_valid[s]=1;
+        state.runtime.fragment_descriptor_slot[s]=3-s;
+    }
+    cursor=commands;calls=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,tables,NULL,NULL)==VK_SUCCESS && calls==6);
+    assert(commands[8]==0xc && commands[9]==4);
+    for(unsigned s=0;s<4;++s)assert(commands[10+3-s]==tables[s]);
+    cursor=commands;calls=0;tables[3]=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,tables,NULL,NULL)!=VK_SUCCESS && !calls && cursor==commands);
+    tables[3]=0x40000;
+    state.runtime.fragment_descriptor_slot[3]=3;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,tables,NULL,NULL)!=VK_SUCCESS && !calls && cursor==commands);
+    state.runtime.fragment_descriptor_slot[3]=0;
+    state.runtime.vertex_buffer_valid=0;state.runtime.vertex_buffer_usage_mask=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0,tables,NULL,NULL)==VK_SUCCESS); /* procedural VS + sampled FS */
     state.runtime.fragment_descriptor_valid[0]=0;
     op.type=PS5VK_DRAW;
     state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,.fragment_count=2,

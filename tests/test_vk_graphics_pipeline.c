@@ -118,6 +118,17 @@ int main(void)
     vkDestroyPipeline(&d,runtime,NULL);
     v.vertexBindingDescriptionCount=v.vertexAttributeDescriptionCount=0;
     v.pVertexBindingDescriptions=NULL;v.pVertexAttributeDescriptions=NULL;
+    layout.set_count=4;
+    for(unsigned s=0;s<4;++s) {
+        layout.sets[s].count=24;
+        layout.sets[s].binding[7]=(struct ps5vk_binding){24,0,VK_SHADER_STAGE_FRAGMENT_BIT};
+        layout.sets[s].type[7]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        for(unsigned b=8;b<PS5VK_MAX_BINDINGS;++b)layout.sets[s].binding[b].first=24;
+    }
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS && runtime->set_count==4);
+    layout.sets[3].binding[7].count=23;
+    assert(runtime->sets[3].binding[7].count==24); /* pipeline owns its signature */
+    vkDestroyPipeline(&d,runtime,NULL);layout.set_count=0;
     d.graphics_acquire=NULL;d.graphics_library=&library;
     created=1;released=0;
     vkDestroyShaderModule(&d,modules[0],NULL); vkDestroyShaderModule(&d,modules[1],NULL);

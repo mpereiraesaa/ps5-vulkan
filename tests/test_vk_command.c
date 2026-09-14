@@ -340,8 +340,19 @@ static void graphics_recording(void)
     vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&graphics_layout,0,1,&graphics_handle,0,NULL);
     assert(c->graphics_sets[0]==graphics_handle && !c->sets[0]);
     pipeline.set_count=1;pipeline.sets[0]=graphics_set.signature;
+    struct VkDescriptorSet_T extra_sets[3];VkDescriptorSet extra_handles[3];
+    pipeline.set_count=graphics_layout.set_count=4;
+    for(unsigned s=1;s<4;++s) {
+        extra_sets[s-1]=graphics_set;extra_sets[s-1].generation=9+s;
+        extra_handles[s-1]=&extra_sets[s-1];
+        pipeline.sets[s]=graphics_layout.sets[s]=graphics_set.signature;
+    }
+    vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&graphics_layout,3,1,extra_handles+2,0,NULL);
+    vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&graphics_layout,1,2,extra_handles,0,NULL);
     vkCmdDraw(c, 3, 1, 2, 4);
     assert(c->operations[1].sets[0]==graphics_handle && c->operations[1].generations[0]==9);
+    for(unsigned s=1;s<4;++s)assert(c->operations[1].sets[s]==extra_handles[s-1] &&
+        c->operations[1].generations[s]==9+s);
     vkCmdEndRenderPass(c);
     assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->operation_count == 3);
     assert(c->operations[1].first_vertex == 2 && c->operations[1].first_instance == 4);
@@ -351,6 +362,7 @@ static void graphics_recording(void)
     assert(!d.invalidate(&d, VK_OBJECT_TYPE_FRAMEBUFFER, &fb));
     assert(!d.invalidate(&d, VK_OBJECT_TYPE_PIPELINE, &pipeline));
     assert(!d.invalidate(&d, VK_OBJECT_TYPE_DESCRIPTOR_SET, graphics_handle));
+    for(unsigned s=0;s<3;++s)assert(!d.invalidate(&d,VK_OBJECT_TYPE_DESCRIPTOR_SET,extra_handles[s]));
     c->state = PS5VK_EXECUTABLE;
     assert(d.invalidate(&d, VK_OBJECT_TYPE_IMAGE_VIEW, &view) && c->state == PS5VK_INVALID);
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS && !c->graphics_pipeline && !c->graphics_sets[0]);

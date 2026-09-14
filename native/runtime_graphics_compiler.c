@@ -32,7 +32,7 @@ static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned m
         if(op==59) {
             if(n<4)return 0;
             /* UniformConstant is admitted only through the separately checked
-             * one-sampler descriptor profile; general buffer resources remain
+             * sampled descriptor profile; general buffer resources remain
              * outside this bounded graphics compiler. */
             if(w[3]==2 || w[3]==12)return 0;
         }
@@ -61,15 +61,13 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
     struct ps5vk_descriptor_table_layout tables;
     if (ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
             key->descriptor_sets,&tables)!=VK_SUCCESS) return 0;
-    if(!key->descriptor_set_count)return 1;
-    if(key->descriptor_set_count!=1 || !key->descriptor_sets)return 0;
-    const struct ps5vk_set_signature *set=&key->descriptor_sets[0];
-    if(set->count!=1 || set->binding[0].count!=1 || set->binding[0].first ||
-       set->binding[0].stages!=VK_SHADER_STAGE_FRAGMENT_BIT ||
-       set->type[0]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)return 0;
-    for(unsigned binding=1;binding<PS5VK_MAX_BINDINGS;++binding)
-        if(set->binding[binding].count || set->binding[binding].first!=1 ||
-           set->binding[binding].stages || set->type[binding])return 0;
+    if(tables.binding_count>PSBC_MAX_DESCRIPTOR_BINDINGS)return 0;
+    for(unsigned s=0;s<key->descriptor_set_count;++s)
+        for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+            const struct ps5vk_set_signature *set=&key->descriptor_sets[s];
+            if(set->binding[b].count && (set->binding[b].stages!=VK_SHADER_STAGE_FRAGMENT_BIT ||
+                set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER))return 0;
+        }
     return 1;
 }
 

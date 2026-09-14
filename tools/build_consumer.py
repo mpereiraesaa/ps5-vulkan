@@ -87,6 +87,7 @@ def main():
     obj_file = BUILD_DIR / "main.o"
     storage_shader_header = BUILD_DIR / "storage_width_shaders.h"
     sync_shader_header = BUILD_DIR / "sync_shaders.h"
+    sampled_shader_header = BUILD_DIR / "sampled_set_shaders.h"
     pie_elf = BUILD_DIR / "consumer_pie.elf"
     eboot_elf = BUILD_DIR / "eboot.elf"
     eboot_bin = DIST_DIR / "eboot.bin"
@@ -107,6 +108,10 @@ def main():
     ], check=True)
 
     # 1. Compile consumer main.c
+    subprocess.run([
+        sys.executable, str(ROOT / "tools/prepare_consumer_sampled_shaders.py"),
+        "--out", str(sampled_shader_header),
+    ], check=True)
     cflags = [
         "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
         "-ffunction-sections", "-fdata-sections",
@@ -262,6 +267,10 @@ def main():
             "load_preservation": True,
             "dynamic_viewport": True,
             "dynamic_scissor": True,
+        },
+        "sampled_graphics": {
+            "sets": 4, "descriptors": 96, "rounds": 4,
+            "shader_spirv_sha256": hashlib.sha256(sampled_shader_header.with_suffix(".spv").read_bytes()).hexdigest(),
         },
     }
     artifact_path = DIST_DIR.parent / "artifact.json"

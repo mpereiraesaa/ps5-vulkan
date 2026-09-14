@@ -51,7 +51,9 @@ static void pin(struct ps5vk_submission *s, int acquire)
                 ps5vk_indirect_graphics_operation(op->type)) {
                 if (acquire) ++op->pipeline->pending;
                 else --op->pipeline->pending;
-                if(op->sets[0]) {if(acquire)++op->sets[0]->pending;else --op->sets[0]->pending;}
+                for(unsigned set=0;set<PS5VK_MAX_SETS;++set)if(op->sets[set]) {
+                    if(acquire)++op->sets[set]->pending;else --op->sets[set]->pending;
+                }
             }
             if (op->type != PS5VK_DISPATCH &&
                 !ps5vk_indirect_compute_operation(op->type)) continue;
@@ -240,8 +242,12 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                         !op->pipeline->graphics_state) return 0;
                     if (ps5vk_indirect_graphics_operation(op->type) &&
                         ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
-                    if(op->pipeline->set_count && (!op->sets[0] || op->sets[0]->pool->device!=d ||
-                        op->generations[0]!=op->sets[0]->generation))return 0;
+                    if(op->pipeline->set_count>PS5VK_MAX_SETS)return 0;
+                    for(unsigned set=0;set<op->pipeline->set_count;++set)
+                        if(op->pipeline->sets[set].count &&
+                           (!op->sets[set] || !op->sets[set]->pool || op->sets[set]->pool->device!=d ||
+                            op->generations[set]!=op->sets[set]->generation ||
+                            memcmp(&op->sets[set]->signature,&op->pipeline->sets[set],sizeof(op->pipeline->sets[set]))))return 0;
                 } else { active = NULL; framebuffer = NULL; }
             }
             continue;

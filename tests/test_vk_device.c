@@ -8,6 +8,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
+#include <setjmp.h>
+
+/* Compile the *consumer's* independent assertions unchanged against the real
+ * public query entry points. Only platform discovery is mocked here. */
+static jmp_buf consumer_rejection;
+static int expect_consumer_rejection;
+static const char *consumer_failed_contract;
+static void consumer_require(int condition, const char *message)
+{
+    if (condition) return;
+    consumer_failed_contract = message;
+    if (expect_consumer_rejection) longjmp(consumer_rejection, 1);
+    fprintf(stderr, "Consumer contract failed: %s\n", message);
+    abort();
+}
+static void consumer_log(int level, const char *fmt, ...)
+{
+    (void)level;
+    va_list ap;
+    va_start(ap, fmt); vprintf(fmt, ap); va_end(ap);
+    putchar('\n');
+}
+#define REQUIRE(c, m) consumer_require(!!(c), (m))
+#define PS5LOG_MARK 0
+#define ps5log_printf consumer_log
+#define ps5log_line(level, message) consumer_log(level, "%s", message)
+#include "../examples/native_consumer/physical_device_contract.h"
+#undef REQUIRE
+#undef PS5LOG_MARK
+#undef ps5log_printf
+#undef ps5log_line
 
 static unsigned opened, closed;
 static VkResult query_result, open_result;
@@ -967,8 +999,43 @@ static void allocator_lifetimes(void)
     vkDestroyBuffer(d, b, NULL); vkDestroyDevice(d, NULL); vkDestroyInstance(i, &a);
     assert(!c.live && c.instance == 2 && c.device == 2 && c.object == 1);
 }
+static void stale_consumer_formats(VkFormat format, VkFormatProperties *out)
+{
+    ps5vk_graphics_format_properties(format, out);
+    if (format == VK_FORMAT_R8G8B8A8_UNORM)
+        out->bufferFeatures &= ~VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
+}
+static void consumer_physical_queries(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    ps5vk_device_profile_init(&p->platform.properties,
+                             &p->platform.memory_properties, 1, 1);
+    p->platform.queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+    p->platform.max_allocation = UINT64_C(268435456);
+    p->platform.format_properties = ps5vk_graphics_format_properties;
+    p->platform.image_properties = ps5vk_graphics_image_properties;
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(p, &props);
+    report_physical_device_contract(i, p, &props);
+
+    /* A lost advertised role must fail the exact native consumer contract,
+     * not silently regenerate its oracle from the implementation. */
+    p->platform.format_properties = stale_consumer_formats;
+    expect_consumer_rejection = 1;
+    consumer_failed_contract = NULL;
+    if (setjmp(consumer_rejection) == 0) {
+        report_physical_device_contract(i, p, &props);
+        assert(!"consumer accepted a stale format report");
+    }
+    assert(consumer_failed_contract &&
+           !strcmp(consumer_failed_contract, "exact format-property matrix"));
+    expect_consumer_rejection = 0;
+    vkDestroyInstance(i, NULL);
+}
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
+    consumer_physical_queries();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }
