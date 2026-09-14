@@ -26,6 +26,12 @@ struct ps5vk_runtime_draw_abi {
     uint32_t fragment_descriptor_valid[PS5VK_RUNTIME_DESCRIPTOR_SETS];
     uint32_t vertex_descriptor_slot[PS5VK_RUNTIME_DESCRIPTOR_SETS];
     uint32_t fragment_descriptor_slot[PS5VK_RUNTIME_DESCRIPTOR_SETS];
+    /* Bindings the compiled stages really dereference, per set: bit B is set
+     * when binding B of that table is read by that stage. A zero entry for a
+     * valid set means the compiler could not name the bindings, so the whole
+     * declaration of that set stays required (fail closed). */
+    uint64_t vertex_used_bindings[PS5VK_RUNTIME_DESCRIPTOR_SETS];
+    uint64_t fragment_used_bindings[PS5VK_RUNTIME_DESCRIPTOR_SETS];
 };
 
 /* All validation precedes publication of either register bank. A set has one

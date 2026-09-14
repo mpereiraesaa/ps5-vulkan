@@ -51,6 +51,13 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
             if(!graphics_descriptor_type(set->signature.type[b]) ||
                !(binding->stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
+            /* A binding no compiled stage dereferences is a declaration, not a
+             * requirement: it needs no defined descriptor. A set the compiler
+             * could not name (zero mask on both stages) keeps its whole
+             * declaration so an unknown entry can never look unused. */
+            const uint64_t used=runtime->vertex_used_bindings[s]|
+                runtime->fragment_used_bindings[s];
+            if(runtime->enabled && used && !(used&(UINT64_C(1)<<b)))continue;
             for(unsigned e=0;e<binding->count;++e) {
                 unsigned index=binding->first+e;
                 if(!set->defined[index])return VK_ERROR_UNKNOWN;
@@ -175,6 +182,13 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         VkDescriptorSet set=op->sets[s];
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_binding *binding=&set->signature.binding[b];
+            /* An unused declared binding keeps its zeroed record and is never
+             * encoded, so it cannot require a view, a sampler or a descriptor. */
+            if(plan.runtime.enabled) {
+                const uint64_t used=plan.runtime.vertex_used_bindings[s]|
+                    plan.runtime.fragment_used_bindings[s];
+                if(used && binding->count && !(used&(UINT64_C(1)<<b)))continue;
+            }
             for(unsigned e=0;e<binding->count;++e) {
                 unsigned index=binding->first+e;
                 uint32_t *words=table+(tables.binding[s][b].byte_offset+

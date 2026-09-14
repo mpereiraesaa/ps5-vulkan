@@ -242,6 +242,15 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 }
                 if(binding->first>PS5VK_MAX_DESCRIPTORS ||
                    binding->count>PS5VK_MAX_DESCRIPTORS-binding->first){rc=VK_ERROR_UNKNOWN;goto fail;}
+                /* Only the bindings the compiled stages dereference are a
+                 * requirement; the table is shared, so the two stage masks are
+                 * ORed. A zero mask keeps the whole declaration (fail closed). */
+                if(p->pair->runtime_arguments.enabled) {
+                    const uint64_t used=
+                        p->pair->runtime_arguments.vertex_used_bindings[set_index]|
+                        p->pair->runtime_arguments.fragment_used_bindings[set_index];
+                    if(used && binding->count && !(used&(UINT64_C(1)<<b)))continue;
+                }
                 for(unsigned e=0;e<binding->count;++e) {
                     unsigned index=binding->first+e;
                     if(!set->defined[index]){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
