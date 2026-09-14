@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -11,6 +12,20 @@ import check_reporting_matrix as matrix  # noqa: E402
 
 
 class TestReportingMatrix(unittest.TestCase):
+    def test_every_public_format_is_in_the_reporting_dump(self):
+        """A supported image or vertex row omitted by the dumper is a false blocker."""
+        public_formats = set()
+        for path in (ROOT / "src/texture_format.c", ROOT / "src/graphics_formats.h"):
+            public_formats |= set(re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b",
+                                             path.read_text()))
+        public_formats = {name for name in public_formats
+                          if not name.startswith("VK_FORMAT_FEATURE_")}
+        dump_source = (ROOT / "tools/dump_device_reporting.c").read_text()
+        dump_body = dump_source.split("static const VkFormat dump_formats[] = {", 1)[1]
+        dump_body = dump_body.split("};", 1)[0]
+        dumped_formats = set(re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", dump_body))
+        self.assertEqual(public_formats - dumped_formats, set())
+
     def test_committed_matrix_is_current(self):
         """The gate must fail when the reported values move without a refresh."""
         # `make check` builds this dump in its own step and runs the same check;
@@ -103,8 +118,11 @@ class TestReportingMatrix(unittest.TestCase):
             "VK_FORMAT_R8_UNORM", "VK_FORMAT_R8_SNORM",
             "VK_FORMAT_R8G8_UNORM", "VK_FORMAT_R8G8_SNORM",
             "VK_FORMAT_R8G8B8A8_UNORM", "VK_FORMAT_R8G8B8A8_SNORM",
+            "VK_FORMAT_R8G8B8A8_SRGB",
             "VK_FORMAT_R16_SFLOAT", "VK_FORMAT_R16G16_SFLOAT",
             "VK_FORMAT_R16G16B16A16_SFLOAT",
+            "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32",
+            "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
         })
         self.assertTrue(any(row.get("verdict") == "blocker" and
                             row.get("format") != "VK_FORMAT_R8G8B8A8_UNORM"

@@ -3851,7 +3851,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "VK_FORMAT_R8G8B8A8_SRGB reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -3859,7 +3859,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3867,7 +3867,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_BLIT_SRC_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_BLIT_SRC_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -3883,7 +3883,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "VK_FORMAT_R8G8B8A8_SRGB reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -3891,7 +3891,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3899,7 +3899,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -3915,7 +3915,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_BLIT_DST_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_BLIT_DST_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -3931,7 +3931,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -5307,7 +5307,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "VK_FORMAT_R16G16_SNORM reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16_SNORM",
       "kind": "format-cell",
@@ -5315,7 +5315,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5659,7 +5659,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "VK_FORMAT_R16G16B16A16_SNORM reports VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16B16A16_SNORM",
       "kind": "format-cell",
@@ -5667,7 +5667,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7323,7 +7323,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "VK_FORMAT_B10G11R11_UFLOAT_PACK32 reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -7331,7 +7331,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-64bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7339,7 +7339,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_B10G11R11_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_BLIT_SRC_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_BLIT_SRC_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -7355,7 +7355,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "VK_FORMAT_B10G11R11_UFLOAT_PACK32 reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -7363,7 +7363,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-64bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7371,7 +7371,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_B10G11R11_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -7387,7 +7387,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -7395,7 +7395,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-64bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7403,7 +7403,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_BLIT_SRC_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_BLIT_SRC_BIT",
       "format": "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -7419,7 +7419,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 reports VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -7427,7 +7427,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-64bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -9146,7 +9146,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -9162,7 +9162,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_BLIT_SRC_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_BLIT_SRC_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -9178,7 +9178,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -9194,7 +9194,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -9210,7 +9210,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_BLIT_DST_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_BLIT_DST_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -9226,7 +9226,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R8G8B8A8_SRGB lacks mandatory VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT",
       "format": "VK_FORMAT_R8G8B8A8_SRGB",
       "kind": "format-cell",
@@ -10602,7 +10602,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R16G16_SNORM lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16_SNORM",
       "kind": "format-cell",
@@ -10954,7 +10954,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_R16G16B16A16_SNORM lacks mandatory VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT in bufferFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16B16A16_SNORM",
       "kind": "format-cell",
@@ -12618,7 +12618,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_B10G11R11_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -12634,7 +12634,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_B10G11R11_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_BLIT_SRC_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_BLIT_SRC_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -12650,7 +12650,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_B10G11R11_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -12666,7 +12666,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_B10G11R11_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -12682,7 +12682,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
       "format": "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -12698,7 +12698,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_BLIT_SRC_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_BLIT_SRC_BIT",
       "format": "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -12714,7 +12714,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "mandatory format is not implemented by this profile (This feature must: be supported on the named format)",
+      "detail": "advertised format VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT in optimalTilingFeatures (capability not implemented)",
       "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
       "format": "VK_FORMAT_E5B9G9R9_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -25975,9 +25975,9 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 572,
+      "blocker": 564,
       "not-applicable": 2,
-      "satisfied": 90
+      "satisfied": 98
     },
     "limits": {
       "blocker": 70,

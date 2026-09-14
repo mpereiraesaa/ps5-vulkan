@@ -531,11 +531,18 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 128 mandatory limits satisfied, 70 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 90 mandatory format-feature cells satisfied
-with 572 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 98 mandatory format-feature cells satisfied
+with 564 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
+
+The dump inventory is also checked against every public image and vertex format
+named by the implementation. This exposed five supported sampled formats that
+the hand-written dump list had omitted; adding those queries removed eight
+false blockers without changing runtime capabilities. A future public format
+that is absent from the dumper now fails the host gate instead of silently
+appearing unsupported in the generated matrix.
 
 Seven unset values that were below the mandatory floor were corrected to the
 minimum the specification allows (`subTexelPrecisionBits`, `mipmapPrecisionBits`,
@@ -823,7 +830,7 @@ ranges. Queue priority reporting subsequently removed two more blockers: both
 profiles report the required two discrete priority classes, and device creation
 maps every valid normalized priority deterministically to low or high. The
 reporting matrix now records 128 satisfied mandatory limit rows, 70 limit
-blockers and 642 blockers overall.
+blockers and 634 blockers overall.
 
 Two byte-identical public-SDK consumer runs then exercised that path on the
 owned PS5. Runs
