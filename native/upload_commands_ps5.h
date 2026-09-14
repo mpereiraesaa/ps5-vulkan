@@ -5,6 +5,7 @@
 #include "texture_copy.h"
 #include "texture_dma.h"
 #include "graphics_sync.h"
+#include "color_barrier.h"
 
 /* Shared by a render prelude and an independent transfer submission. Prepare
  * only emits commands and records tentative layouts: it never copies pixels
@@ -46,9 +47,7 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
                  b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
                  b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT && b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT) ||
-                (color && b->image==color && b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
-                 b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && !b->srcAccessMask &&
-                 b->dstAccessMask==(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))))
+                ((!color || b->image==color) && ps5vk_color_discard_barrier(b))))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);
             if(rc!=VK_SUCCESS)return rc;

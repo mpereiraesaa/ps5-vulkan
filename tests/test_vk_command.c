@@ -631,6 +631,33 @@ static void image_barriers(void)
     assert(c->state==PS5VK_RECORDING && c->operation_count==2 &&
         c->operations[0].type==PS5VK_BARRIER &&
         c->operations[1].type==PS5VK_IMAGE_BARRIER);
+    /* Original binding-model CTS uses a standalone WRITE-only transition.
+     * Exercise all color subsets, empty scope and generic memory aliases. */
+    const VkAccessFlags color_scopes[]={0,VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT};
+    for(unsigned scope=0;scope<sizeof(color_scopes)/sizeof(color_scopes[0]);++scope) {
+        assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        b.dstAccessMask=color_scopes[scope];
+        vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            0,0,NULL,0,NULL,1,&b);
+        assert(c->state==PS5VK_RECORDING && c->operation_count==1 &&
+            c->operations[0].image_barrier.dstAccessMask==color_scopes[scope] &&
+            image.layout==VK_IMAGE_LAYOUT_UNDEFINED);
+        assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+    }
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    assert(c->state==PS5VK_INVALID && !c->operation_count); /* Wrong stage. */
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    assert(c->state==PS5VK_INVALID && !c->operation_count); /* Wrong access role. */
+    b.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
     b.subresourceRange.levelCount=2;
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_HOST_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
