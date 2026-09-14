@@ -9,13 +9,28 @@
  */
 #include "texture_layout.h"
 #include "texture_format.h"
+
+/* Checked products. Every quantity is computed before anything is written, so a
+ * rejected geometry leaves the caller's structure untouched. */
+static int checked_product(uint64_t a, uint64_t b, uint64_t *out)
+{
+    if (a && b > UINT64_MAX / a) return -1;
+    *out = a * b;
+    return 0;
+}
+
 int ps5vk_texture_mip_layout_for_slices(VkFormat format,uint32_t width,
     uint32_t height,uint32_t storage_layers,uint32_t level_count,
     struct ps5vk_texture_mip_layout *out)
 {
-    const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(format);
     struct ps5vk_texture_mip_layout result={0};
-    if(!out || !entry || !width || !height || !storage_layers || !level_count ||
+    /* The padded-linear encoding exists for every implemented sampled-image
+     * capability; the published role is a separate, witnessed decision. */
+    if(!ps5vk_texture_format_sampled_encoding(format))
+        return -1;
+    const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(format);
+    if(!out || !entry || !entry->bytes_per_texel || !width || !height ||
+       !storage_layers || !level_count ||
        level_count>PS5VK_MAX_TEXTURE_MIP_LEVELS || width>16384 || height>16384)
         return -1;
     result.level_count=level_count;result.storage_layers=storage_layers;
@@ -26,18 +41,22 @@ int ps5vk_texture_mip_layout_for_slices(VkFormat format,uint32_t width,
         uint64_t storage_height=((uint64_t)height+divisor-1)/divisor;
         if(!storage_width)storage_width=1;
         if(!storage_height)storage_height=1;
-        if(storage_width>UINT32_MAX/entry->bytes_per_texel ||
-           storage_height>UINT32_MAX)return -1;
-        uint64_t pitch=(storage_width*entry->bytes_per_texel+255u)&~UINT64_C(255);
-        uint64_t level_bytes=pitch*storage_height;
-        if(pitch>UINT32_MAX || level_bytes>UINT64_MAX-result.layer_stride)return -1;
+        uint64_t row_bytes;
+        if(storage_height>UINT32_MAX ||
+           checked_product(storage_width,entry->bytes_per_texel,&row_bytes) ||
+           row_bytes>UINT32_MAX)return -1;
+        uint64_t pitch=(row_bytes+255u)&~UINT64_C(255);
+        uint64_t level_bytes;
+        if(pitch>UINT32_MAX || checked_product(pitch,storage_height,&level_bytes) ||
+           level_bytes>UINT64_MAX-result.layer_stride)return -1;
         result.levels[level]=(struct ps5vk_texture_mip_level){
             result.layer_stride,(uint32_t)pitch,(uint32_t)storage_width,
             (uint32_t)storage_height};
         result.layer_stride+=level_bytes;
     }
-    if(result.layer_stride>UINT64_MAX/storage_layers)return -1;
-    result.bytes=result.layer_stride*storage_layers;
+    uint64_t total;
+    if(checked_product(result.layer_stride,storage_layers,&total))return -1;
+    result.bytes=total;
     *out=result;return 0;
 }
 int ps5vk_texture_layout_for_slices(VkFormat format,uint32_t width,uint32_t height,

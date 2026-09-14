@@ -1,0 +1,169 @@
+{
+  "schema": "ps5vk-physical-format-validation/1",
+  "task": "ps5vk-vulkan10-formats-4byte-32bit",
+  "tables": ["formats-mandatory-features-4byte", "formats-mandatory-features-32bit"],
+  "console_used_by_this_task": false,
+  "summary": {
+    "mandatory_cells_in_scope": 287,
+    "satisfied_by_this_task": 0,
+    "ready_pending_physical_validation": 8,
+    "blocked_without_backend": 279,
+    "notes": "No cell was advertised by this task: ps5-vulkan publishes a format feature only with a deterministic on-console witness, and this assignment forbids console use. The eight entries below are implemented, host-tested and one data change away from being advertised; the remaining 279 cells have no backend operation at all and cannot be promoted by running a diagnostic."
+  },
+  "promotion_procedure": [
+    "1. In a private qualification build, include the candidate capability in the witnessed argument of its SAMPLED_PACKED row in src/texture_format.c. Sampling with upload requires both SAMPLED_IMAGE and TRANSFER_DST; linear filtering additionally requires SAMPLED_IMAGE_LINEAR. Do not publish the promotion before both physical runs pass.",
+    "2. Build the native graphics diagnostic that performs the named operation.",
+    "3. Run it twice on the console with the same SELF image; both runs must produce the exact expected value for every case, a complete ps5log/1 stream, BYE, zero retained allocations and a verified exact-title Close Game.",
+    "4. Record SELF/artifact hashes, firmware and both log digests in VALIDATION.md and keep the promotion only if both runs match; otherwise revert the flag and keep the cell a blocker."
+  ],
+  "entries": [
+    {
+      "format": "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
+      "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
+      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_UNORM_PACK32 row",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "float",
+      "minimal_gpu_operation": "Create a 2D optimal-tiling image with usage SAMPLED|TRANSFER_DST, upload one 2x2 texel set through the ordinary buffer-to-image path, encode the T#/S# with ps5vk_texture_descriptor, sample a texel centre with a nearest sampler in a fragment shader and read the pixel back through the RGBA8 colour attachment.",
+      "texel_bytes": [64, 128, 192, 255],
+      "expected_result": "exact BGRA8-target readback word 0xff4080c0 (R=0x40, G=0x80, B=0xc0, A=0xff), identical to the same bytes uploaded as VK_FORMAT_R8G8B8A8_UNORM; an RGBA8 target instead stores 0xffc08040",
+      "host_test_limit": "Host tests prove descriptor word 0x03800000, the identity selectors, the texel size and the copy/layout arithmetic; only the texture unit decodes the packed component order."
+    },
+    {
+      "format": "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
+      "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
+      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_SNORM_PACK32 row",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "float",
+      "minimal_gpu_operation": "As the UNORM entry with the SNORM descriptor word 0x03900000 and an asymmetric positive texel set that distinguishes signed from unsigned normalization.",
+      "texel_bytes": [32, 64, 96, 127],
+      "expected_result": "exact readback 0xff4080c1, identical to the recorded VK_FORMAT_R8G8B8A8_SNORM witness for the same bytes",
+      "host_test_limit": "As the UNORM entry: the sign handling and component order are decided by the texture unit."
+    },
+    {
+      "format": "VK_FORMAT_A8B8G8R8_SRGB_PACK32",
+      "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
+      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_SRGB_PACK32 row",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "sRGB",
+      "minimal_gpu_operation": "As the UNORM entry with the sRGB descriptor word 0x08200000 and the recorded VK_FORMAT_R8G8B8A8_SRGB texel set.",
+      "texel_bytes": [128, 64, 32, 255],
+      "expected_result": "exact readback 0xff370d04, identical to the recorded VK_FORMAT_R8G8B8A8_SRGB witness for the same bytes",
+      "host_test_limit": "The sRGB decode (0x80 to 0x37, 0x40 to 0x0d, 0x20 to 0x04) happens in the texture unit; a host test can only check that the sRGB descriptor word is selected."
+    },
+    {
+      "format": "VK_FORMAT_A8B8G8R8_UINT_PACK32",
+      "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
+      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_UINT_PACK32 row",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "uint",
+      "minimal_gpu_operation": "As the UNORM entry with the integer descriptor word 0x03c00000, a typed usampler in the fragment shader and no linear filtering (Vulkan forbids it for integer formats).",
+      "texel_bytes": [51, 102, 153, 255],
+      "expected_result": "exact readback 0xff336699, identical to the recorded VK_FORMAT_R8G8B8A8_UINT witness for the same bytes",
+      "host_test_limit": "The typed sampled-image ABI and integer component order are consumed by the texture unit and the compiled shader; the host contract fixes only the descriptor word and the shader interface class."
+    },
+    {
+      "format": "VK_FORMAT_A8B8G8R8_SINT_PACK32",
+      "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT",
+      "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE",
+      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE in the pending column of the VK_FORMAT_A8B8G8R8_SINT_PACK32 row",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "sint",
+      "minimal_gpu_operation": "As the UINT entry with the signed integer descriptor word 0x03d00000, a typed isampler and negative component values.",
+      "texel_bytes": [192, 32, 96, 127],
+      "expected_result": "exact readback 0xff40a0e0, identical to the recorded VK_FORMAT_R8G8B8A8_SINT witness for the same bytes",
+      "host_test_limit": "As the UINT entry for the signed case."
+    },
+    {
+      "format": "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
+      "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
+      "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR",
+      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR in the pending column of the VK_FORMAT_A8B8G8R8_UNORM_PACK32 row",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "float",
+      "minimal_gpu_operation": "Upload the opaque black/opaque white 2x2 checkerboard used by the recorded filter probes and sample its centre twice: once with VK_FILTER_NEAREST and once with VK_FILTER_LINEAR.",
+      "texel_bytes": [0, 0, 0, 255],
+      "expected_result": "nearest 0xff000000 and linear 0xff808080 in both byte-identical runs",
+      "host_test_limit": "The filter hardware decides the interpolated value; the host contract only proves that linear filtering is gated on a non-integer format and that the sampler encoding is accepted."
+    },
+    {
+      "format": "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
+      "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
+      "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR",
+      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR in the pending column of the VK_FORMAT_A8B8G8R8_SNORM_PACK32 row",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "float",
+      "minimal_gpu_operation": "The same checkerboard probe with the recorded SNORM fixture (black alpha 0x7f, white components 0x7f) and both filters.",
+      "texel_bytes": [0, 0, 0, 127],
+      "expected_result": "nearest 0xff000000 and linear 0xff808080, matching the recorded VK_FORMAT_R8G8B8A8_SNORM filter witness",
+      "host_test_limit": "As the UNORM filter entry."
+    },
+    {
+      "format": "VK_FORMAT_A8B8G8R8_SRGB_PACK32",
+      "feature": "VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT",
+      "capability": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR",
+      "pending_flag": "PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR in the pending column of the VK_FORMAT_A8B8G8R8_SRGB_PACK32 row",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "sRGB",
+      "minimal_gpu_operation": "The same opaque black/opaque white checkerboard with the sRGB descriptor word and both filters; the recorded sRGB fixture is used unchanged.",
+      "texel_bytes": [0, 0, 0, 255],
+      "expected_result": "nearest 0xff000000 and linear 0xff808080, matching the recorded VK_FORMAT_R8G8B8A8_SRGB filter witness",
+      "host_test_limit": "As the UNORM filter entry; 0 and 255 are sRGB fixed points, so decode must be covered by the sampled-image entry above."
+    }
+  ],
+  "blocker_classification": [
+    {
+      "reason": "profile-has-no-image-model",
+      "profiles": ["compute"],
+      "cells": 165,
+      "detail": "The compute profile installs neither format_properties nor image_properties and creates no graphics objects, so every mandatory format cell of the two tables is a blocker for that profile by construction."
+    },
+    {
+      "reason": "no-blit-implementation",
+      "profiles": ["graphics"],
+      "cells": 40,
+      "detail": "vkCmdBlitImage rejects every call: there is no scaling/filtering packet and no bounded CPU contract, and BLIT is not COPY, so no BLIT_SRC/BLIT_DST bit may be published."
+    },
+    {
+      "reason": "no-texel-buffer-descriptor",
+      "profiles": ["graphics"],
+      "cells": 32,
+      "detail": "Buffer views and texel-buffer descriptors exist only for the R32 UINT/SINT/SFLOAT uniform rows; there is no storage-texel-buffer descriptor type and no buffer-data-format mapping for the remaining formats."
+    },
+    {
+      "reason": "no-render-target-encoding",
+      "profiles": ["graphics"],
+      "cells": 23,
+      "detail": "Only B8G8R8A8_UNORM and R8G8B8A8_UNORM have a render-target encoding and a clear/draw/readback route; the native graphics compiler additionally requires colorWriteMask 15 with blendEnable false, so no blend bit is publishable either."
+    },
+    {
+      "reason": "no-storage-image-abi",
+      "profiles": ["graphics"],
+      "cells": 15,
+      "detail": "There is no storage-image descriptor, image-load/store ABI or atomic path in the shader interface, so storage images and atomics cannot be inferred from texture descriptors."
+    },
+    {
+      "reason": "implemented-pending-physical-diagnostic",
+      "profiles": ["graphics"],
+      "cells": 8,
+      "detail": "The A8B8G8R8_* sampled and linear-filtering capabilities are implemented and host-tested but have no console witness, so they stay unpublished until the entries above are executed."
+    },
+    {
+      "reason": "no-sampled-encoding",
+      "profiles": ["graphics"],
+      "cells": 4,
+      "detail": "B8G8R8A8_UNORM and B8G8R8A8_SRGB sampling needs a component swap that the pinned GPL reference does not encode and that no console witness covers; the profile deliberately does not sample BGRA."
+    }
+  ]
+}

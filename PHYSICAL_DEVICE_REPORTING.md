@@ -187,6 +187,49 @@ report their bounded dimensions, layers and complete mip count; attachment and
 pure-transfer roles remain single-level. Unsupported combinations return
 `VK_ERROR_FORMAT_NOT_SUPPORTED` and a zeroed property structure.
 
+### Format capabilities: implemented versus witnessed
+
+`src/texture_format.c` is the single place that decides a format capability.
+Every row carries two masks: `capabilities` (the operation is implemented in
+this tree and covered by host tests) and `witnessed` (the subset that also has a
+deterministic on-console witness recorded in `VALIDATION.md`). All Vulkan-facing
+decisions - the bits `vkGetPhysicalDeviceFormatProperties` reports, the usage
+combinations `vkGetPhysicalDeviceImageFormatProperties` and image creation
+accept, the T#/S# encoding, the padded-linear layout and the copy planner - are
+derived from that one table, and unimplemented combinations are refused before
+an object exists.
+
+The two questions are deliberately not the same one. A capability can be
+implemented, encoded and host-tested while still being reported as a blocker,
+because host tests do not prove hardware behaviour. `tools/dump_device_reporting.c`
+emits the capability ledger and `tests/test_format_capabilities.py` re-derives
+every published bit from it, so a feature cannot be advertised without a
+witnessed capability, and `tests/test_reporting_matrix.py` freezes the rows of
+every mandatory format table outside the ones a change is scoped to.
+
+The Vulkan 1.0 4-byte and 32-bit mandatory tables are the worked example of
+that accounting: 287 cells, of which 0 are advertised by this task, 8 are
+implemented and host-tested but await their console diagnostic, and 279 have no
+backend operation at all.
+
+| Blocker reason | Cells | Why a diagnostic cannot promote it |
+| --- | ---: | --- |
+| compute profile has no image model | 165 | that profile installs no format or image-query callback and creates no graphics objects |
+| no blit implementation | 40 | `vkCmdBlitImage` rejects every call; BLIT is not COPY, so no blit bit may be published |
+| no texel-buffer descriptor | 32 | only the R32 UINT/SINT/SFLOAT uniform rows have buffer views and descriptor formats; there is no storage-texel-buffer type |
+| no render-target encoding | 23 | only B8G8R8A8/R8G8B8A8 have a render-target encoding, and the native compiler requires `colorWriteMask` 15 with `blendEnable` false |
+| no storage-image ABI | 15 | no storage-image descriptor, image-load/store ABI or atomic path exists |
+| implemented, pending physical diagnostic | 8 | the A8B8G8R8_* sampled/linear encodings are complete and host-tested; only the console witness is missing |
+| no sampled encoding | 4 | BGRA8 sampling needs a component swap the pinned GPL reference does not encode |
+
+`conformance_inventory/physical_format_validation.json` is the machine-readable
+form of the pending row of that table: one entry per cell, naming the exact GPU
+operation, the texel fixture, the deterministic expected readback, the shader
+type (float, uint, sint or sRGB) and why the host test cannot settle it.
+Promotion is a data change: move the named flag from the pending column to the
+witnessed column of the same row once two byte-identical console runs pass, and
+no code path changes.
+
 ### Pipeline cache identity
 
 `pipelineCacheUUID` is no longer left zero. It is derived deterministically from

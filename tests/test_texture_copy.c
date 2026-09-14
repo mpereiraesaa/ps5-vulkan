@@ -1,6 +1,7 @@
 #include "texture_copy.h"
 #include "vk_image.h"
 #include <assert.h>
+#include <string.h>
 int main(void)
 {
     VkBufferImageCopy r={.bufferOffset=16,.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
@@ -59,4 +60,54 @@ int main(void)
         p.destination_offset==256+2304 && p.destination_pitch==256);
     mip.imageExtent.width=33;
     assert(ps5vk_texture_copy_plan_for_image(&mip_image,132,4608,&mip,&p)!=VK_SUCCESS);
+
+    /* Only formats with an implemented padded-linear encoding have a copy
+     * plan; the colour attachment, the depth target, the three-component
+     * vertex rows and the packed 10-bit row have no image encoding. */
+    VkBufferImageCopy single={.bufferOffset=0,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .imageExtent={2,2,1}};
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_R32G32B32_SFLOAT,4,4,
+        UINT64_C(64),UINT64_C(64),&single,&p)!=VK_SUCCESS);
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_D32_SFLOAT,4,4,
+        UINT64_C(64),UINT64_C(64),&single,&p)!=VK_SUCCESS);
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_A2B10G10R10_UNORM_PACK32,4,4,
+        UINT64_C(64),UINT64_C(64),&single,&p)!=VK_SUCCESS);
+
+    /* A pending sampled row has the same plan as its byte-identical witnessed
+     * counterpart, so promotion changes only the published capability. */
+    VkBufferImageCopy sample={.bufferOffset=16,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .imageOffset={1,1,0},.imageExtent={3,2,1}};
+    struct ps5vk_texture_copy rgba8={0},packed={0};
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_R8G8B8A8_UNORM,65,4,40,2048,
+        &sample,&rgba8)==VK_SUCCESS);
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_A8B8G8R8_UNORM_PACK32,65,4,40,
+        2048,&sample,&packed)==VK_SUCCESS);
+    assert(!memcmp(&rgba8,&packed,sizeof(rgba8)));
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_A8B8G8R8_SRGB_PACK32,65,4,40,
+        2048,&sample,&packed)==VK_SUCCESS && !memcmp(&rgba8,&packed,sizeof(rgba8)));
+
+    /* An unbounded bufferRowLength/bufferImageHeight pair would overflow the
+     * 64-bit source span; it must be refused with the output untouched. */
+    VkBufferImageCopy unbounded={.bufferOffset=0,.bufferRowLength=UINT32_MAX,
+        .bufferImageHeight=UINT32_MAX,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .imageExtent={1,1,1}};
+    struct ps5vk_texture_copy sentinel;
+    memset(&sentinel,0x5a,sizeof(sentinel));
+    struct ps5vk_texture_copy guard=sentinel;
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_R32G32B32A32_SFLOAT,16384,16384,
+        UINT64_MAX,UINT64_MAX,&unbounded,&guard)!=VK_SUCCESS &&
+        !memcmp(&guard,&sentinel,sizeof(guard)));
+    /* The same geometry at the largest representable row is still refused
+     * without touching the caller's structure. */
+    VkBufferImageCopy widest={.bufferOffset=0,.bufferRowLength=UINT32_MAX,
+        .bufferImageHeight=UINT32_MAX,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .imageExtent={16384,16384,1}};
+    guard=sentinel;
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_R32G32B32A32_SFLOAT,16384,16384,
+        UINT64_MAX,UINT64_MAX,&widest,&guard)!=VK_SUCCESS &&
+        !memcmp(&guard,&sentinel,sizeof(guard)));
 }

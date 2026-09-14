@@ -1,6 +1,7 @@
 #include "texture_layout.h"
 #include "vk_internal.h"
 #include <assert.h>
+#include <string.h>
 int main(void)
 {
     struct ps5vk_texture_layout l={0};
@@ -48,4 +49,61 @@ int main(void)
         r.size==2048 && r.alignment==256);
     i.usage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_ERROR_FORMAT_NOT_SUPPORTED);
+
+    /* Only formats with an implemented padded-linear encoding have layout
+     * arithmetic: the colour attachment, the depth target, the vertex-only
+     * rows and unknown formats are rejected rather than defaulted. */
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_B8G8R8A8_UNORM,4,4,&l));
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_D32_SFLOAT,4,4,&l));
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_R32G32B32_SFLOAT,4,4,&l));
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_A2B10G10R10_UNORM_PACK32,4,4,&l));
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_UNDEFINED,4,4,&l));
+
+    /* The pending sampled rows already have their arithmetic: the packed
+     * A8B8G8R8 order is byte-identical to R8G8B8A8, so the layout matches the
+     * witnessed row exactly. */
+    struct ps5vk_texture_mip_layout rgba8={0}, packed={0};
+    assert(!ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
+        65,3,2,3,&rgba8));
+    assert(!ps5vk_texture_mip_layout_for_slices(VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+        65,3,2,3,&packed));
+    assert(rgba8.bytes==packed.bytes && rgba8.layer_stride==packed.layer_stride &&
+        rgba8.levels[0].row_pitch==packed.levels[0].row_pitch &&
+        rgba8.levels[2].storage_width==packed.levels[2].storage_width);
+    struct ps5vk_texture_mip_layout srgb_packed={0};
+    assert(!ps5vk_texture_mip_layout_for_slices(VK_FORMAT_A8B8G8R8_SRGB_PACK32,
+        65,3,1,3,&srgb_packed));
+    assert(srgb_packed.bytes==rgba8.layer_stride);
+
+    /* Overflow and bound rejections must not mutate the caller's structure.
+     * 16384x16384 at 16 bytes per texel is 2^32 bytes per level, so two levels
+     * plus UINT32_MAX layers cannot be represented and must be refused rather
+     * than wrapped. */
+    struct ps5vk_texture_mip_layout sentinel;
+    memset(&sentinel,0x5a,sizeof(sentinel));
+    struct ps5vk_texture_mip_layout guard=sentinel;
+    assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R32G32B32A32_SFLOAT,
+        16384,16384,UINT32_MAX,2,&guard) && !memcmp(&guard,&sentinel,sizeof(guard)));
+    guard=sentinel;
+    assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
+        16385,4,1,1,&guard) && !memcmp(&guard,&sentinel,sizeof(guard)));
+    guard=sentinel;
+    assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
+        4,16385,1,1,&guard) && !memcmp(&guard,&sentinel,sizeof(guard)));
+    guard=sentinel;
+    assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
+        4,4,1,17,&guard) && !memcmp(&guard,&sentinel,sizeof(guard)));
+    guard=sentinel;
+    assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
+        4,4,1,0,&guard) && !memcmp(&guard,&sentinel,sizeof(guard)));
+    guard=sentinel;
+    assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
+        4,4,0,1,&guard) && !memcmp(&guard,&sentinel,sizeof(guard)));
+    guard=sentinel;
+    assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
+        0,4,1,1,&guard) && !memcmp(&guard,&sentinel,sizeof(guard)));
+    assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
+        4,4,1,1,NULL));
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_R8_UNORM,1,1,NULL));
+    assert(ps5vk_texture_layout(1,1,NULL));
 }

@@ -1,4 +1,5 @@
 import json
+import hashlib
 import re
 import subprocess
 import sys
@@ -10,8 +11,45 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import check_reporting_matrix as matrix  # noqa: E402
 
+# Scope guard for the Vulkan 1.0 4-byte/32-bit format-contract task: the rows
+# of every other mandatory format table are frozen by digest, so a change that
+# should have stayed inside the assigned tables cannot pass unnoticed. A
+# deliberate change to another table must update this digest in the same commit
+# that changes the table, with the reason in the commit message.
+UNASSIGNED_FORMAT_TABLES = {
+    "formats-mandatory-features-subbyte",
+    "formats-mandatory-features-2byte",
+    "formats-mandatory-features-10bit",
+    "formats-mandatory-features-16bit",
+    "formats-mandatory-features-64bit",
+    "formats-mandatory-features-depth-stencil",
+    "formats-mandatory-features-bcn",
+    "formats-mandatory-features-etc",
+    "formats-mandatory-features-astc",
+}
+UNASSIGNED_FORMAT_TABLE_DIGEST = (
+    "ef9d8bf9f833f6b149009d2f87e2a1d2bcb14a7309f84dedbd101d3f6aff0e23")
+
+
+def unassigned_format_table_digest(rows):
+    blob = json.dumps(rows, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(blob).hexdigest()
+
 
 class TestReportingMatrix(unittest.TestCase):
+    def test_unassigned_format_tables_are_untouched(self):
+        """Only the 4-byte and 32-bit tables may differ in this task."""
+        data = json.loads(
+            (ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        rows = [row for row in data["formats"]
+                if row.get("table") in UNASSIGNED_FORMAT_TABLES]
+        self.assertTrue(rows)
+        self.assertEqual(unassigned_format_table_digest(rows),
+                         UNASSIGNED_FORMAT_TABLE_DIGEST,
+                         "a format row outside the assigned 4-byte/32-bit tables "
+                         "changed; if that is deliberate, update "
+                         "UNASSIGNED_FORMAT_TABLE_DIGEST and explain why")
+
     def test_every_public_format_is_in_the_reporting_dump(self):
         """A supported image or vertex row omitted by the dumper is a false blocker."""
         public_formats = set()
