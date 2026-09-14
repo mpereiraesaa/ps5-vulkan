@@ -64,6 +64,11 @@ compiler-deps:
 test-shaders:
 	$(PYTHON) tools/prepare_test_shaders.py
 check-sanitize:
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) src/vertex_descriptor.c src/vertex_fetch.c tests/test_vertex_fetch.c -o build/tests/test_vertex_fetch_sanitized
+	./build/tests/test_vertex_fetch_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_prepare_ps5.c src/vertex_descriptor.c tests/test_draw_prepare_ps5.c -o build/tests/test_draw_prepare_ps5_sanitized
+	./build/tests/test_draw_prepare_ps5_sanitized
 	@if [ -d third_party/psbc-reference ]; then $(MAKE) test-runtime-header RUNTIME_HEADER_SANITIZERS=-fsanitize=address,undefined; fi
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_sanitized

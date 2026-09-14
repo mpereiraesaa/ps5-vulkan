@@ -15,9 +15,18 @@ static VkResult texture_rc;
 VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView v,VkSampler s,uint32_t out[12])
 {(void)d;(void)v;(void)s;for(unsigned i=0;i<12;++i)out[i]=100+i;return texture_rc;}
 static const void *fetch_address=vertex_source;
-VkResult ps5vk_vertex_fetch_span(VkDevice d,const struct ps5vk_graphics_key *k,
-    const struct ps5vk_operation *op,struct ps5vk_vertex_fetch *out)
-{(void)d;(void)k;(void)op;if(fetch_rc==VK_SUCCESS)*out=(struct ps5vk_vertex_fetch){fetch_address,16,4,4};return fetch_rc;}
+static unsigned fetch_count=1;
+VkResult ps5vk_vertex_fetch_used_spans(VkDevice d,const struct ps5vk_graphics_key *k,
+    const struct ps5vk_operation *op,uint32_t mask,struct ps5vk_vertex_fetch_table *out)
+{
+    (void)d;(void)k;(void)op;(void)mask;
+    if(fetch_rc==VK_SUCCESS) {
+        *out=(struct ps5vk_vertex_fetch_table){.count=fetch_count};
+        out->bindings[0]=(struct ps5vk_vertex_fetch){fetch_address,16,4,4};
+        if(fetch_count>1)out->bindings[fetch_count-1]=out->bindings[0];
+    }
+    return fetch_rc;
+}
 static VkResult allocate(void *c, VkDeviceSize n, void **a, void **b)
 {
     (void)c;
@@ -94,6 +103,17 @@ int main(void)
     assert(allocations==bounce_allocated && releases==allocations &&
         !prepared.backing && !prepared.vertex_bounce);
     fail_allocation_size=0;fetch_address=vertex_source;
+    /* Compiler mask {0,15} requires two packed SRDs, not sixteen sparse SRDs.
+     * Each unaligned source owns its bounce until draw retirement. */
+    fetch_count=16;fetch_address=vertex_source+1;
+    expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+32+32;
+    assert(ps5vk_native_prepare_vertex_draw_masked(&d,&op,&area,NULL,NULL,shader_address,0x8001,&prepared)==VK_SUCCESS);
+    assert(prepared.vertex_bounce_bytes==32);
+    assert(prepared.vertex_table[0]!=prepared.vertex_table[4]);
+    assert(prepared.vertex_table[6]==4);
+    ps5vk_native_release_draw(&prepared);
+    assert(allocations==releases);
+    fetch_count=1;fetch_address=vertex_source;
     expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+16;
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address^(UINT64_C(1)<<32),&prepared)==VK_ERROR_MEMORY_MAP_FAILED);
     assert(allocations==releases && !prepared.backing);

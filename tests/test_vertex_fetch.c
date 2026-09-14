@@ -78,5 +78,62 @@ int main(void)
     op.type=PS5VK_DRAW_INDEXED;op.index_count=6;op.vertex_offset=-2;
     op.vertices[0].buffer=buffer;
     assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_SUCCESS && words[2]==9);
+    /* A sparse table is indexed by binding number, regardless of description
+     * order. One failing buffer must leave the entire output unchanged. */
+    VkVertexInputBindingDescription split[2]={{15,12,VK_VERTEX_INPUT_RATE_VERTEX},
+                                            {3,24,VK_VERTEX_INPUT_RATE_VERTEX}};
+    attrs[0]=(VkVertexInputAttributeDescription){0,3,VK_FORMAT_R32G32B32_SFLOAT,0};
+    attrs[1]=(VkVertexInputAttributeDescription){1,15,VK_FORMAT_R32G32B32_SFLOAT,0};
+    key.vertex_bindings=split;key.vertex_binding_count=2;
+    op.type=PS5VK_DRAW;op.vertex_count=3;op.first_vertex=2;
+    op.vertices[3]=(struct ps5vk_vertex_binding){buffer,1};
+    op.vertices[15]=(struct ps5vk_vertex_binding){buffer,12};
+    struct ps5vk_vertex_fetch_table table={0},snapshot;
+    assert(ps5vk_vertex_fetch_spans(&d,&key,&op,&table)==VK_SUCCESS);
+    assert(table.count==16 && table.bindings[3].stride==24 && table.bindings[15].stride==12);
+    assert(table.bindings[3].address==(unsigned char *)mapped+257);
+    assert(table.bindings[15].address==(unsigned char *)mapped+268);
+    for(unsigned i=0;i<16;++i)if(i!=3 && i!=15)assert(!table.bindings[i].address);
+    struct ps5vk_vertex_fetch_table compact={0};
+    assert(ps5vk_vertex_fetch_compact(&table,0x8008,&compact)==VK_SUCCESS && compact.count==2);
+    assert(compact.bindings[0].address==table.bindings[3].address);
+    assert(compact.bindings[1].address==table.bindings[15].address);
+    /* Optimization can drop binding 3: the remaining binding becomes SRD 0. */
+    assert(ps5vk_vertex_fetch_compact(&table,0x8000,&compact)==VK_SUCCESS && compact.count==1);
+    assert(compact.bindings[0].address==table.bindings[15].address);
+    struct ps5vk_vertex_fetch_table compact_saved=compact;
+    assert(ps5vk_vertex_fetch_compact(&table,0x8001,&compact)!=VK_SUCCESS);
+    assert(ps5vk_vertex_fetch_compact(&table,0x10000,&compact)!=VK_SUCCESS);
+    assert(ps5vk_vertex_fetch_compact(&table,0,&compact)!=VK_SUCCESS);
+    assert(!memcmp(&compact,&compact_saved,sizeof(compact)));
+    op.vertices[3].buffer=NULL;
+    assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,0x8000,&compact)==VK_SUCCESS);
+    assert(!compact.bindings[3].address && compact.bindings[15].address);
+    op.vertices[3].buffer=buffer;
+    snapshot=table;op.vertices[15].offset=235;
+    assert(ps5vk_vertex_fetch_spans(&d,&key,&op,&table)!=VK_SUCCESS);
+    assert(!memcmp(&table,&snapshot,sizeof(table)));
+    op.vertices[15].offset=12;split[0].binding=3;
+    assert(ps5vk_vertex_fetch_spans(&d,&key,&op,&table)!=VK_SUCCESS);
+    split[0].binding=16;
+    assert(ps5vk_vertex_fetch_spans(&d,&key,&op,&table)!=VK_SUCCESS);
+    split[0].binding=15;attrs[1].binding=14;
+    assert(ps5vk_vertex_fetch_spans(&d,&key,&op,&table)!=VK_SUCCESS);
+    attrs[1].binding=15;op.vertex_count=0;op.vertices[3].buffer=NULL;op.vertices[15].buffer=NULL;
+    assert(ps5vk_vertex_fetch_spans(&d,&key,&op,&table)==VK_SUCCESS);
+    assert(table.count==16);
+    for(unsigned i=0;i<16;++i)assert(!table.bindings[i].address);
+    VkVertexInputBindingDescription all_bindings[16];
+    VkVertexInputAttributeDescription all_attrs[16];
+    for(unsigned i=0;i<16;++i) {
+        all_bindings[i]=(VkVertexInputBindingDescription){15-i,4,VK_VERTEX_INPUT_RATE_VERTEX};
+        all_attrs[i]=(VkVertexInputAttributeDescription){i,i,VK_FORMAT_R32_SFLOAT,0};
+        op.vertices[i]=(struct ps5vk_vertex_binding){buffer,i};
+    }
+    key.vertex_binding_count=key.vertex_attribute_count=16;
+    key.vertex_bindings=all_bindings;key.vertex_attributes=all_attrs;op.vertex_count=3;
+    assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,0xffff,&table)==VK_SUCCESS);
+    assert(ps5vk_vertex_fetch_compact(&table,0xffff,&compact)==VK_SUCCESS && compact.count==16);
+    for(unsigned i=0;i<16;++i)assert(compact.bindings[i].address==(unsigned char *)mapped+256+i);
     vkUnmapMemory(&d,memory);vkDestroyBuffer(&d,buffer,NULL);vkFreeMemory(&d,memory,NULL);
 }

@@ -170,6 +170,17 @@ int main(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);
     attribute.format=VK_FORMAT_R32G32B32_SFLOAT;
+    VkVertexInputBindingDescription many_bindings[16];
+    for(unsigned i=0;i<16;++i)many_bindings[i]=(VkVertexInputBindingDescription){15-i,16,VK_VERTEX_INPUT_RATE_VERTEX};
+    vertex_input.vertex_binding_count=16;vertex_input.vertex_bindings=many_bindings;
+    attribute.binding=15;
+    /* Candidate fetch code alone must not promote the compiler ABI. */
+    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    many_bindings[0].binding=16;
+    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    many_bindings[0].binding=14;
+    assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    vertex_input.vertex_binding_count=1;vertex_input.vertex_bindings=&binding;attribute.binding=0;
     assert(ps5vk_spirv_graphics_interface(&vertex_input));
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);
@@ -177,6 +188,28 @@ int main(void)
     assert(!ps5vk_spirv_graphics_interface(&vertex_input));
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     attribute.format=VK_FORMAT_R32G32B32A32_SFLOAT;
+    /* Same SPIR-V, distinct baked vertex layouts: each change must compile
+     * separately, while repeating the exact layout must reuse its entry. */
+    cache=ps5vk_compilation_cache_create(8,1024*1024);
+    assert(cache);
+    for(unsigned variant=0;variant<4;++variant) {
+        binding.stride=variant?20:16;
+        attribute.offset=variant>=2?4:0;
+        attribute.format=variant==3?VK_FORMAT_R32G32B32_SFLOAT:VK_FORMAT_R32G32B32A32_SFLOAT;
+        assert(ps5vk_runtime_graphics_cached_acquire(cache,&vertex_input,&cold)==VK_SUCCESS && cold);
+        assert(ps5vk_runtime_graphics_cached_acquire(cache,&vertex_input,&warm)==VK_SUCCESS && warm);
+        ps5vk_compilation_cache_get_stats(cache,&stats);
+        assert(stats.misses==variant+1 && stats.hits==variant+1 && stats.current_entries==variant+1);
+        ps5vk_runtime_graphics_cached_release(cache,warm);
+        ps5vk_runtime_graphics_cached_release(cache,cold);
+    }
+    binding.stride=16;attribute.offset=0;attribute.format=VK_FORMAT_R32G32B32A32_SFLOAT;
+    attribute.location=32;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    attribute.location=0;binding.binding=16;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    binding.binding=0;
+    ps5vk_compilation_cache_destroy(cache);
     binding.inputRate=VK_VERTEX_INPUT_RATE_INSTANCE;
     assert(ps5vk_runtime_graphics_compile(NULL,&vertex_input,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     free((void *)vertex_input.vertex.words);free((void *)vertex_input.fragment.words);

@@ -75,11 +75,26 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
        key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
+    if(key->vertex_binding_count>1 || key->vertex_attribute_count>PSBC_MAX_VERTEX_ATTRIBUTES ||
+       (key->vertex_binding_count && !key->vertex_bindings) ||
+       (key->vertex_attribute_count && !key->vertex_attributes))return 0;
+    for(uint32_t i=0;i<key->vertex_binding_count;++i) {
+        const VkVertexInputBindingDescription *b=&key->vertex_bindings[i];
+        if(b->binding!=0 || b->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
+           !b->stride || b->stride>0x3fff)return 0;
+    }
+    for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
+        const VkVertexInputAttributeDescription *a=&key->vertex_attributes[i];
+        if(a->binding!=0 || !key->vertex_binding_count || a->location>=PSBC_MAX_VERTEX_ATTRIBUTES)return 0;
+        for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return 0;
+    }
     return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
         key->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
         (key->color_format==VK_FORMAT_B8G8R8A8_UNORM ||
          key->color_format==VK_FORMAT_R8G8B8A8_UNORM) && key->samples==VK_SAMPLE_COUNT_1_BIT &&
         key->color_write_mask==15 && !key->blend_enable &&
+        /* Promotion requires the compiler's optimized vb_desc_usage_mask.
+         * The current PSBC metadata exports only the table SGPR. */
         key->vertex_binding_count<=1 && key->vertex_attribute_count<=PSBC_MAX_VERTEX_ATTRIBUTES &&
         (!key->vertex_binding_count || key->vertex_bindings) &&
         (!key->vertex_attribute_count || key->vertex_attributes) &&

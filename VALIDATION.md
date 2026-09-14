@@ -5,6 +5,15 @@ firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013
 
 ## Observed results
 
+The vertex-layout cache correction and multiple-binding preparation described
+in [VERTEX_INPUT.md](VERTEX_INPUT.md) have host contract/compiler tests only.
+The cache tests use real PSBC compilation and distinguish stride, offset and
+format changes while retaining warm reuse for an unchanged layout. Preparation
+tests cover 16 binding spans, sparse compiler masks, optimized-away inputs,
+alignment copies and allocation failure. Multiple bindings remain disabled in
+the production compiler adapter pending metadata export and PS5 qualification;
+the hardware runs below do not establish support for that candidate path.
+
 Two consecutive launches of the same executable each completed:
 
 - Runtime compilation of owned vertex and fragment SPIR-V absent from the

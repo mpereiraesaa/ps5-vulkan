@@ -21,4 +21,10 @@ void ps5vk_native_release_draw(struct ps5vk_prepared_draw *);
 VkResult ps5vk_native_prepare_vertex_draw(VkDevice,const struct ps5vk_operation *,const VkRect2D *,
     const ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT],const struct ps5vk_graphics_key *,
     uint64_t shader_address,struct ps5vk_prepared_draw *);
+/* Internal candidate bridge; usage_mask must be supplied by the compiler.
+ * The production wrapper remains binding-zero-only until that metadata is
+ * exported and qualified. */
+VkResult ps5vk_native_prepare_vertex_draw_masked(VkDevice,const struct ps5vk_operation *,const VkRect2D *,
+    const ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT],const struct ps5vk_graphics_key *,
+    uint64_t shader_address,uint32_t usage_mask,struct ps5vk_prepared_draw *);
 #endif
