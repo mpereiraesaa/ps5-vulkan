@@ -86,11 +86,14 @@ Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
 backend and cached under a bounded in-memory policy. Runtime vertex/fragment
 compilation now supports procedural or multi-binding typed triangles with
 matching smooth interfaces, BGRA8/RGBA8 targets, push/specialization constants
-and fragment combined-image samplers. A four-set/96-element sampler stress
-fixture now has exact GPU readback, but exceeds the still-conservative published
+and vertex/fragment combined-image samplers. A four-set/96-element shared-stage
+sampler stress fixture has exact GPU readback, but exceeds the still-conservative published
 sampler limits; it is not a portable consumer or a limit promotion.
-Compiled pairs reuse the bounded cache. Vertex-stage sampler delivery is
-connected but still awaits GPU qualification. Other graphics resource types
+Compiled pairs reuse the bounded cache. Two identical-artifact shared-stage runs
+passed, as did the default fragment-only regression and clean app closure.
+This bounded result does not establish arbitrary shader compatibility; see
+[the qualification details](VALIDATION.md#shared-stage-sampler-hardware-qualification).
+Other graphics resource types
 and arbitrary textured runtime-shader profiles remain unsupported.
 The 8/16-bit slice covers storage-buffer access only; narrow integer/float
 arithmetic and other narrow storage classes remain unadvertised.

@@ -347,9 +347,9 @@ fragment SPIR-V. The current profile supports procedural or up to 16-binding
 for triangle lists, smooth float32 scalar/vector interfaces
 at matching whole locations 0–31, one vec4 fragment output at location 0,
 BGRA8/RGBA8 UNORM sample-1 targets and full color writes. VertexIndex, push
-constants and scalar specialization constants are supported. Fragment combined
-image/sampler descriptors have a connected four-set array backend; vertex-stage
-delivery is now connected but has host-only qualification. See the boundary
+constants and scalar specialization constants are supported. Vertex/fragment combined
+image/sampler descriptors have a connected four-set array backend and bounded
+shared-stage hardware qualification. See the boundary
 below. Other graphics resource types, blending, additional targets and other interpolation modes remain
 unsupported by this runtime-compiled profile. Interface
 reflection is bounded to 65,536 IDs and is not a complete SPIR-V validator;
@@ -396,15 +396,22 @@ The runtime backend accepts combined-image sampler arrays visible to vertex,
 fragment or both stages across four sets and sparse binding numbers, within
 the canonical layout and compiler declaration bounds. Shared stages receive
 the same table address; their resource-layout checks and ownership cover the
-union of sets. Vertex sampling still awaits hardware qualification.
-An independent public-header fragment diagnostic has qualified 24
+union of sets. Independent public-header fragment-only and shared-stage
+vertex/fragment diagnostics have qualified 24
 elements in each of four sets, four descriptor-update rounds and exact weighted
 pixel readback. This stress fixture exceeds the currently advertised sampler
 counts of one: it is backend qualification, not a portable Vulkan consumer or
 a limit promotion. Earlier single-sampler level-0 and three-level explicit-LOD
 results remain separate evidence. Every binding in an active table must be
-defined; per-binding static-use elimination, vertex hardware qualification and mixed graphics
+defined; per-binding static-use elimination and mixed graphics
 buffer/image resource delivery are not complete. See [VALIDATION.md](VALIDATION.md).
+The shared-stage witness uses procedural vertices, explicit level-zero nearest
+sampling from four RGBA8 textures and different weighted sums in each stage.
+It does not qualify every supported image format or arbitrary sampler state.
+Descriptor layout creation accepts legal core visibility masks, including
+`VK_SHADER_STAGE_ALL`; pipeline compiler/preparation still reject masks outside
+vertex/fragment visibility. That is a remaining semantic gap, not a Vulkan
+restriction on unused stage visibility.
 Recording also conservatively requires all nonempty layout sets to be bound,
 even if compilation later eliminates a whole set. That is a remaining Vulkan
 semantic gap, not an application requirement of the full API.

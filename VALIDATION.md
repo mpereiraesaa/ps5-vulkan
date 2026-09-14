@@ -3,7 +3,51 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
-## Shared-stage sampler compilation (host qualification only)
+## Shared-stage sampler hardware qualification
+
+On PS5 GFX1013 / firmware 12.02, 2026-09-14, the independent public-SDK
+consumer passed two identical-artifact shared-stage runs. Build this finite
+diagnostic with `python3 tools/build_consumer.py --shared-stage-samplers`;
+without that flag the earlier fragment-only diagnostic remains the default.
+
+- Consumer source: `04c7bb36b6229f6857643db8e29f9542c8ec0c7b`.
+- SELF SHA-256:
+  `35e0d62f82b90938ead0e6feb012b083ea3912d465e6fd836f28fb592d11790c`.
+- Complete TCP log SHA-256:
+  `903e7b4b91219bc323b61a35ecccc7722876a89423b34f607348d4392ef5575e`
+  and `4e3130e2d86e1a7af29d2efc0a1e5bf5e457feb7a97d47cdc8c03048b70551c7`.
+- Four sets, binding 7, 24 combined-sampler references per set, using four
+  palette textures. The vertex shader sums reverse weights 96–1; the fragment
+  shader sums forward weights 1–96 and combines both stage contributions.
+  Upload barriers explicitly target vertex and fragment shader reads.
+- Four descriptor-update rounds require independent BGRA references
+  `6d3a3b2f`, `6d373d35`, `6d42392a`, `6d2e4135`. Each run matched exactly
+  471,744 non-background pixels per round with zero bad pixels, 40 paired GPU
+  submissions/completions, earlier compute/synchronization witnesses and
+  fixed-function presentation, zero tracked allocations and complete TCP BYE.
+- Both runs passed independently confirmed Close Game. A decoded Remote Play
+  frame after the shared runs showed the home menu without an error dialog.
+- The default fragment-only consumer was freshly rebuilt at the same source
+  revision and passed its original pixel references and lifecycle checks:
+  SELF `edfa661b4e282b06a346beeda2f9235a86861663a74d638780aafa04d10009b3`.
+
+Package identity was checked by exact signed-file FTP readback, followed by a
+verified remount and fresh launch. The verifier's `deployment_self_sha256` is
+manifest-supplied, not an independent measurement of the running SELF. Both
+shared SPIR-V hashes are additionally emitted by the running consumer and
+matched to the manifest. Nine focused verifier tests cover actual C-oracle
+compilation in both modes and rejection of mismatched profiles/hashes,
+missing/duplicate evidence and wrong pixels. The integrated host gate passed.
+
+**Qualification boundary:** 96 descriptors exceed the still-advertised sampler
+counts of one. This is backend qualification through public SDK headers, not
+a portable consumer, upstream CTS execution or a general limit promotion.
+The witness uses procedural vertices, a nearest sampler and four level-zero
+RGBA8 textures. Wider stage-visibility masks at pipeline consumption,
+statically unused resources, mixed graphics buffer/image resources and
+applicable upstream CTS remain pending. No capability is promoted here.
+
+## Shared-stage sampler compilation (host evidence)
 
 The compiler now admits combined-image sampler bindings visible to vertex,
 fragment or both stages. Real PSBC/NIR/ACO GFX1013 tests compile owned vertex
@@ -17,12 +61,12 @@ vertex pointer even without an actual vertex shader access. Eliminating
 statically unused resources is not implemented by this change. Unsupported
 stage masks and resource types remain rejected.
 
-This compiler/ABI evidence is **not vertex-sampling hardware evidence**.
-The follow-on native delivery is described below; deterministic GPU output
-for vertex sampling remains pending. No advertised feature or limit is
-promoted, and the earlier fragment-only GPU results do not validate vertex use.
+Compiler/ABI tests alone are **not vertex-sampling hardware evidence**.
+The separate shared-stage runs above provide bounded GPU output evidence.
+No advertised feature or limit is promoted, and the earlier fragment-only
+GPU results do not validate vertex use.
 
-## Shared-stage sampler delivery (host qualification only)
+## Shared-stage sampler delivery (host evidence)
 
 Native preparation now builds the union of vertex and fragment descriptor
 sets. It allocates each table once, even when both stages use it, and preserves
@@ -39,10 +83,9 @@ releases the allocation without publishing a prepared draw. The focused
 ASan/UBSan test passes. Synthetic inactive-set metadata is tested separately;
 it does not prove PSBC eliminates statically unused sets.
 
-This connects delivery but does not yet qualify vertex texture instructions
-on the GPU. The independent public-SDK shared-stage readback experiment and
-applicable upstream CTS are still pending. Published sampler limits remain
-unchanged.
+These host tests cover delivery and rollback; the independent shared-stage
+readback runs above establish the bounded GPU result. Applicable upstream CTS
+is still pending. Published sampler limits remain unchanged.
 
 ## Multi-set fragment samplers: connected backend and hardware diagnostic
 
@@ -101,7 +144,7 @@ public-SDK consumer passed two identical-artifact runs:
 currently advertised sampler limits. It exercises the backend through public
 headers, not a portable application obeying the published limits, and is not
 upstream CTS or conformance evidence. The advertised sampler counts remain
-one. Vertex-stage hardware qualification, non-sampler graphics resources, statically unused
+one. Broader vertex-stage combinations, non-sampler graphics resources, statically unused
 individual bindings, broader sampler/state combinations and applicable CTS
 must be addressed before a general limit promotion. The diagnostic uses
 procedural vertices, one nearest sampler and four level-0 RGBA8 source images;
