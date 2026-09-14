@@ -24,6 +24,9 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_format.frag -o build/runtime-graphics/vertex_format.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_texture.frag -o build/runtime-graphics/texture.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_descriptor_arrays.frag -o build/runtime-graphics/descriptor_arrays.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_shared_sets.vert -o build/runtime-graphics/shared_sets.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_shared_sets.frag -o build/runtime-graphics/shared_sets.frag.spv
+	$(GLSLANG) -V -DVERTEX_SAMPLERS_ONLY=1 experiments/graphics/runtime_shared_sets.frag -o build/runtime-graphics/vertex_sets.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_mipmap.vert -o build/runtime-graphics/mipmap.vert.spv
 	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tools/inspect_graphics_compiler.c src/ps5_compiler_shims.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/runtime-graphics/inspect
 	./build/runtime-graphics/inspect build/runtime-graphics/triangle.vert.spv build/runtime-graphics/triangle.frag.spv

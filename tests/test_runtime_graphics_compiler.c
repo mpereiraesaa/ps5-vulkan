@@ -118,7 +118,45 @@ static void check_descriptor_options(void)
     ps5vk_runtime_graphics_cached_release(cache,warm);ps5vk_runtime_graphics_cached_release(cache,cold);
     ps5vk_compilation_cache_destroy(cache);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
-    puts("Descriptor compiler: four sets / 96 array elements lowered by real PSBC; GPU proof pending");
+    /* Both stages use each table with distinct coefficients. There must be a
+     * separate compiler-selected argument slot in both register banks, but
+     * only one table address per descriptor set. */
+    key.vertex=read_module("build/runtime-graphics/shared_sets.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/shared_sets.frag.spv");
+    for(unsigned s=0;s<4;++s)
+        sets[s].binding[7].stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+    compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS);
+    actual=compiled;
+    assert(actual->vertex.machine_code_size && actual->fragment.machine_code_size);
+    assert(!ps5vk_runtime_shader_build(&header,&actual->vertex));
+    assert(!ps5vk_runtime_shader_build(&header,&actual->fragment));
+    assert(!ps5vk_runtime_draw_values_sets(&actual->arguments,0,0,0,0,tables,vs,fs));
+    for(unsigned s=0;s<4;++s) {
+        assert(actual->arguments.vertex_descriptor_valid[s] &&
+               actual->arguments.fragment_descriptor_valid[s]);
+        assert(vs[actual->arguments.vertex_descriptor_slot[s]]==tables[s]);
+        assert(fs[actual->arguments.fragment_descriptor_slot[s]]==tables[s]);
+        assert(actual->vertex.metadata.descriptor_bindings[s].offset==0);
+        assert(actual->fragment.metadata.descriptor_bindings[s].offset==0);
+    }
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    free((void *)key.fragment.words);
+    key.fragment=read_module("build/runtime-graphics/vertex_sets.frag.spv");
+    for(unsigned s=0;s<4;++s)sets[s].binding[7].stages=VK_SHADER_STAGE_VERTEX_BIT;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS);
+    actual=compiled;
+    assert(!ps5vk_runtime_draw_values_sets(&actual->arguments,0,0,0,0,tables,vs,fs));
+    for(unsigned s=0;s<4;++s) {
+        assert(actual->arguments.vertex_descriptor_valid[s]);
+        assert(!actual->arguments.fragment_descriptor_valid[s]);
+        assert(vs[actual->arguments.vertex_descriptor_slot[s]]==tables[s]);
+    }
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    sets[3].binding[7].stages=VK_SHADER_STAGE_COMPUTE_BIT;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    puts("Descriptor compiler: four sets / 96 array elements, fragment and shared-stage PSBC contracts");
 }
 static void check_interfaces(struct ps5vk_graphics_key *key)
 {
@@ -199,7 +237,14 @@ int main(void)
         p->arguments.fragment_descriptor_slot[0]< p->arguments.fragment_count);
     ps5vk_runtime_graphics_free(NULL,out);
     sampled.binding[0].stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
-    assert(ps5vk_runtime_graphics_compile(NULL,&textured,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_runtime_graphics_compile(NULL,&textured,&out)==VK_SUCCESS && out);
+    p=out;
+    /* Pinned PSBC ORs option-provided sets into desc_set_used_mask, so even
+     * unused vertex visibility conservatively reserves a pointer. This test
+     * records the real ABI, not successful static-use elimination. */
+    assert(p->arguments.vertex_descriptor_valid[0] &&
+            p->arguments.fragment_descriptor_valid[0]);
+    ps5vk_runtime_graphics_free(NULL,out);
     sampled.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
     sampled.type[0]=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     assert(ps5vk_runtime_graphics_compile(NULL,&textured,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);

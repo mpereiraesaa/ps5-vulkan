@@ -3,6 +3,26 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Shared-stage sampler compilation (host qualification only)
+
+The compiler now admits combined-image sampler bindings visible to vertex,
+fragment or both stages. Real PSBC/NIR/ACO GFX1013 tests compile owned vertex
+and fragment shaders that each read 24 elements from four shared sets, using
+different weighted sums. Native shader headers and both user-SGPR banks are
+checked: each stage receives its compiler-selected slot, while a shared set
+uses the same canonical table address. A vertex-only sampling variant requires
+four vertex pointers and no fragment pointers. The pinned PSBC compiler conservatively
+ORs option-provided sets into its used-set mask: visibility can reserve a
+vertex pointer even without an actual vertex shader access. Eliminating
+statically unused resources is not implemented by this change. Unsupported
+stage masks and resource types remain rejected.
+
+This is a compiler/ABI change, **not vertex-sampling hardware evidence**.
+Native draw preparation still rejects vertex resource use in this revision;
+connecting that delivery and checking deterministic GPU output are separate
+dependent changes. No advertised feature or limit is promoted, and the earlier
+fragment-only GPU results below do not validate the new vertex-stage path.
+
 ## Multi-set fragment samplers: connected backend and hardware diagnostic
 
 The canonical descriptor-table layout is shared by compiler options and
