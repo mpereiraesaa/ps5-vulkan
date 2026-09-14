@@ -348,9 +348,9 @@ for triangle lists, smooth float32 scalar/vector interfaces
 at matching whole locations 0–31, one vec4 fragment output at location 0,
 BGRA8/RGBA8 UNORM sample-1 targets and full color writes. VertexIndex, push
 constants and scalar specialization constants are supported. Fragment combined
-image/sampler descriptors have a connected four-set array backend, with the
-qualification boundary below. Other graphics resource types, vertex-stage
-samplers, blending, additional targets and other interpolation modes remain
+image/sampler descriptors have a connected four-set array backend; vertex-stage
+delivery is now connected but has host-only qualification. See the boundary
+below. Other graphics resource types, blending, additional targets and other interpolation modes remain
 unsupported by this runtime-compiled profile. Interface
 reflection is bounded to 65,536 IDs and is not a complete SPIR-V validator;
 use developer-owned valid shader modules.
@@ -392,15 +392,18 @@ version, target, layout, specialization and push-range state), and
 inputs (vendor/device, GFX1013 target, driver version, compiler identity and
 cache ABI revision) so any change invalidates previously exported data.
 
-The runtime backend accepts fragment-only combined-image sampler arrays across
-four sets and sparse binding numbers, within the canonical layout and compiler
-declaration bounds. An independent public-header diagnostic has qualified 24
+The runtime backend accepts combined-image sampler arrays visible to vertex,
+fragment or both stages across four sets and sparse binding numbers, within
+the canonical layout and compiler declaration bounds. Shared stages receive
+the same table address; their resource-layout checks and ownership cover the
+union of sets. Vertex sampling still awaits hardware qualification.
+An independent public-header fragment diagnostic has qualified 24
 elements in each of four sets, four descriptor-update rounds and exact weighted
 pixel readback. This stress fixture exceeds the currently advertised sampler
 counts of one: it is backend qualification, not a portable Vulkan consumer or
 a limit promotion. Earlier single-sampler level-0 and three-level explicit-LOD
 results remain separate evidence. Every binding in an active table must be
-defined; per-binding static-use elimination, vertex sampling and mixed graphics
+defined; per-binding static-use elimination, vertex hardware qualification and mixed graphics
 buffer/image resource delivery are not complete. See [VALIDATION.md](VALIDATION.md).
 Recording also conservatively requires all nonempty layout sets to be bound,
 even if compilation later eliminates a whole set. That is a remaining Vulkan

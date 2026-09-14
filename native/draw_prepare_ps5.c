@@ -15,9 +15,8 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
     *mask=0;
     if(runtime->enabled) {
         for(unsigned s=0;s<PS5VK_MAX_SETS;++s) {
-            /* Vertex resource encoding will be admitted separately. */
-            if(runtime->vertex_descriptor_valid[s])return VK_ERROR_FEATURE_NOT_PRESENT;
-            if(runtime->fragment_descriptor_valid[s])*mask|=1u<<s;
+            /* One canonical table per set, shared by every using stage. */
+            if(runtime->vertex_descriptor_valid[s] || runtime->fragment_descriptor_valid[s])*mask|=1u<<s;
         }
     } else if(p->set_count) {
         if(p->set_count!=1 || p->sets[0].count!=1 || p->sets[0].binding[0].count!=1)
@@ -33,7 +32,9 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
             const struct ps5vk_binding *binding=&set->signature.binding[b];
             if(!binding->count)continue;
             if(set->signature.type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
-               binding->stages!=VK_SHADER_STAGE_FRAGMENT_BIT)return VK_ERROR_FEATURE_NOT_PRESENT;
+               !binding->stages ||
+               (binding->stages&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
             for(unsigned e=0;e<binding->count;++e)
                 if(!set->defined[binding->first+e])return VK_ERROR_UNKNOWN;
         }

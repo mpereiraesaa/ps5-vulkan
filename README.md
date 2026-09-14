@@ -89,8 +89,9 @@ matching smooth interfaces, BGRA8/RGBA8 targets, push/specialization constants
 and fragment combined-image samplers. A four-set/96-element sampler stress
 fixture now has exact GPU readback, but exceeds the still-conservative published
 sampler limits; it is not a portable consumer or a limit promotion.
-Compiled pairs reuse the bounded cache. Vertex-stage samplers, other graphics
-resource types and arbitrary textured runtime-shader profiles remain unsupported.
+Compiled pairs reuse the bounded cache. Vertex-stage sampler delivery is
+connected but still awaits GPU qualification. Other graphics resource types
+and arbitrary textured runtime-shader profiles remain unsupported.
 The 8/16-bit slice covers storage-buffer access only; narrow integer/float
 arithmetic and other narrow storage classes remain unadvertised.
 
