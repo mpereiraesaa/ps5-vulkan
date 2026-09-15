@@ -66,6 +66,15 @@ int main(void)
     second.operation_count=1; second.operations[0].type=PS5VK_DRAW;
     assert(device.submit_backend.prepare(&device,&s,&job)==VK_ERROR_FEATURE_NOT_PRESENT);
     assert(prepared[0]==4 && prepared[1]==4); /* No speculative child prepare. */
+    /* A subpass boundary is graphics scope, not an unknown opcode and not a
+     * compute no-op. PR #75 made it recordable; this regression keeps the
+     * router in lockstep with that command surface. */
+    s.count=1; command.operation_count=1;
+    command.operations[0].type=PS5VK_NEXT_SUBPASS;
+    const unsigned boundary_graphics=prepared[1],boundary_compute=prepared[0];
+    assert(device.submit_backend.prepare(&device,&s,&job)==VK_SUCCESS && job);
+    assert(prepared[1]==boundary_graphics+1 && prepared[0]==boundary_compute);
+    device.submit_backend.release(&device,job);
     s.count=1; prepare_rc=VK_ERROR_OUT_OF_DEVICE_MEMORY;
     assert(device.submit_backend.prepare(&device,&s,&job)==prepare_rc && !job);
     prepare_rc=VK_SUCCESS;
