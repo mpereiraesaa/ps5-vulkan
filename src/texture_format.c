@@ -50,10 +50,17 @@ static const struct ps5vk_texture_format formats[] = {
      * readback evidence; the filterable rows additionally have two
      * byte-identical nearest/linear checkerboard runs. Integer rows use typed
      * isampler/usampler interfaces only, as Vulkan requires. */
+    /* The four one-component one-byte rows also carry the uniform-texel-buffer
+     * role in the IMPLEMENTED column: the descriptor path derives the GFX10
+     * combined word (1/2/5/6 = 8_UNORM/8_SNORM/8_UINT/8_SINT) and the
+     * (4,0,0,1) completion from the row and takes the element stride from
+     * bytes_per_texel, so a one-byte structured element needs no new encoding.
+     * The role stays unwitnessed until a console fetch covers a sub-4-byte
+     * element, so no feature bit moves and no buffer view becomes creatable. */
     SAMPLED(VK_FORMAT_R8_UNORM, 1, UINT32_C(0x00100000), 4, 0, 0, 1,
-            CAP_LINEAR | CAP_VERTEX, 0),
+            CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R8_SNORM, 1, UINT32_C(0x00200000), 4, 0, 0, 1,
-            CAP_LINEAR | CAP_VERTEX, 0),
+            CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R8G8_UNORM, 2, UINT32_C(0x00e00000), 4, 5, 0, 1,
             CAP_LINEAR | CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R8G8_SNORM, 2, UINT32_C(0x00f00000), 4, 5, 0, 1,
@@ -98,8 +105,10 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R32G32B32A32_SFLOAT, 16, UINT32_C(0x04d00000), 4, 5, 6, 7,
             CAP_LINEAR | CAP_VERTEX, 0),
     /* --- typed integer sampled formats (nearest only) --------------------- */
-    SAMPLED(VK_FORMAT_R8_UINT, 1, UINT32_C(0x00500000), 4, 0, 0, 1, CAP_VERTEX, 0),
-    SAMPLED(VK_FORMAT_R8_SINT, 1, UINT32_C(0x00600000), 4, 0, 0, 1, CAP_VERTEX, 0),
+    SAMPLED(VK_FORMAT_R8_UINT, 1, UINT32_C(0x00500000), 4, 0, 0, 1,
+            CAP_VERTEX, CAP_UTEXEL),
+    SAMPLED(VK_FORMAT_R8_SINT, 1, UINT32_C(0x00600000), 4, 0, 0, 1,
+            CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R8G8_UINT, 2, UINT32_C(0x01200000), 4, 5, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R8G8_SINT, 2, UINT32_C(0x01300000), 4, 5, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R8G8B8A8_UINT, 4, UINT32_C(0x03c00000), 4, 5, 6, 7,
