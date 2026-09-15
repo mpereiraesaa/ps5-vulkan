@@ -1382,10 +1382,12 @@ with the smooth float output passed to the fragment stage. Ninety-six compute
 rounds surrounded the graphics cases, resource accounting returned to zero,
 both streams ended with BYE and exact-title Close Game completed in 100 ms.
 
-The probe deliberately uses `vkCmdDraw`: the runtime shader emitter still
-rejects indexed draws, while the separate offline-program path retains its
-validated indexed support. This evidence therefore promotes eight vertex-format
-bits, not general runtime indexed rendering or broad format conformance.
+The probe deliberately uses `vkCmdDraw`: it predates the runtime shader
+emitter's indexed support (the combination is emitted now but still has no
+native witness), while the separate offline-program path retains the validated
+indexed support this document records elsewhere. This evidence therefore
+promotes eight vertex-format bits, not general runtime indexed rendering or
+broad format conformance.
 
 Two subsequent runs promoted the packed `R8G8B8A8_UNORM` and
 `B8G8R8A8_UNORM` vertex rows using byte-identical SELF SHA-256

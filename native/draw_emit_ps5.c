@@ -47,12 +47,21 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     uint32_t sh_count=state->sh_count?state->sh_count:12;
     if(sh_count>16)return VK_ERROR_UNKNOWN;
     const uint32_t single_table[PS5VK_RUNTIME_DESCRIPTOR_SETS]={texture_low?*texture_low:0,0,0,0};
-    if(state->runtime.enabled && (indices ||
+    /* The runtime ABI describes how the compiled stages receive their user
+     * SGPRs; it is orthogonal to how vertices are addressed. An indexed draw
+     * runs through the same prepared vertex table and the same
+     * ps5vk_native_emit_index emitter as the offline path, with only the
+     * shader-visible base vertex changing value: the signed vertexOffset
+     * (draw_parameters.h). The emitter keeps its own fetch checks and the
+     * caller's cursor still advances only on full success, so an unsupported
+     * shape stays fail-closed instead of reaching the queue. */
+    if(state->runtime.enabled &&
         ps5vk_runtime_draw_values_sets(&state->runtime,ps5vk_draw_base_vertex(op),
-                                 ps5vk_draw_base_instance(op),
-                                 vertex_input?vertex_table_low:0,state->push_constant_low,
-                                 descriptor_tables?descriptor_tables:single_table,
-                                 runtime_vertex,runtime_pixel))) return VK_ERROR_FEATURE_NOT_PRESENT;
+            ps5vk_draw_base_instance(op),
+            vertex_input?vertex_table_low:0,state->push_constant_low,
+            descriptor_tables?descriptor_tables:single_table,
+            runtime_vertex,runtime_pixel))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (capacity < 13) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;
     if (ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->cx, state->cx_count,

@@ -2,10 +2,11 @@
  *
  * This file is deliberately a contract and negative-regression test, not an
  * enablement: the public feature stays false because DrawIndex is still
- * unimplemented and the runtime path still refuses indexed draws. What is
- * pinned here is the exact value mapping the pinned upstream CTS requires and
- * the exact gaps that keep the feature unadvertised, so neither can drift
- * silently while the tranche is in progress.
+ * unimplemented - the compiler exports no user-data slot for it and ps5vk has
+ * no multi-draw path to give it a real sequence number. What is pinned here is
+ * the exact value mapping the pinned upstream CTS requires and the exact gap
+ * that keeps the feature unadvertised, so neither can drift silently while the
+ * tranche is in progress.
  */
 #include "draw_parameters.h"
 #include "runtime_draw_abi.h"
