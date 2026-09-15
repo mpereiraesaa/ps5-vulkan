@@ -45,6 +45,7 @@ static void check_sparse_layout_static_use(void)
     const void *out=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST);
     assert(p->fragment.metadata.descriptor_binding_count==PS5VK_MAX_SETS);
     assert(p->fragment.metadata.descriptor_set_valid[0]);
     for(unsigned s=1;s<PS5VK_MAX_SETS;++s) {
@@ -155,6 +156,10 @@ static void check_descriptor_options(void)
     assert(cache);
     const void *cold,*warm;
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&cold)==VK_SUCCESS);
+    /* The lease view carries the primitive the cached pair was compiled for;
+     * the payload check refuses a value that does not match the key topology. */
+    assert(((const struct ps5vk_runtime_graphics_program *)cold)->primitive_type==
+        PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST);
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&warm)==VK_SUCCESS);
     const struct ps5vk_runtime_graphics_program *actual=warm;
     for(unsigned s=0;s<4;++s) {
@@ -656,6 +661,8 @@ int main(void)
            primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
     key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     assert(ps5vk_runtime_graphics_supported(&key) && ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==
+        PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
     ps5vk_runtime_graphics_free(NULL,out);out=NULL;
     const VkPrimitiveTopology unsupported_topologies[]={
         VK_PRIMITIVE_TOPOLOGY_POINT_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,

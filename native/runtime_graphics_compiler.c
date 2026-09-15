@@ -290,6 +290,10 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     if(ps5vk_runtime_shader_build(&header,&p->vertex) ||
        ps5vk_runtime_shader_build(&header,&p->fragment) ||
        ps5vk_runtime_draw_abi_build(&p->vertex.metadata,&p->fragment.metadata,&p->arguments))goto failed;
+    /* Recorded from the same resolved value the compiler was given, so the
+     * native create path can refuse a pipeline that asks to link this pair for
+     * a different primitive. */
+    p->primitive_type=options.primitive_type;
     *out=p;
     return VK_SUCCESS;
 failed:

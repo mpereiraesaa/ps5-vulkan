@@ -7,7 +7,7 @@
  * Revisit version/options whenever the pinned compiler or supported profile
  * changes. This is not an on-disk Vulkan pipeline cache format. */
 struct pair_payload {
-    uint32_t version, reserved;
+    uint32_t version, reserved, primitive_type;
     uint64_t vertex_bytes, fragment_bytes;
     PsbcShaderMetadata vertex, fragment;
 };
@@ -102,6 +102,7 @@ static struct ps5vk_cache_entry *store_pair(struct ps5vk_compilation_cache *cach
     struct pair_payload *payload=calloc(1,bytes);
     if(!payload)return NULL;
     payload->version=1;payload->vertex_bytes=vs;payload->fragment_bytes=fs;
+    payload->primitive_type=p->primitive_type;
     payload->vertex=p->vertex.metadata;payload->fragment=p->fragment.metadata;
     memcpy(payload+1,p->vertex.machine_code,vs);
     memcpy((char *)(payload+1)+vs,p->fragment.machine_code,fs);
@@ -133,7 +134,10 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     if(!entry)return VK_ERROR_OUT_OF_HOST_MEMORY;
     VkResult failure=VK_ERROR_UNKNOWN;
     const struct pair_payload *payload=entry->payload_copy;
+    uint32_t expected_primitive=0;
     if(!payload || entry->payload_bytes<sizeof(*payload) || payload->version!=1 ||
+       ps5vk_agc_primitive_type(key->topology,&expected_primitive) ||
+       payload->primitive_type!=expected_primitive ||
        !payload->vertex_bytes || !payload->fragment_bytes ||
        payload->vertex_bytes>16u*1024u*1024u || payload->fragment_bytes>16u*1024u*1024u ||
        payload->vertex_bytes%4 || payload->fragment_bytes%4 ||
@@ -142,6 +146,7 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     struct pair_lease *lease=calloc(1,sizeof(*lease));
     if(!lease){failure=VK_ERROR_OUT_OF_HOST_MEMORY;goto failed;}
     lease->entry=entry;
+    lease->program.primitive_type=payload->primitive_type;
     lease->program.vertex.metadata=payload->vertex;
     lease->program.vertex.machine_code=(void *)(payload+1);
     lease->program.vertex.machine_code_size=(size_t)payload->vertex_bytes;
