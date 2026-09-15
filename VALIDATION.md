@@ -874,9 +874,10 @@ The following structural slice added all six query commands plus
 prove ordered query reset, the reset-but-unavailable 32/64-bit availability
 layout, preservation of result sentinels, query-pool command lifetime, function
 identity, and no queue/fence mutation on rejected sparse calls. Real occlusion,
-query-result copying, GPU timestamps, multi-subpass execution, secondary
-command buffers and sparse binding remain fail-closed. No new CTS or hardware
-claim is attached to these structural boundaries.
+query-result copying, GPU timestamps, multi-subpass execution and sparse
+binding remain fail-closed. No new CTS or hardware claim is attached to these
+structural boundaries. Secondary command buffers left that list later: they are
+recorded and executed today, in the bounded profile described below.
 
 ## Current capability gap ledger (unsupported, not planned)
 
@@ -907,8 +908,18 @@ drift away from the documents again.
   multisample images remain unsupported.
 - `vkCmdNextSubpass` — unsupported. A render pass accepts one subpass only, so
   no multi-subpass transition executes.
-- `vkCmdExecuteCommands` — unsupported. Secondary command buffers are rejected
-  at allocation, so no secondary execution exists.
+- `vkCmdExecuteCommands` — supported in a bounded profile. A primary executes
+  the secondaries it names, in call order, outside a render pass and inside a
+  render pass begun with `VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS`. The
+  children are never flattened into the primary: outside a pass each is
+  expanded into its own submission segment, and inside one the pass and the
+  children it names are submitted as a single segment because a render pass is
+  a single scope. Execution outside a render pass is qualified on hardware by
+  the consumer's bounded transfer oracle; the deterministic hardware draw
+  oracle for the in-pass path is still outstanding and is not claimed here.
+  Nesting, cross-device children, a child that is neither pending nor
+  executable, a repeated child without simultaneous use and every render-pass
+  scope mismatch stay fail-closed.
 - `vkQueueBindSparse` — unsupported. No queue advertises
   `VK_QUEUE_SPARSE_BINDING_BIT`, and the call fails closed without mutating
   queue, fence or semaphore state.
@@ -969,8 +980,7 @@ from the pinned registry and reports 137/137 public, dispatched and implemented
 symbols with zero asymmetries. That is a structural symbol and dispatch result,
 not a semantic or conformance claim. Unsupported semantics are not counted as
 supported: blit, resolve, attachment clear, real query results, multi-subpass
-execution, secondary command buffers and sparse binding retain explicit
-host-tested fail-closed behavior. `vkCmdClearDepthStencilImage` left that list
+execution and sparse binding retain explicit host-tested fail-closed behavior. `vkCmdClearDepthStencilImage` left that list
 for one bounded shape only, recorded in the section below.
 
 The final image slice adds bounded RGBA8 transfer-role image copy and colour

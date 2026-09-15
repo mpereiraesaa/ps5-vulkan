@@ -59,6 +59,8 @@ static void clear(VkCommandBuffer c)
     c->inheritance_valid = VK_FALSE;
     memset(&c->inheritance, 0, sizeof(c->inheritance));
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
+    c->render_pass_inherited = VK_FALSE;
+    c->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
     c->viewport_valid = c->scissor_valid = VK_FALSE;
     c->line_width = 1.0f;
     c->min_depth_bounds = 0.0f;
@@ -96,6 +98,14 @@ struct ps5vk_operation *ps5vk_command_reserve_operations(VkCommandBuffer c,
         scope > PS5VK_OPERATION_ANYWHERE ||
         (scope == PS5VK_OPERATION_OUTSIDE_RENDER_PASS && c->render_pass) ||
         (scope == PS5VK_OPERATION_INSIDE_RENDER_PASS && !c->render_pass) ||
+        /* A pass begun with VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
+         * carries no work of its own: the only commands legal inside it are
+         * vkCmdExecuteCommands, which records with ANYWHERE scope, and
+         * vkCmdEndRenderPass. An inline draw there is refused rather than
+         * silently recorded into a pass that will never execute it. */
+        (scope == PS5VK_OPERATION_INSIDE_RENDER_PASS && c->render_pass &&
+         !c->render_pass_inherited && type != PS5VK_END_RENDER_PASS &&
+         c->render_pass_contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
         c->operation_count > PS5VK_MAX_OPERATIONS ||
         count > PS5VK_MAX_OPERATIONS - c->operation_count) {
         invalid(c);
@@ -288,14 +298,49 @@ VKAPI_ATTR VkResult VKAPI_CALL vkResetCommandBuffer(VkCommandBuffer c, VkCommand
         (flags & ~VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT)) return INVALID;
     clear(c); return VK_SUCCESS;
 }
+/* Render-pass compatibility, Vulkan 1.0 chapter 7.2: two passes are compatible
+ * when their attachment references match and each attachment agrees on format
+ * and sample count. Load/store ops and layouts are explicitly NOT part of it,
+ * so a secondary recorded against a LOAD pass may run inside a CLEAR pass of
+ * the same shape. Comparing the objects by identity would refuse that, which
+ * is a conformant use. */
+VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b)
+{
+    if (!a || !b) return VK_FALSE;
+    if (a == b) return VK_TRUE;
+    if (a->attachment_count != b->attachment_count ||
+        a->color.attachment != b->color.attachment ||
+        a->depth.attachment != b->depth.attachment) return VK_FALSE;
+    for (uint32_t j = 0; j < a->attachment_count; ++j)
+        if (a->attachments[j].format != b->attachments[j].format ||
+            a->attachments[j].samples != b->attachments[j].samples) return VK_FALSE;
+    return VK_TRUE;
+}
+
+/* A framebuffer is usable with a pass when it carries the same attachments in
+ * the same roles with the same formats and sample counts. */
+static VkBool32 framebuffer_compatible(VkFramebuffer fb, VkRenderPass pass)
+{
+    if (!fb || !pass || fb->attachment_count != pass->attachment_count ||
+        fb->color_attachment != pass->color.attachment ||
+        fb->depth_attachment != pass->depth.attachment) return VK_FALSE;
+    for (uint32_t j = 0; j < pass->attachment_count; ++j)
+        if (fb->formats[j] != pass->attachments[j].format ||
+            fb->samples[j] != pass->attachments[j].samples) return VK_FALSE;
+    return VK_TRUE;
+}
+
 /* Inheritance a secondary may declare, checked against what this device can
  * truthfully do rather than against the structure's shape.
  *
- * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT is refused here, so a
- * secondary can only be recorded outside a render pass for now. Its semantics
- * - inherited render pass, framebuffer and subpass scope - are a later slice,
- * and accepting the flag before they exist would advertise a capability that
- * does not execute.
+ * WITH VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT the scope members stop
+ * being decorative: renderPass and subpass name the scope the secondary will
+ * be executed in, so they are validated here. This device creates exactly one
+ * subpass, so subpass must be 0; a higher index is refused rather than
+ * accepted and quietly treated as the only one that exists. framebuffer is
+ * OPTIONAL by the specification and VK_NULL_HANDLE is accepted: the driver
+ * takes the framebuffer from the executing primary, and refusing the null
+ * handle would reject a conformant call.
  *
  * Without that flag Vulkan IGNORES renderPass, framebuffer and subpass, which
  * the pinned CTS states explicitly (doc/testspecs/VK/apitests.adoc,
@@ -308,8 +353,15 @@ static VkResult inheritance_valid(VkDevice d, const VkCommandBufferInheritanceIn
     VkCommandBufferUsageFlags usage)
 {
     if (!i || i->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO ||
-        i->pNext || (usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
-        return INVALID;
+        i->pNext) return INVALID;
+    if (usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) {
+        if (!d->graphics_enabled || !i->renderPass ||
+            i->renderPass->device != d || i->subpass ||
+            (i->framebuffer &&
+             (i->framebuffer->device != d ||
+              !framebuffer_compatible(i->framebuffer, i->renderPass))))
+            return INVALID;
+    }
     /* occlusionQueryEnable, queryFlags and pipelineStatistics describe queries
      * this device does not execute: it reports occlusionQueryPrecise and
      * pipelineStatisticsQuery false and no query command is implemented, so a
@@ -324,8 +376,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
 {
     if (!c || !info || info->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO || info->pNext ||
         c->state == PS5VK_PENDING || c->state == PS5VK_RECORDING ||
+        /* VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT is meaningful only
+         * for a secondary; VUID-vkBeginCommandBuffer-flags-09123 ignores it
+         * for a primary, but this driver refuses it there rather than
+         * accepting a flag that would describe a scope a primary cannot be
+         * executed in. */
         (info->flags & ~(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
-                         VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) ||
+                         VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                         (c->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY ?
+                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : 0u))) ||
         /* VUID-vkBeginCommandBuffer-commandBuffer-02840 makes the two usage
          * flags mutually exclusive for a PRIMARY only. A secondary may set
          * both, so refusing the pair there would reject a conformant call. */
@@ -346,12 +405,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
          * reads them while RENDER_PASS_CONTINUE is unreachable. */
         c->inheritance = *info->pInheritanceInfo;
         c->inheritance_valid = VK_TRUE;
+        /* A continuation secondary records INSIDE the inherited pass from its
+         * first command. Entering the scope here is what lets every existing
+         * draw path work unchanged in a secondary: they already record against
+         * c->render_pass and refuse to record outside one. */
+        if (info->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) {
+            c->render_pass = c->inheritance.renderPass;
+            c->framebuffer = c->inheritance.framebuffer;
+            c->render_pass_inherited = VK_TRUE;
+        }
     }
     return VK_SUCCESS;
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer c)
 {
-    if (!c || c->state != PS5VK_RECORDING || c->render_pass) return INVALID;
+    /* A pass this buffer BEGAN must be ended before recording stops; an
+     * INHERITED one must not, because the primary owns it and the secondary
+     * has no vkCmdEndRenderPass to give. */
+    if (!c || c->state != PS5VK_RECORDING ||
+        (c->render_pass && !c->render_pass_inherited)) return INVALID;
     c->state = PS5VK_EXECUTABLE;
     return VK_SUCCESS;
 }
@@ -588,7 +660,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         !c->pool->device->graphics_enabled || c->render_pass ||
         !info || info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO || info->pNext ||
-        contents != VK_SUBPASS_CONTENTS_INLINE || !info->renderPass || !info->framebuffer ||
+        (contents != VK_SUBPASS_CONTENTS_INLINE &&
+         contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
+        !info->renderPass || !info->framebuffer ||
         info->renderPass->device != c->pool->device || info->framebuffer->device != c->pool->device ||
         info->clearValueCount > 2 || (info->clearValueCount && !info->pClearValues) ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
@@ -608,9 +682,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
         PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
     if(!op)return;
     op->render_pass=pass;op->framebuffer=fb;op->render_area=area;
+    op->render_pass_contents=contents;
     op->clear_count=info->clearValueCount;
     if (info->clearValueCount) memcpy(op->clears, info->pClearValues, info->clearValueCount * sizeof(VkClearValue));
-    c->render_pass = pass; c->framebuffer = fb;
+    c->render_pass = pass; c->framebuffer = fb; c->render_pass_contents = contents;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
 {
@@ -644,27 +719,33 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
  * Refused, each poisoning the recording with no partial operation left:
  * nesting, an empty or null array, a child of another device or without a
  * pool, a non-secondary child, a child that is neither pending nor executable,
- * a child recorded for render-pass continuation, a self-reference, and a
- * pending or repeated child that was not recorded for simultaneous use.
- * There is no invented limit on how many children may be named.
+ * a self-reference, and a pending or repeated child that was not recorded for
+ * simultaneous use. There is no invented limit on how many children may be
+ * named.
  *
- * Not refused: whatever the child's inheritance record happens to carry. Its
- * scope members are ignored by Vulkan without RENDER_PASS_CONTINUE and this
- * path never reads them. */
+ * The render-pass scope must MATCH in both directions. Inside a pass the pass
+ * must have been begun with VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS and
+ * every child must be a continuation recorded against a compatible render pass
+ * and the same subpass; outside a pass a continuation child is refused,
+ * because its recorded draws have no scope to execute in. */
 VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
     uint32_t count, const VkCommandBuffer *commands)
 {
     if (!c || c->state != PS5VK_RECORDING ||
         /* Primary-only: a secondary can never execute another buffer. */
         c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
-        /* Executing inside a render pass needs inherited continuation, which
-         * is a later slice, so it stays fail-closed here. */
-        c->render_pass || !count || !commands) { invalid(c); return; }
+        /* An INLINE pass carries its own draws and admits no secondaries. */
+        (c->render_pass &&
+         c->render_pass_contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
+        !count || !commands) { invalid(c); return; }
     VkDevice d = c->pool->device;
     for (uint32_t j = 0; j < count; ++j) {
         VkCommandBuffer child = commands[j];
         const VkBool32 simultaneous =
             (child && (child->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) ?
+            VK_TRUE : VK_FALSE;
+        const VkBool32 continues = (child &&
+            (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)) ?
             VK_TRUE : VK_FALSE;
         /* VUID-vkCmdExecuteCommands-pCommandBuffers-00089: a child must be in
          * the PENDING OR EXECUTABLE state, so pending is legal; 00091 narrows
@@ -674,7 +755,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
             child->level != VK_COMMAND_BUFFER_LEVEL_SECONDARY ||
             (child->state != PS5VK_EXECUTABLE &&
              !(child->state == PS5VK_PENDING && simultaneous)) ||
-            (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
+            (c->render_pass ? !continues : continues))
+            { invalid(c); return; }
+        /* Inside a pass the inherited scope must actually match the one the
+         * child is about to execute in: a compatible render pass, this
+         * device's only subpass, and either the primary's framebuffer or the
+         * null handle the specification allows a secondary to inherit. */
+        if (c->render_pass &&
+            (!child->inheritance_valid ||
+             !ps5vk_render_pass_compatible(child->inheritance.renderPass, c->render_pass) ||
+             child->inheritance.subpass ||
+             (child->inheritance.framebuffer &&
+              child->inheritance.framebuffer != c->framebuffer)))
             { invalid(c); return; }
         if (!simultaneous) {
             /* Without simultaneous use a child may not already be pending and
@@ -688,10 +780,15 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
      * rejected call leaves nothing behind and a later caller mutation cannot
      * change which children execute. */
     struct ps5vk_operation *op = ps5vk_command_reserve_operation_with_payload(c,
-        PS5VK_EXECUTE_COMMANDS, PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
+        /* Legal in both scopes, each already checked exactly above. */
+        PS5VK_EXECUTE_COMMANDS, PS5VK_OPERATION_ANYWHERE,
         commands, count * sizeof(*commands));
     if (!op) return;
     op->child_count = count;
+    /* The scope this call was recorded in, so submission can re-derive which
+     * rules applied without replaying the primary's recording state. */
+    op->render_pass = c->render_pass;
+    op->framebuffer = c->framebuffer;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(VkCommandBuffer c,uint32_t first,uint32_t count,
     const VkBuffer *buffers,const VkDeviceSize *offsets)

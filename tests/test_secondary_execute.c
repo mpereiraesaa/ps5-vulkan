@@ -64,6 +64,14 @@ static VkCommandBuffer child_with_event(VkDevice d, VkCommandPool p, VkEvent eve
     assert(child->operation_count == 1);
     return child;
 }
+static VkResult image_requirements(VkDevice d, const VkImageCreateInfo *i, VkMemoryRequirements *r)
+{ (void)d; (void)i; *r = (VkMemoryRequirements){256, 256, 1}; return VK_SUCCESS; }
+static VkResult memory_allocate(void *ctx, VkDeviceSize n, void **a, void **b)
+{ (void)ctx; *a = *b = calloc(1, n); return *a ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY; }
+static void memory_release(void *ctx, void *b) { (void)ctx; free(b); }
+static VkResult memory_sync(void *ctx, void *b, VkDeviceSize offset, VkDeviceSize bytes)
+{ (void)ctx; (void)b; (void)offset; (void)bytes; return VK_SUCCESS; }
+
 static VkCommandBuffer begun_primary(VkDevice d, VkCommandPool p)
 {
     VkCommandBuffer c = allocate(d, p, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
@@ -342,13 +350,12 @@ int main(void)
                probe->operations[0].child_count == MANY);
     }
 
-    /* a render-pass-continue child stays refused: S3 owns those semantics */
+    /* Continuation needs a real inherited scope: the flag with no render pass
+     * named is refused, and so is naming such a buffer at all. */
     VkCommandBuffer continued = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     VkCommandBufferBeginInfo cbegin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
         .pInheritanceInfo = &inherit};
-    /* S1 refuses the flag outright, so the buffer never becomes executable;
-     * the point here is that no path reaches execution either way. */
     assert(vkBeginCommandBuffer(continued, &cbegin) != VK_SUCCESS);
     probe = begun_primary(&d, pool);
     vkCmdExecuteCommands(probe, 1, &continued);
@@ -370,6 +377,235 @@ int main(void)
         (void)vkQueueWaitIdle(&d.queue);
     fail_prepare_at = 0;
     assert(!b->pending_count && !rollback->pending_count);
+
+    /* ====================================================================
+     * S3: execution INSIDE a render pass.
+     *
+     * The oracle here is the SHAPE OF THE SEGMENT, and that is not a weaker
+     * oracle than S2's executed event: a render pass is one scope and the
+     * backend builds one command stream for it, so proving that the parent's
+     * BEGIN..END range and every named child land in ONE segment, in recorded
+     * order, with each buffer keeping its own range, is exactly the property
+     * that makes the pass executable at all. Splitting it would submit a
+     * begin, a draw and an end as three unrelated jobs.
+     * ==================================================================== */
+    d.graphics_enabled = VK_TRUE; d.graphics_submit_enabled = VK_TRUE;
+    d.image_requirements = image_requirements;
+    d.memory.allocate = memory_allocate; d.memory.release = memory_release;
+    d.memory.flush = memory_sync; d.memory.invalidate = memory_sync;
+    d.max_allocation = 4096; d.noncoherent_atom = 64;
+    VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .extent = {4,4,1}, .mipLevels = 1, .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
+    VkImage image; VkDeviceMemory memory;
+    VkMemoryAllocateInfo mi = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = 256};
+    assert(vkCreateImage(&d, &ii, NULL, &image) == VK_SUCCESS);
+    assert(vkAllocateMemory(&d, &mi, NULL, &memory) == VK_SUCCESS);
+    assert(vkBindImageMemory(&d, image, memory, 0) == VK_SUCCESS);
+    struct VkImageView_T view = {.device = &d, .image = image};
+    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1,
+        .depth = {.attachment = VK_ATTACHMENT_UNUSED},
+        .attachments = {{.format = VK_FORMAT_B8G8R8A8_UNORM,
+                         .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    /* A DIFFERENT object with the same shape: compatibility is defined by
+     * attachment formats, sample counts and references, not by identity, so a
+     * secondary recorded against this one must be accepted by the pass above. */
+    struct VkRenderPass_T twin = pass;
+    /* Same references, different format: incompatible. */
+    struct VkRenderPass_T foreign = pass;
+    foreign.attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
+    struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4,
+        .attachment_count = 1, .attachments = {&view},
+        .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
+        .depth_attachment = VK_ATTACHMENT_UNUSED};
+    struct VkFramebuffer_T other_fb = fb;
+    struct VkPipeline_T graphics = {.device = &d, .graphics = VK_TRUE,
+        .graphics_state = &graphics, .color_format = VK_FORMAT_B8G8R8A8_UNORM};
+    VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = &pass, .framebuffer = &fb, .renderArea = {.extent = {4,4}}};
+
+    /* A continuation secondary: it inherits the scope and records one draw. */
+    VkCommandBufferInheritanceInfo continues = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .renderPass = &twin, .framebuffer = &fb};
+    VkCommandBufferBeginInfo continue_begin = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+        .pInheritanceInfo = &continues};
+    VkCommandBuffer inside = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    assert(vkBeginCommandBuffer(inside, &continue_begin) == VK_SUCCESS);
+    /* The inherited scope is entered at begin, so the draw records exactly as
+     * it would in a primary, and a command that may only run OUTSIDE a pass is
+     * refused here for the same reason it would be there. */
+    assert(inside->render_pass == &twin && inside->render_pass_inherited);
+    vkCmdBindPipeline(inside, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics);
+    vkCmdDraw(inside, 3, 1, 0, 0);
+    assert(inside->state == PS5VK_RECORDING && inside->operation_count == 1);
+    /* Ending with the INHERITED pass still open is correct: the primary owns
+     * it and the secondary has no vkCmdEndRenderPass to give. */
+    assert(vkEndCommandBuffer(inside) == VK_SUCCESS);
+
+    /* The primary begins the pass for secondary contents and names the child. */
+    VkCommandBuffer host = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(host, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    vkCmdExecuteCommands(host, 1, &inside);
+    vkCmdEndRenderPass(host);
+    assert(vkEndCommandBuffer(host) == VK_SUCCESS && host->operation_count == 3);
+    VkSubmitInfo pass_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &host};
+    assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    /* ONE segment, not three: the parent's whole BEGIN..END range plus the
+     * child's own range, each buffer named once and keeping its identity. */
+    assert(d.submission && !d.submission->next && d.submission->count == 2 &&
+           !d.submission->frontend_only &&
+           d.submission->buffers[0] == host &&
+           d.submission->first_operation[0] == 0 &&
+           d.submission->operation_count[0] == 3 &&
+           d.submission->buffers[1] == inside &&
+           d.submission->first_operation[1] == 0 &&
+           d.submission->operation_count[1] == 1);
+    /* Both are pinned, so neither can be reset or freed while the pass runs,
+     * and the pass resources are pinned exactly once. */
+    assert(host->pending_count == 1 && inside->pending_count == 1 &&
+           pass.pending == 1 && fb.pending == 1 && view.pending == 1 &&
+           image->pending == 1 && graphics.pending == 1);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+    assert(!host->pending_count && !inside->pending_count && !pass.pending &&
+           !fb.pending && !view.pending && !image->pending && !graphics.pending &&
+           host->state == PS5VK_EXECUTABLE && inside->state == PS5VK_EXECUTABLE);
+
+    /* The inherited framebuffer is OPTIONAL: the null handle is accepted and
+     * the primary supplies the one that executes. */
+    VkCommandBufferInheritanceInfo no_fb = continues;
+    no_fb.framebuffer = VK_NULL_HANDLE;
+    VkCommandBufferBeginInfo no_fb_begin = continue_begin;
+    no_fb_begin.pInheritanceInfo = &no_fb;
+    VkCommandBuffer floating = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    assert(vkBeginCommandBuffer(floating, &no_fb_begin) == VK_SUCCESS);
+    vkCmdBindPipeline(floating, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics);
+    vkCmdDraw(floating, 3, 1, 0, 0);
+    assert(vkEndCommandBuffer(floating) == VK_SUCCESS);
+    host = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(host, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    /* Two children in one call keep their recorded order in the segment. */
+    {
+        VkCommandBuffer both[2] = {floating, inside};
+        vkCmdExecuteCommands(host, 2, both);
+    }
+    vkCmdEndRenderPass(host);
+    assert(vkEndCommandBuffer(host) == VK_SUCCESS);
+    pass_submit.pCommandBuffers = &host;
+    assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(d.submission && !d.submission->next && d.submission->count == 3 &&
+           d.submission->buffers[1] == floating && d.submission->buffers[2] == inside);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+
+    /* --- refused, each leaving the recording poisoned with no operation --- */
+    /* a PRIMARY may never claim render-pass continuation */
+    {
+        VkCommandBuffer p2 = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+        VkCommandBufferBeginInfo bad_begin = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT};
+        assert(vkBeginCommandBuffer(p2, &bad_begin) != VK_SUCCESS);
+    }
+    /* a continuation child OUTSIDE a render pass: its draws have no scope */
+    probe = begun_primary(&d, pool);
+    vkCmdExecuteCommands(probe, 1, &inside);
+    assert(probe->state == PS5VK_INVALID && !probe->operation_count);
+    /* a NON-continuation child inside one: it was not recorded for this scope */
+    probe = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    vkCmdExecuteCommands(probe, 1, &a);
+    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
+    /* an INLINE pass admits no secondaries */
+    probe = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdExecuteCommands(probe, 1, &inside);
+    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
+    /* a SECONDARY_COMMAND_BUFFERS pass admits no inline draw of its own */
+    probe = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    vkCmdBindPipeline(probe, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics);
+    vkCmdDraw(probe, 3, 1, 0, 0);
+    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
+    /* an incompatible inherited render pass */
+    {
+        VkCommandBufferInheritanceInfo wrong = continues;
+        /* Self-consistent on its own terms - no framebuffer to disagree with -
+         * so it is accepted at begin and refused only where it does not
+         * belong: inside a pass of a different attachment format. */
+        wrong.renderPass = &foreign; wrong.framebuffer = VK_NULL_HANDLE;
+        VkCommandBufferBeginInfo wrong_begin = continue_begin;
+        wrong_begin.pInheritanceInfo = &wrong;
+        VkCommandBuffer mismatched = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        assert(vkBeginCommandBuffer(mismatched, &wrong_begin) == VK_SUCCESS);
+        assert(vkEndCommandBuffer(mismatched) == VK_SUCCESS);
+        probe = begun_primary(&d, pool);
+        vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+        vkCmdExecuteCommands(probe, 1, &mismatched);
+        assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
+        vkFreeCommandBuffers(&d, pool, 1, &mismatched);
+    }
+    /* a DIFFERENT framebuffer than the one the pass is executing */
+    {
+        VkCommandBufferInheritanceInfo elsewhere = continues;
+        elsewhere.framebuffer = &other_fb;
+        VkCommandBufferBeginInfo elsewhere_begin = continue_begin;
+        elsewhere_begin.pInheritanceInfo = &elsewhere;
+        VkCommandBuffer stray = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        assert(vkBeginCommandBuffer(stray, &elsewhere_begin) == VK_SUCCESS);
+        assert(vkEndCommandBuffer(stray) == VK_SUCCESS);
+        probe = begun_primary(&d, pool);
+        vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+        vkCmdExecuteCommands(probe, 1, &stray);
+        assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
+        vkFreeCommandBuffers(&d, pool, 1, &stray);
+    }
+    /* a subpass index this device does not have */
+    {
+        VkCommandBufferInheritanceInfo later = continues;
+        later.subpass = 1;
+        VkCommandBufferBeginInfo later_begin = continue_begin;
+        later_begin.pInheritanceInfo = &later;
+        VkCommandBuffer beyond = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        assert(vkBeginCommandBuffer(beyond, &later_begin) != VK_SUCCESS);
+        vkFreeCommandBuffers(&d, pool, 1, &beyond);
+    }
+    /* a continuation secondary may not carry work that belongs outside a pass */
+    {
+        VkCommandBuffer mixed = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        assert(vkBeginCommandBuffer(mixed, &continue_begin) == VK_SUCCESS);
+        vkCmdSetEvent(mixed, first, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+        assert(mixed->state == PS5VK_INVALID && !mixed->operation_count);
+        vkFreeCommandBuffers(&d, pool, 1, &mixed);
+    }
+    /* and it may not end the pass it inherited */
+    {
+        VkCommandBuffer closer = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        assert(vkBeginCommandBuffer(closer, &continue_begin) == VK_SUCCESS);
+        vkCmdEndRenderPass(closer);
+        assert(closer->state == PS5VK_INVALID && !closer->operation_count);
+        vkFreeCommandBuffers(&d, pool, 1, &closer);
+    }
+    /* resetting a named child still invalidates the parent that names it */
+    host = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(host, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    vkCmdExecuteCommands(host, 1, &inside);
+    vkCmdEndRenderPass(host);
+    assert(vkEndCommandBuffer(host) == VK_SUCCESS);
+    assert(vkResetCommandBuffer(inside, 0) == VK_SUCCESS);
+    assert(host->state == PS5VK_INVALID);
+    pass_submit.pCommandBuffers = &host;
+    assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+
+    vkFreeCommandBuffers(&d, pool, 1, &floating);
+    vkFreeCommandBuffers(&d, pool, 1, &inside);
+    vkDestroyImage(&d, image, NULL);
+    vkFreeMemory(&d, memory, NULL);
+    d.graphics_enabled = VK_FALSE; d.graphics_submit_enabled = VK_FALSE;
 
     vkDestroyEvent(&d, dep_event, NULL);
     vkDestroyEvent(&d, parent_event, NULL);

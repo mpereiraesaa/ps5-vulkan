@@ -112,7 +112,12 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     /* One color pass, optional D32 and texture-upload prelude.  LOAD preserves
      * an attachment only when its tracked initial layout matches.  CLEAR is
      * bounded to the full render area until a rectangular clear path exists. */
-    if(s->count!=1 || !s->serial)return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Buffer 0 is always the recording that owns the scope. A segment with
+     * more buffers is a render pass whose work is NAMED by secondaries: they
+     * follow in recorded order, each with its own range, and this is the only
+     * shape that admits more than one. */
+    if(!s->count || s->count>PS5VK_MAX_SUBMITTED_BUFFERS || !s->serial)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     VkCommandBuffer cb=s->buffers[0];
     uint32_t range_first=ps5vk_submission_first_operation(s,0);
     uint32_t range_count=ps5vk_submission_operation_count(s,0);
@@ -128,7 +133,11 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         ++first;
     }
-    if(first==range_end)return prepare_transfer(d,s,cb,range_first,range_count,out);
+    /* No render pass in this range: a transfer-only segment names one buffer. */
+    if(first==range_end) {
+        if(s->count!=1)return VK_ERROR_FEATURE_NOT_PRESENT;
+        return prepare_transfer(d,s,cb,range_first,range_count,out);
+    }
     unsigned last=first+1;
     while(last<range_end && cb->operations[last].type!=PS5VK_END_RENDER_PASS)++last;
     if(first>=range_end || last>=range_end || last<first+2)
@@ -171,11 +180,54 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
         }
     }
-    for(unsigned i=first+1;i<last;++i)
-        if(cb->operations[i].type!=PS5VK_DRAW &&
-           cb->operations[i].type!=PS5VK_DRAW_INDEXED &&
-           !ps5vk_indirect_graphics_operation(cb->operations[i].type))
+    /* Ordered body of the pass. vkCmdExecuteCommands carries no work of its
+     * own: it NAMES children, and each name expands here into that child's own
+     * recorded draws, taken from the child's own buffer. Nothing was flattened
+     * into the primary at record time, so this is where the one command stream
+     * the pass needs is assembled - and only here, from buffers the submission
+     * itself names, matched by identity so this code cannot invent the
+     * association. */
+    const struct ps5vk_operation *body[PS5VK_MAX_OPERATIONS];
+    unsigned body_count=0,next_buffer=1;
+    for(unsigned i=first+1;i<last;++i) {
+        const struct ps5vk_operation *op=&cb->operations[i];
+        if(op->type==PS5VK_EXECUTE_COMMANDS) {
+            VkCommandBuffer const *children=(VkCommandBuffer const *)op->owned_payload;
+            if(!children || !op->child_count ||
+               op->owned_payload_size!=(size_t)op->child_count*sizeof(*children))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            for(uint32_t n=0;n<op->child_count;++n) {
+                if(next_buffer>=s->count || s->buffers[next_buffer]!=children[n])
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                VkCommandBuffer child=s->buffers[next_buffer];
+                uint32_t child_first=ps5vk_submission_first_operation(s,next_buffer);
+                uint32_t child_count=ps5vk_submission_operation_count(s,next_buffer);
+                if(child->operation_count>PS5VK_MAX_OPERATIONS ||
+                   child_first>child->operation_count ||
+                   child_count>child->operation_count-child_first)
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                for(uint32_t k=child_first;k<child_first+child_count;++k) {
+                    const struct ps5vk_operation *inner=&child->operations[k];
+                    if(inner->type!=PS5VK_DRAW && inner->type!=PS5VK_DRAW_INDEXED &&
+                       !ps5vk_indirect_graphics_operation(inner->type))
+                        return VK_ERROR_FEATURE_NOT_PRESENT;
+                    /* The prepared-draw arena is bounded; refuse rather than
+                     * silently dropping the tail of the pass. */
+                    if(body_count==PS5VK_MAX_OPERATIONS)return VK_ERROR_FEATURE_NOT_PRESENT;
+                    body[body_count++]=inner;
+                }
+                ++next_buffer;
+            }
+            continue;
+        }
+        if(op->type!=PS5VK_DRAW && op->type!=PS5VK_DRAW_INDEXED &&
+           !ps5vk_indirect_graphics_operation(op->type))
             return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(body_count==PS5VK_MAX_OPERATIONS)return VK_ERROR_FEATURE_NOT_PRESENT;
+        body[body_count++]=op;
+    }
+    /* Every named buffer must have been consumed by a name in this pass. */
+    if(next_buffer!=s->count)return VK_ERROR_FEATURE_NOT_PRESENT;
     struct graphics_job *j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial; j->color=begin->framebuffer->attachments[0]->image;
     phase="command-arena";
@@ -249,8 +301,8 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             (unsigned)PS5VK_OCCLUSION_PROBE_PAIRS);
     }
 #endif
-    for(unsigned i=first+1;i<last;++i) {
-        const struct ps5vk_operation *recorded=&cb->operations[i];
+    for(unsigned i=0;i<body_count;++i) {
+        const struct ps5vk_operation *recorded=body[i];
         struct ps5vk_operation resolved;
         const struct ps5vk_operation *op=recorded;
         if(ps5vk_indirect_graphics_operation(recorded->type)) {

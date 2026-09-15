@@ -137,8 +137,12 @@ static void inheritance_contract(void)
      * refused begin leaves the buffer untouched rather than half-recorded. */
     const struct { const char *name; VkCommandBufferUsageFlags flags;
                    VkCommandBufferInheritanceInfo info; } refused[] = {
-        /* RENDER_PASS_CONTINUE has no implementation in this slice */
-        {"render-pass-continue", VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT, {
+        /* RENDER_PASS_CONTINUE makes the scope members MEANINGFUL, so a
+         * continuation that names no render pass describes no scope. The
+         * accepted shape, and the scope it enters, are exercised where it can
+         * actually execute, in tests/test_secondary_execute.c. */
+        {"render-pass-continue-without-a-pass",
+         VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT, {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO}},
         /* queries this device does not execute at all */
         {"occlusion-query", 0, {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
@@ -262,6 +266,48 @@ static void primary_only_commands_poison_a_secondary(void)
     assert(begin_secondary(c, 0, &i) == VK_SUCCESS);
     vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_INLINE);
     assert(c->state == PS5VK_INVALID && !c->operation_count);
+
+    /* Render-pass continuation, with graphics enabled so the ONLY thing under
+     * test is the inherited scope itself: naming no render pass describes no
+     * scope and is refused, while a valid one is accepted and entered, which
+     * is what lets the secondary record draws at all. What it may then execute
+     * inside is covered in tests/test_secondary_execute.c. */
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    VkCommandBufferInheritanceInfo scopeless = inheritance();
+    assert(begin_secondary(c, VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+                           &scopeless) != VK_SUCCESS);
+    assert(c->state == PS5VK_INITIAL && !c->inheritance_valid && !c->render_pass);
+    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1,
+        .depth = {.attachment = VK_ATTACHMENT_UNUSED},
+        .attachments = {{.format = VK_FORMAT_B8G8R8A8_UNORM,
+                         .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    VkCommandBufferInheritanceInfo scoped = inheritance();
+    scoped.renderPass = &pass;
+    assert(begin_secondary(c, VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+                           &scoped) == VK_SUCCESS);
+    assert(c->render_pass == &pass && c->render_pass_inherited &&
+           !c->framebuffer && c->inheritance_valid);
+    /* It never began that pass, so it cannot end it, and ending the RECORDING
+     * with the inherited pass still open is correct. */
+    vkCmdEndRenderPass(c);
+    assert(c->state == PS5VK_INVALID && !c->operation_count);
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(begin_secondary(c, VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+                           &scoped) == VK_SUCCESS);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->state == PS5VK_EXECUTABLE);
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    /* The level is what forbids it: a PRIMARY may not claim continuation. */
+    {
+        VkCommandBuffer parent;
+        assert(allocate_level(&d, p, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1,
+                              &parent) == VK_SUCCESS);
+        VkCommandBufferBeginInfo pb = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT};
+        assert(vkBeginCommandBuffer(parent, &pb) != VK_SUCCESS);
+        assert(parent->state == PS5VK_INITIAL);
+        vkFreeCommandBuffers(&d, p, 1, &parent);
+    }
 
     /* Nesting is refused permanently, not merely until execution exists. */
     assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
