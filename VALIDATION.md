@@ -874,10 +874,10 @@ The following structural slice added all six query commands plus
 prove ordered query reset, the reset-but-unavailable 32/64-bit availability
 layout, preservation of result sentinels, query-pool command lifetime, function
 identity, and no queue/fence mutation on rejected sparse calls. Real occlusion,
-query-result copying, GPU timestamps, multi-subpass execution and sparse
-binding remain fail-closed. No new CTS or hardware claim is attached to these
-structural boundaries. Secondary command buffers left that list later: they are
-recorded and executed today, in the bounded profile described below.
+query-result copying, GPU timestamps and sparse binding remain fail-closed. No
+new CTS or hardware claim was attached to the original structural slice.
+Secondary command buffers and one bounded two-subpass profile left that list
+later through the native evidence recorded below.
 
 ## Current capability gap ledger (unsupported, not planned)
 
@@ -906,8 +906,12 @@ drift away from the documents again.
   `[0,1]`, and that single shape is qualified on hardware. Stencil aspects,
   combined depth/stencil formats, partial mip or array ranges, rectangles and
   multisample images remain unsupported.
-- `vkCmdNextSubpass` — unsupported. A render pass accepts one subpass only, so
-  no multi-subpass transition executes.
+- `vkCmdNextSubpass` — supported in a bounded profile. Exactly two subpasses
+  may execute when both use the same colour and optional D32 attachment with
+  identical layouts, with either no dependency or one forward `0` to `1`
+  dependency. The boundary emits a full graphics acquire. More subpasses,
+  attachment/layout changes, input/resolve/preserve attachments and wider
+  dependency graphs remain fail-closed.
 - `vkCmdExecuteCommands` — supported in a bounded profile. A primary executes
   the secondaries it names, in call order, outside a render pass and inside a
   render pass begun with `VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS`. The
@@ -979,8 +983,10 @@ The command-surface gate now derives all 137 mandatory Vulkan 1.0 core commands
 from the pinned registry and reports 137/137 public, dispatched and implemented
 symbols with zero asymmetries. That is a structural symbol and dispatch result,
 not a semantic or conformance claim. Unsupported semantics are not counted as
-supported: blit, resolve, attachment clear, real query results, multi-subpass
-execution and sparse binding retain explicit host-tested fail-closed behavior. `vkCmdClearDepthStencilImage` left that list
+supported: blit, resolve, attachment clear, real query results and sparse
+binding retain explicit host-tested fail-closed behavior. Multi-subpass
+execution later gained the bounded native profile documented below; wider
+forms still fail closed. `vkCmdClearDepthStencilImage` left that list
 for one bounded shape only, recorded in the section below.
 
 The final image slice adds bounded RGBA8 transfer-role image copy and colour
@@ -1816,8 +1822,10 @@ no draw at all, so that draw reached the backend through the composed segment.
 It establishes that a secondary recorded for render-pass continuation executes
 inside a primary's render pass and produces exactly the image the same draw
 produces inline, on the already qualified one-colour-plus-D32 profile. It does
-not establish multiple subpasses, `vkCmdNextSubpass`, input or resolve
-attachments, multisampling, query inheritance, or any conformance claim.
+not by itself establish multiple subpasses, `vkCmdNextSubpass`, input or
+resolve attachments, multisampling, query inheritance, or any conformance
+claim. The separate two-subpass oracle below establishes only its own bounded
+profile.
 
 A zero-body render pass cannot be smuggled in through this path either: a pass
 whose only content names empty secondaries executes nothing, and recording,
@@ -1832,6 +1840,50 @@ because that image was still display-busy from the last presented frame. The
 driver was right and the scenario was wrong; both passes now use the same
 attachment, which also makes inline versus secondary the only difference
 between the two measurements.
+
+## Native two-subpass execution (2026-09-15)
+
+The finite public-SDK consumer records a render pass with two subpasses over
+the same `VK_FORMAT_B8G8R8A8_UNORM` colour attachment and layout. Subpass `0`
+draws a full-size procedural triangle, `vkCmdNextSubpass` crosses one explicit
+forward `0` to `1` dependency, and subpass `1` draws a centred half-size
+triangle. A one-subpass control records the same two draws in the same order;
+their complete 1920x1080 readbacks must have the same pinned FNV-1a hash.
+
+Three additional controls execute the first draw only, the second draw only,
+and the two draws in reverse order. Every incorrect sequence must differ from
+the ordered result. The reversed result intentionally equals first-only: its
+final full-size draw completely overwrites the smaller draw. The verifier pins
+all five hashes independently, requires exactly one boundary marker for
+subpass `1` carrying the measured 10-word acquire, requires all 47 graphics
+submissions in order, and rejects missing, duplicated or reordered evidence.
+
+Two independent launches used the identical SELF SHA-256
+`374e9e59dc23c981f61dbdc62f71eecd5db28090d9eea97b384ee5f2785743ed`:
+
+- `20260915T124637265Z_PPSA99994_ps5vk_0xdd8ad6960977`, log SHA-256
+  `806bb9e9086a224bb0b4b8dc0efe752a0159ef9c853ee4770f8c41db26505046`
+- `20260915T124759988Z_PPSA99994_ps5vk_0xdd9e18e67fef`, log SHA-256
+  `48a45f271e17d62762b51d71db0866f85dbb372d388b7416339e5dc1bec6d5c0`
+
+Both produced the same witness:
+
+```text
+PS5VK_SUBPASS_BOUNDARY serial=57 subpass=1 words=10
+PS5VK_CONSUMER_TWO_SUBPASS_SUCCESS multi=84cc0cb3 ordered=84cc0cb3
+first=77abc830 second=fa6b3a7a reversed=77abc830 changed=471744
+negative_distinct=1 bad_alpha=0 bad_sum=0
+```
+
+Both retired the two render passes, three pipelines and two framebuffers before
+the presentation surface; both then reported
+`zero_tracked_allocations=1`, ended with
+`BYE seq=560 reason=consumer-finite-end`, and were independently confirmed
+stopped. This establishes real GFX1013 execution and attachment ordering for
+the exact shared-role two-subpass profile. It does not establish input,
+resolve or preserve attachments, attachment/layout changes between subpasses,
+more than two subpasses, arbitrary dependency graphs, multisampling or Vulkan
+conformance.
 
 ## Direct uniform-texel format matrix (2026-09-15)
 

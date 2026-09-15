@@ -58,9 +58,11 @@ hardware acceptance.
   one sample. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
   `DONT_CARE` store semantics are supported by the bounded native path.
   Blending, logic ops and multisampling are unsupported.
-- One or two subpasses may be **described and recorded**; exactly one is
-  **executed**. Submitting a render pass that declares two is refused, so the
-  second subpass has no execution semantics yet.
+- One or two subpasses may be described, recorded and **executed**. The native
+  two-subpass path is deliberately bounded: both subpasses use the same colour
+  and optional D32 attachment with the same layouts, and accept either no
+  dependency or one forward `0` to `1` dependency. Wider attachment graphs
+  remain fail-closed.
 - Optional D32 depth attachment. Depth testing and writing are supported;
   stencil and depth bounds are unsupported.
 - Face culling and front-face selection are encoded by the native backend.
@@ -717,13 +719,16 @@ record. A continuation secondary is likewise recorded for one subpass:
 `vkCmdExecuteCommands` requires the child's inherited `subpass` to equal the
 subpass it is being named in, not merely to belong to a compatible pass.
 
-**Execution stops at one subpass, and at work that exists.** Submitting a
-render pass that declares more than one subpass is refused, submitting one that
-carries no work is refused, and the native path refuses both independently, so
-a recording the driver cannot execute never reaches a backend. The subpass
-transitions, attachment lifetime across them and their ordering are a later
-slice; until then the model and the recording state machine are exactly what
-this profile claims, and nothing more.
+**Execution covers one subpass and one exact two-subpass profile, and still
+requires work somewhere in the pass.** For two subpasses, the colour and
+optional depth roles and layouts must be identical in both; the dependency
+graph is either empty or exactly one forward `0` to `1` edge. At
+`vkCmdNextSubpass` the native backend emits a full graphics acquire before the
+second subpass. This is stronger than the accepted forward dependency and
+keeps the shared attachment ordered. Empty individual subpasses remain legal
+when the pass as a whole draws. Different attachments or layouts, more than
+two subpasses, input/resolve/preserve attachments and wider dependency graphs
+are refused before native submission.
 
 ## Compatibility boundary
 

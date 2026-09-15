@@ -2244,9 +2244,10 @@ static void run_consumer(VkPhysicalDevice physical, VkDevice device, VkQueue que
      * and a centered half-size triangle in subpass 1.  A one-subpass control
      * records the same two draws in the same order. Their full-image hashes
      * must agree. Three negative controls (first only, second only, reversed)
-     * must all differ from that result and from each other. This distinguishes
-     * a missing transition/draw and an order reversal without trusting a
-     * success flag from the driver. */
+     * must all differ from that result. The reversed control intentionally
+     * equals first-only because its final full draw overwrites the small one;
+     * their pinned hashes still distinguish missing work and wrong order
+     * without trusting a success flag from the driver. */
     if (!is_continuous) {
         ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_TWO_SUBPASS_START");
         VkAttachmentDescription two_attachment = {
