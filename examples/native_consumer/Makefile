@@ -35,7 +35,12 @@ endif
 ifneq ($(CONSUMER_MIXED_RESOURCES),)
 $(error Choose one sampled-descriptor profile)
 endif
+
 CFLAGS += -DCONSUMER_SHARED_STAGE_SAMPLERS=1
+endif
+
+ifneq ($(CONSUMER_DXVK262_PROBE),)
+CFLAGS += -DCONSUMER_DXVK262_PROBE=1
 endif
 
 ifneq ($(CONSUMER_SINGLE_SET_SAMPLERS),)
@@ -108,7 +113,8 @@ $(BUILD_DIR)/sampled_set_shaders.h: ../../tools/prepare_consumer_sampled_shaders
                                  ../../experiments/graphics/runtime_shared_sets.frag | $(BUILD_DIR)
 	python3 ../../tools/prepare_consumer_sampled_shaders.py --out $@
 
-$(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h sampled_sets.h physical_device_contract.h FORCE \
+$(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h sampled_sets.h physical_device_contract.h \
+                     dxvk_capability_probe.h dxvk_v262_profile.h FORCE \
                      $(BUILD_DIR)/sampled_set_shaders.h \
                      $(BUILD_DIR)/storage_width_shaders.h \
                      $(BUILD_DIR)/sync_shaders.h | $(BUILD_DIR)

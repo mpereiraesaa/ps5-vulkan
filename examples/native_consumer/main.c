@@ -12,6 +12,9 @@
 #include "storage_width_shaders.h"
 #include "sync_shaders.h"
 #include "ps5log.h"
+#ifdef CONSUMER_DXVK262_PROBE
+#include "dxvk_capability_probe.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -2490,6 +2493,10 @@ int main(void)
     if (ps5log_init(&cfg, "PPSA99994", "ps5vk", boot)) {
         _exit(0);
     }
+
+#ifdef CONSUMER_DXVK262_PROBE
+    return run_dxvk262_capability_probe();
+#endif
 
     int is_continuous = parse_is_continuous();
     ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_BOOT mode=%s sdk_version=%u.%u",

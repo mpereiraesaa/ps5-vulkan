@@ -73,6 +73,8 @@ def main():
                         help="Qualify the full staged uniform-texel format matrix")
     parser.add_argument("--use-staged-sdk", action="store_true",
                         help="Reuse dist-sdk without rebuilding it (caller guarantees freshness)")
+    parser.add_argument("--dxvk-v262-probe", action="store_true",
+                        help="Build the public-ABI-only DXVK v2.6.2 capability probe")
     args = parser.parse_args()
     if args.continuous and args.shared_stage_samplers:
         parser.error("Shared-stage qualification requires the finite consumer")
@@ -84,6 +86,10 @@ def main():
         parser.error("Texel-format qualification requires the finite consumer")
     if args.texel_rgba8 and args.texel_formats:
         parser.error("Choose one uniform-texel witness")
+    if args.dxvk_v262_probe and any((args.continuous, args.shared_stage_samplers,
+                                    args.single_set_samplers, args.mixed_resources,
+                                    args.texel_rgba8, args.texel_formats)):
+        parser.error("DXVK capability probing is an independent finite profile")
     if sum((args.shared_stage_samplers, args.single_set_samplers,
             args.mixed_resources)) > 1:
         parser.error("Choose one sampled-descriptor profile")
@@ -173,6 +179,8 @@ def main():
         cflags.append("-DCONSUMER_TEXEL_RGBA8=1")
     if args.texel_formats:
         cflags.append("-DCONSUMER_TEXEL_FORMATS=1")
+    if args.dxvk_v262_probe:
+        cflags.append("-DCONSUMER_DXVK262_PROBE=1")
 
     has_native_toolchain = clang_wrapper.is_file() and linker.is_file() and builder.is_file()
 
@@ -330,6 +338,24 @@ def main():
                 ".shared.frag.spv" if args.shared_stage_samplers else ".spv").read_bytes()).hexdigest(),
         },
     }
+    if args.dxvk_v262_probe:
+        profile_path = ROOT / "conformance_inventory/dxvk_v262_profile.json"
+        matrix_path = ROOT / "conformance_inventory/dxvk_v262_matrix.json"
+        profile = json.loads(profile_path.read_text())
+        artifact = {
+            "title": "PPSA99994",
+            "profile": "dxvk-v262-capability-probe",
+            "submit_enabled": False,
+            "files": files,
+            "dxvk": {
+                "version": "2.6.2",
+                "profile_id": profile["profile"]["id"],
+                "target_api": profile["profile"]["api_version"],
+                "requirements": profile["summary"]["requirements"],
+                "profile_sha256": hashlib.sha256(profile_path.read_bytes()).hexdigest(),
+                "matrix_sha256": hashlib.sha256(matrix_path.read_bytes()).hexdigest(),
+            },
+        }
     if args.single_set_samplers:
         artifact["sampled_graphics"]["sets"] = 1
         artifact["sampled_graphics"]["elements_per_set"] = 96
