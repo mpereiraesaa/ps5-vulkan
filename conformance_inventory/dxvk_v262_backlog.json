@@ -11,12 +11,18 @@
   },
   "policy": {
     "scope": "The 61 blockers currently reported for the pinned DXVK v2.6.2 D3D11 feature-level 11_0 baseline.",
-    "completion_gate": {
+    "profile_completion_gate": {
       "api": "satisfied",
       "implementation": "implemented",
       "cts": "cts-pass",
       "native": "native-evidence",
       "verdict": "satisfied"
+    },
+    "implementation_readiness_gate": {
+      "implementation": "implemented",
+      "cts": "cts-pass",
+      "native": "native-evidence",
+      "meaning": "Behavior is ready for final API promotion; this is not an advertised profile capability while its API axis remains blocked."
     },
     "delivery": {
       "branching": "One fresh topic branch from current main per pull request; no stacked pull requests.",

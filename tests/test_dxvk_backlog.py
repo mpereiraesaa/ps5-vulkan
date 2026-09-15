@@ -29,8 +29,9 @@ class DxvkBacklogTests(unittest.TestCase):
         summary = backlog.validate(self.document, self.matrix)
         self.assertEqual(15, summary["tranches"])
         self.assertEqual(61, summary["requirements"])
-        self.assertEqual(0, summary["completed"])
-        self.assertEqual(61, summary["remaining_blockers"])
+        self.assertEqual(0, summary["implementation_ready"])
+        self.assertEqual(0, summary["profile_satisfied"])
+        self.assertEqual(61, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,
@@ -57,15 +58,25 @@ class DxvkBacklogTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     backlog.validate(broken, self.matrix)
 
-    def test_completed_rows_remain_in_baseline_and_reduce_remaining_count(self):
+    def test_implementation_readiness_is_distinct_from_profile_satisfaction(self):
         promoted = copy.deepcopy(self.matrix)
         identifier = self.document["tranches"][0]["requirements"][0]
         row = next(item for item in promoted["requirements"]
                    if item["id"] == identifier)
+        row["implementation"]["state"] = "implemented"
+        row["cts"]["state"] = "cts-pass"
+        row["native"]["state"] = "native-evidence"
+        summary = backlog.validate(self.document, promoted)
+        self.assertEqual(1, summary["implementation_ready"])
+        self.assertEqual(0, summary["profile_satisfied"])
+        self.assertEqual(61, summary["remaining_profile_blockers"])
+
+        row["api"]["state"] = "satisfied"
         row["verdict"] = "satisfied"
         summary = backlog.validate(self.document, promoted)
-        self.assertEqual(1, summary["completed"])
-        self.assertEqual(60, summary["remaining_blockers"])
+        self.assertEqual(1, summary["implementation_ready"])
+        self.assertEqual(1, summary["profile_satisfied"])
+        self.assertEqual(60, summary["remaining_profile_blockers"])
 
     def test_initially_satisfied_requirement_may_not_regress(self):
         regressed = copy.deepcopy(self.matrix)

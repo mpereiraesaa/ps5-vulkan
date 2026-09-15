@@ -31,15 +31,25 @@ def validate(document: dict, matrix: dict) -> dict:
     if document.get("source_matrix") != "conformance_inventory/dxvk_v262_matrix.json":
         errors.append("backlog source_matrix is not canonical")
 
-    expected_gate = {
+    expected_profile_gate = {
         "api": "satisfied",
         "implementation": "implemented",
         "cts": "cts-pass",
         "native": "native-evidence",
         "verdict": "satisfied",
     }
-    if document.get("policy", {}).get("completion_gate") != expected_gate:
-        errors.append("completion gate drift")
+    expected_readiness_gate = {
+        "implementation": "implemented",
+        "cts": "cts-pass",
+        "native": "native-evidence",
+        "meaning": ("Behavior is ready for final API promotion; this is not an "
+                    "advertised profile capability while its API axis remains blocked."),
+    }
+    policy = document.get("policy", {})
+    if policy.get("profile_completion_gate") != expected_profile_gate:
+        errors.append("profile completion gate drift")
+    if policy.get("implementation_readiness_gate") != expected_readiness_gate:
+        errors.append("implementation readiness gate drift")
 
     tranches = document.get("tranches")
     if not isinstance(tranches, list) or not tranches:
@@ -134,13 +144,20 @@ def validate(document: dict, matrix: dict) -> dict:
         raise ValueError("DXVK backlog validation failed:\n- " + "\n- ".join(errors))
 
     kinds = Counter(row["kind"] for row in matrix_rows if row["id"] in assigned)
-    completed = sum(rows_by_id[identifier]["verdict"] == "satisfied"
-                    for identifier in assigned)
+    profile_satisfied = sum(rows_by_id[identifier]["verdict"] == "satisfied"
+                            for identifier in assigned)
+    implementation_ready = sum(
+        identifier != API_REQUIREMENT and
+        rows_by_id[identifier].get("implementation", {}).get("state") == "implemented" and
+        rows_by_id[identifier].get("cts", {}).get("state") == "cts-pass" and
+        rows_by_id[identifier].get("native", {}).get("state") == "native-evidence"
+        for identifier in assigned)
     return {
         "tranches": len(tranches),
         "requirements": len(assigned),
-        "completed": completed,
-        "remaining_blockers": len(assigned) - completed,
+        "implementation_ready": implementation_ready,
+        "profile_satisfied": profile_satisfied,
+        "remaining_profile_blockers": len(assigned) - profile_satisfied,
         "kinds": dict(sorted(kinds.items())),
         "first": tranches[0]["id"],
         "final": tranches[-1]["id"],

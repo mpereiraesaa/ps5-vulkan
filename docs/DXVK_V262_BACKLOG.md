@@ -34,11 +34,25 @@ official conformance process remain separate obligations.
 
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
-is stable while completion is derived from the live matrix, so implemented
+is stable while readiness and completion are derived from the live matrix, so implemented
 requirements remain auditable in their original tranche. The checker fails if
 a baseline requirement is missing, duplicated or unknown, or if the initially
 satisfied `robustBufferAccess` regresses. It also enforces dependency order and
 the final API promotion gate.
+
+## Readiness versus profile completion
+
+For Vulkan 1.1–1.3 rows, implementation can be ready before the device is
+allowed to advertise the target API version. The backlog therefore reports two
+different facts:
+
+* **implementation ready** means real implementation, applicable CTS and native
+  evidence are green; it does not assert that the capability is advertised;
+* **profile satisfied** additionally requires the public API axis and final
+  fail-closed verdict to be green.
+
+This distinction lets the implementation counter advance without weakening the
+final Vulkan 1.3.204 gate or creating a circular dependency.
 
 ## Definition of done for a requirement
 
