@@ -127,17 +127,23 @@ static const struct ps5vk_texture_format formats[] = {
      * and same identity selectors. Separate typed/normalized/sRGB sampling
      * and checkerboard filter diagnostics each passed twice with identical
      * SELF images. This does not promote attachment, storage or blit roles.
-     * Exact artifacts and log digests are recorded in VALIDATION.md. */
+     * Exact artifacts and log digests are recorded in VALIDATION.md.
+     * The four non-sRGB rows also carry the uniform-texel-buffer role in the
+     * IMPLEMENTED column: their memory layout, GFX1013 word and identity
+     * selectors are the R8G8B8A8 ones, so the descriptor path that witness
+     * established encodes them unchanged. The role stays unwitnessed until its
+     * own console fetch is recorded, so no feature bit moves and no buffer
+     * view becomes creatable yet. */
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_UNORM_PACK32, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
-                   CAP_VERTEX | CAP_SAMP | CAP_DST | CAP_LINEAR, 0),
+                   CAP_VERTEX | CAP_SAMP | CAP_DST | CAP_LINEAR, CAP_UTEXEL),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SNORM_PACK32, 4, UINT32_C(0x03900000), 4, 5, 6, 7,
-                   CAP_VERTEX | CAP_SAMP | CAP_DST | CAP_LINEAR, 0),
+                   CAP_VERTEX | CAP_SAMP | CAP_DST | CAP_LINEAR, CAP_UTEXEL),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SRGB_PACK32, 4, UINT32_C(0x08200000), 4, 5, 6, 7,
                    CAP_SAMP | CAP_DST | CAP_LINEAR, 0),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_UINT_PACK32, 4, UINT32_C(0x03c00000), 4, 5, 6, 7,
-                   CAP_VERTEX | CAP_SAMP | CAP_DST, 0),
+                   CAP_VERTEX | CAP_SAMP | CAP_DST, CAP_UTEXEL),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SINT_PACK32, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
-                   CAP_VERTEX | CAP_SAMP | CAP_DST, 0),
+                   CAP_VERTEX | CAP_SAMP | CAP_DST, CAP_UTEXEL),
     /* --- roles without a sampled-image encoding --------------------------- */
     /* VideoOut target and vertex input; deliberately not sampled. */
     BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_VERTEX),

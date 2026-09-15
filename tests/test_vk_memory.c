@@ -218,10 +218,16 @@ static void test_buffer_views(void)
         assert(vkCreateBufferView(&d, &vi, NULL, &extra[i]) == VK_SUCCESS && extra[i]);
     }
     vi.format = VK_FORMAT_R8G8B8A8_UNORM;
-    /* Negatives: no implemented role (sRGB and BGRA), unknown format,
-     * misaligned offset for that row, another device, and a buffer that was
-     * not created with the uniform-texel-buffer usage. */
+    /* Negatives: no implemented role (sRGB and BGRA), an implemented but
+     * UNWITNESSED role (the four packed A8B8G8R8 rows, whose role has no
+     * console fetch yet), unknown format, misaligned offset for that row,
+     * another device, and a buffer that was not created with the
+     * uniform-texel-buffer usage. */
     const VkFormat refused[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM,
+                                VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+                                VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+                                VK_FORMAT_A8B8G8R8_UINT_PACK32,
+                                VK_FORMAT_A8B8G8R8_SINT_PACK32,
                                 (VkFormat)0x7fffffff};
     for (unsigned i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
         vi.format = refused[i]; vi.offset = 0;
