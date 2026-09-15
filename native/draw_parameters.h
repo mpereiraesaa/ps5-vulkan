@@ -26,14 +26,21 @@
  * the same SGPR the same way (radv_cmd_buffer.c:11703-11705 for non-indexed,
  * :11666 for indexed). BaseInstance is the command's firstInstance.
  *
- * DrawIndex is NOT implemented and is not claimed here. The pinned compiler
- * does lower SpvBuiltInDrawIndex to its draw_id argument
- * (vtn_variables.c:1076, ac_nir_lower_intrinsics_to_args.c:321) and RADV places
- * that in the same user-data block at base+8 (radv_shader_args.c:209-210),
- * but psbc_compile.h exports no user-data slot for it and ps5vk has no
- * multi-draw path, so a shader using gl_DrawIndex would read an SGPR the
- * runtime never writes. ps5vk_draw_index_supported() therefore stays false and
- * the public feature bit stays unadvertised until both exist.
+ * DrawIndex IS delivered for the draws this profile supports. The pinned
+ * compiler lowers SpvBuiltInDrawIndex to its draw_id argument and reports the
+ * user-data slot for it (psbc_compile.h, metadata version 13), the runtime ABI
+ * mirrors that slot, and ps5vk_draw_index_value() supplies the value the shader
+ * must observe: the pinned specification defines DrawIndex as zero for every
+ * direct draw and as beginning at zero for indirect draws, and ps5vk refuses
+ * more than one draw per command (multiDrawIndirect is false), so every draw
+ * it executes is that first draw and the value is zero.
+ *
+ * What is still missing is the evidence and one dependent capability, not the
+ * value: the pinned CTS leaves that exercise DrawIndex with non-zero values are
+ * the multi-draw ones, ps5vk has no multi-draw path (T03), and no native
+ * witness has been taken for the DrawIndex slot yet. The public feature bit is
+ * therefore still not advertised, and ps5vk_draw_index_supported() reports
+ * that advertisement gate rather than whether a value can be delivered.
  */
 #ifndef PS5VK_DRAW_PARAMETERS_H
 #define PS5VK_DRAW_PARAMETERS_H
@@ -52,8 +59,19 @@ static inline uint32_t ps5vk_draw_base_instance(const struct ps5vk_operation *op
     return op ? op->first_instance : 0;
 }
 
-/* False until the compiler exports a draw_id user-data slot and a multi-draw
- * path exists to give it a real sequence number. */
+/* The DrawIndex a shader must observe for one recorded draw. ps5vk executes at
+ * most one draw per command, so this is the first draw of the command and the
+ * specification makes that zero. A future multi-draw path (T03) must pass its
+ * sequence index here instead of a constant. */
+static inline uint32_t ps5vk_draw_index_value(const struct ps5vk_operation *op)
+{
+    (void)op;
+    return 0u;
+}
+
+/* The public advertisement gate: false until the DrawIndex evidence exists.
+ * Delivery is not the blocker - the multi-draw CTS leaves that judge non-zero
+ * DrawIndex values are, plus the missing native witness. */
 static inline uint32_t ps5vk_draw_index_supported(void)
 {
     return 0u;

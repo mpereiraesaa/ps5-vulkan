@@ -17,7 +17,13 @@
 struct ps5vk_runtime_draw_abi {
     uint32_t enabled;
     uint32_t vertex_count, fragment_count;
-    uint32_t base_vertex_slot, start_instance_slot;
+    /* Compiler-declared user-SGPR dwords, UINT32_MAX when the stage does not
+     * read that value. draw_id_slot is the DrawIndex slot (metadata v13); a
+     * stage that reads the built-in always has a real slot here, so a caller
+     * cannot leave the built-in unwritten by accident. A zero-initialised
+     * struct names slot 0 for every one of these fields and is therefore
+     * rejected as a collision, never silently accepted. */
+    uint32_t base_vertex_slot, start_instance_slot, draw_id_slot;
     uint32_t vertex_buffer_valid, vertex_buffer_slot;
     uint32_t vertex_buffer_usage_mask;
     uint32_t lds_slot, lds_value;
@@ -37,7 +43,7 @@ struct ps5vk_runtime_draw_abi {
 /* All validation precedes publication of either register bank. A set has one
  * table address, shared by all stages that statically use that set. */
 static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw_abi *a,
-    uint32_t base_vertex, uint32_t instance, uint32_t vertex_buffer_low,
+    uint32_t base_vertex, uint32_t instance, uint32_t draw_index, uint32_t vertex_buffer_low,
     uint32_t push_constant_low, const uint32_t descriptor_low[PS5VK_RUNTIME_DESCRIPTOR_SETS],
     uint32_t vertex_out[16], uint32_t pixel_out[16])
 {
@@ -47,19 +53,20 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
     if(a->vertex_buffer_valid>1)return -1;
     if(a->vertex_buffer_valid ? (!a->vertex_buffer_usage_mask || a->vertex_buffer_usage_mask>0xffffu) :
        a->vertex_buffer_usage_mask!=0)return -1;
-    uint32_t slots[5]={a->base_vertex_slot,a->start_instance_slot,
+    uint32_t slots[6]={a->base_vertex_slot,a->start_instance_slot,a->draw_id_slot,
         a->vertex_buffer_valid?a->vertex_buffer_slot:UINT32_MAX,
         a->lds_slot,a->vertex_push_slot};
-    for(unsigned i=0;i<5;++i) {
+    for(unsigned i=0;i<6;++i) {
         if(slots[i]==UINT32_MAX)continue;
         if(slots[i]>=a->vertex_count)return -1;
         for(unsigned j=0;j<i;++j)if(slots[i]==slots[j])return -1;
     }
     uint32_t vertex[16]={0},pixel[16]={0};
     uint32_t vertex_used=0,pixel_used=0;
-    for(unsigned i=0;i<5;++i)if(slots[i]!=UINT32_MAX)vertex_used|=1u<<slots[i];
+    for(unsigned i=0;i<6;++i)if(slots[i]!=UINT32_MAX)vertex_used|=1u<<slots[i];
     if(a->base_vertex_slot!=UINT32_MAX)vertex[a->base_vertex_slot]=base_vertex;
     if(a->start_instance_slot!=UINT32_MAX)vertex[a->start_instance_slot]=instance;
+    if(a->draw_id_slot!=UINT32_MAX)vertex[a->draw_id_slot]=draw_index;
     if(a->vertex_buffer_valid) {
         if(!vertex_buffer_low || (vertex_buffer_low&15u))return -1;
         vertex[a->vertex_buffer_slot]=vertex_buffer_low;
@@ -99,12 +106,12 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
 /* Compatibility bridge for existing one-table command emitters. A compiled
  * multi-set program cannot pass here with missing addresses. */
 static inline int ps5vk_runtime_draw_values(const struct ps5vk_runtime_draw_abi *a,
-    uint32_t base_vertex,uint32_t instance,uint32_t vertex_buffer_low,
+    uint32_t base_vertex,uint32_t instance,uint32_t draw_index,uint32_t vertex_buffer_low,
     uint32_t push_constant_low,uint32_t descriptor_set0_low,
     uint32_t vertex[16],uint32_t pixel[16])
 {
     const uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={descriptor_set0_low,0,0,0};
-    return ps5vk_runtime_draw_values_sets(a,base_vertex,instance,vertex_buffer_low,
+    return ps5vk_runtime_draw_values_sets(a,base_vertex,instance,draw_index,vertex_buffer_low,
         push_constant_low,tables,vertex,pixel);
 }
 #endif

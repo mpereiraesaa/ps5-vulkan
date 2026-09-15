@@ -57,7 +57,7 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
      * shape stays fail-closed instead of reaching the queue. */
     if(state->runtime.enabled &&
         ps5vk_runtime_draw_values_sets(&state->runtime,ps5vk_draw_base_vertex(op),
-            ps5vk_draw_base_instance(op),
+            ps5vk_draw_base_instance(op),ps5vk_draw_index_value(op),
             vertex_input?vertex_table_low:0,state->push_constant_low,
             descriptor_tables?descriptor_tables:single_table,
             runtime_vertex,runtime_pixel))
