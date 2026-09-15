@@ -1098,6 +1098,15 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
          b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT);
+    /* Colour attachment that also declares a transfer destination: the pinned
+     * upstream draw cases initialise it by transitioning UNDEFINED to GENERAL
+     * for a transfer write, clear it in GENERAL and then run a GENERAL render
+     * pass. Exactly that one transition is accepted here - GENERAL is not a
+     * wildcard, and the role predicate keeps it to this single image shape. */
+    if(ps5vk_colour_transfer_image(image))return
+        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+         b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT);
     /* Pure transfer role: host-visible memory that no GPU stage samples or
      * renders into, so every transition among the transfer layouts is honest
      * bookkeeping. Only transfer dependencies can order such an image. */

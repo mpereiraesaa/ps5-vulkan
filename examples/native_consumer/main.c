@@ -1741,10 +1741,11 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        /* GENERAL for both, like the pinned upstream draw pass. */
+        .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .finalLayout = VK_IMAGE_LAYOUT_GENERAL
     };
-    VkAttachmentReference color_reference = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference color_reference = {0, VK_IMAGE_LAYOUT_GENERAL};
     VkSubpassDescription subpass = {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = 1,
@@ -1973,7 +1974,10 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            /* The pinned upstream draw cases use GENERAL here, clear in GENERAL
+             * and render with a GENERAL attachment; the witness keeps exactly
+             * that shape so it exercises the same layout path. */
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = image, .subresourceRange = range};
@@ -1984,7 +1988,7 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
         clear.float32[1] = 0x40 / 255.0f;
         clear.float32[2] = 0x60 / 255.0f;
         clear.float32[3] = 1.0f;
-        vkCmdClearColorImage(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vkCmdClearColorImage(command, image, VK_IMAGE_LAYOUT_GENERAL,
                              &clear, 1, &range);
         VkBufferImageCopy copy = {
             .bufferOffset = 0, .bufferRowLength = 0, .bufferImageHeight = 0,
@@ -1992,12 +1996,14 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
             .imageOffset = {0, 0, 0},
             .imageExtent = {UPLOAD_EDGE, UPLOAD_EDGE, 1}};
         vkCmdCopyBufferToImage(command, upload_buffer, image,
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+                               VK_IMAGE_LAYOUT_GENERAL, 1, &copy);
         VkImageMemoryBarrier to_color = to_dst;
         to_color.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         to_color.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        to_color.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        to_color.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        to_color.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        to_color.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        to_color.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL,
             1, &to_color);
