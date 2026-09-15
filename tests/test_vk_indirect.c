@@ -70,9 +70,11 @@ int main(void)
     vkCmdDispatchIndirect(cb,indirect,2);
     assert(cb->state==PS5VK_INVALID && !cb->operation_count);
 
-    struct VkRenderPass_T pass={.device=&d,.attachment_count=1,
-        .color={.attachment=0},.depth={.attachment=VK_ATTACHMENT_UNUSED}};
-    pass.attachments[0].format=VK_FORMAT_R8G8B8A8_UNORM;
+    VkAttachmentDescription pass_attachments[1]={{.format=VK_FORMAT_R8G8B8A8_UNORM}};
+    struct ps5vk_subpass pass_subpasses[1]={
+        {.color={.attachment=0},.depth={.attachment=VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T pass={.device=&d,.attachment_count=1,.subpass_count=1,
+        .attachments=pass_attachments,.subpasses=pass_subpasses};
     struct VkFramebuffer_T framebuffer={.device=&d,.attachment_count=1,
         .color_attachment=0,.depth_attachment=VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T graphics={.device=&d,.graphics=VK_TRUE,

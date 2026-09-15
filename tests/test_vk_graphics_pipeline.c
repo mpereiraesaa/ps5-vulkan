@@ -31,8 +31,11 @@ int main(void)
         assert(vkCreateShaderModule(&d,&mi,NULL,&modules[i])==VK_SUCCESS);
     }
     struct VkPipelineLayout_T layout={.device=&d};
-    struct VkRenderPass_T pass={.device=&d,.attachment_count=1,.color={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},.depth={VK_ATTACHMENT_UNUSED,0}};
-    pass.attachments[0].format=VK_FORMAT_B8G8R8A8_UNORM;
+    VkAttachmentDescription pass_attachments[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM}};
+    struct ps5vk_subpass pass_subpasses[1]={
+        {.color={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},.depth={VK_ATTACHMENT_UNUSED,0}}};
+    struct VkRenderPass_T pass={.device=&d,.attachment_count=1,.subpass_count=1,
+        .attachments=pass_attachments,.subpasses=pass_subpasses};
     VkPipelineShaderStageCreateInfo stages[2]={
         {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,.stage=VK_SHADER_STAGE_VERTEX_BIT,.module=modules[0],.pName="main"},
         {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,.stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=modules[1],.pName="main"}};

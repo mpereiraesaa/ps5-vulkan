@@ -54,10 +54,13 @@ hardware acceptance.
   including offsets and signed base vertex.
 - One viewport and scissor, supplied statically at pipeline creation or through
   `vkCmdSetViewport` / `vkCmdSetScissor` before each affected draw.
-- One BGRA8 presentation attachment or RGBA8 off-screen color attachment, one
-  sample and one subpass. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
+- One BGRA8 presentation attachment or RGBA8 off-screen color attachment and
+  one sample. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
   `DONT_CARE` store semantics are supported by the bounded native path.
   Blending, logic ops and multisampling are unsupported.
+- One or two subpasses may be **described and recorded**; exactly one is
+  **executed**. Submitting a render pass that declares two is refused, so the
+  second subpass has no execution semantics yet.
 - Optional D32 depth attachment. Depth testing and writing are supported;
   stencil and depth bounds are unsupported.
 - Face culling and front-face selection are encoded by the native backend.
@@ -553,7 +556,7 @@ caller supplies is accepted and retained verbatim in that opaque copy, and
 nothing in this driver reads it.
 With that flag the same members describe the scope the secondary will execute
 in and are validated: `renderPass` must be a render pass of this device,
-`subpass` must be `0` because exactly one subpass exists, and `framebuffer` is
+`subpass` must name a subpass the inherited pass actually has, and `framebuffer` is
 **optional** - `VK_NULL_HANDLE` is accepted and the executing primary supplies
 the framebuffer, while a non-null one must be compatible with the inherited
 pass. The flag is accepted on a secondary only; a primary that sets it is
@@ -666,9 +669,44 @@ secondaries executes exactly as little as one that recorded nothing, and is
 refused the same way. Naming an empty secondary remains legal in itself; it
 simply contributes nothing, so it has to be accompanied by work that does.
 
-`vkCmdNextSubpass` is an explicit fail-closed boundary. The implementation
-accepts exactly one subpass, so it has no valid reachable invocation. Its
-presence is structural API coverage, not subpass support.
+## Multiple subpasses
+
+A render pass owns its shape: the attachment descriptions, one entry per
+subpass with that subpass's colour and depth references and its preserve list,
+and the dependency array. All of it is copied at creation into a single
+allocation, so a caller that mutates its own structures afterwards cannot
+change what the object recorded, and a failed creation leaves nothing behind.
+
+This profile describes **one or two** subpasses, each with exactly one colour
+reference and an optional D32 depth reference, over one or two attachments.
+Creation refuses, rather than accepting and ignoring: a subpass count outside
+that range; a subpass without exactly one colour attachment; input attachments
+and resolve attachments, which are unimplemented; an attachment index out of
+range; a depth reference that aliases the colour one; an attachment that no
+subpass references; an attachment used as colour in one subpass and depth in
+another; a preserve entry that is out of range, repeated, or names an
+attachment the same subpass also uses; and a dependency whose endpoints do not
+exist, that is a self-dependency, that runs backward between subpasses, or that
+joins external to external. A forward `0` to `1` edge and both external edges
+are accepted.
+
+`vkCmdNextSubpass` advances the recording by exactly one subpass. It is
+primary-only, requires a pass this buffer began, requires a next subpass to
+exist, and requires the subpass being left to have carried work of its own -
+an empty subpass is the zero-body shape again, one subpass down. Each subpass
+carries its **own** contents mode, so a pass may draw inline in its first
+subpass and name secondaries in its second, and a draw is validated against the
+formats of the subpass it is recorded in. `vkCmdEndRenderPass` requires the
+recording to have reached the **last** subpass, so a missing
+`vkCmdNextSubpass` is refused where it is written rather than silently
+dropping the subpasses never entered.
+
+**Execution stops at one subpass.** Submitting a render pass that declares more
+than one is refused, and the native path refuses it independently, so a
+recording the driver cannot execute never reaches a backend. The subpass
+transitions, attachment lifetime across them and their ordering are a later
+slice; until then the model and the recording state machine are exactly what
+this profile claims, and nothing more.
 
 ## Compatibility boundary
 

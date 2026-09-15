@@ -401,9 +401,12 @@ int main(void)
     assert(vkAllocateMemory(&d, &mi, NULL, &memory) == VK_SUCCESS);
     assert(vkBindImageMemory(&d, image, memory, 0) == VK_SUCCESS);
     struct VkImageView_T view = {.device = &d, .image = image};
-    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1,
-        .depth = {.attachment = VK_ATTACHMENT_UNUSED},
-        .attachments = {{.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    VkAttachmentDescription pass_attachments[1] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
+    struct ps5vk_subpass pass_subpasses[1] = {
+        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = pass_attachments, .subpasses = pass_subpasses};
     struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1,
         .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
@@ -455,6 +458,42 @@ int main(void)
     for(unsigned s=0;s<4;++s)assert(!sampled_sets[s].pending);
     assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
     assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && !image->pending);
+
+    /* EXECUTION of more than one subpass is not implemented. The object model
+     * and recording accept the bounded two-subpass shape, so submission is
+     * where it has to stop: the backend is never handed a pass whose subpass
+     * transitions, attachment lifetime and ordering do not exist yet, and the
+     * refusal leaves nothing pending. */
+    {
+        struct ps5vk_subpass two_subpasses[2] = {pass_subpasses[0], pass_subpasses[0]};
+        struct VkRenderPass_T two = {.device = &d, .attachment_count = 1, .subpass_count = 2,
+            .attachments = pass_attachments, .subpasses = two_subpasses};
+        VkCommandBuffer multi;
+        VkCommandBufferAllocateInfo mi2 = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+        assert(vkAllocateCommandBuffers(&d, &mi2, &multi) == VK_SUCCESS);
+        VkRenderPassBeginInfo two_ri = ri;
+        two_ri.renderPass = &two;
+        assert(vkBeginCommandBuffer(multi, &begin) == VK_SUCCESS);
+        vkCmdBeginRenderPass(multi, &two_ri, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(multi, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
+        vkCmdBindDescriptorSets(multi, VK_PIPELINE_BIND_POINT_GRAPHICS, &sampled_layout,
+                                0, 4, sampled_handles, 0, NULL);
+        vkCmdDraw(multi, 3, 1, 0, 0);
+        vkCmdNextSubpass(multi, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdDraw(multi, 3, 1, 0, 0);
+        vkCmdEndRenderPass(multi);
+        /* Recording accepted the whole thing... */
+        assert(vkEndCommandBuffer(multi) == VK_SUCCESS && multi->operation_count == 5);
+        VkSubmitInfo multi_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1, .pCommandBuffers = &multi};
+        const unsigned prepared = f.prepares;
+        /* ...and submission refuses it without reaching a backend. */
+        assert(vkQueueSubmit(&d.queue, 1, &multi_submit, NULL) != VK_SUCCESS);
+        assert(f.prepares == prepared && !d.submission && !multi->pending_count &&
+               !two.pending && !fb.pending && !image->pending && !pipeline.pending);
+        vkFreeCommandBuffers(&d, pool, 1, &multi);
+    }
     vkFreeMemory(&d, memory, NULL);
     assert(!d.memories && c->state == PS5VK_INVALID);
     vkDestroyImage(&d, image, NULL);

@@ -48,7 +48,9 @@ static void operation_reservation_contract(void)
     source[0]=0;
     assert(((const uint32_t *)owned->owned_payload)[0]==0x11223344u);
 
-    struct VkRenderPass_T pass={.device=&d};
+    struct ps5vk_subpass scope_subpasses[1]={{.color={.attachment=0},
+        .depth={.attachment=VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T pass={.device=&d,.subpass_count=1,.subpasses=scope_subpasses};
     c->render_pass=&pass;
     unsigned before=c->operation_count;
     assert(!ps5vk_command_reserve_operations(c,PS5VK_DISPATCH,
@@ -297,6 +299,158 @@ static void multi_set_recording(void)
     assert(cmd->state==PS5VK_INVALID && !cmd->operation_count);
     vkDestroyCommandPool(&d,p,NULL);vkDestroyBuffer(&d,uniform,NULL);vkFreeMemory(&d,memory,NULL);
 }
+/* The vkCmdNextSubpass state machine over a bounded two-subpass pass.
+ *
+ * Nothing here executes: M1 delivers the object model and the recording
+ * transitions, and submitting a pass with more than one subpass stays
+ * fail-closed until the execution slice implements it. */
+static void subpass_transitions(void)
+{
+    struct VkDevice_T d = {.graphics_enabled = VK_TRUE,
+        .memory={NULL,allocate,release,cache,cache},.buffer_alignment=256,
+        .noncoherent_atom=64,.max_allocation=4096};
+    struct VkImage_T image = {.device = &d};
+    struct VkImageView_T view = {.device = &d, .image = &image};
+    VkAttachmentDescription attachments[1] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR}};
+    /* Both subpasses draw into the same colour role, which is the only shape
+     * this profile admits. */
+    struct ps5vk_subpass subpasses[2] = {
+        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}},
+        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T two = {.device = &d, .attachment_count = 1, .subpass_count = 2,
+        .attachments = attachments, .subpasses = subpasses};
+    struct VkRenderPass_T one = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = attachments, .subpasses = subpasses};
+    struct VkFramebuffer_T fb = {.device = &d, .width = 8, .height = 8, .attachment_count = 1,
+        .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM},
+        .samples = {VK_SAMPLE_COUNT_1_BIT}, .depth_attachment = VK_ATTACHMENT_UNUSED};
+    struct VkPipeline_T pipeline = {.device = &d, .graphics = VK_TRUE,
+        .color_format = VK_FORMAT_B8G8R8A8_UNORM,
+        .viewport = {0,0,8,8,0,1}, .scissor = {{0,0},{8,8}}};
+    VkClearValue value = {.color = {.float32 = {0, 0, 0, 1}}};
+    VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = &two, .framebuffer = &fb, .renderArea = {.extent = {8, 8}},
+        .clearValueCount = 1, .pClearValues = &value};
+    VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c = command(&d, p);
+
+    /* The accepted shape: draw, advance, draw, end. Each transition is
+     * recorded, and each operation says which subpass it belongs to. */
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
+    vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    assert(!c->subpass);
+    vkCmdDraw(c, 3, 1, 0, 0);
+    vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_INLINE);
+    assert(c->state == PS5VK_RECORDING && c->subpass == 1);
+    vkCmdDraw(c, 3, 1, 0, 0);
+    vkCmdEndRenderPass(c);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->operation_count == 5);
+    assert(c->operations[0].type == PS5VK_BEGIN_RENDER_PASS && !c->operations[0].subpass);
+    assert(c->operations[1].type == PS5VK_DRAW && !c->operations[1].subpass);
+    assert(c->operations[2].type == PS5VK_NEXT_SUBPASS && c->operations[2].subpass == 1);
+    assert(c->operations[3].type == PS5VK_DRAW && c->operations[3].subpass == 1);
+    assert(c->operations[4].type == PS5VK_END_RENDER_PASS && c->operations[4].subpass == 1);
+
+    /* The contents mode belongs to the SUBPASS, not to the pass: a pass may
+     * draw inline first and name secondaries second. */
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
+    vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdDraw(c, 3, 1, 0, 0);
+    vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    assert(c->state == PS5VK_RECORDING &&
+           c->render_pass_contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    /* ...and that mode is then binding for the new subpass. */
+    vkCmdDraw(c, 3, 1, 0, 0);
+    assert(c->state == PS5VK_INVALID);
+
+    /* Refused, each transactionally. */
+    struct { const char *name; VkBool32 advance_twice, no_pass, wrong_contents,
+             empty_subpass, end_early; } cases[] = {
+        {"past the last subpass", VK_TRUE, 0, 0, 0, 0},
+        {"outside any render pass", 0, VK_TRUE, 0, 0, 0},
+        {"an unknown contents mode", 0, 0, VK_TRUE, 0, 0},
+        {"leaving an empty subpass", 0, 0, 0, VK_TRUE, 0},
+        {"ending before the last subpass", 0, 0, 0, 0, VK_TRUE},
+    };
+    for (unsigned n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n) {
+        assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
+        if (cases[n].no_pass) {
+            vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_INLINE);
+            assert(c->state == PS5VK_INVALID && !c->operation_count);
+            continue;
+        }
+        vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
+        if (cases[n].empty_subpass) {
+            vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_INLINE);
+            assert(c->state == PS5VK_INVALID && c->operation_count == 1);
+            continue;
+        }
+        vkCmdDraw(c, 3, 1, 0, 0);
+        if (cases[n].wrong_contents) {
+            vkCmdNextSubpass(c, (VkSubpassContents)7);
+            assert(c->state == PS5VK_INVALID && c->operation_count == 2);
+            continue;
+        }
+        if (cases[n].end_early) {
+            vkCmdEndRenderPass(c);
+            assert(c->state == PS5VK_INVALID && c->operation_count == 2);
+            continue;
+        }
+        vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdDraw(c, 3, 1, 0, 0);
+        vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_INLINE);
+        assert(c->state == PS5VK_INVALID && c->operation_count == 4);
+    }
+
+    /* A single-subpass pass has no next subpass at all, and its end is
+     * unaffected by any of this. */
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    ri.renderPass = &one;
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
+    vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdDraw(c, 3, 1, 0, 0);
+    vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_INLINE);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 2);
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
+    vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdDraw(c, 3, 1, 0, 0);
+    vkCmdEndRenderPass(c);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+
+    /* A secondary never advances a subpass: it inherits one. */
+    VkCommandBufferAllocateInfo si = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = p, .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, .commandBufferCount = 1};
+    VkCommandBuffer secondary;
+    assert(vkAllocateCommandBuffers(&d, &si, &secondary) == VK_SUCCESS);
+    VkCommandBufferInheritanceInfo inherit = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .renderPass = &two, .subpass = 1};
+    VkCommandBufferBeginInfo sbegin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+        .pInheritanceInfo = &inherit};
+    assert(vkBeginCommandBuffer(secondary, &sbegin) == VK_SUCCESS);
+    /* The inherited index is the one it records in. */
+    assert(secondary->subpass == 1 && secondary->render_pass_inherited);
+    vkCmdNextSubpass(secondary, VK_SUBPASS_CONTENTS_INLINE);
+    assert(secondary->state == PS5VK_INVALID && !secondary->operation_count);
+    /* A subpass the inherited pass does not have is refused at begin. */
+    assert(vkResetCommandBuffer(secondary, 0) == VK_SUCCESS);
+    inherit.subpass = 2;
+    assert(vkBeginCommandBuffer(secondary, &sbegin) != VK_SUCCESS);
+    vkFreeCommandBuffers(&d, p, 1, &secondary);
+    vkDestroyCommandPool(&d, p, NULL);
+}
+
 static void graphics_recording(void)
 {
     /* Structural objects only: no shaders, allocation or GPU execution. */
@@ -305,10 +459,13 @@ static void graphics_recording(void)
         .noncoherent_atom=64,.max_allocation=4096};
     struct VkImage_T image = {.device = &d};
     struct VkImageView_T view = {.device = &d, .image = &image};
-    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1,
-        .color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED},
-        .attachments = {{.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
-                         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR}}};
+    VkAttachmentDescription pass_attachments[1] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR}};
+    struct ps5vk_subpass pass_subpasses[1] = {
+        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = pass_attachments, .subpasses = pass_subpasses};
     struct VkFramebuffer_T fb = {.device = &d, .width = 100, .height = 100, .attachment_count = 1,
         .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
@@ -762,4 +919,4 @@ static void core_dynamic_state_recording(void)
     vkDestroyCommandPool(&d,p,NULL);
 }
 int main(void)
-{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }

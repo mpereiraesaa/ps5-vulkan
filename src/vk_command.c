@@ -61,6 +61,7 @@ static void clear(VkCommandBuffer c)
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
     c->render_pass_inherited = VK_FALSE;
     c->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
+    c->subpass = 0;
     c->viewport_valid = c->scissor_valid = VK_FALSE;
     c->line_width = 1.0f;
     c->min_depth_bounds = 0.0f;
@@ -331,8 +332,17 @@ VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b)
 {
     if (!a || !b) return VK_FALSE;
     if (a == b) return VK_TRUE;
-    return reference_compatible(a, &a->color, b, &b->color) &&
-           reference_compatible(a, &a->depth, b, &b->depth) ? VK_TRUE : VK_FALSE;
+    /* Compatibility is per subpass and positional: subpass i of one pass is
+     * compared with subpass i of the other, and two passes with different
+     * subpass counts describe different scopes entirely. */
+    if (a->subpass_count != b->subpass_count) return VK_FALSE;
+    for (uint32_t i = 0; i < a->subpass_count; ++i) {
+        const struct ps5vk_subpass *left = ps5vk_render_pass_subpass(a, i);
+        const struct ps5vk_subpass *right = ps5vk_render_pass_subpass(b, i);
+        if (!reference_compatible(a, &left->color, b, &right->color) ||
+            !reference_compatible(a, &left->depth, b, &right->depth)) return VK_FALSE;
+    }
+    return VK_TRUE;
 }
 
 /* Inheritance a secondary may declare, checked against what this device can
@@ -361,7 +371,9 @@ static VkResult inheritance_valid(VkDevice d, const VkCommandBufferInheritanceIn
         i->pNext) return INVALID;
     if (usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) {
         if (!d->graphics_enabled || !i->renderPass ||
-            i->renderPass->device != d || i->subpass ||
+            i->renderPass->device != d ||
+            /* The inherited subpass must exist in the inherited pass. */
+            i->subpass >= i->renderPass->subpass_count ||
             (i->framebuffer &&
              (i->framebuffer->device != d ||
               !ps5vk_framebuffer_compatible(i->framebuffer, i->renderPass))))
@@ -417,6 +429,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
         if (info->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) {
             c->render_pass = c->inheritance.renderPass;
             c->framebuffer = c->inheritance.framebuffer;
+            c->subpass = c->inheritance.subpass;
             c->render_pass_inherited = VK_TRUE;
         }
     }
@@ -658,6 +671,31 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(VkCommandBuffer c,VkBuffer buff
     op->type=PS5VK_DISPATCH_INDIRECT;op->indirect_buffer=buffer;
     op->indirect_offset=offset;op->indirect_count=1;
 }
+/* Draw work recorded in the pass that is currently open.
+ *
+ * What counts is what will EXECUTE, not how many commands were written: a
+ * vkCmdExecuteCommands marker naming an empty secondary executes nothing, so
+ * counting markers would let a zero-body pass through. Only draws and
+ * vkCmdExecuteCommands can be recorded inside a pass, and a continuation child
+ * may carry nothing but draws, so a child's operation count IS its draw count. */
+static uint32_t open_subpass_draw_work(VkCommandBuffer c)
+{
+    uint32_t work = 0, j = c->operation_count;
+    while (j) {
+        const struct ps5vk_operation *op = &c->operations[--j];
+        /* Stop at the boundary that opened the CURRENT subpass: work recorded
+         * in an earlier subpass belongs to that one and cannot make this one
+         * non-empty. */
+        if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_NEXT_SUBPASS) break;
+        if (op->type != PS5VK_EXECUTE_COMMANDS) { ++work; continue; }
+        VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
+        if (!children) continue;
+        for (uint32_t n = 0; n < op->child_count; ++n)
+            if (children[n]) work += children[n]->operation_count;
+    }
+    return work;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRenderPassBeginInfo *info,
     VkSubpassContents contents)
 {
@@ -673,8 +711,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;
-    if (fb->attachment_count != pass->attachment_count || fb->color_attachment != pass->color.attachment ||
-        fb->depth_attachment != pass->depth.attachment || area.offset.x < 0 || area.offset.y < 0 ||
+    if (fb->attachment_count != pass->attachment_count ||
+        fb->color_attachment != ps5vk_render_pass_subpass(pass, 0)->color.attachment ||
+        fb->depth_attachment != ps5vk_render_pass_subpass(pass, 0)->depth.attachment ||
+        area.offset.x < 0 || area.offset.y < 0 ||
         !area.extent.width || !area.extent.height || (uint32_t)area.offset.x > fb->width ||
         (uint32_t)area.offset.y > fb->height || area.extent.width > fb->width - (uint32_t)area.offset.x ||
         area.extent.height > fb->height - (uint32_t)area.offset.y) { invalid(c); return; }
@@ -688,32 +728,43 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
     if(!op)return;
     op->render_pass=pass;op->framebuffer=fb;op->render_area=area;
     op->render_pass_contents=contents;
+    op->subpass=0;
     op->clear_count=info->clearValueCount;
     if (info->clearValueCount) memcpy(op->clears, info->pClearValues, info->clearValueCount * sizeof(VkClearValue));
     c->render_pass = pass; c->framebuffer = fb; c->render_pass_contents = contents;
-}
-/* Draw work recorded in the pass that is currently open.
- *
- * What counts is what will EXECUTE, not how many commands were written: a
- * vkCmdExecuteCommands marker naming an empty secondary executes nothing, so
- * counting markers would let a zero-body pass through. Only draws and
- * vkCmdExecuteCommands can be recorded inside a pass, and a continuation child
- * may carry nothing but draws, so a child's operation count IS its draw count. */
-static uint32_t open_pass_draw_work(VkCommandBuffer c)
-{
-    uint32_t work = 0, j = c->operation_count;
-    while (j) {
-        const struct ps5vk_operation *op = &c->operations[--j];
-        if (op->type == PS5VK_BEGIN_RENDER_PASS) break;
-        if (op->type != PS5VK_EXECUTE_COMMANDS) { ++work; continue; }
-        VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
-        if (!children) continue;
-        for (uint32_t n = 0; n < op->child_count; ++n)
-            if (children[n]) work += children[n]->operation_count;
-    }
-    return work;
+    c->subpass = 0;
 }
 
+/* Advance to the next subpass.
+ *
+ * The transition is exact: it is primary-only, it needs an open pass that this
+ * buffer began, there must BE a next subpass, and the subpass being left must
+ * have executed work of its own - an empty subpass is the zero-body shape
+ * again, one subpass down. Each subpass carries its own contents mode, so a
+ * pass may take its first subpass inline and name secondaries in the second.
+ *
+ * The transition is RECORDED as an operation rather than kept only in
+ * recording state, so submission re-derives the subpass structure from the
+ * immutable record instead of trusting what the recorder remembered. */
+VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
+    VkSubpassContents contents)
+{
+    if (!c || c->state != PS5VK_RECORDING ||
+        c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY || !c->render_pass ||
+        c->render_pass_inherited ||
+        (contents != VK_SUBPASS_CONTENTS_INLINE &&
+         contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
+        c->subpass + 1 >= c->render_pass->subpass_count ||
+        !open_subpass_draw_work(c)) { invalid(c); return; }
+    struct ps5vk_operation *op = ps5vk_command_reserve_operations(c, PS5VK_NEXT_SUBPASS,
+        PS5VK_OPERATION_INSIDE_RENDER_PASS, 1);
+    if (!op) return;
+    op->render_pass = c->render_pass; op->framebuffer = c->framebuffer;
+    op->render_pass_contents = contents;
+    op->subpass = c->subpass + 1;
+    c->subpass = op->subpass;
+    c->render_pass_contents = contents;
+}
 VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
 {
     /* Primary-only, and unreachable in a secondary anyway because one can
@@ -731,24 +782,21 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
      * content is vkCmdExecuteCommands naming empty secondaries executes
      * exactly as little as one that recorded nothing at all. Naming an empty
      * child is still legal on its own - it just has to be accompanied by work
-     * that executes. */
+     * that executes.
+     *
+     * A multi-subpass pass must also have REACHED its last subpass: ending
+     * early would silently drop the subpasses that were never entered, so a
+     * missing vkCmdNextSubpass is refused here rather than at submission. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
-        !c->render_pass || !open_pass_draw_work(c) ||
+        !c->render_pass || c->subpass + 1 != c->render_pass->subpass_count ||
+        !open_subpass_draw_work(c) ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
     if(!op)return;
     op->render_pass=c->render_pass;op->framebuffer=c->framebuffer;
-    c->render_pass = NULL; c->framebuffer = NULL;
-}
-VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
-    VkSubpassContents contents)
-{
-    /* vkCreateRenderPass accepts exactly one subpass, hence no next subpass is
-     * reachable; it is also primary-only. Do not mutate render-pass state or
-     * append a fake operation. */
-    (void)contents;
-    ps5vk_command_invalidate(c);
+    op->subpass=c->subpass;
+    c->render_pass = NULL; c->framebuffer = NULL; c->subpass = 0;
 }
 /* Record an ordered, owned list of secondary references.
  *
@@ -830,6 +878,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
      * rules applied without replaying the primary's recording state. */
     op->render_pass = c->render_pass;
     op->framebuffer = c->framebuffer;
+    op->subpass = c->subpass;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(VkCommandBuffer c,uint32_t first,uint32_t count,
     const VkBuffer *buffers,const VkDeviceSize *offsets)
@@ -875,15 +924,20 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
         (!c->graphics_sets[s] ||
          memcmp(&p->sets[s],&c->graphics_set_signatures[s],sizeof(p->sets[s])))) {invalid(c);return;}
     VkRenderPass pass = c->render_pass;
-    VkFormat depth = pass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
-        pass->attachments[pass->depth.attachment].format;
-    if (p->color_format != pass->attachments[pass->color.attachment].format || p->depth_format != depth) {
+    /* The formats a draw must match are those of the CURRENT subpass, not of
+     * the pass as a whole. */
+    const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, c->subpass);
+    VkFormat depth = subpass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
+        pass->attachments[subpass->depth.attachment].format;
+    if (p->color_format != pass->attachments[subpass->color.attachment].format ||
+        p->depth_format != depth) {
         invalid(c); return;
     }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_DRAW,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
     if(!op)return;
     op->pipeline=p;op->render_pass=pass;op->framebuffer=c->framebuffer;
+    op->subpass=c->subpass;
     op->viewport=*viewport;op->scissor=*scissor;op->vertex_count=vertices;
     op->instance_count=instances;op->first_vertex=first_vertex;op->first_instance=first_instance;
     memcpy(op->vertices,c->vertices,sizeof(c->vertices));

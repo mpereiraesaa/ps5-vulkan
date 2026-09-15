@@ -18,7 +18,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
         if (!view || view->device != d || !view->image->memory || view->range.levelCount != 1 ||
             view->format != pass->attachments[i].format ||
             view->image->info.samples != pass->attachments[i].samples) return VK_ERROR_UNKNOWN;
-        VkImageUsageFlags usage = i == pass->depth.attachment ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT :
+        VkImageUsageFlags usage = i == ps5vk_render_pass_subpass(pass, 0)->depth.attachment ?
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT :
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         uint32_t mip = view->range.baseMipLevel;
         if (mip >= 32) return VK_ERROR_UNKNOWN;
@@ -35,7 +36,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
     if (!fb) return VK_ERROR_OUT_OF_HOST_MEMORY;
     memset(fb, 0, sizeof(*fb)); fb->device = d; fb->allocator = saved; fb->custom_allocator = custom;
     fb->width = info->width; fb->height = info->height; fb->attachment_count = info->attachmentCount;
-    fb->color_attachment = pass->color.attachment; fb->depth_attachment = pass->depth.attachment;
+    /* The roles are the same in every subpass of this profile, so the first
+     * one names them for the framebuffer. */
+    fb->color_attachment = ps5vk_render_pass_subpass(pass, 0)->color.attachment;
+    fb->depth_attachment = ps5vk_render_pass_subpass(pass, 0)->depth.attachment;
     for (uint32_t i = 0; i < fb->attachment_count; ++i) {
         fb->attachments[i] = info->pAttachments[i]; ++fb->attachments[i]->framebuffers;
         fb->formats[i] = pass->attachments[i].format; fb->samples[i] = pass->attachments[i].samples;

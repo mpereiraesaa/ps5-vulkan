@@ -277,10 +277,12 @@ static void primary_only_commands_poison_a_secondary(void)
     assert(begin_secondary(c, VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
                            &scopeless) != VK_SUCCESS);
     assert(c->state == PS5VK_INITIAL && !c->inheritance_valid && !c->render_pass);
-    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1,
-        .depth = {.attachment = VK_ATTACHMENT_UNUSED},
-        .attachments = {{.format = VK_FORMAT_B8G8R8A8_UNORM,
-                         .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    VkAttachmentDescription pass_attachments[1] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
+    struct ps5vk_subpass pass_subpasses[1] = {
+        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = pass_attachments, .subpasses = pass_subpasses};
     VkCommandBufferInheritanceInfo scoped = inheritance();
     scoped.renderPass = &pass;
     assert(begin_secondary(c, VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
