@@ -3,6 +3,66 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Layer-addressed target measurement (2026-09-15, DXVK262-T02 slice A)
+
+Multiview's normative core is per-view broadcast into one framebuffer layer per
+view, so the first question is whether the pinned GFX1013 AGC/DCB target path
+can be pointed at a chosen layer at all. Slice A measures exactly that, and
+nothing else: no capability is advertised, no feature or property is flipped.
+
+The public path cannot express the shape - `vkCreateImage` refuses
+`COLOR_ATTACHMENT` with `arrayLayers != 1` (`native/image_ps5.c:26`) and
+`ps5vk_native_target` refuses a non-zero `baseArrayLayer` - so the probe binds
+the ordinary single-layer attachment to the **second of two aligned slots** in
+one allocation, seeds the slot no attachment is bound to with a sentinel
+(`0x5a5a5a5a`), renders normally, and reads both slots back. A layer-addressed
+target is expressible only if the render lands in the bound slot and the
+neighbouring slot stays untouched.
+
+Built with `PS5VK_LAYER_PROBE=1` and the audited graphics control
+(`build/graphics/control-i83c3zcj`, LLPC control from
+`experiments/graphics/scene3d.pipe`, `native_input_version=3`) on top of the
+audited compute bootstrap (`build/compute/control-frxdmh8o/first.elf`), the
+probe artifact `dist-graphics-api/PPSA99994/eboot.bin` sha256
+`733928103cc03780e1d9f23ab502efe590318e0d5b7cca35ae92d114e3f8df57` ran once on
+the owned console and reported, in a run that ended with
+`BYE reason=graphics-api-end`:
+
+```
+PS5VK_LAYER_TARGET_PROBE role=color slot_bytes=8912896 bind_offset=8912896 sentinel=5a5a5a5a untouched_mismatches=0 rendered_changed=295611 rendered_oracle=0 valid=1
+PS5VK_LAYER_TARGET_PROBE role=depth slot_bytes=8847360 bind_offset=8847360 sentinel=5a5a5a5a untouched_mismatches=0 rendered_changed=2211840 valid=1
+```
+
+* **Colour:** the attachment bound to the second slot rendered there (295611
+  words changed) and the first slot is byte-for-byte the seeded sentinel
+  (0 mismatches). `rendered_oracle=0` is the probe's triangle oracle, which does
+  not apply to the `scene3d` control program: the measured question is *where*
+  the render landed, not what was drawn.
+* **Depth:** the depth attachment bound to its second slot was written across
+  the whole slot (2211840 of 2211840 words changed) and its neighbour is
+  untouched, so depth selects by address through the same mechanism.
+* Both roles therefore need no distinct routing; the host test in
+  `tests/test_targets_ps5.c` pins the arithmetic behind that answer - one
+  address-carrying register per layer, advanced by exactly one layer footprint,
+  with the depth role requiring 64 KiB alignment and the colour role 128 KiB.
+
+Supporting runs: the triangle-program variant (runtime compiler, no depth
+attachment) reported `role=color ... rendered_oracle=1 valid=1` on all three
+pipeline iterations, and the offline variant that carries the depth attachment
+reported both roles valid. Raw runs are in `projects/logging_server/runs`:
+`20260915T232549250Z_PPSA99994_ps5vk_0x1006c3bf20055` (sha256
+`08bac6623f255ed886dd4d4c3aa67abce55a3bbadb01d95273e325f52330c19f`),
+`20260915T232924537Z_PPSA99994_ps5vk_0x1009e5be3c2e8` (sha256
+`a711367b11900af3a77aa61a78f8178583f1359cc99d6e0111dbf1043e889e00`) and the
+quoted strict run `20260915T233257773Z_PPSA99994_ps5vk_0x100d0018b47fa` (sha256
+`53590a744240319f23ea4adb8ba73e9307f09feb6de742819e46444bb3a05b59`). The
+console was released with `running=none` confirmed.
+
+What this does *not* claim: that multiview is implementable end to end. It
+answers the address-selection question that every later slice depends on, and
+nothing about view masks, `ViewIndex` lowering, per-view query results or the
+CTS leaf set - each of those is a separate slice with its own evidence.
+
 ## Shader draw parameters promotion (2026-09-15)
 
 `VK_KHR_shader_draw_parameters` is advertised on the still-apiVersion-1.0

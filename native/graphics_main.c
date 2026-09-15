@@ -780,10 +780,14 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         size_t untouched_mismatches=0;
         for(size_t i=0;i<words;++i)
             untouched_mismatches+=other_slot[i]!=PS5VK_LAYER_SENTINEL;
-        const int color_valid=!untouched_mismatches && valid;
+        /* The question here is WHERE the render landed, not what was drawn:
+         * valid=1 means the bound slot changed and its neighbour did not. The
+         * probe's own triangle oracle is reported separately because it only
+         * applies to the triangle program, not to every control library. */
+        const int color_valid=!untouched_mismatches && stats.changed>0;
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_LAYER_TARGET_PROBE role=color slot_bytes=%llu bind_offset=%llu sentinel=%08x "
-            "untouched_mismatches=%zu rendered_changed=%llu rendered_valid=%d valid=%d",
+            "untouched_mismatches=%zu rendered_changed=%llu rendered_oracle=%d valid=%d",
             (unsigned long long)req.size,(unsigned long long)bind_offset,
             (unsigned)PS5VK_LAYER_SENTINEL,untouched_mismatches,
             (unsigned long long)stats.changed,valid,color_valid);
