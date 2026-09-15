@@ -16,7 +16,7 @@ TITLE = "PPSA99994"
 APP = "ps5vk"
 
 
-def validate(log, receipt, artifact):
+def validate(log, receipt, artifact, texel_rgba8=False):
     def require(condition, label):
         if not condition:
             raise ValueError(label)
@@ -164,6 +164,8 @@ def validate(log, receipt, artifact):
     suspended = matching("PS5VK_QUEUE_SUSPEND_POINT ")
     completed = matching("PS5VK_QUEUE_COMPLETED ")
     witness = one("PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS ")
+    texel_format = one("PS5VK_CONSUMER_TEXEL_RGBA8_FORMAT ") if texel_rgba8 else None
+    texel_witness = one("PS5VK_CONSUMER_TEXEL_RGBA8_SUCCESS ") if texel_rgba8 else None
     width_start = one("PS5VK_CONSUMER_STORAGE_WIDTH_START")
     width_pipelines = one("PS5VK_CONSUMER_STORAGE_WIDTH_PIPELINES_CREATED ")
     width_witness = one("PS5VK_CONSUMER_STORAGE_WIDTH_SUCCESS ")
@@ -194,9 +196,15 @@ def validate(log, receipt, artifact):
             "resource, narrow and synchronization submit records")
     ordered = [boot, physical, physical_queries, negotiated,
                transfer_start, transfer_witness, transfer_retired,
-               start, pipeline, indirect,
+               start]
+    if texel_format is not None:
+        ordered.append(texel_format)
+    ordered += [pipeline, indirect,
                prepared[0], submitted[0], suspended[0], completed[0], witness,
-               width_start, width_pipelines,
+               ]
+    if texel_witness is not None:
+        ordered.append(texel_witness)
+    ordered += [width_start, width_pipelines,
                prepared[1], submitted[1], suspended[1], completed[1],
                submitted[2], suspended[2], completed[2],
                width_witness, width_retired, sync_start, prepared[2],
@@ -207,6 +215,23 @@ def validate(log, receipt, artifact):
                sync_objects, sync_witness, sync_retired, success, retired, ready]
     require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
             "resource witness ordering")
+    if texel_rgba8:
+        texel_contract = artifact.get("texel_rgba8", {})
+        require(texel_contract.get("format") == "VK_FORMAT_R8G8B8A8_UNORM" and
+                texel_contract.get("texels") == 64, "texel artifact contract")
+        spirv_digest = str(texel_contract.get("shader_spirv_sha256", ""))
+        require(len(spirv_digest) == 64 and
+                all(c in "0123456789abcdef" for c in spirv_digest.lower()),
+                "texel shader identity")
+        require("format=r8g8b8a8_unorm" in texel_format[1] and
+                "uniform_texel_reported=1" in texel_format[1],
+                "the device must report the uniform texel buffer bit for RGBA8")
+        require("format=r8g8b8a8_unorm" in texel_witness[1] and
+                "channels=4" in texel_witness[1] and
+                "packed_rgba_order=1" in texel_witness[1] and
+                "mismatches=0" in texel_witness[1] and
+                "guard_mismatches=0" in texel_witness[1],
+                "RGBA8 texel fetch witness")
     require(graphics_start[0] > sync_retired[0] and
             graphics_cold[0] < graphics_warm[0] < graphics_cache_release[0] <
             dynamic_pipeline[0] < present_created[0] and
@@ -481,10 +506,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path)
     parser.add_argument("--artifact", required=True, type=Path)
+    parser.add_argument("--texel-rgba8", action="store_true")
     args = parser.parse_args()
     receipt = json.loads(args.log.with_suffix(".json").read_text())
     artifact = json.loads(args.artifact.read_text())
-    print(json.dumps(validate(args.log.read_bytes(), receipt, artifact), indent=2))
+    print(json.dumps(validate(args.log.read_bytes(), receipt, artifact,
+                              texel_rgba8=args.texel_rgba8), indent=2))
 
 
 if __name__ == "__main__":

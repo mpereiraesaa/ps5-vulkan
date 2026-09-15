@@ -1,0 +1,29 @@
+#version 450
+/* RGBA8 uniform-texel-buffer witness.
+ *
+ * Same descriptor interface as resource_abi.comp, but the lookup table is a
+ * four-component UNORM buffer view instead of a one-component usamplerBuffer.
+ * Each fetched channel is rounded back to its 8-bit value and packed in
+ * (R, G, B, A) order, so the CPU can predict the exact result from the bytes
+ * written into the texel buffer. A wrong GFX10 element format, a wrong channel
+ * completion, a scalar-replicated (X,X,X,X) mapping or an off-by-one record
+ * count each change the packed word and fail the oracle.
+ */
+layout(local_size_x=64) in;
+layout(constant_id=0) const uint multiplier=3u;
+layout(constant_id=1) const uint extra_bias=7u;
+layout(push_constant) uniform PushConstants { uint addend; } push_data;
+layout(set=0,binding=0,std430) readonly buffer Input { uint values[]; } src;
+layout(set=0,binding=1,std430) writeonly buffer Output { uint values[]; } dst;
+layout(set=1,binding=0,std140) uniform Params { uint bias; } params;
+layout(set=2,binding=0) uniform samplerBuffer lookup_rgba8;
+void main()
+{
+    uint i=gl_GlobalInvocationID.x;
+    vec4 texel=texelFetch(lookup_rgba8,int(i));
+    uint packed=(uint(texel.x*255.0+0.5))|
+                (uint(texel.y*255.0+0.5)<<8)|
+                (uint(texel.z*255.0+0.5)<<16)|
+                (uint(texel.w*255.0+0.5)<<24);
+    dst.values[i]=(src.values[i]*multiplier+params.bias+extra_bias+push_data.addend)^packed;
+}

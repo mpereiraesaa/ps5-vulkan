@@ -202,19 +202,17 @@ static void test_buffer_views(void)
         .buffer = b, .format = VK_FORMAT_R32_UINT, .offset = 4, .range = VK_WHOLE_SIZE};
     VkBufferView base = VK_NULL_HANDLE, view = VK_NULL_HANDLE;
     assert(vkCreateBufferView(&d, &vi, NULL, &base) == VK_SUCCESS && base);
-    /* A row whose role is implemented but still waiting for its console
-     * witness must not be creatable: creation follows the witnessed mask, so
-     * the reported set and the creatable set stay identical rather than merely
-     * nested. All four pending RGBA8 formats are refused without output
-     * mutation while the already-witnessed R32 rows still create. */
-    const VkFormat pending[] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
-                                VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_R8G8B8A8_SINT};
-    for (unsigned i = 0; i < sizeof(pending) / sizeof(pending[0]); ++i) {
-        vi.format = pending[i]; vi.offset = 0;
-        assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
-    }
-    const VkFormat witnessed[] = {VK_FORMAT_R32_UINT, VK_FORMAT_R32_SINT, VK_FORMAT_R32_SFLOAT};
-    VkBufferView extra[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    /* Creation follows the witnessed mask, so every row whose role passed its
+     * console witness creates and nothing else does. The four RGBA8 rows are
+     * witnessed by the two-run texelFetch witness recorded in VALIDATION.md. */
+    const VkFormat witnessed[] = {
+        VK_FORMAT_R32_UINT, VK_FORMAT_R32_SINT, VK_FORMAT_R32_SFLOAT,
+        VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
+        VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_R8G8B8A8_SINT,
+    };
+    VkBufferView extra[7] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE,
+                             VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE,
+                             VK_NULL_HANDLE};
     for (unsigned i = 0; i < sizeof(witnessed) / sizeof(witnessed[0]); ++i) {
         vi.format = witnessed[i]; vi.offset = 0;
         assert(vkCreateBufferView(&d, &vi, NULL, &extra[i]) == VK_SUCCESS && extra[i]);

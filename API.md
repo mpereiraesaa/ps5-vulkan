@@ -101,6 +101,8 @@ readback. Each format query exposes only the operations actually established.
 | `VK_FORMAT_A8B8G8R8_UINT_PACK32`, `VK_FORMAT_A8B8G8R8_SINT_PACK32` | Packed typed integer sampled/upload image, nearest only |
 | `VK_FORMAT_R32_UINT` | Uniform texel buffer, hardware validated in compute |
 | `VK_FORMAT_R32_SINT`, `VK_FORMAT_R32_SFLOAT` | Uniform texel buffer object/encoder contract; native execution not yet validated |
+| `VK_FORMAT_R8G8B8A8_UNORM` | Uniform texel buffer, directly hardware validated with compute `texelFetch` |
+| `VK_FORMAT_R8G8B8A8_SNORM`, `VK_FORMAT_R8G8B8A8_UINT`, `VK_FORMAT_R8G8B8A8_SINT` | Uniform texel buffer through the same four-component descriptor path; qualification composes the direct UNORM buffer witness with each format's independently validated conversion/interface evidence |
 
 The shared layout and query path exposes bounded complete mip chains for these
 sampled formats. Direct multi-level hardware evidence currently covers 2D
@@ -182,9 +184,13 @@ layered mip selection, anisotropy, cube arrays or general descriptor arrays.
   GFX1013, with a bounded in-memory compilation cache.
 - Up to four descriptor sets in the compute ABI. The native acceptance fixture
   uses three sets simultaneously.
-- Storage buffers, uniform buffers and uniform texel buffers. The validated
-  texel format is `VK_FORMAT_R32_UINT`, including Vulkan's `(R,0,0,1)`
-  one-component completion; broader format support is not implied.
+- Storage buffers, uniform buffers and uniform texel buffers. Direct native
+  texel-fetch witnesses cover `VK_FORMAT_R32_UINT`, including Vulkan's
+  `(R,0,0,1)` one-component completion, and `VK_FORMAT_R8G8B8A8_UNORM` with
+  four-component identity completion. The SNORM/UINT/SINT RGBA8 rows reuse the
+  same buffer-descriptor path and are qualified compositionally with their
+  existing format-conversion/interface evidence; they were not each fetched by
+  this new payload, and no broader format support is implied.
 - Dynamic storage and uniform-buffer descriptors use the same executable
   compiler ABI as their static forms. `vkCmdBindDescriptorSets` consumes one
   offset for every dynamic descriptor in increasing set, binding and array

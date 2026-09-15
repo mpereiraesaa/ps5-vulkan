@@ -412,17 +412,18 @@ static void lifecycle(void)
         VK_FORMAT_R16_UNORM,VK_FORMAT_R16_SNORM,VK_FORMAT_R16_SFLOAT,
         VK_FORMAT_R16G16_UNORM,VK_FORMAT_R16G16_SNORM,VK_FORMAT_R16G16_SFLOAT,
         VK_FORMAT_R16G16B16A16_UNORM,VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R8G8B8A8_UINT,VK_FORMAT_R8G8B8A8_SINT,
         VK_FORMAT_R32_SFLOAT,VK_FORMAT_R32G32_SFLOAT};
     for (unsigned n=0; n<sizeof(formats)/sizeof(formats[0]); ++n) {
         memset(&fp, 0xff, sizeof(fp));
         vkGetPhysicalDeviceFormatProperties(p, formats[n], &fp);
-        VkFormatFeatureFlags buffer_bits=ps5vk_vertex_format_size(formats[n])?
-            VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
-        if(formats[n]==VK_FORMAT_R32_SFLOAT)
-            buffer_bits|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
-        VkFormatFeatureFlags optimal_bits=0;
         const struct ps5vk_texture_format *sampled=
             ps5vk_texture_format_lookup(formats[n]);
+        VkFormatFeatureFlags buffer_bits=ps5vk_vertex_format_size(formats[n])?
+            VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER))
+            buffer_bits|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
+        VkFormatFeatureFlags optimal_bits=0;
         /* The published bits come from the witnessed column only. */
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
             optimal_bits=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
@@ -511,15 +512,14 @@ static void lifecycle(void)
         VK_FORMAT_A2B10G10R10_UNORM_PACK32};
     for(unsigned n=0;n<sizeof(vertex_formats)/sizeof(vertex_formats[0]);++n) {
         vkGetPhysicalDeviceFormatProperties(p,vertex_formats[n],&fp);
-        VkFormatFeatureFlags expected=VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
-            ((vertex_formats[n]==VK_FORMAT_R32_SFLOAT ||
-              vertex_formats[n]==VK_FORMAT_R32_SINT ||
-              vertex_formats[n]==VK_FORMAT_R32_UINT)?VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT:0);
+        const struct ps5vk_texture_format *sampled=
+            ps5vk_texture_format_lookup(vertex_formats[n]);
+        VkFormatFeatureFlags expected=VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER))
+            expected|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
         assert(fp.bufferFeatures==expected);
         assert(!fp.linearTilingFeatures);
         VkFormatFeatureFlags expected_optimal=0;
-        const struct ps5vk_texture_format *sampled=
-            ps5vk_texture_format_lookup(vertex_formats[n]);
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
             expected_optimal=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT;

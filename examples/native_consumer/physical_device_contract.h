@@ -97,7 +97,9 @@ static void report_physical_device_contract(VkInstance instance,
             bgra.bufferFeatures == VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT &&
             bgra.optimalTilingFeatures == VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT &&
             !rgba.linearTilingFeatures &&
-            rgba.bufferFeatures == VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT &&
+            /* RGBA8 also carries the witnessed uniform-texel-buffer role. */
+            rgba.bufferFeatures == (VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
+                                    VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT) &&
             rgba.optimalTilingFeatures ==
                 (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |

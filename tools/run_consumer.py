@@ -68,6 +68,8 @@ def main() -> int:
                         default=ROOT / "dist-consumer/artifact.json")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--timeout", type=float, default=300.0)
+    parser.add_argument("--texel-rgba8", action="store_true",
+                        help="Require the RGBA8 uniform-texel-buffer witness markers")
     args = parser.parse_args()
 
     if running(args.host) != "none":
@@ -81,7 +83,8 @@ def main() -> int:
         log = wait_for_log(args.runs_dir, known, args.timeout)
         receipt = json.loads(log.with_suffix(".json").read_text())
         artifact = json.loads(args.artifact.read_text())
-        result = validate(log.read_bytes(), receipt, artifact)
+        result = validate(log.read_bytes(), receipt, artifact,
+                          texel_rgba8=args.texel_rgba8)
         result["source_log"] = str(log)
         result["strict_verified"] = True
     finally:

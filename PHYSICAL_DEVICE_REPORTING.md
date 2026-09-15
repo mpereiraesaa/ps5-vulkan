@@ -200,6 +200,7 @@ The current graphics format matrix remains deliberately bounded:
 | `D32_SFLOAT` | optimal depth attachment (the `DEPTH_STENCIL_ATTACHMENT` feature bit, depth aspect only) plus transfer destination, which exists solely for the whole-subresource one-sample depth-only clear |
 | `R32_SFLOAT` | vertex buffer and uniform texel buffer; the texel-buffer role has host-only evidence |
 | `R32_SINT`, `R32_UINT` | uniform texel buffer; UINT has native evidence, SINT is host-only |
+| `R8G8B8A8_UNORM`, `R8G8B8A8_SNORM`, `R8G8B8A8_UINT`, `R8G8B8A8_SINT` | uniform texel buffer with four-component identity completion; UNORM is directly covered by the two-run `texelFetch` witness in VALIDATION.md, while the other three compose that shared buffer path with their independently validated format conversion/interface evidence |
 | `R32G32_SFLOAT`, `R32G32B32_SFLOAT`, `R32G32B32A32_SFLOAT` | vertex buffer |
 
 Image-format queries accept optimal-tiling, sample-count-one combinations that
