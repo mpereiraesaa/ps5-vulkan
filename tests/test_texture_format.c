@@ -262,6 +262,36 @@ int main(void)
         assert(!(r16_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     }
 
+    /* --- two-component 16-bit rows: same staging rule ----------------------
+     * R16G16_UNORM/SNORM/SFLOAT/UINT/SINT carry a four-byte element with the
+     * (4,5,0,1) completion, so the derived completion word is 0x22C and the
+     * combined GFX10 words are 23/24/29/27/28. The mandatory 16-bit table
+     * requires the role for SFLOAT, UINT and SINT; UNORM and SNORM are staged
+     * with them for family coherence. Implemented, still unwitnessed: no
+     * console fetch of this element shape exists yet, the published bit stays
+     * off and creation stays refused (asserted in tests/test_vk_memory.c). */
+    const VkFormat r16g16_texel[] = {
+        VK_FORMAT_R16G16_UNORM, VK_FORMAT_R16G16_SNORM, VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16_UINT, VK_FORMAT_R16G16_SINT,
+    };
+    const uint32_t r16g16_texel_words[] = {23u, 24u, 29u, 27u, 28u};
+    for (unsigned i = 0; i < sizeof(r16g16_texel) / sizeof(r16g16_texel[0]); ++i) {
+        const struct ps5vk_texture_format *entry =
+            ps5vk_texture_format_lookup(r16g16_texel[i]);
+        VkFormatProperties r16g16_properties;
+        assert(entry && entry->bytes_per_texel == 4);
+        assert(ps5vk_texture_format_has(r16g16_texel[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(r16g16_texel[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        /* 16_16_UNORM/SNORM/FLOAT/UINT/SINT in the pinned GFX10 table. */
+        assert(ps5vk_texture_format_gfx10_format(entry) == r16g16_texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x22c));
+        ps5vk_texture_format_properties(r16g16_texel[i], &r16g16_properties);
+        assert(!(r16g16_properties.bufferFeatures &
+                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
