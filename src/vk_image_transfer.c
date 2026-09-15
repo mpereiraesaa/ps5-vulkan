@@ -127,6 +127,12 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
         return transfer_role_destination(op->image_destination) ?
             PS5VK_IMAGE_DOMAIN_TRANSFER : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_COPY_BUFFER_IMAGE:
+        /* An upload into the colour-attachment shape that declares a transfer
+         * destination is frontend work for the same reason the pure transfer
+         * role is: padded linear memory the graphics backend never touches. */
+        return (ps5vk_pure_transfer_image(op->copy_image) ||
+                ps5vk_colour_transfer_image(op->copy_image)) ?
+            PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_COPY_IMAGE_BUFFER:
         return ps5vk_pure_transfer_image(op->copy_image) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
@@ -604,7 +610,13 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
     }
     const VkBuffer buffer = op->type == PS5VK_COPY_BUFFER_IMAGE ?
         op->copy_source : op->copy_destination;
-    if (!ps5vk_pure_transfer_image(op->copy_image) ||
+    /* The upload direction also accepts the colour-attachment shape that
+     * declares a transfer destination; the readback direction does not. */
+    const int image_role = op->type == PS5VK_COPY_BUFFER_IMAGE ?
+        (ps5vk_pure_transfer_image(op->copy_image) ||
+         ps5vk_colour_transfer_image(op->copy_image)) :
+        ps5vk_pure_transfer_image(op->copy_image);
+    if (!image_role ||
         !ps5vk_buffer_usage(d, buffer, op->type == PS5VK_COPY_BUFFER_IMAGE ?
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT : VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
         (op->type == PS5VK_COPY_BUFFER_IMAGE ?

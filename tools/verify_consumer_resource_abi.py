@@ -34,7 +34,7 @@ DRAW_PARAMETER_COVERED_MINIMUM = 900
 # colour-attachment image the draw cases then use: a clear fills everything and
 # a buffer-to-image upload overwrites the leading edge. Both words and their
 # pixel counts are pins, not samples.
-DRAW_PARAMETER_DST_CLEAR_WORD = 0xff602040
+DRAW_PARAMETER_DST_CLEAR_WORD = 0xff604020
 DRAW_PARAMETER_DST_UPLOAD_WORD = 0xff1e140a
 DRAW_PARAMETER_EXTENT = 64
 DRAW_PARAMETER_UPLOAD_EDGE = 8
@@ -484,7 +484,11 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     ready = one("PS5VK_READY_FOR_SHELL_CLOSE ")
 
     extra_texel_dispatches = len(TEXEL_FORMAT_CASES) if texel_formats else 0
-    require(len(prepared) == 4 + (1 if texel_formats else 0) and
+    # Four compute submissions, plus the draw-parameter witness's one
+    # resource-less prelude submission when that scenario ran; its staging
+    # readback is frontend work and adds none.
+    extra_witness_prelude = 1 if draw_parameters_present else 0
+    require(len(prepared) == 4 + extra_witness_prelude + (1 if texel_formats else 0) and
             all(len(rows) == 6 + extra_texel_dispatches
                 for rows in (submitted, suspended, completed)),
             "resource, narrow and synchronization submit records")
@@ -693,9 +697,13 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
                       (2 if inpass_present else 0) +
                       (5 if two_subpass_present else 0) +
                       (len(DRAW_PARAMETER_CASES) if draw_parameters_present else 0))
-    require(all(len(rows) == graphics_count for rows in
-                (graphics_prepared, graphics_submitted,
-                 graphics_suspended, graphics_completed)),
+    # The draw-parameter witness also records one transfer prelude (its colour
+    # transition), which submits and completes but is never prepared by the
+    # graphics backend. Every other submission is a graphics one.
+    prelude_submissions = 1 if draw_parameters_present else 0
+    require(len(graphics_prepared) == graphics_count and
+            all(len(rows) == graphics_count + prelude_submissions for rows in
+                (graphics_submitted, graphics_suspended, graphics_completed)),
             "two graphics submissions per finite frame")
     require(len(depth_reject) == 18 and len(readbacks) == 18,
             "fixed-function frame witnesses")
@@ -716,10 +724,29 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
                 int(readback_fields.get("changed", "0")) > 0,
                 "load/depth/dynamic draw oracle")
     serials = [int(fields(row[1])["serial"]) for row in graphics_prepared]
+    # The draw-parameter witness's colour transition is a transfer prelude: it
+    # submits and completes, but the graphics backend never prepares it, so the
+    # pairing and status checks below are over the graphics submissions only.
+    graphics_serials = set(serials)
+    prelude_serials = sorted({int(fields(row[1])["serial"]) for row in graphics_submitted} -
+                             graphics_serials)
+    require(len(prelude_serials) == prelude_submissions,
+            "draw-parameter transfer prelude submissions")
+    graphics_submitted = [row for row in graphics_submitted
+                          if int(fields(row[1])["serial"]) in graphics_serials]
+    graphics_suspended = [row for row in graphics_suspended
+                          if int(fields(row[1])["serial"]) in graphics_serials]
+    graphics_completed = [row for row in graphics_completed
+                          if int(fields(row[1])["serial"]) in graphics_serials]
     expected_draws = ["1"] * graphics_count
     if two_subpass_present:
         expected_draws[-5:] = ["2", "2", "1", "1", "2"]
-    require(serials == list(range(serials[0], serials[0] + graphics_count)) and
+    # The graphics submissions must retire in increasing serial order. Their
+    # serials are not contiguous: the payload's non-graphics submissions (the
+    # compute blocks, the draw-parameter preludes and the per-case staging
+    # readback) take serials in between, which is exactly what the counts above
+    # and below bound.
+    require(all(later > earlier for earlier, later in zip(serials, serials[1:])) and
             [fields(row[1]).get("draws") for row in graphics_prepared] == expected_draws and
             all(fields(row[1]).get("rc") == "0" for row in graphics_submitted) and
             all(fields(row[1]).get("rc") == "0" for row in graphics_suspended),

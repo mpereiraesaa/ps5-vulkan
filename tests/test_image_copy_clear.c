@@ -846,6 +846,63 @@ int main(void)
         assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FEATURE_NOT_PRESENT && !image);
     }
 
+    /* --- the destination sequence the native witness pins on hardware ------
+     * The witness clears the colour attachment and uploads an edge into it
+     * through the transfer destination the pinned upstream draw cases declare,
+     * then reads those bytes from the CPU. The same sequence is executed and
+     * pinned here, so the witness cannot disagree with the driver about the
+     * bytes it reads. */
+    {
+        enum { EDGE = 2 };
+        const uint32_t clear_word = 0xff604020u, upload_word = 0xff1e140au;
+        const uint32_t pitch = (WIDTH * 4u + 255u) & ~255u;
+        VkImage colour = make_image(VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT, NULL);
+        assert(ps5vk_colour_transfer_image(colour));
+        uint32_t *upload_words = NULL;
+        VkBuffer upload = make_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                      EDGE * EDGE * 4, (void **)&upload_words);
+        for (unsigned i = 0; i < EDGE * EDGE; ++i) upload_words[i] = upload_word;
+
+        VkCommandBuffer command = begin();
+        VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        /* The transitions are recorded and executed by the pinned sequence; this
+         * block pins the bytes, so the committed layout they would establish is
+         * injected exactly as a completed submission leaves it. */
+        colour->layout = VK_IMAGE_LAYOUT_GENERAL;
+        VkClearColorValue clear = {0};
+        clear.float32[0] = 0x20 / 255.0f;
+        clear.float32[1] = 0x40 / 255.0f;
+        clear.float32[2] = 0x60 / 255.0f;
+        clear.float32[3] = 1.0f;
+        vkCmdClearColorImage(command, colour, VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
+        VkBufferImageCopy region = {
+            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+            .imageExtent = {EDGE, EDGE, 1}};
+        vkCmdCopyBufferToImage(command, upload, colour, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+        assert(command->state == PS5VK_RECORDING);
+        (void)range;
+        submit_and_wait(command);
+
+        void *address = NULL;
+        VkDeviceSize bytes = 0;
+        assert(ps5vk_image_span(device, colour, &address, &bytes) == VK_SUCCESS);
+        assert(bytes >= (VkDeviceSize)pitch * HEIGHT);
+        unsigned clear_matched = 0, upload_matched = 0;
+        for (unsigned y = 0; y < HEIGHT; ++y)
+            for (unsigned x = 0; x < WIDTH; ++x) {
+                uint32_t word = 0;
+                memcpy(&word, (unsigned char *)address + (VkDeviceSize)y * pitch +
+                       (VkDeviceSize)x * 4u, sizeof(word));
+                if (x < EDGE && y < EDGE) upload_matched += word == upload_word;
+                else clear_matched += word == clear_word;
+            }
+        assert(clear_matched == WIDTH * HEIGHT - EDGE * EDGE);
+        assert(upload_matched == EDGE * EDGE);
+        vkDestroyImage(device, colour, NULL);
+    }
+
     vkDestroyBuffer(device, alias_buffer, NULL);
     vkDestroyImage(device, alias_destination, NULL);
     vkDestroyImage(device, alias_source, NULL);

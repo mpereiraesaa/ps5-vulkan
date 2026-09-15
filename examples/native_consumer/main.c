@@ -1937,7 +1937,7 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
      * before any draw runs - the colour-attachment role is exercised later by
      * the six draw cases on the same image. */
     {
-        const uint32_t clear_word = 0xff602040u;  /* R=20 G=40 B=60 A=ff */
+        const uint32_t clear_word = 0xff604020u;  /* R=20 G=40 B=60 A=ff: R is the low byte */
         const uint32_t upload_word = 0xff1e140au; /* R=0a G=14 B=1e A=ff */
         enum { UPLOAD_EDGE = 8 };
         VkBufferCreateInfo upload_info = {
@@ -1981,7 +1981,10 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = image, .subresourceRange = range};
-        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        /* The pinned upstream draw case's own transition stages: TOP_OF_PIPE to
+         * TRANSFER for the initial UNDEFINED -> GENERAL transfer write
+         * (vktDrawBaseClass.cpp:199-200). */
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_dst);
         VkClearColorValue clear = {0};
         clear.float32[0] = 0x20 / 255.0f;
@@ -1997,16 +2000,18 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
             .imageExtent = {UPLOAD_EDGE, UPLOAD_EDGE, 1}};
         vkCmdCopyBufferToImage(command, upload_buffer, image,
                                VK_IMAGE_LAYOUT_GENERAL, 1, &copy);
-        VkImageMemoryBarrier to_color = to_dst;
-        to_color.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        to_color.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        to_color.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        to_color.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        to_color.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        /* The pinned upstream draw case orders the transfer write against the
+         * colour-attachment stages with a resource-less memory barrier
+         * (vktDrawBaseClass.cpp:207-211); the witness records the same shape
+         * rather than a second image barrier the profile does not claim. */
+        VkMemoryBarrier to_color = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT};
         vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL,
-            1, &to_color);
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 1, &to_color, 0,
+            NULL, 0, NULL);
         CHECK(vkEndCommandBuffer(command));
         CHECK(vkResetFences(device, 1, &fence));
         VkSubmitInfo dst_submit = {
@@ -2063,6 +2068,15 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     VkDeviceMemory staging_memory = VK_NULL_HANDLE;
     CHECK(vkAllocateMemory(device, &staging_allocation, NULL, &staging_memory));
     CHECK(vkBindImageMemory(device, staging_image, staging_memory, 0));
+    /* The staging allocation stays mapped: the invalidation below names a
+     * mapped range, exactly as the module's own allocation does. */
+    unsigned char *staging_bytes = NULL;
+    CHECK(vkMapMemory(device, staging_memory, 0, staging_requirements.size, 0,
+                      (void **)&staging_bytes));
+    if (!staging_bytes) {
+        ps5log_printf(PS5LOG_ERR, "PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_MAP_FAILED");
+        return;
+    }
     VkSubresourceLayout staging_layout = {0};
     const VkImageSubresource staging_subresource = {
         VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
@@ -2223,16 +2237,13 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
                 .size = staging_requirements.size};
             CHECK(vkInvalidateMappedMemoryRanges(device, 1, &staging_invalidate));
 
-            const unsigned char *staged_bytes = NULL;
-            CHECK(vkMapMemory(device, staging_memory, 0, staging_requirements.size,
-                              0, (void **)&staged_bytes));
             unsigned staged_covered = 0;
             uint32_t staged_observed = 0;
             int staged_uniform = 1;
             for (unsigned y = 0; y < EXTENT; ++y) {
                 for (unsigned x = 0; x < EXTENT; ++x) {
                     uint32_t word = 0;
-                    memcpy(&word, staged_bytes + (VkDeviceSize)y * staging_layout.rowPitch +
+                    memcpy(&word, staging_bytes + (VkDeviceSize)y * staging_layout.rowPitch +
                            (VkDeviceSize)x * 4u, sizeof(word));
                     if (word == clear_word) continue;
                     if (!staged_covered) staged_observed = word;
@@ -2250,7 +2261,6 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
                 (unsigned long long)staging_requirements.size, staged_observed,
                 staged_covered, staged_uniform, staging_layout_valid, staged_valid);
             if (staged_valid) ++staged_witnessed;
-            vkUnmapMemory(device, staging_memory);
         }
     }
     ps5log_printf(PS5LOG_MARK,
@@ -2283,6 +2293,7 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     vkDestroyImage(device, image, NULL);
     vkFreeMemory(device, image_memory, NULL);
     vkDestroyImage(device, staging_image, NULL);
+    vkUnmapMemory(device, staging_memory);
     vkFreeMemory(device, staging_memory, NULL);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_CONSUMER_DRAW_PARAMETERS_RETIRED cases=%u witnessed=%u",

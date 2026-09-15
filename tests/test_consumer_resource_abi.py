@@ -24,6 +24,14 @@ def draw_parameter_messages(first_serial=13,
     """The witness rows as the hardware emits them, from the verifier's table."""
     rows = [
         "PS5VK_CONSUMER_DRAW_PARAMETERS_START cases=6 extent=64",
+        # The destination witness also records the pinned resource-less barrier
+        # that orders its transfer write against the colour-attachment stages;
+        # the router prepares that one submission with no dispatches, so it
+        # submits and completes without a graphics prepare record.
+        "PS5VK_QUEUE_PREPARED serial=60 dispatches=0",
+        "PS5VK_GRAPHICS_SUBMIT serial=60 rc=0",
+        "PS5VK_GRAPHICS_SUSPEND_POINT serial=60 rc=0",
+        "PS5VK_GRAPHICS_COMPLETED serial=60 image_bytes=0",
         f"PS5VK_CONSUMER_DRAW_PARAMETERS_DST "
         f"clear_word={DRAW_PARAMETER_DST_CLEAR_WORD:08x} "
         f"clear_matched={DRAW_PARAMETER_EXTENT * DRAW_PARAMETER_EXTENT - DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE} "

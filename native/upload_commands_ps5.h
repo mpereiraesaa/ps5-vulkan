@@ -31,7 +31,19 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
                 op->src_access==VK_ACCESS_HOST_WRITE_BIT &&
                 op->dst_access==VK_ACCESS_TRANSFER_READ_BIT;
-            if(!vertex && !upload)return VK_ERROR_FEATURE_NOT_PRESENT;
+            /* The pinned upstream draw case orders the transfer write that
+             * initialised and cleared its colour target against the
+             * colour-attachment stages (vktDrawBaseClass.cpp:207-211). The
+             * barrier names no resource of its own, so it is the same acquire
+             * the prelude already emits, bounded to exactly that pair of stages
+             * and accesses. */
+            const int color_prelude=!op->buffer_barrier.buffer &&
+                op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                op->dst_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+                op->src_access==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                op->dst_access==(VkAccessFlags)(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|
+                                                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+            if(!vertex && !upload && !color_prelude)return VK_ERROR_FEATURE_NOT_PRESENT;
             if(op->buffer_barrier.buffer) {
                 void *address;VkDeviceSize bytes;
                 VkResult rc=ps5vk_buffer_span(d,op->buffer_barrier.buffer,
@@ -48,6 +60,17 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
                  b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
                  b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT && b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT) ||
+                /* The pinned draw case's first transition: the RGBA8 colour
+                 * attachment that also declares a transfer destination goes
+                 * UNDEFINED -> GENERAL for the transfer write that follows, with
+                 * the same stage and access pair the recorder accepts. This is
+                 * the prelude that must agree with that record. */
+                (ps5vk_colour_transfer_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+                 b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
+                 !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                 op->src_stage==VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT &&
+                 op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
                 /* The cleared depth target becoming a depth attachment. This is
                  * the transition that makes an explicit clear controllable by a
                  * later depth test, so it is bounded to exactly that: a D32

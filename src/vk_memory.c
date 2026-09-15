@@ -13,18 +13,6 @@
  * TRANSFER_DST alone, exclusive sharing and an UNDEFINED initial layout. Every
  * field is part of the match, so the linear role cannot be widened by a caller
  * that only gets the interesting ones right. */
-int ps5vk_linear_staging_descriptor(const VkImageCreateInfo *info)
-{
-    return info && info->sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO &&
-        info->tiling == VK_IMAGE_TILING_LINEAR && !info->pNext && !info->flags &&
-        info->format == VK_FORMAT_R8G8B8A8_UNORM &&
-        info->imageType == VK_IMAGE_TYPE_2D &&
-        info->mipLevels == 1 && info->arrayLayers == 1 &&
-        info->samples == VK_SAMPLE_COUNT_1_BIT && info->extent.depth == 1 &&
-        info->usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT &&
-        info->sharingMode == VK_SHARING_MODE_EXCLUSIVE &&
-        info->initialLayout == VK_IMAGE_LAYOUT_UNDEFINED;
-}
 
 struct VkDeviceMemory_T {
     VkDevice device;
@@ -509,51 +497,14 @@ VkResult ps5vk_image_span(VkDevice d, VkImage image, void **address, VkDeviceSiz
     return VK_SUCCESS;
 }
 
-VkBool32 ps5vk_pure_transfer_image(VkImage image)
-{
-    if (!image) return VK_FALSE;
-    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
-        image->info.imageType == VK_IMAGE_TYPE_2D &&
-        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
-        image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
-        image->info.tiling == VK_IMAGE_TILING_OPTIMAL && image->info.usage &&
-        !(image->info.usage &
-          ~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-}
 
 /* The pinned upstream draw module's host-readback staging image: the only
  * linear-tiling image this profile creates. It is real linear memory, so
  * vkGetImageSubresourceLayout can describe it and a colour copy can fill it
  * row by row; nothing samples, renders into or clears it. */
-VkBool32 ps5vk_linear_staging_image(VkImage image)
-{
-    if (!image) return VK_FALSE;
-    return image->info.tiling == VK_IMAGE_TILING_LINEAR &&
-        image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
-        image->info.imageType == VK_IMAGE_TYPE_2D &&
-        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
-        image->info.extent.depth == 1 &&
-        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
-        image->info.usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-}
 
 /* The colour-attachment shape whose clear and buffer-upload destinations are
  * implemented. It is the readback row of the transfer format with the
  * attachment role and a transfer destination declared, which is exactly the
  * image the pinned upstream draw tests create; every other combination stays
  * fail-closed, and the transfer-only predicate above is unchanged. */
-VkBool32 ps5vk_colour_transfer_image(VkImage image)
-{
-    if (!image) return VK_FALSE;
-    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
-        image->info.imageType == VK_IMAGE_TYPE_2D &&
-        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
-        image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
-        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
-        (image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
-        (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
-        !(image->info.usage &
-          ~(VkImageUsageFlags)(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                               VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-}

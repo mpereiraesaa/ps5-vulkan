@@ -109,7 +109,15 @@
       "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_32_bytes",
       "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex.single_descriptor.2d",
       "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.fragment.single_descriptor.2d",
-      "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex_fragment.single_descriptor.2d"
+      "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex_fragment.single_descriptor.2d",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indirect",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed_indirect",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect"
     ],
     "diagnostics": [
       "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.update_buffer_second_part",
@@ -1583,12 +1591,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 1 usage 0x4: features 0x0 implies supported=False, query answered supported=False",
+      "detail": "tiling 1 usage 0x4: features 0x8000 implies supported=False, query answered supported=False",
       "expected_supported": false,
       "format": 37,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 0,
+      "reported_features": 32768,
       "reported_supported": false,
       "tiling": 1,
       "usage": 4,
@@ -1643,12 +1651,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 1 usage 0x4: features 0x0 implies supported=False, query answered supported=False",
+      "detail": "tiling 1 usage 0x4: features 0x8000 implies supported=False, query answered supported=False",
       "expected_supported": false,
       "format": 37,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 0,
+      "reported_features": 32768,
       "reported_supported": false,
       "tiling": 1,
       "usage": 4,
@@ -1667,12 +1675,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 1 usage 0x10: features 0x0 implies supported=False, query answered supported=False",
+      "detail": "tiling 1 usage 0x10: features 0x8000 implies supported=False, query answered supported=False",
       "expected_supported": false,
       "format": 37,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 0,
+      "reported_features": 32768,
       "reported_supported": false,
       "tiling": 1,
       "usage": 16,
@@ -1691,12 +1699,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 1 usage 0x20: features 0x0 implies supported=False, query answered supported=False",
+      "detail": "tiling 1 usage 0x20: features 0x8000 implies supported=False, query answered supported=False",
       "expected_supported": false,
       "format": 37,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 0,
+      "reported_features": 32768,
       "reported_supported": false,
       "tiling": 1,
       "usage": 32,
@@ -1715,12 +1723,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 1 usage 0x8: features 0x0 implies supported=False, query answered supported=False",
+      "detail": "tiling 1 usage 0x8: features 0x8000 implies supported=False, query answered supported=False",
       "expected_supported": false,
       "format": 37,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 0,
+      "reported_features": 32768,
       "reported_supported": false,
       "tiling": 1,
       "usage": 8,
