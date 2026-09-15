@@ -421,7 +421,12 @@ int main(void)
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
                                VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
-    assert(!properties.linearTilingFeatures);
+    /* The one linear-tiling role this profile publishes: the pinned upstream
+     * draw module's host-readback staging image, which is this format, is 2D,
+     * single-mip/layer/sample and carries a transfer destination alone. Every
+     * other format still reports nothing here. */
+    assert(properties.linearTilingFeatures ==
+        (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
     ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_UNORM, &properties);
     assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
     assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);

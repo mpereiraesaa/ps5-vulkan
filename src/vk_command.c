@@ -1107,6 +1107,21 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
         (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
          b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
          !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT);
+    /* The linear staging image the pinned draw module reads back through gets
+     * exactly the two transitions that module records
+     * (vktDrawImageObjectUtil.cpp:415-443): UNDEFINED to GENERAL for the
+     * transfer write that fills it, and GENERAL to GENERAL from that transfer
+     * write to the host read that consumes it. Both layouts are already
+     * meaningful for this role and the stage/access scopes are checked by the
+     * generic command-scope gate; anything else stays refused. */
+    if(ps5vk_linear_staging_image(image))return
+        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+         b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        (b->oldLayout==VK_IMAGE_LAYOUT_GENERAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
+         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+         b->dstAccessMask==VK_ACCESS_HOST_READ_BIT);
     /* Pure transfer role: host-visible memory that no GPU stage samples or
      * renders into, so every transition among the transfer layouts is honest
      * bookkeeping. Only transfer dependencies can order such an image. */

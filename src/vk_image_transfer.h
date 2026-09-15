@@ -26,6 +26,18 @@
  * through the memory backend after each driver-originated write. */
 VkBool32 ps5vk_image_transfer_operation(enum ps5vk_operation_type type);
 
+/* Which executor owns a recorded image operation: the pure transfer role's row
+ * memcpy (TRANSFER) or the linear frontend's padded-linear work, which now
+ * includes the colour-attachment readback copy into the staging image (LINEAR).
+ * Exactly one domain owns an operation, so the two executors cannot both act on
+ * it. */
+enum ps5vk_image_domain {
+    PS5VK_IMAGE_DOMAIN_NONE,
+    PS5VK_IMAGE_DOMAIN_TRANSFER,
+    PS5VK_IMAGE_DOMAIN_LINEAR
+};
+enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *operation);
+
 /* The depth role vkCmdClearDepthStencilImage accepts: a one-sample D32_SFLOAT
  * 2D target carrying the transfer-destination usage the clear consumes. The
  * depth/stencil attachment usage may accompany it but is not required, because

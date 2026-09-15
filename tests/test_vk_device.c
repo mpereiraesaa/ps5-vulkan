@@ -408,6 +408,38 @@ static void lifecycle(void)
             VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)
             ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     }
+    /* The one linear-tiling combination this profile publishes is the pinned
+     * upstream draw module's host-readback staging shape, and the query reports
+     * exactly what creation accepts: one mip, one layer, one sample. */
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_LINEAR,VK_IMAGE_USAGE_TRANSFER_DST_BIT,0,&ip)
+        ==VK_SUCCESS && ip.maxExtent.width==PS5VK_MAX_IMAGE_2D &&
+        ip.maxExtent.height==PS5VK_MAX_IMAGE_2D && ip.maxExtent.depth==1 &&
+        ip.maxMipLevels==1 && ip.maxArrayLayers==1 &&
+        ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT &&
+        ip.maxResourceSize==p->platform.max_allocation);
+    /* Every neighbouring linear request stays refused with the output untouched. */
+    {
+        const struct { VkFormat format; VkImageType type; VkImageUsageFlags usage;
+                       VkImageCreateFlags flags; } not_linear[] = {
+            {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_1D, VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_3D, VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D,
+             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D,
+             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+             VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT}};
+        for (unsigned n = 0; n < sizeof(not_linear) / sizeof(not_linear[0]); ++n) {
+            memset(&ip, 0xff, sizeof(ip));
+            assert(vkGetPhysicalDeviceImageFormatProperties(p, not_linear[n].format,
+                not_linear[n].type, VK_IMAGE_TILING_LINEAR, not_linear[n].usage,
+                not_linear[n].flags, &ip) == VK_ERROR_FORMAT_NOT_SUPPORTED &&
+                !memcmp(&ip, &zero_ip, sizeof(ip)));
+        }
+    }
     const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
         VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM,
         VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT,
@@ -446,7 +478,11 @@ static void lifecycle(void)
              * only transfer role 64KB_Z_X has; there is no TRANSFER_SRC. */
             optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-        assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
+        /* One format publishes a linear-tiling role: RGBA8 carries the transfer
+         * destination of the pinned host-readback staging image. */
+        const VkFormatFeatureFlags linear_bits = formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?
+            (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT : 0;
+        assert(fp.linearTilingFeatures==linear_bits && fp.bufferFeatures==buffer_bits &&
             fp.optimalTilingFeatures==optimal_bits);
     }
     /* Query/create coherence: for every format the capability table knows, the
@@ -524,7 +560,10 @@ static void lifecycle(void)
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER))
             expected|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
         assert(fp.bufferFeatures==expected);
-        assert(!fp.linearTilingFeatures);
+        /* RGBA8 is also the one linear-tiling staging row; the other vertex
+         * formats publish nothing there. */
+        assert(fp.linearTilingFeatures==(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?
+            (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT : 0));
         VkFormatFeatureFlags expected_optimal=0;
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
             expected_optimal=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |

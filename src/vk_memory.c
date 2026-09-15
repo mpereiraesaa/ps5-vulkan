@@ -2,10 +2,29 @@
 #include "vk_descriptor.h"
 #include "vk_image.h"
 #include "texture_format.h"
+#include "texture_layout.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Exactly the descriptor the pinned upstream draw module's host readback
+ * creates: RGBA8, 2D, one mip, one layer, one sample, LINEAR tiling, usage
+ * TRANSFER_DST alone, exclusive sharing and an UNDEFINED initial layout. Every
+ * field is part of the match, so the linear role cannot be widened by a caller
+ * that only gets the interesting ones right. */
+int ps5vk_linear_staging_descriptor(const VkImageCreateInfo *info)
+{
+    return info && info->sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO &&
+        info->tiling == VK_IMAGE_TILING_LINEAR && !info->pNext && !info->flags &&
+        info->format == VK_FORMAT_R8G8B8A8_UNORM &&
+        info->imageType == VK_IMAGE_TYPE_2D &&
+        info->mipLevels == 1 && info->arrayLayers == 1 &&
+        info->samples == VK_SAMPLE_COUNT_1_BIT && info->extent.depth == 1 &&
+        info->usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT &&
+        info->sharingMode == VK_SHARING_MODE_EXCLUSIVE &&
+        info->initialLayout == VK_IMAGE_LAYOUT_UNDEFINED;
+}
 
 struct VkDeviceMemory_T {
     VkDevice device;
@@ -314,6 +333,15 @@ VkResult ps5vk_image_flush_range(VkDevice d, VkImage image, VkDeviceSize offset,
     return d->memory.flush(d->memory.context, image->memory->backing, image->offset + offset, size);
 }
 
+VkResult ps5vk_image_invalidate_range(VkDevice d, VkImage image, VkDeviceSize offset, VkDeviceSize size)
+{
+    void *address = NULL; VkDeviceSize bytes = 0;
+    if (ps5vk_image_span(d, image, &address, &bytes) != VK_SUCCESS) return INVALID;
+    if (!image->memory || offset > bytes || size > bytes - offset) return INVALID;
+    if (!d->memory.invalidate) return VK_SUCCESS;
+    return d->memory.invalidate(d->memory.context, image->memory->backing, image->offset + offset, size);
+}
+
 VkResult ps5vk_buffer_cache(VkDevice d, VkBuffer b, VkDeviceSize offset,
     VkDeviceSize range, VkBool32 invalidate)
 {
@@ -337,13 +365,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO) return INVALID;
     if (!d->graphics_enabled || !d->image_requirements) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* The one linear image this profile creates: the pinned upstream draw
+     * module's host-readback staging image, which it creates with
+     * VK_IMAGE_TILING_LINEAR and TRANSFER_DST only
+     * (vktDrawImageObjectUtil.cpp:398-401) and then addresses through
+     * vkGetImageSubresourceLayout. The descriptor is matched exactly here, so
+     * a different format, type, mip/layer/sample count, usage, sharing mode or
+     * initial layout stays refused instead of being stored as tiled and read
+     * back as if it were linear. */
+    const int linear_staging = ps5vk_linear_staging_descriptor(info);
     if (info->pNext ||
         (info->flags && info->flags != VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
         (info->imageType != VK_IMAGE_TYPE_1D && info->imageType != VK_IMAGE_TYPE_2D &&
          info->imageType != VK_IMAGE_TYPE_3D) ||
         !info->arrayLayers || info->samples != VK_SAMPLE_COUNT_1_BIT ||
-        info->sharingMode != VK_SHARING_MODE_EXCLUSIVE || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
+        info->sharingMode != VK_SHARING_MODE_EXCLUSIVE ||
         info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Only the one linear descriptor above is backed; any other linear request
+     * is a format/tiling combination this profile does not support, which is
+     * what the corresponding capability query reports too. */
+    if (info->tiling != VK_IMAGE_TILING_OPTIMAL && !linear_staging)
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     const VkImageUsageFlags supported = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     if (!info->usage || info->usage & ~supported || !info->extent.width || !info->extent.height ||
@@ -409,10 +451,21 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(VkDevice d, VkImage image
     if (!pLayout) return;
     memset(pLayout, 0, sizeof(*pLayout));
     if (!d || !image || image->device != d || !pSubresource) return;
-    /* ps5vk only supports optimal tiling for hardware graphics and rejects
-     * linear tiling at image creation. Non-linear layouts must never be
-     * fabricated as linear, so safe zeroing is returned. */
-    if (image->info.tiling != VK_IMAGE_TILING_LINEAR) return;
+    /* Tiled images never report a fabricated linear layout: they stay zeroed.
+     * The one linear image this profile creates is described honestly from the
+     * same padded linear layout the transfer role and the upload path use. */
+    if (!ps5vk_linear_staging_image(image)) return;
+    if (pSubresource->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+        pSubresource->mipLevel || pSubresource->arrayLayer) return;
+    uint32_t row_pitch = 0;
+    uint64_t bytes = 0;
+    if (ps5vk_texture_row_layout(4u, image->info.extent.width,
+            image->info.extent.height, &row_pitch, &bytes)) return;
+    pLayout->offset = 0;
+    pLayout->rowPitch = row_pitch;
+    pLayout->depthPitch = bytes;
+    pLayout->arrayPitch = bytes;
+    pLayout->size = bytes;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(VkDevice d, VkImage image, VkDeviceMemory m, VkDeviceSize offset)
@@ -466,6 +519,22 @@ VkBool32 ps5vk_pure_transfer_image(VkImage image)
         image->info.tiling == VK_IMAGE_TILING_OPTIMAL && image->info.usage &&
         !(image->info.usage &
           ~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+}
+
+/* The pinned upstream draw module's host-readback staging image: the only
+ * linear-tiling image this profile creates. It is real linear memory, so
+ * vkGetImageSubresourceLayout can describe it and a colour copy can fill it
+ * row by row; nothing samples, renders into or clears it. */
+VkBool32 ps5vk_linear_staging_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    return image->info.tiling == VK_IMAGE_TILING_LINEAR &&
+        image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1 &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 }
 
 /* The colour-attachment shape whose clear and buffer-upload destinations are

@@ -754,6 +754,98 @@ int main(void)
     vkCmdClearAttachments(bad, 1, &ca, 1, &cr);
     assert(bad->state == PS5VK_INVALID);
 
+    /* --- the one linear-tiling role: the pinned host-readback staging image ---
+     * Exactly one descriptor is accepted - RGBA8, 2D, one mip, one layer, one
+     * sample, LINEAR tiling, TRANSFER_DST alone, exclusive sharing, UNDEFINED
+     * initial layout - and its bytes are the padded linear layout the transfer
+     * role already uses, so vkGetImageSubresourceLayout can describe it. */
+    VkImageCreateInfo staging = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {WIDTH, HEIGHT, 1},
+        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_LINEAR, .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkImage staging_image = VK_NULL_HANDLE;
+    assert(vkCreateImage(device, &staging, NULL, &staging_image) == VK_SUCCESS);
+    assert(ps5vk_linear_staging_image(staging_image));
+    assert(!ps5vk_pure_transfer_image(staging_image) && !ps5vk_colour_transfer_image(staging_image));
+    VkMemoryRequirements staging_requirements;
+    vkGetImageMemoryRequirements(device, staging_image, &staging_requirements);
+    struct ps5vk_texture_layout staging_layout = {0};
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_R8G8B8A8_UNORM, WIDTH, HEIGHT,
+        &staging_layout) == 0);
+    assert(staging_requirements.size == staging_layout.bytes);
+    assert(staging_requirements.alignment == staging_layout.alignment);
+    assert(staging_requirements.memoryTypeBits == 1);
+    VkImageSubresource subresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    VkSubresourceLayout subresource_layout = {0};
+    vkGetImageSubresourceLayout(device, staging_image, &subresource, &subresource_layout);
+    assert(subresource_layout.offset == 0 && subresource_layout.rowPitch == staging_layout.row_pitch);
+    assert(subresource_layout.depthPitch == staging_layout.bytes &&
+           subresource_layout.size == staging_layout.bytes);
+    assert(subresource_layout.arrayPitch == staging_layout.bytes);
+    /* A tiled image and a subresource this role does not have report nothing
+     * rather than a fabricated linear layout. */
+    VkSubresourceLayout tiled_layout = {0};
+    vkGetImageSubresourceLayout(device, source, &subresource, &tiled_layout);
+    assert(!tiled_layout.offset && !tiled_layout.rowPitch && !tiled_layout.size);
+    VkImageSubresource wrong_mip = {VK_IMAGE_ASPECT_COLOR_BIT, 1, 0};
+    VkSubresourceLayout wrong_layout = {0};
+    vkGetImageSubresourceLayout(device, staging_image, &wrong_mip, &wrong_layout);
+    assert(!wrong_layout.rowPitch && !wrong_layout.size);
+    VkImageSubresource wrong_aspect = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0};
+    vkGetImageSubresourceLayout(device, staging_image, &wrong_aspect, &wrong_layout);
+    assert(!wrong_layout.rowPitch && !wrong_layout.size);
+    vkDestroyImage(device, staging_image, NULL);
+
+    /* Everything else that asks for linear tiling stays refused before an
+     * object exists. */
+    {
+        VkImageCreateInfo refused = staging;
+        VkImage image = VK_NULL_HANDLE;
+        refused.format = VK_FORMAT_B8G8R8A8_UNORM;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.format = VK_FORMAT_R8G8B8A8_SNORM;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.mipLevels = 2;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.arrayLayers = 2;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        /* A 1D and a 3D linear request are both well formed for the generic
+         * descriptor gate and still refused as the unsupported combinations
+         * they are. */
+        refused = staging;
+        refused.imageType = VK_IMAGE_TYPE_1D;
+        refused.extent.height = 1;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.imageType = VK_IMAGE_TYPE_3D;
+        refused.extent.depth = 4;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        refused.extent.height = WIDTH;
+        refused.arrayLayers = 6;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        /* Exclusive sharing and an UNDEFINED initial layout are generic
+         * descriptor rules, so they are refused by the ordinary gate. */
+        refused = staging;
+        refused.sharingMode = VK_SHARING_MODE_CONCURRENT;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FEATURE_NOT_PRESENT && !image);
+        refused = staging;
+        refused.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FEATURE_NOT_PRESENT && !image);
+    }
+
     vkDestroyBuffer(device, alias_buffer, NULL);
     vkDestroyImage(device, alias_destination, NULL);
     vkDestroyImage(device, alias_source, NULL);

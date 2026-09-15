@@ -14,8 +14,10 @@
  *   4. the pre-render transition, the clear in GENERAL and the memory barrier
  *      (vktDrawBaseClass.cpp:195-206);
  *   5. the pinned draw forms (vktDrawShaderDrawParametersTests.cpp:366-423);
- *   6. the readback staging image, which the profile still refuses
- *      (vktDrawImageObjectUtil.cpp:392-443).
+ *   6. the readback path in full (vktDrawImageObjectUtil.cpp:392-443): the
+ *      linear staging image, its two barriers, the GENERAL-to-GENERAL copy out
+ *      of the colour attachment, the submit, and the host read of the staging
+ *      rows through vkGetImageSubresourceLayout.
  *
  * The pipeline is created through the public entry point with the pinned
  * create-info, and the fixture's compiler callback asserts the key the profile
@@ -25,8 +27,11 @@
  * firstVertex, dropped the first instance, or accepted a multidraw command
  * would be caught here instead of on the console.
  *
- * It is a recording-layer trace: no GPU work, no submission and no readback are
- * performed, so the pipeline/draw/readback execution gates remain covered by
+ * It is a recording-layer trace plus the one execution path that needs no GPU:
+ * the readback copy is host work in this profile, so it is submitted for real
+ * and its result read from memory. The tiled colour surface is written through
+ * the same 64KB_R_X offsets the hardware uses, so the assertion proves the copy
+ * detiles instead of copying rows. Pipeline and draw execution stay covered by
  * tests/test_vk_graphics_pipeline.c, the emitter tests and the hardware session.
  */
 #include "vk_internal.h"
@@ -35,6 +40,8 @@
 #include "graphics_formats.h"
 #include "graphics_program.h"
 #include "physical_device_profile.h"
+#include "color_detile.h"
+#include "texture_layout.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -484,20 +491,162 @@ int main(void)
         assert(rejected->state != PS5VK_RECORDING);
     }
 
-    /* 7. The one remaining boundary: the pinned readback stages through a
-     *    VK_IMAGE_TILING_LINEAR image, which this profile refuses because every
-     *    image it accepts is tiled optimal. When that role is implemented this
-     *    assertion becomes the creation of the staging image plus the
-     *    GENERAL-to-GENERAL image copy the module issues. */
-    VkImageCreateInfo staging_info = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
-        .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {WIDTH, HEIGHT, 1},
-        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_LINEAR, .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-    VkImage staging = VK_NULL_HANDLE;
-    assert(vkCreateImage(device, &staging_info, NULL, &staging) ==
-           VK_ERROR_FEATURE_NOT_PRESENT && !staging);
+    /* 7. The pinned readback, executed for real. The staging image is linear
+     *    memory this profile describes honestly, so the module's sequence -
+     *    transition, GENERAL-to-GENERAL copy, host-read barrier - runs to
+     *    completion here and the host reads the staging rows afterwards. */
+    VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+    VkImage staging = make_image(VK_IMAGE_TILING_LINEAR,
+                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT, &staging_memory);
+    assert(ps5vk_linear_staging_image(staging));
+    assert(ps5vk_colour_transfer_image(target));
+    assert(!ps5vk_pure_transfer_image(staging));
+
+    /* The colour target's content, written the way the GPU writes it: through
+     * the 64KB_R_X tiled offsets the detile below has to invert, not row by
+     * row. */
+    void *target_address = NULL;
+    VkDeviceSize target_bytes = 0;
+    assert(ps5vk_image_span(device, target, &target_address, &target_bytes) == VK_SUCCESS);
+    const size_t tiled_surface = ps5vk_color_64k_rx_surface_size(4u, WIDTH, HEIGHT);
+    assert(tiled_surface != (size_t)-1 && target_bytes >= tiled_surface);
+    const uint32_t pinned_words[3] = {0x11223344u, 0xaabbccddu, 0x00ff7f3fu};
+    const uint32_t pinned_x[3] = {0u, 7u, WIDTH - 1u};
+    const uint32_t pinned_y[3] = {0u, 5u, HEIGHT - 1u};
+    for (unsigned i = 0; i < 3; ++i) {
+        const size_t tiled_offset =
+            ps5vk_rgba8_64k_rx_offset(pinned_x[i], pinned_y[i], WIDTH);
+        assert(tiled_offset + 4u <= target_bytes);
+        memcpy((unsigned char *)target_address + tiled_offset, &pinned_words[i], 4);
+    }
+    /* The producing submission committed GENERAL: that is the pinned case's own
+     * transition (vktDrawBaseClass.cpp:197-203). This fixture has no graphics
+     * backend, so the committed state the readback depends on is injected here
+     * exactly as the module leaves it. */
+    target->layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkCommandBuffer readback = begin();
+    VkImageSubresourceRange staging_range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VkImageMemoryBarrier staging_in = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = staging, .subresourceRange = staging_range};
+    vkCmdPipelineBarrier(readback, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &staging_in);
+    assert(readback->state == PS5VK_RECORDING);
+    VkImageCopy readback_region = {
+        .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .srcOffset = {0, 0, 0},
+        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .dstOffset = {0, 0, 0},
+        .extent = {WIDTH, HEIGHT, 1}};
+    vkCmdCopyImage(readback, target, VK_IMAGE_LAYOUT_GENERAL, staging,
+                   VK_IMAGE_LAYOUT_GENERAL, 1, &readback_region);
+    assert(readback->state == PS5VK_RECORDING);
+    VkImageMemoryBarrier staging_out = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_GENERAL, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = staging, .subresourceRange = staging_range};
+    vkCmdPipelineBarrier(readback, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 0, NULL, 1, &staging_out);
+    assert(readback->state == PS5VK_RECORDING);
+    assert(vkEndCommandBuffer(readback) == VK_SUCCESS);
+    {
+        VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        VkFence fence = VK_NULL_HANDLE;
+        assert(vkCreateFence(device, &fence_info, NULL, &fence) == VK_SUCCESS);
+        VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                               .commandBufferCount = 1, .pCommandBuffers = &readback};
+        assert(vkQueueSubmit(&device->queue, 1, &submit, fence) == VK_SUCCESS);
+        assert(vkWaitForFences(device, 1, &fence, VK_TRUE, 1000000000ull) == VK_SUCCESS);
+        vkDestroyFence(device, fence, NULL);
+    }
+
+    /* vkGetImageSubresourceLayout must describe this image honestly, because
+     * that is how the module addresses the rows it reads. */
+    VkImageSubresource staging_subresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    VkSubresourceLayout staging_layout = {0};
+    vkGetImageSubresourceLayout(device, staging, &staging_subresource, &staging_layout);
+    struct ps5vk_texture_layout expected_layout = {0};
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_R8G8B8A8_UNORM, WIDTH, HEIGHT,
+        &expected_layout) == 0);
+    assert(staging_layout.offset == 0);
+    assert(staging_layout.rowPitch == expected_layout.row_pitch);
+    assert(staging_layout.depthPitch == expected_layout.bytes);
+    assert(staging_layout.arrayPitch == expected_layout.bytes);
+    assert(staging_layout.size == expected_layout.bytes);
+    /* A tiled image still reports nothing: no layout is fabricated for it. */
+    VkSubresourceLayout tiled_layout = {0};
+    vkGetImageSubresourceLayout(device, target, &staging_subresource, &tiled_layout);
+    assert(!tiled_layout.offset && !tiled_layout.rowPitch && !tiled_layout.size);
+
+    /* Every pinned sample must come back at its linear row position, and the
+     * middle one must not coincide with its tiled offset - that is what makes
+     * this a detile rather than a row copy. */
+    void *staging_address = NULL;
+    VkDeviceSize staging_bytes = 0;
+    assert(ps5vk_image_span(device, staging, &staging_address, &staging_bytes) == VK_SUCCESS);
+    assert(staging_bytes >= staging_layout.size);
+    for (unsigned i = 0; i < 3; ++i) {
+        const size_t linear_offset = (size_t)pinned_y[i] * staging_layout.rowPitch +
+            (size_t)pinned_x[i] * 4u;
+        uint32_t word = 0;
+        assert(linear_offset + 4u <= staging_bytes);
+        memcpy(&word, (unsigned char *)staging_address + linear_offset, 4);
+        assert(word == pinned_words[i]);
+    }
+    assert(ps5vk_rgba8_64k_rx_offset(pinned_x[1], pinned_y[1], WIDTH) !=
+           (size_t)pinned_y[1] * staging_layout.rowPitch + (size_t)pinned_x[1] * 4u);
+
+    /* Negatives: only the measured shapes may be recorded. Each call must leave
+     * the command buffer invalid instead of appending work. */
+    VkDeviceMemory pure_transfer_memory = VK_NULL_HANDLE;
+    VkImage pure_transfer = make_image(VK_IMAGE_TILING_OPTIMAL,
+                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                       &pure_transfer_memory);
+    assert(ps5vk_pure_transfer_image(pure_transfer));
+    {
+        VkCommandBuffer rejected = begin();
+        vkCmdPipelineBarrier(rejected, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &staging_in);
+        assert(rejected->state == PS5VK_RECORDING);
+        VkImageCopy partial = readback_region;
+        partial.extent.width = WIDTH - 1u;
+        vkCmdCopyImage(rejected, target, VK_IMAGE_LAYOUT_GENERAL, staging,
+                       VK_IMAGE_LAYOUT_GENERAL, 1, &partial);
+        assert(rejected->state != PS5VK_RECORDING);
+
+        /* A pure transfer image is not a colour-attachment readback source. */
+        rejected = begin();
+        vkCmdCopyImage(rejected, pure_transfer, VK_IMAGE_LAYOUT_GENERAL, staging,
+                       VK_IMAGE_LAYOUT_GENERAL, 1, &readback_region);
+        assert(rejected->state != PS5VK_RECORDING);
+
+        /* The staging role is never a transfer source. */
+        rejected = begin();
+        vkCmdCopyImage(rejected, staging, VK_IMAGE_LAYOUT_GENERAL, target,
+                       VK_IMAGE_LAYOUT_GENERAL, 1, &readback_region);
+        assert(rejected->state != PS5VK_RECORDING);
+
+        /* Only the two measured barriers exist for this role. */
+        rejected = begin();
+        VkImageMemoryBarrier wrong_layout = staging_in;
+        wrong_layout.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        vkCmdPipelineBarrier(rejected, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &wrong_layout);
+        assert(rejected->state != PS5VK_RECORDING);
+        rejected = begin();
+        VkImageMemoryBarrier wrong_access = staging_out;
+        wrong_access.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(rejected, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 0, NULL, 1, &wrong_access);
+        assert(rejected->state != PS5VK_RECORDING);
+    }
 
     /* Teardown through the public entry points, so the backend release path
      * runs for the pipeline exactly once and the fixture is leak-clean. */
@@ -518,8 +667,12 @@ int main(void)
     vkFreeMemory(device, index_memory, NULL);
     vkDestroyBuffer(device, indirect, NULL);
     vkFreeMemory(device, indirect_memory, NULL);
+    vkDestroyImage(device, staging, NULL);
+    vkFreeMemory(device, staging_memory, NULL);
+    vkDestroyImage(device, pure_transfer, NULL);
+    vkFreeMemory(device, pure_transfer_memory, NULL);
     vkDestroyCommandPool(device, pool, NULL);
     assert(compiled == 1u && compiled_released == 1u && linked == 1u && linked_released == 1u);
-    puts("Pinned draw-case trace: target, render pass, pinned pipeline, clear, upload, the six pinned draw forms and the render pass are accepted; the linear readback staging image is the one boundary left");
+    puts("Pinned draw-case trace: target, render pass, pinned pipeline, clear, upload, the six pinned draw forms, and the linear staging readback (barriers, GENERAL copy, submit, host read through vkGetImageSubresourceLayout) are accepted, with the tiled surface detiled into the pinned samples");
     return 0;
 }

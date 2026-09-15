@@ -169,6 +169,10 @@ void ps5vk_object_free(void *object, const VkAllocationCallbacks *saved, VkBool3
 /* Flush the exact bound allocation range carrying a driver-originated image write. */
 VkResult ps5vk_image_flush_range(VkDevice device, VkImage image, VkDeviceSize offset,
                                  VkDeviceSize size);
+/* Invalidate the exact bound allocation range before the CPU reads bytes the
+ * GPU produced, the read half of the same non-coherent memory contract. */
+VkResult ps5vk_image_invalidate_range(VkDevice device, VkImage image, VkDeviceSize offset,
+                                      VkDeviceSize size);
 VkResult ps5vk_buffer_span(VkDevice device, VkBuffer buffer, VkDeviceSize offset,
                           VkDeviceSize range, void **address, VkDeviceSize *size);
 VkResult ps5vk_buffer_cache(VkDevice device, VkBuffer buffer,

@@ -289,8 +289,14 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
         if (w & PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER)
             properties.bufferFeatures |= VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT;
     }
-    /* No linear-tiling image role exists in this profile; the field stays zero
-     * rather than repeating the optimal-tiling bits. */
+    /* One linear-tiling role exists: the pinned upstream draw module's RGBA8
+     * host-readback staging image, whose only usage is a transfer destination
+     * and whose dimensions are single-mip, single-layer and single-sample
+     * (vkGetPhysicalDeviceImageFormatProperties reports the same shape). Every
+     * other format keeps a zeroed linearTilingFeatures field rather than
+     * repeating the optimal-tiling bits. */
+    if (format == VK_FORMAT_R8G8B8A8_UNORM)
+        properties.linearTilingFeatures |= VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
     *out = properties;
 }
 
