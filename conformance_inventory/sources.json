@@ -391,39 +391,29 @@
       "publisher": "doitsujin / Philip Rebohle et al.",
       "repo": "https://github.com/doitsujin/dxvk",
       "revision_kind": "annotated-tag",
-      "tag": "v3.1",
-      "tag_object": "a1596f766f236244686c0c0fffba4416f0e185b1",
-      "commit": "70d7508c01201ed3d4bfb33da42ba834eafe3857",
-      "release_published_utc": "2026-08-28T16:23:29Z",
-      "project_version": "3.1.0",
+      "tag": "v2.6.2",
+      "tag_object": "e2373f9421f2c70583aea75c54219fbdcd67959c",
+      "commit": "9d6f54a1ade20d1d27dd421024717a636f3d8c68",
+      "release_published_utc": "2025-06-10T12:02:30Z",
+      "project_version": "2.6.2",
       "license": {
         "spdx": "Zlib",
-        "url": "https://github.com/doitsujin/dxvk/blob/v3.1/LICENSE"
+        "url": "https://github.com/doitsujin/dxvk/blob/v2.6.2/LICENSE"
       },
-      "retrieved_date": "2026-09-12",
-      "retrieval_method": "shallow clone at the release tag; file inspection inside the clone",
+      "retrieved_date": "2026-09-15",
+      "retrieval_method": "immutable release-tag artifact fetched from raw.githubusercontent.com and verified by SHA-256 and Git blob id",
       "artifacts": [
         {
           "path": "VP_DXVK_requirements.json",
           "kind": "file",
-          "size_bytes": 23834,
-          "sha256": "d490930920a24fb9ac4a0585c68042929acd7e700e04d0a032c79d9fddf1c462",
-          "git_blob_sha1": "ba814825a854d0df4e62194ec1b5bf01a7d0826d"
-        },
-        {
-          "path": "src/dxvk/dxvk_instance.h",
-          "kind": "file",
-          "sha256": "4ea6a2e0f92e82e67b3069b89ad39368944841e299859dabb79217abc4a3eb5f",
-          "git_blob_sha1": "1b0263ed6df1dc14dc173028dabbab0ba50cd972"
-        },
-        {
-          "path": "src/dxvk/dxvk_device_info.cpp",
-          "kind": "file",
-          "sha256": "8490053f675515542864854ae160fc6f0a399282dc32d5af194c3a6004bf810b",
-          "git_blob_sha1": "63d89d9d8f0390a2789d156522a68c474d98ceec"
+          "size_bytes": 18115,
+          "sha256": "dbb2c8c6a34ac52b62b9fcb318b85c47dca9d865c765d9538be3bde70cf341d3",
+          "git_blob_sha1": "b41b2831a17679660fce6ede5f8a2c2935f890e0",
+          "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
+          "url": "https://raw.githubusercontent.com/doitsujin/dxvk/v2.6.2/VP_DXVK_requirements.json"
         }
       ],
-      "notes": "DXVK publishes machine-readable Vulkan Profiles requirement files with its release, which are used as the primary consumer-side evidence."
+      "notes": "DXVK v2.6.2 is the deliberately pinned Vulkan 1.3 bring-up target. Newer DXVK 3.x guidance is a separate future Vulkan 1.4 target and must not be mixed into this profile."
     }
   ]
 }
