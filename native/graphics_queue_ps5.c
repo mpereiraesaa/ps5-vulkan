@@ -147,19 +147,35 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(first>=range_end || last>=range_end || last<first+2)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_operation *begin=&cb->operations[first]; VkRenderPass pass=begin->render_pass;
-    /* This backend executes ONE subpass. A render pass that declares more is
-     * refused here as well as at submission: subpass transitions, their
-     * attachment lifetime and their ordering are unimplemented, and running
-     * only the first subpass of a pass that declares two would silently drop
-     * half the work. */
-    if(pass->subpass_count!=1)return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Execute the exact shared-role profile: one or two subpasses using the
+     * same color/depth attachments and layouts. Wider graphs, or graphs that
+     * would need attachment rebinding/layout changes, remain fail-closed. */
+    if(!pass->subpass_count || pass->subpass_count>2)return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(pass,0);
     int depth=subpass->depth.attachment!=VK_ATTACHMENT_UNUSED;
     VkFormat color_format=begin->framebuffer->attachments[0]->image->info.format;
-    if(pass->attachment_count!=(depth?2u:1u) || pass->dependency_count ||
+    if(pass->attachment_count!=(depth?2u:1u) ||
         (depth && subpass->depth.attachment!=1) || subpass->color.attachment!=0 ||
         (color_format!=VK_FORMAT_B8G8R8A8_UNORM && color_format!=VK_FORMAT_R8G8B8A8_UNORM))
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    for(uint32_t index=1;index<pass->subpass_count;++index) {
+        const struct ps5vk_subpass *next=ps5vk_render_pass_subpass(pass,index);
+        if(next->color.attachment!=subpass->color.attachment ||
+           next->color.layout!=subpass->color.layout ||
+           next->depth.attachment!=subpass->depth.attachment ||
+           next->depth.layout!=subpass->depth.layout)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    /* A full acquire at the boundary is stronger than either no explicit
+     * dependency or one forward 0->1 dependency. Other dependency graphs are
+     * not silently approximated. */
+    if(pass->subpass_count==1) {
+        if(pass->dependency_count)return VK_ERROR_FEATURE_NOT_PRESENT;
+    } else if(pass->dependency_count) {
+        if(pass->dependency_count!=1 || pass->dependencies[0].srcSubpass!=0 ||
+           pass->dependencies[0].dstSubpass!=1)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     struct ps5vk_attachment_plan color_plan={0},depth_plan={0};
     if(ps5vk_attachment_plan(&pass->attachments[0],color_format,
         subpass->color.layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -202,6 +218,11 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     unsigned body_count=0,next_buffer=1;
     for(unsigned i=first+1;i<last;++i) {
         const struct ps5vk_operation *op=&cb->operations[i];
+        if(op->type==PS5VK_NEXT_SUBPASS) {
+            if(body_count==PS5VK_MAX_OPERATIONS)return VK_ERROR_FEATURE_NOT_PRESENT;
+            body[body_count++]=op;
+            continue;
+        }
         if(op->type==PS5VK_EXECUTE_COMMANDS) {
             VkCommandBuffer const *children=(VkCommandBuffer const *)op->owned_payload;
             if(!children || !op->child_count ||
@@ -318,6 +339,15 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 #endif
     for(unsigned i=0;i<body_count;++i) {
         const struct ps5vk_operation *recorded=body[i];
+        if(recorded->type==PS5VK_NEXT_SUBPASS) {
+            size_t boundary=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+            if(!boundary){rc=VK_ERROR_UNKNOWN;goto fail;}
+            cursor+=boundary;
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_SUBPASS_BOUNDARY serial=%llu subpass=%u words=%zu",
+                (unsigned long long)j->serial,recorded->subpass,boundary);
+            continue;
+        }
         struct ps5vk_operation resolved;
         const struct ps5vk_operation *op=recorded;
         if(ps5vk_indirect_graphics_operation(recorded->type)) {

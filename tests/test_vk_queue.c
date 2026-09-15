@@ -459,11 +459,8 @@ int main(void)
     assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
     assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && !image->pending);
 
-    /* EXECUTION of more than one subpass is not implemented. The object model
-     * and recording accept the bounded two-subpass shape, so submission is
-     * where it has to stop: the backend is never handed a pass whose subpass
-     * transitions, attachment lifetime and ordering do not exist yet, and the
-     * refusal leaves nothing pending. */
+    /* The bounded two-subpass shared-role shape reaches the backend. The
+     * immutable stream must retain both draws and the exact transition. */
     {
         struct ps5vk_subpass two_subpasses[2] = {pass_subpasses[0], pass_subpasses[0]};
         struct VkRenderPass_T two = {.device = &d, .attachment_count = 1, .subpass_count = 2,
@@ -494,11 +491,23 @@ int main(void)
         VkSubmitInfo multi_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .commandBufferCount = 1, .pCommandBuffers = &multi};
         const unsigned prepared = f.prepares;
-        /* ...and submission refuses it without reaching a backend. */
+        assert(vkQueueSubmit(&d.queue, 1, &multi_submit, NULL) == VK_SUCCESS);
+        assert(f.prepares == prepared + 1 && d.submission && multi->pending_count == 1 &&
+               two.pending == 1 && fb.pending == 1 && image->pending == 1 &&
+               pipeline.pending == 1 && second.pending == 1);
+        f.complete = 1;
+        assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+        assert(!d.submission && !multi->pending_count && !two.pending &&
+               !fb.pending && !image->pending && !pipeline.pending && !second.pending);
+
+        /* Submission re-derives transition ordering rather than trusting the
+         * recorder. A repeated/jumped marker in an otherwise executable
+         * stream is rejected before prepare and leaves ownership untouched. */
+        multi->operations[2].subpass = 0;
+        const unsigned after_success = f.prepares;
         assert(vkQueueSubmit(&d.queue, 1, &multi_submit, NULL) != VK_SUCCESS);
-        assert(f.prepares == prepared && !d.submission && !multi->pending_count &&
-               !two.pending && !fb.pending && !image->pending && !pipeline.pending &&
-               !second.pending);
+        assert(f.prepares == after_success && !d.submission && !multi->pending_count);
+        multi->operations[2].subpass = 1;
         vkFreeCommandBuffers(&d, pool, 1, &multi);
     }
     vkFreeMemory(&d, memory, NULL);

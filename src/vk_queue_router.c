@@ -31,7 +31,8 @@ static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **out
              * its BEGIN_RENDER_PASS; outside a render pass the naming
              * operation is frontend-only and never routed at all. */
             case PS5VK_EXECUTE_COMMANDS: break;
-            case PS5VK_BEGIN_RENDER_PASS: case PS5VK_END_RENDER_PASS:
+            case PS5VK_BEGIN_RENDER_PASS: case PS5VK_NEXT_SUBPASS:
+            case PS5VK_END_RENDER_PASS:
             case PS5VK_DRAW: case PS5VK_DRAW_INDEXED:
             case PS5VK_DRAW_INDIRECT: case PS5VK_DRAW_INDEXED_INDIRECT:
             case PS5VK_COPY_BUFFER_IMAGE: case PS5VK_COPY_IMAGE_BUFFER:

@@ -264,6 +264,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     /* Contents mode of the active pass, read back from the immutable record
      * rather than from recording state. */
     VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE;
+    uint32_t subpass = 0;
     /* DRAW work seen since the pass began - what will execute, not how many
      * commands were written. A vkCmdExecuteCommands marker naming only empty
      * secondaries executes nothing, so counting markers here would accept the
@@ -285,53 +286,59 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             op->type == PS5VK_NEXT_SUBPASS ||
             op->type == PS5VK_END_RENDER_PASS) {
             if (!d->graphics_enabled || !d->graphics_submit_enabled || !op->render_pass || !op->framebuffer ||
-                op->render_pass->device != d || op->framebuffer->device != d) return 0;
+                op->render_pass->device != d || op->framebuffer->device != d)
+                return 0;
             if (op->type == PS5VK_BEGIN_RENDER_PASS) {
                 if (active) return 0;
-                /* EXECUTION of more than one subpass is not implemented. The
-                 * object model accepts the bounded multi-subpass shape and
-                 * recording carries it faithfully, but submitting one would
-                 * hand the backend a pass whose transitions, attachment
-                 * lifetime and ordering do not exist yet, so it is refused
-                 * here - before any backend sees it - rather than executed
-                 * as if it were a single subpass. */
-                if (op->render_pass->subpass_count != 1) return 0;
+                /* Native execution is deliberately bounded to one or two
+                 * subpasses.  Wider render passes remain representable by the
+                 * object model but are refused before a backend sees them. */
+                if (!op->render_pass->subpass_count ||
+                    op->render_pass->subpass_count > 2)
+                    return 0;
                 if (op->subpass) return 0;
                 active = op->render_pass; framebuffer = op->framebuffer;
                 contents = op->render_pass_contents;
+                subpass = 0;
                 pass_work = 0;
                 for (uint32_t n = 0; n < framebuffer->attachment_count; ++n) {
                     VkImageView view = framebuffer->attachments[n];
                     void *address; VkDeviceSize bytes;
                     if (!view || view->device != d || !view->image || view->image->display_busy ||
-                        ps5vk_image_span(d, view->image, &address, &bytes) != VK_SUCCESS) return 0;
+                        ps5vk_image_span(d, view->image, &address, &bytes) != VK_SUCCESS)
+                        return 0;
                 }
             } else {
-                if (active != op->render_pass || framebuffer != op->framebuffer) return 0;
+                if (active != op->render_pass || framebuffer != op->framebuffer)
+                    return 0;
                 if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED ||
                     ps5vk_indirect_graphics_operation(op->type)) {
                     /* A pass begun for secondary contents carries no inline
                      * draws of its own. */
-                    if (contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) return 0;
+                    if (contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS)
+                        return 0;
+                    if (op->subpass != subpass) return 0;
                     if (!draw_operation_valid(d, op)) return 0;
                     ++pass_work;
                 } else if (op->type == PS5VK_NEXT_SUBPASS) {
-                    /* Unreachable while only single-subpass passes may be
-                     * submitted, and validated anyway so the rule lives with
-                     * the record rather than with the refusal above: the
-                     * boundary must name a later subpass of the pass it is in.
-                     * Empty subpasses are valid recordings, so this transition
-                     * does not require draw work in the subpass it leaves. */
-                    if (op->subpass >= active->subpass_count) return 0;
+                    /* The immutable stream must advance by exactly one.  A
+                     * repeated boundary or a jump cannot be repaired by the
+                     * backend without changing the recorded program. */
+                    if (op->subpass != subpass + 1 ||
+                        op->subpass >= active->subpass_count)
+                        return 0;
+                    subpass = op->subpass;
                     contents = op->render_pass_contents;
-                    pass_work = 0;
                 } else {
                     if (!pass_work) return 0;
                     /* A pass must end at its last subpass; ending earlier
                      * would drop the subpasses never entered. */
-                    if (op->subpass + 1 != active->subpass_count) return 0;
+                    if (op->subpass != subpass ||
+                        op->subpass + 1 != active->subpass_count)
+                        return 0;
                     active = NULL; framebuffer = NULL;
                     contents = VK_SUBPASS_CONTENTS_INLINE;
+                    subpass = 0;
                 }
             }
             continue;
