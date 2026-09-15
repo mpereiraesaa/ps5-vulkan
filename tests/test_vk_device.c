@@ -299,6 +299,11 @@ static void lifecycle(void)
              usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
              usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+             /* The pinned upstream draw tests create their colour target with a
+              * transfer destination as well, so that exact attachment shape
+              * exists; nothing else does. */
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
              usage==VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
              usage==(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)));
     }

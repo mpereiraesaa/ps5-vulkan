@@ -426,6 +426,45 @@ int main(void)
     vkCmdClearColorImage(bad, attachment, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
     assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
 
+    /* The one colour-attachment shape that also declares a transfer destination
+     * is the pinned upstream CTS draw target, and it takes the same padded
+     * linear clear and upload as the transfer role. Only that exact shape: the
+     * predicates below keep every neighbouring shape out. */
+    VkImage colour_dst = make_image(VK_FORMAT_R8G8B8A8_UNORM,
+                                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                    NULL);
+    assert(ps5vk_colour_transfer_image(colour_dst));
+    assert(!ps5vk_colour_transfer_image(attachment));
+    VkImage transfer_only = make_image(VK_FORMAT_R8G8B8A8_UNORM,
+                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                           VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                       NULL);
+    assert(!ps5vk_colour_transfer_image(transfer_only));
+    assert(ps5vk_pure_transfer_image(transfer_only));
+    VkCommandBuffer colour_clear = begin();
+    vkCmdClearColorImage(colour_clear, colour_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         &clear, 1, &range);
+    assert(colour_clear->state == PS5VK_RECORDING && colour_clear->operation_count == 1);
+    VkBuffer colour_upload = make_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                         WIDTH * HEIGHT * 4, NULL);
+    VkBufferImageCopy colour_region = {
+        .bufferOffset = 0, .bufferRowLength = 0, .bufferImageHeight = 0,
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .imageOffset = {0, 0, 0}, .imageExtent = {WIDTH, HEIGHT, 1}};
+    VkCommandBuffer colour_upload_cmd = begin();
+    vkCmdCopyBufferToImage(colour_upload_cmd, colour_upload, colour_dst,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &colour_region);
+    assert(colour_upload_cmd->state == PS5VK_RECORDING &&
+           colour_upload_cmd->operation_count == 1);
+    /* The readback role of the attachment shape is unchanged, and the transfer
+     * role still refuses the attachment geometry it never had. */
+    VkCommandBuffer colour_clear_bad = begin();
+    vkCmdClearColorImage(colour_clear_bad, colour_dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                         &clear, 1, &range);
+    assert(colour_clear_bad->state == PS5VK_INVALID && colour_clear_bad->operation_count == 0);
+
     /* --- whole-subresource depth clear --------------------------------------
      * A depth target that carries the transfer-destination usage records a real
      * operation; one that does not stays fail-closed, because Vulkan requires

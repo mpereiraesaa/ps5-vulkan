@@ -467,3 +467,24 @@ VkBool32 ps5vk_pure_transfer_image(VkImage image)
         !(image->info.usage &
           ~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
 }
+
+/* The colour-attachment shape whose clear and buffer-upload destinations are
+ * implemented. It is the readback row of the transfer format with the
+ * attachment role and a transfer destination declared, which is exactly the
+ * image the pinned upstream draw tests create; every other combination stays
+ * fail-closed, and the transfer-only predicate above is unchanged. */
+VkBool32 ps5vk_colour_transfer_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        (image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+        (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+        !(image->info.usage &
+          ~(VkImageUsageFlags)(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                               VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+}

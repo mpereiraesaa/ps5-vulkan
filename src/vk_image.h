@@ -33,4 +33,7 @@ VkResult ps5vk_image_span(VkDevice, VkImage, void **address, VkDeviceSize *bytes
  * transitions are frontend work over the same padded layout the upload path
  * uses. */
 VkBool32 ps5vk_pure_transfer_image(VkImage);
+/* The colour-attachment readback shape that also declares a transfer
+ * destination; the clear and buffer-upload destination paths accept it. */
+VkBool32 ps5vk_colour_transfer_image(VkImage);
 #endif

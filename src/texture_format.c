@@ -329,6 +329,16 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
          usage == (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
         return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT) && usage == attachment) return VK_TRUE;
+    /* Colour attachment plus the readback role plus a transfer destination.
+     * The pinned upstream draw tests create their colour target exactly this
+     * way (COLOR_ATTACHMENT | TRANSFER_SRC | TRANSFER_DST), so the combination
+     * has to exist for their image to be creatable at all; only the row that
+     * carries the readback capability has it, which keeps this to the one
+     * R8G8B8A8_UNORM attachment shape whose clear and buffer-upload
+     * destinations are implemented and witnessed. */
+    if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
+        usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
         usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) && usage == depth) return VK_TRUE;

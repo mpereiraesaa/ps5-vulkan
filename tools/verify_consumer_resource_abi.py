@@ -30,6 +30,14 @@ DRAW_PARAMETER_CASES = (
     ("strip_direct", 21, 23, 0),
 )
 DRAW_PARAMETER_COVERED_MINIMUM = 900
+# The destination-role witness writes these exact words into the same
+# colour-attachment image the draw cases then use: a clear fills everything and
+# a buffer-to-image upload overwrites the leading edge. Both words and their
+# pixel counts are pins, not samples.
+DRAW_PARAMETER_DST_CLEAR_WORD = 0xff602040
+DRAW_PARAMETER_DST_UPLOAD_WORD = 0xff1e140a
+DRAW_PARAMETER_EXTENT = 64
+DRAW_PARAMETER_UPLOAD_EDGE = 8
 
 # Exact hashes of the two 64-byte destination buffers of the executable
 # secondary scenario, established by two identical hardware runs of the same
@@ -316,6 +324,21 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         if draw_parameters_present else None
     if draw_parameters_present:
         expected_cases = {case[0]: case[1:] for case in DRAW_PARAMETER_CASES}
+        destination = one("PS5VK_CONSUMER_DRAW_PARAMETERS_DST ")
+        destination_fields = dict(field.split("=", 1)
+                                  for field in destination[1].split()[1:])
+        require(destination_fields.get("clear_word") ==
+                f"{DRAW_PARAMETER_DST_CLEAR_WORD:08x}" and
+                destination_fields.get("upload_word") ==
+                f"{DRAW_PARAMETER_DST_UPLOAD_WORD:08x}",
+                "draw-parameter destination words")
+        require(destination_fields.get("clear_matched") ==
+                str(DRAW_PARAMETER_EXTENT * DRAW_PARAMETER_EXTENT -
+                    DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE) and
+                destination_fields.get("upload_matched") ==
+                str(DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE) and
+                destination_fields.get("valid") == "1",
+                "draw-parameter destination readback")
         manifest = artifact.get("draw_parameters", {})
         require(manifest.get("cases") == [case[0] for case in DRAW_PARAMETER_CASES],
                 "artifact draw-parameter case list")

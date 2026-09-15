@@ -9,6 +9,8 @@ from tools.verify_consumer_resource_abi import (
     APP, INPASS_CHANGED, INPASS_HASH, SECONDARY_CONTROL_HASH,
     SECONDARY_EXECUTED_HASH, TEXEL_FORMAT_CASES, TITLE,
     DRAW_PARAMETER_CASES, DRAW_PARAMETER_COVERED_MINIMUM,
+    DRAW_PARAMETER_DST_CLEAR_WORD, DRAW_PARAMETER_DST_UPLOAD_WORD,
+    DRAW_PARAMETER_EXTENT, DRAW_PARAMETER_UPLOAD_EDGE,
     TWO_SUBPASS_CHANGED, TWO_SUBPASS_FIRST_HASH, TWO_SUBPASS_HASH,
     TWO_SUBPASS_REVERSED_HASH, TWO_SUBPASS_SECOND_HASH, validate)
 
@@ -20,7 +22,15 @@ DRAW_PARAMETER_FRAG_SHA256 = "2" * 64
 def draw_parameter_messages(first_serial=13,
                             covered=DRAW_PARAMETER_COVERED_MINIMUM + 300):
     """The witness rows as the hardware emits them, from the verifier's table."""
-    rows = ["PS5VK_CONSUMER_DRAW_PARAMETERS_START cases=6 extent=64"]
+    rows = [
+        "PS5VK_CONSUMER_DRAW_PARAMETERS_START cases=6 extent=64",
+        f"PS5VK_CONSUMER_DRAW_PARAMETERS_DST "
+        f"clear_word={DRAW_PARAMETER_DST_CLEAR_WORD:08x} "
+        f"clear_matched={DRAW_PARAMETER_EXTENT * DRAW_PARAMETER_EXTENT - DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE} "
+        f"upload_word={DRAW_PARAMETER_DST_UPLOAD_WORD:08x} "
+        f"upload_matched={DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE} "
+        f"valid=1",
+    ]
     serial = first_serial
     for name, base_vertex, base_instance, draw_index in DRAW_PARAMETER_CASES:
         rows.extend([
@@ -777,6 +787,34 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             mutate(artifact)
             with self.subTest(mutate=mutate.__name__), self.assertRaises(ValueError):
                 validate(log, receipt, artifact)
+
+    def test_draw_parameter_destination_witness_is_fail_closed(self):
+        rows = draw_parameter_messages()
+        destination_row = next(row for row in rows
+                               if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS_DST"))
+
+        def rewrite(field, value):
+            def edit(messages):
+                index = messages.index(destination_row)
+                messages[index] = " ".join(
+                    f"{field}={value}" if part.startswith(f"{field}=") else part
+                    for part in messages[index].split())
+            return edit
+
+        for field, value in (
+                ("clear_word", "ff000000"),
+                ("upload_word", "ff000000"),
+                ("clear_matched", "0"),
+                ("upload_matched", "0"),
+                ("valid", "0")):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate(*self.fixture(draw_parameters=True,
+                                       edit=rewrite(field, value)))
+        # The destination witness is part of the scenario, not optional.
+        def drop(messages):
+            messages.remove(destination_row)
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(draw_parameters=True, edit=drop))
 
     def test_secondary_execute_scenario_cannot_be_half_reported(self):
         for dropped in SECONDARY_MESSAGES:

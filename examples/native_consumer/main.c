@@ -1700,10 +1700,15 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     VkImageCreateInfo image_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = VK_FORMAT_B8G8R8A8_UNORM,
+        /* The exact shape the pinned upstream draw cases create: the readback
+         * colour format with the attachment, readback and transfer-destination
+         * roles together. */
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
         .extent = {EXTENT, EXTENT, 1},
         .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
-        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_DST_BIT
     };
     VkImage image = VK_NULL_HANDLE;
     CHECK(vkCreateImage(device, &image_info, NULL, &image));
@@ -1725,14 +1730,14 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
     };
     VkImageView view = VK_NULL_HANDLE;
     CHECK(vkCreateImageView(device, &view_info, NULL, &view));
 
     VkAttachmentDescription attachment = {
-        .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1925,6 +1930,109 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     VkFence fence = VK_NULL_HANDLE;
     CHECK(vkCreateFence(device, &fence_info, NULL, &fence));
 
+    /* Transfer-destination witness on the same image shape the promotion's
+     * upstream cases create. A clear and a buffer-to-image upload each write a
+     * pinned word through the destination role, and the CPU readback pins both
+     * before any draw runs - the colour-attachment role is exercised later by
+     * the six draw cases on the same image. */
+    {
+        const uint32_t clear_word = 0xff602040u;  /* R=20 G=40 B=60 A=ff */
+        const uint32_t upload_word = 0xff1e140au; /* R=0a G=14 B=1e A=ff */
+        enum { UPLOAD_EDGE = 8 };
+        VkBufferCreateInfo upload_info = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = UPLOAD_EDGE * UPLOAD_EDGE * 4,
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+        VkBuffer upload_buffer = VK_NULL_HANDLE;
+        CHECK(vkCreateBuffer(device, &upload_info, NULL, &upload_buffer));
+        VkMemoryRequirements upload_requirements;
+        vkGetBufferMemoryRequirements(device, upload_buffer, &upload_requirements);
+        VkMemoryAllocateInfo upload_allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = upload_requirements.size, .memoryTypeIndex = 0};
+        VkDeviceMemory upload_memory = VK_NULL_HANDLE;
+        CHECK(vkAllocateMemory(device, &upload_allocation, NULL, &upload_memory));
+        CHECK(vkBindBufferMemory(device, upload_buffer, upload_memory, 0));
+        uint32_t *upload_words = NULL;
+        CHECK(vkMapMemory(device, upload_memory, 0, upload_requirements.size, 0,
+                          (void **)&upload_words));
+        for (unsigned word = 0; word < UPLOAD_EDGE * UPLOAD_EDGE; ++word)
+            upload_words[word] = upload_word;
+        VkMappedMemoryRange upload_flush = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = upload_memory, .offset = 0, .size = VK_WHOLE_SIZE};
+        CHECK(vkFlushMappedMemoryRanges(device, 1, &upload_flush));
+
+        CHECK(vkResetCommandBuffer(command, 0));
+        VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(command, &begin));
+        VkImageSubresourceRange range = {
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkImageMemoryBarrier to_dst = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image, .subresourceRange = range};
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_dst);
+        VkClearColorValue clear = {0};
+        clear.float32[0] = 0x20 / 255.0f;
+        clear.float32[1] = 0x40 / 255.0f;
+        clear.float32[2] = 0x60 / 255.0f;
+        clear.float32[3] = 1.0f;
+        vkCmdClearColorImage(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             &clear, 1, &range);
+        VkBufferImageCopy copy = {
+            .bufferOffset = 0, .bufferRowLength = 0, .bufferImageHeight = 0,
+            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+            .imageOffset = {0, 0, 0},
+            .imageExtent = {UPLOAD_EDGE, UPLOAD_EDGE, 1}};
+        vkCmdCopyBufferToImage(command, upload_buffer, image,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        VkImageMemoryBarrier to_color = to_dst;
+        to_color.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        to_color.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        to_color.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        to_color.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL,
+            1, &to_color);
+        CHECK(vkEndCommandBuffer(command));
+        CHECK(vkResetFences(device, 1, &fence));
+        VkSubmitInfo dst_submit = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1, .pCommandBuffers = &command};
+        CHECK(vkQueueSubmit(queue, 1, &dst_submit, fence));
+        CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+        VkMappedMemoryRange dst_invalidate = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = image_memory, .offset = 0, .size = image_requirements.size};
+        CHECK(vkInvalidateMappedMemoryRanges(device, 1, &dst_invalidate));
+        unsigned clear_matched = 0, upload_matched = 0;
+        for (unsigned y = 0; y < EXTENT; ++y)
+            for (unsigned x = 0; x < EXTENT; ++x) {
+                const uint32_t word = pixels[y * EXTENT + x];
+                if (x < UPLOAD_EDGE && y < UPLOAD_EDGE)
+                    upload_matched += word == upload_word;
+                else
+                    clear_matched += word == clear_word;
+            }
+        const int dst_valid =
+            clear_matched == EXTENT * EXTENT - UPLOAD_EDGE * UPLOAD_EDGE &&
+            upload_matched == UPLOAD_EDGE * UPLOAD_EDGE;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CONSUMER_DRAW_PARAMETERS_DST clear_word=%08x clear_matched=%u "
+            "upload_word=%08x upload_matched=%u valid=%d",
+            clear_word, clear_matched, upload_word, upload_matched, dst_valid);
+        vkUnmapMemory(device, upload_memory);
+        vkDestroyBuffer(device, upload_buffer, NULL);
+        vkFreeMemory(device, upload_memory, NULL);
+    }
+
     unsigned witnessed = 0;
     for (unsigned c = 0; c < CASE_COUNT; ++c) {
         const struct draw_parameter_case *test = &cases[c];
@@ -2009,9 +2117,10 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
             else if (word != observed) uniform = 0;
             ++covered;
         }
-        const uint32_t base_vertex = (observed >> 16) & 0xffu;
+        /* R8G8B8A8_UNORM: R is the low byte of the little-endian word. */
+        const uint32_t base_vertex = observed & 0xffu;
         const uint32_t base_instance = (observed >> 8) & 0xffu;
-        const uint32_t draw_index = observed & 0xffu;
+        const uint32_t draw_index = (observed >> 16) & 0xffu;
         const int valid = uniform && covered >= COVERED_MINIMUM &&
             ((observed >> 24) & 0xffu) == 0xffu &&
             base_vertex == test->expected_base_vertex &&

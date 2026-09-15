@@ -97,7 +97,10 @@ static int transfer_role_source(VkImage image)
 }
 static int transfer_role_destination(VkImage image)
 {
-    return ps5vk_pure_transfer_image(image) &&
+    /* The transfer-only role and the colour-attachment readback shape that also
+     * declares a transfer destination: both are padded linear memory, and the
+     * clear below fills either of them the same way. */
+    return (ps5vk_pure_transfer_image(image) || ps5vk_colour_transfer_image(image)) &&
         (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 }
 
@@ -110,6 +113,11 @@ VkBool32 ps5vk_image_linear_operation(const struct ps5vk_operation *op)
     if (!op) return VK_FALSE;
     switch (op->type) {
     case PS5VK_COPY_BUFFER_IMAGE:
+        /* An upload into the colour-attachment shape that declares a transfer
+         * destination is frontend work for the same reason the transfer role
+         * is: linear memory, no graphics backend involvement. */
+        return ps5vk_pure_transfer_image(op->copy_image) ||
+            ps5vk_colour_transfer_image(op->copy_image);
     case PS5VK_COPY_IMAGE_BUFFER:
         return ps5vk_pure_transfer_image(op->copy_image);
     case PS5VK_IMAGE_BARRIER:
