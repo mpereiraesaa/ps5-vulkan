@@ -2040,6 +2040,41 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     }
 
     unsigned witnessed = 0;
+    /* The pinned upstream readback path, executed exactly as the draw module
+     * runs it: the colour attachment is copied into a VK_IMAGE_TILING_LINEAR
+     * staging image and the rows are read through vkGetImageSubresourceLayout.
+     * Without this the witness would only prove the attachment's own memory,
+     * which is not what the eight selected upstream leaves consume. */
+    VkImageCreateInfo staging_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {EXTENT, EXTENT, 1},
+        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_LINEAR,
+        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    VkImage staging_image = VK_NULL_HANDLE;
+    CHECK(vkCreateImage(device, &staging_info, NULL, &staging_image));
+    VkMemoryRequirements staging_requirements;
+    vkGetImageMemoryRequirements(device, staging_image, &staging_requirements);
+    VkMemoryAllocateInfo staging_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = staging_requirements.size, .memoryTypeIndex = 0};
+    VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &staging_allocation, NULL, &staging_memory));
+    CHECK(vkBindImageMemory(device, staging_image, staging_memory, 0));
+    VkSubresourceLayout staging_layout = {0};
+    const VkImageSubresource staging_subresource = {
+        VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    vkGetImageSubresourceLayout(device, staging_image, &staging_subresource,
+                               &staging_layout);
+    const uint32_t expected_pitch = (EXTENT * 4u + 255u) & ~255u;
+    const int staging_layout_valid =
+        staging_layout.offset == 0 && staging_layout.rowPitch == expected_pitch &&
+        staging_layout.depthPitch == (VkDeviceSize)expected_pitch * EXTENT &&
+        staging_layout.size == (VkDeviceSize)expected_pitch * EXTENT;
+    unsigned staged_witnessed = 0;
+    (void)staging_layout_valid;
     for (unsigned c = 0; c < CASE_COUNT; ++c) {
         const struct draw_parameter_case *test = &cases[c];
         if (test->indexed) {
@@ -2138,10 +2173,92 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
             test->name, base_vertex, base_instance, draw_index, covered,
             uniform, valid);
         if (valid) ++witnessed;
+
+        /* The pinned readback of the same frame, in its own submission and its
+         * own barriers, then a host read of the staging rows. */
+        {
+            CHECK(vkResetCommandBuffer(command, 0));
+            VkCommandBufferBeginInfo readback_begin = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+            CHECK(vkBeginCommandBuffer(command, &readback_begin));
+            VkImageSubresourceRange staging_range = {
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            VkImageMemoryBarrier staging_in = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = staging_image, .subresourceRange = staging_range};
+            vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1,
+                &staging_in);
+            VkImageCopy staging_copy = {
+                .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                .srcOffset = {0, 0, 0},
+                .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                .dstOffset = {0, 0, 0},
+                .extent = {EXTENT, EXTENT, 1}};
+            vkCmdCopyImage(command, image, VK_IMAGE_LAYOUT_GENERAL, staging_image,
+                           VK_IMAGE_LAYOUT_GENERAL, 1, &staging_copy);
+            VkImageMemoryBarrier staging_out = staging_in;
+            staging_out.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            staging_out.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+            staging_out.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            staging_out.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+            vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 0, NULL, 1,
+                &staging_out);
+            CHECK(vkEndCommandBuffer(command));
+            CHECK(vkResetFences(device, 1, &fence));
+            VkSubmitInfo readback_submit = {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .commandBufferCount = 1, .pCommandBuffers = &command};
+            CHECK(vkQueueSubmit(queue, 1, &readback_submit, fence));
+            CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+            VkMappedMemoryRange staging_invalidate = {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = staging_memory, .offset = 0,
+                .size = staging_requirements.size};
+            CHECK(vkInvalidateMappedMemoryRanges(device, 1, &staging_invalidate));
+
+            const unsigned char *staged_bytes = NULL;
+            CHECK(vkMapMemory(device, staging_memory, 0, staging_requirements.size,
+                              0, (void **)&staged_bytes));
+            unsigned staged_covered = 0;
+            uint32_t staged_observed = 0;
+            int staged_uniform = 1;
+            for (unsigned y = 0; y < EXTENT; ++y) {
+                for (unsigned x = 0; x < EXTENT; ++x) {
+                    uint32_t word = 0;
+                    memcpy(&word, staged_bytes + (VkDeviceSize)y * staging_layout.rowPitch +
+                           (VkDeviceSize)x * 4u, sizeof(word));
+                    if (word == clear_word) continue;
+                    if (!staged_covered) staged_observed = word;
+                    else if (word != staged_observed) staged_uniform = 0;
+                    ++staged_covered;
+                }
+            }
+            const int staged_valid = staging_layout_valid && staged_uniform &&
+                staged_covered == covered && staged_observed == observed;
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING case=%s row_pitch=%llu "
+                "staged_bytes=%llu staged=%08x covered=%u uniform=%d layout=%d "
+                "valid=%d",
+                test->name, (unsigned long long)staging_layout.rowPitch,
+                (unsigned long long)staging_requirements.size, staged_observed,
+                staged_covered, staged_uniform, staging_layout_valid, staged_valid);
+            if (staged_valid) ++staged_witnessed;
+            vkUnmapMemory(device, staging_memory);
+        }
     }
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_CONSUMER_DRAW_PARAMETERS_RESULT cases=%u witnessed=%u valid=%d",
         (unsigned)CASE_COUNT, witnessed, witnessed == CASE_COUNT);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT cases=%u witnessed=%u valid=%d",
+        (unsigned)CASE_COUNT, staged_witnessed, staged_witnessed == CASE_COUNT);
 
     vkUnmapMemory(device, indirect_memory);
     vkUnmapMemory(device, index_memory);
@@ -2165,6 +2282,8 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     vkDestroyImageView(device, view, NULL);
     vkDestroyImage(device, image, NULL);
     vkFreeMemory(device, image_memory, NULL);
+    vkDestroyImage(device, staging_image, NULL);
+    vkFreeMemory(device, staging_memory, NULL);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_CONSUMER_DRAW_PARAMETERS_RETIRED cases=%u witnessed=%u",
         (unsigned)CASE_COUNT, witnessed);

@@ -371,6 +371,45 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
             f"cases={len(DRAW_PARAMETER_CASES)}",
             f"witnessed={len(DRAW_PARAMETER_CASES)}", "valid=1"],
             "draw-parameter result")
+        # The pinned upstream readback contract: the same frame copied into the
+        # linear staging image and read through vkGetImageSubresourceLayout. The
+        # words below come from the staging memory, not the attachment's, so a
+        # driver that cannot describe or fill that image cannot pass this.
+        staging_messages = matching("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING case=")
+        staging_result = one("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT ")
+        require(len(staging_messages) == len(DRAW_PARAMETER_CASES),
+                "staging readback case count")
+        expected_pitch = (DRAW_PARAMETER_EXTENT * 4 + 255) & ~255
+        staged = {}
+        for _, message in staging_messages:
+            fields = dict(field.split("=", 1) for field in message.split()[1:])
+            name = fields.get("case", "")
+            require(name in expected_cases,
+                    f"unexpected staging readback case {name!r}")
+            require(name not in staged, f"repeated staging readback case {name}")
+            require(fields.get("row_pitch") == str(expected_pitch) and
+                    fields.get("staged_bytes") ==
+                    str(expected_pitch * DRAW_PARAMETER_EXTENT),
+                    f"staging layout for {name}")
+            require(fields.get("layout") == "1",
+                    f"staging subresource layout for {name}")
+            observed_case = observed[name]
+            require(fields.get("covered") == observed_case.get("covered") and
+                    fields.get("uniform") == "1" and fields.get("valid") == "1",
+                    f"staging readback for {name}")
+            staged[name] = fields
+        require(set(staged) == set(expected_cases), "staging readback case set")
+        # The staging word must be exactly the frame the attachment held: the
+        # same encoded triple, read from the linear image.
+        for name, fields in staged.items():
+            encoded = (0xff << 24) | (int(expected_cases[name][2]) << 16) | \
+                (int(expected_cases[name][1]) << 8) | int(expected_cases[name][0])
+            require(fields.get("staged") == f"{encoded:08x}",
+                    f"staging word for {name}")
+        require(staging_result[1].split()[1:] == [
+            f"cases={len(DRAW_PARAMETER_CASES)}",
+            f"witnessed={len(DRAW_PARAMETER_CASES)}", "valid=1"],
+            "staging readback result")
     two_subpass_present = bool(matching("PS5VK_CONSUMER_TWO_SUBPASS_START"))
     two_subpass_start = one("PS5VK_CONSUMER_TWO_SUBPASS_START") \
         if two_subpass_present else None

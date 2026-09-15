@@ -32,7 +32,9 @@ def draw_parameter_messages(first_serial=13,
         f"valid=1",
     ]
     serial = first_serial
+    pitch = (DRAW_PARAMETER_EXTENT * 4 + 255) & ~255
     for name, base_vertex, base_instance, draw_index in DRAW_PARAMETER_CASES:
+        encoded = (0xff << 24) | (draw_index << 16) | (base_instance << 8) | base_vertex
         rows.extend([
             f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
             f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
@@ -41,9 +43,13 @@ def draw_parameter_messages(first_serial=13,
             f"PS5VK_CONSUMER_DRAW_PARAMETERS case={name} "
             f"base_vertex={base_vertex} base_instance={base_instance} "
             f"draw_index={draw_index} covered={covered} uniform=1 valid=1",
+            f"PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING case={name} row_pitch={pitch} "
+            f"staged_bytes={pitch * DRAW_PARAMETER_EXTENT} staged={encoded:08x} "
+            f"covered={covered} uniform=1 layout=1 valid=1",
         ])
         serial += 1
     rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_RESULT cases=6 witnessed=6 valid=1")
+    rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT cases=6 witnessed=6 valid=1")
     rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_RETIRED cases=6 witnessed=6")
     return rows
 
@@ -732,7 +738,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         self.assertEqual(result["draw_parameter_cases"], len(DRAW_PARAMETER_CASES))
 
     def test_draw_parameter_values_are_pinned_per_case(self):
-        rows = [row for row in draw_parameter_messages() if " case=" in row]
+        rows = [row for row in draw_parameter_messages()
+                if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS case=")]
         self.assertEqual(len(rows), len(DRAW_PARAMETER_CASES))
         for row in rows:
             for field in ("base_vertex", "base_instance", "draw_index"):
@@ -747,7 +754,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
 
     def test_draw_parameter_witness_is_fail_closed(self):
         rows = draw_parameter_messages()
-        case_row = next(row for row in rows if " case=" in row)
+        case_row = next(row for row in rows
+                        if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS case="))
 
         def rewrite(row, field, value):
             def edit(messages):
@@ -788,10 +796,49 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             with self.subTest(mutate=mutate.__name__), self.assertRaises(ValueError):
                 validate(log, receipt, artifact)
 
+    def test_staging_readback_witness_is_fail_closed(self):
+        """The pinned linear-staging readback is a pin, not a sample: the word,
+        the layout and the coverage all have to match the attachment's frame."""
+        rows = draw_parameter_messages()
+        staging_row = next(row for row in rows
+                           if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING case="))
+        staging_result = next(row for row in rows if row.startswith(
+            "PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT "))
+
+        def rewrite(row, field, value):
+            def edit(messages):
+                index = messages.index(row)
+                messages[index] = " ".join(
+                    f"{field}={value}" if part.startswith(f"{field}=") else part
+                    for part in messages[index].split())
+            return edit
+
+        for field, value in (("staged", "00000000"),
+                             ("row_pitch", "128"),
+                             ("staged_bytes", "4096"),
+                             ("covered", "1"),
+                             ("uniform", "0"),
+                             ("layout", "0"),
+                             ("valid", "0")):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate(*self.fixture(draw_parameters=True,
+                                       edit=rewrite(staging_row, field, value)))
+        for field, value in (("witnessed", "5"), ("valid", "0")):
+            with self.subTest(result=field), self.assertRaises(ValueError):
+                validate(*self.fixture(draw_parameters=True,
+                                       edit=rewrite(staging_result, field, value)))
+        # A staging row the payload never reported is a missing witness, not a
+        # smaller run.
+        def drop(messages):
+            messages.remove(staging_row)
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(draw_parameters=True, edit=drop))
+
     def test_draw_parameter_destination_witness_is_fail_closed(self):
         rows = draw_parameter_messages()
         destination_row = next(row for row in rows
                                if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS_DST"))
+
 
         def rewrite(field, value):
             def edit(messages):
