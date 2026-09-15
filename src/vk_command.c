@@ -17,6 +17,31 @@ enum {
     PS5VK_DYNAMIC_STENCIL_WRITE_MASK = 1u << 5,
     PS5VK_DYNAMIC_STENCIL_REFERENCE = 1u << 6,
 };
+/* A recorded vkCmdExecuteCommands holds raw references to its children. If a
+ * child is reset, re-recorded or freed before its parent is submitted, those
+ * references would dangle and submit-time validation would read freed memory.
+ * Vulkan already says such a parent becomes invalid, so poison every parent
+ * that names this child rather than leaving a stale handle behind. The walk is
+ * bounded: a device has a list of pools, a pool a list of buffers, and a
+ * buffer at most PS5VK_MAX_OPERATIONS operations. */
+static void invalidate_parents_referencing(VkCommandBuffer child)
+{
+    if (!child || !child->pool || !child->pool->device) return;
+    VkDevice d = child->pool->device;
+    for (VkCommandPool p = d->command_pools; p; p = p->next)
+        for (VkCommandBuffer parent = p->buffers; parent; parent = parent->next) {
+            if (parent == child || parent->state == PS5VK_INVALID) continue;
+            for (unsigned j = 0; j < parent->operation_count; ++j) {
+                const struct ps5vk_operation *op = &parent->operations[j];
+                if (op->type != PS5VK_EXECUTE_COMMANDS || !op->owned_payload) continue;
+                VkCommandBuffer const *named = (VkCommandBuffer const *)op->owned_payload;
+                for (uint32_t n = 0; n < op->child_count; ++n)
+                    if (named[n] == child) { parent->state = PS5VK_INVALID; break; }
+                if (parent->state == PS5VK_INVALID) break;
+            }
+        }
+}
+
 static void clear(VkCommandBuffer c)
 {
     for (unsigned j = 0; j < c->operation_count; ++j) {
@@ -25,6 +50,8 @@ static void clear(VkCommandBuffer c)
             ps5vk_object_free(op->owned_payload, &op->payload_allocator,
                 op->custom_payload_allocator);
     }
+    if (c->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY)
+        invalidate_parents_referencing(c);
     c->state = PS5VK_INITIAL; c->usage = 0; c->pipeline = NULL;
     c->operation_count = 0;
     /* The level survives every reset: Vulkan has no operation that changes it.
@@ -226,6 +253,10 @@ VKAPI_ATTR void VKAPI_CALL vkFreeCommandBuffers(VkDevice d, VkCommandPool p, uin
         VkCommandBuffer *link = &p->buffers;
         while (*link && *link != buffers[j]) link = &(*link)->next;
         if (*link) {
+            /* Poison any parent that names this child BEFORE the object goes
+             * away, so no recorded reference can outlive its target. */
+            if (buffers[j]->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY)
+                invalidate_parents_referencing(buffers[j]);
             *link = buffers[j]->next;
             clear(buffers[j]);
             ps5vk_object_free(buffers[j], &p->allocator, p->custom_allocator);
@@ -611,11 +642,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
  * under simultaneous use and simply names the child twice.
  *
  * Refused, each poisoning the recording with no partial operation left:
- * nesting, an empty or null array, more children than the segmenter expands,
- * a child of another device or without a pool, a non-secondary child, a child
- * that is not EXECUTABLE, a child recorded for render-pass continuation, a
- * self-reference, and a pending or repeated child that was not recorded for
- * simultaneous use.
+ * nesting, an empty or null array, a child of another device or without a
+ * pool, a non-secondary child, a child that is neither pending nor executable,
+ * a child recorded for render-pass continuation, a self-reference, and a
+ * pending or repeated child that was not recorded for simultaneous use.
+ * There is no invented limit on how many children may be named.
  *
  * Not refused: whatever the child's inheritance record happens to carry. Its
  * scope members are ignored by Vulkan without RENDER_PASS_CONTINUE and this
@@ -628,17 +659,24 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
         c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         /* Executing inside a render pass needs inherited continuation, which
          * is a later slice, so it stays fail-closed here. */
-        c->render_pass || !count || !commands ||
-        count > PS5VK_MAX_EXECUTED_COMMANDS) { invalid(c); return; }
+        c->render_pass || !count || !commands) { invalid(c); return; }
     VkDevice d = c->pool->device;
     for (uint32_t j = 0; j < count; ++j) {
         VkCommandBuffer child = commands[j];
+        const VkBool32 simultaneous =
+            (child && (child->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) ?
+            VK_TRUE : VK_FALSE;
+        /* VUID-vkCmdExecuteCommands-pCommandBuffers-00089: a child must be in
+         * the PENDING OR EXECUTABLE state, so pending is legal; 00091 narrows
+         * that to simultaneous-use buffers only. Demanding EXECUTABLE
+         * unconditionally would refuse a conformant call. */
         if (!child || child == c || !child->pool || child->pool->device != d ||
             child->level != VK_COMMAND_BUFFER_LEVEL_SECONDARY ||
-            child->state != PS5VK_EXECUTABLE ||
+            (child->state != PS5VK_EXECUTABLE &&
+             !(child->state == PS5VK_PENDING && simultaneous)) ||
             (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
             { invalid(c); return; }
-        if (!(child->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
+        if (!simultaneous) {
             /* Without simultaneous use a child may not already be pending and
              * may not appear twice: either executes it alongside itself. */
             if (child->pending_count) { invalid(c); return; }

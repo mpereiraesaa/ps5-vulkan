@@ -19,16 +19,21 @@
 #include <string.h>
 
 static unsigned prepares, fail_prepare_at;
+/* The mock must report the segment's OWN serial as completed. Reporting a
+ * constant works only while a submission produces one segment; secondary
+ * expansion produces several, and a stale serial reads as device loss. */
 static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **job)
 {
-    (void)d; (void)s;
+    (void)d;
     if (fail_prepare_at && ++prepares == fail_prepare_at) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    *job = malloc(1);
-    return *job ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
+    uint64_t *serial = malloc(sizeof(*serial));
+    if (!serial) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    *serial = s->serial; *job = serial;
+    return VK_SUCCESS;
 }
 static VkResult launch(VkDevice d, void *job) { (void)d; (void)job; return VK_SUCCESS; }
 static VkResult poll_backend(VkDevice d, void *job, uint64_t *completed)
-{ (void)d; (void)job; *completed = 1; return VK_SUCCESS; }
+{ (void)d; *completed = *(uint64_t *)job; return VK_SUCCESS; }
 static void release(VkDevice d, void *job) { (void)d; free(job); }
 static uint64_t clock_ns(void *ctx) { (void)ctx; static uint64_t t; return ++t; }
 static void pause_wait(void *ctx, uint64_t ns) { (void)ctx; (void)ns; }
@@ -154,6 +159,140 @@ int main(void)
     /* Named twice and still reusable: simultaneous use is not consumption. */
     assert(shared->state == PS5VK_EXECUTABLE && !shared->pending_count);
 
+    /* --- a MIXED child is segmented per operation, not classified whole ---
+     * An event (frontend) followed by a barrier (backend) must have BOTH
+     * halves executed. Judging the child by its first operation would run the
+     * event and silently drop the barrier, which no uniform event-only child
+     * can reveal. */
+    VkEvent mixed_event;
+    assert(vkCreateEvent(&d, &ei, NULL, &mixed_event) == VK_SUCCESS);
+    VkCommandBuffer mixed = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    {
+        VkCommandBufferInheritanceInfo mi = inheritance();
+        VkCommandBufferBeginInfo mb = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pInheritanceInfo = &mi};
+        assert(vkBeginCommandBuffer(mixed, &mb) == VK_SUCCESS);
+        vkCmdSetEvent(mixed, mixed_event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+        vkCmdPipelineBarrier(mixed, VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 0, NULL);
+        assert(vkEndCommandBuffer(mixed) == VK_SUCCESS);
+        assert(mixed->operation_count == 2);
+        assert(mixed->operations[0].type == PS5VK_EVENT_SET);
+        assert(mixed->operations[1].type == PS5VK_BARRIER);
+    }
+    VkCommandBuffer mixed_parent = begun_primary(&d, pool);
+    vkCmdExecuteCommands(mixed_parent, 1, &mixed);
+    assert(vkEndCommandBuffer(mixed_parent) == VK_SUCCESS);
+    VkSubmitInfo mixed_si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &mixed_parent};
+    assert(vkQueueSubmit(&d.queue, 1, &mixed_si, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+    /* The frontend half ran, and the whole submission completed rather than
+     * dropping the backend half. */
+    assert(vkGetEventStatus(&d, mixed_event) == VK_EVENT_SET);
+    assert(mixed->state == PS5VK_EXECUTABLE && !mixed->pending_count);
+    assert(mixed_parent->state == PS5VK_EXECUTABLE && !mixed_parent->pending_count);
+
+    /* --- the PARENT is pinned even when it only names children ------------
+     * A primary whose sole operation is vkCmdExecuteCommands must still become
+     * pending and must still be consumed by one-time-submit; otherwise
+     * reset/free protection silently disappears. */
+    VkEvent parent_event;
+    assert(vkCreateEvent(&d, &ei, NULL, &parent_event) == VK_SUCCESS);
+    VkCommandBuffer only_child = child_with_event(&d, pool, parent_event,
+        VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    VkCommandBuffer one_time_parent = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    {
+        VkCommandBufferBeginInfo ob = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+        assert(vkBeginCommandBuffer(one_time_parent, &ob) == VK_SUCCESS);
+        vkCmdExecuteCommands(one_time_parent, 1, &only_child);
+        assert(one_time_parent->operation_count == 1);
+        assert(vkEndCommandBuffer(one_time_parent) == VK_SUCCESS);
+    }
+    VkSubmitInfo parent_si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &one_time_parent};
+    assert(vkQueueSubmit(&d.queue, 1, &parent_si, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+    assert(vkGetEventStatus(&d, parent_event) == VK_EVENT_SET);
+    /* Consumed exactly as any one-time-submit primary would be. */
+    assert(one_time_parent->state == PS5VK_INVALID && !one_time_parent->pending_count);
+
+    /* --- an EMPTY child still has lifecycle ------------------------------- */
+    VkCommandBuffer empty = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    {
+        VkCommandBufferInheritanceInfo eih = inheritance();
+        VkCommandBufferBeginInfo eb = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pInheritanceInfo = &eih};
+        assert(vkBeginCommandBuffer(empty, &eb) == VK_SUCCESS);
+        assert(vkEndCommandBuffer(empty) == VK_SUCCESS);
+        assert(!empty->operation_count);
+    }
+    VkCommandBuffer empty_parent = begun_primary(&d, pool);
+    vkCmdExecuteCommands(empty_parent, 1, &empty);
+    assert(vkEndCommandBuffer(empty_parent) == VK_SUCCESS);
+    VkSubmitInfo empty_si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &empty_parent};
+    assert(vkQueueSubmit(&d.queue, 1, &empty_si, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+    /* Executing nothing is still executing: the one-time child is consumed. */
+    assert(empty->state == PS5VK_INVALID && !empty->pending_count);
+
+    /* --- resetting a referenced child poisons its parent ------------------
+     * The recorded array holds raw references; a child that is reset,
+     * re-recorded or freed before the parent submits would leave them
+     * dangling, so the parent is invalidated instead. */
+    VkEvent dep_event;
+    assert(vkCreateEvent(&d, &ei, NULL, &dep_event) == VK_SUCCESS);
+    VkCommandBuffer dep_child = child_with_event(&d, pool, dep_event, 0);
+    VkCommandBuffer dep_parent = begun_primary(&d, pool);
+    vkCmdExecuteCommands(dep_parent, 1, &dep_child);
+    assert(vkEndCommandBuffer(dep_parent) == VK_SUCCESS);
+    assert(dep_parent->state == PS5VK_EXECUTABLE);
+    assert(vkResetCommandBuffer(dep_child, 0) == VK_SUCCESS);
+    assert(dep_parent->state == PS5VK_INVALID);
+    /* And an invalid parent cannot be submitted. */
+    VkSubmitInfo dep_si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &dep_parent};
+    assert(vkQueueSubmit(&d.queue, 1, &dep_si, VK_NULL_HANDLE) != VK_SUCCESS);
+
+    /* Freeing a referenced child does the same, before the object goes away,
+     * so a later submit cannot read freed memory. */
+    VkCommandBuffer freed_child = child_with_event(&d, pool, dep_event, 0);
+    VkCommandBuffer freed_parent = begun_primary(&d, pool);
+    vkCmdExecuteCommands(freed_parent, 1, &freed_child);
+    assert(vkEndCommandBuffer(freed_parent) == VK_SUCCESS);
+    vkFreeCommandBuffers(&d, pool, 1, &freed_child);
+    assert(freed_parent->state == PS5VK_INVALID);
+
+    /* --- a PENDING simultaneous-use child is legal ------------------------
+     * VUID-vkCmdExecuteCommands-pCommandBuffers-00089 allows a child in the
+     * pending OR executable state, and 00091 restricts pending only for
+     * buffers WITHOUT simultaneous use. Demanding executable unconditionally
+     * would refuse a conformant call. Forcing the pending state directly is
+     * how the host harness reaches it without a live GPU. */
+    {
+        VkEvent pending_event;
+        assert(vkCreateEvent(&d, &ei, NULL, &pending_event) == VK_SUCCESS);
+        VkCommandBuffer simul_child = child_with_event(&d, pool, pending_event,
+            VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+        const enum ps5vk_command_state saved = simul_child->state;
+        simul_child->state = PS5VK_PENDING; simul_child->pending_count = 1;
+        VkCommandBuffer accepts = begun_primary(&d, pool);
+        vkCmdExecuteCommands(accepts, 1, &simul_child);
+        assert(accepts->state == PS5VK_RECORDING && accepts->operation_count == 1);
+        /* The same state WITHOUT simultaneous use is refused, per 00091. */
+        VkCommandBuffer plain = child_with_event(&d, pool, pending_event, 0);
+        plain->state = PS5VK_PENDING; plain->pending_count = 1;
+        VkCommandBuffer refuses = begun_primary(&d, pool);
+        vkCmdExecuteCommands(refuses, 1, &plain);
+        assert(refuses->state == PS5VK_INVALID && !refuses->operation_count);
+        plain->state = saved; plain->pending_count = 0;
+        simul_child->state = saved; simul_child->pending_count = 0;
+        vkDestroyEvent(&d, pending_event, NULL);
+    }
+
     /* --- fail-closed edges, each leaving nothing recorded ----------------- */
     VkCommandBuffer probe;
     /* nesting: a secondary may not execute anything */
@@ -191,12 +330,16 @@ int main(void)
     probe = begun_primary(&d, pool);
     vkCmdExecuteCommands(probe, 1, NULL);
     assert(probe->state == PS5VK_INVALID && !probe->operation_count);
+    /* A long but legal list is ACCEPTED: there is no invented cap, and the
+     * segment list is dynamically allocated. */
     {
-        VkCommandBuffer many[PS5VK_MAX_EXECUTED_COMMANDS + 1];
-        for (unsigned i = 0; i <= PS5VK_MAX_EXECUTED_COMMANDS; ++i) many[i] = shared;
+        enum { MANY = 24 };
+        VkCommandBuffer many[MANY];
+        for (unsigned i = 0; i < MANY; ++i) many[i] = shared;
         probe = begun_primary(&d, pool);
-        vkCmdExecuteCommands(probe, PS5VK_MAX_EXECUTED_COMMANDS + 1, many);
-        assert(probe->state == PS5VK_INVALID && !probe->operation_count);
+        vkCmdExecuteCommands(probe, MANY, many);
+        assert(probe->state == PS5VK_RECORDING && probe->operation_count == 1 &&
+               probe->operations[0].child_count == MANY);
     }
 
     /* a render-pass-continue child stays refused: S3 owns those semantics */
@@ -228,6 +371,9 @@ int main(void)
     fail_prepare_at = 0;
     assert(!b->pending_count && !rollback->pending_count);
 
+    vkDestroyEvent(&d, dep_event, NULL);
+    vkDestroyEvent(&d, parent_event, NULL);
+    vkDestroyEvent(&d, mixed_event, NULL);
     vkDestroyEvent(&d, shared_event, NULL);
     vkDestroyEvent(&d, once_event, NULL);
     vkDestroyEvent(&d, second, NULL);

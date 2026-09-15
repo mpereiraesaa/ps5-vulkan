@@ -30,9 +30,6 @@ enum ps5vk_operation_scope {
     PS5VK_OPERATION_ANYWHERE
 };
 enum { PS5VK_MAX_OPERATIONS = 64 };
-/* One vkCmdExecuteCommands cannot name more children than the submission
- * segmenter will expand for a single primary. */
-enum { PS5VK_MAX_EXECUTED_COMMANDS = 16 };
 enum { PS5VK_MAX_VERTEX_BINDINGS = 16 };
 struct ps5vk_vertex_binding { VkBuffer buffer; VkDeviceSize offset; };
 struct ps5vk_index_binding { VkBuffer buffer; VkDeviceSize offset; VkIndexType type; };

@@ -568,12 +568,29 @@ as a primary would be; one recorded with
 call and stays reusable. A secondary is still refused at `vkQueueSubmit`: it
 reaches the queue only through a primary.
 
+A child may be in the **pending or executable** state, per
+`VUID-vkCmdExecuteCommands-pCommandBuffers-00089`; `00091` restricts the
+pending state to buffers recorded with
+`VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT`. There is no limit on how many
+children one call may name. An **empty** child executes as a no-op but still
+consumes its lifecycle, so a one-time-submit empty child is consumed.
+
+Each child is segmented by the **same per-operation rules as a primary**, not
+classified as a whole, so a mixed child - an event followed by a barrier, say -
+has both halves executed in order rather than one half silently dropped. The
+primary itself stays pending across its children, so resetting or freeing it
+mid-flight is refused exactly as for any other submitted buffer.
+
+A recorded reference keeps the child alive in the parent's plan, so resetting,
+re-recording or freeing a referenced child before the parent is submitted
+**invalidates the parent** rather than leaving a dangling handle behind.
+
 The call is refused, poisoning the recording with no partial operation left
 behind, for nesting (a secondary may not execute anything), an empty or null
-array, more children than the driver expands, a child of another device or
-without a pool, a child that is not a secondary, a child that is not
-executable, a self-reference, a pending or repeated child that was not recorded
-for simultaneous use, and a child recorded for render-pass continuation.
+array, a child of another device or without a pool, a child that is not a
+secondary, a child that is neither pending nor executable, a self-reference, a
+pending or repeated child that was not recorded for simultaneous use, and a
+child recorded for render-pass continuation.
 Executing **inside** a render pass is not supported: inherited render-pass
 scope is a separate slice, so the call is valid only outside one.
 
