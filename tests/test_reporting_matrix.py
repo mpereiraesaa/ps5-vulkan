@@ -29,7 +29,9 @@ UNASSIGNED_FORMAT_TABLES = {
     "formats-mandatory-features-astc",
 }
 UNASSIGNED_FORMAT_TABLE_DIGEST = (
-    "ef9d8bf9f833f6b149009d2f87e2a1d2bcb14a7309f84dedbd101d3f6aff0e23")
+    # The 2026-09-15 direct UTEXEL matrix intentionally qualifies owned rows
+    # across the 2-byte, 4-byte, 16-bit, 32-bit and 64-bit tables.
+    "529b68fbd880f0cf9a4a49cbe3631302790217100c569ee658288fb9864b69a7")
 
 
 def unassigned_format_table_digest(rows):
@@ -38,8 +40,8 @@ def unassigned_format_table_digest(rows):
 
 
 class TestReportingMatrix(unittest.TestCase):
-    def test_unassigned_format_tables_are_untouched(self):
-        """Only the 4-byte and 32-bit tables may differ in this task."""
+    def test_cross_table_format_snapshot_matches_the_audited_baseline(self):
+        """Changes outside the original two-table audit require explicit review."""
         data = json.loads(
             (ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         rows = [row for row in data["formats"]
@@ -47,8 +49,7 @@ class TestReportingMatrix(unittest.TestCase):
         self.assertTrue(rows)
         self.assertEqual(unassigned_format_table_digest(rows),
                          UNASSIGNED_FORMAT_TABLE_DIGEST,
-                         "a format row outside the assigned 4-byte/32-bit tables "
-                         "changed; if that is deliberate, update "
+                         "a cross-table format row changed; if deliberate, update "
                          "UNASSIGNED_FORMAT_TABLE_DIGEST and explain why")
 
     def test_every_public_format_is_in_the_reporting_dump(self):

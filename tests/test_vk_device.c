@@ -497,7 +497,8 @@ static void lifecycle(void)
         VK_FORMAT_FEATURE_TRANSFER_DST_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
     vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_A8B8G8R8_UNORM_PACK32, &fp);
     assert(fp.optimalTilingFeatures == packed_sampled &&
-        fp.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+        fp.bufferFeatures == (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
+                                                    VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_A8B8G8R8_SRGB_PACK32, &fp);
     assert(fp.optimalTilingFeatures == packed_sampled && !fp.bufferFeatures &&
         !fp.linearTilingFeatures);

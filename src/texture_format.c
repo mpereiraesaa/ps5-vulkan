@@ -10,7 +10,7 @@
  * This is the only place in ps5-vulkan that decides which format capability
  * exists. See texture_format.h for the implemented/witnessed contract and
  * conformance_inventory/physical_format_validation.json for the diagnostics
- * that promote a pending capability.
+ * that qualify a capability for publication.
  */
 #include "texture_format.h"
 
@@ -28,18 +28,19 @@
 #define CAP_UTEXEL PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER
 
 /* Sampled row: the GFX1013 word/selectors/texel size are the pinned GPL
- * encoding; the pending column carries capabilities that are implemented and
- * host-tested but have no on-console witness yet. */
-#define SAMPLED(f, bpt, word, s0, s1, s2, s3, EXTRA, PENDING) \
+ * encoding. ENABLED carries additional directly qualified roles. */
+#define SAMPLED(f, bpt, word, s0, s1, s2, s3, EXTRA, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
-      CAP_SAMP | CAP_DST | (EXTRA) | (PENDING), CAP_SAMP | CAP_DST | (EXTRA), GPL }
+      CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), \
+      CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), GPL }
 /* Sampled row whose byte layout is the pinned registry's packed-component
  * order rather than one of the reference's explicit rows. WITNESSED lists
  * enabled capabilities, including the independently qualified sampled roles;
- * PENDING lists any remaining implemented-but-disabled operations. */
-#define SAMPLED_PACKED(f, bpt, word, s0, s1, s2, s3, WITNESSED, PENDING) \
+ * ENABLED lists additional directly qualified operations. */
+#define SAMPLED_PACKED(f, bpt, word, s0, s1, s2, s3, WITNESSED, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
-      CAP_SAMP | CAP_DST | (WITNESSED) | (PENDING), (WITNESSED), GPL | PACK }
+      CAP_SAMP | CAP_DST | (WITNESSED) | (ENABLED), \
+      (WITNESSED) | (ENABLED), GPL | PACK }
 /* Row with no sampled-image encoding: a render-target, depth or buffer role. */
 #define BUFFER(f, CAPS) \
     { (f), 0, 0, {0, 0, 0, 0}, (CAPS), (CAPS), PS5VK_FORMAT_PROVENANCE_NONE }
@@ -51,19 +52,13 @@ static const struct ps5vk_texture_format formats[] = {
      * byte-identical nearest/linear checkerboard runs. Integer rows use typed
      * isampler/usampler interfaces only, as Vulkan requires. The one-byte and
      * two-byte one- and two-component rows also carry the uniform-texel-buffer
-     * role in the IMPLEMENTED column (see each row's pending column): the
-     * descriptor path derives the GFX10 combined word and the completion from
-     * the row and takes the element stride from bytes_per_texel, so those
-     * element sizes need no new encoding. They stay unwitnessed until a
-     * console fetch covers them, so no feature bit moves and no buffer view
-     * becomes creatable. */
+     * role. A direct typed compute matrix validated their GFX10 words,
+     * completion selectors and 1/2-byte element strides on console. */
     /* The four one-component one-byte rows also carry the uniform-texel-buffer
-     * role in the IMPLEMENTED column: the descriptor path derives the GFX10
+     * role: the descriptor path derives the GFX10
      * combined word (1/2/5/6 = 8_UNORM/8_SNORM/8_UINT/8_SINT) and the
      * (4,0,0,1) completion from the row and takes the element stride from
-     * bytes_per_texel, so a one-byte structured element needs no new encoding.
-     * The role stays unwitnessed until a console fetch covers a sub-4-byte
-     * element, so no feature bit moves and no buffer view becomes creatable. */
+     * bytes_per_texel. The direct typed matrix covers this sub-4-byte path. */
     SAMPLED(VK_FORMAT_R8_UNORM, 1, UINT32_C(0x00100000), 4, 0, 0, 1,
             CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R8_SNORM, 1, UINT32_C(0x00200000), 4, 0, 0, 1,
@@ -86,14 +81,14 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_B10G11R11_UFLOAT_PACK32, 4, UINT32_C(0x02400000), 4, 5, 6, 1,
             CAP_LINEAR, CAP_UTEXEL),
     /* --- 16-bit sampled formats ------------------------------------------
-     * The five single-component rows also carry the uniform-texel-buffer role
-     * in the IMPLEMENTED column (pending column below). Their GFX10 combined
+     * The five single-component rows also carry the uniform-texel-buffer role.
+     * Their GFX10 combined
      * words are 7/8/13/11/12 = 16_UNORM/SNORM/FLOAT/UINT/SINT, the completion
      * is (4,0,0,1) -> 0x204 and the element is two bytes, so the descriptor
      * path needs nothing new. The mandatory 16-bit table requires the role for
      * SFLOAT, UINT and SINT; UNORM and SNORM are staged with them for family
-     * coherence. All five stay unwitnessed until a console fetch covers a
-     * 16-bit element, so no feature bit moves and no view becomes creatable. */
+     * coherence. Direct typed console fetches cover all five and the wider
+     * R16 vector families. */
     SAMPLED(VK_FORMAT_R16_UNORM, 2, UINT32_C(0x00700000), 4, 0, 0, 1,
             CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16_SNORM, 2, UINT32_C(0x00800000), 4, 0, 0, 1,
@@ -165,11 +160,8 @@ static const struct ps5vk_texture_format formats[] = {
      * SELF images. This does not promote attachment, storage or blit roles.
      * Exact artifacts and log digests are recorded in VALIDATION.md.
      * The four non-sRGB rows also carry the uniform-texel-buffer role in the
-     * IMPLEMENTED column: their memory layout, GFX1013 word and identity
-     * selectors are the R8G8B8A8 ones, so the descriptor path that witness
-     * established encodes them unchanged. The role stays unwitnessed until its
-     * own console fetch is recorded, so no feature bit moves and no buffer
-     * view becomes creatable yet. */
+     * enabled role: their memory layout, GFX1013 word and identity selectors
+     * are the R8G8B8A8 ones. Direct typed console fetches cover all four. */
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_UNORM_PACK32, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
                    CAP_VERTEX | CAP_SAMP | CAP_DST | CAP_LINEAR, CAP_UTEXEL),
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SNORM_PACK32, 4, UINT32_C(0x03900000), 4, 5, 6, 7,

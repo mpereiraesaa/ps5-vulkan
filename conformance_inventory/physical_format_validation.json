@@ -8,10 +8,11 @@
   "console_used_by_this_task": true,
   "summary": {
     "mandatory_cells_in_scope": 287,
-    "satisfied_by_this_task": 12,
+    "satisfied_by_this_task": 22,
+    "direct_texel_matrix_cells_in_scope": 10,
     "ready_pending_physical_validation": 0,
-    "blocked_without_backend": 275,
-    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated and enabled the eight A8B8G8R8 sampled entries below; the four-byte RGBA8 uniform-texel-buffer promotion of 2026-09-15 added the four RGBA8 entries from its own two-run texelFetch witness. The remaining 275 baseline cells require backend work; the count is not CTS coverage or conformance."
+    "blocked_without_backend": 265,
+    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated eight A8B8G8R8 sampled entries. The direct uniform-texel matrix of 2026-09-15 validates 41 formats across all owned format families and moves ten additional cells in this original two-table scope. The remaining 265 baseline cells require backend work; the count is not CTS coverage or conformance."
   },
   "qualification": {
     "status": "validated",
@@ -55,6 +56,37 @@
         ]
       }
     }
+  },
+  "uniform_texel_matrix": {
+    "status": "validated",
+    "date": "2026-09-15",
+    "target": "PS5 GFX1013 / firmware 12.02",
+    "oracle": "Typed compute samplerBuffer/usamplerBuffer/isamplerBuffer texelFetch with exact four-word CPU comparison and guard-region verification",
+    "self_sha256": "ef196ce8fbb22ef33f0c15f60dbd9a801d7d7624c0bb87407a1e1e79cfa7e8b1",
+    "run_ids": [
+      "20260915T114720138Z_PPSA99994_ps5vk_0xda4ea3a518eb",
+      "20260915T114908594Z_PPSA99994_ps5vk_0xda67e478833a"
+    ],
+    "log_sha256": [
+      "94a07bde50440227191ec5a44f4e47c76a74a5bfa0b985a077ab1bd436174646",
+      "c309d5db753fe0b25b6491f336eb700281ed16fa71af51313f782583f6b709f1"
+    ],
+    "case_count": 41,
+    "components_per_case": 4,
+    "element_bytes": [1, 2, 4, 8, 16],
+    "formats": [
+      "VK_FORMAT_R8_UNORM", "VK_FORMAT_R8_SNORM", "VK_FORMAT_R8G8_UNORM", "VK_FORMAT_R8G8_SNORM",
+      "VK_FORMAT_R8G8B8A8_UNORM", "VK_FORMAT_R8G8B8A8_SNORM", "VK_FORMAT_A8B8G8R8_UNORM_PACK32", "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
+      "VK_FORMAT_B10G11R11_UFLOAT_PACK32", "VK_FORMAT_R16_UNORM", "VK_FORMAT_R16_SNORM", "VK_FORMAT_R16_SFLOAT",
+      "VK_FORMAT_R16G16_UNORM", "VK_FORMAT_R16G16_SNORM", "VK_FORMAT_R16G16_SFLOAT", "VK_FORMAT_R16G16B16A16_UNORM",
+      "VK_FORMAT_R16G16B16A16_SNORM", "VK_FORMAT_R16G16B16A16_SFLOAT", "VK_FORMAT_R32_SFLOAT", "VK_FORMAT_R32G32_SFLOAT",
+      "VK_FORMAT_R32G32B32A32_SFLOAT", "VK_FORMAT_R8_UINT", "VK_FORMAT_R8_SINT", "VK_FORMAT_R8G8_UINT",
+      "VK_FORMAT_R8G8_SINT", "VK_FORMAT_R8G8B8A8_UINT", "VK_FORMAT_R8G8B8A8_SINT", "VK_FORMAT_A8B8G8R8_UINT_PACK32",
+      "VK_FORMAT_A8B8G8R8_SINT_PACK32", "VK_FORMAT_R16_UINT", "VK_FORMAT_R16_SINT", "VK_FORMAT_R16G16_UINT",
+      "VK_FORMAT_R16G16_SINT", "VK_FORMAT_R16G16B16A16_UINT", "VK_FORMAT_R16G16B16A16_SINT", "VK_FORMAT_R32_UINT",
+      "VK_FORMAT_R32_SINT", "VK_FORMAT_R32G32_UINT", "VK_FORMAT_R32G32_SINT", "VK_FORMAT_R32G32B32A32_UINT",
+      "VK_FORMAT_R32G32B32A32_SINT"
+    ]
   },
   "promotion_procedure": [
     "1. In a private qualification build, include the candidate capability in the witnessed argument of its SAMPLED_PACKED row in src/texture_format.c. Sampling with upload requires both SAMPLED_IMAGE and TRANSFER_DST; linear filtering additionally requires SAMPLED_IMAGE_LINEAR. Do not publish the promotion before both physical runs pass.",
@@ -290,8 +322,8 @@
       "profiles": [
         "graphics"
       ],
-      "cells": 28,
-      "detail": "Buffer views and texel-buffer descriptors exist for the R32 UINT/SINT/SFLOAT uniform rows and, since the 2026-09-15 promotion, for the four four-component R8G8B8A8 rows with their own identity completion; there is still no storage-texel-buffer descriptor type and no buffer-data-format mapping for the remaining formats."
+      "cells": 18,
+      "detail": "Direct native typed fetches qualify every implemented uniform-texel row in this two-table scope except B8G8R8A8_UNORM, whose absent sampled encoding prevents an honest buffer descriptor. Storage-texel-buffer descriptors remain unsupported."
     },
     {
       "reason": "no-render-target-encoding",

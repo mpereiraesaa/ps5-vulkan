@@ -132,7 +132,8 @@ int main(void)
             assert(!properties.bufferFeatures);
         else
             assert(properties.bufferFeatures ==
-                   (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+                   (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
+                                          VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
         assert(ps5vk_texture_format_image_usage(format, VK_IMAGE_USAGE_SAMPLED_BIT));
         assert(ps5vk_texture_format_image_usage(format,
             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
@@ -146,15 +147,12 @@ int main(void)
     assert(!ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UINT_PACK32,
         PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
 
-    /* --- packed rows: uniform texel buffer implemented but not witnessed ---
+    /* --- packed rows: directly witnessed uniform texel buffers ------------
      * The four non-sRGB A8B8G8R8 rows have the R8G8B8A8 memory layout, word
      * and selectors, so the descriptor path the RGBA8 witness established
      * encodes them unchanged. They must therefore report the capability as
-     * IMPLEMENTED while still withholding it everywhere a user can see it:
-     * the reported bufferFeatures bit stays off and creation stays refused
-     * (asserted in tests/test_vk_memory.c) until their own console fetch is
-     * recorded. sRGB deliberately has no such role because an sRGB buffer
-     * view needs its own decode contract. */
+     * enabled after the direct typed matrix witness. sRGB deliberately has no
+     * such role because an sRGB buffer view needs its own decode contract. */
     const VkFormat packed_texel[] = {
         VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_FORMAT_A8B8G8R8_SNORM_PACK32,
         VK_FORMAT_A8B8G8R8_UINT_PACK32, VK_FORMAT_A8B8G8R8_SINT_PACK32,
@@ -169,25 +167,18 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 4);
         assert(ps5vk_texture_format_has(packed_texel[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(packed_texel[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(packed_texel[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         assert(ps5vk_texture_format_gfx10_format(entry) == packed_texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0xfac));
         ps5vk_texture_format_properties(packed_texel[i], &packed_properties);
-        assert(!(packed_properties.bufferFeatures &
-                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(packed_properties.bufferFeatures &
+               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
     assert(!ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_SRGB_PACK32,
                                      PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
 
-    /* --- one-byte rows: uniform texel buffer implemented, not witnessed ----
-     * Same staging rule as the four-byte families: the role is implemented
-     * because the descriptor path derives the GFX10 combined word and the
-     * completion from the row and takes a one-byte element stride from
-     * bytes_per_texel, and it stays unwitnessed because no console fetch has
-     * covered a sub-4-byte element yet. Nothing user-visible changes: the
-     * reported bufferFeatures bit stays off and creation stays refused
-     * (asserted in tests/test_vk_memory.c). */
+    /* --- one-byte rows: directly witnessed uniform texel buffers --------- */
     const VkFormat r8_texel[] = {
         VK_FORMAT_R8_UNORM, VK_FORMAT_R8_SNORM, VK_FORMAT_R8_UINT, VK_FORMAT_R8_SINT,
     };
@@ -198,21 +189,16 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 1);
         assert(ps5vk_texture_format_has(r8_texel[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(r8_texel[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(r8_texel[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         /* 8_UNORM/8_SNORM/8_UINT/8_SINT in the pinned GFX10 format table. */
         assert(ps5vk_texture_format_gfx10_format(entry) == r8_texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x204));
         ps5vk_texture_format_properties(r8_texel[i], &r8_properties);
-        assert(!(r8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(r8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
 
-    /* --- two-byte two-component rows: same staging rule --------------------
-     * R8G8_UNORM/SNORM/UINT/SINT carry a two-byte element with the (4,5,0,1)
-     * completion, so the derived completion word is 0x22C and the combined
-     * GFX10 word is 14/15/18/19. Implemented, still unwitnessed: no console
-     * fetch of a two-byte element exists yet, the published bit stays off and
-     * creation stays refused (asserted in tests/test_vk_memory.c). */
+    /* --- two-byte two-component rows: directly witnessed ----------------- */
     const VkFormat r8g8_texel[] = {
         VK_FORMAT_R8G8_UNORM, VK_FORMAT_R8G8_SNORM,
         VK_FORMAT_R8G8_UINT, VK_FORMAT_R8G8_SINT,
@@ -224,13 +210,13 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 2);
         assert(ps5vk_texture_format_has(r8g8_texel[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(r8g8_texel[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(r8g8_texel[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         /* 8_8_UNORM/8_8_SNORM/8_8_UINT/8_8_SINT in the pinned GFX10 table. */
         assert(ps5vk_texture_format_gfx10_format(entry) == r8g8_texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x22c));
         ps5vk_texture_format_properties(r8g8_texel[i], &r8g8_properties);
-        assert(!(r8g8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(r8g8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
 
     /* --- single-component 16-bit rows: same staging rule -------------------
@@ -238,10 +224,7 @@ int main(void)
      * (4,0,0,1) completion, so the derived completion word is 0x204 and the
      * combined GFX10 words are 7/8/13/11/12 for UNORM/SNORM/FLOAT/UINT/SINT.
      * The mandatory 16-bit table requires the role for SFLOAT, UINT and SINT;
-     * UNORM and SNORM are staged with them for family coherence. Implemented,
-     * still unwitnessed: no console fetch of a 16-bit element exists yet, the
-     * published bit stays off and creation stays refused (asserted in
-     * tests/test_vk_memory.c). */
+     * UNORM and SNORM are enabled with them after the same direct witness. */
     const VkFormat r16_texel[] = {
         VK_FORMAT_R16_UNORM, VK_FORMAT_R16_SNORM, VK_FORMAT_R16_SFLOAT,
         VK_FORMAT_R16_UINT, VK_FORMAT_R16_SINT,
@@ -253,13 +236,13 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 2);
         assert(ps5vk_texture_format_has(r16_texel[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(r16_texel[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(r16_texel[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         /* 16_UNORM/16_SNORM/16_FLOAT/16_UINT/16_SINT in the pinned table. */
         assert(ps5vk_texture_format_gfx10_format(entry) == r16_texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x204));
         ps5vk_texture_format_properties(r16_texel[i], &r16_properties);
-        assert(!(r16_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(r16_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
 
     /* --- two-component 16-bit rows: same staging rule ----------------------
@@ -267,9 +250,7 @@ int main(void)
      * (4,5,0,1) completion, so the derived completion word is 0x22C and the
      * combined GFX10 words are 23/24/29/27/28. The mandatory 16-bit table
      * requires the role for SFLOAT, UINT and SINT; UNORM and SNORM are staged
-     * with them for family coherence. Implemented, still unwitnessed: no
-     * console fetch of this element shape exists yet, the published bit stays
-     * off and creation stays refused (asserted in tests/test_vk_memory.c). */
+     * with them for family coherence after the same direct witness. */
     const VkFormat r16g16_texel[] = {
         VK_FORMAT_R16G16_UNORM, VK_FORMAT_R16G16_SNORM, VK_FORMAT_R16G16_SFLOAT,
         VK_FORMAT_R16G16_UINT, VK_FORMAT_R16G16_SINT,
@@ -282,14 +263,14 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 4);
         assert(ps5vk_texture_format_has(r16g16_texel[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(r16g16_texel[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(r16g16_texel[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         /* 16_16_UNORM/SNORM/FLOAT/UINT/SINT in the pinned GFX10 table. */
         assert(ps5vk_texture_format_gfx10_format(entry) == r16g16_texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x22c));
         ps5vk_texture_format_properties(r16g16_texel[i], &r16g16_properties);
-        assert(!(r16g16_properties.bufferFeatures &
-                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(r16g16_properties.bufferFeatures &
+               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
 
     /* --- four-component 16-bit rows: same staging rule ---------------------
@@ -300,8 +281,7 @@ int main(void)
      * word 1, so 8 fits, and NUM_RECORDS is bytes/bytes_per_texel. The
      * mandatory 16-bit table requires the role for SFLOAT, UINT and SINT;
      * UNORM and SNORM have no mandatory cell at all and are staged only for
-     * family coherence. Implemented, still unwitnessed: the published bit
-     * stays off and creation stays refused (tests/test_vk_memory.c). */
+     * family coherence after the same direct witness. */
     const VkFormat r16g16b16a16_texel[] = {
         VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_R16G16B16A16_SNORM,
         VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_UINT,
@@ -316,16 +296,16 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 8);
         assert(ps5vk_texture_format_has(r16g16b16a16_texel[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(r16g16b16a16_texel[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(r16g16b16a16_texel[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         /* 16_16_16_16_UNORM/SNORM/FLOAT/UINT/SINT in the pinned table. */
         assert(ps5vk_texture_format_gfx10_format(entry) ==
                r16g16b16a16_texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0xfac));
         ps5vk_texture_format_properties(r16g16b16a16_texel[i],
                                         &r16g16b16a16_properties);
-        assert(!(r16g16b16a16_properties.bufferFeatures &
-                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(r16g16b16a16_properties.bufferFeatures &
+               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
 
     /* --- two-component 32-bit rows: same staging rule ----------------------
@@ -333,9 +313,7 @@ int main(void)
      * completion, so the derived completion word is 0x22C and the combined
      * GFX10 words are 62/63/64. Unlike the 16-bit families, the mandatory
      * 32-bit table requires the role for ALL THREE of these rows, so there is
-     * no coherence-only row here. Implemented, still unwitnessed: the
-     * published bit stays off and creation stays refused (asserted in
-     * tests/test_vk_memory.c). */
+     * no coherence-only row here. All three have a direct console fetch. */
     const VkFormat r32g32_texel[] = {
         VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32_SINT, VK_FORMAT_R32G32_SFLOAT,
     };
@@ -346,14 +324,14 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 8);
         assert(ps5vk_texture_format_has(r32g32_texel[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(r32g32_texel[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(r32g32_texel[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         /* 32_32_UINT/32_32_SINT/32_32_FLOAT in the pinned GFX10 table. */
         assert(ps5vk_texture_format_gfx10_format(entry) == r32g32_texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x22c));
         ps5vk_texture_format_properties(r32g32_texel[i], &r32g32_properties);
-        assert(!(r32g32_properties.bufferFeatures &
-                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(r32g32_properties.bufferFeatures &
+               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
 
     /* --- four-component 32-bit rows: same staging rule ---------------------
@@ -363,9 +341,7 @@ int main(void)
      * UNIFORM_TEXEL cells in both profiles, so none is a coherence-only row.
      * The sixteen-byte stride fits the V# stride field (bits 16-29 of word 1,
      * 0x3fff maximum) and the encoder accepts element sizes up to 16.
-     * Implemented, still unwitnessed: no console fetch of this element shape
-     * exists yet, the published bit stays off and creation stays refused
-     * (asserted in tests/test_vk_memory.c). */
+     * All three have a direct sixteen-byte console fetch. */
     const VkFormat r32g32b32a32_texel[] = {
         VK_FORMAT_R32G32B32A32_UINT, VK_FORMAT_R32G32B32A32_SINT,
         VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -379,16 +355,16 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 16);
         assert(ps5vk_texture_format_has(r32g32b32a32_texel[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(r32g32b32a32_texel[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(r32g32b32a32_texel[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         /* 32_32_32_32_UINT/SINT/FLOAT in the pinned GFX10 table. */
         assert(ps5vk_texture_format_gfx10_format(entry) ==
                r32g32b32a32_texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0xfac));
         ps5vk_texture_format_properties(r32g32b32a32_texel[i],
                                         &r32g32b32a32_properties);
-        assert(!(r32g32b32a32_properties.bufferFeatures &
-                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(r32g32b32a32_properties.bufferFeatures &
+               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
 
     /* --- packed three-component float row: same staging rule --------------
@@ -397,9 +373,8 @@ int main(void)
      * (R,G,B,1) - so the derived completion word is 0x3ac and the combined
      * GFX10 word is 36 (10_11_11_FLOAT). Its mandatory UNIFORM_TEXEL cell is
      * a blocker in BOTH profiles of formats-mandatory-features-64bit, while
-     * sampled image and linear filtering are already satisfied. Implemented,
-     * still unwitnessed: the published bit stays off and creation stays
-     * refused (asserted in tests/test_vk_memory.c). */
+     * sampled image and linear filtering are already satisfied. Its packed
+     * float decode now has a direct console fetch. */
     {
         const VkFormat packed_texel_float = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
         const struct ps5vk_texture_format *entry =
@@ -408,14 +383,14 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 4);
         assert(ps5vk_texture_format_has(packed_texel_float,
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(packed_texel_float,
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(packed_texel_float,
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         assert(ps5vk_texture_format_gfx10_format(entry) == 36u);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x3ac));
         ps5vk_texture_format_properties(packed_texel_float,
                                         &packed_texel_float_properties);
-        assert(!(packed_texel_float_properties.bufferFeatures &
-                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(packed_texel_float_properties.bufferFeatures &
+               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
 
     /* --- vertex metadata matches the published vertex role ---------------- */

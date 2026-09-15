@@ -202,57 +202,42 @@ static void test_buffer_views(void)
         .buffer = b, .format = VK_FORMAT_R32_UINT, .offset = 4, .range = VK_WHOLE_SIZE};
     VkBufferView base = VK_NULL_HANDLE, view = VK_NULL_HANDLE;
     assert(vkCreateBufferView(&d, &vi, NULL, &base) == VK_SUCCESS && base);
-    /* Creation follows the witnessed mask, so every row whose role passed its
-     * console witness creates and nothing else does. The four RGBA8 rows are
-     * witnessed by the two-run texelFetch witness recorded in VALIDATION.md. */
+    /* Creation follows the witnessed mask.  The typed native matrix covers
+     * every row below directly, across 1/2/4/8/16-byte elements. */
     const VkFormat witnessed[] = {
-        VK_FORMAT_R32_UINT, VK_FORMAT_R32_SINT, VK_FORMAT_R32_SFLOAT,
+        VK_FORMAT_R8_UNORM, VK_FORMAT_R8_SNORM, VK_FORMAT_R8_UINT, VK_FORMAT_R8_SINT,
+        VK_FORMAT_R8G8_UNORM, VK_FORMAT_R8G8_SNORM,
+        VK_FORMAT_R8G8_UINT, VK_FORMAT_R8G8_SINT,
         VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
         VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32, VK_FORMAT_A8B8G8R8_SINT_PACK32,
+        VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+        VK_FORMAT_R16_UNORM, VK_FORMAT_R16_SNORM, VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16_UINT, VK_FORMAT_R16_SINT,
+        VK_FORMAT_R16G16_UNORM, VK_FORMAT_R16G16_SNORM,
+        VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_R16G16_UINT, VK_FORMAT_R16G16_SINT,
+        VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_UINT,
+        VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R32_UINT, VK_FORMAT_R32_SINT, VK_FORMAT_R32_SFLOAT,
+        VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32_SINT, VK_FORMAT_R32G32_SFLOAT,
+        VK_FORMAT_R32G32B32A32_UINT, VK_FORMAT_R32G32B32A32_SINT,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
     };
-    VkBufferView extra[7] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE,
-                             VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE,
-                             VK_NULL_HANDLE};
+    enum { WITNESSED_COUNT = sizeof(witnessed) / sizeof(witnessed[0]) };
+    VkBufferView extra[WITNESSED_COUNT];
+    memset(extra, 0, sizeof(extra));
     for (unsigned i = 0; i < sizeof(witnessed) / sizeof(witnessed[0]); ++i) {
         vi.format = witnessed[i]; vi.offset = 0;
         assert(vkCreateBufferView(&d, &vi, NULL, &extra[i]) == VK_SUCCESS && extra[i]);
     }
     vi.format = VK_FORMAT_R8G8B8A8_UNORM;
-    /* Negatives: no implemented role (sRGB and BGRA), implemented but
-     * UNWITNESSED roles (the four packed A8B8G8R8 rows, the four one-byte R8
-     * rows, the four two-byte R8G8 rows, the five single-component R16 rows and
-     * the five two-component R16G16 rows, the five four-component
-     * R16G16B16A16 rows and the three two-component R32G32 rows, none of which
-     * has a console fetch for its element shape yet, plus the three
-     * four-component R32G32B32A32 rows and the packed B10G11R11_UFLOAT row),
-     * unknown format, misaligned offset for that row, another device, and a
-     * buffer that was not created with the uniform-texel-buffer usage. */
-    const VkFormat refused[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM,
-                                VK_FORMAT_A8B8G8R8_UNORM_PACK32,
-                                VK_FORMAT_A8B8G8R8_SNORM_PACK32,
-                                VK_FORMAT_A8B8G8R8_UINT_PACK32,
-                                VK_FORMAT_A8B8G8R8_SINT_PACK32,
-                                VK_FORMAT_R8_UNORM, VK_FORMAT_R8_SNORM,
-                                VK_FORMAT_R8_UINT, VK_FORMAT_R8_SINT,
-                                VK_FORMAT_R8G8_UNORM, VK_FORMAT_R8G8_SNORM,
-                                VK_FORMAT_R8G8_UINT, VK_FORMAT_R8G8_SINT,
-                                VK_FORMAT_R16_UNORM, VK_FORMAT_R16_SNORM,
-                                VK_FORMAT_R16_SFLOAT, VK_FORMAT_R16_UINT,
-                                VK_FORMAT_R16_SINT,
-                                VK_FORMAT_R16G16_UNORM, VK_FORMAT_R16G16_SNORM,
-                                VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_R16G16_UINT,
-                                VK_FORMAT_R16G16_SINT,
-                                VK_FORMAT_R16G16B16A16_UNORM,
-                                VK_FORMAT_R16G16B16A16_SNORM,
-                                VK_FORMAT_R16G16B16A16_SFLOAT,
-                                VK_FORMAT_R16G16B16A16_UINT,
-                                VK_FORMAT_R16G16B16A16_SINT,
-                                VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32_SINT,
-                                VK_FORMAT_R32G32_SFLOAT,
-                                VK_FORMAT_R32G32B32A32_UINT,
-                                VK_FORMAT_R32G32B32A32_SINT,
-                                VK_FORMAT_R32G32B32A32_SFLOAT,
-                                VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+    /* Negatives: no enabled uniform-texel role, unknown format, misaligned
+     * offset, another device, and a buffer without the required usage. */
+    const VkFormat refused[] = {VK_FORMAT_R8G8B8A8_SRGB,
+                                VK_FORMAT_B8G8R8A8_UNORM,
+                                VK_FORMAT_A8B8G8R8_SRGB_PACK32,
                                 (VkFormat)0x7fffffff};
     for (unsigned i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
         vi.format = refused[i]; vi.offset = 0;

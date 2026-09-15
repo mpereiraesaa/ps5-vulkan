@@ -1108,8 +1108,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 134 mandatory limits satisfied, 64 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 110 mandatory format-feature cells satisfied
-with 552 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 138 mandatory format-feature cells satisfied
+with 524 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -1832,3 +1832,27 @@ because that image was still display-busy from the last presented frame. The
 driver was right and the scenario was wrong; both passes now use the same
 attachment, which also makes inline versus secondary the only difference
 between the two measurements.
+
+## Direct uniform-texel format matrix (2026-09-15)
+
+A finite native consumer directly fetched every enabled uniform-texel-buffer
+format through `samplerBuffer`, `usamplerBuffer` or `isamplerBuffer`. The 41
+cases span normalized, integer, half/float and packed-float conversions with
+1-, 2-, 4-, 8- and 16-byte elements. Each case compared all four returned
+components with an exact CPU oracle, including Vulkan component completion;
+the packed `VK_FORMAT_B10G11R11_UFLOAT_PACK32` case additionally pins its
+hardware decode and alpha completion.
+
+Both runs used the same SELF:
+`ef196ce8fbb22ef33f0c15f60dbd9a801d7d7624c0bb87407a1e1e79cfa7e8b1`.
+
+- `20260915T114720138Z_PPSA99994_ps5vk_0xda4ea3a518eb`, log sha256
+  `94a07bde50440227191ec5a44f4e47c76a74a5bfa0b985a077ab1bd436174646`
+- `20260915T114908594Z_PPSA99994_ps5vk_0xda67e478833a`, log sha256
+  `c309d5db753fe0b25b6491f336eb700281ed16fa71af51313f782583f6b709f1`
+
+Each run reported 41/41 exact cases, 164/164 component words, zero guard
+mismatches and one submitted/suspended/completed dispatch per case. Both
+streams ended with the finite consumer's complete `BYE`, and exact-title Close
+Game independently confirmed the process stopped. The qualification applies
+only to uniform texel buffers; it does not imply storage-texel-buffer support.

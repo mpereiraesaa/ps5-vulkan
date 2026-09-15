@@ -1,8 +1,8 @@
 """Audit the authoritative format-capability contract.
 
 The driver publishes a format feature bit only from its enablement mask.
-Sampled-image/filter promotions additionally require recorded console witnesses;
-the two legacy R32_SINT/SFLOAT uniform-texel roles remain host-only in API.md.
+Sampled-image/filter and uniform-texel promotions additionally require recorded
+console witnesses.
 These tests close the loop between the three artefacts that
 must agree: the capability ledger emitted by ``tools/dump_device_reporting.c``,
 the committed ``conformance_inventory/reporting_matrix.json`` and
@@ -111,6 +111,25 @@ TEXEL_FORMATS = {
     "VK_FORMAT_R8G8B8A8_UINT",
     "VK_FORMAT_R8G8B8A8_SINT",
 }
+DIRECT_TEXEL_FORMATS = {
+    "VK_FORMAT_R8_UNORM", "VK_FORMAT_R8_SNORM", "VK_FORMAT_R8G8_UNORM",
+    "VK_FORMAT_R8G8_SNORM", "VK_FORMAT_R8G8B8A8_UNORM",
+    "VK_FORMAT_R8G8B8A8_SNORM", "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
+    "VK_FORMAT_A8B8G8R8_SNORM_PACK32", "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
+    "VK_FORMAT_R16_UNORM", "VK_FORMAT_R16_SNORM", "VK_FORMAT_R16_SFLOAT",
+    "VK_FORMAT_R16G16_UNORM", "VK_FORMAT_R16G16_SNORM", "VK_FORMAT_R16G16_SFLOAT",
+    "VK_FORMAT_R16G16B16A16_UNORM", "VK_FORMAT_R16G16B16A16_SNORM",
+    "VK_FORMAT_R16G16B16A16_SFLOAT", "VK_FORMAT_R32_SFLOAT",
+    "VK_FORMAT_R32G32_SFLOAT", "VK_FORMAT_R32G32B32A32_SFLOAT",
+    "VK_FORMAT_R8_UINT", "VK_FORMAT_R8_SINT", "VK_FORMAT_R8G8_UINT",
+    "VK_FORMAT_R8G8_SINT", "VK_FORMAT_R8G8B8A8_UINT", "VK_FORMAT_R8G8B8A8_SINT",
+    "VK_FORMAT_A8B8G8R8_UINT_PACK32", "VK_FORMAT_A8B8G8R8_SINT_PACK32",
+    "VK_FORMAT_R16_UINT", "VK_FORMAT_R16_SINT", "VK_FORMAT_R16G16_UINT",
+    "VK_FORMAT_R16G16_SINT", "VK_FORMAT_R16G16B16A16_UINT",
+    "VK_FORMAT_R16G16B16A16_SINT", "VK_FORMAT_R32_UINT", "VK_FORMAT_R32_SINT",
+    "VK_FORMAT_R32G32_UINT", "VK_FORMAT_R32G32_SINT",
+    "VK_FORMAT_R32G32B32A32_UINT", "VK_FORMAT_R32G32B32A32_SINT",
+}
 QUALIFIED_ENTRY_FORMATS = PENDING_FORMATS | TEXEL_FORMATS
 BGRA_FORMATS = {"VK_FORMAT_B8G8R8A8_UNORM", "VK_FORMAT_B8G8R8A8_SRGB"}
 
@@ -204,8 +223,11 @@ class TestFormatCapabilities(unittest.TestCase):
         entries = self.plan["entries"]
         qualified = self.plan.get("qualification", {}).get("status") == "validated"
         summary = self.plan["summary"]
-        self.assertEqual(len(entries), summary["ready_pending_physical_validation"] +
-                         summary["satisfied_by_this_task"])
+        self.assertEqual(
+            len(entries),
+            summary["ready_pending_physical_validation"]
+            + summary["satisfied_by_this_task"]
+            - summary["direct_texel_matrix_cells_in_scope"])
         for entry in entries:
             self.assertIn(entry["table"], TASK_TABLES)
             self.assertEqual(entry["profile"], "graphics")
@@ -235,6 +257,28 @@ class TestFormatCapabilities(unittest.TestCase):
     def test_pending_formats_keep_the_registry_packing_provenance(self):
         for name in PENDING_FORMATS:
             self.assertTrue(self.by_name[name]["provenance"] & REGISTRY_PACKING, name)
+
+    def test_direct_uniform_texel_matrix_matches_public_enablement_and_evidence(self):
+        evidence = self.plan["uniform_texel_matrix"]
+        self.assertEqual(evidence["status"], "validated")
+        self.assertEqual(set(evidence["formats"]), DIRECT_TEXEL_FORMATS)
+        self.assertEqual(evidence["case_count"], len(DIRECT_TEXEL_FORMATS))
+        self.assertEqual(evidence["components_per_case"], 4)
+        self.assertEqual(evidence["element_bytes"], [1, 2, 4, 8, 16])
+        self.assertEqual(len(evidence["run_ids"]), 2)
+        self.assertEqual(len(set(evidence["run_ids"])), 2)
+        self.assertEqual(len(evidence["log_sha256"]), 2)
+        self.assertEqual(len(set(evidence["log_sha256"])), 2)
+        validation_doc = (ROOT / "VALIDATION.md").read_text()
+        for digest in [evidence["self_sha256"], *evidence["log_sha256"]]:
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
+            self.assertIn(digest, validation_doc)
+        for run_id in evidence["run_ids"]:
+            self.assertIn(run_id, validation_doc)
+        for name in DIRECT_TEXEL_FORMATS:
+            row = self.by_name[name]
+            self.assertTrue(row["capabilities"] & CAP["UNIFORM_TEXEL_BUFFER"], name)
+            self.assertTrue(row["witnessed"] & CAP["UNIFORM_TEXEL_BUFFER"], name)
 
     def test_residual_blocker_classification_matches_the_matrix(self):
         classification = {row["reason"]: row for row in self.plan["blocker_classification"]}
