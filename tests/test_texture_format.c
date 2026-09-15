@@ -328,6 +328,34 @@ int main(void)
                  VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     }
 
+    /* --- two-component 32-bit rows: same staging rule ----------------------
+     * R32G32_UINT/SINT/SFLOAT carry an eight-byte element with the (4,5,0,1)
+     * completion, so the derived completion word is 0x22C and the combined
+     * GFX10 words are 62/63/64. Unlike the 16-bit families, the mandatory
+     * 32-bit table requires the role for ALL THREE of these rows, so there is
+     * no coherence-only row here. Implemented, still unwitnessed: the
+     * published bit stays off and creation stays refused (asserted in
+     * tests/test_vk_memory.c). */
+    const VkFormat r32g32_texel[] = {
+        VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32_SINT, VK_FORMAT_R32G32_SFLOAT,
+    };
+    const uint32_t r32g32_texel_words[] = {62u, 63u, 64u};
+    for (unsigned i = 0; i < sizeof(r32g32_texel) / sizeof(r32g32_texel[0]); ++i) {
+        const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(r32g32_texel[i]);
+        VkFormatProperties r32g32_properties;
+        assert(entry && entry->bytes_per_texel == 8);
+        assert(ps5vk_texture_format_has(r32g32_texel[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(r32g32_texel[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        /* 32_32_UINT/32_32_SINT/32_32_FLOAT in the pinned GFX10 table. */
+        assert(ps5vk_texture_format_gfx10_format(entry) == r32g32_texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x22c));
+        ps5vk_texture_format_properties(r32g32_texel[i], &r32g32_properties);
+        assert(!(r32g32_properties.bufferFeatures &
+                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
