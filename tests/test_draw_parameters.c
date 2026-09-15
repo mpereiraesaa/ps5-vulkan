@@ -73,8 +73,10 @@ int main(void)
     /* DrawIndex delivery is pinned here, and the advertisement gap is pinned
      * separately: the value a shader observes is the sequence index of the draw
      * in its command, which is zero because multi-draw is refused; the public
-     * feature bit stays false until the multi-draw CTS leaves and a native
-     * witness exist. */
+     * feature bit stays false until the upstream CTS leaves for the supported
+     * direct/single-indirect contract and a native witness exist. Multi-draw is
+     * a separate expansion and its leaves are legitimately NotSupported while
+     * multiDrawIndirect is false, so it does not gate this. */
     assert(ps5vk_draw_index_value(&draw) == 0u);
     assert(ps5vk_draw_index_value(&indexed) == 0u);
     abi.draw_id_slot = 1; /* collides with the start-instance slot */

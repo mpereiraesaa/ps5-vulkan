@@ -42,6 +42,11 @@ int main(void)
     REJECT(ngg_lds_layout_user_data_dword,2);
     REJECT(linkage_user_vgpr_en.offset,0x25c);
     REJECT(source_stage,PSBC_STAGE_GEOMETRY);
+    /* A slot that is not declared must come with a zero dword: a malformed pair
+     * is refused instead of being silently discarded. */
+    REJECT(base_vertex_user_data_dword,1);
+    REJECT(start_instance_user_data_dword,1);
+    REJECT(draw_id_user_data_dword,1);
 #undef REJECT
     PsbcShaderMetadata fragment={.version=PSBC_SHADER_METADATA_VERSION,.source_stage=PSBC_STAGE_FRAGMENT,
         .hardware_stage=PSBC_HW_STAGE_PIXEL,.user_sgpr_count=2,
@@ -66,9 +71,35 @@ int main(void)
     assert(abi.draw_id_slot==2 && abi.vertex_count==3);
     assert(!ps5vk_runtime_draw_values(&abi,31,17,9,0,0,0,vertex,pixel));
     assert(vertex[0]==31 && vertex[2]==9);
+    /* The declared slot is inside the block, so the single-stage packing accepts
+     * it; one dword further is outside the block and is refused. */
+    assert(!ps5vk_runtime_shader_build(&arena,&c));
+    m->draw_id_user_data_dword=3;
+    assert(ps5vk_runtime_shader_build(&arena,&c));
+    m->draw_id_user_data_dword=2;
+    /* Absent with a nonzero dword is malformed on the ABI path too. */
+    m->draw_id_valid=false;m->draw_id_user_data_dword=1;
+    assert(ps5vk_runtime_shader_build(&arena,&c));
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    m->draw_id_valid=true;m->draw_id_user_data_dword=2;
+    /* The fragment stage must not carry a DrawIndex slot, valid or not. */
     fragment.draw_id_valid=true; /* a fragment-stage DrawIndex slot is refused */
     assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
-    fragment.draw_id_valid=false;
+    fragment.draw_id_valid=false;fragment.draw_id_user_data_dword=1;
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    fragment.draw_id_user_data_dword=0;
+    /* BaseVertex and BaseInstance are vertex-stage built-ins as well, and the
+     * same zero-dword rule holds for their absent form. */
+    fragment.base_vertex_valid=true;
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    fragment.base_vertex_valid=false;fragment.base_vertex_user_data_dword=1;
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    fragment.base_vertex_user_data_dword=0;
+    fragment.start_instance_valid=true;
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    fragment.start_instance_valid=false;fragment.start_instance_user_data_dword=1;
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    fragment.start_instance_user_data_dword=0;
     m->draw_id_valid=false;m->draw_id_user_data_dword=0;m->user_sgpr_count=2;
     m->user_sgpr_count=3;m->push_constants_valid=true;
     m->push_constants_user_data_dword=2;m->push_constant_size=12;

@@ -35,12 +35,14 @@
  * more than one draw per command (multiDrawIndirect is false), so every draw
  * it executes is that first draw and the value is zero.
  *
- * What is still missing is the evidence and one dependent capability, not the
- * value: the pinned CTS leaves that exercise DrawIndex with non-zero values are
- * the multi-draw ones, ps5vk has no multi-draw path (T03), and no native
- * witness has been taken for the DrawIndex slot yet. The public feature bit is
- * therefore still not advertised, and ps5vk_draw_index_supported() reports
- * that advertisement gate rather than whether a value can be delivered.
+ * What still blocks advertising the feature is the evidence for that supported
+ * contract, not the DrawIndex value: the upstream CTS leaves for direct and
+ * single-indirect draws have not been run and no native witness of the slot
+ * exists yet. Multi-draw is a separate T03 expansion, not a prerequisite: the
+ * pinned CTS leaves that judge non-zero DrawIndex values are all multi-draw,
+ * they are legitimately NotSupported while multiDrawIndirect is false, and
+ * nothing here waits on them. ps5vk_draw_index_supported() reports that
+ * advertisement gate rather than whether a value can be delivered.
  */
 #ifndef PS5VK_DRAW_PARAMETERS_H
 #define PS5VK_DRAW_PARAMETERS_H
@@ -69,9 +71,9 @@ static inline uint32_t ps5vk_draw_index_value(const struct ps5vk_operation *op)
     return 0u;
 }
 
-/* The public advertisement gate: false until the DrawIndex evidence exists.
- * Delivery is not the blocker - the multi-draw CTS leaves that judge non-zero
- * DrawIndex values are, plus the missing native witness. */
+/* The public advertisement gate: false until the evidence for the supported
+ * direct/single-indirect contract exists (the upstream CTS leaves plus a native
+ * witness). Multi-draw is a separate T03 expansion and does not gate it. */
 static inline uint32_t ps5vk_draw_index_supported(void)
 {
     return 0u;
