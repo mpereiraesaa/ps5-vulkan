@@ -4,6 +4,19 @@ const uint32_t ps5vk_graphics_probe_registers[PS5VK_GRAPHICS_PROBE_REGISTERS]={
     0xa090,0xa091,0xa094,0xa095,0xa292,0xa10f,0xa110,0xa111,0xa112,0xa200,
     0xa204,0xa206,0xa311,0xa293
 };
+size_t ps5vk_graphics_occlusion_event(uint32_t *out,size_t capacity,uint64_t address)
+{
+    /* PKT3_EVENT_WRITE with a two-dword payload: the event/type word followed
+     * by the 48-bit address. PKT3 encodes bits 31:30 as 0b11, the payload
+     * count minus one at 29:16 and the opcode at 15:8, so EVENT_WRITE (0x46)
+     * with three payload dwords is 0xC0024600. EVENT_TYPE occupies bits 5:0
+     * (ZPASS_DONE is 21) and EVENT_INDEX bits 11:8 (1 selects the dump). */
+    if(!out || capacity<4 || !address || (address&7) ||
+       address>(UINT64_C(1)<<48)-8)return 0;
+    const uint32_t words[4]={UINT32_C(0xC0024600),UINT32_C(0x0115),
+        (uint32_t)address,(uint32_t)(address>>32)};
+    memcpy(out,words,sizeof(words));return 4;
+}
 size_t ps5vk_graphics_register_probe(uint32_t *out,size_t capacity,uint64_t destination)
 {
     const size_t bytes=PS5VK_GRAPHICS_PROBE_REGISTERS*4;

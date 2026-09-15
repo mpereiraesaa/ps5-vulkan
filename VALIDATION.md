@@ -1640,3 +1640,110 @@ rows use the same bounded descriptor path and four-component completion. The
 new payload did not fetch each of those three formats independently. This is
 not a CTS result or conformance claim, and it does not extend to storage texel
 buffers, blit, resolve, attachment clears or any other format family.
+
+## GFX10 occlusion-counter measurement (2026-09-15)
+
+The query family could not start honestly without device facts that the desk
+research explicitly left NOT MEASURED: how far the render-backend geometry
+actually extends, which backends are enabled, and whether a real occlusion
+counter can be produced at all. This section records the bounded native
+measurement that answered all three for this console and produced a real
+counter. It adds **no public query behaviour**:
+`vkGetQueryPoolResults` still reports `VK_NOT_READY`, `vkCmdBeginQuery` and
+`vkCmdEndQuery` still fail closed, and nothing is advertised.
+
+### The probe
+
+Payload scenario `PS5VK_GRAPHICS_SCISSOR_PROBE=15` runs the existing bounded
+scene and, around its draws, emits the GFX10 occlusion event pair through
+`ps5vk_graphics_occlusion_event` (`src/graphics_sync.c`, host-asserted in
+`tests/test_graphics_sync.c`):
+
+```text
+PKT3_EVENT_WRITE (header 0xC0024600)
+EVENT_TYPE(ZPASS_DONE=21) | EVENT_INDEX(1)   -> 0x0115
+address: slot base for the begin write, slot base + 8 for the end write
+```
+
+Each enabled render backend writes a 64-bit start at `16*i` and a 64-bit end at
+`16*i + 8`, and sets bit 63 of both words when the dump lands, so the set of
+written pairs IS the enabled mask and the result is the sum of the per-backend
+deltas. The slot is a separate zeroed, 64 KiB-aligned direct-memory arena sized
+for 64 pairs, so a pair no backend owns stays zero and is reported as
+unavailable instead of being read as a fabricated result.
+
+Two coherence and evidence rules matter here and are enforced in the payload,
+not just asserted in prose. The slot arena is CPU-zeroed and the memory is
+non-coherent, so the zeroed lines are flushed before submission and the slot is
+invalidated again only after the exact completion label; otherwise a dirty CPU
+line could obscure or overwrite what the hardware wrote. And the per-pair and
+summary rows are emitted **after** `PS5VK_GRAPHICS_COMPLETED` for the same
+serial, so the log itself shows the readout happened after the producing
+submission retired.
+
+The evidence is verified by `tools/verify_occlusion_probe.py`, which is bound
+to the build manifest and the artifact it names (stage, `submit_enabled`,
+`scissor_probe=15`, `termination=shell-close-after-cleanup`, and the
+`files/eboot.bin` digest), checks the HELLO identity fields, requires one
+serial across begin/end/pairs/slot with its completion row in the right place,
+requires exactly one clean `PS5VK_PLATFORM_CLOSE`, and derives validity from
+the slot invariants (unique contiguous indices from `first_pair`, mask and
+`highest_pair` consistency, availability bit 63 in both words, and the deltas
+summing to the reported counter). `tests/test_verify_occlusion_probe.py` holds
+19 mutation fixtures that make each of those checks fail, and `make check` runs
+them.
+
+### Measured result, two identical runs
+
+Deployed `eboot.bin` SHA-256
+`45c096097b9837f786d6d619db4dcd9548de8f89b82ca1c80c097063d37391fd`, re-read
+with FTP SELF conversion disabled and matched exactly before each launch, with
+ShadowMountPlus restarted and verified before each launch:
+
+- `20260915T061712316Z_PPSA99994_ps5vk_0xc84ad5eb323d`, log SHA-256
+  `efc86b5b54aa7639f6664e430cc38cdc86fdfdf6d17e038031150b5936efe7ff`
+- `20260915T061721229Z_PPSA99994_ps5vk_0xc84ce9235302`, log SHA-256
+  `de93570bf2dc230ecebdad0f14346cdfa35fef952219b7d6cf2379eaf3810d9f`
+
+Both runs report the identical result, and `tools/verify_occlusion_probe.py`
+validated each run and required the two to agree exactly:
+
+- `PS5VK_OCCLUSION_PROBE_SLOT serial=7 pairs=64 available=16 first_pair=0
+  highest_pair=15 mask_lo=0000ffff mask_hi=00000000 counter=139968`, which
+  reports measured facts only; there is no self-certifying validity flag, and
+  the verifier derives validity from the invariants it checks itself;
+- sixteen `PS5VK_OCCLUSION_PROBE_PAIR` rows, indices 0..15, each with
+  `begin=8000000000000000` (start 0 with availability bit 63 set) and end
+  values whose deltas sum exactly to 139968;
+- `PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0` and
+  `BYE seq=263 reason=graphics-api-end`.
+
+So, on this console: the enabled render-backend mask is the contiguous low pair
+range 0..15 (`mask 0x0000ffff`, highest written index 15), which makes
+`enabled_render_backends = 16` and `max_render_backends` **at least 16**; the
+measurement bounds it from below and does not establish the architectural
+maximum. A real GPU occlusion counter of 139968 was produced for the bounded
+draw at default (non-precise) precision, and this is one bounded measurement
+rather than a general claim about counters. The title was closed and
+`running=none` was confirmed independently by `tools/control.py status` and
+`tools/night_supervisor.py status`.
+
+### What this does and does not establish
+
+It establishes the begin/end packet form, the 16-byte-per-render-backend slot
+layout, the bit-63 availability rule and the device geometry: the contract a
+real occlusion query has to be built on. It does not implement query results,
+does not cover timestamps or pipeline statistics, does not cover the
+`WAIT`/`PARTIAL`/64-bit result flags, and is not a CTS result or a conformance
+claim. `DB_COUNT_CONTROL` precise counting is not exercised here; the measured
+counter is the default-precision form.
+
+Two defects found on the way are worth recording. First, the initial packet
+header placed the opcode in the low bits instead of bits 15:8, which is a
+different packet entirely: the completion label never arrived and the payload
+stalled after `PS5VK_GRAPHICS_SUSPEND_POINT` with no BYE. That is the same
+symptom earlier diagnostics attributed to a register-read probe, and it is why
+the builder now lives in the host-tested packet helper where `make check`
+asserts its exact words. Second, the register-probe block is skipped for this
+scenario, because its `COPY_DATA` register reads are unrelated noise for an
+occlusion measurement and previously cost a console round trip on their own.
