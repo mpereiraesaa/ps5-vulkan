@@ -16,8 +16,12 @@
  * BaseVertex + the fetched index (or firstVertex + the vertex ordinal when the
  * draw is not indexed), so the geometry itself is a second, independent check
  * of the BaseVertex contract: the witness draws index values chosen so that the
- * resulting vertex indices stay inside this three-entry table.
+ * resulting vertex indices stay inside this three-entry table. The bound vertex
+ * buffer holds zeroes and only exists because an indexed draw must name a
+ * vertex binding; its one attribute is added at a scale small enough to leave
+ * the generated triangle exactly where it was.
  */
+layout(location = 0) in vec4 in_offset;
 layout(location = 0) out vec4 out_color;
 
 out gl_PerVertex {
@@ -29,7 +33,7 @@ void main() {
     uint base_vertex = uint(gl_BaseVertexARB);
     uint base_instance = uint(gl_BaseInstanceARB);
     uint draw_index = uint(gl_DrawIDARB);
-    gl_Position = vec4(positions[gl_VertexIndex % 3], 0.5, 1.0);
+    gl_Position = vec4(positions[gl_VertexIndex % 3] + in_offset.xy * 0.001, 0.5, 1.0);
     out_color = vec4(float(base_vertex & 0xffu) / 255.0,
                      float(base_instance & 0xffu) / 255.0,
                      float(draw_index & 0xffu) / 255.0,

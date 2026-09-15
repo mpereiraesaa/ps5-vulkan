@@ -20,10 +20,18 @@ DRAW_PARAMETER_FRAG_SHA256 = "2" * 64
 def draw_parameter_messages(covered=DRAW_PARAMETER_COVERED_MINIMUM + 300):
     """The witness rows as the hardware emits them, from the verifier's table."""
     rows = ["PS5VK_CONSUMER_DRAW_PARAMETERS_START cases=6 extent=64"]
+    serial = 20
     for name, base_vertex, base_instance, draw_index in DRAW_PARAMETER_CASES:
-        rows.append(f"PS5VK_CONSUMER_DRAW_PARAMETERS case={name} "
-                    f"base_vertex={base_vertex} base_instance={base_instance} "
-                    f"draw_index={draw_index} covered={covered} uniform=1 valid=1")
+        rows.extend([
+            f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
+            f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
+            f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0",
+            f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=131072",
+            f"PS5VK_CONSUMER_DRAW_PARAMETERS case={name} "
+            f"base_vertex={base_vertex} base_instance={base_instance} "
+            f"draw_index={draw_index} covered={covered} uniform=1 valid=1",
+        ])
+        serial += 1
     rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_RESULT cases=6 witnessed=6 valid=1")
     rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_RETIRED cases=6 witnessed=6")
     return rows

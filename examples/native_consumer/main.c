@@ -1788,6 +1788,19 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     };
     VkPipelineVertexInputStateCreateInfo vertex_input = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    /* An indexed draw has to name a vertex binding, and the interface
+     * reflector only accepts a declared attribute the shader really reads, so
+     * the witness binds one zero-filled buffer whose attribute nudges the
+     * generated triangle by a thousandth of a pixel. */
+    VkVertexInputBindingDescription draw_parameter_binding = {
+        .binding = 0, .stride = 16, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription draw_parameter_attribute = {
+        .location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .offset = 0};
+    vertex_input.vertexBindingDescriptionCount = 1;
+    vertex_input.pVertexBindingDescriptions = &draw_parameter_binding;
+    vertex_input.vertexAttributeDescriptionCount = 1;
+    vertex_input.pVertexAttributeDescriptions = &draw_parameter_attribute;
     VkPipelineRasterizationStateCreateInfo raster = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = VK_CULL_MODE_NONE,
@@ -1851,6 +1864,32 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     uint16_t *index_data = NULL;
     CHECK(vkMapMemory(device, index_memory, 0, index_requirements.size, 0,
                       (void **)&index_data));
+
+    /* Zero-filled vertex storage: the indexed cases need the binding, and the
+     * attribute must resolve to something the shader can add. */
+    VkBufferCreateInfo vertex_buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 512,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer vertex_buffer = VK_NULL_HANDLE;
+    CHECK(vkCreateBuffer(device, &vertex_buffer_info, NULL, &vertex_buffer));
+    VkMemoryRequirements vertex_requirements;
+    vkGetBufferMemoryRequirements(device, vertex_buffer, &vertex_requirements);
+    VkMemoryAllocateInfo vertex_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = vertex_requirements.size, .memoryTypeIndex = 0};
+    VkDeviceMemory vertex_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &vertex_allocation, NULL, &vertex_memory));
+    CHECK(vkBindBufferMemory(device, vertex_buffer, vertex_memory, 0));
+    void *vertex_data = NULL;
+    CHECK(vkMapMemory(device, vertex_memory, 0, vertex_requirements.size, 0,
+                      &vertex_data));
+    memset(vertex_data, 0, (size_t)vertex_requirements.size);
+    VkMappedMemoryRange vertex_flush = {
+        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory = vertex_memory, .offset = 0, .size = VK_WHOLE_SIZE};
+    CHECK(vkFlushMappedMemoryRanges(device, 1, &vertex_flush));
 
     VkBufferCreateInfo indirect_buffer_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1927,6 +1966,10 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
             .clearValueCount = 1, .pClearValues = &clear};
         vkCmdBeginRenderPass(command, &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[test->strip]);
+        {
+            const VkDeviceSize vertex_offset = 0;
+            vkCmdBindVertexBuffers(command, 0, 1, &vertex_buffer, &vertex_offset);
+        }
         if (test->indexed)
             vkCmdBindIndexBuffer(command, index_buffer, 0, VK_INDEX_TYPE_UINT16);
         if (test->indirect) {
@@ -1987,6 +2030,7 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
 
     vkUnmapMemory(device, indirect_memory);
     vkUnmapMemory(device, index_memory);
+    vkUnmapMemory(device, vertex_memory);
     vkUnmapMemory(device, image_memory);
     vkDestroyFence(device, fence, NULL);
     vkDestroyCommandPool(device, pool, NULL);
@@ -1994,6 +2038,8 @@ static void run_draw_parameters(VkDevice device, VkQueue queue)
     vkFreeMemory(device, indirect_memory, NULL);
     vkDestroyBuffer(device, index_buffer, NULL);
     vkFreeMemory(device, index_memory, NULL);
+    vkDestroyBuffer(device, vertex_buffer, NULL);
+    vkFreeMemory(device, vertex_memory, NULL);
     vkDestroyPipeline(device, pipelines[0], NULL);
     vkDestroyPipeline(device, pipelines[1], NULL);
     vkDestroyPipelineLayout(device, pipeline_layout, NULL);

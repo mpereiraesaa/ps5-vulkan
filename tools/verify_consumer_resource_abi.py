@@ -629,7 +629,8 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     # for the secondary-executed pass and one for the inline control.
     graphics_count = ((40 if sampled is not None else 36) +
                       (2 if inpass_present else 0) +
-                      (5 if two_subpass_present else 0))
+                      (5 if two_subpass_present else 0) +
+                      (len(DRAW_PARAMETER_CASES) if draw_parameters_present else 0))
     require(all(len(rows) == graphics_count for rows in
                 (graphics_prepared, graphics_submitted,
                  graphics_suspended, graphics_completed)),
