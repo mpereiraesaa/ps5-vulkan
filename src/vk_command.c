@@ -99,13 +99,15 @@ struct ps5vk_operation *ps5vk_command_reserve_operations(VkCommandBuffer c,
         scope > PS5VK_OPERATION_ANYWHERE ||
         (scope == PS5VK_OPERATION_OUTSIDE_RENDER_PASS && c->render_pass) ||
         (scope == PS5VK_OPERATION_INSIDE_RENDER_PASS && !c->render_pass) ||
-        /* A pass begun with VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
+        /* A subpass begun with VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
          * carries no work of its own: the only commands legal inside it are
-         * vkCmdExecuteCommands, which records with ANYWHERE scope, and
-         * vkCmdEndRenderPass. An inline draw there is refused rather than
-         * silently recorded into a pass that will never execute it. */
+         * vkCmdExecuteCommands, which records with ANYWHERE scope, and the two
+         * that close the subpass or the pass. An inline draw there is refused
+         * rather than silently recorded into a scope that will never execute
+         * it. */
         (scope == PS5VK_OPERATION_INSIDE_RENDER_PASS && c->render_pass &&
          !c->render_pass_inherited && type != PS5VK_END_RENDER_PASS &&
+         type != PS5VK_NEXT_SUBPASS &&
          c->render_pass_contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
         c->operation_count > PS5VK_MAX_OPERATIONS ||
         count > PS5VK_MAX_OPERATIONS - c->operation_count) {
@@ -671,31 +673,6 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(VkCommandBuffer c,VkBuffer buff
     op->type=PS5VK_DISPATCH_INDIRECT;op->indirect_buffer=buffer;
     op->indirect_offset=offset;op->indirect_count=1;
 }
-/* Draw work recorded in the pass that is currently open.
- *
- * What counts is what will EXECUTE, not how many commands were written: a
- * vkCmdExecuteCommands marker naming an empty secondary executes nothing, so
- * counting markers would let a zero-body pass through. Only draws and
- * vkCmdExecuteCommands can be recorded inside a pass, and a continuation child
- * may carry nothing but draws, so a child's operation count IS its draw count. */
-static uint32_t open_subpass_draw_work(VkCommandBuffer c)
-{
-    uint32_t work = 0, j = c->operation_count;
-    while (j) {
-        const struct ps5vk_operation *op = &c->operations[--j];
-        /* Stop at the boundary that opened the CURRENT subpass: work recorded
-         * in an earlier subpass belongs to that one and cannot make this one
-         * non-empty. */
-        if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_NEXT_SUBPASS) break;
-        if (op->type != PS5VK_EXECUTE_COMMANDS) { ++work; continue; }
-        VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
-        if (!children) continue;
-        for (uint32_t n = 0; n < op->child_count; ++n)
-            if (children[n]) work += children[n]->operation_count;
-    }
-    return work;
-}
-
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRenderPassBeginInfo *info,
     VkSubpassContents contents)
 {
@@ -754,8 +731,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
         c->render_pass_inherited ||
         (contents != VK_SUBPASS_CONTENTS_INLINE &&
          contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
-        c->subpass + 1 >= c->render_pass->subpass_count ||
-        !open_subpass_draw_work(c)) { invalid(c); return; }
+        c->subpass + 1 >= c->render_pass->subpass_count) { invalid(c); return; }
     struct ps5vk_operation *op = ps5vk_command_reserve_operations(c, PS5VK_NEXT_SUBPASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS, 1);
     if (!op) return;
@@ -771,25 +747,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
      * never have begun a render pass; the level check keeps the rejection
      * explicit rather than incidental.
      *
-     * A pass that executes NO work is an explicit fail-closed boundary of this
-     * profile, refused here at record time rather than accepted and then
-     * refused by the backend at submit. Vulkan permits it - load and store ops
-     * alone are observable - but the bounded native path has no zero-body
-     * shape, and accepting a recording the driver cannot execute is worse than
-     * refusing it where the caller can see it.
+     * An EMPTY subpass and an empty render pass are legal Vulkan - load and
+     * store ops alone are observable - so recording them is accepted and
+     * recorded faithfully. What this driver cannot EXECUTE is refused where
+     * execution is decided: submission refuses a pass that carries no work,
+     * and the native backend refuses it independently. Refusing it here would
+     * reject a conformant program instead of admitting an unimplemented one.
      *
-     * The test is the DRAW WORK, not the command count: a pass whose only
-     * content is vkCmdExecuteCommands naming empty secondaries executes
-     * exactly as little as one that recorded nothing at all. Naming an empty
-     * child is still legal on its own - it just has to be accompanied by work
-     * that executes.
-     *
-     * A multi-subpass pass must also have REACHED its last subpass: ending
-     * early would silently drop the subpasses that were never entered, so a
-     * missing vkCmdNextSubpass is refused here rather than at submission. */
+     * A multi-subpass pass must have REACHED its last subpass, which is a
+     * structural requirement of the recording rather than a judgement about
+     * work: ending early would silently drop the subpasses never entered. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         !c->render_pass || c->subpass + 1 != c->render_pass->subpass_count ||
-        !open_subpass_draw_work(c) ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
@@ -853,7 +822,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
         if (c->render_pass &&
             (!child->inheritance_valid ||
              !ps5vk_render_pass_compatible(child->inheritance.renderPass, c->render_pass) ||
-             child->inheritance.subpass ||
+             /* The child must have been recorded for the subpass it is about
+              * to execute in, not merely for some subpass of a compatible
+              * pass: its draws were validated against that subpass's formats
+              * and its pipelines carry that identity. */
+             child->inheritance.subpass != c->subpass ||
              (child->inheritance.framebuffer &&
               child->inheritance.framebuffer != c->framebuffer)))
             { invalid(c); return; }
@@ -924,6 +897,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
         (!c->graphics_sets[s] ||
          memcmp(&p->sets[s],&c->graphics_set_signatures[s],sizeof(p->sets[s])))) {invalid(c);return;}
     VkRenderPass pass = c->render_pass;
+    /* A graphics pipeline belongs to ONE subpass. Drawing with a pipeline
+     * created for a different one would execute it with the state of a scope
+     * it was never compiled for, so it is refused rather than tolerated
+     * because the formats happen to agree. */
+    if (p->subpass != c->subpass) { invalid(c); return; }
     /* The formats a draw must match are those of the CURRENT subpass, not of
      * the pass as a whole. */
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, c->subpass);

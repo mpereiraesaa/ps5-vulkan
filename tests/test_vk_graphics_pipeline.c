@@ -56,7 +56,43 @@ int main(void)
         .pTessellationState=&tess,.pRasterizationState=&r,.pMultisampleState=&m,
         .pViewportState=&vp,.pColorBlendState=&b};
     VkPipeline p; assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&p)==VK_SUCCESS && p->graphics && created==1);
+    /* A pipeline is created for ONE subpass and carries that identity, which
+     * is what vkCmdDraw later checks the recording subpass against. */
+    assert(!p->subpass);
     viewport.width=1; assert(p->viewport.width==1920);
+    {
+        /* The counters below are pinned by later assertions, so this block
+         * saves and restores them: it exercises subpass identity, not the
+         * backend accounting, and must be invisible to the rest. */
+        const unsigned saved_created = created, saved_released = released;
+        const unsigned saved_acquired = acquired, saved_compiled = compiled_released;
+
+        /* A NONZERO subpass is accepted when the pass actually has it, and the
+         * pipeline remembers which one. The profile requires every subpass to
+         * name the same attachments, so the formats are necessarily the same
+         * in both - the identity, not the format, is what differs here. */
+        struct ps5vk_subpass two_subpasses[2]={pass_subpasses[0],pass_subpasses[0]};
+        struct VkRenderPass_T two={.device=&d,.attachment_count=1,.subpass_count=2,
+            .attachments=pass_attachments,.subpasses=two_subpasses};
+        VkGraphicsPipelineCreateInfo second=info;
+        second.renderPass=&two; second.subpass=1;
+        VkPipeline later;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&second,NULL,&later)==VK_SUCCESS);
+        assert(later->subpass==1 && later->color_format==VK_FORMAT_B8G8R8A8_UNORM);
+        vkDestroyPipeline(&d,later,NULL);
+        /* A subpass the pass does not have is refused rather than clamped. */
+        second.subpass=2;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&second,NULL,&later)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !later);
+        /* And a nonzero subpass against a one-subpass pass is equally out of
+         * range, which is the case that used to be refused for the wrong
+         * reason - because ANY nonzero index was rejected. */
+        second.renderPass=&pass; second.subpass=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&second,NULL,&later)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !later);
+        created = saved_created; released = saved_released;
+        acquired = saved_acquired; compiled_released = saved_compiled;
+    }
     VkDynamicState dynamic_values[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dynamic={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount=2,.pDynamicStates=dynamic_values};

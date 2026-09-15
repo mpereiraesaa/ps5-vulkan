@@ -13,15 +13,17 @@ enum { PS5VK_MAX_SUBPASSES = 2 };
 enum { PS5VK_MAX_ATTACHMENTS = 2 };
 enum { PS5VK_MAX_DEPENDENCIES = 4 };
 
-/* One subpass: the roles this profile executes, plus the preserve list it is
- * required to carry faithfully. A preserve entry names an attachment the
- * subpass neither reads nor writes but whose contents must survive it; the
- * list is validated and owned, and it has no execution meaning while only one
- * subpass can execute. */
+/* One subpass: the roles this profile executes.
+ *
+ * There is no preserve list here, and that is a statement about the profile
+ * rather than an omission. Every subpass names the SAME colour and depth
+ * attachments - the only shape the framebuffer model can serve - and every
+ * attachment must be named by a subpass, so every attachment is used by every
+ * subpass and no attachment can be preserved-but-unused. A non-empty
+ * pPreserveAttachments therefore has no legal form here and is refused at
+ * creation rather than stored where it could never mean anything. */
 struct ps5vk_subpass {
     VkAttachmentReference color, depth;
-    uint32_t preserve_count;
-    uint32_t *preserve;
 };
 
 struct VkRenderPass_T {
@@ -30,7 +32,7 @@ struct VkRenderPass_T {
     VkBool32 custom_allocator;
     unsigned pending;
     uint32_t attachment_count, subpass_count, dependency_count;
-    /* All four arrays live in the object's single allocation, so a failed
+    /* All three arrays live in the object's single allocation, so a failed
      * creation frees exactly one block and no partially built object can
      * escape. Sizes are computed with checked arithmetic before allocating. */
     VkAttachmentDescription *attachments;
@@ -40,7 +42,8 @@ struct VkRenderPass_T {
 
 /* The references of one subpass. Callers that only handle the single-subpass
  * profile pass 0 and say so, rather than reaching for fields that no longer
- * describe the whole pass. */
+ * describe the whole pass. Every subpass of a pass names the same attachments,
+ * so a caller that needs only the ROLES may read subpass 0 for any of them. */
 static inline const struct ps5vk_subpass *ps5vk_render_pass_subpass(
     VkRenderPass pass, uint32_t index)
 {

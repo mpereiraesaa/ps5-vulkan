@@ -44,7 +44,7 @@ static void multiple_subpasses(struct VkDevice_T *d)
     attachments[0].format = VK_FORMAT_UNDEFINED;
     for (uint32_t i = 0; i < 2; ++i) {
         const struct ps5vk_subpass *s = ps5vk_render_pass_subpass(pass, i);
-        assert(!s->color.attachment && s->depth.attachment == 1 && !s->preserve_count);
+        assert(!s->color.attachment && s->depth.attachment == 1);
     }
     assert(pass->attachments[0].format == VK_FORMAT_B8G8R8A8_UNORM &&
            !pass->dependencies[0].srcSubpass && pass->dependencies[0].dstSubpass == 1);
@@ -52,32 +52,42 @@ static void multiple_subpasses(struct VkDevice_T *d)
     color.attachment = 0; depth.attachment = 1; between.srcSubpass = 0;
     attachments[0].format = VK_FORMAT_B8G8R8A8_UNORM;
 
-    /* A preserve list is validated and owned, and it may only name an
-     * attachment the subpass does not otherwise use. */
-    uint32_t preserved = 1;
-    subpasses[0].pDepthStencilAttachment = NULL;
-    subpasses[0].preserveAttachmentCount = 1;
-    subpasses[0].pPreserveAttachments = &preserved;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS);
-    preserved = 0;
-    assert(ps5vk_render_pass_subpass(pass, 0)->preserve_count == 1 &&
-           ps5vk_render_pass_subpass(pass, 0)->preserve[0] == 1 &&
-           !ps5vk_render_pass_subpass(pass, 1)->preserve_count);
-    vkDestroyRenderPass(d, pass, NULL);
-    preserved = 1;
-
     /* Refused shapes. Each leaves no object and no accounting behind. */
     const unsigned objects = d->graphics_objects;
-    /* preserve naming an attachment the same subpass uses */
-    preserved = 0;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
-    /* preserve out of range */
-    preserved = 2;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN);
-    preserved = 1;
+
+    /* A preserve list has no legal non-empty form in this profile: every
+     * subpass names the same attachments and every attachment must be named,
+     * so nothing can be preserved-but-unused. The list is refused rather than
+     * stored where it could never mean anything. */
+    uint32_t preserved = 1;
+    subpasses[0].preserveAttachmentCount = 1;
+    subpasses[0].pPreserveAttachments = &preserved;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT &&
+           !pass);
     subpasses[0].preserveAttachmentCount = 0;
     subpasses[0].pPreserveAttachments = NULL;
-    subpasses[0].pDepthStencilAttachment = &depth;
+
+    /* Vulkan IGNORES pInputAttachments when the count is zero, so a stale
+     * pointer beside a zero count must NOT be refused. */
+    VkAttachmentReference ignored = {0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    subpasses[0].pInputAttachments = &ignored;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS);
+    vkDestroyRenderPass(d, pass, NULL);
+    subpasses[0].pInputAttachments = NULL;
+
+    /* Subpasses must name the SAME attachments: a pass whose subpasses
+     * disagreed about which attachment is the colour one could be created and
+     * then served by no framebuffer at all. */
+    VkAttachmentReference other_color = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    subpasses[1].pColorAttachments = &other_color;
+    subpasses[1].pDepthStencilAttachment = NULL;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
+    subpasses[1].pColorAttachments = &color;
+    subpasses[1].pDepthStencilAttachment = &depth;
+    /* Including the case where one subpass simply drops the depth role. */
+    subpasses[1].pDepthStencilAttachment = NULL;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
+    subpasses[1].pDepthStencilAttachment = &depth;
 
     /* more subpasses than the profile executes */
     VkSubpassDescription three[3] = {subpasses[0], subpasses[1], subpasses[0]};
@@ -87,7 +97,7 @@ static void multiple_subpasses(struct VkDevice_T *d)
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     info.subpassCount = 2; info.pSubpasses = subpasses;
 
-    /* an input or resolve attachment is refused rather than ignored */
+    /* a requested input or resolve attachment is refused rather than ignored */
     VkAttachmentReference extra = {0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     subpasses[1].inputAttachmentCount = 1; subpasses[1].pInputAttachments = &extra;
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
@@ -108,12 +118,12 @@ static void multiple_subpasses(struct VkDevice_T *d)
     subpasses[0].pColorAttachments = &color;
     subpasses[1].pColorAttachments = &color;
 
-    /* one attachment cannot be colour in one subpass and depth in another */
+    /* swapping the two roles between subpasses is the same refusal */
     VkAttachmentReference swapped_color = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
     VkAttachmentReference swapped_depth = {0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
     subpasses[1].pColorAttachments = &swapped_color;
     subpasses[1].pDepthStencilAttachment = &swapped_depth;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN);
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     subpasses[1].pColorAttachments = &color;
     subpasses[1].pDepthStencilAttachment = &depth;
 

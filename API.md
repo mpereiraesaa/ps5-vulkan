@@ -679,31 +679,53 @@ change what the object recorded, and a failed creation leaves nothing behind.
 
 This profile describes **one or two** subpasses, each with exactly one colour
 reference and an optional D32 depth reference, over one or two attachments.
+**Every subpass names the same attachments**: a framebuffer here carries one
+colour role and one depth role derived from the pass, so a pass whose subpasses
+disagreed about which attachment is the colour one could be created and then
+served by no framebuffer at all. The layouts may still differ per subpass; only
+the attachment each role names is fixed.
+
+That constraint also settles the preserve list. Every attachment must be named
+by a subpass, and every subpass names the same ones, so no attachment can be
+preserved-but-unused: a non-empty `pPreserveAttachments` has no legal form here
+and is refused rather than stored where it could never mean anything.
+
 Creation refuses, rather than accepting and ignoring: a subpass count outside
-that range; a subpass without exactly one colour attachment; input attachments
-and resolve attachments, which are unimplemented; an attachment index out of
-range; a depth reference that aliases the colour one; an attachment that no
-subpass references; an attachment used as colour in one subpass and depth in
-another; a preserve entry that is out of range, repeated, or names an
-attachment the same subpass also uses; and a dependency whose endpoints do not
-exist, that is a self-dependency, that runs backward between subpasses, or that
-joins external to external. A forward `0` to `1` edge and both external edges
-are accepted.
+the range; a subpass without exactly one colour attachment; a nonzero
+`inputAttachmentCount` or a non-null `pResolveAttachments`, which are
+unimplemented - note that a non-null `pInputAttachments` beside a **zero** count
+is accepted, because Vulkan ignores the pointer there; an attachment index out
+of range; a depth reference that aliases the colour one; subpasses that name
+different attachments for a role; an attachment that no subpass references; a
+non-empty preserve list; and a dependency whose endpoints do not exist, that is
+a self-dependency, that runs backward between subpasses, or that joins external
+to external. A forward `0` to `1` edge and both external edges are accepted.
 
 `vkCmdNextSubpass` advances the recording by exactly one subpass. It is
-primary-only, requires a pass this buffer began, requires a next subpass to
-exist, and requires the subpass being left to have carried work of its own -
-an empty subpass is the zero-body shape again, one subpass down. Each subpass
-carries its **own** contents mode, so a pass may draw inline in its first
-subpass and name secondaries in its second, and a draw is validated against the
-formats of the subpass it is recorded in. `vkCmdEndRenderPass` requires the
-recording to have reached the **last** subpass, so a missing
-`vkCmdNextSubpass` is refused where it is written rather than silently
-dropping the subpasses never entered.
+primary-only, requires a pass this buffer began, and requires a next subpass to
+exist. An **empty subpass is legal**, and so is an empty render pass: their
+load and store ops alone are observable, so recording them is accepted and
+recorded faithfully, and whether this driver can execute them is decided at
+submission rather than by refusing a conformant program. Each subpass carries
+its **own** contents mode, so a pass may draw inline in its first subpass and
+name secondaries in its second. `vkCmdEndRenderPass` requires the recording to
+have reached the **last** subpass, which is a structural requirement of the
+recording rather than a judgement about work: ending early would silently drop
+the subpasses never entered.
 
-**Execution stops at one subpass.** Submitting a render pass that declares more
-than one is refused, and the native path refuses it independently, so a
-recording the driver cannot execute never reaches a backend. The subpass
+A graphics pipeline belongs to **one subpass**. `vkCreateGraphicsPipelines`
+accepts any `subpass` the render pass actually has, derives the pipeline's
+formats from that subpass and stores the index; `vkCmdDraw` then refuses a
+pipeline whose subpass differs from the one being recorded, even when every
+format agrees, and submission re-derives the same check from the immutable
+record. A continuation secondary is likewise recorded for one subpass:
+`vkCmdExecuteCommands` requires the child's inherited `subpass` to equal the
+subpass it is being named in, not merely to belong to a compatible pass.
+
+**Execution stops at one subpass, and at work that exists.** Submitting a
+render pass that declares more than one subpass is refused, submitting one that
+carries no work is refused, and the native path refuses both independently, so
+a recording the driver cannot execute never reaches a backend. The subpass
 transitions, attachment lifetime across them and their ordering are a later
 slice; until then the model and the recording state machine are exactly what
 this profile claims, and nothing more.

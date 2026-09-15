@@ -56,7 +56,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
 {
     if (in->sType != VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO || !in->layout ||
         in->layout->device != d || !in->renderPass || in->renderPass->device != d) return VK_ERROR_UNKNOWN;
-    if (in->pNext || in->flags || in->subpass || in->stageCount != 2 || !in->pStages ||
+    /* The pipeline is created for ONE subpass, which must exist in the pass it
+     * names. A nonzero index is no longer refused outright: it identifies the
+     * scope this pipeline may draw in. */
+    if (in->pNext || in->flags || in->subpass >= in->renderPass->subpass_count ||
+        in->stageCount != 2 || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkBool32 dynamic_viewport,dynamic_scissor;
@@ -125,10 +129,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return VK_ERROR_UNKNOWN;
     const VkPipelineDepthStencilStateCreateInfo *depth=in->pDepthStencilState;
     VkRenderPass pass=in->renderPass;
-    /* A graphics pipeline is created against ONE subpass of the pass; this
-     * profile's subpasses share their attachment roles, so the first one
-     * describes the formats every pipeline in the pass must match. */
-    const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, 0);
+    /* The formats come from the subpass this pipeline names, not from the
+     * first one: the identity is what a draw is later checked against. */
+    const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, in->subpass);
     if (subpass->depth.attachment != VK_ATTACHMENT_UNUSED && !depth) return VK_ERROR_UNKNOWN;
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
         depth->pNext || depth->flags || depth->depthBoundsTestEnable || depth->stencilTestEnable ||
@@ -179,6 +182,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return rc == VK_SUCCESS ? VK_ERROR_INITIALIZATION_FAILED : rc;
     }
     p->device=d; p->allocator=saved; p->custom_allocator=custom; p->graphics=VK_TRUE;
+    p->subpass=in->subpass;
     p->set_count=in->layout->set_count;
     if(p->set_count)memcpy(p->sets,in->layout->sets,p->set_count*sizeof(*p->sets));
     p->graphics_release=d->graphics_release;

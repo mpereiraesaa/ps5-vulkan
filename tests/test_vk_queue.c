@@ -475,12 +475,18 @@ int main(void)
         VkRenderPassBeginInfo two_ri = ri;
         two_ri.renderPass = &two;
         assert(vkBeginCommandBuffer(multi, &begin) == VK_SUCCESS);
+        /* One pipeline per subpass: a pipeline created for subpass 0 may not
+         * draw in subpass 1, so the second draw needs its own identity. */
+        struct VkPipeline_T second = pipeline; second.subpass = 1;
         vkCmdBeginRenderPass(multi, &two_ri, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(multi, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
         vkCmdBindDescriptorSets(multi, VK_PIPELINE_BIND_POINT_GRAPHICS, &sampled_layout,
                                 0, 4, sampled_handles, 0, NULL);
         vkCmdDraw(multi, 3, 1, 0, 0);
         vkCmdNextSubpass(multi, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(multi, VK_PIPELINE_BIND_POINT_GRAPHICS, &second);
+        vkCmdBindDescriptorSets(multi, VK_PIPELINE_BIND_POINT_GRAPHICS, &sampled_layout,
+                                0, 4, sampled_handles, 0, NULL);
         vkCmdDraw(multi, 3, 1, 0, 0);
         vkCmdEndRenderPass(multi);
         /* Recording accepted the whole thing... */
@@ -491,7 +497,8 @@ int main(void)
         /* ...and submission refuses it without reaching a backend. */
         assert(vkQueueSubmit(&d.queue, 1, &multi_submit, NULL) != VK_SUCCESS);
         assert(f.prepares == prepared && !d.submission && !multi->pending_count &&
-               !two.pending && !fb.pending && !image->pending && !pipeline.pending);
+               !two.pending && !fb.pending && !image->pending && !pipeline.pending &&
+               !second.pending);
         vkFreeCommandBuffers(&d, pool, 1, &multi);
     }
     vkFreeMemory(&d, memory, NULL);

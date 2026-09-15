@@ -633,20 +633,28 @@ int main(void)
         }
     }
 
-    /* --- a render pass that executes no work is refused where it is written -
-     * not accepted here and then rejected by the backend at submit. */
+    /* --- an empty render pass is LEGAL to record and unsupported to execute -
+     * its load and store ops alone are observable, so refusing it at record
+     * time would reject a conformant program. The recording is faithful and
+     * SUBMISSION is where this driver admits it cannot execute it. */
     probe = begun_primary(&d, pool);
     vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
     vkCmdEndRenderPass(probe);
-    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1 &&
-           probe->render_pass == &pass);
+    assert(vkEndCommandBuffer(probe) == VK_SUCCESS && probe->operation_count == 2 &&
+           probe->state == PS5VK_EXECUTABLE);
+    pass_submit.pCommandBuffers = &probe;
+    assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+    assert(!d.submission && !probe->pending_count);
     probe = begun_primary(&d, pool);
     vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(probe);
-    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
-    /* Naming EMPTY secondaries is not work either. The marker is recorded, but
-     * nothing it names executes, so the pass is still zero-body and is refused
-     * where it is written rather than surviving to the backend. */
+    assert(vkEndCommandBuffer(probe) == VK_SUCCESS && probe->operation_count == 2);
+    pass_submit.pCommandBuffers = &probe;
+    assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+    assert(!d.submission && !probe->pending_count);
+    /* Naming EMPTY secondaries is the same story: the marker is recorded, but
+     * nothing it names executes, so the pass carries no work and submission
+     * refuses it before any backend sees it. */
     {
         VkCommandBuffer empty_children[2];
         for (unsigned n = 0; n < 2; ++n) {
@@ -660,13 +668,20 @@ int main(void)
         vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
         vkCmdExecuteCommands(probe, 1, &empty_children[0]);
         vkCmdEndRenderPass(probe);
-        assert(probe->state == PS5VK_INVALID && probe->operation_count == 2);
+        assert(vkEndCommandBuffer(probe) == VK_SUCCESS && probe->operation_count == 3);
+        pass_submit.pCommandBuffers = &probe;
+        assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+        assert(!d.submission && !probe->pending_count &&
+               !empty_children[0]->pending_count);
         /* Several of them are still nothing. */
         probe = begun_primary(&d, pool);
         vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
         vkCmdExecuteCommands(probe, 2, empty_children);
         vkCmdEndRenderPass(probe);
-        assert(probe->state == PS5VK_INVALID && probe->operation_count == 2);
+        assert(vkEndCommandBuffer(probe) == VK_SUCCESS && probe->operation_count == 3);
+        pass_submit.pCommandBuffers = &probe;
+        assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+        assert(!d.submission && !probe->pending_count);
         /* An empty child ALONGSIDE one that draws is legal and keeps its place
          * in the order: the pass executes work, and naming an empty secondary
          * is a no-op, not an error. */

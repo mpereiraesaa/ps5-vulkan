@@ -214,6 +214,10 @@ static int draw_operation_valid(VkDevice d, const struct ps5vk_operation *op)
 {
     if (!op->pipeline || op->pipeline->device != d || !op->pipeline->graphics ||
         !op->pipeline->graphics_state) return 0;
+    /* The pipeline's subpass identity must still match the subpass the draw
+     * was recorded in, re-derived from the record rather than from recording
+     * state. */
+    if (op->pipeline->subpass != op->subpass) return 0;
     if (ps5vk_indirect_graphics_operation(op->type) &&
         ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
     if (op->pipeline->set_count > PS5VK_MAX_SETS) return 0;
@@ -232,12 +236,13 @@ static int draw_operation_valid(VkDevice d, const struct ps5vk_operation *op)
  * framebuffer is optional in the inheritance record, so the null handle is
  * accepted and only a DIFFERENT one is refused. */
 static int continuation_child_valid(VkDevice d, VkCommandBuffer child,
-    VkRenderPass active, VkFramebuffer framebuffer)
+    VkRenderPass active, VkFramebuffer framebuffer, uint32_t subpass)
 {
     if (!(child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ||
         !child->inheritance_valid ||
         !ps5vk_render_pass_compatible(child->inheritance.renderPass, active) ||
-        child->inheritance.subpass ||
+        /* Recorded for the subpass it is executing in, exactly. */
+        child->inheritance.subpass != subpass ||
         (child->inheritance.framebuffer &&
          child->inheritance.framebuffer != framebuffer)) return 0;
     for (unsigned j = 0; j < child->operation_count; ++j) {
@@ -358,7 +363,8 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                      !(child->state == PS5VK_PENDING && simultaneous)))
                     return 0;
                 if (active) {
-                    if (!continuation_child_valid(d, child, active, framebuffer)) return 0;
+                    if (!continuation_child_valid(d, child, active, framebuffer,
+                                                 op->subpass)) return 0;
                     /* A continuation child carries nothing but draws, so its
                      * operation count is the work it contributes - and an
                      * empty child contributes none. */

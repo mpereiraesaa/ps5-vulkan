@@ -21,11 +21,15 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
 {
     if (s->flags || s->pipelineBindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS ||
         s->colorAttachmentCount != 1 || !s->pColorAttachments ||
-        s->inputAttachmentCount || s->pInputAttachments || s->pResolveAttachments)
+        /* Vulkan IGNORES pInputAttachments when the count is zero, so the
+         * pointer says nothing; only a nonzero count asks for input
+         * attachments, which are unimplemented. pResolveAttachments is
+         * different: a non-null pointer IS the request. */
+        s->inputAttachmentCount || s->pResolveAttachments)
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    if (s->preserveAttachmentCount && !s->pPreserveAttachments)
-        return VK_ERROR_UNKNOWN;
-    if (s->preserveAttachmentCount > attachments) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Every attachment of this profile is used by every subpass, so nothing
+     * can be preserved-but-unused and a non-empty list has no legal form. */
+    if (s->preserveAttachmentCount) return VK_ERROR_FEATURE_NOT_PRESENT;
     *color = s->pColorAttachments[0];
     depth->attachment = VK_ATTACHMENT_UNUSED;
     depth->layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -38,16 +42,6 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
           (depth->layout != VK_IMAGE_LAYOUT_GENERAL &&
            depth->layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))))
         return VK_ERROR_UNKNOWN;
-    /* A preserved attachment is one the subpass does NOT use, so naming an
-     * attachment it also references is a contradiction, and so is naming the
-     * same one twice. */
-    for (uint32_t j = 0; j < s->preserveAttachmentCount; ++j) {
-        uint32_t preserved = s->pPreserveAttachments[j];
-        if (preserved >= attachments || preserved == color->attachment ||
-            preserved == depth->attachment) return VK_ERROR_UNKNOWN;
-        for (uint32_t k = 0; k < j; ++k)
-            if (s->pPreserveAttachments[k] == preserved) return VK_ERROR_UNKNOWN;
-    }
     return VK_SUCCESS;
 }
 
@@ -55,32 +49,24 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
  * and addition checked. The four arrays are suballocated from one block, so
  * there is no partially built object to roll back: either the single
  * allocation succeeds and the object is complete, or nothing was allocated. */
-static VkResult owned_bytes(const VkRenderPassCreateInfo *info, size_t *total,
-    size_t *preserve_total)
+static VkResult owned_bytes(const VkRenderPassCreateInfo *info, size_t *total)
 {
-    size_t preserved = 0;
-    for (uint32_t i = 0; i < info->subpassCount; ++i) {
-        uint32_t count = info->pSubpasses[i].preserveAttachmentCount;
-        if (count > SIZE_MAX - preserved) return VK_ERROR_OUT_OF_HOST_MEMORY;
-        preserved += count;
-    }
     size_t bytes = sizeof(struct VkRenderPass_T);
     /* Same order as the suballocation below, so the total cannot drift from
      * the layout it is supposed to cover. */
-    const size_t parts[4] = {
+    const size_t parts[3] = {
         (size_t)info->subpassCount * sizeof(struct ps5vk_subpass),
         (size_t)info->attachmentCount * sizeof(VkAttachmentDescription),
         (size_t)info->dependencyCount * sizeof(VkSubpassDependency),
-        preserved * sizeof(uint32_t),
     };
-    for (unsigned i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < 3; ++i) {
         /* The counts are already bounded by the profile limits checked above,
          * so these cannot overflow; the checks are kept so a later limit
          * change cannot turn into a silent wrap. */
         if (parts[i] > SIZE_MAX - bytes) return VK_ERROR_OUT_OF_HOST_MEMORY;
         bytes += parts[i];
     }
-    *total = bytes; *preserve_total = preserved;
+    *total = bytes;
     return VK_SUCCESS;
 }
 
@@ -105,25 +91,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
                                     &colors[i], &depths[i]);
         if (rc != VK_SUCCESS) return rc;
     }
-    /* Every attachment must be reachable through some subpass reference: this
-     * profile has no attachment that exists only to be preserved. */
-    for (uint32_t i = 0; i < info->attachmentCount; ++i) {
-        VkBool32 referenced = VK_FALSE;
-        for (uint32_t j = 0; j < info->subpassCount; ++j)
-            referenced |= colors[j].attachment == i || depths[j].attachment == i;
-        if (!referenced) return VK_ERROR_FEATURE_NOT_PRESENT;
-    }
+    /* EVERY SUBPASS MUST NAME THE SAME ATTACHMENTS. A framebuffer in this
+     * driver carries one colour role and one depth role, derived from the
+     * pass, so a pass whose subpasses disagreed about which attachment is the
+     * colour one could be created and then served by no framebuffer at all.
+     * The profile is constrained here, where the caller sees it, instead of
+     * being advertised and then failing later. Layouts may still differ per
+     * subpass; only the attachment each role names is fixed. */
+    for (uint32_t i = 1; i < info->subpassCount; ++i)
+        if (colors[i].attachment != colors[0].attachment ||
+            depths[i].attachment != depths[0].attachment)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Every attachment must be reachable through a subpass reference: an
+     * attachment this profile never uses has no role to play. */
+    for (uint32_t i = 0; i < info->attachmentCount; ++i)
+        if (colors[0].attachment != i && depths[0].attachment != i)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
     for (uint32_t i = 0; i < info->attachmentCount; ++i) {
         const VkAttachmentDescription *a = &info->pAttachments[i];
-        /* An attachment is the depth one if ANY subpass uses it as depth, and
-         * a single attachment may not be colour in one subpass and depth in
-         * another: the formats are disjoint and the roles are not swappable. */
-        int is_depth = 0, is_color = 0;
-        for (uint32_t j = 0; j < info->subpassCount; ++j) {
-            is_depth |= depths[j].attachment == i;
-            is_color |= colors[j].attachment == i;
-        }
-        if (is_depth && is_color) return VK_ERROR_UNKNOWN;
+        /* The roles are shared, so subpass 0 decides which attachment is the
+         * depth one for the whole pass. */
+        int is_depth = depths[0].attachment == i;
         if (a->flags || a->samples != VK_SAMPLE_COUNT_1_BIT ||
             (is_depth ? a->format != VK_FORMAT_D32_SFLOAT :
              (a->format != VK_FORMAT_B8G8R8A8_UNORM && a->format != VK_FORMAT_R8G8B8A8_UNORM)))
@@ -151,8 +139,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
             (dep->dependencyFlags & ~VK_DEPENDENCY_BY_REGION_BIT) ||
             !dep->srcStageMask || !dep->dstStageMask) return VK_ERROR_FEATURE_NOT_PRESENT;
     }
-    size_t bytes = 0, preserved = 0;
-    if (owned_bytes(info, &bytes, &preserved) != VK_SUCCESS)
+    size_t bytes = 0;
+    if (owned_bytes(info, &bytes) != VK_SUCCESS)
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     VkAllocationCallbacks saved; VkBool32 custom;
     VkRenderPass pass = ps5vk_object_alloc(d->custom_allocator ? &d->allocator : NULL, allocator,
@@ -175,24 +163,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     VkAttachmentDescription *attachments = (VkAttachmentDescription *)(void *)cursor;
     cursor += (size_t)info->attachmentCount * sizeof(*attachments);
     VkSubpassDependency *dependencies = (VkSubpassDependency *)(void *)cursor;
-    cursor += (size_t)info->dependencyCount * sizeof(*dependencies);
-    uint32_t *preserve = (uint32_t *)(void *)cursor;
     memcpy(attachments, info->pAttachments,
            (size_t)info->attachmentCount * sizeof(*attachments));
     if (info->dependencyCount)
         memcpy(dependencies, info->pDependencies,
                (size_t)info->dependencyCount * sizeof(*dependencies));
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
-        const VkSubpassDescription *described = &info->pSubpasses[i];
         subpasses[i].color = colors[i];
         subpasses[i].depth = depths[i];
-        subpasses[i].preserve_count = described->preserveAttachmentCount;
-        subpasses[i].preserve = preserve;
-        if (described->preserveAttachmentCount) {
-            memcpy(preserve, described->pPreserveAttachments,
-                   (size_t)described->preserveAttachmentCount * sizeof(*preserve));
-            preserve += described->preserveAttachmentCount;
-        }
     }
     pass->attachments = attachments;
     pass->subpasses = subpasses;

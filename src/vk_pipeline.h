@@ -51,6 +51,11 @@ struct VkPipeline_T {
     struct ps5vk_compiled_program program;
     void *cache_entry;
     VkBool32 graphics;
+    /* The subpass this graphics pipeline was created against. A pipeline is
+     * bound to ONE subpass of one render pass, so a draw recorded in a
+     * different subpass is refused rather than executed with the state of the
+     * wrong one. Meaningless for a compute pipeline. */
+    uint32_t subpass;
     void *graphics_state;
     void (*graphics_release)(VkDevice, void *);
     VkViewport viewport;
