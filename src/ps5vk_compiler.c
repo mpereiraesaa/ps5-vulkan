@@ -58,7 +58,15 @@ VkResult ps5vk_runtime_compile_compute_features(
     opts.static_descriptor_use = true;
     if (feature_mask & ~(PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                          PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
-                         PS5VK_FEATURE_ROBUST_BUFFER_ACCESS))
+                         PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                         /* Shader draw parameters are a graphics-stage
+                          * contract. The compute adapter neither consumes nor
+                          * rejects the bit; without it here, any device that
+                          * enabled the extension failed every compute
+                          * pipeline, which the first hardware run of the
+                          * promotion showed as VK_ERROR_UNKNOWN from
+                          * vkCreateComputePipelines. */
+                         PS5VK_FEATURE_SHADER_DRAW_PARAMETERS))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
