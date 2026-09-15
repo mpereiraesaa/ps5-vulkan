@@ -33,7 +33,8 @@ results; visual output is not the sole correctness signal.
 - Vulkan pipeline-cache objects with a normative header export (no portable compiled-code records yet)
 - Occlusion query-pool lifetime (result retrieval deferred) and empty sparse image queries
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
-- Vertex and index buffers, indexed and non-indexed triangle-list draws;
+- Vertex and index buffers, indexed and non-indexed triangle-list and
+  triangle-strip draws (the strip has host coverage but no native witness yet);
   core 8-, 16- and 32-bit float/normalized/integer vertex families plus the
   packed `A8B8G8R8_*` and `A2B10G10R10_UNORM` forms currently listed in
   [API.md](API.md). Forty-one conversion cases have exact GPU readback on
