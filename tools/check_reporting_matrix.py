@@ -116,8 +116,12 @@ FEATURE_GATES = {
     "variableMultisampleRate": ("src/graphics_limits.h",
                                 "framebufferColorSampleCounts=VK_SAMPLE_COUNT_1_BIT",
                                 "one framebuffer sample count"),
-    "inheritedQueries": ("src/vk_command.c", "There is no valid no-op subset.",
-                         "secondary command buffers are rejected"),
+    # The gate moved and became exact: secondary command buffers now exist, so
+    # the honest citation is the inheritance validation that refuses a
+    # secondary claiming to inherit a query, not the old blanket rejection.
+    "inheritedQueries": ("src/vk_command.c",
+                         "i->occlusionQueryEnable || i->queryFlags || i->pipelineStatistics",
+                         "a secondary cannot inherit a query"),
     "fullDrawIndexUint32": ("src/graphics_limits.h", "maxDrawIndexedIndexValue=UINT32_MAX",
                             "the full 32-bit draw-index range is accepted"),
     "multiViewport": ("src/graphics_limits.h", "maxViewports=1",

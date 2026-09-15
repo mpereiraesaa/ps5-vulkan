@@ -88,6 +88,16 @@ struct VkCommandBuffer_T {
     enum ps5vk_command_state state;
     uint32_t pending_count;
     VkCommandBufferUsageFlags usage;
+    /* Fixed at allocation and never reset: Vulkan has no operation that
+     * changes a command buffer's level, so vkResetCommandBuffer and pool
+     * resets must leave it alone. */
+    VkCommandBufferLevel level;
+    /* Copy of the secondary's VkCommandBufferInheritanceInfo, taken at
+     * vkBeginCommandBuffer. Owned so a caller mutating its own structure
+     * afterwards cannot change what was recorded; pNext is refused rather
+     * than shallow-copied, because a retained pointer is not owned data. */
+    VkBool32 inheritance_valid;
+    VkCommandBufferInheritanceInfo inheritance;
     VkPipeline pipeline;
     VkDescriptorSet sets[PS5VK_MAX_SETS];
     struct ps5vk_set_signature set_signatures[PS5VK_MAX_SETS];

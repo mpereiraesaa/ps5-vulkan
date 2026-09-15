@@ -138,6 +138,8 @@ check-sanitize:
 	./build/tests/test_vk_descriptor_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_PIPELINE_SOURCES) tests/test_vk_pipeline.c -o build/tests/test_vk_pipeline_sanitized
 	./build/tests/test_vk_pipeline_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) tests/test_secondary_command_buffers.c -o build/tests/test_secondary_command_buffers_sanitized
+	./build/tests/test_secondary_command_buffers_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) tests/test_vk_command.c -o build/tests/test_vk_command_sanitized
 	./build/tests/test_vk_command_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/texture_layout.c tests/test_vk_transfer.c -o build/tests/test_vk_transfer_sanitized
@@ -284,6 +286,8 @@ check:
 	./build/tests/test_vk_descriptor
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_PIPELINE_SOURCES) tests/test_vk_pipeline.c -o build/tests/test_vk_pipeline
 	./build/tests/test_vk_pipeline
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) tests/test_secondary_command_buffers.c -o build/tests/test_secondary_command_buffers
+	./build/tests/test_secondary_command_buffers
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) tests/test_vk_command.c -o build/tests/test_vk_command
 	./build/tests/test_vk_command
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/texture_layout.c tests/test_vk_transfer.c -o build/tests/test_vk_transfer

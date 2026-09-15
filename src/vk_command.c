@@ -27,6 +27,10 @@ static void clear(VkCommandBuffer c)
     }
     c->state = PS5VK_INITIAL; c->usage = 0; c->pipeline = NULL;
     c->operation_count = 0;
+    /* The level survives every reset: Vulkan has no operation that changes it.
+     * The inheritance copy does not, because it belongs to one recording. */
+    c->inheritance_valid = VK_FALSE;
+    memset(&c->inheritance, 0, sizeof(c->inheritance));
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
     c->viewport_valid = c->scissor_valid = VK_FALSE;
     c->line_width = 1.0f;
@@ -194,7 +198,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateCommandBuffers(VkDevice d, const VkComm
     for (uint32_t j = 0; j < info->commandBufferCount; ++j) out[j] = NULL;
     if (!d || info->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO || info->pNext ||
         !info->commandPool || info->commandPool->device != d || !info->commandBufferCount ||
-        info->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY) return INVALID;
+        (info->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY &&
+         info->level != VK_COMMAND_BUFFER_LEVEL_SECONDARY)) return INVALID;
     VkCommandPool p = info->commandPool; VkCommandBuffer list = NULL;
     for (uint32_t j = 0; j < info->commandBufferCount; ++j) {
         VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
@@ -205,7 +210,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateCommandBuffers(VkDevice d, const VkComm
             for (uint32_t k = 0; k < info->commandBufferCount; ++k) out[k] = NULL;
             return VK_ERROR_OUT_OF_HOST_MEMORY;
         }
-        c->pool = p; c->next = list; list = c; out[j] = c;
+        c->pool = p; c->level = info->level; c->next = list; list = c; out[j] = c;
     }
     while (list) { VkCommandBuffer next = list->next; list->next = p->buffers; p->buffers = list; list = next; }
     return VK_SUCCESS;
@@ -252,16 +257,65 @@ VKAPI_ATTR VkResult VKAPI_CALL vkResetCommandBuffer(VkCommandBuffer c, VkCommand
         (flags & ~VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT)) return INVALID;
     clear(c); return VK_SUCCESS;
 }
+/* Inheritance a secondary may declare, checked against what this device can
+ * truthfully do rather than against the structure's shape.
+ *
+ * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT is refused here, so a
+ * secondary can only be recorded outside a render pass for now. Its semantics
+ * - inherited render pass, framebuffer and subpass scope - are a later slice,
+ * and accepting the flag before they exist would advertise a capability that
+ * does not execute.
+ *
+ * Without that flag Vulkan IGNORES renderPass, framebuffer and subpass, which
+ * the pinned CTS states explicitly (doc/testspecs/VK/apitests.adoc,
+ * command-buffer-recording case 9: "Otherwise the renderPass, framebuffer, and
+ * subpass members of the VkCommandBufferBeginInfo structure are ignored").
+ * So whatever the caller puts there is accepted and never consulted. Refusing
+ * a non-null handle would reject a conformant call; this driver simply does
+ * not read those members. */
+static VkResult inheritance_valid(VkDevice d, const VkCommandBufferInheritanceInfo *i,
+    VkCommandBufferUsageFlags usage)
+{
+    if (!i || i->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO ||
+        i->pNext || (usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
+        return INVALID;
+    /* occlusionQueryEnable, queryFlags and pipelineStatistics describe queries
+     * this device does not execute: it reports occlusionQueryPrecise and
+     * pipelineStatisticsQuery false and no query command is implemented, so a
+     * secondary that claims to inherit one is refused instead of recorded. */
+    if (i->occlusionQueryEnable || i->queryFlags || i->pipelineStatistics)
+        return INVALID;
+    (void)d;
+    return VK_SUCCESS;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkCommandBufferBeginInfo *info)
 {
     if (!c || !info || info->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO || info->pNext ||
         c->state == PS5VK_PENDING || c->state == PS5VK_RECORDING ||
         (info->flags & ~(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
                          VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) ||
-        ((info->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) &&
+        /* VUID-vkBeginCommandBuffer-commandBuffer-02840 makes the two usage
+         * flags mutually exclusive for a PRIMARY only. A secondary may set
+         * both, so refusing the pair there would reject a conformant call. */
+        (c->level == VK_COMMAND_BUFFER_LEVEL_PRIMARY &&
+         (info->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) &&
          (info->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))) return INVALID;
     if (c->state != PS5VK_INITIAL && !(c->pool->flags & VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)) return INVALID;
+    /* A secondary must describe what it inherits; a primary must not, and
+     * Vulkan says the pointer is ignored for one, so it is not stored. */
+    if (c->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY &&
+        inheritance_valid(c->pool->device, info->pInheritanceInfo, info->flags) != VK_SUCCESS)
+        return INVALID;
     clear(c); c->usage = info->flags; c->state = PS5VK_RECORDING;
+    if (c->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
+        /* Retained as an opaque owned copy of what the caller supplied. The
+         * ignored scope members are preserved verbatim rather than sanitised,
+         * so the record stays a faithful copy, and nothing in this driver
+         * reads them while RENDER_PASS_CONTINUE is unreachable. */
+        c->inheritance = *info->pInheritanceInfo;
+        c->inheritance_valid = VK_TRUE;
+    }
     return VK_SUCCESS;
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer c)
@@ -499,7 +553,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(VkCommandBuffer c,VkBuffer buff
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRenderPassBeginInfo *info,
     VkSubpassContents contents)
 {
-    if (!c || c->state != PS5VK_RECORDING || !c->pool->device->graphics_enabled || c->render_pass ||
+    /* Primary-only: a secondary inherits a render pass, it never begins one. */
+    if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
+        !c->pool->device->graphics_enabled || c->render_pass ||
         !info || info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO || info->pNext ||
         contents != VK_SUBPASS_CONTENTS_INLINE || !info->renderPass || !info->framebuffer ||
         info->renderPass->device != c->pool->device || info->framebuffer->device != c->pool->device ||
@@ -527,8 +583,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
 {
-    if (!c || c->state != PS5VK_RECORDING || !c->render_pass ||
-        c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
+    /* Primary-only, and unreachable in a secondary anyway because one can
+     * never have begun a render pass; the level check keeps the rejection
+     * explicit rather than incidental. */
+    if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
+        !c->render_pass || c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
     if(!op)return;
@@ -539,15 +598,19 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
     VkSubpassContents contents)
 {
     /* vkCreateRenderPass accepts exactly one subpass, hence no next subpass is
-     * reachable. Do not mutate render-pass state or append a fake operation. */
+     * reachable; it is also primary-only. Do not mutate render-pass state or
+     * append a fake operation. */
     (void)contents;
     ps5vk_command_invalidate(c);
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
     uint32_t count, const VkCommandBuffer *commands)
 {
-    /* vkAllocateCommandBuffers rejects secondary level and Vulkan requires a
-     * nonzero array of secondary buffers here. There is no valid no-op subset. */
+    /* Secondary buffers can now be allocated and recorded, but nothing
+     * executes them yet: the ordered child list, lifetime ownership and
+     * submission-time execution are the next slice. Until that exists this
+     * stays fail-closed rather than recording work the queue would drop.
+     * Nesting is refused here permanently, not just for now. */
     (void)count; (void)commands;
     ps5vk_command_invalidate(c);
 }

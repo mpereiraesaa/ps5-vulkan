@@ -284,7 +284,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "secondary command buffers are rejected (src/vk_command.c)",
+      "detail": "a secondary cannot inherit a query (src/vk_command.c)",
       "feature": "inheritedQueries",
       "kind": "feature",
       "profile": "graphics",
@@ -1001,7 +1001,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "secondary command buffers are rejected (src/vk_command.c)",
+      "detail": "a secondary cannot inherit a query (src/vk_command.c)",
       "feature": "inheritedQueries",
       "kind": "feature",
       "profile": "compute",
