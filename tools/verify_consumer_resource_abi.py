@@ -30,8 +30,52 @@ SECONDARY_CONTROL_HASH = "21a49bc5"
 INPASS_HASH = "77abc830"
 INPASS_CHANGED = 471744
 
+TEXEL_FORMAT_CASES = [
+    ("r8_unorm","float",1,"3f800000,00000000,00000000,3f800000"),
+    ("r8_snorm","float",1,"bf800000,00000000,00000000,3f800000"),
+    ("r8g8_unorm","float",2,"3f800000,3f800000,00000000,3f800000"),
+    ("r8g8_snorm","float",2,"bf800000,3f800000,00000000,3f800000"),
+    ("r8g8b8a8_unorm","float",4,"00000000,3f800000,00000000,3f800000"),
+    ("r8g8b8a8_snorm","float",4,"bf800000,3f800000,bf800000,3f800000"),
+    ("a8b8g8r8_unorm","float",4,"00000000,3f800000,00000000,3f800000"),
+    ("a8b8g8r8_snorm","float",4,"bf800000,3f800000,bf800000,3f800000"),
+    ("b10g11r11_ufloat","float",4,"3f800000,40000000,40800000,3f800000"),
+    ("r16_unorm","float",2,"3f800000,00000000,00000000,3f800000"),
+    ("r16_snorm","float",2,"bf800000,00000000,00000000,3f800000"),
+    ("r16_sfloat","float",2,"3f800000,00000000,00000000,3f800000"),
+    ("r16g16_unorm","float",4,"00000000,3f800000,00000000,3f800000"),
+    ("r16g16_snorm","float",4,"bf800000,3f800000,00000000,3f800000"),
+    ("r16g16_sfloat","float",4,"3f000000,c0000000,00000000,3f800000"),
+    ("r16g16b16a16_unorm","float",8,"00000000,3f800000,00000000,3f800000"),
+    ("r16g16b16a16_snorm","float",8,"bf800000,3f800000,bf800000,3f800000"),
+    ("r16g16b16a16_sfloat","float",8,"3f000000,3f800000,40000000,c0000000"),
+    ("r32_sfloat","float",4,"3f000000,00000000,00000000,3f800000"),
+    ("r32g32_sfloat","float",8,"3f000000,c0000000,00000000,3f800000"),
+    ("r32g32b32a32_sfloat","float",16,"3f000000,3f800000,40000000,c0000000"),
+    ("r8_uint","uint",1,"000000ab,00000000,00000000,00000001"),
+    ("r8_sint","sint",1,"ffffff81,00000000,00000000,00000001"),
+    ("r8g8_uint","uint",2,"00000012,00000034,00000000,00000001"),
+    ("r8g8_sint","sint",2,"ffffff81,0000007f,00000000,00000001"),
+    ("r8g8b8a8_uint","uint",4,"00000012,00000034,00000056,00000078"),
+    ("r8g8b8a8_sint","sint",4,"ffffffff,ffffff81,00000001,0000007f"),
+    ("a8b8g8r8_uint","uint",4,"00000012,00000034,00000056,00000078"),
+    ("a8b8g8r8_sint","sint",4,"ffffffff,ffffff81,00000001,0000007f"),
+    ("r16_uint","uint",2,"00001234,00000000,00000000,00000001"),
+    ("r16_sint","sint",2,"ffff8001,00000000,00000000,00000001"),
+    ("r16g16_uint","uint",4,"00001234,00005678,00000000,00000001"),
+    ("r16g16_sint","sint",4,"ffff8001,00007fff,00000000,00000001"),
+    ("r16g16b16a16_uint","uint",8,"00001234,00005678,00009abc,0000def0"),
+    ("r16g16b16a16_sint","sint",8,"ffff8001,00007fff,fffffffe,00000002"),
+    ("r32_uint","uint",4,"12345678,00000000,00000000,00000001"),
+    ("r32_sint","sint",4,"81234567,00000000,00000000,00000001"),
+    ("r32g32_uint","uint",8,"12345678,9abcdef0,00000000,00000001"),
+    ("r32g32_sint","sint",8,"81234567,12345678,00000000,00000001"),
+    ("r32g32b32a32_uint","uint",16,"00000001,00000002,00000003,00000004"),
+    ("r32g32b32a32_sint","sint",16,"ffffffff,00000002,fffffffd,00000004"),
+]
 
-def validate(log, receipt, artifact, texel_rgba8=False):
+
+def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     def require(condition, label):
         if not condition:
             raise ValueError(label)
@@ -40,6 +84,7 @@ def validate(log, receipt, artifact, texel_rgba8=False):
     require(artifact.get("title") == TITLE and
             artifact.get("profile") == "public-consumer-resource-abi" and
             artifact.get("submit_enabled") is True, "artifact profile")
+    require(not (texel_rgba8 and texel_formats), "one texel witness profile")
     require(len(digest) == 64 and
             all(c in "0123456789abcdef" for c in digest.lower()),
             "artifact identity")
@@ -241,6 +286,10 @@ def validate(log, receipt, artifact, texel_rgba8=False):
     witness = one("PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS ")
     texel_format = one("PS5VK_CONSUMER_TEXEL_RGBA8_FORMAT ") if texel_rgba8 else None
     texel_witness = one("PS5VK_CONSUMER_TEXEL_RGBA8_SUCCESS ") if texel_rgba8 else None
+    texel_formats_start = one("PS5VK_CONSUMER_TEXEL_FORMATS_START ") if texel_formats else None
+    texel_format_rows = matching("PS5VK_CONSUMER_TEXEL_FORMAT_CASE ") if texel_formats else []
+    texel_formats_success = one("PS5VK_CONSUMER_TEXEL_FORMATS_SUCCESS ") if texel_formats else None
+    texel_formats_retired = one("PS5VK_CONSUMER_TEXEL_FORMATS_RETIRED") if texel_formats else None
     width_start = one("PS5VK_CONSUMER_STORAGE_WIDTH_START")
     width_pipelines = one("PS5VK_CONSUMER_STORAGE_WIDTH_PIPELINES_CREATED ")
     width_witness = one("PS5VK_CONSUMER_STORAGE_WIDTH_SUCCESS ")
@@ -266,8 +315,10 @@ def validate(log, receipt, artifact, texel_rgba8=False):
     retired = one("PS5VK_CONSUMER_RESOURCES_RETIRED ")
     ready = one("PS5VK_READY_FOR_SHELL_CLOSE ")
 
-    require(len(prepared) == 4 and
-            all(len(rows) == 6 for rows in (submitted, suspended, completed)),
+    extra_texel_dispatches = len(TEXEL_FORMAT_CASES) if texel_formats else 0
+    require(len(prepared) == 4 + (1 if texel_formats else 0) and
+            all(len(rows) == 6 + extra_texel_dispatches
+                for rows in (submitted, suspended, completed)),
             "resource, narrow and synchronization submit records")
     ordered = [boot, physical, physical_queries, negotiated,
                transfer_start, transfer_witness, transfer_retired,
@@ -289,7 +340,15 @@ def validate(log, receipt, artifact, texel_rgba8=False):
                submitted[4], suspended[4], completed[4],
                submitted[5], suspended[5], completed[5],
                prepared[3],
-               sync_objects, sync_witness, sync_retired, success, retired, ready]
+               sync_objects, sync_witness, sync_retired]
+    if texel_formats:
+        ordered += [texel_formats_start, prepared[4]]
+        for index in range(len(TEXEL_FORMAT_CASES)):
+            ordered += [submitted[6 + index], suspended[6 + index],
+                        completed[6 + index]]
+        ordered += [*texel_format_rows, texel_formats_success,
+                    texel_formats_retired]
+    ordered += [success, retired, ready]
     require([row[0] for row in ordered] == sorted({row[0] for row in ordered}),
             "resource witness ordering")
     if texel_rgba8:
@@ -309,6 +368,42 @@ def validate(log, receipt, artifact, texel_rgba8=False):
                 "mismatches=0" in texel_witness[1] and
                 "guard_mismatches=0" in texel_witness[1],
                 "RGBA8 texel fetch witness")
+    if texel_formats:
+        contract = artifact.get("texel_formats", {})
+        hashes = contract.get("shader_spirv_sha256", {})
+        require(contract.get("case_count") == len(TEXEL_FORMAT_CASES) and
+                contract.get("components_per_case") == 4 and
+                set(hashes) == {"float", "uint", "sint"} and
+                all(isinstance(value, str) and len(value) == 64 and
+                    all(c in "0123456789abcdef" for c in value.lower())
+                    for value in hashes.values()), "texel-format artifact contract")
+        require(texel_formats_start[1] ==
+                f"PS5VK_CONSUMER_TEXEL_FORMATS_START cases={len(TEXEL_FORMAT_CASES)}",
+                "texel-format start")
+        require(len(texel_format_rows) == len(TEXEL_FORMAT_CASES),
+                "texel-format case count")
+        require(prepared[4][1].endswith(
+                f"serial=57 dispatches={len(TEXEL_FORMAT_CASES)}"),
+                "texel-format prepared dispatch count")
+        for index in range(len(TEXEL_FORMAT_CASES)):
+            require(submitted[6 + index][1].endswith(
+                    f"serial=57 index={index} rc=0") and
+                    suspended[6 + index][1].endswith(
+                    f"serial=57 index={index} rc=0") and
+                    f"serial=57 index={index} token=" in completed[6 + index][1],
+                    f"texel-format dispatch lifecycle {index}")
+        for index, ((name, shader_class, byte_count, expected), row) in enumerate(
+                zip(TEXEL_FORMAT_CASES, texel_format_rows)):
+            fields = dict(item.split("=", 1) for item in row[1].split()[1:])
+            require(fields == {
+                "index": str(index), "name": name, "class": shader_class,
+                "bytes": str(byte_count), "expected": expected,
+                "actual": expected, "mismatches": "0",
+            }, f"texel-format case {index}")
+        require(texel_formats_success[1] ==
+                f"PS5VK_CONSUMER_TEXEL_FORMATS_SUCCESS cases={len(TEXEL_FORMAT_CASES)} "
+                f"components={len(TEXEL_FORMAT_CASES)*4} mismatches=0 guard_mismatches=0",
+                "texel-format success")
     if inpass_present:
         # The scenario runs after the last finite frame and before the surface
         # is destroyed, so it cannot be mistaken for one of the frames.
@@ -362,7 +457,7 @@ def validate(log, receipt, artifact, texel_rgba8=False):
             "three synchronization dispatches")
     require(prepared[3][1].endswith(f"serial={serial(10)} dispatches=0"),
             "event dependency segment")
-    require([row[1].rsplit(" ", 1)[0] for row in submitted] == [
+    require([row[1].rsplit(" ", 1)[0] for row in submitted[:6]] == [
                 f"PS5VK_QUEUE_SUBMIT serial={serial(5)} index=0",
                 f"PS5VK_QUEUE_SUBMIT serial={serial(6)} index=0",
                 f"PS5VK_QUEUE_SUBMIT serial={serial(6)} index=1",
@@ -370,7 +465,7 @@ def validate(log, receipt, artifact, texel_rgba8=False):
                 f"PS5VK_QUEUE_SUBMIT serial={serial(8)} index=1",
                 f"PS5VK_QUEUE_SUBMIT serial={serial(8)} index=2"] and
             all(row[1].endswith("rc=0") for row in submitted), "submits")
-    require([row[1].rsplit(" ", 1)[0] for row in suspended] == [
+    require([row[1].rsplit(" ", 1)[0] for row in suspended[:6]] == [
                 f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(5)} index=0",
                 f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(6)} index=0",
                 f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(6)} index=1",
@@ -381,7 +476,7 @@ def validate(log, receipt, artifact, texel_rgba8=False):
     expected_completion = ((serial(5), 0), (serial(6), 0), (serial(6), 1),
                            (serial(8), 0), (serial(8), 1), (serial(8), 2))
     require(all(f"serial={s} index={i}" in row[1]
-                for row, (s, i) in zip(completed, expected_completion)),
+                for row, (s, i) in zip(completed[:6], expected_completion)),
             "completion identities")
     require(f"serial={serial(5)} index=0 token={serial(5)}00000001 gcr=0070f528"
             in completed[0][1], "completion")
@@ -597,6 +692,7 @@ def validate(log, receipt, artifact, texel_rgba8=False):
         "sampled_graphics_rounds_checked": 4 if sampled is not None else 0,
         "sampled_graphics_stage_profile": sampled_profile,
         "single_set_sampler_elements": (96 if sampled_profile == "single-set" else 0),
+        "uniform_texel_formats_checked": len(TEXEL_FORMAT_CASES) if texel_formats else 0,
         "sampled_graphics_visibility_mask": (sampled.get("visibility_mask", 0x11)
             if sampled_profile == "vertex-fragment" else None),
         "sampled_graphics_exceeds_advertised_limits": sampled is not None,
@@ -614,11 +710,13 @@ def main():
     parser.add_argument("log", type=Path)
     parser.add_argument("--artifact", required=True, type=Path)
     parser.add_argument("--texel-rgba8", action="store_true")
+    parser.add_argument("--texel-formats", action="store_true")
     args = parser.parse_args()
     receipt = json.loads(args.log.with_suffix(".json").read_text())
     artifact = json.loads(args.artifact.read_text())
     print(json.dumps(validate(args.log.read_bytes(), receipt, artifact,
-                              texel_rgba8=args.texel_rgba8), indent=2))
+                              texel_rgba8=args.texel_rgba8,
+                              texel_formats=args.texel_formats), indent=2))
 
 
 if __name__ == "__main__":

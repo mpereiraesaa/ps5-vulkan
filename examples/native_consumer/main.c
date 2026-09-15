@@ -6,6 +6,9 @@
 #ifdef CONSUMER_TEXEL_RGBA8
 #include "texel_rgba8_shader.h"
 #endif
+#ifdef CONSUMER_TEXEL_FORMATS
+#include "texel_format_shaders.h"
+#endif
 #include "storage_width_shaders.h"
 #include "sync_shaders.h"
 #include "ps5log.h"
@@ -57,6 +60,263 @@ static int parse_is_continuous(void)
 }
 
 #include "physical_device_contract.h"
+
+#ifdef CONSUMER_TEXEL_FORMATS
+enum texel_shader_class { TEXEL_FLOAT, TEXEL_UINT, TEXEL_SINT };
+
+struct texel_format_case {
+    VkFormat format;
+    const char *name;
+    enum texel_shader_class shader_class;
+    uint32_t bytes_per_texel;
+    uint32_t raw[4];
+    uint32_t expected[4];
+};
+
+#define F0 UINT32_C(0x00000000)
+#define F1 UINT32_C(0x3f800000)
+#define FN1 UINT32_C(0xbf800000)
+#define FH UINT32_C(0x3f000000)
+#define F2 UINT32_C(0x40000000)
+#define FN2 UINT32_C(0xc0000000)
+
+static const struct texel_format_case texel_format_cases[] = {
+    {VK_FORMAT_R8_UNORM,"r8_unorm",TEXEL_FLOAT,1,{0xff},{F1,F0,F0,F1}},
+    {VK_FORMAT_R8_SNORM,"r8_snorm",TEXEL_FLOAT,1,{0x81},{FN1,F0,F0,F1}},
+    {VK_FORMAT_R8G8_UNORM,"r8g8_unorm",TEXEL_FLOAT,2,{0xffff},{F1,F1,F0,F1}},
+    {VK_FORMAT_R8G8_SNORM,"r8g8_snorm",TEXEL_FLOAT,2,{0x7f81},{FN1,F1,F0,F1}},
+    {VK_FORMAT_R8G8B8A8_UNORM,"r8g8b8a8_unorm",TEXEL_FLOAT,4,{0xff00ff00},{F0,F1,F0,F1}},
+    {VK_FORMAT_R8G8B8A8_SNORM,"r8g8b8a8_snorm",TEXEL_FLOAT,4,{0x7f817f81},{FN1,F1,FN1,F1}},
+    {VK_FORMAT_A8B8G8R8_UNORM_PACK32,"a8b8g8r8_unorm",TEXEL_FLOAT,4,{0xff00ff00},{F0,F1,F0,F1}},
+    {VK_FORMAT_A8B8G8R8_SNORM_PACK32,"a8b8g8r8_snorm",TEXEL_FLOAT,4,{0x7f817f81},{FN1,F1,FN1,F1}},
+    {VK_FORMAT_B10G11R11_UFLOAT_PACK32,"b10g11r11_ufloat",TEXEL_FLOAT,4,{0x882003c0},{F1,F2,UINT32_C(0x40800000),F1}},
+    {VK_FORMAT_R16_UNORM,"r16_unorm",TEXEL_FLOAT,2,{0xffff},{F1,F0,F0,F1}},
+    {VK_FORMAT_R16_SNORM,"r16_snorm",TEXEL_FLOAT,2,{0x8001},{FN1,F0,F0,F1}},
+    {VK_FORMAT_R16_SFLOAT,"r16_sfloat",TEXEL_FLOAT,2,{0x3c00},{F1,F0,F0,F1}},
+    {VK_FORMAT_R16G16_UNORM,"r16g16_unorm",TEXEL_FLOAT,4,{0xffff0000},{F0,F1,F0,F1}},
+    {VK_FORMAT_R16G16_SNORM,"r16g16_snorm",TEXEL_FLOAT,4,{0x7fff8001},{FN1,F1,F0,F1}},
+    {VK_FORMAT_R16G16_SFLOAT,"r16g16_sfloat",TEXEL_FLOAT,4,{0xc0003800},{FH,FN2,F0,F1}},
+    {VK_FORMAT_R16G16B16A16_UNORM,"r16g16b16a16_unorm",TEXEL_FLOAT,8,{0xffff0000,0xffff0000},{F0,F1,F0,F1}},
+    {VK_FORMAT_R16G16B16A16_SNORM,"r16g16b16a16_snorm",TEXEL_FLOAT,8,{0x7fff8001,0x7fff8001},{FN1,F1,FN1,F1}},
+    {VK_FORMAT_R16G16B16A16_SFLOAT,"r16g16b16a16_sfloat",TEXEL_FLOAT,8,{0x3c003800,0xc0004000},{FH,F1,F2,FN2}},
+    {VK_FORMAT_R32_SFLOAT,"r32_sfloat",TEXEL_FLOAT,4,{FH},{FH,F0,F0,F1}},
+    {VK_FORMAT_R32G32_SFLOAT,"r32g32_sfloat",TEXEL_FLOAT,8,{FH,FN2},{FH,FN2,F0,F1}},
+    {VK_FORMAT_R32G32B32A32_SFLOAT,"r32g32b32a32_sfloat",TEXEL_FLOAT,16,{FH,F1,F2,FN2},{FH,F1,F2,FN2}},
+    {VK_FORMAT_R8_UINT,"r8_uint",TEXEL_UINT,1,{0xab},{0xab,0,0,1}},
+    {VK_FORMAT_R8_SINT,"r8_sint",TEXEL_SINT,1,{0x81},{UINT32_C(0xffffff81),0,0,1}},
+    {VK_FORMAT_R8G8_UINT,"r8g8_uint",TEXEL_UINT,2,{0x3412},{0x12,0x34,0,1}},
+    {VK_FORMAT_R8G8_SINT,"r8g8_sint",TEXEL_SINT,2,{0x7f81},{UINT32_C(0xffffff81),0x7f,0,1}},
+    {VK_FORMAT_R8G8B8A8_UINT,"r8g8b8a8_uint",TEXEL_UINT,4,{0x78563412},{0x12,0x34,0x56,0x78}},
+    {VK_FORMAT_R8G8B8A8_SINT,"r8g8b8a8_sint",TEXEL_SINT,4,{0x7f0181ff},{UINT32_C(0xffffffff),UINT32_C(0xffffff81),1,0x7f}},
+    {VK_FORMAT_A8B8G8R8_UINT_PACK32,"a8b8g8r8_uint",TEXEL_UINT,4,{0x78563412},{0x12,0x34,0x56,0x78}},
+    {VK_FORMAT_A8B8G8R8_SINT_PACK32,"a8b8g8r8_sint",TEXEL_SINT,4,{0x7f0181ff},{UINT32_C(0xffffffff),UINT32_C(0xffffff81),1,0x7f}},
+    {VK_FORMAT_R16_UINT,"r16_uint",TEXEL_UINT,2,{0x1234},{0x1234,0,0,1}},
+    {VK_FORMAT_R16_SINT,"r16_sint",TEXEL_SINT,2,{0x8001},{UINT32_C(0xffff8001),0,0,1}},
+    {VK_FORMAT_R16G16_UINT,"r16g16_uint",TEXEL_UINT,4,{0x56781234},{0x1234,0x5678,0,1}},
+    {VK_FORMAT_R16G16_SINT,"r16g16_sint",TEXEL_SINT,4,{0x7fff8001},{UINT32_C(0xffff8001),0x7fff,0,1}},
+    {VK_FORMAT_R16G16B16A16_UINT,"r16g16b16a16_uint",TEXEL_UINT,8,{0x56781234,0xdef09abc},{0x1234,0x5678,0x9abc,0xdef0}},
+    {VK_FORMAT_R16G16B16A16_SINT,"r16g16b16a16_sint",TEXEL_SINT,8,{0x7fff8001,0x0002fffe},{UINT32_C(0xffff8001),0x7fff,UINT32_C(0xfffffffe),2}},
+    {VK_FORMAT_R32_UINT,"r32_uint",TEXEL_UINT,4,{0x12345678},{0x12345678,0,0,1}},
+    {VK_FORMAT_R32_SINT,"r32_sint",TEXEL_SINT,4,{0x81234567},{0x81234567,0,0,1}},
+    {VK_FORMAT_R32G32_UINT,"r32g32_uint",TEXEL_UINT,8,{0x12345678,0x9abcdef0},{0x12345678,0x9abcdef0,0,1}},
+    {VK_FORMAT_R32G32_SINT,"r32g32_sint",TEXEL_SINT,8,{0x81234567,0x12345678},{0x81234567,0x12345678,0,1}},
+    {VK_FORMAT_R32G32B32A32_UINT,"r32g32b32a32_uint",TEXEL_UINT,16,{1,2,3,4},{1,2,3,4}},
+    {VK_FORMAT_R32G32B32A32_SINT,"r32g32b32a32_sint",TEXEL_SINT,16,{UINT32_C(0xffffffff),2,UINT32_C(0xfffffffd),4},{UINT32_C(0xffffffff),2,UINT32_C(0xfffffffd),4}},
+};
+
+static void run_texel_format_matrix(VkPhysicalDevice physical, VkDevice device,
+                                    VkQueue queue)
+{
+    enum { CASE_COUNT = sizeof(texel_format_cases) / sizeof(texel_format_cases[0]),
+           OUTPUT_STRIDE = 256, INPUT_STRIDE = 16 };
+    ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_TEXEL_FORMATS_START cases=%u",
+                  (unsigned)CASE_COUNT);
+
+    const uint32_t *shader_words[3] = {consumer_texel_float_spirv,
+        consumer_texel_uint_spirv, consumer_texel_sint_spirv};
+    const size_t shader_sizes[3] = {sizeof(consumer_texel_float_spirv),
+        sizeof(consumer_texel_uint_spirv), sizeof(consumer_texel_sint_spirv)};
+    VkShaderModule modules[3] = {VK_NULL_HANDLE};
+    for (unsigned i = 0; i < 3; ++i) {
+        VkShaderModuleCreateInfo shader_info = {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = shader_sizes[i], .pCode = shader_words[i],
+        };
+        CHECK(vkCreateShaderModule(device, &shader_info, NULL, &modules[i]));
+    }
+    VkDescriptorSetLayoutBinding bindings[2] = {
+        {0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL},
+        {1,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL},
+    };
+    VkDescriptorSetLayoutCreateInfo set_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 2, .pBindings = bindings,
+    };
+    VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
+    CHECK(vkCreateDescriptorSetLayout(device, &set_info, NULL, &set_layout));
+    VkPipelineLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1, .pSetLayouts = &set_layout,
+    };
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+    CHECK(vkCreatePipelineLayout(device, &layout_info, NULL, &pipeline_layout));
+    VkPipeline pipelines[3] = {VK_NULL_HANDLE};
+    for (unsigned i = 0; i < 3; ++i) {
+        VkComputePipelineCreateInfo pipeline_info = {
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                      .module = modules[i], .pName = "main"},
+            .layout = pipeline_layout,
+        };
+        CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipeline_info,
+                                       NULL, &pipelines[i]));
+    }
+
+    VkBufferCreateInfo buffer_info = {.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size=CASE_COUNT*OUTPUT_STRIDE,.usage=VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
+    VkBuffer output = VK_NULL_HANDLE, input = VK_NULL_HANDLE;
+    CHECK(vkCreateBuffer(device, &buffer_info, NULL, &output));
+    buffer_info.size = CASE_COUNT*INPUT_STRIDE;
+    buffer_info.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+    CHECK(vkCreateBuffer(device, &buffer_info, NULL, &input));
+    VkMemoryRequirements output_req, input_req;
+    vkGetBufferMemoryRequirements(device, output, &output_req);
+    vkGetBufferMemoryRequirements(device, input, &input_req);
+    VkMemoryAllocateInfo allocation = {.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=output_req.size,.memoryTypeIndex=0};
+    VkDeviceMemory output_memory = VK_NULL_HANDLE, input_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &allocation, NULL, &output_memory));
+    allocation.allocationSize = input_req.size;
+    CHECK(vkAllocateMemory(device, &allocation, NULL, &input_memory));
+    CHECK(vkBindBufferMemory(device, output, output_memory, 0));
+    CHECK(vkBindBufferMemory(device, input, input_memory, 0));
+    uint8_t *input_map = NULL, *output_map = NULL;
+    CHECK(vkMapMemory(device, input_memory, 0, input_req.size, 0, (void **)&input_map));
+    CHECK(vkMapMemory(device, output_memory, 0, output_req.size, 0, (void **)&output_map));
+    memset(input_map, 0xa5, (size_t)input_req.size);
+    for (unsigned i = 0; i < CASE_COUNT; ++i)
+        memcpy(input_map + i*INPUT_STRIDE, texel_format_cases[i].raw,
+               texel_format_cases[i].bytes_per_texel);
+    for (size_t i = 0; i < output_req.size/sizeof(uint32_t); ++i)
+        ((uint32_t *)output_map)[i] = UINT32_C(0xdeadbeef);
+    VkMappedMemoryRange flushes[2] = {
+        {.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=input_memory,.offset=0,.size=VK_WHOLE_SIZE},
+        {.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=output_memory,.offset=0,.size=VK_WHOLE_SIZE},
+    };
+    CHECK(vkFlushMappedMemoryRanges(device, 2, flushes));
+
+    VkDescriptorPoolSize pool_sizes[2] = {
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,CASE_COUNT},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,CASE_COUNT},
+    };
+    VkDescriptorPoolCreateInfo pool_info = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets=CASE_COUNT,.poolSizeCount=2,.pPoolSizes=pool_sizes};
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    CHECK(vkCreateDescriptorPool(device, &pool_info, NULL, &descriptor_pool));
+    VkDescriptorSetLayout layouts[CASE_COUNT];
+    VkDescriptorSet sets[CASE_COUNT];
+    VkBufferView views[CASE_COUNT];
+    for (unsigned i = 0; i < CASE_COUNT; ++i) {
+        layouts[i] = set_layout; sets[i] = VK_NULL_HANDLE; views[i] = VK_NULL_HANDLE;
+    }
+    VkDescriptorSetAllocateInfo set_allocation = {
+        .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool=descriptor_pool,.descriptorSetCount=CASE_COUNT,
+        .pSetLayouts=layouts};
+    CHECK(vkAllocateDescriptorSets(device, &set_allocation, sets));
+    VkDescriptorBufferInfo output_descriptor = {output,0,16};
+    for (unsigned i = 0; i < CASE_COUNT; ++i) {
+        VkFormatProperties properties;
+        vkGetPhysicalDeviceFormatProperties(physical,texel_format_cases[i].format,&properties);
+        REQUIRE(properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT,
+                "qualified texel format must be reported");
+        VkBufferViewCreateInfo view_info = {.sType=VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+            .buffer=input,.format=texel_format_cases[i].format,
+            .offset=i*INPUT_STRIDE,.range=texel_format_cases[i].bytes_per_texel};
+        CHECK(vkCreateBufferView(device,&view_info,NULL,&views[i]));
+        VkWriteDescriptorSet writes[2] = {
+            {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=sets[i],.dstBinding=0,
+             .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+             .pBufferInfo=&output_descriptor},
+            {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=sets[i],.dstBinding=1,
+             .descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+             .pTexelBufferView=&views[i]},
+        };
+        vkUpdateDescriptorSets(device,2,writes,0,NULL);
+    }
+
+    VkCommandPoolCreateInfo command_pool_info = {.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex=0};
+    VkCommandPool command_pool = VK_NULL_HANDLE;
+    CHECK(vkCreateCommandPool(device,&command_pool_info,NULL,&command_pool));
+    VkCommandBufferAllocateInfo command_allocation = {
+        .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,.commandPool=command_pool,
+        .level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    CHECK(vkAllocateCommandBuffers(device,&command_allocation,&command));
+    VkCommandBufferBeginInfo begin_info = {.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    CHECK(vkBeginCommandBuffer(command,&begin_info));
+    for (unsigned i = 0; i < CASE_COUNT; ++i) {
+        uint32_t dynamic_offset = i*OUTPUT_STRIDE;
+        vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_COMPUTE,
+                          pipelines[texel_format_cases[i].shader_class]);
+        vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline_layout,
+                                0,1,&sets[i],1,&dynamic_offset);
+        vkCmdDispatch(command,1,1,1);
+    }
+    CHECK(vkEndCommandBuffer(command));
+    VkFenceCreateInfo fence_info = {.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence fence = VK_NULL_HANDLE;
+    CHECK(vkCreateFence(device,&fence_info,NULL,&fence));
+    VkSubmitInfo submit = {.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount=1,.pCommandBuffers=&command};
+    CHECK(vkQueueSubmit(queue,1,&submit,fence));
+    CHECK(vkWaitForFences(device,1,&fence,VK_TRUE,UINT64_C(5000000000)));
+    VkMappedMemoryRange invalidate = {.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory=output_memory,.offset=0,.size=VK_WHOLE_SIZE};
+    CHECK(vkInvalidateMappedMemoryRanges(device,1,&invalidate));
+    unsigned total_mismatches = 0;
+    const char *class_names[3] = {"float","uint","sint"};
+    for (unsigned i = 0; i < CASE_COUNT; ++i) {
+        const uint32_t *actual = (const uint32_t *)(output_map+i*OUTPUT_STRIDE);
+        unsigned mismatches = 0;
+        for (unsigned c = 0; c < 4; ++c)
+            mismatches += actual[c] != texel_format_cases[i].expected[c];
+        for (unsigned c = 4; c < OUTPUT_STRIDE/sizeof(uint32_t); ++c)
+            mismatches += actual[c] != UINT32_C(0xdeadbeef);
+        total_mismatches += mismatches;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CONSUMER_TEXEL_FORMAT_CASE index=%u name=%s class=%s bytes=%u "
+            "expected=%08x,%08x,%08x,%08x actual=%08x,%08x,%08x,%08x mismatches=%u",
+            i,texel_format_cases[i].name,class_names[texel_format_cases[i].shader_class],
+            texel_format_cases[i].bytes_per_texel,
+            texel_format_cases[i].expected[0],texel_format_cases[i].expected[1],
+            texel_format_cases[i].expected[2],texel_format_cases[i].expected[3],
+            actual[0],actual[1],actual[2],actual[3],mismatches);
+    }
+    REQUIRE(total_mismatches == 0,"uniform texel format matrix oracle");
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_TEXEL_FORMATS_SUCCESS cases=%u components=%u mismatches=0 guard_mismatches=0",
+        (unsigned)CASE_COUNT,(unsigned)(CASE_COUNT*4));
+
+    vkDestroyFence(device,fence,NULL);
+    vkFreeCommandBuffers(device,command_pool,1,&command);
+    vkDestroyCommandPool(device,command_pool,NULL);
+    for (unsigned i = 0; i < CASE_COUNT; ++i) vkDestroyBufferView(device,views[i],NULL);
+    vkDestroyDescriptorPool(device,descriptor_pool,NULL);
+    vkUnmapMemory(device,input_memory); vkUnmapMemory(device,output_memory);
+    vkDestroyBuffer(device,input,NULL); vkDestroyBuffer(device,output,NULL);
+    vkFreeMemory(device,input_memory,NULL); vkFreeMemory(device,output_memory,NULL);
+    for (unsigned i = 0; i < 3; ++i) {
+        vkDestroyPipeline(device,pipelines[i],NULL);
+        vkDestroyShaderModule(device,modules[i],NULL);
+    }
+    vkDestroyPipelineLayout(device,pipeline_layout,NULL);
+    vkDestroyDescriptorSetLayout(device,set_layout,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_CONSUMER_TEXEL_FORMATS_RETIRED");
+}
+#endif
 
 static void run_buffer_transfer_contract(VkDevice device, VkQueue queue)
 {
@@ -1380,7 +1640,8 @@ static void run_runtime_compute(VkPhysicalDevice physical, VkDevice device, VkQu
     vkDestroyShaderModule(device, comp_module, NULL);
 }
 
-static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
+static void run_consumer(VkPhysicalDevice physical, VkDevice device, VkQueue queue,
+                         int is_continuous)
 {
     ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_GRAPHICS_START mode=%s", is_continuous ? "continuous" : "finite");
 
@@ -2005,6 +2266,11 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
     vkDestroyShaderModule(device, vs_module, NULL);
     vkDestroyShaderModule(device, fs_module, NULL);
 
+#ifdef CONSUMER_TEXEL_FORMATS
+    run_texel_format_matrix(physical,device,queue);
+#else
+    (void)physical;
+#endif
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_TEST_SUCCESS");
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1");
     ps5log_line(PS5LOG_MARK, "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
@@ -2136,7 +2402,7 @@ int main(void)
     if(!is_continuous)run_sampled_sets(device,queue);
 
     /* 7. Run runtime procedural graphics and presentation */
-    run_consumer(device, queue, is_continuous);
+    run_consumer(physical_device, device, queue, is_continuous);
 
     vkDestroyPipelineCache(device, pipeline_cache, NULL);
 

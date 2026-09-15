@@ -70,6 +70,8 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--texel-rgba8", action="store_true",
                         help="Require the RGBA8 uniform-texel-buffer witness markers")
+    parser.add_argument("--texel-formats", action="store_true",
+                        help="Require the complete typed uniform-texel format witness")
     args = parser.parse_args()
 
     if running(args.host) != "none":
@@ -84,7 +86,8 @@ def main() -> int:
         receipt = json.loads(log.with_suffix(".json").read_text())
         artifact = json.loads(args.artifact.read_text())
         result = validate(log.read_bytes(), receipt, artifact,
-                          texel_rgba8=args.texel_rgba8)
+                          texel_rgba8=args.texel_rgba8,
+                          texel_formats=args.texel_formats)
         result["source_log"] = str(log)
         result["strict_verified"] = True
     finally:

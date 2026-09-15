@@ -1,0 +1,42 @@
+#version 450
+
+/* Direct uniform-texel-buffer qualification shader.
+ *
+ * The build emits three modules from this source.  Each module fetches one
+ * texel and writes all four completed components as raw 32-bit words.  The
+ * host oracle therefore observes format conversion, component order and the
+ * Vulkan completion values independently; no rendered image is involved.
+ */
+layout(local_size_x=1) in;
+layout(set=0,binding=0,std430) writeonly buffer Output { uint values[]; } dst;
+
+#if defined(TEXEL_UINT)
+layout(set=0,binding=1) uniform usamplerBuffer lookup_table;
+#elif defined(TEXEL_SINT)
+layout(set=0,binding=1) uniform isamplerBuffer lookup_table;
+#else
+layout(set=0,binding=1) uniform samplerBuffer lookup_table;
+#endif
+
+void main()
+{
+#if defined(TEXEL_UINT)
+    uvec4 value=texelFetch(lookup_table,0);
+    dst.values[0]=value.x;
+    dst.values[1]=value.y;
+    dst.values[2]=value.z;
+    dst.values[3]=value.w;
+#elif defined(TEXEL_SINT)
+    ivec4 value=texelFetch(lookup_table,0);
+    dst.values[0]=uint(value.x);
+    dst.values[1]=uint(value.y);
+    dst.values[2]=uint(value.z);
+    dst.values[3]=uint(value.w);
+#else
+    vec4 value=texelFetch(lookup_table,0);
+    dst.values[0]=floatBitsToUint(value.x);
+    dst.values[1]=floatBitsToUint(value.y);
+    dst.values[2]=floatBitsToUint(value.z);
+    dst.values[3]=floatBitsToUint(value.w);
+#endif
+}
