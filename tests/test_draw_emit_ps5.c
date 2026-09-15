@@ -1,7 +1,7 @@
 #include "draw_emit_ps5.h"
 #include "ps5_platform.h"
 #include <assert.h>
-static unsigned calls;
+static unsigned calls, index_calls;
 static uint32_t *indirect(void *opaque, const void *r, uint32_t count)
 {
     struct ps5_agc_command_buffer *w = opaque; assert(r && count); ++calls;
@@ -27,6 +27,7 @@ static uint32_t *draw_index(void *opaque,uint32_t n,const void *address,uint64_t
 {
     struct ps5_agc_command_buffer *w=opaque;
     assert(n==6 && (uintptr_t)address==0x12340000 && modifier==5);++calls;
+    ++index_calls;
     assert(w->top-w->up==6);
     for(unsigned i=0;i<6;++i)*w->up++=i;
     return w->up;
@@ -109,20 +110,69 @@ int main(void)
     state.sh_count=10;cursor=commands;calls=0;
     assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)==VK_SUCCESS);
     assert(commands[5]==11 && commands[6]==13);
-    /* The integer vertex-format probe uses the real runtime vertex-table ABI
-     * but deliberately isolates it from the still-unsupported combination of
-     * runtime shaders with indexed emission. */
-    state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=3,.fragment_count=2,
+    /* The integer vertex-format probe uses the real runtime vertex-table ABI. */
+    const struct ps5vk_runtime_draw_abi vertex_format_abi={.enabled=1,.vertex_count=3,.fragment_count=2,
         .base_vertex_slot=1,.start_instance_slot=UINT32_MAX,
         .vertex_buffer_valid=1,.vertex_buffer_slot=0,.vertex_buffer_usage_mask=1,.lds_slot=2,.lds_value=0,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
+    state.runtime=vertex_format_abi;
     cursor=commands;calls=0;op.type=PS5VK_DRAW;op.instance_count=1;op.first_vertex=0;
     assert(ps5vk_native_emit_vertex_draw(&cursor,64,&state,&state,sizeof(state),&op,
         0x123400,0x567800)==VK_SUCCESS && cursor>commands && calls);
-    cursor=commands;calls=0;op.type=PS5VK_DRAW_INDEXED;op.index_count=6;
+    /* An indexed draw on the runtime path is the combination the emitter used
+     * to refuse outright. It now runs through the same prepared vertex table
+     * and the same index emitter as the offline path, so what this pins at the
+     * packet level is the shader-visible contract: the compiler-declared
+     * base-vertex slot carries the signed vertexOffset (-2, two's complement)
+     * and the start-instance slot keeps its own word, while the vertex index
+     * still comes from the fetched index buffer instead of a DrawIndexAuto. */
+    const struct ps5vk_runtime_draw_abi indexed_abi={.enabled=1,.vertex_count=4,.fragment_count=2,
+        .base_vertex_slot=2,.start_instance_slot=3,
+        .vertex_buffer_valid=1,.vertex_buffer_slot=0,.vertex_buffer_usage_mask=1,.lds_slot=1,.lds_value=0,
+        .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
+    const uint32_t no_tables[4]={0,0,0,0};
+    state.runtime=indexed_abi;
+    cursor=commands;calls=0;index_calls=0;op.type=PS5VK_DRAW_INDEXED;op.index_count=6;
+    op.vertex_offset=-2;op.first_instance=3;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,no_tables,&indices,draw_index)==VK_SUCCESS && calls==6 && index_calls==1);
+    assert(cursor==commands+24);
+    assert(commands[3]==0x8c && commands[4]==4);
+    assert(commands[5]==0x567800 && commands[6]==0);
+    assert(commands[7]==UINT32_MAX-1 && commands[8]==3);
+    assert(commands[13]==0xc0002f00 && commands[14]==1);
+    assert(commands[15]==0xc0017a00 && commands[16]==0x20000243 && commands[17]==0);
+    for(unsigned i=0;i<6;++i)assert(commands[18+i]==i);
+    /* Fail-closed fetch shapes. The batch is already several packets long when
+     * the index emitter looks at the fetch, so the emitter's contract is the
+     * one that matters: the caller's cursor only advances on full success (it
+     * discards the whole unsubmitted batch otherwise) and the index callback
+     * never runs. Partial words in the discarded batch are expected. */
+    struct ps5vk_index_fetch bad=indices;
+    cursor=commands;calls=0;index_calls=0;bad.element_bytes=3;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,no_tables,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
+    bad=indices;bad.address=0x12340001;cursor=commands;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,no_tables,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
+    bad=indices;bad.available_count=5;cursor=commands;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,no_tables,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
+    /* Without the audited index callback the combination is refused before a
+     * single word is written. */
+    cursor=commands;calls=0;index_calls=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,no_tables,&indices,NULL)!=VK_SUCCESS && cursor==commands && !calls);
+    /* The offline entry point shares that emitter, so the same malformed fetch
+     * is refused there without advancing its caller either. */
+    cursor=commands;
     assert(ps5vk_native_emit_indexed_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x123400,0x567800,&indices,draw_index)==VK_ERROR_FEATURE_NOT_PRESENT);
-    assert(cursor==commands && !calls);
+        0x123400,0x567800,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
+    /* Vulkan zero-count draws still have no rasterization side effects. */
+    op.index_count=0;cursor=commands;calls=0;index_calls=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0x567800,no_tables,&indices,draw_index)==VK_SUCCESS && cursor==commands && !calls);
+    op.index_count=6;state.runtime=vertex_format_abi;
     op.type=PS5VK_DRAW;state.runtime.fragment_descriptor_valid[0]=1;
     state.runtime.fragment_descriptor_slot[0]=0;
     cursor=commands;calls=0;

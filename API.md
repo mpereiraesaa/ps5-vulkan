@@ -64,8 +64,10 @@ mean the driver advertises them; the reported device version remains Vulkan
   need not be bound. Separate-buffer, sparse, odd-offset and specialization/cache
   hardware witnesses are documented in [VERTEX_INPUT.md](VERTEX_INPUT.md).
   Instance-rate and zero-stride input remain unsupported.
-  Runtime-shader indexed draws remain a separate unsupported combination;
-  indexed draws remain available through the audited offline-program path.
+  Runtime-shader indexed draws are emitted through the same prepared vertex
+  table and the same index emitter as the audited offline-program path, whose
+  indexed support is the one with a hardware witness. The runtime combination
+  has no native witness of its own yet, so this list does not claim it.
 - Indexed and non-indexed draws. Index buffers support `uint16` and `uint32`,
   including offsets and signed base vertex.
 - One viewport and scissor, supplied statically at pipeline creation or through
