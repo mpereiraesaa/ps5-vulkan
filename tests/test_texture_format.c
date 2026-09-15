@@ -180,6 +180,33 @@ int main(void)
     assert(!ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_SRGB_PACK32,
                                      PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
 
+    /* --- one-byte rows: uniform texel buffer implemented, not witnessed ----
+     * Same staging rule as the four-byte families: the role is implemented
+     * because the descriptor path derives the GFX10 combined word and the
+     * completion from the row and takes a one-byte element stride from
+     * bytes_per_texel, and it stays unwitnessed because no console fetch has
+     * covered a sub-4-byte element yet. Nothing user-visible changes: the
+     * reported bufferFeatures bit stays off and creation stays refused
+     * (asserted in tests/test_vk_memory.c). */
+    const VkFormat r8_texel[] = {
+        VK_FORMAT_R8_UNORM, VK_FORMAT_R8_SNORM, VK_FORMAT_R8_UINT, VK_FORMAT_R8_SINT,
+    };
+    const uint32_t r8_texel_words[] = {1u, 2u, 5u, 6u};
+    for (unsigned i = 0; i < sizeof(r8_texel) / sizeof(r8_texel[0]); ++i) {
+        const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(r8_texel[i]);
+        VkFormatProperties r8_properties;
+        assert(entry && entry->bytes_per_texel == 1);
+        assert(ps5vk_texture_format_has(r8_texel[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(r8_texel[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        /* 8_UNORM/8_SNORM/8_UINT/8_SINT in the pinned GFX10 format table. */
+        assert(ps5vk_texture_format_gfx10_format(entry) == r8_texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x204));
+        ps5vk_texture_format_properties(r8_texel[i], &r8_properties);
+        assert(!(r8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
