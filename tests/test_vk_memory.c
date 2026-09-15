@@ -223,9 +223,10 @@ static void test_buffer_views(void)
      * rows, the four two-byte R8G8 rows, the five single-component R16 rows and
      * the five two-component R16G16 rows, the five four-component
      * R16G16B16A16 rows and the three two-component R32G32 rows, none of which
-     * has a console fetch for its element shape yet), unknown format,
-     * misaligned offset for that row, another device, and a buffer that was not
-     * created with the uniform-texel-buffer usage. */
+     * has a console fetch for its element shape yet, plus the three
+     * four-component R32G32B32A32 rows), unknown format, misaligned offset for
+     * that row, another device, and a buffer that was not created with the
+     * uniform-texel-buffer usage. */
     const VkFormat refused[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM,
                                 VK_FORMAT_A8B8G8R8_UNORM_PACK32,
                                 VK_FORMAT_A8B8G8R8_SNORM_PACK32,
@@ -248,6 +249,9 @@ static void test_buffer_views(void)
                                 VK_FORMAT_R16G16B16A16_SINT,
                                 VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32_SINT,
                                 VK_FORMAT_R32G32_SFLOAT,
+                                VK_FORMAT_R32G32B32A32_UINT,
+                                VK_FORMAT_R32G32B32A32_SINT,
+                                VK_FORMAT_R32G32B32A32_SFLOAT,
                                 (VkFormat)0x7fffffff};
     for (unsigned i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
         vi.format = refused[i]; vi.offset = 0;

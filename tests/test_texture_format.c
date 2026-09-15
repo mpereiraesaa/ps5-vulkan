@@ -356,6 +356,41 @@ int main(void)
                  VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     }
 
+    /* --- four-component 32-bit rows: same staging rule ---------------------
+     * R32G32B32A32_UINT/SINT/SFLOAT carry a sixteen-byte element with the
+     * (4,5,6,7) completion, so the derived completion word is 0xfac and the
+     * combined GFX10 words are 75/76/77. All three are mandatory
+     * UNIFORM_TEXEL cells in both profiles, so none is a coherence-only row.
+     * The sixteen-byte stride fits the V# stride field (bits 16-29 of word 1,
+     * 0x3fff maximum) and the encoder accepts element sizes up to 16.
+     * Implemented, still unwitnessed: no console fetch of this element shape
+     * exists yet, the published bit stays off and creation stays refused
+     * (asserted in tests/test_vk_memory.c). */
+    const VkFormat r32g32b32a32_texel[] = {
+        VK_FORMAT_R32G32B32A32_UINT, VK_FORMAT_R32G32B32A32_SINT,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
+    };
+    const uint32_t r32g32b32a32_texel_words[] = {75u, 76u, 77u};
+    for (unsigned i = 0;
+         i < sizeof(r32g32b32a32_texel) / sizeof(r32g32b32a32_texel[0]); ++i) {
+        const struct ps5vk_texture_format *entry =
+            ps5vk_texture_format_lookup(r32g32b32a32_texel[i]);
+        VkFormatProperties r32g32b32a32_properties;
+        assert(entry && entry->bytes_per_texel == 16);
+        assert(ps5vk_texture_format_has(r32g32b32a32_texel[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(r32g32b32a32_texel[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        /* 32_32_32_32_UINT/SINT/FLOAT in the pinned GFX10 table. */
+        assert(ps5vk_texture_format_gfx10_format(entry) ==
+               r32g32b32a32_texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0xfac));
+        ps5vk_texture_format_properties(r32g32b32a32_texel[i],
+                                        &r32g32b32a32_properties);
+        assert(!(r32g32b32a32_properties.bufferFeatures &
+                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
