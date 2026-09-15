@@ -171,6 +171,148 @@ static void run_buffer_transfer_contract(VkDevice device, VkQueue queue)
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED");
 }
 
+/* Deterministic hardware oracle for executable secondary command buffers.
+ *
+ * Two identical destination buffers start from the same guard pattern. The
+ * SAME bounded transfer is recorded into two secondaries, but only one of them
+ * is named by vkCmdExecuteCommands. After one submit the executed half must
+ * carry the transfer and the control half must still be untouched guard bytes.
+ *
+ * Nothing but real execution of the named secondary can produce that
+ * difference: the primary records no transfer of its own, the two secondaries
+ * are byte-identical in what they record, and the only asymmetry is which one
+ * the primary names. Public headers only. */
+static void run_secondary_execute_contract(VkDevice device, VkQueue queue)
+{
+    enum { BYTES = 64, GUARD = 0x5au, FILL = 0xa1b2c3d4u };
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_SECONDARY_EXECUTE_START");
+
+    VkBuffer destination[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDeviceMemory memory[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    void *mapped[2] = {NULL, NULL};
+    VkDeviceSize allocated[2] = {0, 0};
+    VkBufferCreateInfo buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = BYTES,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    for (uint32_t j = 0; j < 2; ++j) {
+        CHECK(vkCreateBuffer(device, &buffer_info, NULL, &destination[j]));
+        VkMemoryRequirements requirements;
+        vkGetBufferMemoryRequirements(device, destination[j], &requirements);
+        VkMemoryAllocateInfo allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = requirements.size, .memoryTypeIndex = 0,
+        };
+        CHECK(vkAllocateMemory(device, &allocation, NULL, &memory[j]));
+        CHECK(vkBindBufferMemory(device, destination[j], memory[j], 0));
+        CHECK(vkMapMemory(device, memory[j], 0, requirements.size, 0, &mapped[j]));
+        memset(mapped[j], GUARD, (size_t)requirements.size);
+        allocated[j] = requirements.size;
+        VkMappedMemoryRange flush = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = memory[j], .offset = 0, .size = VK_WHOLE_SIZE,
+        };
+        CHECK(vkFlushMappedMemoryRanges(device, 1, &flush));
+    }
+
+    VkCommandPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = 0,
+    };
+    VkCommandPool pool = VK_NULL_HANDLE;
+    CHECK(vkCreateCommandPool(device, &pool_info, NULL, &pool));
+
+    /* Two secondaries recording the same bounded fill, one per destination. */
+    VkCommandBufferAllocateInfo secondary_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+        .commandBufferCount = 2,
+    };
+    VkCommandBuffer secondary[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    CHECK(vkAllocateCommandBuffers(device, &secondary_info, secondary));
+    for (uint32_t j = 0; j < 2; ++j) {
+        VkCommandBufferInheritanceInfo inheritance = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        };
+        VkCommandBufferBeginInfo begin = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pInheritanceInfo = &inheritance,
+        };
+        CHECK(vkBeginCommandBuffer(secondary[j], &begin));
+        vkCmdFillBuffer(secondary[j], destination[j], 0, 32, FILL);
+        CHECK(vkEndCommandBuffer(secondary[j]));
+    }
+
+    /* The primary records NO transfer of its own: it only names secondary 0. */
+    VkCommandBufferAllocateInfo primary_info = secondary_info;
+    primary_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    primary_info.commandBufferCount = 1;
+    VkCommandBuffer primary = VK_NULL_HANDLE;
+    CHECK(vkAllocateCommandBuffers(device, &primary_info, &primary));
+    VkCommandBufferBeginInfo primary_begin = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    CHECK(vkBeginCommandBuffer(primary, &primary_begin));
+    vkCmdExecuteCommands(primary, 1, &secondary[0]);
+    CHECK(vkEndCommandBuffer(primary));
+
+    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence fence = VK_NULL_HANDLE;
+    CHECK(vkCreateFence(device, &fence_info, NULL, &fence));
+    VkSubmitInfo submit = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &primary,
+    };
+    CHECK(vkQueueSubmit(queue, 1, &submit, fence));
+    CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+
+    for (uint32_t j = 0; j < 2; ++j) {
+        VkMappedMemoryRange invalidate = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = memory[j], .offset = 0, .size = VK_WHOLE_SIZE,
+        };
+        CHECK(vkInvalidateMappedMemoryRanges(device, 1, &invalidate));
+    }
+    const uint8_t *executed = mapped[0];
+    const uint8_t *control = mapped[1];
+    uint32_t executed_mismatch = 0, control_mismatch = 0;
+    for (uint32_t j = 0; j < 32; j += 4)
+        executed_mismatch +=
+            *(const uint32_t *)(const void *)(executed + j) != FILL;
+    for (uint32_t j = 32; j < BYTES; ++j) executed_mismatch += executed[j] != GUARD;
+    for (uint32_t j = 0; j < BYTES; ++j) control_mismatch += control[j] != GUARD;
+
+    /* The named secondary executed and the unnamed one did not. Either half
+     * failing is a failure: an all-guard executed buffer means nothing ran, a
+     * changed control buffer means something ran that was never named. */
+    if (executed_mismatch || control_mismatch) {
+        ps5log_printf(PS5LOG_ERR,
+            "PS5VK_CONSUMER_SECONDARY_EXECUTE_FAILURE executed_mismatches=%u "
+            "control_mismatches=%u", executed_mismatch, control_mismatch);
+        ps5log_close("secondary-execute-verification-failed");
+        exit(1);
+    }
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_SECONDARY_EXECUTE_SUCCESS filled_bytes=32 guard_bytes=32 "
+        "executed_mismatches=0 control_mismatches=0 control_untouched=1 "
+        "executed_hash=%08x control_hash=%08x",
+        fnv1a32(executed, BYTES), fnv1a32(control, BYTES));
+
+    vkDestroyFence(device, fence, NULL);
+    vkDestroyCommandPool(device, pool, NULL);
+    for (uint32_t j = 0; j < 2; ++j) {
+        (void)allocated[j];
+        vkUnmapMemory(device, memory[j]);
+        vkDestroyBuffer(device, destination[j], NULL);
+        vkFreeMemory(device, memory[j], NULL);
+    }
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_SECONDARY_EXECUTE_RETIRED");
+}
+
 static void run_storage_width_compute(VkDevice device, VkQueue queue)
 {
     enum { WIDTH_RUNS = 2, ELEMENTS = 64, BUFFER_BYTES = 4096, DATA_OFFSET = 256 };
@@ -1819,6 +1961,7 @@ int main(void)
     VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
     run_pipeline_cache_contract(device, &pipeline_cache);
     run_buffer_transfer_contract(device, queue);
+    run_secondary_execute_contract(device, queue);
     run_runtime_compute(physical_device, device, queue, pipeline_cache);
 
     /* 5. Run byte- and word-exact 8/16-bit storage-buffer witnesses. */
