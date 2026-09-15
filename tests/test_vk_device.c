@@ -1059,6 +1059,30 @@ static void narrow_storage_features(void)
                                         PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
                                         PS5VK_FEATURE_SHADER_DRAW_PARAMETERS));
     vkDestroyDevice(device, NULL);
+    /* A second ShaderDrawParametersFeatures structure in the same chain is
+     * rejected whatever the two carry. The duplicate rule is a property of the
+     * chain, so it cannot depend on the requested value: FALSE+FALSE,
+     * FALSE+TRUE and TRUE+FALSE are all invalid, exactly like TRUE+TRUE. */
+    {
+        VkPhysicalDeviceShaderDrawParametersFeatures duplicate = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES,
+            .pNext = NULL, .shaderDrawParameters = VK_TRUE};
+        shader_draw_features.pNext = &duplicate;
+        for (unsigned variant = 0; variant < 4; ++variant) {
+            const VkBool32 first = (variant >= 2) ? VK_TRUE : VK_FALSE;
+            const VkBool32 second = (variant % 2) ? VK_TRUE : VK_FALSE;
+            shader_draw_features.shaderDrawParameters = first;
+            duplicate.shaderDrawParameters = second;
+            assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+        }
+        /* The same request through one structure still succeeds, so the
+         * rejection above is the duplicate and not the value. */
+        shader_draw_features.pNext = NULL;
+        shader_draw_features.shaderDrawParameters = VK_TRUE;
+        assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+        assert(device->enabled_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS);
+        vkDestroyDevice(device, NULL);
+    }
     info.enabledExtensionCount = 3;
     info.ppEnabledExtensionNames = extensions;
     shader_draw_features.shaderDrawParameters = 2;

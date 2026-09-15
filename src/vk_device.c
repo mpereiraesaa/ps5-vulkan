@@ -392,6 +392,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES) {
             const VkPhysicalDeviceShaderDrawParametersFeatures *features =
                 (const VkPhysicalDeviceShaderDrawParametersFeatures *)next;
+            /* One structure only, whatever value it carries: the duplicate rule
+             * is about the pNext chain, so it is decided before the value is
+             * interpreted. Setting the flag only for a true request let a second
+             * structure slip through whenever either copy was false, which is
+             * the same fail-closed hole the 8/16-bit branches never had. */
+            if (saw_draw_parameters) return INVALID;
+            saw_draw_parameters = VK_TRUE;
             /* VK_KHR_shader_draw_parameters is how this Vulkan 1.0 profile
              * exposes the 1.1 feature, so a true request is accepted only with
              * the extension enabled; the extension itself is only advertised
@@ -399,8 +406,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             if (!valid_bool(features->shaderDrawParameters)) return INVALID;
             if (features->shaderDrawParameters) {
                 if (!draw_parameters) return VK_ERROR_FEATURE_NOT_PRESENT;
-                if (saw_draw_parameters) return INVALID;
-                saw_draw_parameters = VK_TRUE;
                 enabled_features |= PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;
             }
         } else {
