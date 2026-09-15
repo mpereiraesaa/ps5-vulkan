@@ -118,7 +118,7 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R32G32_SFLOAT, 8, UINT32_C(0x04000000), 4, 5, 0, 1,
             CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R32G32B32A32_SFLOAT, 16, UINT32_C(0x04d00000), 4, 5, 6, 7,
-            CAP_LINEAR | CAP_VERTEX, 0),
+            CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     /* --- typed integer sampled formats (nearest only) --------------------- */
     SAMPLED(VK_FORMAT_R8_UINT, 1, UINT32_C(0x00500000), 4, 0, 0, 1,
             CAP_VERTEX, CAP_UTEXEL),
@@ -152,8 +152,10 @@ static const struct ps5vk_texture_format formats[] = {
             CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R32G32_SINT, 8, UINT32_C(0x03f00000), 4, 5, 0, 1,
             CAP_VERTEX, CAP_UTEXEL),
-    SAMPLED(VK_FORMAT_R32G32B32A32_UINT, 16, UINT32_C(0x04b00000), 4, 5, 6, 7, CAP_VERTEX, 0),
-    SAMPLED(VK_FORMAT_R32G32B32A32_SINT, 16, UINT32_C(0x04c00000), 4, 5, 6, 7, CAP_VERTEX, 0),
+    SAMPLED(VK_FORMAT_R32G32B32A32_UINT, 16, UINT32_C(0x04b00000), 4, 5, 6, 7,
+            CAP_VERTEX, CAP_UTEXEL),
+    SAMPLED(VK_FORMAT_R32G32B32A32_SINT, 16, UINT32_C(0x04c00000), 4, 5, 6, 7,
+            CAP_VERTEX, CAP_UTEXEL),
     /* --- packed sampled formats qualified on 2026-09-14 --------------------
      * `A8B8G8R8_*_PACK32` names the packed form whose R component occupies
      * bits 0-7 (the pinned registry's packed-component order), so its memory
