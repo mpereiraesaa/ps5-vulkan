@@ -9,7 +9,7 @@
   "core_conformance_is_not_enough": {
     "summary": "A driver can satisfy every mandatory core obligation and still fail these consumers, because both depend on optional feature bits, optional extensions and platform integration that core does not require.",
     "examples": [
-      "DXVK requires the VK_KHR_maintenance5 and VK_KHR_maintenance6 extensions, descriptor indexing bits, robustness2, depth clip enable and a 256-byte push constant limit. None of those are core-mandatory obligations, and maintenance5/6 are required by name even though 1.4 promotes them.",
+      "The deliberately pinned DXVK v2.6.2 D3D11 FL11_0 baseline is derived from its immutable Vulkan Profiles document. It requires Vulkan 1.3.204, two named extensions and the exact feature/property set in dxvk_v262_profile.json; requirements from DXVK 3.x are a separate future target.",
       "ParaLLEl-RDP requires 8/16-bit storage access, at least three descriptor sets with UBO and texel-buffer bindings, push constants and specialization constants, and shared-memory/barrier/atomic compute kernels. Core conformance does not imply any of those.",
       "Neither consumer is validated by core CTS results alone; both need their own acceptance runs, and both are named here as targets, not as supported configurations."
     ]
@@ -159,106 +159,64 @@
     },
     {
       "id": "dxvk",
-      "title": "DXVK (D3D9/10/11 translation layer)",
+      "title": "DXVK v2.6.2 (D3D11 feature level 11_0 baseline)",
       "source_id": "dxvk",
       "revision": {
-        "commit": "70d7508c01201ed3d4bfb33da42ba834eafe3857",
-        "tag": "v3.1",
-        "release_published_utc": "2026-08-28T16:23:29Z",
-        "project_version": "3.1.0"
+        "commit": "9d6f54a1ade20d1d27dd421024717a636f3d8c68",
+        "tag": "v2.6.2",
+        "release_published_utc": "2025-06-10T12:02:30Z",
+        "project_version": "2.6.2"
       },
-      "api_version_finding": {
-        "declared_api_version": "1.3.0",
-        "evidence": "src/dxvk/dxvk_instance.h defines DxvkVulkanApiVersion = VK_API_VERSION_1_3 and dxvk_instance.cpp uses it for VkApplicationInfo.apiVersion and the capability warning.",
-        "profile_files": "VP_DXVK_requirements.json ships machine-readable Vulkan Profiles with api-version 1.3.204 and 1.3.224 and capability sets ending at vulkan13requirements; there is no vulkan14requirements capability set at this revision.",
-        "master_check": "The same declaration and the same capability-set names were present on the default branch at retrieval time, so this is not a stale-tag artifact.",
-        "conclusion": "The claim that current DXVK 3.x guidance targets Vulkan 1.4 could not be reproduced from the pinned revision or from the default branch. The reproducible statement is: DXVK requires Vulkan 1.3 plus a named set of extensions and features, some of which 1.4 promotes into core. Implementations must still advertise those extensions by name at this revision."
+      "evidence_basis": "Machine-derived from the pinned VP_DXVK_requirements.json profile. dxvk_v262_profile.json is the exact flattened requirement surface and dxvk_v262_matrix.json is the fail-closed join to the current public API, implementation, CTS mapping and native evidence.",
+      "profile_target": {
+        "id": "VP_DXVK_d3d11_level_11_0_baseline",
+        "api_version": "1.3.204",
+        "requirements": 62,
+        "derivative": "conformance_inventory/dxvk_v262_profile.json",
+        "status_matrix": "conformance_inventory/dxvk_v262_matrix.json"
       },
       "requirements": [
         {
-          "id": "DXVK-001", "classification": "mandatory",
-          "summary": "Vulkan 1.3 core API version, with instance/device creation and 1.1/1.2/1.3 feature chains.",
-          "evidence": "DxvkVulkanApiVersion is VK_API_VERSION_1_3; the device is created with chained feature structs and DXVK fails fast for unsupported required features.",
-          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/src/dxvk/dxvk_instance.h"],
+          "id": "DXVK262-001", "classification": "mandatory",
+          "summary": "Satisfy every requirement derived from VP_DXVK_d3d11_level_11_0_baseline at API version 1.3.204.",
+          "evidence": "The immutable upstream Vulkan Profiles document names six capability sets; tools/derive_dxvk_profile.py flattens them into 62 unique requirements and rejects conflicts or source-identity drift.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v2.6.2/VP_DXVK_requirements.json"],
           "related_requirement_ids": ["VK14-INSTANCE-001", "VK14-INSTANCE-002", "VK14-INSTANCE-006", "VK14-INSTANCE-007", "VK14-INSTANCE-012"],
-          "baseline_observation": "Baseline reports 1.0-style behaviour only; this alone blocks an unmodified DXVK start."
+          "baseline_observation": "The public device currently reports 1.0.0; the fail-closed matrix records this as a witnessed blocker."
         },
         {
-          "id": "DXVK-002", "classification": "mandatory",
-          "summary": "Required extensions: VK_KHR_maintenance5, VK_KHR_maintenance6, VK_KHR_load_store_op_none, VK_EXT_depth_clip_enable, VK_EXT_robustness2.",
-          "evidence": "VP_DXVK_requirements.json capability dxvk_common_required lists exactly these extensions; the code enables the same set (khrLoadStoreOpNone, khrMaintenance5, khrMaintenance6, extDepthClipEnable, extRobustness2).",
-          "references": [
-            "https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json",
-            "https://github.com/doitsujin/dxvk/blob/v3.1/src/dxvk/dxvk_device_info.cpp"
-          ],
-          "related_requirement_ids": ["VK14-EXTENSIONS-001", "VK14-PROMOTED-005"],
-          "baseline_observation": "No extension enumeration or advertisement exists at the baseline."
+          "id": "DXVK262-002", "classification": "mandatory",
+          "summary": "Implement and advertise the 1.0 through 1.3 feature/property chains selected by the pinned profile.",
+          "evidence": "The derivative preserves each originating capability and structure/member name; the matrix joins each leaf independently rather than promoting an entire version from one passing feature.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v2.6.2/VP_DXVK_requirements.json"],
+          "related_requirement_ids": ["VK14-INSTANCE-008", "VK14-PROMOTED-002", "VK14-PROMOTED-003", "VK14-SYNC-008", "VK14-SYNC-009", "VK14-RENDERPASS-007"],
+          "baseline_observation": "Only robustBufferAccess currently satisfies all four matrix axes; every absent or unmeasured leaf remains a blocker."
         },
         {
-          "id": "DXVK-003", "classification": "mandatory",
-          "summary": "Required 1.0/1.1/1.2 feature bits: fragmentStoresAndAtomics, samplerAnisotropy, shaderInt16, shaderSampledImageArrayDynamicIndexing, storageBuffer16BitAccess, shaderDrawParameters, storageBuffer8BitAccess, shaderInt8, descriptorIndexing and its update-after-bind/partially-bound/unused-while-pending/runtime-array variants, nullDescriptor, robustBufferAccess2, depthClipEnable.",
-          "evidence": "Listed in the dxvk_common_required capability set; the same bits are enabled in the device feature list.",
-          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
-          "related_requirement_ids": ["VK14-INSTANCE-008", "VK14-DESCRIPTORS-008", "VK14-SHADERS-004", "VK14-SHADERS-005", "VK14-LIFETIME-003", "VK14-PIPELINES-007"],
-          "baseline_observation": "Several of these bits are documented as unsupported in the current profile."
-        },
-        {
-          "id": "DXVK-004", "classification": "mandatory",
-          "summary": "Vulkan 1.3 capability set: synchronization2, maintenance4, dynamicRendering, pipelineCreationCacheControl, subgroupSizeControl, computeFullSubgroups, inlineUniformBlock, robustImageAccess, shaderTerminateInvocation, shaderZeroInitializeWorkgroupMemory, shaderIntegerDotProduct and shaderDemoteToHelperInvocation.",
-          "evidence": "vulkan13requirements capability set in VP_DXVK_requirements.json.",
-          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
-          "related_requirement_ids": ["VK14-SYNC-009", "VK14-RENDERPASS-007", "VK14-PIPELINES-003", "VK14-PROMOTED-003"],
-          "baseline_observation": "None of these are present in the baseline profile."
-        },
-        {
-          "id": "DXVK-005", "classification": "mandatory",
-          "summary": "Vulkan 1.2 capability set: multiview with minMultiviewViewCount 6 and minMultiviewInstanceIndex 134217727, imagelessFramebuffer, timelineSemaphore with maxTimelineSemaphoreValueDifference 2147483647, hostQueryReset, separateDepthStencilLayouts, uniformBufferStandardLayout, subgroupBroadcastDynamicId, shaderSubgroupExtendedTypes, vulkanMemoryModel, vulkanMemoryModelDeviceScope, bufferDeviceAddress.",
-          "evidence": "vulkan12requirements capability set and its property requirements.",
-          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
-          "related_requirement_ids": ["VK14-PROMOTED-002", "VK14-RESOURCES-012", "VK14-SYNC-008", "VK14-RENDERPASS-007"],
-          "baseline_observation": "Requires the memory model and buffer device address, which are large implementation feasibility areas."
-        },
-        {
-          "id": "DXVK-006", "classification": "mandatory",
-          "summary": "maxPushConstantsSize of at least 256 bytes.",
-          "evidence": "Required property in dxvk_common_required, alongside the 1.3 requirement that the value is at least 256.",
-          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
-          "related_requirement_ids": ["VK14-DESCRIPTORS-003", "VK14-FORMATS-004"],
-          "baseline_observation": "maxPushConstantsSize is 256 and the bounded compute path has native evidence; this does not satisfy the remaining DXVK requirements or establish DXVK compatibility."
-        },
-        {
-          "id": "DXVK-007", "classification": "mandatory",
-          "summary": "D3D11 baseline also requires transform feedback (VK_EXT_transform_feedback) plus geometryShader, imageCubeArray, independentBlend, multiViewport, sampleRateShading, depthClamp, depthBiasClamp, fillModeNonSolid, occlusionQueryPrecise, textureCompressionBC, sparseless feature set.",
-          "evidence": "d3d11_baseline capability set lists VK_EXT_transform_feedback and the enumerated 1.0 feature bits.",
-          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
+          "id": "DXVK262-003", "classification": "mandatory",
+          "summary": "Provide VK_EXT_robustness2 and VK_EXT_transform_feedback plus the D3D11 baseline graphics features, including geometry/tessellation, blending, BC textures, MSAA and precise occlusion queries.",
+          "evidence": "These are the two extensions and the d3d11_baseline/d3d11_level11_0 leaves selected by the pinned profile.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v2.6.2/VP_DXVK_requirements.json"],
           "related_requirement_ids": ["VK14-INSTANCE-008", "VK14-PIPELINES-006", "VK14-PIPELINES-007", "VK14-QUERIES-002"],
-          "baseline_observation": "Transform feedback, cubemaps, blending and multisample rate shading are outside the documented profile."
+          "baseline_observation": "Both required extensions and the listed graphics features remain unadvertised; no API-name presence is treated as semantic support."
         },
         {
-          "id": "DXVK-008", "classification": "optional",
-          "summary": "Level 12_0 optional set adds sparse residency features and samplerFilterMinmax; these matter only for higher D3D feature levels.",
-          "evidence": "d3d11_level12_0 capability set.",
-          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/VP_DXVK_requirements.json"],
-          "related_requirement_ids": ["VK14-RESOURCES-010", "VK14-DESCRIPTORS-008"],
-          "baseline_observation": "Sparse support is absent and correctly unadvertised."
-        },
-        {
-          "id": "DXVK-009", "classification": "conditional",
-          "summary": "Presentation: DXVK is a display-oriented consumer and expects a real swapchain/surface path where it presents.",
-          "evidence": "The presenter uses VK_KHR_swapchain with optional swapchain-maintenance1 alias handling.",
-          "references": ["https://github.com/doitsujin/dxvk/blob/v3.1/src/dxvk/dxvk_presenter.cpp"],
+          "id": "DXVK262-004", "classification": "conditional",
+          "summary": "A display-oriented deployment additionally needs a surface/swapchain bridge or an explicitly maintained ps5vk_present adaptation.",
+          "evidence": "WSI is not part of the Vulkan Profiles baseline file, but DXVK's presenter uses the swapchain path when presenting an application.",
+          "references": ["https://github.com/doitsujin/dxvk/blob/v2.6.2/src/dxvk/dxvk_presenter.cpp"],
           "related_requirement_ids": ["VK14-EXTENSIONS-002"],
-          "baseline_observation": "The baseline has a native VideoOut path but no Vulkan WSI; this row records the gap without requiring a desktop port."
+          "baseline_observation": "ps5vk_present reaches VideoOut, but no Vulkan WSI or stock-DXVK integration contract is claimed."
         }
       ],
       "unmeasured": [
-        "Whether any single gfx1013 configuration can satisfy the whole required feature set at once.",
-        "Cost of descriptor indexing and update-after-bind emulation if the hardware path is narrower.",
-        "Transform feedback and geometry-stage feasibility."
+        "Whether one gfx1013 device configuration can satisfy all 62 profile leaves simultaneously.",
+        "Transform feedback, geometry/tessellation stages, BC textures, MSAA and precise query feasibility.",
+        "Stock DXVK loader/WSI integration versus a maintained native presentation adaptation."
       ],
       "limits": [
-        "No port or compatibility claim is made here.",
-        "The overlay describes DXVK v3.1 exactly; later revisions must be re-pinned and re-read.",
+        "The one currently satisfied matrix row is not a DXVK compatibility claim.",
+        "The overlay describes DXVK v2.6.2 D3D11 FL11_0 baseline exactly; DXVK 3.x/Vulkan 1.4 remains a separate future target.",
         "DXVK itself does not define core Vulkan obligations, so its requirement sets must not be copied into the core inventory as mandatory core rows."
       ]
     }

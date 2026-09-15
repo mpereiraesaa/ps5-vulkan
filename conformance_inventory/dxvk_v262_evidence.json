@@ -1,0 +1,66 @@
+{
+  "schema": "ps5vk-dxvk-evidence/1",
+  "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
+  "capability_probe": {
+    "artifact_sha256": "379b979aee2341a1926c6fc477ee4cb7a0f4758a73e9ba5728be065e85e8899a",
+    "device_api": "1.0.0",
+    "device_extensions": 3,
+    "requirements": 62,
+    "satisfied_ids": [
+      "feature:VkPhysicalDeviceFeatures:robustBufferAccess"
+    ],
+    "runs": [
+      {
+        "id": "20260915T142012757Z_PPSA99994_ps5vk_0xe2a6477d4bc5",
+        "log_sha256": "fa9c2318b38ae2d5c23b3ffcdacdf4a4d0efd54f7a81ad3ece4aa6c1d874236a"
+      },
+      {
+        "id": "20260915T142026363Z_PPSA99994_ps5vk_0xe2a97268c1b8",
+        "log_sha256": "78f5349429318a47b33830ccd555427de355957ffcf733257f17b1daac87600f"
+      }
+    ],
+    "transport": "ps5log/1",
+    "verifier": "tools/verify_dxvk_probe.py"
+  },
+  "requirements": {
+    "api-version:apiVersion": {
+      "native": {
+        "state": "witnessed-blocker",
+        "observed": "1.0.0",
+        "refs": [
+          "VALIDATION.md#vulkan-10-device-reporting-audit-2026-09-13",
+          "examples/native_consumer/physical_device_contract.h"
+        ],
+        "note": "The public native query path reports Vulkan 1.0; this is evidence of the current blocker, not evidence for the 1.3 requirement."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:robustBufferAccess": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.info.device_mandatory_features",
+          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_1_byte",
+          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_1_byte",
+          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_1_byte"
+        ],
+        "refs": [
+          "VALIDATION.md#mandatory-core-feature-reporting",
+          "VALIDATION.md#executable-buffer-robustness"
+        ],
+        "note": "Representative reporting plus executable scalar R32_UINT OOB coverage; this is not every robustness permutation."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260913T183926998Z_PPSA99994_upstream-cts_0x53a3233107e6",
+          "20260913T183952333Z_PPSA99994_upstream-cts_0x53a909315ae1"
+        ],
+        "artifact_sha256": "43dd8803a47028ac5086434771d668e119aa662b4483581e72bc3e7ce571a175",
+        "refs": [
+          "VALIDATION.md#executable-buffer-robustness",
+          "UPSTREAM_CTS.md#executable-robust-buffer-expansion"
+        ]
+      }
+    }
+  }
+}
