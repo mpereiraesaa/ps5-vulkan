@@ -1,12 +1,15 @@
 /* Shader draw-parameter contract pinning (VK_KHR_shader_draw_parameters).
  *
  * This file is deliberately a contract and negative-regression test, not an
- * enablement: the public feature stays false because DrawIndex is still
- * unimplemented - the compiler exports no user-data slot for it and ps5vk has
- * no multi-draw path to give it a real sequence number. What is pinned here is
- * the exact value mapping the pinned upstream CTS requires and the exact gap
- * that keeps the feature unadvertised, so neither can drift silently while the
- * tranche is in progress.
+ * enablement. Delivery is implemented: BaseVertex, BaseInstance and DrawIndex
+ * all reach the compiler-declared slots, with DrawIndex zero because ps5vk
+ * refuses more than one draw per command. The public feature bit stays false
+ * only until the evidence for that supported direct/single-indirect contract
+ * exists - the upstream CTS leaves for those draws and a native witness.
+ * Multi-draw is separate: its CTS leaves are legitimately NotSupported while
+ * multiDrawIndirect is false. What is pinned here is the exact value mapping the
+ * pinned upstream CTS requires and the exact boundary that keeps the feature
+ * unadvertised, so neither can drift silently while the tranche is in progress.
  */
 #include "draw_parameters.h"
 #include "runtime_draw_abi.h"
