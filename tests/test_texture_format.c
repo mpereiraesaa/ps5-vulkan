@@ -391,6 +391,33 @@ int main(void)
                  VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     }
 
+    /* --- packed three-component float row: same staging rule --------------
+     * B10G11R11_UFLOAT_PACK32 is a four-byte element with selectors
+     * (4,5,6,1) - Vulkan's completion for a three-component float format is
+     * (R,G,B,1) - so the derived completion word is 0x3ac and the combined
+     * GFX10 word is 36 (10_11_11_FLOAT). Its mandatory UNIFORM_TEXEL cell is
+     * a blocker in BOTH profiles of formats-mandatory-features-64bit, while
+     * sampled image and linear filtering are already satisfied. Implemented,
+     * still unwitnessed: the published bit stays off and creation stays
+     * refused (asserted in tests/test_vk_memory.c). */
+    {
+        const VkFormat packed_texel_float = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+        const struct ps5vk_texture_format *entry =
+            ps5vk_texture_format_lookup(packed_texel_float);
+        VkFormatProperties packed_texel_float_properties;
+        assert(entry && entry->bytes_per_texel == 4);
+        assert(ps5vk_texture_format_has(packed_texel_float,
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(packed_texel_float,
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_gfx10_format(entry) == 36u);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x3ac));
+        ps5vk_texture_format_properties(packed_texel_float,
+                                        &packed_texel_float_properties);
+        assert(!(packed_texel_float_properties.bufferFeatures &
+                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);

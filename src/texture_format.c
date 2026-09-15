@@ -84,7 +84,7 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32, 4, UINT32_C(0x08400000), 4, 5, 6, 1,
             CAP_LINEAR, 0),
     SAMPLED(VK_FORMAT_B10G11R11_UFLOAT_PACK32, 4, UINT32_C(0x02400000), 4, 5, 6, 1,
-            CAP_LINEAR, 0),
+            CAP_LINEAR, CAP_UTEXEL),
     /* --- 16-bit sampled formats ------------------------------------------
      * The five single-component rows also carry the uniform-texel-buffer role
      * in the IMPLEMENTED column (pending column below). Their GFX10 combined
