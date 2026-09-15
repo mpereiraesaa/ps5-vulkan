@@ -104,6 +104,22 @@ class TestCommandSurfaceDocumentation(unittest.TestCase):
         self.assertNotIn("Secondary allocation is not supported", header)
         self.assertIn("exact subpass", header)
 
+    def test_native_two_subpass_status_cannot_revert_to_host_only(self):
+        """The native witness must move every public status statement with it."""
+        api = (ROOT / "API.md").read_text()
+        validation = (ROOT / "VALIDATION.md").read_text()
+        stale = (
+            "exactly one is **executed**",
+            "Execution stops at one subpass",
+            "no multi-subpass transition executes",
+            "multi-subpass execution and sparse binding retain",
+        )
+        for phrase in stale:
+            self.assertNotIn(phrase, api + validation)
+        self.assertIn("`vkCmdNextSubpass` — supported in a bounded profile",
+                      validation)
+        self.assertIn("PS5VK_CONSUMER_TWO_SUBPASS_SUCCESS", validation)
+
     def test_structural_parity_claims_match_the_parity_gate(self):
         """No document may restate a parity count the audit no longer reports."""
         audit = audit_command_surface(ROOT)
