@@ -146,6 +146,40 @@ int main(void)
     assert(!ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UINT_PACK32,
         PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
 
+    /* --- packed rows: uniform texel buffer implemented but not witnessed ---
+     * The four non-sRGB A8B8G8R8 rows have the R8G8B8A8 memory layout, word
+     * and selectors, so the descriptor path the RGBA8 witness established
+     * encodes them unchanged. They must therefore report the capability as
+     * IMPLEMENTED while still withholding it everywhere a user can see it:
+     * the reported bufferFeatures bit stays off and creation stays refused
+     * (asserted in tests/test_vk_memory.c) until their own console fetch is
+     * recorded. sRGB deliberately has no such role because an sRGB buffer
+     * view needs its own decode contract. */
+    const VkFormat packed_texel[] = {
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32, VK_FORMAT_A8B8G8R8_SINT_PACK32,
+    };
+    const uint32_t packed_texel_words[] = {
+        UINT32_C(56), UINT32_C(57), UINT32_C(60), UINT32_C(61),
+    };
+    for (unsigned i = 0; i < sizeof(packed_texel) / sizeof(packed_texel[0]); ++i) {
+        const struct ps5vk_texture_format *entry =
+            ps5vk_texture_format_lookup(packed_texel[i]);
+        VkFormatProperties packed_properties;
+        assert(entry && entry->bytes_per_texel == 4);
+        assert(ps5vk_texture_format_has(packed_texel[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(packed_texel[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_gfx10_format(entry) == packed_texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0xfac));
+        ps5vk_texture_format_properties(packed_texel[i], &packed_properties);
+        assert(!(packed_properties.bufferFeatures &
+                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+    assert(!ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_SRGB_PACK32,
+                                     PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
