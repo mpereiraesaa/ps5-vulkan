@@ -207,6 +207,32 @@ int main(void)
         assert(!(r8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     }
 
+    /* --- two-byte two-component rows: same staging rule --------------------
+     * R8G8_UNORM/SNORM/UINT/SINT carry a two-byte element with the (4,5,0,1)
+     * completion, so the derived completion word is 0x22C and the combined
+     * GFX10 word is 14/15/18/19. Implemented, still unwitnessed: no console
+     * fetch of a two-byte element exists yet, the published bit stays off and
+     * creation stays refused (asserted in tests/test_vk_memory.c). */
+    const VkFormat r8g8_texel[] = {
+        VK_FORMAT_R8G8_UNORM, VK_FORMAT_R8G8_SNORM,
+        VK_FORMAT_R8G8_UINT, VK_FORMAT_R8G8_SINT,
+    };
+    const uint32_t r8g8_texel_words[] = {14u, 15u, 18u, 19u};
+    for (unsigned i = 0; i < sizeof(r8g8_texel) / sizeof(r8g8_texel[0]); ++i) {
+        const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(r8g8_texel[i]);
+        VkFormatProperties r8g8_properties;
+        assert(entry && entry->bytes_per_texel == 2);
+        assert(ps5vk_texture_format_has(r8g8_texel[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(r8g8_texel[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        /* 8_8_UNORM/8_8_SNORM/8_8_UINT/8_8_SINT in the pinned GFX10 table. */
+        assert(ps5vk_texture_format_gfx10_format(entry) == r8g8_texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x22c));
+        ps5vk_texture_format_properties(r8g8_texel[i], &r8g8_properties);
+        assert(!(r8g8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
