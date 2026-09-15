@@ -6,7 +6,24 @@ import tempfile
 import unittest
 
 from tools.verify_consumer_resource_abi import (
-    APP, SECONDARY_CONTROL_HASH, SECONDARY_EXECUTED_HASH, TITLE, validate)
+    APP, INPASS_CHANGED, INPASS_HASH, SECONDARY_CONTROL_HASH,
+    SECONDARY_EXECUTED_HASH, TITLE, validate)
+
+
+# Secondary execution INSIDE a render pass, as the hardware emitted it. The
+# same triangle reaches the same attachment twice - once through an inherited
+# continuation secondary named by a primary that records no draw of its own,
+# once recorded inline - so the two readbacks are the same image. A second
+# continuation secondary is recorded against the same scope and deliberately
+# never named.
+INPASS_MESSAGES = [
+    "PS5VK_CONSUMER_INPASS_SECONDARY_START",
+    "PS5VK_CONSUMER_INPASS_SECONDARY_SUCCESS named=1 unnamed_recorded=1 "
+    f"executed_changed={INPASS_CHANGED} control_changed={INPASS_CHANGED} "
+    f"bad_alpha=0 bad_sum=0 executed_hash={INPASS_HASH} "
+    f"control_hash={INPASS_HASH}",
+    "PS5VK_CONSUMER_INPASS_SECONDARY_RETIRED",
+]
 
 
 # The executable-secondary scenario as the hardware emitted it. The payload
@@ -120,9 +137,27 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 
 class ConsumerResourceAbiTests(unittest.TestCase):
     def fixture(self, edit=None, sampled=False, shared=False, visibility=None,
-                single=False, mixed=False, secondary=False):
+                single=False, mixed=False, secondary=False, inpass=False):
         sampled = sampled or shared or single or mixed
         messages = list(MESSAGES)
+        if inpass:
+            # The scenario runs after the last finite frame and before the
+            # surface is destroyed, and costs exactly two extra graphics
+            # submissions: the secondary-executed pass and the inline control.
+            last = max(index for index, message in enumerate(messages)
+                       if message.startswith("PS5VK_CONSUMER_READBACK "))
+            serial = 13 + 36
+            extra = []
+            for _ in range(2):
+                extra.extend([
+                    f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
+                    f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
+                    f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0",
+                    f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=8388608",
+                ])
+                serial += 1
+            messages[last + 1:last + 1] = [INPASS_MESSAGES[0]] + extra + \
+                INPASS_MESSAGES[1:]
         if secondary:
             # Executing one named secondary costs exactly two extra compute
             # segments, one for the child and one for the parent that names it,
@@ -585,6 +620,78 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                 messages[index] = messages[index].replace(old, new)
             with self.subTest(old=old), self.assertRaises(ValueError):
                 validate(*self.fixture(secondary=True, edit=edit))
+
+
+    def test_inpass_secondary_witness_is_accepted_and_reported(self):
+        result = validate(*self.fixture(inpass=True))
+        self.assertTrue(result["inpass_secondary_witnessed"])
+        self.assertEqual(result["inpass_secondary_hash_fnv1a32"], INPASS_HASH)
+        self.assertEqual(result["inpass_secondary_changed_pixels"], INPASS_CHANGED)
+        self.assertEqual(result["graphics_submissions_checked"], 38)
+        # A payload without the scenario keeps its own submission count and
+        # reports nothing, so recorded evidence still validates unchanged.
+        older = validate(*self.fixture())
+        self.assertFalse(older["inpass_secondary_witnessed"])
+        self.assertIsNone(older["inpass_secondary_hash_fnv1a32"])
+        self.assertEqual(older["graphics_submissions_checked"], 36)
+
+    def test_inpass_secondary_scenario_cannot_be_half_reported(self):
+        for dropped in INPASS_MESSAGES:
+            def drop(messages, dropped=dropped):
+                messages.remove(dropped)
+            with self.subTest(dropped=dropped.split()[0]), \
+                    self.assertRaises(ValueError):
+                validate(*self.fixture(inpass=True, edit=drop))
+
+    def test_inpass_secondary_requires_the_two_images_to_match(self):
+        # Unequal hashes are what a driver that executed nothing, or that also
+        # executed the deliberately unnamed secondary, would report.
+        for old, new in ((f"executed_hash={INPASS_HASH}", "executed_hash=77abc831"),
+                         (f"control_hash={INPASS_HASH}", "control_hash=77abc831"),
+                         (f"executed_changed={INPASS_CHANGED}", "executed_changed=0"),
+                         (f"control_changed={INPASS_CHANGED}", "control_changed=0")):
+            def edit(messages, old=old, new=new):
+                index = messages.index(INPASS_MESSAGES[1])
+                messages[index] = messages[index].replace(old, new)
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                validate(*self.fixture(inpass=True, edit=edit))
+
+    def test_inpass_secondary_hashes_are_pinned_not_merely_equal(self):
+        # Both sides wrong in the same way still agree with each other; only
+        # the pinned image rules that out. The remaining fields are pinned too.
+        def both(messages):
+            index = messages.index(INPASS_MESSAGES[1])
+            messages[index] = messages[index].replace(INPASS_HASH, "77abc831")
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(inpass=True, edit=both))
+
+        def both_changed(messages):
+            index = messages.index(INPASS_MESSAGES[1])
+            messages[index] = messages[index].replace(
+                str(INPASS_CHANGED), str(INPASS_CHANGED - 1))
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(inpass=True, edit=both_changed))
+
+        for old, new in (("named=1", "named=0"),
+                         ("unnamed_recorded=1", "unnamed_recorded=0"),
+                         ("bad_alpha=0", "bad_alpha=1"),
+                         ("bad_sum=0", "bad_sum=1")):
+            def edit(messages, old=old, new=new):
+                index = messages.index(INPASS_MESSAGES[1])
+                messages[index] = messages[index].replace(old, new)
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                validate(*self.fixture(inpass=True, edit=edit))
+
+    def test_inpass_secondary_witness_must_follow_the_frames(self):
+        # Moved before the last frame readback it would be indistinguishable
+        # from one of the eighteen frames.
+        def hoist(messages):
+            for message in INPASS_MESSAGES:
+                messages.remove(message)
+            at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
+            messages[at:at] = INPASS_MESSAGES
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(inpass=True, edit=hoist))
 
 
 if __name__ == "__main__":

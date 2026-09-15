@@ -23,6 +23,13 @@ APP = "ps5vk"
 SECONDARY_EXECUTED_HASH = "ca327245"
 SECONDARY_CONTROL_HASH = "21a49bc5"
 
+# The in-pass oracle renders the same triangle twice into the same 1920x1080
+# B8G8R8A8 attachment shape, once through an inherited continuation secondary
+# and once inline, so ONE pinned hash and ONE pinned changed-pixel count stand
+# for both readbacks: they must agree with each other and with these values.
+INPASS_HASH = "77abc830"
+INPASS_CHANGED = 471744
+
 
 def validate(log, receipt, artifact, texel_rgba8=False):
     def require(condition, label):
@@ -194,6 +201,35 @@ def validate(log, receipt, artifact, texel_rgba8=False):
                          f"control_hash={SECONDARY_CONTROL_HASH}"):
             require(expected in secondary_fields,
                     f"secondary execute witness missing {expected}")
+    # Secondary execution INSIDE a render pass. The witness is the EQUALITY of
+    # two readbacks of the same triangle - one reached through an inherited
+    # continuation secondary, one recorded inline - so the discriminator fails
+    # in every wrong direction: nothing executed, the deliberately unnamed
+    # secondary executed as well, or either drew something else. Presence-gated
+    # for the same reason as the transfer scenario above: the START marker is
+    # compiled in unconditionally, so a log without it is an older payload
+    # rather than a silent skip, and once it is present the rest is mandatory.
+    inpass_present = bool(matching("PS5VK_CONSUMER_INPASS_SECONDARY_START"))
+    inpass_start = one("PS5VK_CONSUMER_INPASS_SECONDARY_START") if inpass_present else None
+    inpass_witness = one("PS5VK_CONSUMER_INPASS_SECONDARY_SUCCESS ") if inpass_present else None
+    inpass_retired = one("PS5VK_CONSUMER_INPASS_SECONDARY_RETIRED") if inpass_present else None
+    if inpass_present:
+        inpass_fields = inpass_witness[1].split()[1:]
+        for expected in ("named=1", "unnamed_recorded=1", "bad_alpha=0", "bad_sum=0",
+                         f"executed_changed={INPASS_CHANGED}",
+                         f"control_changed={INPASS_CHANGED}",
+                         f"executed_hash={INPASS_HASH}",
+                         f"control_hash={INPASS_HASH}"):
+            require(expected in inpass_fields,
+                    f"in-pass secondary witness missing {expected}")
+        # Stated as its own requirement rather than left implicit in the two
+        # pins: the secondary-executed and inline-recorded results must be the
+        # SAME image, and the pinned value is what that image is.
+        executed = [field for field in inpass_fields if field.startswith("executed_hash=")]
+        control = [field for field in inpass_fields if field.startswith("control_hash=")]
+        require(len(executed) == 1 and len(control) == 1 and
+                executed[0].split("=")[1] == control[0].split("=")[1],
+                "secondary-executed and inline draws produced different images")
     transfer_retired = one("PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED")
     start = one("PS5VK_CONSUMER_COMPUTE_START")
     pipeline = one("PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED")
@@ -273,6 +309,12 @@ def validate(log, receipt, artifact, texel_rgba8=False):
                 "mismatches=0" in texel_witness[1] and
                 "guard_mismatches=0" in texel_witness[1],
                 "RGBA8 texel fetch witness")
+    if inpass_present:
+        # The scenario runs after the last finite frame and before the surface
+        # is destroyed, so it cannot be mistaken for one of the frames.
+        require(readbacks[-1][0] < inpass_start[0] < inpass_witness[0] <
+                inpass_retired[0] < present_destroyed[0],
+                "in-pass secondary witness ordering")
     require(graphics_start[0] > sync_retired[0] and
             graphics_cold[0] < graphics_warm[0] < graphics_cache_release[0] <
             dynamic_pipeline[0] < present_created[0] and
@@ -376,7 +418,9 @@ def validate(log, receipt, artifact, texel_rgba8=False):
     require(graphics_start[1].endswith("mode=finite") and
             dynamic_pipeline[1].endswith("viewport=1 scissor=1"),
             "dynamic fixed-function setup")
-    graphics_count = 40 if sampled is not None else 36
+    # Two extra graphics submissions when the in-pass scenario is present: one
+    # for the secondary-executed pass and one for the inline control.
+    graphics_count = (40 if sampled is not None else 36) + (2 if inpass_present else 0)
     require(all(len(rows) == graphics_count for rows in
                 (graphics_prepared, graphics_submitted,
                  graphics_suspended, graphics_completed)),
@@ -530,6 +574,9 @@ def validate(log, receipt, artifact, texel_rgba8=False):
             SECONDARY_EXECUTED_HASH if secondary_present else None,
         "secondary_control_hash_fnv1a32":
             SECONDARY_CONTROL_HASH if secondary_present else None,
+        "inpass_secondary_witnessed": inpass_present,
+        "inpass_secondary_hash_fnv1a32": INPASS_HASH if inpass_present else None,
+        "inpass_secondary_changed_pixels": INPASS_CHANGED if inpass_present else 0,
         "indirect_dispatches_checked": 1,
         "storage8_elements_checked": 64,
         "storage16_elements_checked": 64,

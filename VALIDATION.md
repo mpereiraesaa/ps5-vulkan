@@ -874,9 +874,10 @@ The following structural slice added all six query commands plus
 prove ordered query reset, the reset-but-unavailable 32/64-bit availability
 layout, preservation of result sentinels, query-pool command lifetime, function
 identity, and no queue/fence mutation on rejected sparse calls. Real occlusion,
-query-result copying, GPU timestamps, multi-subpass execution, secondary
-command buffers and sparse binding remain fail-closed. No new CTS or hardware
-claim is attached to these structural boundaries.
+query-result copying, GPU timestamps, multi-subpass execution and sparse
+binding remain fail-closed. No new CTS or hardware claim is attached to these
+structural boundaries. Secondary command buffers left that list later: they are
+recorded and executed today, in the bounded profile described below.
 
 ## Current capability gap ledger (unsupported, not planned)
 
@@ -907,8 +908,18 @@ drift away from the documents again.
   multisample images remain unsupported.
 - `vkCmdNextSubpass` — unsupported. A render pass accepts one subpass only, so
   no multi-subpass transition executes.
-- `vkCmdExecuteCommands` — unsupported. Secondary command buffers are rejected
-  at allocation, so no secondary execution exists.
+- `vkCmdExecuteCommands` — supported in a bounded profile. A primary executes
+  the secondaries it names, in call order, outside a render pass and inside a
+  render pass begun with `VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS`. The
+  children are never flattened into the primary: outside a pass each is
+  expanded into its own submission segment, and inside one the pass and the
+  children it names are submitted as a single segment because a render pass is
+  a single scope. Both paths are qualified on hardware: execution outside
+  a render pass by the consumer's bounded transfer oracle, and execution inside
+  one by the in-pass draw oracle recorded at the end of this document.
+  Nesting, cross-device children, a child that is neither pending nor
+  executable, a repeated child without simultaneous use and every render-pass
+  scope mismatch stay fail-closed.
 - `vkQueueBindSparse` — unsupported. No queue advertises
   `VK_QUEUE_SPARSE_BINDING_BIT`, and the call fails closed without mutating
   queue, fence or semaphore state.
@@ -969,8 +980,7 @@ from the pinned registry and reports 137/137 public, dispatched and implemented
 symbols with zero asymmetries. That is a structural symbol and dispatch result,
 not a semantic or conformance claim. Unsupported semantics are not counted as
 supported: blit, resolve, attachment clear, real query results, multi-subpass
-execution, secondary command buffers and sparse binding retain explicit
-host-tested fail-closed behavior. `vkCmdClearDepthStencilImage` left that list
+execution and sparse binding retain explicit host-tested fail-closed behavior. `vkCmdClearDepthStencilImage` left that list
 for one bounded shape only, recorded in the section below.
 
 The final image slice adds bounded RGBA8 transfer-role image copy and colour
@@ -1747,3 +1757,78 @@ the builder now lives in the host-tested packet helper where `make check`
 asserts its exact words. Second, the register-probe block is skipped for this
 scenario, because its `COPY_DATA` register reads are unrelated noise for an
 occlusion measurement and previously cost a console round trip on their own.
+
+## Secondary execution inside a render pass (2026-09-15)
+
+### The oracle
+
+The consumer renders the SAME triangle twice into the SAME
+`VK_FORMAT_B8G8R8A8_UNORM` 1920x1080 attachment, with the same pipeline and the
+same dynamic viewport and scissor. The only difference is how the draw reaches
+the pass. The first pass is begun with
+`VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS` and the primary records **no
+draw of its own**: it names one inherited continuation secondary. The second
+records the same draw **inline**. The two readbacks must be identical.
+
+A second continuation secondary is recorded against the same scope with a
+half-height viewport and **never named**. Equality therefore fails in every
+wrong direction: if the named secondary did not execute, the first readback
+keeps only its clear; if the driver also executed the unnamed one, its squashed
+triangle paints pixels the inline result does not have; if either drew
+something else, the images differ. The verifier additionally pins the image, so
+two wrong-but-equal results cannot pass either. Each pass is preceded by a
+sentinel pre-fill that neither the clear nor the draw produces, so a surface
+nothing wrote cannot read as a cleared one, and the second measurement cannot
+be the first one's leftovers.
+
+### Measured result, two identical runs
+
+Artifact `dist-consumer/PPSA99994/eboot.bin` sha256
+`383484e752f2e511d08ebd0e3326683c13c28018c6a69b274ef9d640c577dc8a`, deployed by
+FTP and re-read with SELF conversion disabled with an exact match,
+ShadowMountPlus restarted and verified before each launch.
+
+- `20260915T090900132Z_PPSA99994_ps5vk_0xd1aac7365e07`, log sha256
+  `00ba815d938a5f377798a614168d2fae851d1ae36ef3f3f9d88c1ebfd531fd36`
+- `20260915T090927164Z_PPSA99994_ps5vk_0xd1b112905834`, log sha256
+  `a87e4fc27c2671ba1cf269d043081cc294ea3a5fee1c2c2353c06ba9834a1eee`
+
+Both runs are byte-identical in the witness line:
+
+```
+PS5VK_CONSUMER_INPASS_SECONDARY_SUCCESS named=1 unnamed_recorded=1
+executed_changed=471744 control_changed=471744 bad_alpha=0 bad_sum=0
+executed_hash=77abc830 control_hash=77abc830
+```
+
+Both ended with `BYE seq=506 reason=consumer-finite-end`,
+`zero_tracked_allocations=1` and `resources_retired=1`, and the title was
+confirmed stopped independently. 471744 is exactly the triangle area the
+eighteen-frame readback contract already pins, `1920 * 1080 * 91 / 400`,
+measured independently here.
+
+The log also shows the composition directly: the secondary-executed pass
+records `PS5VK_GRAPHICS_PREPARED serial=55 draws=1` for a primary that recorded
+no draw at all, so that draw reached the backend through the composed segment.
+
+### What this does and does not establish
+
+It establishes that a secondary recorded for render-pass continuation executes
+inside a primary's render pass and produces exactly the image the same draw
+produces inline, on the already qualified one-colour-plus-D32 profile. It does
+not establish multiple subpasses, `vkCmdNextSubpass`, input or resolve
+attachments, multisampling, query inheritance, or any conformance claim.
+
+A zero-body render pass cannot be smuggled in through this path either: a pass
+whose only content names empty secondaries executes nothing, and recording,
+submission and the backend each derive the work that will actually execute
+rather than counting commands. Naming an empty secondary beside one that draws
+stays legal and keeps its place in the order.
+
+One defect is worth recording, because only the console could find it. The
+first version of this scenario rendered the control into the second
+presentation image, and `vkQueueSubmit` refused it with `VK_ERROR_UNKNOWN`
+because that image was still display-busy from the last presented frame. The
+driver was right and the scenario was wrong; both passes now use the same
+attachment, which also makes inline versus secondary the only difference
+between the two measurements.

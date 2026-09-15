@@ -1,19 +1,6 @@
 #include "vk_framebuffer.h"
 #include <string.h>
 
-VkBool32 ps5vk_framebuffer_compatible(VkFramebuffer fb, VkRenderPass pass)
-{
-    if (!fb || !pass || fb->device != pass->device ||
-        fb->attachment_count != pass->attachment_count ||
-        fb->color_attachment != pass->color.attachment || fb->depth_attachment != pass->depth.attachment)
-        return VK_FALSE;
-    for (uint32_t i = 0; i < fb->attachment_count; ++i)
-        if (fb->formats[i] != pass->attachments[i].format || fb->samples[i] != pass->attachments[i].samples)
-            return VK_FALSE;
-    /* Load/store ops and layouts are intentionally not compatibility keys. */
-    return VK_TRUE;
-}
-
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebufferCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkFramebuffer *out)
 {

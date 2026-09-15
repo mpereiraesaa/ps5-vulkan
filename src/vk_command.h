@@ -68,6 +68,12 @@ struct ps5vk_operation {
     VkBufferImageCopy copy_region;
     VkRenderPass render_pass;
     VkFramebuffer framebuffer;
+    /* Contents mode recorded by PS5VK_BEGIN_RENDER_PASS. INLINE means the
+     * pass carries its own draws; SECONDARY_COMMAND_BUFFERS means the only
+     * work inside it is named by vkCmdExecuteCommands. Kept on the operation,
+     * not only on the recording buffer, so submission can re-check the rule
+     * against the immutable record instead of trusting record-time state. */
+    VkSubpassContents render_pass_contents;
     VkRect2D render_area;
     VkViewport viewport;
     VkRect2D scissor;
@@ -122,6 +128,14 @@ struct VkCommandBuffer_T {
     struct ps5vk_vertex_binding vertices[PS5VK_MAX_VERTEX_BINDINGS];
     VkRenderPass render_pass;
     VkFramebuffer framebuffer;
+    /* The active render pass was INHERITED by a continuation secondary rather
+     * than begun here. Draws record against it exactly as they would in a
+     * primary, but this buffer never began it: vkCmdEndRenderPass cannot close
+     * it and vkEndCommandBuffer may end with it still active. */
+    VkBool32 render_pass_inherited;
+    /* Contents mode of the pass this buffer began, meaningless while the pass
+     * is inherited. */
+    VkSubpassContents render_pass_contents;
     VkViewport viewport;
     VkRect2D scissor;
     VkBool32 viewport_valid, scissor_valid;
@@ -157,6 +171,10 @@ struct VkCommandPool_T {
  * slot; success zeroes and types every reserved operation before publishing
  * the new operation_count. */
 void ps5vk_command_invalidate(VkCommandBuffer command);
+/* Vulkan 1.0 render-pass compatibility: matching attachment references,
+ * formats and sample counts. Load/store ops and layouts are deliberately not
+ * compared, and identity is not required. */
+VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b);
 struct ps5vk_operation *ps5vk_command_reserve_operations(
     VkCommandBuffer command, enum ps5vk_operation_type type,
     enum ps5vk_operation_scope scope, uint32_t count);

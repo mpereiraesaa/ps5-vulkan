@@ -551,6 +551,18 @@ a primary ignores the pointer and stores nothing. Without
 inherited `renderPass`, `framebuffer` and `subpass` members, so any value the
 caller supplies is accepted and retained verbatim in that opaque copy, and
 nothing in this driver reads it.
+With that flag the same members describe the scope the secondary will execute
+in and are validated: `renderPass` must be a render pass of this device,
+`subpass` must be `0` because exactly one subpass exists, and `framebuffer` is
+**optional** - `VK_NULL_HANDLE` is accepted and the executing primary supplies
+the framebuffer, while a non-null one must be compatible with the inherited
+pass. The flag is accepted on a secondary only; a primary that sets it is
+refused, because it describes a scope a primary cannot be executed in. A
+continuation secondary enters the inherited scope at
+`vkBeginCommandBuffer`, so it records draws exactly as a primary does inside a
+pass, commands that may only appear outside one are refused, and
+`vkEndCommandBuffer` succeeds with the inherited pass still open, because the
+primary owns it.
 `VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT` and
 `VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT` are mutually exclusive for a
 primary only, per
@@ -585,24 +597,74 @@ A recorded reference keeps the child alive in the parent's plan, so resetting,
 re-recording or freeing a referenced child before the parent is submitted
 **invalidates the parent** rather than leaving a dangling handle behind.
 
+Executing **inside** a render pass is supported, and the scope must match in
+both directions. `vkCmdBeginRenderPass` accepts
+`VK_SUBPASS_CONTENTS_INLINE` and
+`VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS`, and the mode it was begun
+with is binding: an inline pass carries its own draws and admits no
+secondaries, while a secondary-contents pass admits no draw of its own and
+only `vkCmdExecuteCommands` and `vkCmdEndRenderPass` inside it. Inside a pass
+every named child must be a continuation whose inherited render pass is
+**compatible** with the executing one, whose `subpass` is `0`, and whose
+inherited framebuffer is either `VK_NULL_HANDLE` or the framebuffer the pass
+is executing.
+
+The inherited framebuffer is checked against the inherited render pass by the
+same rule, applied to the framebuffer's **roles**: its colour and depth
+attachments must agree with the corresponding references on used-versus-unused
+and on format and sample count, and their numeric slots need not match. This is
+a different and weaker requirement than the one `vkCmdBeginRenderPass` places
+on the framebuffer that actually **executes**, which must still line up with
+its render pass index for index, because the native path addresses attachments
+positionally. That stricter rule is a pre-existing boundary of the executing
+path and is not relaxed here.
+
+Compatibility follows Vulkan 1.0 chapter 7.2 and is a property of the
+corresponding attachment **references**: each pair must be both
+`VK_ATTACHMENT_UNUSED`, or both used and referring to attachments that agree
+on format and sample count. The numeric attachment indices, attachments no
+reference names, the total attachment count, initial and final layouts, the
+layout inside a reference, and load and store ops are all excluded, so a
+secondary recorded against a `LOAD` pass runs inside a `CLEAR` pass of the
+same shape, and one that reaches its colour attachment through a different
+slot is accepted. Object identity is not required. Outside a pass a
+continuation child is refused, because its recorded draws would have no scope,
+and a continuation child may carry nothing but draws of the pass it inherited.
+
+A render pass is a single scope, so it is not split the way work outside one
+is: the primary's `vkCmdBeginRenderPass`-to-`vkCmdEndRenderPass` range and
+every child it names are submitted as **one segment**, in recorded order, with
+each buffer keeping its own operation range. Nothing is copied or flattened
+into the primary, so each child still keeps its identity, its pending
+ownership and its one-time-submit consumption, and the children retire with
+the pass they are part of.
+
 The call is refused, poisoning the recording with no partial operation left
 behind, for nesting (a secondary may not execute anything), an empty or null
 array, a child of another device or without a pool, a child that is not a
 secondary, a child that is neither pending nor executable, a self-reference, a
-pending or repeated child that was not recorded for simultaneous use, and a
-child recorded for render-pass continuation.
-Executing **inside** a render pass is not supported: inherited render-pass
-scope is a separate slice, so the call is valid only outside one.
+pending or repeated child that was not recorded for simultaneous use, and any
+of the scope mismatches above.
 
 Accordingly the driver refuses what it would not honour, and only that:
-`VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT`, because inherited
-render-pass execution is unimplemented; and `occlusionQueryEnable`,
+`occlusionQueryEnable`,
 `queryFlags` and `pipelineStatistics`, because this device reports
 `occlusionQueryPrecise` and `pipelineStatisticsQuery` false and executes no
 query at all. Members Vulkan defines as ignored are not refused. Recording a
 primary-only command into a secondary - `vkCmdBeginRenderPass`,
 `vkCmdEndRenderPass`, `vkCmdNextSubpass` - or nesting `vkCmdExecuteCommands`
 poisons the recording transactionally, leaving no partial operation behind.
+
+A render pass that executes **no work at all** is an explicit fail-closed
+boundary of this profile. Vulkan permits an empty pass - its load and store
+ops alone are observable - but the bounded native path has no zero-body shape,
+so `vkCmdEndRenderPass` refuses it transactionally at record time rather than
+letting a recording the driver cannot execute be accepted and then rejected at
+submission. The test is the work that will **execute**, not the commands
+written: a pass whose only content is `vkCmdExecuteCommands` naming empty
+secondaries executes exactly as little as one that recorded nothing, and is
+refused the same way. Naming an empty secondary remains legal in itself; it
+simply contributes nothing, so it has to be accompanied by work that does.
 
 `vkCmdNextSubpass` is an explicit fail-closed boundary. The implementation
 accepts exactly one subpass, so it has no valid reachable invocation. Its

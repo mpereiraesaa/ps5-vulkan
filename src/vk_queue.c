@@ -206,11 +206,66 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(VkQueue queue, uint32_t count,
     return VK_ERROR_VALIDATION_FAILED;
 }
 
+/* Everything a recorded draw needs to still be true at submission: a live
+ * graphics pipeline of this device, resolvable indirect parameters, and
+ * descriptor sets that are still the exact generation and signature the
+ * pipeline was recorded against. */
+static int draw_operation_valid(VkDevice d, const struct ps5vk_operation *op)
+{
+    if (!op->pipeline || op->pipeline->device != d || !op->pipeline->graphics ||
+        !op->pipeline->graphics_state) return 0;
+    if (ps5vk_indirect_graphics_operation(op->type) &&
+        ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
+    if (op->pipeline->set_count > PS5VK_MAX_SETS) return 0;
+    for (unsigned set = 0; set < op->pipeline->set_count; ++set)
+        if (op->pipeline->sets[set].count &&
+            (!op->sets[set] || !op->sets[set]->pool || op->sets[set]->pool->device != d ||
+             op->generations[set] != op->sets[set]->generation ||
+             memcmp(&op->sets[set]->signature, &op->pipeline->sets[set],
+                    sizeof(op->pipeline->sets[set])))) return 0;
+    return 1;
+}
+
+/* A secondary named inside a render pass must be a continuation recorded for
+ * the scope it is about to execute in, and it may carry nothing but draws of
+ * that pass: any other command would have no scope to execute in. The
+ * framebuffer is optional in the inheritance record, so the null handle is
+ * accepted and only a DIFFERENT one is refused. */
+static int continuation_child_valid(VkDevice d, VkCommandBuffer child,
+    VkRenderPass active, VkFramebuffer framebuffer)
+{
+    if (!(child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ||
+        !child->inheritance_valid ||
+        !ps5vk_render_pass_compatible(child->inheritance.renderPass, active) ||
+        child->inheritance.subpass ||
+        (child->inheritance.framebuffer &&
+         child->inheritance.framebuffer != framebuffer)) return 0;
+    for (unsigned j = 0; j < child->operation_count; ++j) {
+        const struct ps5vk_operation *op = &child->operations[j];
+        if (op->type != PS5VK_DRAW && op->type != PS5VK_DRAW_INDEXED &&
+            !ps5vk_indirect_graphics_operation(op->type)) return 0;
+        if (!ps5vk_render_pass_compatible(op->render_pass, active) ||
+            (op->framebuffer && op->framebuffer != framebuffer) ||
+            !draw_operation_valid(d, op)) return 0;
+    }
+    return 1;
+}
+
 static int command_valid(VkDevice d, VkCommandBuffer c)
 {
     if (!c || c->pool->device != d || c->state != PS5VK_EXECUTABLE) return 0;
     VkRenderPass active = NULL;
     VkFramebuffer framebuffer = NULL;
+    /* Contents mode of the active pass, read back from the immutable record
+     * rather than from recording state. */
+    VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE;
+    /* DRAW work seen since the pass began - what will execute, not how many
+     * commands were written. A vkCmdExecuteCommands marker naming only empty
+     * secondaries executes nothing, so counting markers here would accept the
+     * zero-body pass that record time refuses. Re-derived from the immutable
+     * record so a recording that somehow reaches submission with an empty pass
+     * is still refused before any backend sees it. */
+    unsigned pass_work = 0;
     for (unsigned j = 0; j < c->operation_count; ++j) {
         const struct ps5vk_operation *op = &c->operations[j];
         if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
@@ -228,6 +283,8 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             if (op->type == PS5VK_BEGIN_RENDER_PASS) {
                 if (active) return 0;
                 active = op->render_pass; framebuffer = op->framebuffer;
+                contents = op->render_pass_contents;
+                pass_work = 0;
                 for (uint32_t n = 0; n < framebuffer->attachment_count; ++n) {
                     VkImageView view = framebuffer->attachments[n];
                     void *address; VkDeviceSize bytes;
@@ -238,17 +295,58 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 if (active != op->render_pass || framebuffer != op->framebuffer) return 0;
                 if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED ||
                     ps5vk_indirect_graphics_operation(op->type)) {
-                    if (!op->pipeline || op->pipeline->device != d || !op->pipeline->graphics ||
-                        !op->pipeline->graphics_state) return 0;
-                    if (ps5vk_indirect_graphics_operation(op->type) &&
-                        ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
-                    if(op->pipeline->set_count>PS5VK_MAX_SETS)return 0;
-                    for(unsigned set=0;set<op->pipeline->set_count;++set)
-                        if(op->pipeline->sets[set].count &&
-                           (!op->sets[set] || !op->sets[set]->pool || op->sets[set]->pool->device!=d ||
-                            op->generations[set]!=op->sets[set]->generation ||
-                            memcmp(&op->sets[set]->signature,&op->pipeline->sets[set],sizeof(op->pipeline->sets[set]))))return 0;
-                } else { active = NULL; framebuffer = NULL; }
+                    /* A pass begun for secondary contents carries no inline
+                     * draws of its own. */
+                    if (contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) return 0;
+                    if (!draw_operation_valid(d, op)) return 0;
+                    ++pass_work;
+                } else {
+                    if (!pass_work) return 0;
+                    active = NULL; framebuffer = NULL;
+                    contents = VK_SUBPASS_CONTENTS_INLINE;
+                }
+            }
+            continue;
+        }
+        if (op->type == PS5VK_EXECUTE_COMMANDS) {
+            /* Re-validate the owned child array against live state. Each
+             * child's own operations are validated here when it executes
+             * inside a render pass, and by the head-of-queue re-validation of
+             * its own expanded segment when it executes outside one. */
+            VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
+            if (!children || !op->child_count ||
+                op->owned_payload_size != (size_t)op->child_count * sizeof(*children))
+                return 0;
+            /* The scope must be the one this call was recorded in, and inside
+             * a pass that pass must have been begun for secondary contents. */
+            if (op->render_pass != active || op->framebuffer != framebuffer) return 0;
+            if (active && contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) return 0;
+            for (uint32_t n = 0; n < op->child_count; ++n) {
+                VkCommandBuffer child = children[n];
+                const VkBool32 simultaneous = child &&
+                    (child->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ?
+                    VK_TRUE : VK_FALSE;
+                /* VUID-vkCmdExecuteCommands-pCommandBuffers-00089 allows a
+                 * child in the PENDING or executable state; 00091 restricts
+                 * pending to simultaneous-use buffers. Demanding EXECUTABLE
+                 * unconditionally would refuse a conformant submission. */
+                if (!child || child == c || !child->pool || child->pool->device != d ||
+                    child->level != VK_COMMAND_BUFFER_LEVEL_SECONDARY ||
+                    (child->state != PS5VK_EXECUTABLE &&
+                     !(child->state == PS5VK_PENDING && simultaneous)))
+                    return 0;
+                if (active) {
+                    if (!continuation_child_valid(d, child, active, framebuffer)) return 0;
+                    /* A continuation child carries nothing but draws, so its
+                     * operation count is the work it contributes - and an
+                     * empty child contributes none. */
+                    pass_work += child->operation_count;
+                } else if (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
+                    return 0;
+                if (!simultaneous) {
+                    if (child->pending_count) return 0;
+                    for (uint32_t k = 0; k < n; ++k) if (children[k] == child) return 0;
+                }
             }
             continue;
         }
@@ -305,36 +403,6 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             if(op->type==PS5VK_COPY_IMAGE_BUFFER &&
                ps5vk_buffer_span(d,op->copy_destination,0,VK_WHOLE_SIZE,&address,&bytes)!=VK_SUCCESS)
                 return 0;
-            continue;
-        }
-        if (op->type == PS5VK_EXECUTE_COMMANDS) {
-            /* Re-validate the owned child array against live state. Each
-             * child's own operations are validated when its expanded segment
-             * is checked, so this covers only the reference list. */
-            VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
-            if (!children || !op->child_count ||
-                op->owned_payload_size != (size_t)op->child_count * sizeof(*children))
-                return 0;
-            for (uint32_t n = 0; n < op->child_count; ++n) {
-                VkCommandBuffer child = children[n];
-                const VkBool32 simultaneous = child &&
-                    (child->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ?
-                    VK_TRUE : VK_FALSE;
-                /* VUID-vkCmdExecuteCommands-pCommandBuffers-00089 allows a
-                 * child in the PENDING or executable state; 00091 restricts
-                 * pending to simultaneous-use buffers. Demanding EXECUTABLE
-                 * unconditionally would refuse a conformant submission. */
-                if (!child || child == c || !child->pool || child->pool->device != d ||
-                    child->level != VK_COMMAND_BUFFER_LEVEL_SECONDARY ||
-                    (child->state != PS5VK_EXECUTABLE &&
-                     !(child->state == PS5VK_PENDING && simultaneous)) ||
-                    (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
-                    return 0;
-                if (!simultaneous) {
-                    if (child->pending_count) return 0;
-                    for (uint32_t k = 0; k < n; ++k) if (children[k] == child) return 0;
-                }
-            }
             continue;
         }
         if (op->type == PS5VK_BARRIER) {
@@ -465,6 +533,75 @@ static VkResult emit_segment(VkDevice d, VkCommandBuffer command, size_t refs,
     return VK_SUCCESS;
 }
 
+/* Index of the PS5VK_END_RENDER_PASS that closes the pass opened at `begin`,
+ * or the operation count when the recording carries none. */
+static uint32_t render_pass_end(const VkCommandBuffer command, uint32_t begin)
+{
+    uint32_t end = begin + 1;
+    while (end < command->operation_count &&
+           command->operations[end].type != PS5VK_END_RENDER_PASS) ++end;
+    return end;
+}
+
+static VkBool32 range_names_children(const VkCommandBuffer command,
+    uint32_t first, uint32_t count)
+{
+    for (uint32_t k = first; k < first + count; ++k)
+        if (command->operations[k].type == PS5VK_EXECUTE_COMMANDS) return VK_TRUE;
+    return VK_FALSE;
+}
+
+/* Emit ONE segment for a whole render pass whose work is named by secondaries.
+ *
+ * A render pass is a single scope and the backend builds one command stream
+ * for it, so it cannot be split the way vkCmdExecuteCommands splits work
+ * OUTSIDE a pass: the primary's BEGIN..END range becomes buffer 0 and every
+ * named child follows in recorded order with its own range. Nothing is copied
+ * or flattened into the primary, so each buffer keeps its identity and pin()
+ * still does per-buffer pending ownership, one-time-submit consumption and
+ * reset/free protection exactly as it does for a separate segment. Retiring
+ * together is the correct lifetime here: the children ARE the pass. */
+static VkResult emit_render_pass_segment(VkDevice d, VkCommandBuffer command,
+    size_t refs, uint32_t begin, uint32_t count,
+    struct ps5vk_submission **first, struct ps5vk_submission **last,
+    struct ps5vk_submission ***tail, uint32_t *segment_count)
+{
+    VkResult result = VK_SUCCESS;
+    struct ps5vk_submission *s = allocate_submission(d, refs, &result);
+    if (!s) return result;
+    s->count = 1; s->buffers[0] = command;
+    s->first_operation[0] = (uint16_t)begin;
+    s->operation_count[0] = (uint16_t)count;
+    VkBool32 indirect = range_has_indirect(command, begin, count);
+    for (uint32_t k = begin; k < begin + count; ++k) {
+        const struct ps5vk_operation *op = &command->operations[k];
+        if (op->type != PS5VK_EXECUTE_COMMANDS) continue;
+        VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
+        if (!children || !op->child_count ||
+            op->owned_payload_size != (size_t)op->child_count * sizeof(*children))
+            { free_submission(s); return VK_ERROR_UNKNOWN; }
+        for (uint32_t n = 0; n < op->child_count; ++n) {
+            /* The submission record holds a bounded number of buffers. This is
+             * a real limit of this representation, reported as a resource
+             * failure rather than silently dropping a child. */
+            if (!children[n]) { free_submission(s); return VK_ERROR_UNKNOWN; }
+            if (s->count == PS5VK_MAX_SUBMITTED_BUFFERS)
+                { free_submission(s); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+            s->buffers[s->count] = children[n];
+            s->first_operation[s->count] = 0;
+            s->operation_count[s->count] = (uint16_t)children[n]->operation_count;
+            ++s->count;
+            indirect |= range_has_indirect(children[n], 0, children[n]->operation_count);
+        }
+    }
+    s->frontend_only = VK_FALSE;
+    s->deferred_prepare = indirect;
+    if (*segment_count == UINT32_MAX) { free_submission(s); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+    if (!*first) *first = s;
+    **tail = s; *tail = &s->next; *last = s; ++*segment_count;
+    return VK_SUCCESS;
+}
+
 /* Walk ONE command buffer's operations and emit its ordered segments.
  *
  * Shared by a primary and, recursively, by every secondary it names, so a
@@ -486,6 +623,19 @@ static VkResult segment_operations(VkDevice d, VkCommandBuffer command, size_t r
     uint32_t operation = 0;
     while (operation < command->operation_count) {
         uint32_t begin = operation;
+        /* A render pass whose work is named by secondaries is emitted whole,
+         * before the generic boundary rules get a chance to split it. */
+        if (command->operations[operation].type == PS5VK_BEGIN_RENDER_PASS) {
+            uint32_t end = render_pass_end(command, operation);
+            if (end < command->operation_count &&
+                range_names_children(command, operation, end - operation + 1)) {
+                VkResult composed = emit_render_pass_segment(d, command, refs,
+                    operation, end - operation + 1, first, last, tail, segment_count);
+                if (composed != VK_SUCCESS) return composed;
+                operation = end + 1;
+                continue;
+            }
+        }
         VkBool32 frontend = frontend_record(&command->operations[operation]);
         VkBool32 deferred = deferred_boundary(command->operations[operation].type);
         VkBool32 execute = execute_boundary(command->operations[operation].type);
