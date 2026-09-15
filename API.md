@@ -5,6 +5,22 @@ PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely. Each
 capability below states its evidence boundary when it is narrower than native
 hardware acceptance.
 
+## Capability introspection
+
+The independently staged consumer includes an optional DXVK 2.6.2 D3D11
+feature-level 11_0 probe. It requests Vulkan 1.0 for instance creation, then
+queries the reported API version, device extensions and the exact Vulkan
+1.0/1.1/1.2/1.3 and extension feature/property structures named by the pinned
+DXVK profile. It uses only the public `<ps5vk/ps5vk.h>` ABI and emits one
+`ps5log/1` record for each of the 62 profile leaves.
+
+The probe is observational: it does not create a device, submit GPU work or
+promote a capability. Its strict verifier recomputes every result from the
+pinned profile and rejects missing, duplicated, reordered or self-inconsistent
+records. Current Vulkan 1.1+ structures being queryable as C types does not
+mean the driver advertises them; the reported device version remains Vulkan
+1.0 until their contracts are implemented and validated.
+
 ## Core feature negotiation
 
 - `robustBufferAccess` is the one Vulkan 1.0 core feature currently reported
