@@ -15,6 +15,14 @@ from pathlib import Path
 TITLE = "PPSA99994"
 APP = "ps5vk"
 
+# Exact hashes of the two 64-byte destination buffers of the executable
+# secondary scenario, established by two identical hardware runs of the same
+# deployed artifact. Only the first 32 bytes of the named buffer are filled;
+# its remaining 32 bytes and the whole control buffer of the secondary the
+# primary never named stay guard bytes.
+SECONDARY_EXECUTED_HASH = "ca327245"
+SECONDARY_CONTROL_HASH = "21a49bc5"
+
 
 def validate(log, receipt, artifact, texel_rgba8=False):
     def require(condition, label):
@@ -175,14 +183,17 @@ def validate(log, receipt, artifact, texel_rgba8=False):
                          "control_mismatches=0", "control_untouched=1"):
             require(expected in secondary_fields,
                     f"secondary execute witness missing {expected}")
-        # The two hashes must DIFFER: identical hashes would mean the executed
-        # and control buffers ended up the same, which is exactly what a driver
-        # that silently ran nothing, or ran the unnamed one too, would produce.
-        secondary_hashes = [field for field in secondary_fields
-                            if field.startswith(("executed_hash=", "control_hash="))]
-        require(len(secondary_hashes) == 2, "secondary execute witness hashes")
-        require(secondary_hashes[0].split("=")[1] != secondary_hashes[1].split("=")[1],
-                "executed and control buffers hashed the same")
+        # Both hashes are pinned to their exact measured values rather than
+        # merely required to differ. Identical hashes would mean the executed
+        # and control buffers ended up the same, which is what a driver that
+        # silently ran nothing, or ran the unnamed one too, would produce - but
+        # so would a wrong-but-different result, and only the exact pair rules
+        # that out as well. The deterministic fill makes both values stable
+        # across runs of the same artifact, so this is a pin, not a sample.
+        for expected in (f"executed_hash={SECONDARY_EXECUTED_HASH}",
+                         f"control_hash={SECONDARY_CONTROL_HASH}"):
+            require(expected in secondary_fields,
+                    f"secondary execute witness missing {expected}")
     transfer_retired = one("PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED")
     start = one("PS5VK_CONSUMER_COMPUTE_START")
     pipeline = one("PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED")
@@ -514,6 +525,11 @@ def validate(log, receipt, artifact, texel_rgba8=False):
         "guard_words_checked": 192,
         "buffer_transfer_bytes_checked": 67,
         "buffer_transfer_hash_fnv1a32": "9a158222",
+        "secondary_execute_witnessed": secondary_present,
+        "secondary_executed_hash_fnv1a32":
+            SECONDARY_EXECUTED_HASH if secondary_present else None,
+        "secondary_control_hash_fnv1a32":
+            SECONDARY_CONTROL_HASH if secondary_present else None,
         "indirect_dispatches_checked": 1,
         "storage8_elements_checked": 64,
         "storage16_elements_checked": 64,
