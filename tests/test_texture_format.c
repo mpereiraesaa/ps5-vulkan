@@ -233,6 +233,35 @@ int main(void)
         assert(!(r8g8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     }
 
+    /* --- single-component 16-bit rows: same staging rule -------------------
+     * R16_UNORM/SNORM/SFLOAT/UINT/SINT carry a two-byte element with the
+     * (4,0,0,1) completion, so the derived completion word is 0x204 and the
+     * combined GFX10 words are 7/8/13/11/12 for UNORM/SNORM/FLOAT/UINT/SINT.
+     * The mandatory 16-bit table requires the role for SFLOAT, UINT and SINT;
+     * UNORM and SNORM are staged with them for family coherence. Implemented,
+     * still unwitnessed: no console fetch of a 16-bit element exists yet, the
+     * published bit stays off and creation stays refused (asserted in
+     * tests/test_vk_memory.c). */
+    const VkFormat r16_texel[] = {
+        VK_FORMAT_R16_UNORM, VK_FORMAT_R16_SNORM, VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16_UINT, VK_FORMAT_R16_SINT,
+    };
+    const uint32_t r16_texel_words[] = {7u, 8u, 13u, 11u, 12u};
+    for (unsigned i = 0; i < sizeof(r16_texel) / sizeof(r16_texel[0]); ++i) {
+        const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(r16_texel[i]);
+        VkFormatProperties r16_properties;
+        assert(entry && entry->bytes_per_texel == 2);
+        assert(ps5vk_texture_format_has(r16_texel[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(r16_texel[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        /* 16_UNORM/16_SNORM/16_FLOAT/16_UINT/16_SINT in the pinned table. */
+        assert(ps5vk_texture_format_gfx10_format(entry) == r16_texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0x204));
+        ps5vk_texture_format_properties(r16_texel[i], &r16_properties);
+        assert(!(r16_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
