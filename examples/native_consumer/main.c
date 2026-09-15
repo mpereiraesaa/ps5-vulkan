@@ -2238,6 +2238,199 @@ static void run_consumer(VkPhysicalDevice physical, VkDevice device, VkQueue que
         ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_INPASS_SECONDARY_RETIRED");
     }
 
+    /* Native two-subpass oracle for the exact shared-color profile.
+     *
+     * The two-subpass pass draws a full-size procedural triangle in subpass 0
+     * and a centered half-size triangle in subpass 1.  A one-subpass control
+     * records the same two draws in the same order. Their full-image hashes
+     * must agree. Three negative controls (first only, second only, reversed)
+     * must all differ from that result and from each other. This distinguishes
+     * a missing transition/draw and an order reversal without trusting a
+     * success flag from the driver. */
+    if (!is_continuous) {
+        ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_TWO_SUBPASS_START");
+        VkAttachmentDescription two_attachment = {
+            .format = VK_FORMAT_B8G8R8A8_UNORM,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        };
+        VkAttachmentReference two_color = {
+            .attachment = 0,
+            .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        };
+        VkSubpassDescription two_subpasses[2] = {
+            {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+             .colorAttachmentCount = 1, .pColorAttachments = &two_color},
+            {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+             .colorAttachmentCount = 1, .pColorAttachments = &two_color}
+        };
+        VkSubpassDependency two_dependency = {
+            .srcSubpass = 0, .dstSubpass = 1,
+            .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT
+        };
+        VkRenderPassCreateInfo two_pass_info = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .attachmentCount = 1, .pAttachments = &two_attachment,
+            .subpassCount = 2, .pSubpasses = two_subpasses,
+            .dependencyCount = 1, .pDependencies = &two_dependency
+        };
+        VkRenderPass two_pass = VK_NULL_HANDLE;
+        CHECK(vkCreateRenderPass(device, &two_pass_info, NULL, &two_pass));
+        two_pass_info.subpassCount = 1;
+        two_pass_info.dependencyCount = 0;
+        two_pass_info.pDependencies = NULL;
+        VkRenderPass two_control_pass = VK_NULL_HANDLE;
+        CHECK(vkCreateRenderPass(device, &two_pass_info, NULL, &two_control_pass));
+
+        VkFramebuffer two_framebuffers[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+        VkRenderPass two_framebuffer_passes[2] = {two_pass, two_control_pass};
+        for (unsigned index = 0; index < 2; ++index) {
+            VkFramebufferCreateInfo info = {
+                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                .renderPass = two_framebuffer_passes[index],
+                .attachmentCount = 1, .pAttachments = &image_views[0],
+                .width = 1920, .height = 1080, .layers = 1
+            };
+            CHECK(vkCreateFramebuffer(device, &info, NULL,
+                                      &two_framebuffers[index]));
+        }
+
+        VkPipelineDepthStencilStateCreateInfo no_depth = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthCompareOp = VK_COMPARE_OP_ALWAYS
+        };
+        gpci.pDepthStencilState = &no_depth;
+        gpci.renderPass = two_pass;
+        gpci.subpass = 0;
+        VkPipeline two_pipelines[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+        CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &gpci,
+                                        NULL, &two_pipelines[0]));
+        gpci.subpass = 1;
+        CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &gpci,
+                                        NULL, &two_pipelines[1]));
+        gpci.renderPass = two_control_pass;
+        gpci.subpass = 0;
+        VkPipeline two_control_pipeline = VK_NULL_HANDLE;
+        CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &gpci,
+                                        NULL, &two_control_pipeline));
+
+        VkViewport small_viewport = {480.0f, 270.0f, 960.0f, 540.0f,
+                                     0.0f, 1.0f};
+        VkClearValue two_clear = {0};
+        two_clear.color.float32[3] = 1.0f;
+        VkRenderPassBeginInfo two_begin = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderArea = {{0, 0}, {1920, 1080}},
+            .clearValueCount = 1, .pClearValues = &two_clear
+        };
+        VkCommandBufferBeginInfo two_record = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        VkSubmitInfo two_submit = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1, .pCommandBuffers = &cmd_buf};
+        uint32_t hashes[5] = {0};
+        uint32_t changed[5] = {0};
+        uint64_t bad_alpha = 0, bad_sum = 0;
+        const size_t two_words = 1920u * 1080u;
+        uint32_t *two_pixels = (uint32_t *)mapped_images;
+        for (unsigned scenario = 0; scenario < 5; ++scenario) {
+            for (size_t word = 0; word < two_words; ++word)
+                two_pixels[word] = sentinel_bg;
+            VkMappedMemoryRange flush = {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = image_memory, .offset = 0,
+                .size = two_words * sizeof(uint32_t)};
+            CHECK(vkFlushMappedMemoryRanges(device, 1, &flush));
+            CHECK(vkResetCommandBuffer(cmd_buf, 0));
+            CHECK(vkBeginCommandBuffer(cmd_buf, &two_record));
+            two_begin.renderPass = scenario == 0 ? two_pass : two_control_pass;
+            two_begin.framebuffer = scenario == 0 ? two_framebuffers[0] :
+                                                    two_framebuffers[1];
+            vkCmdBeginRenderPass(cmd_buf, &two_begin, VK_SUBPASS_CONTENTS_INLINE);
+            if (scenario == 0) {
+                vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                  two_pipelines[0]);
+                vkCmdSetViewport(cmd_buf, 0, 1, &viewport);
+                vkCmdSetScissor(cmd_buf, 0, 1, &scissor);
+                vkCmdDraw(cmd_buf, 3, 1, 0, 0);
+                vkCmdNextSubpass(cmd_buf, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                  two_pipelines[1]);
+                vkCmdSetViewport(cmd_buf, 0, 1, &small_viewport);
+                vkCmdSetScissor(cmd_buf, 0, 1, &scissor);
+                vkCmdDraw(cmd_buf, 3, 1, 0, 0);
+            } else {
+                vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                  two_control_pipeline);
+                if (scenario != 3) {
+                    vkCmdSetViewport(cmd_buf, 0, 1,
+                        scenario == 4 ? &small_viewport : &viewport);
+                    vkCmdSetScissor(cmd_buf, 0, 1, &scissor);
+                    vkCmdDraw(cmd_buf, 3, 1, 0, 0);
+                }
+                if (scenario == 1 || scenario == 3 || scenario == 4) {
+                    vkCmdSetViewport(cmd_buf, 0, 1,
+                        scenario == 4 ? &viewport : &small_viewport);
+                    vkCmdSetScissor(cmd_buf, 0, 1, &scissor);
+                    vkCmdDraw(cmd_buf, 3, 1, 0, 0);
+                }
+            }
+            vkCmdEndRenderPass(cmd_buf);
+            CHECK(vkEndCommandBuffer(cmd_buf));
+            CHECK(vkQueueSubmit(queue, 1, &two_submit, VK_NULL_HANDLE));
+            CHECK(vkQueueWaitIdle(queue));
+            VkMappedMemoryRange invalidate = flush;
+            CHECK(vkInvalidateMappedMemoryRanges(device, 1, &invalidate));
+            for (size_t word = 0; word < two_words; ++word) {
+                uint32_t pixel = two_pixels[word];
+                if (pixel == 0xff000000u) continue;
+                ++changed[scenario];
+                if ((pixel >> 24) != 255) ++bad_alpha;
+                unsigned sum = (pixel & 255) + ((pixel >> 8) & 255) +
+                               ((pixel >> 16) & 255);
+                if (sum < 254 || sum > 256) ++bad_sum;
+            }
+            hashes[scenario] = fnv1a32((const uint8_t *)two_pixels,
+                                       two_words * sizeof(uint32_t));
+        }
+        /* The reversed sequence intentionally equals first-only: its final
+         * full-size draw overwrites the smaller draw completely. What matters
+         * is that every incorrect sequence differs from the ordered result. */
+        int distinct = hashes[0] == hashes[1] && hashes[0] != hashes[2] &&
+            hashes[0] != hashes[3] && hashes[0] != hashes[4];
+        if (!distinct || !changed[0] || bad_alpha || bad_sum) {
+            ps5log_printf(PS5LOG_ERR,
+                "PS5VK_CONSUMER_TWO_SUBPASS_FAILURE multi=%08x ordered=%08x "
+                "first=%08x second=%08x reversed=%08x distinct=%d "
+                "bad_alpha=%llu bad_sum=%llu",
+                hashes[0], hashes[1], hashes[2], hashes[3], hashes[4], distinct,
+                (unsigned long long)bad_alpha, (unsigned long long)bad_sum);
+            ps5log_close("two-subpass-verification-failed");
+            exit(1);
+        }
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CONSUMER_TWO_SUBPASS_SUCCESS multi=%08x ordered=%08x "
+            "first=%08x second=%08x reversed=%08x changed=%u "
+            "negative_distinct=1 bad_alpha=0 bad_sum=0",
+            hashes[0], hashes[1], hashes[2], hashes[3], hashes[4], changed[0]);
+        vkDestroyPipeline(device, two_control_pipeline, NULL);
+        vkDestroyPipeline(device, two_pipelines[1], NULL);
+        vkDestroyPipeline(device, two_pipelines[0], NULL);
+        vkDestroyFramebuffer(device, two_framebuffers[1], NULL);
+        vkDestroyFramebuffer(device, two_framebuffers[0], NULL);
+        vkDestroyRenderPass(device, two_control_pass, NULL);
+        vkDestroyRenderPass(device, two_pass, NULL);
+        ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_TWO_SUBPASS_RETIRED");
+    }
+
     /* Unmap before closing */
     vkUnmapMemory(device, image_memory);
 

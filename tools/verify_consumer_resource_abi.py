@@ -30,6 +30,16 @@ SECONDARY_CONTROL_HASH = "21a49bc5"
 INPASS_HASH = "77abc830"
 INPASS_CHANGED = 471744
 
+# Exact full-image hashes for the shared-color two-subpass oracle. The native
+# result must equal the ordered one-subpass control and differ from every
+# negative. Reversed equals first-only because its final full-size draw covers
+# the smaller draw completely; that equality is expected, not relaxed.
+TWO_SUBPASS_HASH = "84cc0cb3"
+TWO_SUBPASS_FIRST_HASH = "77abc830"
+TWO_SUBPASS_SECOND_HASH = "fa6b3a7a"
+TWO_SUBPASS_REVERSED_HASH = "77abc830"
+TWO_SUBPASS_CHANGED = 471744
+
 TEXEL_FORMAT_CASES = [
     ("r8_unorm","float",1,"3f800000,00000000,00000000,3f800000"),
     ("r8_snorm","float",1,"bf800000,00000000,00000000,3f800000"),
@@ -275,6 +285,39 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         require(len(executed) == 1 and len(control) == 1 and
                 executed[0].split("=")[1] == control[0].split("=")[1],
                 "secondary-executed and inline draws produced different images")
+    two_subpass_present = bool(matching("PS5VK_CONSUMER_TWO_SUBPASS_START"))
+    two_subpass_start = one("PS5VK_CONSUMER_TWO_SUBPASS_START") \
+        if two_subpass_present else None
+    two_subpass_witness = one("PS5VK_CONSUMER_TWO_SUBPASS_SUCCESS ") \
+        if two_subpass_present else None
+    two_subpass_retired = one("PS5VK_CONSUMER_TWO_SUBPASS_RETIRED") \
+        if two_subpass_present else None
+    subpass_boundaries = matching("PS5VK_SUBPASS_BOUNDARY ")
+    if two_subpass_present:
+        expected = {
+            "multi": TWO_SUBPASS_HASH,
+            "ordered": TWO_SUBPASS_HASH,
+            "first": TWO_SUBPASS_FIRST_HASH,
+            "second": TWO_SUBPASS_SECOND_HASH,
+            "reversed": TWO_SUBPASS_REVERSED_HASH,
+            "changed": str(TWO_SUBPASS_CHANGED),
+            "negative_distinct": "1",
+            "bad_alpha": "0",
+            "bad_sum": "0",
+        }
+        observed = dict(item.split("=", 1)
+                        for item in two_subpass_witness[1].split()[1:])
+        require(observed == expected, "two-subpass exact pixel oracle")
+        require(observed["multi"] == observed["ordered"] and
+                all(observed["multi"] != observed[name]
+                    for name in ("first", "second", "reversed")),
+                "two-subpass discriminator relations")
+        require(len(subpass_boundaries) == 1 and
+                "subpass=1 words=10" in subpass_boundaries[0][1],
+                "one exact native subpass boundary")
+    else:
+        require(not subpass_boundaries,
+                "subpass boundary without two-subpass witness")
     transfer_retired = one("PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED")
     start = one("PS5VK_CONSUMER_COMPUTE_START")
     pipeline = one("PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED")
@@ -410,6 +453,12 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         require(readbacks[-1][0] < inpass_start[0] < inpass_witness[0] <
                 inpass_retired[0] < present_destroyed[0],
                 "in-pass secondary witness ordering")
+    if two_subpass_present:
+        require(inpass_retired and
+                inpass_retired[0] < two_subpass_start[0] <
+                subpass_boundaries[0][0] < two_subpass_witness[0] <
+                two_subpass_retired[0] < present_destroyed[0],
+                "two-subpass witness ordering")
     require(graphics_start[0] > sync_retired[0] and
             graphics_cold[0] < graphics_warm[0] < graphics_cache_release[0] <
             dynamic_pipeline[0] < present_created[0] and
@@ -515,7 +564,9 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
             "dynamic fixed-function setup")
     # Two extra graphics submissions when the in-pass scenario is present: one
     # for the secondary-executed pass and one for the inline control.
-    graphics_count = (40 if sampled is not None else 36) + (2 if inpass_present else 0)
+    graphics_count = ((40 if sampled is not None else 36) +
+                      (2 if inpass_present else 0) +
+                      (5 if two_subpass_present else 0))
     require(all(len(rows) == graphics_count for rows in
                 (graphics_prepared, graphics_submitted,
                  graphics_suspended, graphics_completed)),
@@ -539,8 +590,11 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
                 int(readback_fields.get("changed", "0")) > 0,
                 "load/depth/dynamic draw oracle")
     serials = [int(fields(row[1])["serial"]) for row in graphics_prepared]
+    expected_draws = ["1"] * graphics_count
+    if two_subpass_present:
+        expected_draws[-5:] = ["2", "2", "1", "1", "2"]
     require(serials == list(range(serials[0], serials[0] + graphics_count)) and
-            all(fields(row[1]).get("draws") == "1" for row in graphics_prepared) and
+            [fields(row[1]).get("draws") for row in graphics_prepared] == expected_draws and
             all(fields(row[1]).get("rc") == "0" for row in graphics_submitted) and
             all(fields(row[1]).get("rc") == "0" for row in graphics_suspended),
             "graphics serials and submit status")
@@ -672,6 +726,11 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         "inpass_secondary_witnessed": inpass_present,
         "inpass_secondary_hash_fnv1a32": INPASS_HASH if inpass_present else None,
         "inpass_secondary_changed_pixels": INPASS_CHANGED if inpass_present else 0,
+        "two_subpass_witnessed": two_subpass_present,
+        "two_subpass_hash_fnv1a32": TWO_SUBPASS_HASH if two_subpass_present else None,
+        "two_subpass_negative_hashes_fnv1a32": ([TWO_SUBPASS_FIRST_HASH,
+            TWO_SUBPASS_SECOND_HASH, TWO_SUBPASS_REVERSED_HASH]
+            if two_subpass_present else []),
         "indirect_dispatches_checked": 1,
         "storage8_elements_checked": 64,
         "storage16_elements_checked": 64,
