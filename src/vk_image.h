@@ -32,5 +32,62 @@ VkResult ps5vk_image_span(VkDevice, VkImage, void **address, VkDeviceSize *bytes
  * sample, render into or read such an image, so its transfers and layout
  * transitions are frontend work over the same padded layout the upload path
  * uses. */
-VkBool32 ps5vk_pure_transfer_image(VkImage);
+/* The colour-attachment readback shape that also declares a transfer
+ * destination; the clear and buffer-upload destination paths accept it. */
+/* The descriptor shape of the one linear image this profile creates:
+ * RGBA8, 2D, one mip, one layer, one sample, LINEAR tiling, usage TRANSFER_DST
+ * alone. Used by vkCreateImage to accept it and to refuse every other linear
+ * combination before an object exists. */
+/* The pinned upstream draw module's host-readback staging image itself: the
+ * linear-tiling image vkGetImageSubresourceLayout may describe and the only
+ * destination a colour-attachment readback copy may name. */
+static inline int ps5vk_linear_staging_descriptor(const VkImageCreateInfo *info)
+{
+    return info && info->sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO &&
+        info->tiling == VK_IMAGE_TILING_LINEAR && !info->pNext && !info->flags &&
+        info->format == VK_FORMAT_R8G8B8A8_UNORM &&
+        info->imageType == VK_IMAGE_TYPE_2D &&
+        info->mipLevels == 1 && info->arrayLayers == 1 &&
+        info->samples == VK_SAMPLE_COUNT_1_BIT && info->extent.depth == 1 &&
+        info->usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT &&
+        info->sharingMode == VK_SHARING_MODE_EXCLUSIVE &&
+        info->initialLayout == VK_IMAGE_LAYOUT_UNDEFINED;
+}
+static inline VkBool32 ps5vk_pure_transfer_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL && image->info.usage &&
+        !(image->info.usage &
+          ~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+}
+static inline VkBool32 ps5vk_linear_staging_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    return image->info.tiling == VK_IMAGE_TILING_LINEAR &&
+        image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1 &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+}
+static inline VkBool32 ps5vk_colour_transfer_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        (image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+        (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+        !(image->info.usage &
+          ~(VkImageUsageFlags)(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                               VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+}
 #endif

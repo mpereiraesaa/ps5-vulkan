@@ -1,29 +1,60 @@
 {
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
-  "capability_probe": {
-    "artifact_sha256": "379b979aee2341a1926c6fc477ee4cb7a0f4758a73e9ba5728be065e85e8899a",
-    "device_api": "1.0.0",
-    "device_extensions": 3,
-    "requirements": 62,
-    "satisfied_ids": [
-      "feature:VkPhysicalDeviceFeatures:robustBufferAccess"
-    ],
-    "runs": [
-      {
-        "id": "20260915T142012757Z_PPSA99994_ps5vk_0xe2a6477d4bc5",
-        "log_sha256": "fa9c2318b38ae2d5c23b3ffcdacdf4a4d0efd54f7a81ad3ece4aa6c1d874236a"
-      },
-      {
-        "id": "20260915T142026363Z_PPSA99994_ps5vk_0xe2a97268c1b8",
-        "log_sha256": "78f5349429318a47b33830ccd555427de355957ffcf733257f17b1daac87600f"
-      }
-    ],
+ "capability_probe": {
+  "artifact_sha256": "7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593",
+  "device_api": "1.0.0",
+  "device_extensions": 4,
+  "requirements": 62,
+  "satisfied_ids": [
+   "feature:VkPhysicalDeviceFeatures:robustBufferAccess"
+  ],
+  "runs": [
+   {
+    "id": "20260915T210947412Z_PPSA99994_ps5vk_0xf8ffef0f6ba6",
+    "log_sha256": "a8714a3b90b10daf72a5548bddba4cd604bf782e3d185b0b71427dd8230631d7"
+   },
+   {
+    "id": "20260915T211224694Z_PPSA99994_ps5vk_0xf9248da2b03d",
+    "log_sha256": "18507cfe84212641043ab7e8edffb1fe5f44d682e608b173376c1eeacbb7e91d"
+   }
+  ],
     "transport": "ps5log/1",
     "verifier": "tools/verify_dxvk_probe.py"
   },
-  "requirements": {
-    "api-version:apiVersion": {
+ "requirements": {
+  "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
+   "cts": {
+    "state": "cts-pass",
+    "cases": [
+     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw",
+     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed",
+     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indirect",
+     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed_indirect",
+     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw",
+     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
+     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
+     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect"
+    ],
+    "refs": [
+     "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15",
+     "UPSTREAM_CTS.md"
+    ],
+    "note": "The eight applicable leaves: the four base_vertex and the four non-first-instance base_instance cases. The two FIRST_INSTANCE leaves need drawIndirectFirstInstance and the four draw_index leaves need multiDrawIndirect, both of which this profile reports false, so they are excluded rather than reported as NotSupported."
+   },
+   "native": {
+    "state": "native-evidence",
+    "run_ids": [
+     "20260915T210924328Z_PPSA99994_ps5vk_0xf8fa8f2840e9"
+    ],
+    "artifact_sha256": "69ef5b3fa83641febbaad2edd477664135c108cd336c895cf335d1c4dbe77fab",
+    "refs": [
+     "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15"
+    ],
+    "note": "The public-SDK witness covers direct, indexed, indirect and instanced draws with pinned BaseVertex/BaseInstance/DrawIndex=0 triples in the colour attachment, and the same frames copied into the linear staging image and read back through vkGetImageSubresourceLayout, plus the transfer-destination clear/upload witness."
+   }
+  },
+  "api-version:apiVersion": {
       "native": {
         "state": "witnessed-blocker",
         "observed": "1.0.0",

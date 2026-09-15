@@ -153,6 +153,24 @@ layout transitions are bookkeeping and are validated against the image's
 committed layout. Anything outside the padded linear geometry stays refused
 rather than being approximated with a linear write.
 
+A third, narrower role exists for the same memory: `VK_FORMAT_R8G8B8A8_UNORM`
+as a 2D, single-mip, single-layer, single-sample image with
+`VK_IMAGE_TILING_LINEAR` and `VK_IMAGE_USAGE_TRANSFER_DST_BIT` alone is
+accepted, and only that combination is. It is the host-readback staging image
+the upstream draw tests create: `vkGetImageSubresourceLayout` describes it with
+the padded linear `rowPitch`, `depthPitch`, `arrayPitch` and `size`, and
+`vkCmdCopyImage` copies the RGBA8 colour attachment in `VK_IMAGE_LAYOUT_GENERAL`
+into it in `GENERAL` for a whole-surface region. The copy is the driver's
+existing GPU-completion readback: the tiled surface is invalidated, detiled
+through the same 64KB_R_X offsets the colour readback uses, written into the
+staging image's rows and flushed. Exactly the two transitions that role has are
+accepted (`UNDEFINED` to `GENERAL` for the transfer write, `GENERAL` to
+`GENERAL` from that write to the host read); every other format, dimension,
+mip/layer/sample count, usage, tiling, region, barrier shape or copy direction
+stays refused before any state is mutated. `linearTilingFeatures` and
+`vkGetPhysicalDeviceImageFormatProperties` report exactly this one shape and
+nothing else.
+
 Nearest and linear sampling have native deterministic readback evidence for all
 24 filterable sampled formats. 20 additional signed and unsigned
 integer rows have typed `isampler2D`/`usampler2D` nearest-sampling evidence and
@@ -521,7 +539,7 @@ The public driver interface exposes standard Vulkan 1.0 bookkeeping entry points
 
 - `vkEnumerateDeviceLayerProperties`: Validates arguments and reports zero device layers (`*pPropertyCount = 0`), returning `VK_SUCCESS` in conformance with modern Vulkan conventions deprecating separate device layers.
 - `vkGetDeviceMemoryCommitment`: Queries memory commitment in `*pCommittedMemoryInBytes`. Because ps5vk exposes no memory type with `VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT` and does not support lazily allocated memory, ordinary allocations are not reported as lazily committed, and the query safely reports 0 bytes committed (`*pCommittedMemoryInBytes = 0`).
-- `vkGetImageSubresourceLayout`: Queries image subresource layout. Because ps5vk images are backed by optimal GPU-tiled memory and linear image layout access is not supported, the layout structure is safely zeroed (`*pLayout = {0}`) rather than fabricating fictitious linear row or depth pitches.
+- `vkGetImageSubresourceLayout`: Queries image subresource layout. Tiled images report a zeroed structure (`*pLayout = {0}`) rather than a fabricated linear row or depth pitch. The one linear image this profile creates - the RGBA8 transfer-destination staging image described above - reports its real padded linear `offset`, `rowPitch`, `depthPitch`, `arrayPitch` and `size`; any other subresource of it, and every subresource of a tiled image, is zeroed.
 - `vkGetRenderAreaGranularity`: Returns `(1, 1)` pixel render area granularity for valid render passes (`offset = 0`, full pixel granularity).
 - `vkResetDescriptorPool`: Resets all descriptor sets allocated from a descriptor pool back to the pool, preserving pool allocation state without requiring pool destruction.
 

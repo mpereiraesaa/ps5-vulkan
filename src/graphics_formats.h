@@ -121,6 +121,25 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
     VkImageCreateFlags flags,VkDeviceSize budget,VkImageFormatProperties *out)
 {
     *out=(VkImageFormatProperties){0};
+    /* The one linear-tiling combination this profile publishes: the pinned
+     * upstream draw module's host-readback staging image. The query reports
+     * exactly what creation accepts - RGBA8, 2D, one mip, one layer, one
+     * sample, TRANSFER_DST alone - and nothing more, so a caller cannot be told
+     * a linear shape exists that vkCreateImage would then refuse. */
+    if (tiling == VK_IMAGE_TILING_LINEAR) {
+        struct ps5vk_texture_layout layout;
+        if (!budget || format != VK_FORMAT_R8G8B8A8_UNORM ||
+            type != VK_IMAGE_TYPE_2D || flags ||
+            usage != VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
+            ps5vk_texture_layout_for_format(format, PS5VK_MAX_IMAGE_2D,
+                PS5VK_MAX_IMAGE_2D, &layout))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        *out=(VkImageFormatProperties){
+            .maxExtent={PS5VK_MAX_IMAGE_2D,PS5VK_MAX_IMAGE_2D,1},
+            .maxMipLevels=1,.maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
     if(tiling!=VK_IMAGE_TILING_OPTIMAL || !budget ||
        !ps5vk_graphics_image_usage(format,usage))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;

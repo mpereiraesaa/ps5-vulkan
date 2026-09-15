@@ -95,6 +95,29 @@ int main(void)
         acquired = saved_acquired; compiled_released = saved_compiled;
     }
     VkDynamicState dynamic_values[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
+    {
+        /* The pinned upstream draw pipeline enables depth bias with every
+         * factor and the clamp at zero; that no-op form is accepted, and a
+         * non-zero bias stays refused rather than being dropped silently. */
+        const unsigned saved_created=created,saved_released=released;
+        const unsigned saved_acquired=acquired,saved_compiled=compiled_released;
+        VkPipeline biased=NULL;
+        r.depthBiasEnable=VK_TRUE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        vkDestroyPipeline(&d,biased,NULL);
+        r.depthBiasConstantFactor=0.25f;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        r.depthBiasConstantFactor=0.0f;r.depthBiasSlopeFactor=1.0f;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        r.depthBiasSlopeFactor=0.0f;r.depthBiasClamp=0.5f;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        r.depthBiasClamp=0.0f;r.depthBiasEnable=VK_FALSE;
+        created=saved_created;released=saved_released;
+        acquired=saved_acquired;compiled_released=saved_compiled;
+    }
     VkPipelineDynamicStateCreateInfo dynamic={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount=2,.pDynamicStates=dynamic_values};
     vp.pViewports=NULL;vp.pScissors=NULL;info.pDynamicState=&dynamic;

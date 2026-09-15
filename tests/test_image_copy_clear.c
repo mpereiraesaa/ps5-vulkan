@@ -426,6 +426,45 @@ int main(void)
     vkCmdClearColorImage(bad, attachment, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
     assert(bad->state == PS5VK_INVALID && bad->operation_count == 0);
 
+    /* The one colour-attachment shape that also declares a transfer destination
+     * is the pinned upstream CTS draw target, and it takes the same padded
+     * linear clear and upload as the transfer role. Only that exact shape: the
+     * predicates below keep every neighbouring shape out. */
+    VkImage colour_dst = make_image(VK_FORMAT_R8G8B8A8_UNORM,
+                                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                    NULL);
+    assert(ps5vk_colour_transfer_image(colour_dst));
+    assert(!ps5vk_colour_transfer_image(attachment));
+    VkImage transfer_only = make_image(VK_FORMAT_R8G8B8A8_UNORM,
+                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                           VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                       NULL);
+    assert(!ps5vk_colour_transfer_image(transfer_only));
+    assert(ps5vk_pure_transfer_image(transfer_only));
+    VkCommandBuffer colour_clear = begin();
+    vkCmdClearColorImage(colour_clear, colour_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         &clear, 1, &range);
+    assert(colour_clear->state == PS5VK_RECORDING && colour_clear->operation_count == 1);
+    VkBuffer colour_upload = make_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                         WIDTH * HEIGHT * 4, NULL);
+    VkBufferImageCopy colour_region = {
+        .bufferOffset = 0, .bufferRowLength = 0, .bufferImageHeight = 0,
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .imageOffset = {0, 0, 0}, .imageExtent = {WIDTH, HEIGHT, 1}};
+    VkCommandBuffer colour_upload_cmd = begin();
+    vkCmdCopyBufferToImage(colour_upload_cmd, colour_upload, colour_dst,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &colour_region);
+    assert(colour_upload_cmd->state == PS5VK_RECORDING &&
+           colour_upload_cmd->operation_count == 1);
+    /* The readback role of the attachment shape is unchanged, and the transfer
+     * role still refuses the attachment geometry it never had. */
+    VkCommandBuffer colour_clear_bad = begin();
+    vkCmdClearColorImage(colour_clear_bad, colour_dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                         &clear, 1, &range);
+    assert(colour_clear_bad->state == PS5VK_INVALID && colour_clear_bad->operation_count == 0);
+
     /* --- whole-subresource depth clear --------------------------------------
      * A depth target that carries the transfer-destination usage records a real
      * operation; one that does not stays fail-closed, because Vulkan requires
@@ -714,6 +753,155 @@ int main(void)
     assert(bad->state == PS5VK_RECORDING && bad->render_pass == &active_pass);
     vkCmdClearAttachments(bad, 1, &ca, 1, &cr);
     assert(bad->state == PS5VK_INVALID);
+
+    /* --- the one linear-tiling role: the pinned host-readback staging image ---
+     * Exactly one descriptor is accepted - RGBA8, 2D, one mip, one layer, one
+     * sample, LINEAR tiling, TRANSFER_DST alone, exclusive sharing, UNDEFINED
+     * initial layout - and its bytes are the padded linear layout the transfer
+     * role already uses, so vkGetImageSubresourceLayout can describe it. */
+    VkImageCreateInfo staging = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {WIDTH, HEIGHT, 1},
+        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_LINEAR, .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkImage staging_image = VK_NULL_HANDLE;
+    assert(vkCreateImage(device, &staging, NULL, &staging_image) == VK_SUCCESS);
+    assert(ps5vk_linear_staging_image(staging_image));
+    assert(!ps5vk_pure_transfer_image(staging_image) && !ps5vk_colour_transfer_image(staging_image));
+    VkMemoryRequirements staging_requirements;
+    vkGetImageMemoryRequirements(device, staging_image, &staging_requirements);
+    struct ps5vk_texture_layout staging_layout = {0};
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_R8G8B8A8_UNORM, WIDTH, HEIGHT,
+        &staging_layout) == 0);
+    assert(staging_requirements.size == staging_layout.bytes);
+    assert(staging_requirements.alignment == staging_layout.alignment);
+    assert(staging_requirements.memoryTypeBits == 1);
+    VkImageSubresource subresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    VkSubresourceLayout subresource_layout = {0};
+    vkGetImageSubresourceLayout(device, staging_image, &subresource, &subresource_layout);
+    assert(subresource_layout.offset == 0 && subresource_layout.rowPitch == staging_layout.row_pitch);
+    assert(subresource_layout.depthPitch == staging_layout.bytes &&
+           subresource_layout.size == staging_layout.bytes);
+    assert(subresource_layout.arrayPitch == staging_layout.bytes);
+    /* A tiled image and a subresource this role does not have report nothing
+     * rather than a fabricated linear layout. */
+    VkSubresourceLayout tiled_layout = {0};
+    vkGetImageSubresourceLayout(device, source, &subresource, &tiled_layout);
+    assert(!tiled_layout.offset && !tiled_layout.rowPitch && !tiled_layout.size);
+    VkImageSubresource wrong_mip = {VK_IMAGE_ASPECT_COLOR_BIT, 1, 0};
+    VkSubresourceLayout wrong_layout = {0};
+    vkGetImageSubresourceLayout(device, staging_image, &wrong_mip, &wrong_layout);
+    assert(!wrong_layout.rowPitch && !wrong_layout.size);
+    VkImageSubresource wrong_aspect = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0};
+    vkGetImageSubresourceLayout(device, staging_image, &wrong_aspect, &wrong_layout);
+    assert(!wrong_layout.rowPitch && !wrong_layout.size);
+    vkDestroyImage(device, staging_image, NULL);
+
+    /* Everything else that asks for linear tiling stays refused before an
+     * object exists. */
+    {
+        VkImageCreateInfo refused = staging;
+        VkImage image = VK_NULL_HANDLE;
+        refused.format = VK_FORMAT_B8G8R8A8_UNORM;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.format = VK_FORMAT_R8G8B8A8_SNORM;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.mipLevels = 2;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.arrayLayers = 2;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        /* A 1D and a 3D linear request are both well formed for the generic
+         * descriptor gate and still refused as the unsupported combinations
+         * they are. */
+        refused = staging;
+        refused.imageType = VK_IMAGE_TYPE_1D;
+        refused.extent.height = 1;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.imageType = VK_IMAGE_TYPE_3D;
+        refused.extent.depth = 4;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        refused = staging;
+        refused.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        refused.extent.height = WIDTH;
+        refused.arrayLayers = 6;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+        /* Exclusive sharing and an UNDEFINED initial layout are generic
+         * descriptor rules, so they are refused by the ordinary gate. */
+        refused = staging;
+        refused.sharingMode = VK_SHARING_MODE_CONCURRENT;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FEATURE_NOT_PRESENT && !image);
+        refused = staging;
+        refused.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+        assert(vkCreateImage(device, &refused, NULL, &image) == VK_ERROR_FEATURE_NOT_PRESENT && !image);
+    }
+
+    /* --- the destination sequence the native witness pins on hardware ------
+     * The witness clears the colour attachment and uploads an edge into it
+     * through the transfer destination the pinned upstream draw cases declare,
+     * then reads those bytes from the CPU. The same sequence is executed and
+     * pinned here, so the witness cannot disagree with the driver about the
+     * bytes it reads. */
+    {
+        enum { EDGE = 2 };
+        const uint32_t clear_word = 0xff604020u, upload_word = 0xff1e140au;
+        const uint32_t pitch = (WIDTH * 4u + 255u) & ~255u;
+        VkImage colour = make_image(VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT, NULL);
+        assert(ps5vk_colour_transfer_image(colour));
+        uint32_t *upload_words = NULL;
+        VkBuffer upload = make_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                      EDGE * EDGE * 4, (void **)&upload_words);
+        for (unsigned i = 0; i < EDGE * EDGE; ++i) upload_words[i] = upload_word;
+
+        VkCommandBuffer command = begin();
+        VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        /* The transitions are recorded and executed by the pinned sequence; this
+         * block pins the bytes, so the committed layout they would establish is
+         * injected exactly as a completed submission leaves it. */
+        colour->layout = VK_IMAGE_LAYOUT_GENERAL;
+        VkClearColorValue clear = {0};
+        clear.float32[0] = 0x20 / 255.0f;
+        clear.float32[1] = 0x40 / 255.0f;
+        clear.float32[2] = 0x60 / 255.0f;
+        clear.float32[3] = 1.0f;
+        vkCmdClearColorImage(command, colour, VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
+        VkBufferImageCopy region = {
+            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+            .imageExtent = {EDGE, EDGE, 1}};
+        vkCmdCopyBufferToImage(command, upload, colour, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+        assert(command->state == PS5VK_RECORDING);
+        (void)range;
+        submit_and_wait(command);
+
+        void *address = NULL;
+        VkDeviceSize bytes = 0;
+        assert(ps5vk_image_span(device, colour, &address, &bytes) == VK_SUCCESS);
+        assert(bytes >= (VkDeviceSize)pitch * HEIGHT);
+        unsigned clear_matched = 0, upload_matched = 0;
+        for (unsigned y = 0; y < HEIGHT; ++y)
+            for (unsigned x = 0; x < WIDTH; ++x) {
+                uint32_t word = 0;
+                memcpy(&word, (unsigned char *)address + (VkDeviceSize)y * pitch +
+                       (VkDeviceSize)x * 4u, sizeof(word));
+                if (x < EDGE && y < EDGE) upload_matched += word == upload_word;
+                else clear_matched += word == clear_word;
+            }
+        assert(clear_matched == WIDTH * HEIGHT - EDGE * EDGE);
+        assert(upload_matched == EDGE * EDGE);
+        vkDestroyImage(device, colour, NULL);
+    }
 
     vkDestroyBuffer(device, alias_buffer, NULL);
     vkDestroyImage(device, alias_destination, NULL);

@@ -11,6 +11,18 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# The draw-parameter witness cases the consumer renders. The verifier keeps its
+# own table of the values each case must produce, so a drift between the two is
+# a validation failure rather than a silent acceptance.
+DRAW_PARAMETER_CASES = (
+    "list_direct",
+    "list_indexed",
+    "strip_indexed_negative",
+    "list_indirect",
+    "strip_indexed_indirect",
+    "strip_direct",
+)
 sys.path.insert(0, str(ROOT / "tools"))
 from lab import lab_root  # noqa: E402
 
@@ -139,6 +151,11 @@ def main():
     subprocess.run([
         sys.executable, str(ROOT / "tools/prepare_consumer_sync_shaders.py"),
         "--out", str(sync_shader_header),
+    ], check=True)
+    draw_parameter_shader_header = BUILD_DIR / "draw_parameter_shaders.h"
+    subprocess.run([
+        sys.executable, str(ROOT / "tools/prepare_consumer_draw_parameter_shaders.py"),
+        "--out", str(draw_parameter_shader_header),
     ], check=True)
 
     # 1. Compile consumer main.c
@@ -300,6 +317,17 @@ def main():
                 (ROOT / "build/test-shaders/storage8.spv").read_bytes()).hexdigest(),
             "storage16_spirv_sha256": hashlib.sha256(
                 (ROOT / "build/test-shaders/storage16.spv").read_bytes()).hexdigest(),
+        },
+        "draw_parameters": {
+            "api": "Vulkan 1.0 extension",
+            "extension": "VK_KHR_shader_draw_parameters",
+            "cases": list(DRAW_PARAMETER_CASES),
+            "vertex_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_suffix(".vert.spv").read_bytes()
+            ).hexdigest(),
+            "fragment_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_suffix(".frag.spv").read_bytes()
+            ).hexdigest(),
         },
         "synchronization": {
             "api": "Vulkan 1.0",

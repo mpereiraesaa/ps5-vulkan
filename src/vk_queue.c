@@ -118,12 +118,15 @@ static VkResult start_submission(VkDevice d)
                         d->lost = VK_TRUE;
                         return VK_ERROR_DEVICE_LOST;
                     }
-                    if (ps5vk_image_transfer_operation(op->type) &&
+                    /* Exactly one image domain owns the operation: the pure
+                     * transfer role's row memcpy, or the linear frontend that
+                     * also performs the colour-attachment readback copy. */
+                    if (ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_TRANSFER &&
                         ps5vk_image_transfer_execute(d, op) != VK_SUCCESS) {
                         d->lost = VK_TRUE;
                         return VK_ERROR_DEVICE_LOST;
                     }
-                    if (ps5vk_image_linear_operation(op) &&
+                    if (ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_LINEAR &&
                         ps5vk_image_linear_execute(d, op) != VK_SUCCESS) {
                         d->lost = VK_TRUE;
                         return VK_ERROR_DEVICE_LOST;
@@ -387,7 +390,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             continue;
         }
         if (active) return 0;
-        if (ps5vk_image_transfer_operation(op->type)) {
+        if (ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_TRANSFER) {
             /* Submit-time validation of the recorded image operation; execution
              * re-validates at the head. Lifetime is protected by
              * invalidate_resource, which sees op->image_source/_destination. */
@@ -402,7 +405,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             if (ps5vk_query_operation_validate(d, op) != VK_SUCCESS) return 0;
             continue;
         }
-        if (ps5vk_image_linear_operation(op)) {
+        if (ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_LINEAR) {
             /* Host copies over the padded linear transfer role: no graphics
              * backend submit is involved, so only the role, the resources and
              * the region mapping are validated here. Recorded-order layout

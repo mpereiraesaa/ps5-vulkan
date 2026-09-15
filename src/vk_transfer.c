@@ -110,7 +110,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
     const int sampled_upload=(usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
         ps5vk_texture_format_sampled_image(image->info.format) &&
         !(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
-    const int linear_upload=ps5vk_pure_transfer_image(image) &&
+    /* The transfer role and the colour-attachment shape that declares a
+     * transfer destination share the padded linear upload, which is why the
+     * pinned upstream draw tests can create their colour target with a
+     * transfer destination and still upload into it. */
+    const int linear_upload=(ps5vk_pure_transfer_image(image) ||
+        ps5vk_colour_transfer_image(image)) &&
         (usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     if(!ps5vk_buffer_usage(d,source,VK_BUFFER_USAGE_TRANSFER_SRC_BIT) ||
         !ps5vk_texture_format_sampled_image(image->info.format) ||

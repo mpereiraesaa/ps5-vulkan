@@ -150,7 +150,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
             ((VkPhysicalDeviceProtectedMemoryFeatures *)next)->protectedMemory = VK_FALSE;
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES) {
-            ((VkPhysicalDeviceShaderDrawParametersFeatures *)next)->shaderDrawParameters = VK_FALSE;
+            ((VkPhysicalDeviceShaderDrawParametersFeatures *)next)->shaderDrawParameters =
+                !!(p->platform.supported_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS);
         }
     }
 }
@@ -266,7 +267,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkExtensionProperties properties[3];
+    VkExtensionProperties properties[4];
     uint32_t total = 0;
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
@@ -281,6 +282,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (p->platform.supported_features & PS5VK_FEATURE_STORAGE_BUFFER_16BIT) {
         properties[total++] = (VkExtensionProperties){VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
                                                        VK_KHR_16BIT_STORAGE_SPEC_VERSION};
+    }
+    if (p->platform.supported_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME,
+            VK_KHR_SHADER_DRAW_PARAMETERS_SPEC_VERSION};
     }
     return enumerate_extensions(properties, total, count, out);
 }
@@ -306,6 +312,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         return INVALID;
     }
     VkBool32 storage_class = VK_FALSE, extension8 = VK_FALSE, extension16 = VK_FALSE;
+    VkBool32 draw_parameters = VK_FALSE;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -316,6 +323,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &extension8;
         else if (!strcmp(name, VK_KHR_16BIT_STORAGE_EXTENSION_NAME))
             seen = &extension16;
+        else if (!strcmp(name, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME))
+            seen = &draw_parameters;
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -324,12 +333,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     }
     if ((extension8 && !(p->platform.supported_features & PS5VK_FEATURE_STORAGE_BUFFER_8BIT)) ||
         (extension16 && !(p->platform.supported_features & PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) ||
+        (draw_parameters &&
+         !(p->platform.supported_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS)) ||
         ((extension8 || extension16) &&
          (!storage_class || !p->instance->features2_extension_enabled)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
+    VkBool32 saw_draw_parameters = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2) {
@@ -380,10 +392,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES) {
             const VkPhysicalDeviceShaderDrawParametersFeatures *features =
                 (const VkPhysicalDeviceShaderDrawParametersFeatures *)next;
-            /* Same neutral-chain rule as protected memory. This 1.1 feature is
-             * not advertised by the Vulkan-1.0 profile. */
+            /* One structure only, whatever value it carries: the duplicate rule
+             * is about the pNext chain, so it is decided before the value is
+             * interpreted. Setting the flag only for a true request let a second
+             * structure slip through whenever either copy was false, which is
+             * the same fail-closed hole the 8/16-bit branches never had. */
+            if (saw_draw_parameters) return INVALID;
+            saw_draw_parameters = VK_TRUE;
+            /* VK_KHR_shader_draw_parameters is how this Vulkan 1.0 profile
+             * exposes the 1.1 feature, so a true request is accepted only with
+             * the extension enabled; the extension itself is only advertised
+             * when the platform supports it, which the loop above enforced. */
             if (!valid_bool(features->shaderDrawParameters)) return INVALID;
-            if (features->shaderDrawParameters) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (features->shaderDrawParameters) {
+                if (!draw_parameters) return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features |= PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;
+            }
         } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;
         }

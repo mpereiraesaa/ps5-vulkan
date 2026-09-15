@@ -11,6 +11,7 @@
 #endif
 #include "storage_width_shaders.h"
 #include "sync_shaders.h"
+#include "draw_parameter_shaders.h"
 #include "ps5log.h"
 #ifdef CONSUMER_DXVK262_PROBE
 #include "dxvk_capability_probe.h"
@@ -1643,6 +1644,662 @@ static void run_runtime_compute(VkPhysicalDevice physical, VkDevice device, VkQu
     vkDestroyShaderModule(device, comp_module, NULL);
 }
 
+/* Shader draw parameters witness (VK_KHR_shader_draw_parameters).
+ *
+ * A runtime-compiled vertex shader encodes BaseVertex, BaseInstance and
+ * DrawIndex into the colour attachment, so the CPU readback below proves the
+ * values the GPU actually delivered rather than the values the API was asked
+ * for:
+ *
+ *   R = low byte of gl_BaseVertexARB   (two's complement when negative)
+ *   G = low byte of gl_BaseInstanceARB
+ *   B = low byte of gl_DrawIDARB       (zero for every draw this profile runs)
+ *   A = 255
+ *
+ * Six cases cover both accepted topologies, direct and single-indirect draws,
+ * indexed and non-indexed addressing and a negative vertex offset. Indirect
+ * firstInstance stays zero because drawIndirectFirstInstance is not advertised;
+ * the direct cases exercise non-zero firstInstance instead. The shader derives
+ * its positions from gl_VertexIndex, so a wrong BaseVertex also breaks the
+ * geometry that produced the covered pixels.
+ */
+static void run_draw_parameters(VkDevice device, VkQueue queue)
+{
+    enum {
+        EXTENT = 64,
+        CASE_COUNT = 6,
+        COVERED_MINIMUM = 900
+    };
+    struct draw_parameter_case {
+        const char *name;
+        int strip;
+        int indirect;
+        int indexed;
+        uint16_t index_data[3];
+        int32_t vertex_offset;
+        uint32_t first_instance;
+        uint32_t expected_base_vertex;
+        uint32_t expected_base_instance;
+        uint32_t expected_draw_index;
+    };
+    static const struct draw_parameter_case cases[CASE_COUNT] = {
+        {"list_direct", 0, 0, 0, {0, 0, 0}, 7, 9, 7, 9, 0},
+        {"list_indexed", 0, 0, 1, {0, 1, 2}, 5, 3, 5, 3, 0},
+        {"strip_indexed_negative", 1, 0, 1, {2, 3, 4}, -2, 11, 254, 11, 0},
+        {"list_indirect", 0, 1, 0, {0, 0, 0}, 11, 0, 11, 0, 0},
+        {"strip_indexed_indirect", 1, 1, 1, {0, 1, 2}, 17, 0, 17, 0, 0},
+        {"strip_direct", 1, 0, 0, {0, 0, 0}, 21, 23, 21, 23, 0}
+    };
+    const uint32_t clear_word = 0xff000000u;
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_DRAW_PARAMETERS_START cases=%u extent=%u",
+        (unsigned)CASE_COUNT, (unsigned)EXTENT);
+
+    /* Colour target: one BGRA8 image whose memory stays mapped for the CPU
+     * comparison, exactly like the other offscreen witnesses. */
+    VkImageCreateInfo image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        /* The exact shape the pinned upstream draw cases create: the readback
+         * colour format with the attachment, readback and transfer-destination
+         * roles together. */
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {EXTENT, EXTENT, 1},
+        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_DST_BIT
+    };
+    VkImage image = VK_NULL_HANDLE;
+    CHECK(vkCreateImage(device, &image_info, NULL, &image));
+    VkMemoryRequirements image_requirements;
+    vkGetImageMemoryRequirements(device, image, &image_requirements);
+    VkMemoryAllocateInfo image_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = image_requirements.size,
+        .memoryTypeIndex = 0
+    };
+    VkDeviceMemory image_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &image_allocation, NULL, &image_memory));
+    CHECK(vkBindImageMemory(device, image, image_memory, 0));
+    uint32_t *pixels = NULL;
+    CHECK(vkMapMemory(device, image_memory, 0, image_requirements.size, 0,
+                      (void **)&pixels));
+
+    VkImageViewCreateInfo view_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+    };
+    VkImageView view = VK_NULL_HANDLE;
+    CHECK(vkCreateImageView(device, &view_info, NULL, &view));
+
+    VkAttachmentDescription attachment = {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        /* GENERAL for both, like the pinned upstream draw pass. */
+        .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .finalLayout = VK_IMAGE_LAYOUT_GENERAL
+    };
+    VkAttachmentReference color_reference = {0, VK_IMAGE_LAYOUT_GENERAL};
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_reference
+    };
+    VkRenderPassCreateInfo pass_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1, .pAttachments = &attachment,
+        .subpassCount = 1, .pSubpasses = &subpass
+    };
+    VkRenderPass pass = VK_NULL_HANDLE;
+    CHECK(vkCreateRenderPass(device, &pass_info, NULL, &pass));
+    VkFramebufferCreateInfo framebuffer_info = {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = pass,
+        .attachmentCount = 1, .pAttachments = &view,
+        .width = EXTENT, .height = EXTENT, .layers = 1
+    };
+    VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    CHECK(vkCreateFramebuffer(device, &framebuffer_info, NULL, &framebuffer));
+
+    VkShaderModuleCreateInfo vertex_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(consumer_draw_parameters_vert_spirv),
+        .pCode = consumer_draw_parameters_vert_spirv
+    };
+    VkShaderModule vertex_module = VK_NULL_HANDLE;
+    CHECK(vkCreateShaderModule(device, &vertex_info, NULL, &vertex_module));
+    VkShaderModuleCreateInfo fragment_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(consumer_draw_parameters_frag_spirv),
+        .pCode = consumer_draw_parameters_frag_spirv
+    };
+    VkShaderModule fragment_module = VK_NULL_HANDLE;
+    CHECK(vkCreateShaderModule(device, &fragment_info, NULL, &fragment_module));
+    VkPipelineLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+    CHECK(vkCreatePipelineLayout(device, &layout_info, NULL, &pipeline_layout));
+
+    VkPipelineShaderStageCreateInfo stages[2] = {
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vertex_module, .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fragment_module, .pName = "main"}
+    };
+    VkPipelineVertexInputStateCreateInfo vertex_input = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    /* An indexed draw has to name a vertex binding, and the interface
+     * reflector only accepts a declared attribute the shader really reads, so
+     * the witness binds one zero-filled buffer whose attribute nudges the
+     * generated triangle by a thousandth of a pixel. */
+    VkVertexInputBindingDescription draw_parameter_binding = {
+        .binding = 0, .stride = 16, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription draw_parameter_attribute = {
+        .location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .offset = 0};
+    vertex_input.vertexBindingDescriptionCount = 1;
+    vertex_input.pVertexBindingDescriptions = &draw_parameter_binding;
+    vertex_input.vertexAttributeDescriptionCount = 1;
+    vertex_input.pVertexAttributeDescriptions = &draw_parameter_attribute;
+    VkPipelineRasterizationStateCreateInfo raster = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = VK_CULL_MODE_NONE,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE, .lineWidth = 1.0f};
+    VkPipelineMultisampleStateCreateInfo multisample = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
+    VkViewport viewport = {0.0f, 0.0f, EXTENT, EXTENT, 0.0f, 1.0f};
+    VkRect2D scissor = {{0, 0}, {EXTENT, EXTENT}};
+    VkPipelineViewportStateCreateInfo viewport_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1, .pViewports = &viewport,
+        .scissorCount = 1, .pScissors = &scissor};
+    VkPipelineColorBlendAttachmentState blend_attachment = {.colorWriteMask = 15};
+    VkPipelineColorBlendStateCreateInfo blend = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount = 1, .pAttachments = &blend_attachment};
+
+    VkPipeline pipelines[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    const VkPrimitiveTopology topologies[2] = {
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP};
+    for (unsigned t = 0; t < 2; ++t) {
+        VkPipelineInputAssemblyStateCreateInfo input_assembly = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = topologies[t]};
+        VkGraphicsPipelineCreateInfo pipeline_info = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .stageCount = 2, .pStages = stages,
+            .pVertexInputState = &vertex_input,
+            .pInputAssemblyState = &input_assembly,
+            .pRasterizationState = &raster,
+            .pMultisampleState = &multisample,
+            .pViewportState = &viewport_state,
+            .pColorBlendState = &blend,
+            .layout = pipeline_layout, .renderPass = pass};
+        CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info,
+                                        NULL, &pipelines[t]));
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CONSUMER_DRAW_PARAMETERS_PIPELINE topology=%s created=1",
+            t ? "triangle_strip" : "triangle_list");
+    }
+
+    /* Index and indirect argument storage stay host visible and mapped, so a
+     * case only writes and flushes before recording its draw. */
+    VkBufferCreateInfo index_buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 3 * sizeof(uint16_t),
+        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer index_buffer = VK_NULL_HANDLE;
+    CHECK(vkCreateBuffer(device, &index_buffer_info, NULL, &index_buffer));
+    VkMemoryRequirements index_requirements;
+    vkGetBufferMemoryRequirements(device, index_buffer, &index_requirements);
+    VkMemoryAllocateInfo index_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = index_requirements.size, .memoryTypeIndex = 0};
+    VkDeviceMemory index_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &index_allocation, NULL, &index_memory));
+    CHECK(vkBindBufferMemory(device, index_buffer, index_memory, 0));
+    uint16_t *index_data = NULL;
+    CHECK(vkMapMemory(device, index_memory, 0, index_requirements.size, 0,
+                      (void **)&index_data));
+
+    /* Zero-filled vertex storage: the indexed cases need the binding, and the
+     * attribute must resolve to something the shader can add. */
+    VkBufferCreateInfo vertex_buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 512,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer vertex_buffer = VK_NULL_HANDLE;
+    CHECK(vkCreateBuffer(device, &vertex_buffer_info, NULL, &vertex_buffer));
+    VkMemoryRequirements vertex_requirements;
+    vkGetBufferMemoryRequirements(device, vertex_buffer, &vertex_requirements);
+    VkMemoryAllocateInfo vertex_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = vertex_requirements.size, .memoryTypeIndex = 0};
+    VkDeviceMemory vertex_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &vertex_allocation, NULL, &vertex_memory));
+    CHECK(vkBindBufferMemory(device, vertex_buffer, vertex_memory, 0));
+    void *vertex_data = NULL;
+    CHECK(vkMapMemory(device, vertex_memory, 0, vertex_requirements.size, 0,
+                      &vertex_data));
+    memset(vertex_data, 0, (size_t)vertex_requirements.size);
+    VkMappedMemoryRange vertex_flush = {
+        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory = vertex_memory, .offset = 0, .size = VK_WHOLE_SIZE};
+    CHECK(vkFlushMappedMemoryRanges(device, 1, &vertex_flush));
+
+    VkBufferCreateInfo indirect_buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 2 * sizeof(VkDrawIndexedIndirectCommand),
+        .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer indirect_buffer = VK_NULL_HANDLE;
+    CHECK(vkCreateBuffer(device, &indirect_buffer_info, NULL, &indirect_buffer));
+    VkMemoryRequirements indirect_requirements;
+    vkGetBufferMemoryRequirements(device, indirect_buffer, &indirect_requirements);
+    VkMemoryAllocateInfo indirect_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = indirect_requirements.size, .memoryTypeIndex = 0};
+    VkDeviceMemory indirect_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &indirect_allocation, NULL, &indirect_memory));
+    CHECK(vkBindBufferMemory(device, indirect_buffer, indirect_memory, 0));
+    void *indirect_data = NULL;
+    CHECK(vkMapMemory(device, indirect_memory, 0, indirect_requirements.size, 0,
+                      &indirect_data));
+
+    VkCommandPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = 0};
+    VkCommandPool pool = VK_NULL_HANDLE;
+    CHECK(vkCreateCommandPool(device, &pool_info, NULL, &pool));
+    VkCommandBufferAllocateInfo command_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1};
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    CHECK(vkAllocateCommandBuffers(device, &command_info, &command));
+    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence fence = VK_NULL_HANDLE;
+    CHECK(vkCreateFence(device, &fence_info, NULL, &fence));
+
+    /* Transfer-destination witness on the same image shape the promotion's
+     * upstream cases create. A clear and a buffer-to-image upload each write a
+     * pinned word through the destination role, and the CPU readback pins both
+     * before any draw runs - the colour-attachment role is exercised later by
+     * the six draw cases on the same image. */
+    {
+        const uint32_t clear_word = 0xff604020u;  /* R=20 G=40 B=60 A=ff: R is the low byte */
+        const uint32_t upload_word = 0xff1e140au; /* R=0a G=14 B=1e A=ff */
+        enum { UPLOAD_EDGE = 8 };
+        VkBufferCreateInfo upload_info = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = UPLOAD_EDGE * UPLOAD_EDGE * 4,
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+        VkBuffer upload_buffer = VK_NULL_HANDLE;
+        CHECK(vkCreateBuffer(device, &upload_info, NULL, &upload_buffer));
+        VkMemoryRequirements upload_requirements;
+        vkGetBufferMemoryRequirements(device, upload_buffer, &upload_requirements);
+        VkMemoryAllocateInfo upload_allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = upload_requirements.size, .memoryTypeIndex = 0};
+        VkDeviceMemory upload_memory = VK_NULL_HANDLE;
+        CHECK(vkAllocateMemory(device, &upload_allocation, NULL, &upload_memory));
+        CHECK(vkBindBufferMemory(device, upload_buffer, upload_memory, 0));
+        uint32_t *upload_words = NULL;
+        CHECK(vkMapMemory(device, upload_memory, 0, upload_requirements.size, 0,
+                          (void **)&upload_words));
+        for (unsigned word = 0; word < UPLOAD_EDGE * UPLOAD_EDGE; ++word)
+            upload_words[word] = upload_word;
+        VkMappedMemoryRange upload_flush = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = upload_memory, .offset = 0, .size = VK_WHOLE_SIZE};
+        CHECK(vkFlushMappedMemoryRanges(device, 1, &upload_flush));
+
+        CHECK(vkResetCommandBuffer(command, 0));
+        VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(command, &begin));
+        VkImageSubresourceRange range = {
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkImageMemoryBarrier to_dst = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            /* The pinned upstream draw cases use GENERAL here, clear in GENERAL
+             * and render with a GENERAL attachment; the witness keeps exactly
+             * that shape so it exercises the same layout path. */
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image, .subresourceRange = range};
+        /* The pinned upstream draw case's own transition stages: TOP_OF_PIPE to
+         * TRANSFER for the initial UNDEFINED -> GENERAL transfer write
+         * (vktDrawBaseClass.cpp:199-200). */
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_dst);
+        VkClearColorValue clear = {0};
+        clear.float32[0] = 0x20 / 255.0f;
+        clear.float32[1] = 0x40 / 255.0f;
+        clear.float32[2] = 0x60 / 255.0f;
+        clear.float32[3] = 1.0f;
+        vkCmdClearColorImage(command, image, VK_IMAGE_LAYOUT_GENERAL,
+                             &clear, 1, &range);
+        VkBufferImageCopy copy = {
+            .bufferOffset = 0, .bufferRowLength = 0, .bufferImageHeight = 0,
+            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+            .imageOffset = {0, 0, 0},
+            .imageExtent = {UPLOAD_EDGE, UPLOAD_EDGE, 1}};
+        vkCmdCopyBufferToImage(command, upload_buffer, image,
+                               VK_IMAGE_LAYOUT_GENERAL, 1, &copy);
+        /* The pinned upstream draw case orders the transfer write against the
+         * colour-attachment stages with a resource-less memory barrier
+         * (vktDrawBaseClass.cpp:207-211); the witness records the same shape
+         * rather than a second image barrier the profile does not claim. */
+        VkMemoryBarrier to_color = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT};
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 1, &to_color, 0,
+            NULL, 0, NULL);
+        CHECK(vkEndCommandBuffer(command));
+        CHECK(vkResetFences(device, 1, &fence));
+        VkSubmitInfo dst_submit = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1, .pCommandBuffers = &command};
+        CHECK(vkQueueSubmit(queue, 1, &dst_submit, fence));
+        CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+        VkMappedMemoryRange dst_invalidate = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = image_memory, .offset = 0, .size = image_requirements.size};
+        CHECK(vkInvalidateMappedMemoryRanges(device, 1, &dst_invalidate));
+        unsigned clear_matched = 0, upload_matched = 0;
+        for (unsigned y = 0; y < EXTENT; ++y)
+            for (unsigned x = 0; x < EXTENT; ++x) {
+                const uint32_t word = pixels[y * EXTENT + x];
+                if (x < UPLOAD_EDGE && y < UPLOAD_EDGE)
+                    upload_matched += word == upload_word;
+                else
+                    clear_matched += word == clear_word;
+            }
+        const int dst_valid =
+            clear_matched == EXTENT * EXTENT - UPLOAD_EDGE * UPLOAD_EDGE &&
+            upload_matched == UPLOAD_EDGE * UPLOAD_EDGE;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CONSUMER_DRAW_PARAMETERS_DST clear_word=%08x clear_matched=%u "
+            "upload_word=%08x upload_matched=%u valid=%d",
+            clear_word, clear_matched, upload_word, upload_matched, dst_valid);
+        vkUnmapMemory(device, upload_memory);
+        vkDestroyBuffer(device, upload_buffer, NULL);
+        vkFreeMemory(device, upload_memory, NULL);
+    }
+
+    unsigned witnessed = 0;
+    /* The pinned upstream readback path, executed exactly as the draw module
+     * runs it: the colour attachment is copied into a VK_IMAGE_TILING_LINEAR
+     * staging image and the rows are read through vkGetImageSubresourceLayout.
+     * Without this the witness would only prove the attachment's own memory,
+     * which is not what the eight selected upstream leaves consume. */
+    VkImageCreateInfo staging_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {EXTENT, EXTENT, 1},
+        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_LINEAR,
+        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    VkImage staging_image = VK_NULL_HANDLE;
+    CHECK(vkCreateImage(device, &staging_info, NULL, &staging_image));
+    VkMemoryRequirements staging_requirements;
+    vkGetImageMemoryRequirements(device, staging_image, &staging_requirements);
+    VkMemoryAllocateInfo staging_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = staging_requirements.size, .memoryTypeIndex = 0};
+    VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+    CHECK(vkAllocateMemory(device, &staging_allocation, NULL, &staging_memory));
+    CHECK(vkBindImageMemory(device, staging_image, staging_memory, 0));
+    /* The staging allocation stays mapped: the invalidation below names a
+     * mapped range, exactly as the module's own allocation does. */
+    unsigned char *staging_bytes = NULL;
+    CHECK(vkMapMemory(device, staging_memory, 0, staging_requirements.size, 0,
+                      (void **)&staging_bytes));
+    if (!staging_bytes) {
+        ps5log_printf(PS5LOG_ERR, "PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_MAP_FAILED");
+        return;
+    }
+    VkSubresourceLayout staging_layout = {0};
+    const VkImageSubresource staging_subresource = {
+        VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    vkGetImageSubresourceLayout(device, staging_image, &staging_subresource,
+                               &staging_layout);
+    const uint32_t expected_pitch = (EXTENT * 4u + 255u) & ~255u;
+    const int staging_layout_valid =
+        staging_layout.offset == 0 && staging_layout.rowPitch == expected_pitch &&
+        staging_layout.depthPitch == (VkDeviceSize)expected_pitch * EXTENT &&
+        staging_layout.size == (VkDeviceSize)expected_pitch * EXTENT;
+    unsigned staged_witnessed = 0;
+    (void)staging_layout_valid;
+    for (unsigned c = 0; c < CASE_COUNT; ++c) {
+        const struct draw_parameter_case *test = &cases[c];
+        if (test->indexed) {
+            memcpy(index_data, test->index_data, sizeof(test->index_data));
+            VkMappedMemoryRange flush = {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = index_memory, .offset = 0, .size = VK_WHOLE_SIZE};
+            CHECK(vkFlushMappedMemoryRanges(device, 1, &flush));
+        }
+        if (test->indirect) {
+            if (test->indexed) {
+                VkDrawIndexedIndirectCommand indirect = {
+                    .indexCount = 3, .instanceCount = 1, .firstIndex = 0,
+                    .vertexOffset = test->vertex_offset,
+                    .firstInstance = test->first_instance};
+                memcpy(indirect_data, &indirect, sizeof(indirect));
+            } else {
+                VkDrawIndirectCommand indirect = {
+                    .vertexCount = 3, .instanceCount = 1,
+                    .firstVertex = (uint32_t)test->vertex_offset,
+                    .firstInstance = test->first_instance};
+                memcpy(indirect_data, &indirect, sizeof(indirect));
+            }
+            VkMappedMemoryRange flush = {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = indirect_memory, .offset = 0, .size = VK_WHOLE_SIZE};
+            CHECK(vkFlushMappedMemoryRanges(device, 1, &flush));
+        }
+        CHECK(vkResetCommandBuffer(command, 0));
+        VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(command, &begin));
+        VkClearValue clear = {0};
+        clear.color.float32[3] = 1.0f;
+        VkRenderPassBeginInfo pass_begin = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = pass, .framebuffer = framebuffer,
+            .renderArea = {{0, 0}, {EXTENT, EXTENT}},
+            .clearValueCount = 1, .pClearValues = &clear};
+        vkCmdBeginRenderPass(command, &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[test->strip]);
+        {
+            const VkDeviceSize vertex_offset = 0;
+            vkCmdBindVertexBuffers(command, 0, 1, &vertex_buffer, &vertex_offset);
+        }
+        if (test->indexed)
+            vkCmdBindIndexBuffer(command, index_buffer, 0, VK_INDEX_TYPE_UINT16);
+        if (test->indirect) {
+            if (test->indexed)
+                vkCmdDrawIndexedIndirect(command, indirect_buffer, 0, 1,
+                                         sizeof(VkDrawIndexedIndirectCommand));
+            else
+                vkCmdDrawIndirect(command, indirect_buffer, 0, 1,
+                                  sizeof(VkDrawIndirectCommand));
+        } else if (test->indexed) {
+            vkCmdDrawIndexed(command, 3, 1, 0, test->vertex_offset, test->first_instance);
+        } else {
+            vkCmdDraw(command, 3, 1, (uint32_t)test->vertex_offset, test->first_instance);
+        }
+        vkCmdEndRenderPass(command);
+        CHECK(vkEndCommandBuffer(command));
+        CHECK(vkResetFences(device, 1, &fence));
+        VkSubmitInfo submit = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1, .pCommandBuffers = &command};
+        CHECK(vkQueueSubmit(queue, 1, &submit, fence));
+        CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+        VkMappedMemoryRange invalidate = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = image_memory, .offset = 0, .size = image_requirements.size};
+        CHECK(vkInvalidateMappedMemoryRanges(device, 1, &invalidate));
+
+        /* The shader writes one colour for the whole draw, so the covered
+         * pixels must agree exactly. */
+        unsigned covered = 0;
+        uint32_t observed = 0;
+        int uniform = 1;
+        for (unsigned pixel = 0; pixel < EXTENT * EXTENT; ++pixel) {
+            const uint32_t word = pixels[pixel];
+            if (word == clear_word) continue;
+            if (!covered) observed = word;
+            else if (word != observed) uniform = 0;
+            ++covered;
+        }
+        /* R8G8B8A8_UNORM: R is the low byte of the little-endian word. */
+        const uint32_t base_vertex = observed & 0xffu;
+        const uint32_t base_instance = (observed >> 8) & 0xffu;
+        const uint32_t draw_index = (observed >> 16) & 0xffu;
+        const int valid = uniform && covered >= COVERED_MINIMUM &&
+            ((observed >> 24) & 0xffu) == 0xffu &&
+            base_vertex == test->expected_base_vertex &&
+            base_instance == test->expected_base_instance &&
+            draw_index == test->expected_draw_index;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CONSUMER_DRAW_PARAMETERS case=%s base_vertex=%u base_instance=%u "
+            "draw_index=%u covered=%u uniform=%d valid=%d",
+            test->name, base_vertex, base_instance, draw_index, covered,
+            uniform, valid);
+        if (valid) ++witnessed;
+
+        /* The pinned readback of the same frame, in its own submission and its
+         * own barriers, then a host read of the staging rows. */
+        {
+            CHECK(vkResetCommandBuffer(command, 0));
+            VkCommandBufferBeginInfo readback_begin = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+            CHECK(vkBeginCommandBuffer(command, &readback_begin));
+            VkImageSubresourceRange staging_range = {
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            VkImageMemoryBarrier staging_in = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = staging_image, .subresourceRange = staging_range};
+            vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1,
+                &staging_in);
+            VkImageCopy staging_copy = {
+                .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                .srcOffset = {0, 0, 0},
+                .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                .dstOffset = {0, 0, 0},
+                .extent = {EXTENT, EXTENT, 1}};
+            vkCmdCopyImage(command, image, VK_IMAGE_LAYOUT_GENERAL, staging_image,
+                           VK_IMAGE_LAYOUT_GENERAL, 1, &staging_copy);
+            VkImageMemoryBarrier staging_out = staging_in;
+            staging_out.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            staging_out.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+            staging_out.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            staging_out.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+            vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 0, NULL, 1,
+                &staging_out);
+            CHECK(vkEndCommandBuffer(command));
+            CHECK(vkResetFences(device, 1, &fence));
+            VkSubmitInfo readback_submit = {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .commandBufferCount = 1, .pCommandBuffers = &command};
+            CHECK(vkQueueSubmit(queue, 1, &readback_submit, fence));
+            CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+            VkMappedMemoryRange staging_invalidate = {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = staging_memory, .offset = 0,
+                .size = staging_requirements.size};
+            CHECK(vkInvalidateMappedMemoryRanges(device, 1, &staging_invalidate));
+
+            unsigned staged_covered = 0;
+            uint32_t staged_observed = 0;
+            int staged_uniform = 1;
+            for (unsigned y = 0; y < EXTENT; ++y) {
+                for (unsigned x = 0; x < EXTENT; ++x) {
+                    uint32_t word = 0;
+                    memcpy(&word, staging_bytes + (VkDeviceSize)y * staging_layout.rowPitch +
+                           (VkDeviceSize)x * 4u, sizeof(word));
+                    if (word == clear_word) continue;
+                    if (!staged_covered) staged_observed = word;
+                    else if (word != staged_observed) staged_uniform = 0;
+                    ++staged_covered;
+                }
+            }
+            const int staged_valid = staging_layout_valid && staged_uniform &&
+                staged_covered == covered && staged_observed == observed;
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING case=%s row_pitch=%llu "
+                "staged_bytes=%llu staged=%08x covered=%u uniform=%d layout=%d "
+                "valid=%d",
+                test->name, (unsigned long long)staging_layout.rowPitch,
+                (unsigned long long)staging_requirements.size, staged_observed,
+                staged_covered, staged_uniform, staging_layout_valid, staged_valid);
+            if (staged_valid) ++staged_witnessed;
+        }
+    }
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_DRAW_PARAMETERS_RESULT cases=%u witnessed=%u valid=%d",
+        (unsigned)CASE_COUNT, witnessed, witnessed == CASE_COUNT);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT cases=%u witnessed=%u valid=%d",
+        (unsigned)CASE_COUNT, staged_witnessed, staged_witnessed == CASE_COUNT);
+
+    vkUnmapMemory(device, indirect_memory);
+    vkUnmapMemory(device, index_memory);
+    vkUnmapMemory(device, vertex_memory);
+    vkUnmapMemory(device, image_memory);
+    vkDestroyFence(device, fence, NULL);
+    vkDestroyCommandPool(device, pool, NULL);
+    vkDestroyBuffer(device, indirect_buffer, NULL);
+    vkFreeMemory(device, indirect_memory, NULL);
+    vkDestroyBuffer(device, index_buffer, NULL);
+    vkFreeMemory(device, index_memory, NULL);
+    vkDestroyBuffer(device, vertex_buffer, NULL);
+    vkFreeMemory(device, vertex_memory, NULL);
+    vkDestroyPipeline(device, pipelines[0], NULL);
+    vkDestroyPipeline(device, pipelines[1], NULL);
+    vkDestroyPipelineLayout(device, pipeline_layout, NULL);
+    vkDestroyShaderModule(device, fragment_module, NULL);
+    vkDestroyShaderModule(device, vertex_module, NULL);
+    vkDestroyFramebuffer(device, framebuffer, NULL);
+    vkDestroyRenderPass(device, pass, NULL);
+    vkDestroyImageView(device, view, NULL);
+    vkDestroyImage(device, image, NULL);
+    vkFreeMemory(device, image_memory, NULL);
+    vkDestroyImage(device, staging_image, NULL);
+    vkUnmapMemory(device, staging_memory);
+    vkFreeMemory(device, staging_memory, NULL);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_DRAW_PARAMETERS_RETIRED cases=%u witnessed=%u",
+        (unsigned)CASE_COUNT, witnessed);
+}
+
 static void run_consumer(VkPhysicalDevice physical, VkDevice device, VkQueue queue,
                          int is_continuous)
 {
@@ -2532,10 +3189,14 @@ int main(void)
     VkPhysicalDevice16BitStorageFeatures storage16 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
     };
+    VkPhysicalDeviceShaderDrawParametersFeatures draw_parameters = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES,
+    };
     VkPhysicalDevice8BitStorageFeatures storage8 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES,
-        .pNext = &storage16,
+        .pNext = &draw_parameters,
     };
+    draw_parameters.pNext = &storage16;
     VkPhysicalDeviceFeatures2 features2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .pNext = &storage8,
@@ -2552,10 +3213,14 @@ int main(void)
             storage16.storagePushConstant16 == VK_FALSE &&
             storage16.storageInputOutput16 == VK_FALSE,
             "exact 16-bit storage feature report");
+    /* The draw-parameter contract this tranche promoted: the 1.1 feature is
+     * exposed through VK_KHR_shader_draw_parameters on this Vulkan 1.0 device. */
+    REQUIRE(draw_parameters.shaderDrawParameters == VK_TRUE,
+            "shader draw parameters feature report");
     ps5log_line(PS5LOG_MARK,
-        "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=3 "
+        "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=4 "
         "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0 "
-        "robustBufferAccess=1");
+        "robustBufferAccess=1 shaderDrawParameters=1");
 
     /* 3. Create Device & Queue with the mandatory core robustness bit and the
      * two reported narrow-storage bits returned by the same public query. */
@@ -2570,13 +3235,14 @@ int main(void)
         VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME,
         VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
         VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME,
     };
     VkDeviceCreateInfo dci = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &features2,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &qci,
-        .enabledExtensionCount = 3,
+        .enabledExtensionCount = 4,
         .ppEnabledExtensionNames = device_extensions,
     };
     VkDevice device = VK_NULL_HANDLE;
@@ -2601,6 +3267,9 @@ int main(void)
 
     /* Four sampled sets are checked offscreen before presentation resources. */
     if(!is_continuous)run_sampled_sets(device,queue);
+
+    /* The promoted draw-parameter contract, witnessed through the public API. */
+    run_draw_parameters(device, queue);
 
     /* 7. Run runtime procedural graphics and presentation */
     run_consumer(physical_device, device, queue, is_continuous);

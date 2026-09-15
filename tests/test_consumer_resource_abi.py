@@ -8,8 +8,58 @@ import unittest
 from tools.verify_consumer_resource_abi import (
     APP, INPASS_CHANGED, INPASS_HASH, SECONDARY_CONTROL_HASH,
     SECONDARY_EXECUTED_HASH, TEXEL_FORMAT_CASES, TITLE,
+    DRAW_PARAMETER_CASES, DRAW_PARAMETER_COVERED_MINIMUM,
+    DRAW_PARAMETER_DST_CLEAR_WORD, DRAW_PARAMETER_DST_UPLOAD_WORD,
+    DRAW_PARAMETER_EXTENT, DRAW_PARAMETER_UPLOAD_EDGE,
     TWO_SUBPASS_CHANGED, TWO_SUBPASS_FIRST_HASH, TWO_SUBPASS_HASH,
     TWO_SUBPASS_REVERSED_HASH, TWO_SUBPASS_SECOND_HASH, validate)
+
+
+DRAW_PARAMETER_VERT_SHA256 = "1" * 64
+DRAW_PARAMETER_FRAG_SHA256 = "2" * 64
+
+
+def draw_parameter_messages(first_serial=13,
+                            covered=DRAW_PARAMETER_COVERED_MINIMUM + 300):
+    """The witness rows as the hardware emits them, from the verifier's table."""
+    rows = [
+        "PS5VK_CONSUMER_DRAW_PARAMETERS_START cases=6 extent=64",
+        # The destination witness also records the pinned resource-less barrier
+        # that orders its transfer write against the colour-attachment stages;
+        # the router prepares that one submission with no dispatches, so it
+        # submits and completes without a graphics prepare record.
+        "PS5VK_QUEUE_PREPARED serial=60 dispatches=0",
+        "PS5VK_GRAPHICS_SUBMIT serial=60 rc=0",
+        "PS5VK_GRAPHICS_SUSPEND_POINT serial=60 rc=0",
+        "PS5VK_GRAPHICS_COMPLETED serial=60 image_bytes=0",
+        f"PS5VK_CONSUMER_DRAW_PARAMETERS_DST "
+        f"clear_word={DRAW_PARAMETER_DST_CLEAR_WORD:08x} "
+        f"clear_matched={DRAW_PARAMETER_EXTENT * DRAW_PARAMETER_EXTENT - DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE} "
+        f"upload_word={DRAW_PARAMETER_DST_UPLOAD_WORD:08x} "
+        f"upload_matched={DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE} "
+        f"valid=1",
+    ]
+    serial = first_serial
+    pitch = (DRAW_PARAMETER_EXTENT * 4 + 255) & ~255
+    for name, base_vertex, base_instance, draw_index in DRAW_PARAMETER_CASES:
+        encoded = (0xff << 24) | (draw_index << 16) | (base_instance << 8) | base_vertex
+        rows.extend([
+            f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
+            f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
+            f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0",
+            f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=131072",
+            f"PS5VK_CONSUMER_DRAW_PARAMETERS case={name} "
+            f"base_vertex={base_vertex} base_instance={base_instance} "
+            f"draw_index={draw_index} covered={covered} uniform=1 valid=1",
+            f"PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING case={name} row_pitch={pitch} "
+            f"staged_bytes={pitch * DRAW_PARAMETER_EXTENT} staged={encoded:08x} "
+            f"covered={covered} uniform=1 layout=1 valid=1",
+        ])
+        serial += 1
+    rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_RESULT cases=6 witnessed=6 valid=1")
+    rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT cases=6 witnessed=6 valid=1")
+    rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_RETIRED cases=6 witnessed=6")
+    return rows
 
 
 # Secondary execution INSIDE a render pass, as the hardware emitted it. The
@@ -64,9 +114,9 @@ MESSAGES = [
     "PS5VK_CONSUMER_PHYSICAL_QUERIES devices=1 queues=1 two_call=1 "
     "tail_preserved=1 pnext_preserved=1 formats=5 image_supported=1 "
     "image_rejected=1",
-    "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=3 "
+    "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=4 "
     "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0 "
-    "robustBufferAccess=1",
+    "robustBufferAccess=1 shaderDrawParameters=1",
     "PS5VK_CONSUMER_BUFFER_TRANSFER_START",
     "PS5VK_CONSUMER_BUFFER_TRANSFER_SUCCESS copy_bytes=7 update_bytes=8 "
     "fill_bytes=20 whole_tail_bytes=3 guard_mismatches=0 hash=9a158222",
@@ -150,9 +200,23 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 class ConsumerResourceAbiTests(unittest.TestCase):
     def fixture(self, edit=None, sampled=False, shared=False, visibility=None,
                 single=False, mixed=False, secondary=False, inpass=False,
-                texel_formats=False, two_subpass=False):
+                texel_formats=False, two_subpass=False, draw_parameters=False):
         sampled = sampled or shared or single or mixed
         messages = list(MESSAGES)
+        if draw_parameters:
+            # The witness runs after the last offscreen sampled case and before
+            # the presentation graphics block, exactly like the payload. Its
+            # submissions take the first serials of that block, so the
+            # presentation rows shift by the number of cases.
+            for index, message in enumerate(messages):
+                if message.startswith("PS5VK_GRAPHICS_") and " serial=" in message:
+                    prefix, rest = message.split(" serial=")
+                    serial, tail = rest.split(" ", 1)
+                    messages[index] = (f"{prefix} "
+                                       f"serial={int(serial) + len(DRAW_PARAMETER_CASES)} "
+                                       f"{tail}")
+            at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
+            messages[at:at] = draw_parameter_messages()
         if inpass:
             # The scenario runs after the last finite frame and before the
             # surface is destroyed, and costs exactly two extra graphics
@@ -281,6 +345,11 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         artifact = {
             "title": TITLE, "profile": "public-consumer-resource-abi",
             "submit_enabled": True, "files": {"eboot.bin": "a" * 64},
+            "draw_parameters": {
+                "cases": [case[0] for case in DRAW_PARAMETER_CASES],
+                "vertex_shader_sha256": DRAW_PARAMETER_VERT_SHA256,
+                "fragment_shader_sha256": DRAW_PARAMETER_FRAG_SHA256,
+            },
             "buffer_transfer": {
                 "api": "Vulkan 1.0", "copy_bytes": 7,
                 "update_bytes": 8, "fill_bytes": 20,
@@ -671,6 +740,136 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         self.assertEqual(fnv1a32(executed), SECONDARY_EXECUTED_HASH)
         self.assertEqual(fnv1a32(guard), SECONDARY_CONTROL_HASH)
         self.assertNotEqual(SECONDARY_EXECUTED_HASH, SECONDARY_CONTROL_HASH)
+
+    def test_draw_parameter_witness_is_accepted_and_reported(self):
+        result = validate(*self.fixture(draw_parameters=True))
+        self.assertEqual(result["draw_parameter_cases"], len(DRAW_PARAMETER_CASES))
+
+    def test_draw_parameter_values_are_pinned_per_case(self):
+        rows = [row for row in draw_parameter_messages()
+                if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS case=")]
+        self.assertEqual(len(rows), len(DRAW_PARAMETER_CASES))
+        for row in rows:
+            for field in ("base_vertex", "base_instance", "draw_index"):
+                def edit(messages, row=row, field=field):
+                    index = messages.index(row)
+                    messages[index] = " ".join(
+                        f"{field}=99" if part.startswith(f"{field}=") else part
+                        for part in messages[index].split())
+                with self.subTest(case=row.split()[1], field=field), \
+                        self.assertRaises(ValueError):
+                    validate(*self.fixture(draw_parameters=True, edit=edit))
+
+    def test_draw_parameter_witness_is_fail_closed(self):
+        rows = draw_parameter_messages()
+        case_row = next(row for row in rows
+                        if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS case="))
+
+        def rewrite(row, field, value):
+            def edit(messages):
+                index = messages.index(row)
+                messages[index] = " ".join(
+                    f"{field}={value}" if part.startswith(f"{field}=") else part
+                    for part in messages[index].split())
+            return edit
+
+        for row, field, value in (
+                (case_row, "uniform", "0"),
+                (case_row, "valid", "0"),
+                (case_row, "covered", str(DRAW_PARAMETER_COVERED_MINIMUM - 1)),
+                (rows[-2], "witnessed", "5"),
+                (rows[-2], "valid", "0")):
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                validate(*self.fixture(draw_parameters=True,
+                                       edit=rewrite(row, field, value)))
+        # A case the payload did not report is a missing witness, not a
+        # smaller run, so dropping one row must fail.
+        def drop(messages):
+            messages.remove(case_row)
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(draw_parameters=True, edit=drop))
+        # The artifact must declare exactly the same cases and pin both shaders.
+        def drop_cases(artifact):
+            artifact["draw_parameters"].pop("cases")
+
+        def drop_vertex_hash(artifact):
+            artifact["draw_parameters"].pop("vertex_shader_sha256")
+
+        def shrink_cases(artifact):
+            artifact["draw_parameters"]["cases"] = ["list_direct"]
+
+        for mutate in (drop_cases, drop_vertex_hash, shrink_cases):
+            log, receipt, artifact = self.fixture(draw_parameters=True)
+            mutate(artifact)
+            with self.subTest(mutate=mutate.__name__), self.assertRaises(ValueError):
+                validate(log, receipt, artifact)
+
+    def test_staging_readback_witness_is_fail_closed(self):
+        """The pinned linear-staging readback is a pin, not a sample: the word,
+        the layout and the coverage all have to match the attachment's frame."""
+        rows = draw_parameter_messages()
+        staging_row = next(row for row in rows
+                           if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING case="))
+        staging_result = next(row for row in rows if row.startswith(
+            "PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT "))
+
+        def rewrite(row, field, value):
+            def edit(messages):
+                index = messages.index(row)
+                messages[index] = " ".join(
+                    f"{field}={value}" if part.startswith(f"{field}=") else part
+                    for part in messages[index].split())
+            return edit
+
+        for field, value in (("staged", "00000000"),
+                             ("row_pitch", "128"),
+                             ("staged_bytes", "4096"),
+                             ("covered", "1"),
+                             ("uniform", "0"),
+                             ("layout", "0"),
+                             ("valid", "0")):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate(*self.fixture(draw_parameters=True,
+                                       edit=rewrite(staging_row, field, value)))
+        for field, value in (("witnessed", "5"), ("valid", "0")):
+            with self.subTest(result=field), self.assertRaises(ValueError):
+                validate(*self.fixture(draw_parameters=True,
+                                       edit=rewrite(staging_result, field, value)))
+        # A staging row the payload never reported is a missing witness, not a
+        # smaller run.
+        def drop(messages):
+            messages.remove(staging_row)
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(draw_parameters=True, edit=drop))
+
+    def test_draw_parameter_destination_witness_is_fail_closed(self):
+        rows = draw_parameter_messages()
+        destination_row = next(row for row in rows
+                               if row.startswith("PS5VK_CONSUMER_DRAW_PARAMETERS_DST"))
+
+
+        def rewrite(field, value):
+            def edit(messages):
+                index = messages.index(destination_row)
+                messages[index] = " ".join(
+                    f"{field}={value}" if part.startswith(f"{field}=") else part
+                    for part in messages[index].split())
+            return edit
+
+        for field, value in (
+                ("clear_word", "ff000000"),
+                ("upload_word", "ff000000"),
+                ("clear_matched", "0"),
+                ("upload_matched", "0"),
+                ("valid", "0")):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate(*self.fixture(draw_parameters=True,
+                                       edit=rewrite(field, value)))
+        # The destination witness is part of the scenario, not optional.
+        def drop(messages):
+            messages.remove(destination_row)
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(draw_parameters=True, edit=drop))
 
     def test_secondary_execute_scenario_cannot_be_half_reported(self):
         for dropped in SECONDARY_MESSAGES:

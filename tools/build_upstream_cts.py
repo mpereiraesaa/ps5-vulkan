@@ -15,6 +15,11 @@ sys.path.insert(0, str(ROOT / "tools"))
 from lab import lab_root
 
 SELECTION_MANIFEST = ROOT / "cts/upstream/manifest.json"
+# Upstream shader sources the packaged cases load from the /app0 data archive.
+DATASET_SHADER_SOURCES = (
+    "vulkan/draw/VertexFetchShaderDrawParameters.vert",
+    "vulkan/draw/VertexFetch.frag",
+)
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -775,6 +780,17 @@ def main():
         # registration pruned to compute/scalar_copy/R32_UINT.
         focused_sources / "vktRobustnessBufferAccessTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/robustness/vktRobustnessUtil.cpp",
+        # Draw-parameter module: the original upstream bodies and their
+        # reference-rasterizer image oracle, registered under the render-pass
+        # group parameters. The module's base class carries the pipeline,
+        # vertex-input and render-pass setup the oracle compares against.
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBaseClass.cpp",
+        # The base class builds its buffers, images and render pass through the
+        # module's own create-info and object helpers.
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawCreateInfoUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawImageObjectUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBufferObjectUtil.cpp",
         # Genuine upstream push-constant factory. The focused package registers
         # the complete group and cases.txt selects only the audited compute leaf.
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelinePushConstantTests.cpp",
@@ -949,6 +965,18 @@ def main():
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
+
+    # The packaged CTS reads its data archive from /app0 (the title directory),
+    # so the selected cases that load upstream shader sources need those files
+    # beside eboot.bin. Only the draw-parameter module's two sources are staged;
+    # the rest of the selection builds its shaders in code.
+    for relative in DATASET_SHADER_SOURCES:
+        source = cts_root / "external/vulkancts/data" / relative
+        if not source.is_file():
+            raise SystemExit(f"missing upstream CTS data source {source}")
+        destination = dist / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
 
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")

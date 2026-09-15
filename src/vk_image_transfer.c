@@ -10,6 +10,8 @@
 #include "vk_image_transfer.h"
 #include "vk_image.h"
 #include "color_clear.h"
+#include "color_detile.h"
+#include "texture_layout.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -97,26 +99,61 @@ static int transfer_role_source(VkImage image)
 }
 static int transfer_role_destination(VkImage image)
 {
-    return ps5vk_pure_transfer_image(image) &&
+    /* The transfer-only role and the colour-attachment readback shape that also
+     * declares a transfer destination: both are padded linear memory, and the
+     * clear below fills either of them the same way. */
+    return (ps5vk_pure_transfer_image(image) || ps5vk_colour_transfer_image(image)) &&
         (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 }
 
-/* Frontend work of the pure transfer role: image copies and clears, image <->
- * buffer transfers, and layout bookkeeping. The tiled colour-attachment role
- * keeps its GPU prelude/postlude path, and the sampled role keeps its upload
+/* Which executor owns a recorded image operation. Exactly one domain owns an
+ * operation, so the pure transfer role's row memcpy and the linear frontend's
+ * colour readback can never both act on the same recording. */
+enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
+{
+    if (!op) return PS5VK_IMAGE_DOMAIN_NONE;
+    switch (op->type) {
+    case PS5VK_COPY_IMAGE:
+        /* A linear staging destination is the pinned host readback: its source
+         * must be the colour attachment whose tiled surface is detiled below.
+         * Any other combination is not an implemented copy at all. */
+        if (ps5vk_linear_staging_image(op->image_destination))
+            return ps5vk_colour_transfer_image(op->image_source) ?
+                PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
+        return (transfer_role_source(op->image_source) &&
+                transfer_role_destination(op->image_destination)) ?
+            PS5VK_IMAGE_DOMAIN_TRANSFER : PS5VK_IMAGE_DOMAIN_NONE;
+    case PS5VK_CLEAR_COLOR_IMAGE:
+        return transfer_role_destination(op->image_destination) ?
+            PS5VK_IMAGE_DOMAIN_TRANSFER : PS5VK_IMAGE_DOMAIN_NONE;
+    case PS5VK_COPY_BUFFER_IMAGE:
+        /* An upload into the colour-attachment shape that declares a transfer
+         * destination is frontend work for the same reason the pure transfer
+         * role is: padded linear memory the graphics backend never touches. */
+        return (ps5vk_pure_transfer_image(op->copy_image) ||
+                ps5vk_colour_transfer_image(op->copy_image)) ?
+            PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
+    case PS5VK_COPY_IMAGE_BUFFER:
+        return ps5vk_pure_transfer_image(op->copy_image) ?
+            PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
+    case PS5VK_IMAGE_BARRIER:
+        return (ps5vk_pure_transfer_image(op->image_barrier.image) ||
+                ps5vk_linear_staging_image(op->image_barrier.image)) ?
+            PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
+    default:
+        return PS5VK_IMAGE_DOMAIN_NONE;
+    }
+}
+
+/* Frontend work of the linear domain: image/buffer transfers over the padded
+ * linear layout, layout bookkeeping for the roles that have no GPU stage, and
+ * the colour-attachment readback copy whose detile runs in recorded order after
+ * the producing submission completed. The tiled colour-attachment role itself
+ * keeps its GPU prelude/postlude path and the sampled role keeps its upload
  * prelude, so neither is claimed here. */
 VkBool32 ps5vk_image_linear_operation(const struct ps5vk_operation *op)
 {
-    if (!op) return VK_FALSE;
-    switch (op->type) {
-    case PS5VK_COPY_BUFFER_IMAGE:
-    case PS5VK_COPY_IMAGE_BUFFER:
-        return ps5vk_pure_transfer_image(op->copy_image);
-    case PS5VK_IMAGE_BARRIER:
-        return ps5vk_pure_transfer_image(op->image_barrier.image);
-    default:
-        return VK_FALSE;
-    }
+    return ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_LINEAR ? VK_TRUE : VK_FALSE;
 }
 
 static int layout_is_transfer_source(VkImageLayout layout)
@@ -137,6 +174,53 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
     VkDevice d = c->pool->device;
     void *source_address = NULL, *destination_address = NULL;
     VkDeviceSize source_bytes = 0, destination_bytes = 0;
+    /* The pinned draw module's host readback: the tiled colour attachment is
+     * copied into the linear staging image, both in GENERAL, one whole-surface
+     * region with no offsets (vktDrawImageObjectUtil.cpp:424-425). The staging
+     * role is real linear memory, so the recorded copy is executed by the
+     * detile below rather than by the pure transfer role's row memcpy; nothing
+     * else may name a linear destination, and a partial region is refused
+     * because only the full surface has a proven readback mapping. */
+    if (ps5vk_linear_staging_image(destination)) {
+        if (!ps5vk_colour_transfer_image(source) ||
+            source_layout != VK_IMAGE_LAYOUT_GENERAL ||
+            destination_layout != VK_IMAGE_LAYOUT_GENERAL ||
+            source == destination ||
+            ps5vk_image_span(d, source, &source_address, &source_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, destination, &destination_address, &destination_bytes) != VK_SUCCESS ||
+            spans_overlap(source_address, source_bytes, destination_address, destination_bytes)) {
+            ps5vk_command_invalidate(c);
+            return;
+        }
+        for (uint32_t i = 0; i < region_count; ++i) {
+            const VkImageCopy *r = &regions[i];
+            if (r->srcSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+                r->dstSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+                r->srcSubresource.mipLevel || r->dstSubresource.mipLevel ||
+                r->srcSubresource.baseArrayLayer || r->dstSubresource.baseArrayLayer ||
+                r->srcSubresource.layerCount != 1 || r->dstSubresource.layerCount != 1 ||
+                r->srcOffset.x || r->srcOffset.y || r->srcOffset.z ||
+                r->dstOffset.x || r->dstOffset.y || r->dstOffset.z ||
+                r->extent.depth != 1 ||
+                r->extent.width != source->info.extent.width ||
+                r->extent.height != source->info.extent.height ||
+                r->extent.width != destination->info.extent.width ||
+                r->extent.height != destination->info.extent.height) {
+                ps5vk_command_invalidate(c);
+                return;
+            }
+        }
+        struct ps5vk_operation *readback = ps5vk_command_reserve_operation_with_payload(c,
+            PS5VK_COPY_IMAGE, PS5VK_OPERATION_OUTSIDE_RENDER_PASS, regions,
+            region_count * sizeof(*regions));
+        if (!readback) return;
+        readback->image_source = source;
+        readback->image_destination = destination;
+        readback->image_source_layout = source_layout;
+        readback->image_destination_layout = destination_layout;
+        readback->image_region_count = region_count;
+        return;
+    }
     if (!transfer_role_source(source) || !transfer_role_destination(destination) ||
         !layout_is_transfer_source(source_layout) ||
         !layout_is_transfer_destination(destination_layout) ||
@@ -458,21 +542,81 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
     VkDeviceSize bytes = 0;
     if (op->type == PS5VK_IMAGE_BARRIER) {
         const VkImageMemoryBarrier *b = &op->image_barrier;
-        if (!layout_is_transfer_source(b->oldLayout) &&
-            b->oldLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
-            !layout_is_transfer_destination(b->oldLayout)) return INVALID;
-        if (!layout_is_transfer_source(b->newLayout) &&
-            !layout_is_transfer_destination(b->newLayout)) return INVALID;
-        /* Only transfer dependencies can order a transfer-only image. */
-        if ((b->srcAccessMask | b->dstAccessMask) &
-            ~(VkAccessFlags)(VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT))
-            return INVALID;
+        if (ps5vk_linear_staging_image(b->image)) {
+            /* The linear staging image has exactly the two transitions the
+             * pinned readback records: UNDEFINED to GENERAL for the transfer
+             * write that fills it, and GENERAL to GENERAL from that write to the
+             * host read that consumes it. The host read is the only access that
+             * is not a transfer dependency, and it is accepted only there. */
+            const int fill = b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+                b->newLayout == VK_IMAGE_LAYOUT_GENERAL && !b->srcAccessMask &&
+                b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT;
+            const int host_read = b->oldLayout == VK_IMAGE_LAYOUT_GENERAL &&
+                b->newLayout == VK_IMAGE_LAYOUT_GENERAL &&
+                b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT &&
+                b->dstAccessMask == VK_ACCESS_HOST_READ_BIT;
+            if (!fill && !host_read) return INVALID;
+        } else {
+            if (!layout_is_transfer_source(b->oldLayout) &&
+                b->oldLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
+                !layout_is_transfer_destination(b->oldLayout)) return INVALID;
+            if (!layout_is_transfer_source(b->newLayout) &&
+                !layout_is_transfer_destination(b->newLayout)) return INVALID;
+            /* Only transfer dependencies can order a transfer-only image. */
+            if ((b->srcAccessMask | b->dstAccessMask) &
+                ~(VkAccessFlags)(VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT))
+                return INVALID;
+        }
         if (ps5vk_image_span(d, b->image, &address, &bytes) != VK_SUCCESS) return INVALID;
+        return VK_SUCCESS;
+    }
+    if (op->type == PS5VK_COPY_IMAGE) {
+        /* The pinned host readback: the tiled colour attachment in GENERAL into
+         * the linear staging image in GENERAL, one whole-surface region. The
+         * recorded-order layout requirement is checked at execution, because a
+         * barrier recorded earlier in the same command buffer has not run when
+         * the submit is validated. */
+        const VkImageCopy *regions = (const VkImageCopy *)op->owned_payload;
+        void *source_address = NULL, *destination_address = NULL;
+        VkDeviceSize source_bytes = 0, destination_bytes = 0;
+        if (!op->image_region_count || op->image_region_count != 1 || !regions ||
+            op->owned_payload_size != (size_t)op->image_region_count * sizeof(*regions) ||
+            !ps5vk_colour_transfer_image(op->image_source) ||
+            !ps5vk_linear_staging_image(op->image_destination) ||
+            op->image_source == op->image_destination ||
+            op->image_source_layout != VK_IMAGE_LAYOUT_GENERAL ||
+            op->image_destination_layout != VK_IMAGE_LAYOUT_GENERAL ||
+            op->image_source->info.extent.width != op->image_destination->info.extent.width ||
+            op->image_source->info.extent.height != op->image_destination->info.extent.height ||
+            ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->image_destination, &destination_address, &destination_bytes) != VK_SUCCESS ||
+            spans_overlap(source_address, source_bytes, destination_address, destination_bytes))
+            return INVALID;
+        for (uint32_t i = 0; i < op->image_region_count; ++i) {
+            const VkImageCopy *r = &regions[i];
+            if (r->srcSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+                r->dstSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+                r->srcSubresource.mipLevel || r->dstSubresource.mipLevel ||
+                r->srcSubresource.baseArrayLayer || r->dstSubresource.baseArrayLayer ||
+                r->srcSubresource.layerCount != 1 || r->dstSubresource.layerCount != 1 ||
+                r->srcOffset.x || r->srcOffset.y || r->srcOffset.z ||
+                r->dstOffset.x || r->dstOffset.y || r->dstOffset.z ||
+                r->extent.depth != 1 ||
+                r->extent.width != op->image_source->info.extent.width ||
+                r->extent.height != op->image_source->info.extent.height)
+                return INVALID;
+        }
         return VK_SUCCESS;
     }
     const VkBuffer buffer = op->type == PS5VK_COPY_BUFFER_IMAGE ?
         op->copy_source : op->copy_destination;
-    if (!ps5vk_pure_transfer_image(op->copy_image) ||
+    /* The upload direction also accepts the colour-attachment shape that
+     * declares a transfer destination; the readback direction does not. */
+    const int image_role = op->type == PS5VK_COPY_BUFFER_IMAGE ?
+        (ps5vk_pure_transfer_image(op->copy_image) ||
+         ps5vk_colour_transfer_image(op->copy_image)) :
+        ps5vk_pure_transfer_image(op->copy_image);
+    if (!image_role ||
         !ps5vk_buffer_usage(d, buffer, op->type == PS5VK_COPY_BUFFER_IMAGE ?
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT : VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
         (op->type == PS5VK_COPY_BUFFER_IMAGE ?
@@ -520,6 +664,50 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         if (b->oldLayout != VK_IMAGE_LAYOUT_UNDEFINED && b->image->layout != b->oldLayout)
             return VK_ERROR_DEVICE_LOST;
         b->image->layout = b->newLayout;
+        return VK_SUCCESS;
+    }
+    if (op->type == PS5VK_COPY_IMAGE) {
+        /* The tiled colour attachment was painted by an earlier submission.
+         * Segments are executed in recorded order and a segment starts only
+         * after the previous one reported its exact completion label, so by the
+         * time this runs the GPU work that produced the source has retired. The
+         * bytes are not coherent, so invalidate before reading them, then detile
+         * the surface into the staging image's padded linear rows and flush
+         * them for the host read the barrier above ordered. */
+        const uint32_t width = op->image_destination->info.extent.width;
+        const uint32_t height = op->image_destination->info.extent.height;
+        const size_t tiled = ps5vk_color_64k_rx_surface_size(4u, width, height);
+        uint32_t row_pitch = 0;
+        uint64_t linear_bytes = 0;
+        void *source_address = NULL, *destination_address = NULL;
+        VkDeviceSize source_bytes = 0, destination_bytes = 0;
+        if (op->image_source->layout != op->image_source_layout ||
+            op->image_destination->layout != op->image_destination_layout ||
+            ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->image_destination, &destination_address, &destination_bytes) != VK_SUCCESS ||
+            tiled == SIZE_MAX || source_bytes < tiled ||
+            ps5vk_texture_row_layout(4u, width, height, &row_pitch, &linear_bytes) ||
+            linear_bytes > destination_bytes)
+            return VK_ERROR_DEVICE_LOST;
+        if (ps5vk_image_invalidate_range(d, op->image_source, 0, tiled) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+        /* Detile through the same 64KB_R_X offset function the existing colour
+         * readback uses, but write into the staging image's padded rows rather
+         * than a tightly packed buffer: the module addresses those rows through
+         * vkGetImageSubresourceLayout, so the row pitch is part of the contract.
+         */
+        for (uint32_t y = 0; y < height; ++y) {
+            unsigned char *row = (unsigned char *)destination_address +
+                (VkDeviceSize)y * row_pitch;
+            for (uint32_t x = 0; x < width; ++x) {
+                const size_t tiled_offset = ps5vk_rgba8_64k_rx_offset(x, y, width);
+                if (tiled_offset + 4u > source_bytes) return VK_ERROR_DEVICE_LOST;
+                memcpy(row + (VkDeviceSize)x * 4u,
+                       (const unsigned char *)source_address + tiled_offset, 4);
+            }
+        }
+        if (ps5vk_image_flush_range(d, op->image_destination, 0, linear_bytes) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
         return VK_SUCCESS;
     }
     void *image_address = NULL, *buffer_address = NULL;

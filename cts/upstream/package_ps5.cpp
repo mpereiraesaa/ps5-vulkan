@@ -17,6 +17,7 @@
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
+#include "vktDrawShaderDrawParametersTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -137,6 +138,27 @@ void FocusedVkTestPackage::init(void)
             new tcu::TestCaseGroup(m_testCtx, "robustness"));
         robustnessGroup->addChild(vkt::robustness::createBufferAccessTests(m_testCtx));
         addChild(robustnessGroup.release());
+    }
+
+    // draw.renderpass.shader_draw_parameters: the original upstream
+    // draw-parameter bodies and their reference-rasterizer image oracle,
+    // registered under the render-pass group parameters only. The
+    // dynamic-rendering variants need VK_KHR_dynamic_rendering, which this
+    // profile does not advertise, and cases.txt remains the leaf filter.
+    {
+        de::MovePtr<tcu::TestCaseGroup> drawGroup(new tcu::TestCaseGroup(m_testCtx, "draw"));
+        de::MovePtr<tcu::TestCaseGroup> renderPassGroup(
+            new tcu::TestCaseGroup(m_testCtx, "renderpass"));
+        renderPassGroup->addChild(new vkt::Draw::ShaderDrawParametersTests(
+            m_testCtx,
+            vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
+                false, // useDynamicRendering
+                false, // useSecondaryCmdBuffer
+                false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
+                false, // nestedSecondaryCmdBuffer
+            })));
+        drawGroup->addChild(renderPassGroup.release());
+        addChild(drawGroup.release());
     }
 
     // compute.basic group

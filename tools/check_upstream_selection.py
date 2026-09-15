@@ -108,6 +108,47 @@ def _mapping_group_segment(text: str, segment: str) -> bool:
     return int(value) in {int(token) for token in re.findall(r"\b\d+\b", match.group(1))}
 
 
+def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
+    """Derive the shader_draw_parameters leaf names of the pinned draw module.
+
+    The upstream factory names a leaf from the flags passed as its third
+    argument and ORs the group's preset flags in afterwards, so a preset flag
+    (INDIRECT|MULTIDRAW for the draw_index group, for example) never appears in
+    the leaf name. Accept a name only when the module still contains the exact
+    naming construction and the cited function is one of the group blocks that
+    registers calls through it.
+    """
+    construction = (
+        'name << "draw";' in text and
+        'if (flags & TEST_FLAG_INDEXED)' in text and
+        'name << "_indexed";' in text and
+        'if (flags & TEST_FLAG_INDIRECT)' in text and
+        'name << "_indirect";' in text and
+        'if (flags & TEST_FLAG_INSTANCED)' in text and
+        'name << "_instanced";' in text and
+        'if (flags & TEST_FLAG_FIRST_INSTANCE)' in text and
+        'name << "_first_instance";' in text and
+        "testSpec.flags |= flags;" in text
+    )
+    if not construction:
+        return set()
+    calls = re.findall(r"addDrawCase\(group\.get\(\), testSpec,([^;]*)\);",
+                       function_text)
+    if not calls:
+        return set()
+    leaves: set[str] = set()
+    for argument in calls:
+        name = "draw"
+        for token, suffix in (("TEST_FLAG_INDEXED", "_indexed"),
+                              ("TEST_FLAG_INDIRECT", "_indirect"),
+                              ("TEST_FLAG_INSTANCED", "_instanced"),
+                              ("TEST_FLAG_FIRST_INSTANCE", "_first_instance")):
+            if token in argument:
+                name += suffix
+        leaves.add(name)
+    return leaves
+
+
 def _fill_update_generated_leaf_names(function_text: str) -> set[str]:
     """Derive names constructed by createFillAndUpdateBufferTests.
 
@@ -311,6 +352,13 @@ def main() -> int:
         # function. Bounded to that factory's exact construction expressions.
         if (source_path.name == "vktApiCopiesAndBlittingTests.cpp" and
                 leaf in _copy_and_blit_simple_image_leaf_names(function_text)):
+            continue
+        # The draw-parameter groups register their leaves through addDrawCase,
+        # whose name only shows the flags passed there while the group's preset
+        # flags are ORed in afterwards. Bounded to that factory's exact
+        # construction and to the cited group block. Applied to this one module.
+        if (source_path.name == "vktDrawShaderDrawParametersTests.cpp" and
+                leaf in _draw_shader_draw_parameters_leaf_names(text, function_text)):
             continue
         if leaf.isdigit():
             continue

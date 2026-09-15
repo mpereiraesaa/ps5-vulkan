@@ -421,7 +421,12 @@ int main(void)
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
                                VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
-    assert(!properties.linearTilingFeatures);
+    /* The one linear-tiling role this profile publishes: the pinned upstream
+     * draw module's host-readback staging image, which is this format, is 2D,
+     * single-mip/layer/sample and carries a transfer destination alone. Every
+     * other format still reports nothing here. */
+    assert(properties.linearTilingFeatures ==
+        (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
     ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_UNORM, &properties);
     assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
     assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
@@ -611,8 +616,22 @@ int main(void)
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    /* The pinned upstream draw tests create their colour target with the
+     * readback role AND a transfer destination, so that exact combination is
+     * the one addition; every neighbouring shape stays refused. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
+    /* The combination is the readback row's alone: the other colour format
+     * keeps refusing it, so no second format silently gains a destination. */
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
     /* Vertex-only formats have no image role at all. */

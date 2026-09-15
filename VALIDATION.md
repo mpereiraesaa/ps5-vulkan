@@ -3,6 +3,64 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Shader draw parameters promotion (2026-09-15)
+
+`VK_KHR_shader_draw_parameters` is advertised on the still-apiVersion-1.0
+device and the extension's feature is reported through the Vulkan 1.1 features
+chain. The promoted contract is the direct and single-indirect
+BaseVertex/BaseInstance/DrawIndex=0 shape PSBC exports a slot for;
+`multiDrawIndirect` and `drawIndirectFirstInstance` stay false, so the four
+`draw_index` leaves and the two `*_first_instance` leaves are excluded rather
+than reported as NotSupported.
+
+One strict artifact-bound session produced all of the evidence below.
+
+* **Upstream CTS 117/117 Pass** from payload eboot sha256
+  `0d797edebf83c783bda7d2cb073ca7392a7751dd8f760c9c8d94154f5cfa41ec` with
+  selection hash `656c2d6e31820084385f8948b952673704930d2882d2417b030e84fab3b3b070`
+  (`build/cts-run7.json`): `strict_verified=true`, `fail_count=0`,
+  `not_supported_count=0`, `missing=[]`. All eight selected leaves Pass -
+  `base_vertex.{draw,draw_indexed,draw_indirect,draw_indexed_indirect}` and
+  `base_instance.{draw,draw_indexed,draw_indirect,draw_indexed_indirect}`.
+* **Public-SDK/native witness** from consumer eboot sha256
+  `69ef5b3fa83641febbaad2edd477664135c108cd336c895cf335d1c4dbe77fab`
+  (`build/consumer-run6.json`): `strict_verified=true`, `lifecycle_ok=true`.
+  Six draw cases reported the exact pinned triples
+  (`list_direct` 7/9/0, `list_indexed` 5/3/0, `strip_indexed_negative`
+  254/11/0, `list_indirect` 11/0/0, `strip_indexed_indirect` 17/0/0,
+  `strip_direct` 21/23/0), each with 1352 covered pixels and `uniform=1`. The
+  same six frames were then copied into the linear staging image and read back
+  through `vkGetImageSubresourceLayout` with the same encoded words
+  (`ff000907`, `ff000305`, `ff000bfe`, `ff00000b`, `ff000011`, `ff001715`),
+  `row_pitch=256` and `staged_bytes=16384`. The transfer-destination witness
+  reported `clear_word=ff604020 clear_matched=4032 upload_word=ff1e140a
+  upload_matched=64 valid=1`.
+* **Refreshed public capability probe** from artifact eboot sha256
+  `7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593`: two
+  runs, both `strict_verified`, reporting `device_extensions=4`,
+  `satisfied=1`, `blockers=61`, `total=62` (run ids and log hashes are recorded
+  in `conformance_inventory/dxvk_v262_evidence.json`).
+
+The prerequisites that made the leaves runnable are bounded and separately
+recorded: the R8G8B8A8_UNORM colour attachment that also declares a transfer
+destination (`CAP_DST` with real clear and buffer-to-image execution), the
+GENERAL layout shape that role uses (`UNDEFINED` to `GENERAL` for a transfer
+write, the clear in `GENERAL`, `GENERAL` render-pass attachments, and the
+resource-less barrier into the colour-attachment stages), and the linear
+transfer-destination staging image the draw module reads back through (real
+`vkGetImageSubresourceLayout`, a real `GENERAL`-to-`GENERAL` colour copy
+executed as the existing GPU-completion detile, and the matching capability
+queries). `tests/test_cts_draw_case_trace.c` walks the pinned sequence on the
+host and executes the readback; every neighbouring shape stays fail-closed in
+`tests/test_image_copy_clear.c`, `tests/test_texture_format.c`,
+`tests/test_vk_device.c`, `tests/test_upload_commands.c` and the consumer
+verifier's fail-closed suite.
+
+The DXVK v2.6.2 row for this feature therefore records `cts-pass` and
+`native-evidence` while its `api` axis stays a blocker: the profile still
+reports Vulkan 1.0 and the DXVK target is API 1.3.204, so the row is not
+`profile_satisfied`.
+
 ## Independent texture-upload submissions
 
 On 2026-09-14, the original upstream binding-model cases

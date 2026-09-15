@@ -299,6 +299,11 @@ static void lifecycle(void)
              usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
              usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+             /* The pinned upstream draw tests create their colour target with a
+              * transfer destination as well, so that exact attachment shape
+              * exists; nothing else does. */
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
              usage==VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
              usage==(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)));
     }
@@ -403,6 +408,38 @@ static void lifecycle(void)
             VK_IMAGE_USAGE_SAMPLED_BIT,0,&ip)
             ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     }
+    /* The one linear-tiling combination this profile publishes is the pinned
+     * upstream draw module's host-readback staging shape, and the query reports
+     * exactly what creation accepts: one mip, one layer, one sample. */
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_LINEAR,VK_IMAGE_USAGE_TRANSFER_DST_BIT,0,&ip)
+        ==VK_SUCCESS && ip.maxExtent.width==PS5VK_MAX_IMAGE_2D &&
+        ip.maxExtent.height==PS5VK_MAX_IMAGE_2D && ip.maxExtent.depth==1 &&
+        ip.maxMipLevels==1 && ip.maxArrayLayers==1 &&
+        ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT &&
+        ip.maxResourceSize==p->platform.max_allocation);
+    /* Every neighbouring linear request stays refused with the output untouched. */
+    {
+        const struct { VkFormat format; VkImageType type; VkImageUsageFlags usage;
+                       VkImageCreateFlags flags; } not_linear[] = {
+            {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_1D, VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_3D, VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D,
+             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D,
+             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0u},
+            {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+             VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT}};
+        for (unsigned n = 0; n < sizeof(not_linear) / sizeof(not_linear[0]); ++n) {
+            memset(&ip, 0xff, sizeof(ip));
+            assert(vkGetPhysicalDeviceImageFormatProperties(p, not_linear[n].format,
+                not_linear[n].type, VK_IMAGE_TILING_LINEAR, not_linear[n].usage,
+                not_linear[n].flags, &ip) == VK_ERROR_FORMAT_NOT_SUPPORTED &&
+                !memcmp(&ip, &zero_ip, sizeof(ip)));
+        }
+    }
     const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
         VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM,
         VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT,
@@ -441,7 +478,11 @@ static void lifecycle(void)
              * only transfer role 64KB_Z_X has; there is no TRANSFER_SRC. */
             optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-        assert(!fp.linearTilingFeatures && fp.bufferFeatures==buffer_bits &&
+        /* One format publishes a linear-tiling role: RGBA8 carries the transfer
+         * destination of the pinned host-readback staging image. */
+        const VkFormatFeatureFlags linear_bits = formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?
+            (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT : 0;
+        assert(fp.linearTilingFeatures==linear_bits && fp.bufferFeatures==buffer_bits &&
             fp.optimalTilingFeatures==optimal_bits);
     }
     /* Query/create coherence: for every format the capability table knows, the
@@ -519,7 +560,10 @@ static void lifecycle(void)
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER))
             expected|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
         assert(fp.bufferFeatures==expected);
-        assert(!fp.linearTilingFeatures);
+        /* RGBA8 is also the one linear-tiling staging row; the other vertex
+         * formats publish nothing there. */
+        assert(fp.linearTilingFeatures==(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?
+            (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT : 0));
         VkFormatFeatureFlags expected_optimal=0;
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
             expected_optimal=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
@@ -827,7 +871,8 @@ static void narrow_storage_features(void)
            (PFN_vkVoidFunction)vkGetPhysicalDeviceFeatures2KHR);
     p->platform.supported_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                      PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
-                                     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+                                     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                                     PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;
     p->platform.format_properties = ps5vk_graphics_format_properties;
     p->platform.image_properties = ps5vk_graphics_image_properties;
 
@@ -928,14 +973,15 @@ static void narrow_storage_features(void)
 
     VkExtensionProperties device_properties[4] = {0};
     count = 0;
-    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS && count == 3);
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS && count == 4);
     count = 2;
     assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, device_properties) == VK_INCOMPLETE && count == 2);
     count = 4;
-    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, device_properties) == VK_SUCCESS && count == 3);
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, device_properties) == VK_SUCCESS && count == 4);
     assert(!strcmp(device_properties[0].extensionName, VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME));
     assert(!strcmp(device_properties[1].extensionName, VK_KHR_8BIT_STORAGE_EXTENSION_NAME));
     assert(!strcmp(device_properties[2].extensionName, VK_KHR_16BIT_STORAGE_EXTENSION_NAME));
+    assert(!strcmp(device_properties[3].extensionName, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME));
 
     VkBaseOutStructure unknown = {.sType = VK_STRUCTURE_TYPE_MAX_ENUM};
     VkPhysicalDeviceShaderDrawParametersFeatures shader_draw_features = {
@@ -962,7 +1008,7 @@ static void narrow_storage_features(void)
            !feature8.storagePushConstant8);
     assert(feature16.storageBuffer16BitAccess && !feature16.uniformAndStorageBuffer16BitAccess &&
            !feature16.storagePushConstant16 && !feature16.storageInputOutput16);
-    assert(!protected_features.protectedMemory && !shader_draw_features.shaderDrawParameters);
+    assert(!protected_features.protectedMemory && shader_draw_features.shaderDrawParameters);
     assert(unknown.sType == VK_STRUCTURE_TYPE_MAX_ENUM && !unknown.pNext);
 
     const char *extensions[] = {
@@ -976,6 +1022,10 @@ static void narrow_storage_features(void)
     feature8.storageBuffer8BitAccess = VK_TRUE;
     protected_features.pNext = &shader_draw_features;
     shader_draw_features.pNext = NULL;
+    /* The query above reported the feature the profile now supports; this
+     * creation is the narrow-storage one and deliberately does not request it,
+     * because the extension that exposes it is not enabled here. */
+    shader_draw_features.shaderDrawParameters = VK_FALSE;
     feature16.pNext = &protected_features;
     feature16.storageBuffer16BitAccess = VK_TRUE;
     feature_query.pNext = &feature8;
@@ -993,7 +1043,48 @@ static void narrow_storage_features(void)
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
     protected_features.protectedMemory = VK_FALSE;
     shader_draw_features.shaderDrawParameters = VK_TRUE;
+    /* The extension is what exposes the 1.1 feature on this Vulkan 1.0
+     * profile, so a true request without it stays fail-closed. */
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    const char *draw_parameter_extensions[] = {
+        VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME,
+        VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME};
+    info.enabledExtensionCount = 4;
+    info.ppEnabledExtensionNames = draw_parameter_extensions;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features == (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+                                        PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                                        PS5VK_FEATURE_SHADER_DRAW_PARAMETERS));
+    vkDestroyDevice(device, NULL);
+    /* A second ShaderDrawParametersFeatures structure in the same chain is
+     * rejected whatever the two carry. The duplicate rule is a property of the
+     * chain, so it cannot depend on the requested value: FALSE+FALSE,
+     * FALSE+TRUE and TRUE+FALSE are all invalid, exactly like TRUE+TRUE. */
+    {
+        VkPhysicalDeviceShaderDrawParametersFeatures duplicate = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES,
+            .pNext = NULL, .shaderDrawParameters = VK_TRUE};
+        shader_draw_features.pNext = &duplicate;
+        for (unsigned variant = 0; variant < 4; ++variant) {
+            const VkBool32 first = (variant >= 2) ? VK_TRUE : VK_FALSE;
+            const VkBool32 second = (variant % 2) ? VK_TRUE : VK_FALSE;
+            shader_draw_features.shaderDrawParameters = first;
+            duplicate.shaderDrawParameters = second;
+            assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+        }
+        /* The same request through one structure still succeeds, so the
+         * rejection above is the duplicate and not the value. */
+        shader_draw_features.pNext = NULL;
+        shader_draw_features.shaderDrawParameters = VK_TRUE;
+        assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+        assert(device->enabled_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS);
+        vkDestroyDevice(device, NULL);
+    }
+    info.enabledExtensionCount = 3;
+    info.ppEnabledExtensionNames = extensions;
     shader_draw_features.shaderDrawParameters = 2;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
     shader_draw_features.shaderDrawParameters = VK_FALSE;

@@ -13,6 +13,26 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     (void)d;
     if (!info || !out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
+    /* The pinned upstream draw module's host-readback staging image is the one
+     * linear-tiling image this profile backs. Its bytes are the same padded
+     * linear layout the transfer role and the upload path address, so the
+     * requirements are that layout's, not the tiled colour surface's. Anything
+     * else that asks for linear tiling is refused here as well as in
+     * vkCreateImage. */
+    if (info->tiling == VK_IMAGE_TILING_LINEAR) {
+        struct ps5vk_texture_layout layout;
+        if (info->format != VK_FORMAT_R8G8B8A8_UNORM ||
+            info->imageType != VK_IMAGE_TYPE_2D ||
+            info->mipLevels != 1 || info->arrayLayers != 1 ||
+            info->samples != VK_SAMPLE_COUNT_1_BIT ||
+            info->extent.depth != 1 || info->flags ||
+            info->usage != VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
+            ps5vk_texture_layout_for_format(info->format, info->extent.width,
+                info->extent.height, &layout))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        *out = (VkMemoryRequirements){layout.bytes, layout.alignment, 1};
+        return VK_SUCCESS;
+    }
     if(!ps5vk_graphics_image_usage(info->format,info->usage))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     int depth = info->format == VK_FORMAT_D32_SFLOAT;

@@ -260,6 +260,9 @@ def main():
         "src/vk_alloc.c", "src/vk_memory.c", "src/vk_descriptor.c",
         "src/vk_pipeline.c", "src/compilation_cache.c", "src/vk_pipeline_cache.c", "src/vk_command.c", "src/vk_indirect.c",
         "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
+        # The linear staging readback copy reads the tiled colour surface
+        # through the shared 64KB_R_X offset contract.
+        "src/color_detile.c",
         "src/vk_image_view.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/graphics_program.c",
         "src/vk_transfer.c", "src/texture_copy.c", "src/texture_format.c", "src/texture_layout.c", "src/color_clear.c",

@@ -111,6 +111,73 @@ int main(void)
     assert(ps5vk_upload_commands(&device,&color,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
     assert(cursor==words && !layouts.count);
 
+    /* --- the pinned draw case's prelude -----------------------------------
+     * The eight selected upstream draw cases initialise their colour target
+     * with UNDEFINED -> GENERAL for a transfer write (TOP_OF_PIPE -> TRANSFER)
+     * and then order that write against the colour-attachment stages with a
+     * resource-less memory barrier. Both must be executable prelude work, and
+     * every neighbouring shape must stay refused. */
+    image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image.info.format=VK_FORMAT_R8G8B8A8_UNORM;
+    image.info.imageType=VK_IMAGE_TYPE_2D;
+    image.info.mipLevels=1;image.info.arrayLayers=1;
+    image.info.extent.depth=1;image.info.samples=VK_SAMPLE_COUNT_1_BIT;
+    image.info.tiling=VK_IMAGE_TILING_OPTIMAL;
+    struct ps5vk_operation pinned={.type=PS5VK_IMAGE_BARRIER,
+        .src_stage=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        .dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+        .image_barrier={.image=&image,.srcAccessMask=0,
+            .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout=VK_IMAGE_LAYOUT_GENERAL}};
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&pinned,1,NULL,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
+    assert(cursor-words==PS5VK_GRAPHICS_ACQUIRE_WORDS && layouts.count==1);
+    assert(ps5vk_layout_require(&layouts,&image,VK_IMAGE_LAYOUT_GENERAL)==VK_SUCCESS);
+    /* Wrong stage, wrong access and a non-GENERAL target stay refused without
+     * mutating the cursor or the tentative layout. */
+    struct ps5vk_operation rejected=pinned;
+    rejected.dst_stage=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&rejected,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    rejected=pinned;rejected.image_barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+    assert(ps5vk_upload_commands(&device,&rejected,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    /* The GENERAL-to-GENERAL form belongs to the linear staging image, not to
+     * the colour attachment; and UNDEFINED to SHADER_READ_ONLY is the sampled
+     * upload's shape, which starts at TRANSFER_DST_OPTIMAL. */
+    rejected=pinned;rejected.image_barrier.oldLayout=VK_IMAGE_LAYOUT_GENERAL;
+    assert(ps5vk_upload_commands(&device,&rejected,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    rejected=pinned;rejected.image_barrier.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    assert(ps5vk_upload_commands(&device,&rejected,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    /* A two-sample colour target is not the single-sample role either: the
+     * pinned shape is the only one that may take this transition. */
+    rejected=pinned;image.info.samples=VK_SAMPLE_COUNT_2_BIT;
+    assert(ps5vk_upload_commands(&device,&rejected,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    assert(cursor==words && !layouts.count);
+
+    /* The resource-less barrier that orders that transfer write against the
+     * colour-attachment stages. */
+    struct ps5vk_operation color_prelude={.type=PS5VK_BARRIER,
+        .src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+        .dst_stage=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .src_access=VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dst_access=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|
+                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT};
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&color_prelude,1,NULL,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
+    assert(cursor-words==PS5VK_GRAPHICS_ACQUIRE_WORDS);
+    struct ps5vk_operation bad_prelude=color_prelude;
+    bad_prelude.dst_stage=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    cursor=words;
+    assert(ps5vk_upload_commands(&device,&bad_prelude,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    bad_prelude=color_prelude;bad_prelude.src_access=VK_ACCESS_SHADER_WRITE_BIT;
+    assert(ps5vk_upload_commands(&device,&bad_prelude,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    bad_prelude=color_prelude;bad_prelude.dst_access=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+    assert(ps5vk_upload_commands(&device,&bad_prelude,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    assert(cursor==words);
+    image.info.samples=VK_SAMPLE_COUNT_1_BIT;
+
     /* --- whole-subresource depth clear ------------------------------------
      * The emitted work is the uniform DWORD fill, over the whole allocation,
      * of the exact value the frontend recorded. The host writes nothing: the

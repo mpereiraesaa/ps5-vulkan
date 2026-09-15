@@ -29,6 +29,12 @@ enum ps5vk_feature_bits {
      * byte extent and select GFX10 raw OOB checking; vertex fetch descriptors
      * are likewise bounded by the bound VkBuffer span. */
     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS = 1u << 2,
+    /* VK_KHR_shader_draw_parameters on the Vulkan 1.0 profile. The supported
+     * contract is the one this tranche witnessed: BaseVertex, BaseInstance and
+     * DrawIndex for direct draws and for a single indirect draw, with DrawIndex
+     * delivered as zero because multiDrawIndirect stays false. Requesting more
+     * than one draw per command is still refused. */
+    PS5VK_FEATURE_SHADER_DRAW_PARAMETERS = 1u << 3,
 };
 struct ps5vk_compiler {
     void *context;
@@ -163,6 +169,10 @@ void ps5vk_object_free(void *object, const VkAllocationCallbacks *saved, VkBool3
 /* Flush the exact bound allocation range carrying a driver-originated image write. */
 VkResult ps5vk_image_flush_range(VkDevice device, VkImage image, VkDeviceSize offset,
                                  VkDeviceSize size);
+/* Invalidate the exact bound allocation range before the CPU reads bytes the
+ * GPU produced, the read half of the same non-coherent memory contract. */
+VkResult ps5vk_image_invalidate_range(VkDevice device, VkImage image, VkDeviceSize offset,
+                                      VkDeviceSize size);
 VkResult ps5vk_buffer_span(VkDevice device, VkBuffer buffer, VkDeviceSize offset,
                           VkDeviceSize range, void **address, VkDeviceSize *size);
 VkResult ps5vk_buffer_cache(VkDevice device, VkBuffer buffer,

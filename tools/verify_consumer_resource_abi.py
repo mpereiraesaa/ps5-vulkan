@@ -15,6 +15,30 @@ from pathlib import Path
 TITLE = "PPSA99994"
 APP = "ps5vk"
 
+# Shader draw parameters as the promoted contract defines them: BaseVertex,
+# BaseInstance and DrawIndex = 0 for direct and single-indirect draws. The
+# triples are the low bytes the witness shader encoded into colour, so the case
+# with a negative vertex offset pins the two's complement value 254 and every
+# case pins DrawIndex 0. Indirect firstInstance stays 0 because
+# drawIndirectFirstInstance is not part of this profile.
+DRAW_PARAMETER_CASES = (
+    ("list_direct", 7, 9, 0),
+    ("list_indexed", 5, 3, 0),
+    ("strip_indexed_negative", 254, 11, 0),
+    ("list_indirect", 11, 0, 0),
+    ("strip_indexed_indirect", 17, 0, 0),
+    ("strip_direct", 21, 23, 0),
+)
+DRAW_PARAMETER_COVERED_MINIMUM = 900
+# The destination-role witness writes these exact words into the same
+# colour-attachment image the draw cases then use: a clear fills everything and
+# a buffer-to-image upload overwrites the leading edge. Both words and their
+# pixel counts are pins, not samples.
+DRAW_PARAMETER_DST_CLEAR_WORD = 0xff604020
+DRAW_PARAMETER_DST_UPLOAD_WORD = 0xff1e140a
+DRAW_PARAMETER_EXTENT = 64
+DRAW_PARAMETER_UPLOAD_EDGE = 8
+
 # Exact hashes of the two 64-byte destination buffers of the executable
 # secondary scenario, established by two identical hardware runs of the same
 # deployed artifact. Only the first 32 bytes of the named buffer are filled;
@@ -285,6 +309,107 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         require(len(executed) == 1 and len(control) == 1 and
                 executed[0].split("=")[1] == control[0].split("=")[1],
                 "secondary-executed and inline draws produced different images")
+    # Shader draw parameters. The witness encodes BaseVertex, BaseInstance and
+    # DrawIndex into colour and compares the readback in CPU, so every expected
+    # triple is a pin rather than a sample. Presence-gated for the same reason
+    # as the other scenarios: START is compiled in unconditionally, so a log
+    # without it is an older payload rather than a silent skip.
+    draw_parameters_present = bool(matching("PS5VK_CONSUMER_DRAW_PARAMETERS_START"))
+    draw_parameters_start = one("PS5VK_CONSUMER_DRAW_PARAMETERS_START") \
+        if draw_parameters_present else None
+    draw_parameter_messages = matching("PS5VK_CONSUMER_DRAW_PARAMETERS case=")
+    draw_parameters_result = one("PS5VK_CONSUMER_DRAW_PARAMETERS_RESULT ") \
+        if draw_parameters_present else None
+    draw_parameters_retired = one("PS5VK_CONSUMER_DRAW_PARAMETERS_RETIRED") \
+        if draw_parameters_present else None
+    if draw_parameters_present:
+        expected_cases = {case[0]: case[1:] for case in DRAW_PARAMETER_CASES}
+        destination = one("PS5VK_CONSUMER_DRAW_PARAMETERS_DST ")
+        destination_fields = dict(field.split("=", 1)
+                                  for field in destination[1].split()[1:])
+        require(destination_fields.get("clear_word") ==
+                f"{DRAW_PARAMETER_DST_CLEAR_WORD:08x}" and
+                destination_fields.get("upload_word") ==
+                f"{DRAW_PARAMETER_DST_UPLOAD_WORD:08x}",
+                "draw-parameter destination words")
+        require(destination_fields.get("clear_matched") ==
+                str(DRAW_PARAMETER_EXTENT * DRAW_PARAMETER_EXTENT -
+                    DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE) and
+                destination_fields.get("upload_matched") ==
+                str(DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE) and
+                destination_fields.get("valid") == "1",
+                "draw-parameter destination readback")
+        manifest = artifact.get("draw_parameters", {})
+        require(manifest.get("cases") == [case[0] for case in DRAW_PARAMETER_CASES],
+                "artifact draw-parameter case list")
+        for field in ("vertex_shader_sha256", "fragment_shader_sha256"):
+            digest = manifest.get(field, "")
+            require(len(digest) == 64 and
+                    all(char in "0123456789abcdef" for char in digest),
+                    f"artifact draw-parameter {field}")
+        require(len(draw_parameter_messages) == len(DRAW_PARAMETER_CASES),
+                "draw-parameter case count")
+        observed = {}
+        for _, message in draw_parameter_messages:
+            fields = dict(field.split("=", 1) for field in message.split()[1:])
+            name = fields.get("case", "")
+            require(name in expected_cases, f"unexpected draw-parameter case {name!r}")
+            require(name not in observed, f"repeated draw-parameter case {name}")
+            values = expected_cases[name]
+            require(fields.get("base_vertex") == str(values[0]) and
+                    fields.get("base_instance") == str(values[1]) and
+                    fields.get("draw_index") == str(values[2]),
+                    f"draw-parameter values for {name}")
+            require(fields.get("uniform") == "1" and fields.get("valid") == "1",
+                    f"draw-parameter uniformity for {name}")
+            require(fields.get("covered", "").isdigit() and
+                    int(fields["covered"]) >= DRAW_PARAMETER_COVERED_MINIMUM,
+                    f"draw-parameter coverage for {name}")
+            observed[name] = fields
+        require(set(observed) == set(expected_cases), "draw-parameter case set")
+        require(draw_parameters_result[1].split()[1:] == [
+            f"cases={len(DRAW_PARAMETER_CASES)}",
+            f"witnessed={len(DRAW_PARAMETER_CASES)}", "valid=1"],
+            "draw-parameter result")
+        # The pinned upstream readback contract: the same frame copied into the
+        # linear staging image and read through vkGetImageSubresourceLayout. The
+        # words below come from the staging memory, not the attachment's, so a
+        # driver that cannot describe or fill that image cannot pass this.
+        staging_messages = matching("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING case=")
+        staging_result = one("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT ")
+        require(len(staging_messages) == len(DRAW_PARAMETER_CASES),
+                "staging readback case count")
+        expected_pitch = (DRAW_PARAMETER_EXTENT * 4 + 255) & ~255
+        staged = {}
+        for _, message in staging_messages:
+            fields = dict(field.split("=", 1) for field in message.split()[1:])
+            name = fields.get("case", "")
+            require(name in expected_cases,
+                    f"unexpected staging readback case {name!r}")
+            require(name not in staged, f"repeated staging readback case {name}")
+            require(fields.get("row_pitch") == str(expected_pitch) and
+                    fields.get("staged_bytes") ==
+                    str(expected_pitch * DRAW_PARAMETER_EXTENT),
+                    f"staging layout for {name}")
+            require(fields.get("layout") == "1",
+                    f"staging subresource layout for {name}")
+            observed_case = observed[name]
+            require(fields.get("covered") == observed_case.get("covered") and
+                    fields.get("uniform") == "1" and fields.get("valid") == "1",
+                    f"staging readback for {name}")
+            staged[name] = fields
+        require(set(staged) == set(expected_cases), "staging readback case set")
+        # The staging word must be exactly the frame the attachment held: the
+        # same encoded triple, read from the linear image.
+        for name, fields in staged.items():
+            encoded = (0xff << 24) | (int(expected_cases[name][2]) << 16) | \
+                (int(expected_cases[name][1]) << 8) | int(expected_cases[name][0])
+            require(fields.get("staged") == f"{encoded:08x}",
+                    f"staging word for {name}")
+        require(staging_result[1].split()[1:] == [
+            f"cases={len(DRAW_PARAMETER_CASES)}",
+            f"witnessed={len(DRAW_PARAMETER_CASES)}", "valid=1"],
+            "staging readback result")
     two_subpass_present = bool(matching("PS5VK_CONSUMER_TWO_SUBPASS_START"))
     two_subpass_start = one("PS5VK_CONSUMER_TWO_SUBPASS_START") \
         if two_subpass_present else None
@@ -359,7 +484,11 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     ready = one("PS5VK_READY_FOR_SHELL_CLOSE ")
 
     extra_texel_dispatches = len(TEXEL_FORMAT_CASES) if texel_formats else 0
-    require(len(prepared) == 4 + (1 if texel_formats else 0) and
+    # Four compute submissions, plus the draw-parameter witness's one
+    # resource-less prelude submission when that scenario ran; its staging
+    # readback is frontend work and adds none.
+    extra_witness_prelude = 1 if draw_parameters_present else 0
+    require(len(prepared) == 4 + extra_witness_prelude + (1 if texel_formats else 0) and
             all(len(rows) == 6 + extra_texel_dispatches
                 for rows in (submitted, suspended, completed)),
             "resource, narrow and synchronization submit records")
@@ -478,9 +607,9 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         "image_rejected=1"],
         "physical-device query witnesses")
     require(negotiated[1].split()[1:] == [
-        "instance_ext=1", "device_exts=3", "storageBuffer8BitAccess=1",
+        "instance_ext=1", "device_exts=4", "storageBuffer8BitAccess=1",
         "storageBuffer16BitAccess=1", "narrow_arithmetic=0",
-        "robustBufferAccess=1"],
+        "robustBufferAccess=1", "shaderDrawParameters=1"],
         "narrow storage negotiation")
     require(transfer_witness[1].split()[1:] == [
         "copy_bytes=7", "update_bytes=8", "fill_bytes=20",
@@ -566,10 +695,15 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     # for the secondary-executed pass and one for the inline control.
     graphics_count = ((40 if sampled is not None else 36) +
                       (2 if inpass_present else 0) +
-                      (5 if two_subpass_present else 0))
-    require(all(len(rows) == graphics_count for rows in
-                (graphics_prepared, graphics_submitted,
-                 graphics_suspended, graphics_completed)),
+                      (5 if two_subpass_present else 0) +
+                      (len(DRAW_PARAMETER_CASES) if draw_parameters_present else 0))
+    # The draw-parameter witness also records one transfer prelude (its colour
+    # transition), which submits and completes but is never prepared by the
+    # graphics backend. Every other submission is a graphics one.
+    prelude_submissions = 1 if draw_parameters_present else 0
+    require(len(graphics_prepared) == graphics_count and
+            all(len(rows) == graphics_count + prelude_submissions for rows in
+                (graphics_submitted, graphics_suspended, graphics_completed)),
             "two graphics submissions per finite frame")
     require(len(depth_reject) == 18 and len(readbacks) == 18,
             "fixed-function frame witnesses")
@@ -590,10 +724,29 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
                 int(readback_fields.get("changed", "0")) > 0,
                 "load/depth/dynamic draw oracle")
     serials = [int(fields(row[1])["serial"]) for row in graphics_prepared]
+    # The draw-parameter witness's colour transition is a transfer prelude: it
+    # submits and completes, but the graphics backend never prepares it, so the
+    # pairing and status checks below are over the graphics submissions only.
+    graphics_serials = set(serials)
+    prelude_serials = sorted({int(fields(row[1])["serial"]) for row in graphics_submitted} -
+                             graphics_serials)
+    require(len(prelude_serials) == prelude_submissions,
+            "draw-parameter transfer prelude submissions")
+    graphics_submitted = [row for row in graphics_submitted
+                          if int(fields(row[1])["serial"]) in graphics_serials]
+    graphics_suspended = [row for row in graphics_suspended
+                          if int(fields(row[1])["serial"]) in graphics_serials]
+    graphics_completed = [row for row in graphics_completed
+                          if int(fields(row[1])["serial"]) in graphics_serials]
     expected_draws = ["1"] * graphics_count
     if two_subpass_present:
         expected_draws[-5:] = ["2", "2", "1", "1", "2"]
-    require(serials == list(range(serials[0], serials[0] + graphics_count)) and
+    # The graphics submissions must retire in increasing serial order. Their
+    # serials are not contiguous: the payload's non-graphics submissions (the
+    # compute blocks, the draw-parameter preludes and the per-case staging
+    # readback) take serials in between, which is exactly what the counts above
+    # and below bound.
+    require(all(later > earlier for earlier, later in zip(serials, serials[1:])) and
             [fields(row[1]).get("draws") for row in graphics_prepared] == expected_draws and
             all(fields(row[1]).get("rc") == "0" for row in graphics_submitted) and
             all(fields(row[1]).get("rc") == "0" for row in graphics_suspended),
@@ -752,6 +905,8 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         "sampled_graphics_stage_profile": sampled_profile,
         "single_set_sampler_elements": (96 if sampled_profile == "single-set" else 0),
         "uniform_texel_formats_checked": len(TEXEL_FORMAT_CASES) if texel_formats else 0,
+        "draw_parameter_cases": (len(DRAW_PARAMETER_CASES)
+                                 if draw_parameters_present else 0),
         "sampled_graphics_visibility_mask": (sampled.get("visibility_mask", 0x11)
             if sampled_profile == "vertex-fragment" else None),
         "sampled_graphics_exceeds_advertised_limits": sampled is not None,

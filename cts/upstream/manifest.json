@@ -862,6 +862,62 @@
       "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9698",
       "category": "graphics-sampler", "expected_status": "Pass", "features_required": [],
       "rationale": "Original upstream single-descriptor mutable combined-image-sampler body and four-quadrant image oracle, executed from the vertex and fragment stages together. Measured Pass twice on the same signed artifact before acceptance."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:501",
+      "category": "graphics-draw-parameters", "expected_status": "Pass",
+      "features_required": ["shaderDrawParameters"],
+      "rationale": "Original upstream direct non-indexed draw with firstVertex = 2 and firstInstance = 2. The pinned VertexFetchShaderDrawParameters.vert accepts a vertex only when gl_VertexIndex - gl_BaseVertexARB equals the recorded reference index and gl_DrawIDARB is zero, and the group's image oracle is the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:501",
+      "category": "graphics-draw-parameters", "expected_status": "Pass",
+      "features_required": ["shaderDrawParameters"],
+      "rationale": "Original upstream indexed draw with uint32 indices, firstIndex = 11 and vertexOffset = 1. It judges the signed vertexOffset half of the BaseVertex contract and the DrawIndex = 0 value through the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indirect",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:501",
+      "category": "graphics-draw-parameters", "expected_status": "Pass",
+      "features_required": ["shaderDrawParameters"],
+      "rationale": "Original upstream single-draw vkCmdDrawIndirect command built by the downstream factory; drawCount stays 1, so the profile's maxDrawIndirectCount of 1 is what executes and the upstream image oracle judges the result."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed_indirect",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:501",
+      "category": "graphics-draw-parameters", "expected_status": "Pass",
+      "features_required": ["shaderDrawParameters"],
+      "rationale": "Original upstream single-draw vkCmdDrawIndexedIndirect command, judging the indirect vertexOffset path and DrawIndex = 0 with the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
+      "category": "graphics-draw-parameters", "expected_status": "Pass",
+      "features_required": ["shaderDrawParameters"],
+      "rationale": "Original upstream instanced direct draw with firstInstance = 2. The pinned shader derives gl_InstanceIndex - gl_BaseInstanceARB, so the case judges the BaseInstance contract together with the DrawIndex = 0 value."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
+      "category": "graphics-draw-parameters", "expected_status": "Pass",
+      "features_required": ["shaderDrawParameters"],
+      "rationale": "Original upstream instanced indexed draw with firstInstance = 2, firstIndex = 11 and vertexOffset = 1, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
+      "category": "graphics-draw-parameters", "expected_status": "Pass",
+      "features_required": ["shaderDrawParameters"],
+      "rationale": "Original upstream single-draw indirect command whose firstInstance field is zero, which is the only indirect firstInstance shape this profile executes; the upstream image oracle judges the result."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
+      "category": "graphics-draw-parameters", "expected_status": "Pass",
+      "features_required": ["shaderDrawParameters"],
+      "rationale": "Original upstream single-draw indexed indirect command with a zero firstInstance field and a non-zero vertexOffset, judged by the upstream reference rasterizer."
     }
   ],
   "diagnostics": [

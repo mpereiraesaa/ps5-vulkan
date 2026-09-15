@@ -110,7 +110,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if(ps5vk_agc_primitive_type(ia->topology,&primitive_type))return VK_ERROR_FEATURE_NOT_PRESENT;
     if (v->pNext || v->flags ||
         ia->pNext || ia->flags || ia->primitiveRestartEnable ||
-        r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable || r->depthBiasEnable ||
+        r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable ||
+        /* Depth bias is accepted only in its no-op form: the pinned upstream
+         * draw pipeline enables it with every factor and the clamp at zero,
+         * where the enable bit cannot change a fragment's depth. A non-zero
+         * bias stays refused rather than being silently dropped. Vulkan
+         * ignores the factors when the enable bit is clear, so only the
+         * enabled form is checked. */
+        (r->depthBiasEnable && (r->depthBiasConstantFactor != 0.0f ||
+                                r->depthBiasSlopeFactor != 0.0f ||
+                                r->depthBiasClamp != 0.0f)) ||
         r->polygonMode != VK_POLYGON_MODE_FILL || r->lineWidth != 1.0f ||
         m->pNext || m->flags || m->rasterizationSamples != VK_SAMPLE_COUNT_1_BIT ||
         m->sampleShadingEnable || m->alphaToCoverageEnable || m->alphaToOneEnable ||
