@@ -26,7 +26,8 @@ results; visual output is not the sole correctness signal.
 - Ordered byte-granular buffer copies plus bounded buffer update and fill commands
 - Single-dispatch and single-draw indirect commands with execution-time argument resolution
 - Runtime-compiled compute pipelines with up to four resource sets
-- Storage buffers, uniform buffers and R32 uniform texel buffers
+- Storage buffers, uniform buffers and 41 directly hardware-tested uniform
+  texel-buffer formats spanning 1-, 2-, 4-, 8- and 16-byte elements
 - Extension-negotiated 8-bit and 16-bit storage-buffer access
 - Push constants and scalar specialization constants in compute and runtime graphics
 - Vulkan pipeline-cache objects with a normative header export (no portable compiled-code records yet)
