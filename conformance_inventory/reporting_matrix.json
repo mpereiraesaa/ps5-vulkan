@@ -2638,7 +2638,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8_UNORM lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8_UNORM reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8_UNORM",
       "kind": "format-cell",
@@ -2646,7 +2646,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -2718,7 +2718,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8_SNORM lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8_SNORM reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8_SNORM",
       "kind": "format-cell",
@@ -2726,7 +2726,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -2814,7 +2814,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8_UINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8_UINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8_UINT",
       "kind": "format-cell",
@@ -2822,7 +2822,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -2910,7 +2910,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8_SINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8_SINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8_SINT",
       "kind": "format-cell",
@@ -2918,7 +2918,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3038,7 +3038,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8_UNORM lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8_UNORM reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8G8_UNORM",
       "kind": "format-cell",
@@ -3046,7 +3046,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3118,7 +3118,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8_SNORM lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8_SNORM reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8G8_SNORM",
       "kind": "format-cell",
@@ -3126,7 +3126,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3214,7 +3214,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8_UINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8_UINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8G8_UINT",
       "kind": "format-cell",
@@ -3222,7 +3222,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -3310,7 +3310,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8_SINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8_SINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8G8_SINT",
       "kind": "format-cell",
@@ -3318,7 +3318,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-2byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -4286,7 +4286,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_A8B8G8R8_UNORM_PACK32 lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_A8B8G8R8_UNORM_PACK32 reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
       "kind": "format-cell",
@@ -4294,7 +4294,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -4382,7 +4382,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_A8B8G8R8_SNORM_PACK32 lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_A8B8G8R8_SNORM_PACK32 reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
       "kind": "format-cell",
@@ -4390,7 +4390,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -4494,7 +4494,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_A8B8G8R8_UINT_PACK32 lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_A8B8G8R8_UINT_PACK32 reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_A8B8G8R8_UINT_PACK32",
       "kind": "format-cell",
@@ -4502,7 +4502,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -4606,7 +4606,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_A8B8G8R8_SINT_PACK32 lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_A8B8G8R8_SINT_PACK32 reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_A8B8G8R8_SINT_PACK32",
       "kind": "format-cell",
@@ -4614,7 +4614,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5054,7 +5054,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16_UINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16_UINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16_UINT",
       "kind": "format-cell",
@@ -5062,7 +5062,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5150,7 +5150,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16_SINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16_SINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16_SINT",
       "kind": "format-cell",
@@ -5158,7 +5158,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5278,7 +5278,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16_SFLOAT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16_SFLOAT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16_SFLOAT",
       "kind": "format-cell",
@@ -5286,7 +5286,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5406,7 +5406,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16_UINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16_UINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16_UINT",
       "kind": "format-cell",
@@ -5414,7 +5414,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5502,7 +5502,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16_SINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16_SINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16_SINT",
       "kind": "format-cell",
@@ -5510,7 +5510,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5630,7 +5630,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16_SFLOAT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16_SFLOAT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16_SFLOAT",
       "kind": "format-cell",
@@ -5638,7 +5638,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5774,7 +5774,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16B16A16_UINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16B16A16_UINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16B16A16_UINT",
       "kind": "format-cell",
@@ -5782,7 +5782,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -5902,7 +5902,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16B16A16_SINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16B16A16_SINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16B16A16_SINT",
       "kind": "format-cell",
@@ -5910,7 +5910,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6062,7 +6062,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R16G16B16A16_SFLOAT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R16G16B16A16_SFLOAT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R16G16B16A16_SFLOAT",
       "kind": "format-cell",
@@ -6070,7 +6070,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-16bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6606,7 +6606,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32_UINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32_UINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32_UINT",
       "kind": "format-cell",
@@ -6614,7 +6614,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6734,7 +6734,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32_SINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32_SINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32_SINT",
       "kind": "format-cell",
@@ -6742,7 +6742,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -6862,7 +6862,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32_SFLOAT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32_SFLOAT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32_SFLOAT",
       "kind": "format-cell",
@@ -6870,7 +6870,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7038,7 +7038,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32A32_UINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32A32_UINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32B32A32_UINT",
       "kind": "format-cell",
@@ -7046,7 +7046,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7166,7 +7166,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32A32_SINT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32A32_SINT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32B32A32_SINT",
       "kind": "format-cell",
@@ -7174,7 +7174,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7294,7 +7294,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32A32_SFLOAT lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32A32_SFLOAT reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32B32A32_SFLOAT",
       "kind": "format-cell",
@@ -7302,7 +7302,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -7374,7 +7374,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_B10G11R11_UFLOAT_PACK32 lacks mandatory VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_B10G11R11_UFLOAT_PACK32 reports VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
       "kind": "format-cell",
@@ -7382,7 +7382,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-64bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -25978,9 +25978,9 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 552,
+      "blocker": 524,
       "not-applicable": 2,
-      "satisfied": 110
+      "satisfied": 138
     },
     "limits": {
       "blocker": 60,
