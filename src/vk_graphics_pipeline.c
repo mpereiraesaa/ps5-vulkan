@@ -104,8 +104,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     for(uint32_t a=0;a<v->vertexAttributeDescriptionCount;++a)
         if(v->pVertexAttributeDescriptions[a].location>=32)return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* The topology decides the primitive the AGC linker programs, so the
+     * accepted set and its values live in one place. */
+    uint32_t primitive_type=0;
+    if(ps5vk_agc_primitive_type(ia->topology,&primitive_type))return VK_ERROR_FEATURE_NOT_PRESENT;
     if (v->pNext || v->flags ||
-        ia->pNext || ia->flags || ia->primitiveRestartEnable || ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ||
+        ia->pNext || ia->flags || ia->primitiveRestartEnable ||
         r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable || r->depthBiasEnable ||
         r->polygonMode != VK_POLYGON_MODE_FILL || r->lineWidth != 1.0f ||
         m->pNext || m->flags || m->rasterizationSamples != VK_SAMPLE_COUNT_1_BIT ||
@@ -174,7 +178,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memset(p,0,sizeof(*p));
-    rc=d->graphics_create(d,data,&p->graphics_state);
+    rc=d->graphics_create(d,data,primitive_type,&p->graphics_state);
     if(d->graphics_acquire)d->graphics_compiled_release(d->graphics_compiler_context,data);
     if (rc != VK_SUCCESS || !p->graphics_state) {
         if (p->graphics_state) d->graphics_release(d,p->graphics_state);

@@ -9,6 +9,7 @@
 
 static size_t mapping_bytes;
 static unsigned allocations,releases,agc_calls,fail_agc,fail_flush;
+static uint32_t linked_primitive;
 static VkResult allocate(void *ctx,VkDeviceSize size,void **address,void **backing)
 {
     (void)ctx;mapping_bytes=((size_t)size+4095u)&~(size_t)4095u;
@@ -29,7 +30,8 @@ int32_t sceAgcCreateShader(void **out,void *storage,void *code)
 }
 int32_t sceAgcLinkShaders(void *cx,void *uc,void *reserved,void *vs,void *fs,uint32_t primitive)
 {
-    assert(cx && uc && !reserved && vs && fs && primitive==4);
+    assert(cx && uc && !reserved && vs && fs);
+    linked_primitive=primitive;
     return ++agc_calls==fail_agc?-1:0;
 }
 int ps5vk_graphics_pair_prepare(struct ps5vk_graphics_pair *p,void *image,size_t capacity,
@@ -54,14 +56,15 @@ int main(void)
     void *state=NULL;
     for(fail_agc=1;fail_agc<=3;++fail_agc) {
         agc_calls=0;
-        assert(ps5vk_native_runtime_graphics_create(&device,compiled,&state)!=VK_SUCCESS && !state);
+        assert(ps5vk_native_runtime_graphics_create(&device,compiled,4u,&state)!=VK_SUCCESS && !state);
         assert(allocations==releases);
     }
     fail_agc=0;fail_flush=1;agc_calls=0;
-    assert(ps5vk_native_runtime_graphics_create(&device,compiled,&state)!=VK_SUCCESS && !state);
+    assert(ps5vk_native_runtime_graphics_create(&device,compiled,4u,&state)!=VK_SUCCESS && !state);
     assert(allocations==releases);
     fail_flush=0;agc_calls=0;
-    assert(ps5vk_native_runtime_graphics_create(&device,compiled,&state)==VK_SUCCESS && state);
+    assert(ps5vk_native_runtime_graphics_create(&device,compiled,4u,&state)==VK_SUCCESS && state);
+    assert(linked_primitive==4u);
     struct ps5vk_native_graphics_pipeline *p=state;
     const struct ps5vk_runtime_graphics_program *source=compiled;
     assert(p->pair->ready && p->pair->runtime_arguments.enabled);
@@ -71,6 +74,23 @@ int main(void)
     /* GPU-owned copies and relative metadata outlive the compilation lease. */
     assert(p->pair->runtime_vertex.outputs[0]==15 && p->pair->runtime_fragment.inputs[0]==15);
     ps5vk_native_graphics_release(&device,state);assert(allocations==releases);
+    /* A strip pipeline must program the strip primitive for the pair it links,
+     * and a primitive this profile does not accept must be refused before any
+     * allocation. The compiled program supplies code and the user-SGPR ABI;
+     * the primitive comes from the pipeline, which is why it is an argument. */
+    const void *strip_compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&strip_compiled)==VK_SUCCESS);
+    void *strip_state=NULL;
+    assert(ps5vk_native_runtime_graphics_create(&device,strip_compiled,6u,&strip_state)==
+        VK_SUCCESS && strip_state);
+    assert(linked_primitive==6u);
+    ps5vk_native_graphics_release(&device,strip_state);assert(allocations==releases);
+    unsigned before=allocations;
+    assert(ps5vk_native_runtime_graphics_create(&device,strip_compiled,5u,&strip_state)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !strip_state && allocations==before);
+    assert(ps5vk_native_runtime_graphics_create(&device,strip_compiled,0u,&strip_state)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !strip_state && allocations==before);
+    ps5vk_runtime_graphics_free(NULL,strip_compiled);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
     puts("Runtime graphics native preparation: pass (mock AGC, copied ownership, rollback)");
 }

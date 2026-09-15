@@ -1,13 +1,20 @@
 #include "runtime_graphics_compiler.h"
 #include "graphics_pipeline_ps5.h"
+#include "graphics_program.h"
 #include <stdlib.h>
 #include <string.h>
 
-VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,void **out)
+VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
+    uint32_t primitive_type,void **out)
 {
     if(!out)return VK_ERROR_UNKNOWN;
     *out=NULL;
     const struct ps5vk_runtime_graphics_program *input=data;
+    /* Same accepted set as the Vulkan layer; the linker below programs this
+     * value as VGT_PRIMITIVE_TYPE for the compiled pair. */
+    if(primitive_type!=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST &&
+       primitive_type!=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if(!d || !input || !d->memory.allocate || !d->memory.release || !d->memory.flush)
         return VK_ERROR_INITIALIZATION_FAILED;
     struct ps5vk_runtime_shader check;
@@ -46,7 +53,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,void *
         agc_rc=sceAgcCreateShader(&fs,&pair->runtime_fragment,fs_code);
     }
     if(!agc_rc && fs==&pair->runtime_fragment) {
-        agc_rc=sceAgcLinkShaders(&pair->cx,&pair->uc,NULL,vs,fs,4u);
+        agc_rc=sceAgcLinkShaders(&pair->cx,&pair->uc,NULL,vs,fs,primitive_type);
     }
     if(agc_rc || vs!=&pair->runtime_vertex || fs!=&pair->runtime_fragment) {
         rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;

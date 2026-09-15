@@ -15,7 +15,7 @@ int main(void)
     struct VkDevice_T device={.memory={NULL,allocate,release,flush,flush}};
     struct ps5vk_graphics_pair_input input={.image_bytes=704};
     void *state;
-    assert(ps5vk_native_graphics_create(&device,&input,&state)==VK_SUCCESS);
+    assert(ps5vk_native_graphics_create(&device,&input,4u,&state)==VK_SUCCESS);
     assert(((struct ps5vk_native_graphics_pipeline *)state)->pair->ready && allocations==1 && !releases && flushes==1);
     struct ps5vk_native_graphics_pipeline *p=state;
     assert(p->global_table && !((uintptr_t)p->global_table & 15));
@@ -25,9 +25,18 @@ int main(void)
     for (unsigned j=0;j<4;++j) assert(!p->global_table[j]);
     ps5vk_native_graphics_release(&device,state); assert(releases==allocations);
     fail_prepare=1;
-    assert(ps5vk_native_graphics_create(&device,&input,&state)==VK_ERROR_INITIALIZATION_FAILED && !state);
+    assert(ps5vk_native_graphics_create(&device,&input,4u,&state)==VK_ERROR_INITIALIZATION_FAILED && !state);
     assert(releases==allocations && flushes==1);
     fail_prepare=0; fail_flush=1;
-    assert(ps5vk_native_graphics_create(&device,&input,&state)==VK_ERROR_UNKNOWN && !state);
+    assert(ps5vk_native_graphics_create(&device,&input,4u,&state)==VK_ERROR_UNKNOWN && !state);
     assert(releases==allocations && flushes==2);
+    /* The offline library holds the audited triangle-list programs only, and a
+     * strip pipeline cannot resolve to one; the backend refuses it instead of
+     * linking a mismatched primitive. */
+    fail_flush=0;
+    unsigned before=allocations;
+    assert(ps5vk_native_graphics_create(&device,&input,6u,&state)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !state && allocations==before);
+    assert(ps5vk_native_graphics_create(&device,&input,5u,&state)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !state && allocations==before);
 }

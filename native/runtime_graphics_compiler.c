@@ -103,8 +103,9 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         if(!found)return 0;
         for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return 0;
     }
+    uint32_t primitive_type=0;
     return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
-        key->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
+        !ps5vk_agc_primitive_type(key->topology,&primitive_type) &&
         (key->color_format==VK_FORMAT_B8G8R8A8_UNORM ||
          key->color_format==VK_FORMAT_R8G8B8A8_UNORM) && key->samples==VK_SAMPLE_COUNT_1_BIT &&
         key->color_write_mask==15 && !key->blend_enable &&
@@ -269,7 +270,8 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     VkResult failure=VK_ERROR_FEATURE_NOT_PRESENT;
     PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
         .entrypoint=key->fragment.entry,.optimise=true,.address32_hi=2,
-        .primitive_type=4,.rasterization_samples=1};
+        .primitive_type=0,.rasterization_samples=1};
+    if(ps5vk_agc_primitive_type(key->topology,&options.primitive_type))goto failed;
     if(!apply_parameters(&options,&key->fragment,key,VK_SHADER_STAGE_FRAGMENT_BIT))goto failed;
     result=psbc_compile_shader(key->fragment.words,key->fragment.word_count*4u,&options,&p->fragment);
     if(result!=PSBC_RESULT_OK)goto failed;

@@ -644,7 +644,30 @@ int main(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
     key.descriptor_set_count=0;key.blend_enable=1;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
-    key.blend_enable=0;key.vertex.word_count--;
+    key.blend_enable=0;
+    /* Topology selects the primitive the composite pipeline links, so the key
+     * carries it and the compiler is asked for the matching value. Both
+     * accepted topologies compile; everything else stays fail-closed, before
+     * the compiler is reached. */
+    uint32_t primitive_type=0;
+    assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,&primitive_type)==0 &&
+           primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST);
+    assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,&primitive_type)==0 &&
+           primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
+    key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    assert(ps5vk_runtime_graphics_supported(&key) && ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);out=NULL;
+    const VkPrimitiveTopology unsupported_topologies[]={
+        VK_PRIMITIVE_TOPOLOGY_POINT_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
+    for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
+        key.topology=unsupported_topologies[i];
+        assert(!ps5vk_runtime_graphics_supported(&key) &&
+               ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    }
+    key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    key.vertex.word_count--;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
     puts("Runtime graphics compiler: pass (real VS/FS, metadata ABI, unsupported profiles)");

@@ -45,7 +45,10 @@ mean the driver advertises them; the reported device version remains Vulkan
 ## Graphics
 
 - Exactly one vertex stage and one fragment stage per graphics pipeline.
-- Triangle-list topology, fill rasterization and line width 1.
+- Triangle-list and triangle-strip topology, fill rasterization and line
+  width 1. Triangle strips are accepted and linked with the pinned GFX1013
+  primitive type 6, but no strip draw has a native witness yet; every other
+  topology is refused at pipeline creation.
 - Up to 16 vertex bindings numbered 0–15, per-vertex input, with up to 32 attribute
   locations. Supported attributes are `R8` and `R8G8` UNORM/SNORM/UINT/SINT;
   `R8G8B8A8` UNORM/SNORM/UINT/SINT; packed `A8B8G8R8`

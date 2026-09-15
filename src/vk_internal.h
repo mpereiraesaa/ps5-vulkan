@@ -127,7 +127,10 @@ struct VkDevice_T {
     void *graphics_compiler_context;
     VkResult (*graphics_acquire)(void *,const struct ps5vk_graphics_key *,const void **);
     void (*graphics_compiled_release)(void *,const void *);
-    VkResult (*graphics_create)(VkDevice, const void *program_data, void **owned_state);
+    /* The backend receives the GFX1013 primitive type the pipeline's topology
+     * maps to, so the AGC link step and the compiled shader cannot disagree. */
+    VkResult (*graphics_create)(VkDevice, const void *program_data,
+        uint32_t primitive_type, void **owned_state);
     void (*graphics_release)(VkDevice, void *owned_state);
     VkResult (*image_requirements)(VkDevice, const VkImageCreateInfo *, VkMemoryRequirements *);
     struct VkImage_T *images;

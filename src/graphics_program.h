@@ -40,6 +40,27 @@ struct ps5vk_graphics_library {
     const struct ps5vk_graphics_program *programs;
     size_t count;
 };
+/* Topologies this profile accepts, and the GFX1013 primitive-type value the AGC
+ * linker programs for each of them. The pinned compiler's primitive enum
+ * (third_party/psbc-reference libpsbc/psbc_compile.c ps5_last_provoking_vertex)
+ * and the pinned register header (amdgfxregs.h V_030908_DI_PT_TRILIST = 4,
+ * V_030908_DI_PT_TRISTRIP = 6) agree on both values, so the shader compile and
+ * the linked pipeline cannot disagree about the primitive they were built for.
+ * Every other topology stays fail-closed. */
+#define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST 4u
+#define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP 6u
+static inline int ps5vk_agc_primitive_type(VkPrimitiveTopology topology,uint32_t *out)
+{
+    if(!out)return -1;
+    switch(topology) {
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;return 0;
+    default:
+        return -1;
+    }
+}
 VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *,
     const struct ps5vk_graphics_key *, const struct ps5vk_graphics_program **);
 #endif
