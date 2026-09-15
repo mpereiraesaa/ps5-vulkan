@@ -85,13 +85,21 @@ static const struct ps5vk_texture_format formats[] = {
             CAP_LINEAR, 0),
     SAMPLED(VK_FORMAT_B10G11R11_UFLOAT_PACK32, 4, UINT32_C(0x02400000), 4, 5, 6, 1,
             CAP_LINEAR, 0),
-    /* --- 16-bit sampled formats ------------------------------------------ */
+    /* --- 16-bit sampled formats ------------------------------------------
+     * The five single-component rows also carry the uniform-texel-buffer role
+     * in the IMPLEMENTED column (pending column below). Their GFX10 combined
+     * words are 7/8/13/11/12 = 16_UNORM/SNORM/FLOAT/UINT/SINT, the completion
+     * is (4,0,0,1) -> 0x204 and the element is two bytes, so the descriptor
+     * path needs nothing new. The mandatory 16-bit table requires the role for
+     * SFLOAT, UINT and SINT; UNORM and SNORM are staged with them for family
+     * coherence. All five stay unwitnessed until a console fetch covers a
+     * 16-bit element, so no feature bit moves and no view becomes creatable. */
     SAMPLED(VK_FORMAT_R16_UNORM, 2, UINT32_C(0x00700000), 4, 0, 0, 1,
-            CAP_LINEAR | CAP_VERTEX, 0),
+            CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16_SNORM, 2, UINT32_C(0x00800000), 4, 0, 0, 1,
-            CAP_LINEAR | CAP_VERTEX, 0),
+            CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16_SFLOAT, 2, UINT32_C(0x00d00000), 4, 0, 0, 1,
-            CAP_LINEAR | CAP_VERTEX, 0),
+            CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16G16_UNORM, 4, UINT32_C(0x01700000), 4, 5, 0, 1,
             CAP_LINEAR | CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R16G16_SNORM, 4, UINT32_C(0x01800000), 4, 5, 0, 1,
@@ -124,8 +132,10 @@ static const struct ps5vk_texture_format formats[] = {
             CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R8G8B8A8_SINT, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
             CAP_VERTEX | CAP_UTEXEL, 0),
-    SAMPLED(VK_FORMAT_R16_UINT, 2, UINT32_C(0x00b00000), 4, 0, 0, 1, CAP_VERTEX, 0),
-    SAMPLED(VK_FORMAT_R16_SINT, 2, UINT32_C(0x00c00000), 4, 0, 0, 1, CAP_VERTEX, 0),
+    SAMPLED(VK_FORMAT_R16_UINT, 2, UINT32_C(0x00b00000), 4, 0, 0, 1,
+            CAP_VERTEX, CAP_UTEXEL),
+    SAMPLED(VK_FORMAT_R16_SINT, 2, UINT32_C(0x00c00000), 4, 0, 0, 1,
+            CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16G16_UINT, 4, UINT32_C(0x01b00000), 4, 5, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R16G16_SINT, 4, UINT32_C(0x01c00000), 4, 5, 0, 1, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R16G16B16A16_UINT, 8, UINT32_C(0x04500000), 4, 5, 6, 7, CAP_VERTEX, 0),
