@@ -17,10 +17,11 @@ DRAW_PARAMETER_VERT_SHA256 = "1" * 64
 DRAW_PARAMETER_FRAG_SHA256 = "2" * 64
 
 
-def draw_parameter_messages(covered=DRAW_PARAMETER_COVERED_MINIMUM + 300):
+def draw_parameter_messages(first_serial=13,
+                            covered=DRAW_PARAMETER_COVERED_MINIMUM + 300):
     """The witness rows as the hardware emits them, from the verifier's table."""
     rows = ["PS5VK_CONSUMER_DRAW_PARAMETERS_START cases=6 extent=64"]
-    serial = 20
+    serial = first_serial
     for name, base_vertex, base_instance, draw_index in DRAW_PARAMETER_CASES:
         rows.extend([
             f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words=256",
@@ -180,7 +181,16 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         messages = list(MESSAGES)
         if draw_parameters:
             # The witness runs after the last offscreen sampled case and before
-            # the presentation graphics block, exactly like the payload.
+            # the presentation graphics block, exactly like the payload. Its
+            # submissions take the first serials of that block, so the
+            # presentation rows shift by the number of cases.
+            for index, message in enumerate(messages):
+                if message.startswith("PS5VK_GRAPHICS_") and " serial=" in message:
+                    prefix, rest = message.split(" serial=")
+                    serial, tail = rest.split(" ", 1)
+                    messages[index] = (f"{prefix} "
+                                       f"serial={int(serial) + len(DRAW_PARAMETER_CASES)} "
+                                       f"{tail}")
             at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
             messages[at:at] = draw_parameter_messages()
         if inpass:
