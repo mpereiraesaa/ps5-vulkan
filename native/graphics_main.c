@@ -39,6 +39,12 @@
 #ifndef PS5VK_RUNTIME_GRAPHICS
 #define PS5VK_RUNTIME_GRAPHICS 0
 #endif
+#if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
+/* Slice A measurement: the pattern seeded into the allocation slot no
+ * attachment is bound to, so "the neighbouring layer is untouched" is a
+ * measured fact rather than whatever the allocator returned. */
+#define PS5VK_LAYER_SENTINEL UINT32_C(0x5a5a5a5a)
+#endif
 static const char *layered_target_name(void)
 {
     switch(PS5VK_IMAGE_TARGET) {
@@ -364,7 +370,19 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     VkImage image; CHECK(vkCreateImage(d,&ii,NULL,&image));
     VkMemoryRequirements req; vkGetImageMemoryRequirements(d,image,&req);
     VkDeviceSize bind_offset=req.alignment;
+#if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
+    /* Slice A measurement: the attachment keeps its exact shape, but it is
+     * bound to the SECOND of two aligned slots in one allocation, and the
+     * first slot is filled with a sentinel before the draw. If the pinned
+     * AGC/DCB target path selects by address, the render lands in the slot the
+     * image is bound to and the other slot stays untouched - which is the
+     * whole question for a layered (multiview) attachment. */
+    bind_offset = req.size;
+#endif
     VkMemoryAllocateInfo mi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=req.size+req.alignment};
+#if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
+    mi.allocationSize = 2u * req.size;
+#endif
 #if PS5VK_GRAPHICS_PRESENT
     /* Registration control: use the allocation base and the Gears
      * reference's two-buffer allocation envelope. This is
@@ -385,7 +403,28 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         CHECK(vkCreateImage(d,&di,NULL,&depth_image));
         VkMemoryRequirements dr;vkGetImageMemoryRequirements(d,depth_image,&dr);
         VkMemoryAllocateInfo da={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=dr.size};
-        CHECK(vkAllocateMemory(d,&da,NULL,&depth_memory));CHECK(vkBindImageMemory(d,depth_image,depth_memory,0));
+#if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
+        /* The depth attachment is measured the same way as the colour one: it
+         * is bound to the second slot of a two-slot allocation so the probe can
+         * ask whether the depth target path selects by address too. */
+        da.allocationSize=2u*dr.size;
+#endif
+        CHECK(vkAllocateMemory(d,&da,NULL,&depth_memory));
+#if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
+        CHECK(vkBindImageMemory(d,depth_image,depth_memory,dr.size));
+        {
+            void *depth_seed=NULL;
+            CHECK(vkMapMemory(d,depth_memory,0,VK_WHOLE_SIZE,0,&depth_seed));
+            uint32_t *slot0=(uint32_t *)depth_seed;
+            for(size_t i=0;i<(size_t)(dr.size/4);++i)slot0[i]=PS5VK_LAYER_SENTINEL;
+            VkMappedMemoryRange depth_flush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory=depth_memory,.offset=0,.size=dr.size};
+            CHECK(vkFlushMappedMemoryRanges(d,1,&depth_flush));
+            vkUnmapMemory(d,depth_memory);
+        }
+#else
+        CHECK(vkBindImageMemory(d,depth_image,depth_memory,0));
+#endif
         VkImageViewCreateInfo dv={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=depth_image,
             .viewType=VK_IMAGE_VIEW_TYPE_2D,.format=di.format,.subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,1}};
         CHECK(vkCreateImageView(d,&dv,NULL,&depth_view));
@@ -682,6 +721,15 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     size_t words=req.size/4;
     for(size_t i=0;i<words;++i)pixels[i]=0x55aa11ee;
     VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,.offset=bind_offset,.size=req.size};
+#if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
+    /* Seed the slot the attachment is NOT bound to, so "untouched" is a
+     * measured fact rather than whatever the allocator happened to return. */
+    {
+        uint32_t *other_slot=(uint32_t *)mapped;
+        for(size_t i=0;i<words;++i)other_slot[i]=PS5VK_LAYER_SENTINEL;
+    }
+    range.offset=0; range.size=2u*req.size;
+#endif
     CHECK(vkFlushMappedMemoryRanges(d,1,&range));
     VkQueue queue;vkGetDeviceQueue(d,0,0,&queue);
     VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.commandBufferCount=1,.pCommandBuffers=&cb};
@@ -720,6 +768,57 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     int far_visible=depth_image && !pipeline->depth_test && !(frame&1);
     int valid=(far_visible?ps5vk_triangle_coverage_valid:ps5vk_triangle_readback_valid)(&stats,(uint32_t)pipeline->viewport.width*scale_quarters/4,
         (uint32_t)pipeline->viewport.height*scale_quarters/4);
+#if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
+    /* Slice A measurement, colour role: the attachment is bound to the second
+     * slot of a two-slot allocation. The rendered oracle above ran against that
+     * slot; here the OTHER slot is checked for the sentinel it was seeded with.
+     * valid=1 means the target path rendered into the slot the image was bound
+     * to and left the neighbouring slot untouched - i.e. selection is by
+     * address, which is what a layered attachment would need. */
+    if(frame==0) {
+        const uint32_t *other_slot=(const uint32_t *)mapped;
+        size_t untouched_mismatches=0;
+        for(size_t i=0;i<words;++i)
+            untouched_mismatches+=other_slot[i]!=PS5VK_LAYER_SENTINEL;
+        const int color_valid=!untouched_mismatches && valid;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_LAYER_TARGET_PROBE role=color slot_bytes=%llu bind_offset=%llu sentinel=%08x "
+            "untouched_mismatches=%zu rendered_changed=%llu rendered_valid=%d valid=%d",
+            (unsigned long long)req.size,(unsigned long long)bind_offset,
+            (unsigned)PS5VK_LAYER_SENTINEL,untouched_mismatches,
+            (unsigned long long)stats.changed,valid,color_valid);
+    }
+    /* Depth role: the same two-slot question for the depth target path. The
+     * depth attachment is bound to the second slot and the first was seeded
+     * with the sentinel, so valid=1 means the depth clear/draw landed in the
+     * bound slot and left its neighbour alone - the answer to "does depth need
+     * distinct routing" at the address level. */
+    if(frame==0 && depth_image) {
+        VkMemoryRequirements depth_read_requirements;
+        vkGetImageMemoryRequirements(d,depth_image,&depth_read_requirements);
+        void *depth_bytes=NULL;
+        CHECK(vkMapMemory(d,depth_memory,0,VK_WHOLE_SIZE,0,&depth_bytes));
+        VkMappedMemoryRange depth_read={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=depth_memory,.offset=0,.size=2u*depth_read_requirements.size};
+        CHECK(vkInvalidateMappedMemoryRanges(d,1,&depth_read));
+        const uint32_t *depth_slots=(const uint32_t *)depth_bytes;
+        const size_t depth_words=(size_t)(depth_read_requirements.size/4);
+        size_t depth_untouched_mismatches=0,depth_rendered_changed=0;
+        for(size_t i=0;i<depth_words;++i)
+            depth_untouched_mismatches+=depth_slots[i]!=PS5VK_LAYER_SENTINEL;
+        for(size_t i=0;i<depth_words;++i)
+            depth_rendered_changed+=depth_slots[depth_words+i]!=PS5VK_LAYER_SENTINEL;
+        const int depth_valid=!depth_untouched_mismatches && depth_rendered_changed>0;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_LAYER_TARGET_PROBE role=depth slot_bytes=%llu bind_offset=%llu sentinel=%08x "
+            "untouched_mismatches=%zu rendered_changed=%zu valid=%d",
+            (unsigned long long)depth_read_requirements.size,
+            (unsigned long long)depth_read_requirements.size,
+            (unsigned)PS5VK_LAYER_SENTINEL,depth_untouched_mismatches,
+            depth_rendered_changed,depth_valid);
+        vkUnmapMemory(d,depth_memory);
+    }
+#endif
     if(PS5VK_GRAPHICS_SCENE)valid=stats.changed>1000 && stats.changed<words && !stats.bad_alpha && !stats.bad_sum;
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==14) {
         /* The GPU-visible oracle. depth cleared to 1.0 lets the z=0.4/0.8
