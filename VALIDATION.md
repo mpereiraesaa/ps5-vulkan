@@ -1111,7 +1111,7 @@ public query paths rather than from a copied table:
   `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
   report fails the gate; only documented blockers are accepted.
 
-Result on the shipped profiles: 134 mandatory limits satisfied, 64 documented
+Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
 the code path that enforces them, 138 mandatory format-feature cells satisfied
@@ -1139,6 +1139,50 @@ hardware behaviour behind those limits and it does not make the profile
 conformant: the documented blockers include the mandatory image-type, attachment
 count, descriptor-count, multisample and format-family gaps. No console run was
 performed for this increment, so no new hardware claim is made.
+
+## DXVK 2.6.2 public-ABI capability probe
+
+The pinned `VP_DXVK_d3d11_level_11_0_baseline` profile declares Vulkan 1.3.204
+and resolves to 62 unique requirements. `tools/derive_dxvk_profile.py --check`
+proves that the checked derivative and generated C header retain the immutable
+DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
+leaf to public API reporting, reviewed implementation, exact CTS and exact
+native evidence with an AND rule across all four axes.
+
+The current checked result is 1/62 satisfied and 61 blockers. Only core
+`robustBufferAccess` has all four evidence axes; every Vulkan 1.1+ structure,
+the Vulkan 1.3.204 API floor and the two required extension surfaces remain
+blocked unless separately implemented and witnessed. This intentionally makes
+the matrix more conservative than either the source inventory or a successful
+struct query.
+
+The optional native consumer is built with:
+
+```sh
+python3 tools/build_consumer.py --dxvk-v262-probe
+```
+
+It consumes only staged public headers/libraries, creates no logical device and
+submits no GPU work. It emits exactly one `DXVK262_REQUIREMENT` record per leaf;
+`tools/verify_dxvk_probe.py` derives every expected value, status and aggregate
+from the pinned profile and rejects transport gaps, incomplete termination,
+wrong artifact identity, missing/duplicate/reordered rows or payload-reported
+false greens. Host isolation, link and mutation tests pass.
+
+Two native runs on PS5 firmware 12.02 used the same exact SELF SHA-256
+`379b979aee2341a1926c6fc477ee4cb7a0f4758a73e9ba5728be065e85e8899a`:
+
+- `20260915T142012757Z_PPSA99994_ps5vk_0xe2a6477d4bc5`, log SHA-256
+  `fa9c2318b38ae2d5c23b3ffcdacdf4a4d0efd54f7a81ad3ece4aa6c1d874236a`
+- `20260915T142026363Z_PPSA99994_ps5vk_0xe2a97268c1b8`, log SHA-256
+  `78f5349429318a47b33830ccd555427de355957ffcf733257f17b1daac87600f`
+
+Both strict verifications reconstructed all 62 unique rows, observed device API
+1.0.0 and three enumerated device extensions, and independently derived the
+same 1 satisfied / 61 blocker result. Both streams ended with a complete BYE
+and the title was confirmed absent immediately afterward. This is native
+evidence of the current report and its blockers, not execution evidence for the
+61 missing capabilities and not a DXVK compatibility claim.
 
 ## Core sampler addressing, fixed borders and linear filtering (2026-09-13)
 

@@ -126,6 +126,15 @@ python3 tools/build_consumer.py
 # For continuous rendering demonstration (60 FPS looped stream)
 python3 tools/build_consumer.py --continuous
 
+# Build the finite DXVK 2.6.2 FL11_0 capability probe. It queries only the
+# staged public Vulkan ABI and does not submit graphics or compute work.
+python3 tools/build_consumer.py --dxvk-v262-probe
+
+# Verify one finalized ps5log/1 run against the exact profile and artifact.
+python3 tools/verify_dxvk_probe.py <run-prefix-or-log> \
+  --manifest dist-consumer/artifact.json \
+  --artifact dist-consumer/PPSA99994/eboot.bin
+
 # Consumer header and symbol isolation tests
 python3 -m unittest tests/test_consumer_isolation.py
 

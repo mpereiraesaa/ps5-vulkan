@@ -68,6 +68,9 @@ the block disagrees with the inventory.
 | `roadmap_comparison.json` | Khronos roadmap profile sets, recorded as a comparison only. |
 | `baseline_surface.json` | Entry points actually present in the baseline implementation, with dispatch scope and whether the public header declares them. |
 | `consumers.json` | Independent requirement overlays for ParaLLEl-RDP and DXVK, joined to core rows by id. |
+| `dxvk_v262_profile.json` | Exact derivative of DXVK v2.6.2's D3D11 FL11_0 baseline profile. |
+| `dxvk_v262_evidence.json` | Reviewed CTS/native evidence overrides; absence is deliberately a blocker. |
+| `dxvk_v262_matrix.json` | Fail-closed four-axis join of every profile leaf to API, implementation, CTS and native evidence. |
 | `validate.py` | Offline validator and report generator (standard library only). |
 | `tools/collect_baseline_surface.py` | Regenerates `baseline_surface.json` from the baseline sources. |
 | `tools/derive_core_target.py` | Regenerates `core_target.json` from the pinned specification section and `vk.xml`. |
@@ -92,7 +95,7 @@ were computed from the exact bytes fetched at the pinned revision
 | Vulkan CTS (VK-GL-CTS) | tag `vulkan-cts-1.4.6.2` | `f6a29701220f34dd1407513bfe80d74ca7b392ce` |
 | ParaLLEl-RDP | commit | `1cecd042b2619bc505c12bfdc713808386f2b54d` |
 | Granite (RDP dependency) | commit | `cf71dee71fb00110749a9a3fcbd87b0297e49b6a` |
-| DXVK | tag `v3.1` | `70d7508c01201ed3d4bfb33da42ba834eafe3857` |
+| DXVK | tag `v2.6.2` | `9d6f54a1ade20d1d27dd421024717a636f3d8c68` |
 | Khronos roadmap profiles, comparison only (`registry/profiles/VP_KHR_roadmap.json`, Apache-2.0) | tag `v1.4.362` | `ee2ec5fd83dafce291024683b50dc89219333076` |
 
 The specification and registry pins are the same release train, and the
@@ -301,19 +304,33 @@ the requirement, and the coverage notes say so per row.
   constants, 8/16-bit storage access, and shared-memory/barrier/atomic compute
   kernels. It has a documented fallback when `VK_EXT_external_memory_host` is
   absent, and its timeline-semaphore usage is optional.
-* **DXVK** (pin above) declares `VK_API_VERSION_1_3`, ships machine-readable
-  Vulkan Profiles at api-version 1.3.204 / 1.3.224, and requires a named set of
-  extensions and features — including `VK_KHR_maintenance5`,
-  `VK_KHR_maintenance6`, `VK_KHR_load_store_op_none`,
-  `VK_EXT_depth_clip_enable`, `VK_EXT_robustness2`, descriptor indexing and a
-  256-byte push constant limit. The claim that current DXVK 3.x guidance targets
-  Vulkan 1.4 was **not** reproducible from the pinned revision or from the
-  default branch at retrieval time; what is reproducible is that 1.4 promotes
-  several extensions DXVK still requires by name.
+* **DXVK 2.6.2** is evaluated against its own machine-readable
+  `VP_DXVK_d3d11_level_11_0_baseline` profile. That exact profile declares
+  Vulkan 1.3.204 and contains 62 unique leaf requirements: one API-version
+  floor, two extensions, 49 features and ten properties. Newer DXVK 3.x and a
+  future Vulkan 1.4 target are separate future evaluations; their requirements
+  are not mixed into this baseline.
 
 Both overlays are static source reading only. They exist to show why core
 conformance alone does not make a consumer work, and they are kept separate so
 that a consumer need is never reported as a core obligation.
+
+### DXVK 2.6.2 profile
+
+`tools/derive_dxvk_profile.py` verifies the pinned byte count, SHA-256 and Git
+blob identity before deriving the profile. Normal `--check` execution is fully
+offline. `tools/check_dxvk_profile.py` then joins every leaf independently to
+four evidence axes:
+
+1. the value exposed by the public API;
+2. reviewed implementation support;
+3. an exact CTS pass; and
+4. exact native evidence.
+
+A row is satisfied only when all four axes are positive. Unknown or absent
+evidence is a blocker. The checked matrix currently records 1/62 satisfied
+(`robustBufferAccess`) and 61 blockers; it is not a DXVK compatibility or
+Vulkan conformance statement.
 
 ## Running the tools
 
@@ -321,6 +338,8 @@ Validate the checked-in data and print the coverage report:
 
 ```sh
 python3 conformance_inventory/validate.py
+python3 tools/derive_dxvk_profile.py --check
+python3 tools/check_dxvk_profile.py --check
 ```
 
 Regenerate the derived, checked-in data (all offline except the profile and
@@ -331,6 +350,9 @@ python3 conformance_inventory/tools/collect_baseline_surface.py
 python3 conformance_inventory/tools/update_requirements_baseline.py
 python3 conformance_inventory/tools/derive_core_target.py
 python3 conformance_inventory/tools/derive_roadmap_comparison.py
+
+# Explicit network refresh; source identity must still match sources.json.
+python3 tools/derive_dxvk_profile.py --refresh
 ```
 
 Add the optional strict checks (fail on a stale anchor or an unknown case):
