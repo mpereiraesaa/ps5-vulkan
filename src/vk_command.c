@@ -603,16 +603,57 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
     (void)contents;
     ps5vk_command_invalidate(c);
 }
+/* Record an ordered, owned list of secondary references.
+ *
+ * Nothing is copied or flattened: the operation NAMES the children and the
+ * queue expands each name into its own submission segment, so a child keeps
+ * its object identity and its reuse rules. A duplicate reference is legal
+ * under simultaneous use and simply names the child twice.
+ *
+ * Refused, each poisoning the recording with no partial operation left:
+ * nesting, an empty or null array, more children than the segmenter expands,
+ * a child of another device or without a pool, a non-secondary child, a child
+ * that is not EXECUTABLE, a child recorded for render-pass continuation, a
+ * self-reference, and a pending or repeated child that was not recorded for
+ * simultaneous use.
+ *
+ * Not refused: whatever the child's inheritance record happens to carry. Its
+ * scope members are ignored by Vulkan without RENDER_PASS_CONTINUE and this
+ * path never reads them. */
 VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
     uint32_t count, const VkCommandBuffer *commands)
 {
-    /* Secondary buffers can now be allocated and recorded, but nothing
-     * executes them yet: the ordered child list, lifetime ownership and
-     * submission-time execution are the next slice. Until that exists this
-     * stays fail-closed rather than recording work the queue would drop.
-     * Nesting is refused here permanently, not just for now. */
-    (void)count; (void)commands;
-    ps5vk_command_invalidate(c);
+    if (!c || c->state != PS5VK_RECORDING ||
+        /* Primary-only: a secondary can never execute another buffer. */
+        c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
+        /* Executing inside a render pass needs inherited continuation, which
+         * is a later slice, so it stays fail-closed here. */
+        c->render_pass || !count || !commands ||
+        count > PS5VK_MAX_EXECUTED_COMMANDS) { invalid(c); return; }
+    VkDevice d = c->pool->device;
+    for (uint32_t j = 0; j < count; ++j) {
+        VkCommandBuffer child = commands[j];
+        if (!child || child == c || !child->pool || child->pool->device != d ||
+            child->level != VK_COMMAND_BUFFER_LEVEL_SECONDARY ||
+            child->state != PS5VK_EXECUTABLE ||
+            (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
+            { invalid(c); return; }
+        if (!(child->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
+            /* Without simultaneous use a child may not already be pending and
+             * may not appear twice: either executes it alongside itself. */
+            if (child->pending_count) { invalid(c); return; }
+            for (uint32_t k = 0; k < j; ++k)
+                if (commands[k] == child) { invalid(c); return; }
+        }
+    }
+    /* Validate the whole call before appending, and own the array, so a
+     * rejected call leaves nothing behind and a later caller mutation cannot
+     * change which children execute. */
+    struct ps5vk_operation *op = ps5vk_command_reserve_operation_with_payload(c,
+        PS5VK_EXECUTE_COMMANDS, PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
+        commands, count * sizeof(*commands));
+    if (!op) return;
+    op->child_count = count;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(VkCommandBuffer c,uint32_t first,uint32_t count,
     const VkBuffer *buffers,const VkDeviceSize *offsets)

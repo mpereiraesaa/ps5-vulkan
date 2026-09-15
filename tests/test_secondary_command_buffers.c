@@ -270,8 +270,9 @@ static void primary_only_commands_poison_a_secondary(void)
     vkCmdExecuteCommands(c, 1, &child);
     assert(c->state == PS5VK_INVALID && !c->operation_count);
 
-    /* A primary still cannot execute one either: this slice adds no
-     * execution, so the boundary is unchanged for both levels. */
+    /* A primary CAN execute an executable secondary; that contract now lives
+     * in tests/test_secondary_execute.c. Asserted here only so this file does
+     * not keep claiming the opposite. */
     VkCommandBufferAllocateInfo pi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = p, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
     VkCommandBuffer prim;
@@ -282,7 +283,8 @@ static void primary_only_commands_poison_a_secondary(void)
     assert(begin_secondary(child, 0, &i) == VK_SUCCESS);
     assert(vkEndCommandBuffer(child) == VK_SUCCESS);
     vkCmdExecuteCommands(prim, 1, &child);
-    assert(prim->state == PS5VK_INVALID && !prim->operation_count);
+    assert(prim->state == PS5VK_RECORDING && prim->operation_count == 1 &&
+           prim->operations[0].type == PS5VK_EXECUTE_COMMANDS);
 
     vkFreeCommandBuffers(&d, p, 1, &prim);
     vkFreeCommandBuffers(&d, p, 1, &child);
@@ -296,6 +298,6 @@ int main(void)
     inheritance_contract();
     usage_and_state_matrix();
     primary_only_commands_poison_a_secondary();
-    puts("Secondary command buffer object and state: pass (host only, no secondary execution)");
+    puts("Secondary command buffer object and state: pass (host only)");
     return 0;
 }

@@ -556,10 +556,27 @@ nothing in this driver reads it.
 primary only, per
 `VUID-vkBeginCommandBuffer-commandBuffer-02840`; a secondary may set both.
 
-**Nothing executes a secondary.** `vkCmdExecuteCommands` remains an explicit
-fail-closed boundary for both levels, and a secondary is refused at
-`vkQueueSubmit`, so nothing recorded into one can run. Ordered child
-references, lifetime ownership and submission-time execution do not exist yet.
+`vkCmdExecuteCommands` executes the named secondaries, in call order. It
+records an ordered array of child references that the driver **owns**, so a
+caller mutating its own array afterwards cannot change which buffers run, and
+the children are never copied or flattened into the primary: each is expanded
+into its own submission segment at submit time and keeps its object identity,
+its pending ownership and its reuse rules. A child recorded with
+`VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT` is consumed by executing exactly
+as a primary would be; one recorded with
+`VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT` may be named more than once in a
+call and stays reusable. A secondary is still refused at `vkQueueSubmit`: it
+reaches the queue only through a primary.
+
+The call is refused, poisoning the recording with no partial operation left
+behind, for nesting (a secondary may not execute anything), an empty or null
+array, more children than the driver expands, a child of another device or
+without a pool, a child that is not a secondary, a child that is not
+executable, a self-reference, a pending or repeated child that was not recorded
+for simultaneous use, and a child recorded for render-pass continuation.
+Executing **inside** a render pass is not supported: inherited render-pass
+scope is a separate slice, so the call is valid only outside one.
+
 Accordingly the driver refuses what it would not honour, and only that:
 `VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT`, because inherited
 render-pass execution is unimplemented; and `occlusionQueryEnable`,

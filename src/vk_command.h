@@ -16,7 +16,13 @@ enum ps5vk_operation_type {
     /* Backend image domain: the tiled depth target is device memory the host
      * never writes, so a depth clear is emitted as GPU packets and completes
      * against the segment's label, like the buffer-to-image upload. */
-    PS5VK_CLEAR_DEPTH_STENCIL_IMAGE
+    PS5VK_CLEAR_DEPTH_STENCIL_IMAGE,
+    /* Ordered references to secondary command buffers. The children are never
+     * copied or flattened into the primary: this operation only NAMES them,
+     * and the queue expands each name into its own submission segment, so a
+     * child keeps its object identity, its pending ownership and its reuse
+     * rules instead of a parallel mechanism inventing them. */
+    PS5VK_EXECUTE_COMMANDS
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -24,6 +30,9 @@ enum ps5vk_operation_scope {
     PS5VK_OPERATION_ANYWHERE
 };
 enum { PS5VK_MAX_OPERATIONS = 64 };
+/* One vkCmdExecuteCommands cannot name more children than the submission
+ * segmenter will expand for a single primary. */
+enum { PS5VK_MAX_EXECUTED_COMMANDS = 16 };
 enum { PS5VK_MAX_VERTEX_BINDINGS = 16 };
 struct ps5vk_vertex_binding { VkBuffer buffer; VkDeviceSize offset; };
 struct ps5vk_index_binding { VkBuffer buffer; VkDeviceSize offset; VkIndexType type; };
@@ -45,6 +54,9 @@ struct ps5vk_operation {
     uint32_t indirect_count;
     uint32_t indirect_stride;
     uint32_t fill_data;
+    /* Owned child references for PS5VK_EXECUTE_COMMANDS: the array itself is
+     * the operation's owned_payload and this is its element count. */
+    uint32_t child_count;
     VkQueryPool query_pool;
     uint32_t query_first;
     uint32_t query_count;

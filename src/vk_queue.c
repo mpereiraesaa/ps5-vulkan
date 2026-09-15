@@ -307,6 +307,28 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 return 0;
             continue;
         }
+        if (op->type == PS5VK_EXECUTE_COMMANDS) {
+            /* Re-validate the owned child array against live state. Each
+             * child's own operations are validated when its expanded segment
+             * is checked, so this covers only the reference list. */
+            VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
+            if (!children || !op->child_count ||
+                op->owned_payload_size != (size_t)op->child_count * sizeof(*children))
+                return 0;
+            for (uint32_t n = 0; n < op->child_count; ++n) {
+                VkCommandBuffer child = children[n];
+                if (!child || child == c || !child->pool || child->pool->device != d ||
+                    child->level != VK_COMMAND_BUFFER_LEVEL_SECONDARY ||
+                    child->state != PS5VK_EXECUTABLE ||
+                    (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
+                    return 0;
+                if (!(child->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
+                    if (child->pending_count) return 0;
+                    for (uint32_t k = 0; k < n; ++k) if (children[k] == child) return 0;
+                }
+            }
+            continue;
+        }
         if (op->type == PS5VK_BARRIER) {
             if (op->buffer_barrier.buffer) {
                 void *address; VkDeviceSize bytes;
@@ -401,6 +423,12 @@ static int frontend_record(const struct ps5vk_operation *op)
 static int deferred_boundary(int type)
 { return ps5vk_indirect_compute_operation((enum ps5vk_operation_type)type); }
 
+/* vkCmdExecuteCommands names children instead of carrying work, so it ends the
+ * primary's current segment: the children are expanded into their own segments
+ * in recorded order and the primary resumes after them. */
+static int execute_boundary(int type)
+{ return type == PS5VK_EXECUTE_COMMANDS; }
+
 static VkBool32 range_has_indirect(const VkCommandBuffer command,
     uint32_t first, uint32_t count)
 {
@@ -420,6 +448,7 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
         for (uint32_t b = 0; b < record->count; ++b)
             for (uint32_t k = 0; k < record->buffers[b]->operation_count; ++k)
                 contains_special |= frontend_record(&record->buffers[b]->operations[k]) ||
+                    execute_boundary(record->buffers[b]->operations[k].type) ||
                     ps5vk_indirect_operation(record->buffers[b]->operations[k].type);
         struct ps5vk_submission *first = NULL, *last = NULL;
         if (!contains_special) {
@@ -449,11 +478,47 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
                     uint32_t begin = operation;
                     VkBool32 frontend = frontend_record(&command->operations[operation]);
                     VkBool32 deferred = deferred_boundary(command->operations[operation].type);
+                    VkBool32 execute = execute_boundary(command->operations[operation].type);
                     if (frontend) ++operation;
-                    else if (deferred) ++operation;
+                    else if (deferred || execute) ++operation;
                     else while (operation < command->operation_count &&
                         !frontend_record(&command->operations[operation]) &&
+                        !execute_boundary(command->operations[operation].type) &&
                         !deferred_boundary(command->operations[operation].type)) ++operation;
+                    if (execute) {
+                        /* Expand each named child as its own segment over its
+                         * own full range, in recorded order. The primary is
+                         * never rewritten and no child is copied, so pin()
+                         * applies per buffer and the child's pending ownership
+                         * and one-time-submit consumption follow unchanged. */
+                        const struct ps5vk_operation *ex = &command->operations[begin];
+                        VkCommandBuffer const *children =
+                            (VkCommandBuffer const *)ex->owned_payload;
+                        if (!children || !ex->child_count ||
+                            ex->owned_payload_size !=
+                                (size_t)ex->child_count * sizeof(*children)) {
+                            result = INVALID; goto fail;
+                        }
+                        for (uint32_t n = 0; n < ex->child_count; ++n) {
+                            VkCommandBuffer child = children[n];
+                            if (!child || !child->operation_count) continue;
+                            last = allocate_submission(d, refs, &result);
+                            if (!last) goto fail;
+                            last->count = 1; last->buffers[0] = child;
+                            last->first_operation[0] = 0;
+                            last->operation_count[0] = (uint16_t)child->operation_count;
+                            last->frontend_only = frontend_record(&child->operations[0]);
+                            last->deferred_prepare =
+                                range_has_indirect(child, 0, child->operation_count);
+                            if (!first) first = last;
+                            if (*segment_count == UINT32_MAX) {
+                                free_submission(last);
+                                result = VK_ERROR_OUT_OF_HOST_MEMORY; goto fail;
+                            }
+                            *tail = last; tail = &last->next; ++*segment_count;
+                        }
+                        continue;
+                    }
                     last = allocate_submission(d, refs, &result); if (!last) goto fail;
                     last->count = 1; last->buffers[0] = command;
                     last->first_operation[0] = (uint16_t)begin;
