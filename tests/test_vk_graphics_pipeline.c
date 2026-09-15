@@ -5,8 +5,9 @@
 #include <stdlib.h>
 static unsigned created, released;
 static unsigned acquired, compiled_released, compile_fail, backend_fail;
-static VkResult backend(VkDevice d,const void *data,void **out)
-{ (void)d; assert(data); ++created; *out=malloc(1); return backend_fail?VK_ERROR_UNKNOWN:(*out ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY); }
+static uint32_t expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
+static VkResult backend(VkDevice d,const void *data,uint32_t primitive_type,void **out)
+{ (void)d; assert(data); assert(primitive_type==expected_primitive); ++created; *out=malloc(1); return backend_fail?VK_ERROR_UNKNOWN:(*out ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY); }
 static void release(VkDevice d,void *data) { (void)d; ++released; free(data); }
 static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const void **out)
 {
@@ -141,6 +142,37 @@ int main(void)
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
     assert(acquired==3);
     d.graphics_compiled_release=compiled_release;
+    {
+        /* Topology selects the primitive the backend links. Both accepted
+         * topologies reach the backend with their pinned GFX1013 value, and an
+         * unsupported topology is refused before any backend work happens.
+         * The counters below are pinned by later assertions, so this block
+         * restores them and uses the runtime lease path, where a program does
+         * not have to come from an offline record of the same topology. */
+        const unsigned saved_created=created,saved_released=released;
+        const unsigned saved_acquired=acquired,saved_compiled=compiled_released;
+        VkPipeline topo=NULL;
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+        expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS && topo->graphics);
+        vkDestroyPipeline(&d,topo,NULL);
+        const VkPrimitiveTopology unsupported_topologies[]={
+            VK_PRIMITIVE_TOPOLOGY_POINT_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
+        const unsigned before_created=created;
+        for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
+            ia.topology=unsupported_topologies[i];
+            assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==
+                VK_ERROR_FEATURE_NOT_PRESENT && !topo && created==before_created);
+        }
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS);
+        vkDestroyPipeline(&d,topo,NULL);
+        created=saved_created;released=saved_released;
+        acquired=saved_acquired;compiled_released=saved_compiled;
+    }
     VkVertexInputBindingDescription bindings[16];
     VkVertexInputAttributeDescription attributes[16];
     for(unsigned i=0;i<16;++i) {

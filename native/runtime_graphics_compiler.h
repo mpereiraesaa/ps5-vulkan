@@ -6,6 +6,12 @@
 struct ps5vk_runtime_graphics_program {
     PsbcShaderOutput vertex,fragment;
     struct ps5vk_runtime_draw_abi arguments;
+    /* The GFX1013 primitive this pair was compiled for, resolved from the key's
+     * topology. The native create path links the pair with a primitive the
+     * caller supplies, and refuses any value that is not this one, so a
+     * compiled shader and its linked pipeline cannot end up describing
+     * different primitives. */
+    uint32_t primitive_type;
 };
 /* Uncached compiler adapter. The acquisition seam may wrap this with caching.
  * The consumer must copy code/metadata before the lease is released. */

@@ -1,8 +1,10 @@
 #include "graphics_pipeline_ps5.h"
+#include "graphics_program.h"
 #include <stdlib.h>
 #include <string.h>
 
-VkResult ps5vk_native_graphics_create(VkDevice d, const void *data, void **out)
+VkResult ps5vk_native_graphics_create(VkDevice d, const void *data,
+    uint32_t primitive_type, void **out)
 {
     if (!out) return VK_ERROR_UNKNOWN;
     *out = NULL;
@@ -10,6 +12,11 @@ VkResult ps5vk_native_graphics_create(VkDevice d, const void *data, void **out)
     if (!d || !input || !input->image_bytes || input->image_bytes > 16u*1024u*1024u ||
         !d->memory.allocate || !d->memory.release || !d->memory.flush)
         return VK_ERROR_INITIALIZATION_FAILED;
+    /* The offline program library is the audited triangle-list profile and
+     * ps5vk_graphics_resolve compares topology, so a strip pipeline cannot reach
+     * a record here; refuse rather than link a mismatched primitive. */
+    if (primitive_type != PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_native_graphics_pipeline *p = calloc(1, sizeof(*p));
     if (!p) return VK_ERROR_OUT_OF_HOST_MEMORY;
     p->device = d; p->memory = d->memory;

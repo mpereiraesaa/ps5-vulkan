@@ -12,7 +12,8 @@ struct ps5vk_native_graphics_pipeline {
     const uint32_t *global_table;
     size_t allocation_bytes;
 };
-VkResult ps5vk_native_graphics_create(VkDevice, const void *, void **);
-VkResult ps5vk_native_runtime_graphics_create(VkDevice,const void *,void **);
+/* primitive_type is the GFX1013 value the pipeline's topology maps to. */
+VkResult ps5vk_native_graphics_create(VkDevice, const void *, uint32_t, void **);
+VkResult ps5vk_native_runtime_graphics_create(VkDevice,const void *,uint32_t,void **);
 void ps5vk_native_graphics_release(VkDevice, void *);
 #endif

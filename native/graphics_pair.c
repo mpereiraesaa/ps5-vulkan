@@ -1,4 +1,5 @@
 #include "graphics_pair.h"
+#include "graphics_program.h"
 #include <string.h>
 
 static int extent_valid(struct ps5vk_graphics_stage_extent s, size_t bytes)
@@ -40,7 +41,11 @@ int ps5vk_graphics_pair_prepare(struct ps5vk_graphics_pair *pair,
         gs != &pair->gs) return -4;
     if (sceAgcCreateShader(&ps, &pair->ps, (unsigned char *)mapped_image + in->ps.offset) ||
         ps != &pair->ps) return -5;
-    if (sceAgcLinkShaders(&pair->cx, &pair->uc, NULL, gs, ps, 4u)) return -6;
+    /* This library holds the audited triangle-list programs only: the pipeline
+     * key carries topology and ps5vk_graphics_resolve compares it, so a strip
+     * pipeline never reaches this linker with a mismatched primitive. */
+    if (sceAgcLinkShaders(&pair->cx, &pair->uc, NULL, gs, ps,
+                          PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST)) return -6;
     /* LLPC specifies interpolation modes and export offsets. Linking supplies
      * the native structural state, but must not silently replace that compiler
      * contract with default smooth/identity interpolation. */
