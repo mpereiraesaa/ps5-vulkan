@@ -827,7 +827,8 @@ static void narrow_storage_features(void)
            (PFN_vkVoidFunction)vkGetPhysicalDeviceFeatures2KHR);
     p->platform.supported_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                      PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
-                                     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+                                     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                                     PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;
     p->platform.format_properties = ps5vk_graphics_format_properties;
     p->platform.image_properties = ps5vk_graphics_image_properties;
 
@@ -928,14 +929,15 @@ static void narrow_storage_features(void)
 
     VkExtensionProperties device_properties[4] = {0};
     count = 0;
-    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS && count == 3);
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS && count == 4);
     count = 2;
     assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, device_properties) == VK_INCOMPLETE && count == 2);
     count = 4;
-    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, device_properties) == VK_SUCCESS && count == 3);
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, device_properties) == VK_SUCCESS && count == 4);
     assert(!strcmp(device_properties[0].extensionName, VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME));
     assert(!strcmp(device_properties[1].extensionName, VK_KHR_8BIT_STORAGE_EXTENSION_NAME));
     assert(!strcmp(device_properties[2].extensionName, VK_KHR_16BIT_STORAGE_EXTENSION_NAME));
+    assert(!strcmp(device_properties[3].extensionName, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME));
 
     VkBaseOutStructure unknown = {.sType = VK_STRUCTURE_TYPE_MAX_ENUM};
     VkPhysicalDeviceShaderDrawParametersFeatures shader_draw_features = {
@@ -962,7 +964,7 @@ static void narrow_storage_features(void)
            !feature8.storagePushConstant8);
     assert(feature16.storageBuffer16BitAccess && !feature16.uniformAndStorageBuffer16BitAccess &&
            !feature16.storagePushConstant16 && !feature16.storageInputOutput16);
-    assert(!protected_features.protectedMemory && !shader_draw_features.shaderDrawParameters);
+    assert(!protected_features.protectedMemory && shader_draw_features.shaderDrawParameters);
     assert(unknown.sType == VK_STRUCTURE_TYPE_MAX_ENUM && !unknown.pNext);
 
     const char *extensions[] = {
@@ -976,6 +978,10 @@ static void narrow_storage_features(void)
     feature8.storageBuffer8BitAccess = VK_TRUE;
     protected_features.pNext = &shader_draw_features;
     shader_draw_features.pNext = NULL;
+    /* The query above reported the feature the profile now supports; this
+     * creation is the narrow-storage one and deliberately does not request it,
+     * because the extension that exposes it is not enabled here. */
+    shader_draw_features.shaderDrawParameters = VK_FALSE;
     feature16.pNext = &protected_features;
     feature16.storageBuffer16BitAccess = VK_TRUE;
     feature_query.pNext = &feature8;
@@ -993,7 +999,24 @@ static void narrow_storage_features(void)
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
     protected_features.protectedMemory = VK_FALSE;
     shader_draw_features.shaderDrawParameters = VK_TRUE;
+    /* The extension is what exposes the 1.1 feature on this Vulkan 1.0
+     * profile, so a true request without it stays fail-closed. */
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    const char *draw_parameter_extensions[] = {
+        VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME,
+        VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME};
+    info.enabledExtensionCount = 4;
+    info.ppEnabledExtensionNames = draw_parameter_extensions;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features == (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+                                        PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                                        PS5VK_FEATURE_SHADER_DRAW_PARAMETERS));
+    vkDestroyDevice(device, NULL);
+    info.enabledExtensionCount = 3;
+    info.ppEnabledExtensionNames = extensions;
     shader_draw_features.shaderDrawParameters = 2;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
     shader_draw_features.shaderDrawParameters = VK_FALSE;

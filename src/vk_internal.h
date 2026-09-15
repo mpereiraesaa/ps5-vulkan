@@ -29,6 +29,12 @@ enum ps5vk_feature_bits {
      * byte extent and select GFX10 raw OOB checking; vertex fetch descriptors
      * are likewise bounded by the bound VkBuffer span. */
     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS = 1u << 2,
+    /* VK_KHR_shader_draw_parameters on the Vulkan 1.0 profile. The supported
+     * contract is the one this tranche witnessed: BaseVertex, BaseInstance and
+     * DrawIndex for direct draws and for a single indirect draw, with DrawIndex
+     * delivered as zero because multiDrawIndirect stays false. Requesting more
+     * than one draw per command is still refused. */
+    PS5VK_FEATURE_SHADER_DRAW_PARAMETERS = 1u << 3,
 };
 struct ps5vk_compiler {
     void *context;
