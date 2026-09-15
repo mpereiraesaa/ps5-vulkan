@@ -5,7 +5,23 @@ import sys
 import tempfile
 import unittest
 
-from tools.verify_consumer_resource_abi import APP, TITLE, validate
+from tools.verify_consumer_resource_abi import (
+    APP, SECONDARY_CONTROL_HASH, SECONDARY_EXECUTED_HASH, TITLE, validate)
+
+
+# The executable-secondary scenario as the hardware emitted it. The payload
+# allocates two 64-byte destination buffers of guard bytes, records the same
+# 32-byte fill into two secondaries and names only the first, so the executed
+# buffer carries the pattern in its first half and the control buffer keeps
+# all of its guard bytes.
+SECONDARY_MESSAGES = [
+    "PS5VK_CONSUMER_SECONDARY_EXECUTE_START",
+    "PS5VK_CONSUMER_SECONDARY_EXECUTE_SUCCESS filled_bytes=32 guard_bytes=32 "
+    "executed_mismatches=0 control_mismatches=0 control_untouched=1 "
+    f"executed_hash={SECONDARY_EXECUTED_HASH} "
+    f"control_hash={SECONDARY_CONTROL_HASH}",
+    "PS5VK_CONSUMER_SECONDARY_EXECUTE_RETIRED",
+]
 
 
 MESSAGES = [
@@ -104,9 +120,23 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 
 class ConsumerResourceAbiTests(unittest.TestCase):
     def fixture(self, edit=None, sampled=False, shared=False, visibility=None,
-                single=False, mixed=False):
+                single=False, mixed=False, secondary=False):
         sampled = sampled or shared or single or mixed
         messages = list(MESSAGES)
+        if secondary:
+            # Executing one named secondary costs exactly two extra compute
+            # segments, one for the child and one for the parent that names it,
+            # so every later submission serial - and the serial-derived first
+            # completion token - moves up by two.
+            for index, message in enumerate(messages):
+                if message.startswith("PS5VK_QUEUE_") and " serial=" in message:
+                    prefix, rest = message.split(" serial=")
+                    value, tail = rest.split(" ", 1)
+                    tail = tail.replace(f"token={value}00000001",
+                                        f"token={int(value) + 2}00000001")
+                    messages[index] = f"{prefix} serial={int(value) + 2} {tail}"
+            at = messages.index("PS5VK_CONSUMER_COMPUTE_START")
+            messages[at:at] = list(SECONDARY_MESSAGES)
         if sampled:
             for index,message in enumerate(messages):
                 if message.startswith("PS5VK_GRAPHICS_") and " serial=" in message:
@@ -486,6 +516,75 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             mutate(*args)
             with self.assertRaises(ValueError):
                 validate(*args)
+
+    def test_executable_secondary_witness_is_accepted_with_shifted_serials(self):
+        result = validate(*self.fixture(secondary=True))
+        self.assertTrue(result["secondary_execute_witnessed"])
+        self.assertEqual(result["secondary_executed_hash_fnv1a32"],
+                         SECONDARY_EXECUTED_HASH)
+        self.assertEqual(result["secondary_control_hash_fnv1a32"],
+                         SECONDARY_CONTROL_HASH)
+        # Payloads without the scenario keep their recorded serials and stay
+        # valid; the shift is derived from the scenario's own presence.
+        older = validate(*self.fixture())
+        self.assertFalse(older["secondary_execute_witnessed"])
+        self.assertIsNone(older["secondary_executed_hash_fnv1a32"])
+        self.assertIsNone(older["secondary_control_hash_fnv1a32"])
+
+    def test_secondary_hashes_match_an_independent_recomputation(self):
+        # The pins are not transcribed from the log: the oracle is fully
+        # declared - two 64-byte buffers of 0x5a guard, with the first 32 bytes
+        # of the executed one overwritten by the little-endian 0xa1b2c3d4 fill
+        # - so both FNV-1a values are recomputed here from that description.
+        def fnv1a32(data):
+            digest = 0x811c9dc5
+            for byte in data:
+                digest = ((digest ^ byte) * 0x01000193) & 0xffffffff
+            return f"{digest:08x}"
+
+        guard = bytes([0x5a]) * 64
+        executed = (0xa1b2c3d4).to_bytes(4, "little") * 8 + guard[32:]
+        self.assertEqual(fnv1a32(executed), SECONDARY_EXECUTED_HASH)
+        self.assertEqual(fnv1a32(guard), SECONDARY_CONTROL_HASH)
+        self.assertNotEqual(SECONDARY_EXECUTED_HASH, SECONDARY_CONTROL_HASH)
+
+    def test_secondary_execute_scenario_cannot_be_half_reported(self):
+        for dropped in SECONDARY_MESSAGES:
+            def drop(messages, dropped=dropped):
+                messages.remove(dropped)
+            with self.subTest(dropped=dropped.split()[0]), \
+                    self.assertRaises(ValueError):
+                validate(*self.fixture(secondary=True, edit=drop))
+
+    def test_secondary_execute_rejects_equal_hashes(self):
+        # Identical hashes are what a driver that executed nothing, or that
+        # executed the unnamed secondary too, would report.
+        for old, new in ((f"control_hash={SECONDARY_CONTROL_HASH}",
+                          f"control_hash={SECONDARY_EXECUTED_HASH}"),
+                         (f"executed_hash={SECONDARY_EXECUTED_HASH}",
+                          f"executed_hash={SECONDARY_CONTROL_HASH}")):
+            def edit(messages, old=old, new=new):
+                index = messages.index(SECONDARY_MESSAGES[1])
+                messages[index] = messages[index].replace(old, new)
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                validate(*self.fixture(secondary=True, edit=edit))
+
+    def test_secondary_execute_hashes_are_pinned_not_merely_different(self):
+        # A wrong-but-different pair - a bad fill pattern, or a control buffer
+        # that was touched - passes a difference check and must still fail.
+        for old, new in ((f"executed_hash={SECONDARY_EXECUTED_HASH}",
+                          "executed_hash=ca327246"),
+                         (f"control_hash={SECONDARY_CONTROL_HASH}",
+                          "control_hash=21a49bc6"),
+                         ("control_untouched=1", "control_untouched=0"),
+                         ("filled_bytes=32", "filled_bytes=16"),
+                         ("executed_mismatches=0", "executed_mismatches=1"),
+                         ("control_mismatches=0", "control_mismatches=1")):
+            def edit(messages, old=old, new=new):
+                index = messages.index(SECONDARY_MESSAGES[1])
+                messages[index] = messages[index].replace(old, new)
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                validate(*self.fixture(secondary=True, edit=edit))
 
 
 if __name__ == "__main__":

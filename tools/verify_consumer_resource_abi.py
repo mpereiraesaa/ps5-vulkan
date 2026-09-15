@@ -15,6 +15,14 @@ from pathlib import Path
 TITLE = "PPSA99994"
 APP = "ps5vk"
 
+# Exact hashes of the two 64-byte destination buffers of the executable
+# secondary scenario, established by two identical hardware runs of the same
+# deployed artifact. Only the first 32 bytes of the named buffer are filled;
+# its remaining 32 bytes and the whole control buffer of the secondary the
+# primary never named stay guard bytes.
+SECONDARY_EXECUTED_HASH = "ca327245"
+SECONDARY_CONTROL_HASH = "21a49bc5"
+
 
 def validate(log, receipt, artifact, texel_rgba8=False):
     def require(condition, label):
@@ -155,6 +163,37 @@ def validate(log, receipt, artifact, texel_rgba8=False):
     negotiated = one("PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED ")
     transfer_start = one("PS5VK_CONSUMER_BUFFER_TRANSFER_START")
     transfer_witness = one("PS5VK_CONSUMER_BUFFER_TRANSFER_SUCCESS ")
+    # Executable secondary command buffers: the named secondary must have run
+    # and the unnamed control must be untouched. Both halves are required, so a
+    # run where nothing executed and a run where something unnamed executed are
+    # equally failures.
+    # Presence-gated rather than flag-gated, because this scenario is compiled
+    # unconditionally into the consumer and its START marker is emitted before
+    # any Vulkan work: a payload that contains the scenario always logs START,
+    # so a missing START means an older payload, not a silent skip. Once START
+    # is present the rest is mandatory, so a run that starts the scenario and
+    # fails to finish it cannot pass.
+    secondary_present = bool(matching("PS5VK_CONSUMER_SECONDARY_EXECUTE_START"))
+    secondary_start = one("PS5VK_CONSUMER_SECONDARY_EXECUTE_START") if secondary_present else None
+    secondary_witness = one("PS5VK_CONSUMER_SECONDARY_EXECUTE_SUCCESS ") if secondary_present else None
+    secondary_retired = one("PS5VK_CONSUMER_SECONDARY_EXECUTE_RETIRED") if secondary_present else None
+    if secondary_present:
+        secondary_fields = secondary_witness[1].split()[1:]
+        for expected in ("filled_bytes=32", "guard_bytes=32", "executed_mismatches=0",
+                         "control_mismatches=0", "control_untouched=1"):
+            require(expected in secondary_fields,
+                    f"secondary execute witness missing {expected}")
+        # Both hashes are pinned to their exact measured values rather than
+        # merely required to differ. Identical hashes would mean the executed
+        # and control buffers ended up the same, which is what a driver that
+        # silently ran nothing, or ran the unnamed one too, would produce - but
+        # so would a wrong-but-different result, and only the exact pair rules
+        # that out as well. The deterministic fill makes both values stable
+        # across runs of the same artifact, so this is a pin, not a sample.
+        for expected in (f"executed_hash={SECONDARY_EXECUTED_HASH}",
+                         f"control_hash={SECONDARY_CONTROL_HASH}"):
+            require(expected in secondary_fields,
+                    f"secondary execute witness missing {expected}")
     transfer_retired = one("PS5VK_CONSUMER_BUFFER_TRANSFER_RETIRED")
     start = one("PS5VK_CONSUMER_COMPUTE_START")
     pipeline = one("PS5VK_CONSUMER_COMPUTE_PIPELINE_CREATED")
@@ -197,6 +236,8 @@ def validate(log, receipt, artifact, texel_rgba8=False):
     ordered = [boot, physical, physical_queries, negotiated,
                transfer_start, transfer_witness, transfer_retired,
                start]
+    if secondary_present:
+        ordered[-1:-1] = [secondary_start, secondary_witness, secondary_retired]
     if texel_format is not None:
         ordered.append(texel_format)
     ordered += [pipeline, indirect,
@@ -259,35 +300,49 @@ def validate(log, receipt, artifact, texel_rgba8=False):
         "copy_bytes=7", "update_bytes=8", "fill_bytes=20",
         "whole_tail_bytes=3", "guard_mismatches=0", "hash=9a158222"],
         "buffer-transfer oracle")
-    require(prepared[0][1].endswith("serial=5 dispatches=1"), "one resource dispatch")
+    # The serial numbering depends on whether the payload contains the
+    # executable-secondary scenario, because executing one named secondary
+    # produces exactly TWO extra segments: one for the child and one for the
+    # primary that names it. Both numberings are pinned exactly rather than
+    # relaxed, and the offset is derived from the scenario's own presence, so
+    # an unexpected extra submission still fails either way. Recorded evidence
+    # from payloads without the scenario keeps its original serials.
+    shift = 2 if secondary_present else 0
+    def serial(base):
+        return base + shift
+    require(prepared[0][1].endswith(f"serial={serial(5)} dispatches=1"),
+            "one resource dispatch")
     require(indirect[1].split()[1:] == ["groups=1,1,1", "offset=512"],
             "indirect dispatch recording")
-    require(prepared[1][1].endswith("serial=6 dispatches=2"), "two narrow dispatches")
-    require(prepared[2][1].endswith("serial=8 dispatches=3"), "three synchronization dispatches")
-    require(prepared[3][1].endswith("serial=10 dispatches=0"), "event dependency segment")
+    require(prepared[1][1].endswith(f"serial={serial(6)} dispatches=2"),
+            "two narrow dispatches")
+    require(prepared[2][1].endswith(f"serial={serial(8)} dispatches=3"),
+            "three synchronization dispatches")
+    require(prepared[3][1].endswith(f"serial={serial(10)} dispatches=0"),
+            "event dependency segment")
     require([row[1].rsplit(" ", 1)[0] for row in submitted] == [
-                "PS5VK_QUEUE_SUBMIT serial=5 index=0",
-                "PS5VK_QUEUE_SUBMIT serial=6 index=0",
-                "PS5VK_QUEUE_SUBMIT serial=6 index=1",
-                "PS5VK_QUEUE_SUBMIT serial=8 index=0",
-                "PS5VK_QUEUE_SUBMIT serial=8 index=1",
-                "PS5VK_QUEUE_SUBMIT serial=8 index=2"] and
+                f"PS5VK_QUEUE_SUBMIT serial={serial(5)} index=0",
+                f"PS5VK_QUEUE_SUBMIT serial={serial(6)} index=0",
+                f"PS5VK_QUEUE_SUBMIT serial={serial(6)} index=1",
+                f"PS5VK_QUEUE_SUBMIT serial={serial(8)} index=0",
+                f"PS5VK_QUEUE_SUBMIT serial={serial(8)} index=1",
+                f"PS5VK_QUEUE_SUBMIT serial={serial(8)} index=2"] and
             all(row[1].endswith("rc=0") for row in submitted), "submits")
     require([row[1].rsplit(" ", 1)[0] for row in suspended] == [
-                "PS5VK_QUEUE_SUSPEND_POINT serial=5 index=0",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=6 index=0",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=6 index=1",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=0",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=1",
-                "PS5VK_QUEUE_SUSPEND_POINT serial=8 index=2"] and
+                f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(5)} index=0",
+                f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(6)} index=0",
+                f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(6)} index=1",
+                f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(8)} index=0",
+                f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(8)} index=1",
+                f"PS5VK_QUEUE_SUSPEND_POINT serial={serial(8)} index=2"] and
             all(row[1].endswith("rc=0") for row in suspended), "suspend points")
-    expected_completion = ((5, 0), (6, 0), (6, 1),
-                           (8, 0), (8, 1), (8, 2))
-    require(all(f"serial={serial} index={index}" in row[1]
-                for row, (serial, index) in zip(completed, expected_completion)),
+    expected_completion = ((serial(5), 0), (serial(6), 0), (serial(6), 1),
+                           (serial(8), 0), (serial(8), 1), (serial(8), 2))
+    require(all(f"serial={s} index={i}" in row[1]
+                for row, (s, i) in zip(completed, expected_completion)),
             "completion identities")
-    require("serial=5 index=0 token=500000001 gcr=0070f528" in completed[0][1],
-            "completion")
+    require(f"serial={serial(5)} index=0 token={serial(5)}00000001 gcr=0070f528"
+            in completed[0][1], "completion")
     require(witness[1].split()[1:] == [
         "sets=3", "storage=2", "uniform=1", "texel=1",
         "dynamic_ssbo=2", "dynamic_ubo=1", "offsets=256,256,256",
@@ -470,6 +525,11 @@ def validate(log, receipt, artifact, texel_rgba8=False):
         "guard_words_checked": 192,
         "buffer_transfer_bytes_checked": 67,
         "buffer_transfer_hash_fnv1a32": "9a158222",
+        "secondary_execute_witnessed": secondary_present,
+        "secondary_executed_hash_fnv1a32":
+            SECONDARY_EXECUTED_HASH if secondary_present else None,
+        "secondary_control_hash_fnv1a32":
+            SECONDARY_CONTROL_HASH if secondary_present else None,
         "indirect_dispatches_checked": 1,
         "storage8_elements_checked": 64,
         "storage16_elements_checked": 64,
