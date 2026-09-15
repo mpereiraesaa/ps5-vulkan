@@ -116,7 +116,7 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R32_SFLOAT, 4, UINT32_C(0x01600000), 4, 0, 0, 1,
             CAP_LINEAR | CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R32G32_SFLOAT, 8, UINT32_C(0x04000000), 4, 5, 0, 1,
-            CAP_LINEAR | CAP_VERTEX, 0),
+            CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R32G32B32A32_SFLOAT, 16, UINT32_C(0x04d00000), 4, 5, 6, 7,
             CAP_LINEAR | CAP_VERTEX, 0),
     /* --- typed integer sampled formats (nearest only) --------------------- */
@@ -148,8 +148,10 @@ static const struct ps5vk_texture_format formats[] = {
             CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R32_SINT, 4, UINT32_C(0x01500000), 4, 0, 0, 1,
             CAP_VERTEX | CAP_UTEXEL, 0),
-    SAMPLED(VK_FORMAT_R32G32_UINT, 8, UINT32_C(0x03e00000), 4, 5, 0, 1, CAP_VERTEX, 0),
-    SAMPLED(VK_FORMAT_R32G32_SINT, 8, UINT32_C(0x03f00000), 4, 5, 0, 1, CAP_VERTEX, 0),
+    SAMPLED(VK_FORMAT_R32G32_UINT, 8, UINT32_C(0x03e00000), 4, 5, 0, 1,
+            CAP_VERTEX, CAP_UTEXEL),
+    SAMPLED(VK_FORMAT_R32G32_SINT, 8, UINT32_C(0x03f00000), 4, 5, 0, 1,
+            CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R32G32B32A32_UINT, 16, UINT32_C(0x04b00000), 4, 5, 6, 7, CAP_VERTEX, 0),
     SAMPLED(VK_FORMAT_R32G32B32A32_SINT, 16, UINT32_C(0x04c00000), 4, 5, 6, 7, CAP_VERTEX, 0),
     /* --- packed sampled formats qualified on 2026-09-14 --------------------
