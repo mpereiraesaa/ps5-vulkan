@@ -8,6 +8,7 @@
  * Vulkan-facing ownership are ps5-vulkan work.
  */
 #include "draw_emit_ps5.h"
+#include "draw_parameters.h"
 #include "ps5_agc_writer.h"
 #include "ps5_gpu_span.h"
 #include <string.h>
@@ -47,7 +48,8 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     if(sh_count>16)return VK_ERROR_UNKNOWN;
     const uint32_t single_table[PS5VK_RUNTIME_DESCRIPTOR_SETS]={texture_low?*texture_low:0,0,0,0};
     if(state->runtime.enabled && (indices ||
-        ps5vk_runtime_draw_values_sets(&state->runtime,op->first_vertex,op->first_instance,
+        ps5vk_runtime_draw_values_sets(&state->runtime,ps5vk_draw_base_vertex(op),
+                                 ps5vk_draw_base_instance(op),
                                  vertex_input?vertex_table_low:0,state->push_constant_low,
                                  descriptor_tables?descriptor_tables:single_table,
                                  runtime_vertex,runtime_pixel))) return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -63,9 +65,10 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     VkResult scissor_rc=ps5vk_native_emit_scissor_replay(&next,(uint32_t)(end-next),state);
     if(scissor_rc!=VK_SUCCESS)return scissor_rc;
 #endif
-    const uint32_t procedural[3] = {global_table_low, op->first_vertex, op->first_instance};
+    const uint32_t procedural[3] = {global_table_low, ps5vk_draw_base_vertex(op),
+        ps5vk_draw_base_instance(op)};
     const uint32_t vertex[4] = {global_table_low, vertex_table_low,
-        indices?(uint32_t)op->vertex_offset:op->first_vertex, op->first_instance};
+        ps5vk_draw_base_vertex(op), ps5vk_draw_base_instance(op)};
     const uint32_t fragment[2]={global_table_low,texture_low?*texture_low:0};
     if(state->runtime.enabled) {
         if(ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x8c,
