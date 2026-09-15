@@ -292,6 +292,42 @@ int main(void)
                  VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     }
 
+    /* --- four-component 16-bit rows: same staging rule ---------------------
+     * R16G16B16A16_UNORM/SNORM/SFLOAT/UINT/SINT carry an eight-byte element
+     * with the (4,5,6,7) completion, so the derived completion word is 0xfac
+     * and the combined GFX10 words are 65/66/71/69/70. This is the first
+     * family with an eight-byte element: the V# stride field is bits 16-29 of
+     * word 1, so 8 fits, and NUM_RECORDS is bytes/bytes_per_texel. The
+     * mandatory 16-bit table requires the role for SFLOAT, UINT and SINT;
+     * UNORM and SNORM have no mandatory cell at all and are staged only for
+     * family coherence. Implemented, still unwitnessed: the published bit
+     * stays off and creation stays refused (tests/test_vk_memory.c). */
+    const VkFormat r16g16b16a16_texel[] = {
+        VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_UINT,
+        VK_FORMAT_R16G16B16A16_SINT,
+    };
+    const uint32_t r16g16b16a16_texel_words[] = {65u, 66u, 71u, 69u, 70u};
+    for (unsigned i = 0;
+         i < sizeof(r16g16b16a16_texel) / sizeof(r16g16b16a16_texel[0]); ++i) {
+        const struct ps5vk_texture_format *entry =
+            ps5vk_texture_format_lookup(r16g16b16a16_texel[i]);
+        VkFormatProperties r16g16b16a16_properties;
+        assert(entry && entry->bytes_per_texel == 8);
+        assert(ps5vk_texture_format_has(r16g16b16a16_texel[i],
+                                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(!ps5vk_texture_format_witnessed(r16g16b16a16_texel[i],
+                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        /* 16_16_16_16_UNORM/SNORM/FLOAT/UINT/SINT in the pinned table. */
+        assert(ps5vk_texture_format_gfx10_format(entry) ==
+               r16g16b16a16_texel_words[i]);
+        assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0xfac));
+        ps5vk_texture_format_properties(r16g16b16a16_texel[i],
+                                        &r16g16b16a16_properties);
+        assert(!(r16g16b16a16_properties.bufferFeatures &
+                 VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+    }
+
     /* --- vertex metadata matches the published vertex role ---------------- */
     check_vertex(VK_FORMAT_R8_UNORM, 1, 1, PS5VK_VERTEX_NUMERIC_FLOAT);
     check_vertex(VK_FORMAT_R8G8_SNORM, 2, 2, PS5VK_VERTEX_NUMERIC_FLOAT);
