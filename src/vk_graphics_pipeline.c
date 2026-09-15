@@ -56,7 +56,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
 {
     if (in->sType != VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO || !in->layout ||
         in->layout->device != d || !in->renderPass || in->renderPass->device != d) return VK_ERROR_UNKNOWN;
-    if (in->pNext || in->flags || in->subpass || in->stageCount != 2 || !in->pStages ||
+    /* The pipeline is created for ONE subpass, which must exist in the pass it
+     * names. A nonzero index is no longer refused outright: it identifies the
+     * scope this pipeline may draw in. */
+    if (in->pNext || in->flags || in->subpass >= in->renderPass->subpass_count ||
+        in->stageCount != 2 || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkBool32 dynamic_viewport,dynamic_scissor;
@@ -125,7 +129,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return VK_ERROR_UNKNOWN;
     const VkPipelineDepthStencilStateCreateInfo *depth=in->pDepthStencilState;
     VkRenderPass pass=in->renderPass;
-    if (pass->depth.attachment != VK_ATTACHMENT_UNUSED && !depth) return VK_ERROR_UNKNOWN;
+    /* The formats come from the subpass this pipeline names, not from the
+     * first one: the identity is what a draw is later checked against. */
+    const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, in->subpass);
+    if (subpass->depth.attachment != VK_ATTACHMENT_UNUSED && !depth) return VK_ERROR_UNKNOWN;
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
         depth->pNext || depth->flags || depth->depthBoundsTestEnable || depth->stencilTestEnable ||
         depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
@@ -133,7 +140,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     struct ps5vk_graphics_key key={
         .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
         .fragment={.words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName},
-        .topology=ia->topology, .color_format=pass->attachments[pass->color.attachment].format,
+        .topology=ia->topology, .color_format=pass->attachments[subpass->color.attachment].format,
         .samples=m->rasterizationSamples, .color_write_mask=b->pAttachments[0].colorWriteMask,
         .blend_enable=b->pAttachments[0].blendEnable,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
@@ -175,6 +182,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return rc == VK_SUCCESS ? VK_ERROR_INITIALIZATION_FAILED : rc;
     }
     p->device=d; p->allocator=saved; p->custom_allocator=custom; p->graphics=VK_TRUE;
+    p->subpass=in->subpass;
     p->set_count=in->layout->set_count;
     if(p->set_count)memcpy(p->sets,in->layout->sets,p->set_count*sizeof(*p->sets));
     p->graphics_release=d->graphics_release;
@@ -190,8 +198,8 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         key.vertex_binding_count*sizeof(*key.vertex_bindings));
     if(key.vertex_attribute_count)memcpy(p->vertex_attributes,key.vertex_attributes,
         key.vertex_attribute_count*sizeof(*key.vertex_attributes));
-    if (pass->depth.attachment != VK_ATTACHMENT_UNUSED) {
-        p->depth_format=pass->attachments[pass->depth.attachment].format;
+    if (subpass->depth.attachment != VK_ATTACHMENT_UNUSED) {
+        p->depth_format=pass->attachments[subpass->depth.attachment].format;
         p->depth_test=depth->depthTestEnable; p->depth_write=depth->depthWriteEnable;
         p->depth_compare=depth->depthCompareOp;
     }

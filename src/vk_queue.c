@@ -214,6 +214,10 @@ static int draw_operation_valid(VkDevice d, const struct ps5vk_operation *op)
 {
     if (!op->pipeline || op->pipeline->device != d || !op->pipeline->graphics ||
         !op->pipeline->graphics_state) return 0;
+    /* The pipeline's subpass identity must still match the subpass the draw
+     * was recorded in, re-derived from the record rather than from recording
+     * state. */
+    if (op->pipeline->subpass != op->subpass) return 0;
     if (ps5vk_indirect_graphics_operation(op->type) &&
         ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
     if (op->pipeline->set_count > PS5VK_MAX_SETS) return 0;
@@ -232,12 +236,13 @@ static int draw_operation_valid(VkDevice d, const struct ps5vk_operation *op)
  * framebuffer is optional in the inheritance record, so the null handle is
  * accepted and only a DIFFERENT one is refused. */
 static int continuation_child_valid(VkDevice d, VkCommandBuffer child,
-    VkRenderPass active, VkFramebuffer framebuffer)
+    VkRenderPass active, VkFramebuffer framebuffer, uint32_t subpass)
 {
     if (!(child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ||
         !child->inheritance_valid ||
         !ps5vk_render_pass_compatible(child->inheritance.renderPass, active) ||
-        child->inheritance.subpass ||
+        /* Recorded for the subpass it is executing in, exactly. */
+        child->inheritance.subpass != subpass ||
         (child->inheritance.framebuffer &&
          child->inheritance.framebuffer != framebuffer)) return 0;
     for (unsigned j = 0; j < child->operation_count; ++j) {
@@ -277,11 +282,21 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
         if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_DRAW ||
             op->type == PS5VK_DRAW_INDEXED ||
             ps5vk_indirect_graphics_operation(op->type) ||
+            op->type == PS5VK_NEXT_SUBPASS ||
             op->type == PS5VK_END_RENDER_PASS) {
             if (!d->graphics_enabled || !d->graphics_submit_enabled || !op->render_pass || !op->framebuffer ||
                 op->render_pass->device != d || op->framebuffer->device != d) return 0;
             if (op->type == PS5VK_BEGIN_RENDER_PASS) {
                 if (active) return 0;
+                /* EXECUTION of more than one subpass is not implemented. The
+                 * object model accepts the bounded multi-subpass shape and
+                 * recording carries it faithfully, but submitting one would
+                 * hand the backend a pass whose transitions, attachment
+                 * lifetime and ordering do not exist yet, so it is refused
+                 * here - before any backend sees it - rather than executed
+                 * as if it were a single subpass. */
+                if (op->render_pass->subpass_count != 1) return 0;
+                if (op->subpass) return 0;
                 active = op->render_pass; framebuffer = op->framebuffer;
                 contents = op->render_pass_contents;
                 pass_work = 0;
@@ -300,8 +315,21 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     if (contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) return 0;
                     if (!draw_operation_valid(d, op)) return 0;
                     ++pass_work;
+                } else if (op->type == PS5VK_NEXT_SUBPASS) {
+                    /* Unreachable while only single-subpass passes may be
+                     * submitted, and validated anyway so the rule lives with
+                     * the record rather than with the refusal above: the
+                     * boundary must name a later subpass of the pass it is in.
+                     * Empty subpasses are valid recordings, so this transition
+                     * does not require draw work in the subpass it leaves. */
+                    if (op->subpass >= active->subpass_count) return 0;
+                    contents = op->render_pass_contents;
+                    pass_work = 0;
                 } else {
                     if (!pass_work) return 0;
+                    /* A pass must end at its last subpass; ending earlier
+                     * would drop the subpasses never entered. */
+                    if (op->subpass + 1 != active->subpass_count) return 0;
                     active = NULL; framebuffer = NULL;
                     contents = VK_SUBPASS_CONTENTS_INLINE;
                 }
@@ -336,7 +364,8 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                      !(child->state == PS5VK_PENDING && simultaneous)))
                     return 0;
                 if (active) {
-                    if (!continuation_child_valid(d, child, active, framebuffer)) return 0;
+                    if (!continuation_child_valid(d, child, active, framebuffer,
+                                                 op->subpass)) return 0;
                     /* A continuation child carries nothing but draws, so its
                      * operation count is the work it contributes - and an
                      * empty child contributes none. */

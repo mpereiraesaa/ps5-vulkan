@@ -74,7 +74,10 @@ int main(void)
     struct VkImageView_T v = {.device = &d};
     struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1,
         .attachments = {&v}, .depth_attachment = VK_ATTACHMENT_UNUSED};
-    struct VkRenderPass_T pass = {.device = &d};
+    struct ps5vk_subpass pass_subpasses[1] = {{.color = {.attachment = 0},
+        .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T pass = {.device = &d, .subpass_count = 1,
+        .subpasses = pass_subpasses};
     struct VkPipeline_T p = {.device = &d};
     struct ps5vk_operation op = {.type = PS5VK_DRAW, .pipeline = &p, .framebuffer = &fb,
         .render_pass = &pass, .viewport = {0,0,4,4,0,1}, .scissor = {{0,0},{4,4}}};

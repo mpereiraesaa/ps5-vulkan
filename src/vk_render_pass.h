@@ -2,16 +2,51 @@
 #define PS5VK_RENDER_PASS_H
 #include "vk_internal.h"
 
-/* Initial one-subpass profile; owned data, never retained create-info pointers.
- * A graphics-capable backend must be enabled before these objects are usable. */
+/* Bounded multiple-subpass profile. The shape is owned data - never retained
+ * create-info pointers - and a graphics-capable backend must be enabled before
+ * these objects are usable.
+ *
+ * The limits below are this profile's, not Vulkan's, and they are enforced at
+ * creation so an unsupported shape is refused where the caller can see it
+ * rather than accepted and failed later. */
+enum { PS5VK_MAX_SUBPASSES = 2 };
+enum { PS5VK_MAX_ATTACHMENTS = 2 };
+enum { PS5VK_MAX_DEPENDENCIES = 4 };
+
+/* One subpass: the roles this profile executes.
+ *
+ * There is no preserve list here, and that is a statement about the profile
+ * rather than an omission. Every subpass names the SAME colour and depth
+ * attachments - the only shape the framebuffer model can serve - and every
+ * attachment must be named by a subpass, so every attachment is used by every
+ * subpass and no attachment can be preserved-but-unused. A non-empty
+ * pPreserveAttachments therefore has no legal form here and is refused at
+ * creation rather than stored where it could never mean anything. */
+struct ps5vk_subpass {
+    VkAttachmentReference color, depth;
+};
+
 struct VkRenderPass_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
     unsigned pending;
-    uint32_t attachment_count, dependency_count;
-    VkAttachmentDescription attachments[2];
-    VkAttachmentReference color, depth;
-    VkSubpassDependency dependencies[2];
+    uint32_t attachment_count, subpass_count, dependency_count;
+    /* All three arrays live in the object's single allocation, so a failed
+     * creation frees exactly one block and no partially built object can
+     * escape. Sizes are computed with checked arithmetic before allocating. */
+    VkAttachmentDescription *attachments;
+    struct ps5vk_subpass *subpasses;
+    VkSubpassDependency *dependencies;
 };
+
+/* The references of one subpass. Callers that only handle the single-subpass
+ * profile pass 0 and say so, rather than reaching for fields that no longer
+ * describe the whole pass. Every subpass of a pass names the same attachments,
+ * so a caller that needs only the ROLES may read subpass 0 for any of them. */
+static inline const struct ps5vk_subpass *ps5vk_render_pass_subpass(
+    VkRenderPass pass, uint32_t index)
+{
+    return &pass->subpasses[index];
+}
 #endif

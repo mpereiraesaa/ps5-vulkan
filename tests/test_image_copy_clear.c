@@ -692,10 +692,14 @@ int main(void)
 
     /* Closest otherwise-valid boundary: an active one-subpass render pass. */
     struct VkImageView_T active_view = {.device = device, .image = attachment};
+    VkAttachmentDescription active_attachments[1] = {
+        {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE}};
+    struct ps5vk_subpass active_subpasses[1] = {
+        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T active_pass = {.device = device, .attachment_count = 1,
-        .color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED},
-        .attachments = {{.format = VK_FORMAT_R8G8B8A8_UNORM,
-            .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE}}};
+        .subpass_count = 1, .attachments = active_attachments,
+        .subpasses = active_subpasses};
     struct VkFramebuffer_T active_fb = {.device = device, .width = WIDTH, .height = HEIGHT,
         .attachment_count = 1, .attachments = {&active_view},
         .formats = {VK_FORMAT_R8G8B8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},

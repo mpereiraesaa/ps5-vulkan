@@ -147,15 +147,22 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(first>=range_end || last>=range_end || last<first+2)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_operation *begin=&cb->operations[first]; VkRenderPass pass=begin->render_pass;
-    int depth=pass->depth.attachment!=VK_ATTACHMENT_UNUSED;
+    /* This backend executes ONE subpass. A render pass that declares more is
+     * refused here as well as at submission: subpass transitions, their
+     * attachment lifetime and their ordering are unimplemented, and running
+     * only the first subpass of a pass that declares two would silently drop
+     * half the work. */
+    if(pass->subpass_count!=1)return VK_ERROR_FEATURE_NOT_PRESENT;
+    const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(pass,0);
+    int depth=subpass->depth.attachment!=VK_ATTACHMENT_UNUSED;
     VkFormat color_format=begin->framebuffer->attachments[0]->image->info.format;
     if(pass->attachment_count!=(depth?2u:1u) || pass->dependency_count ||
-        (depth && pass->depth.attachment!=1) || pass->color.attachment!=0 ||
+        (depth && subpass->depth.attachment!=1) || subpass->color.attachment!=0 ||
         (color_format!=VK_FORMAT_B8G8R8A8_UNORM && color_format!=VK_FORMAT_R8G8B8A8_UNORM))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_attachment_plan color_plan={0},depth_plan={0};
     if(ps5vk_attachment_plan(&pass->attachments[0],color_format,
-        pass->color.layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
+        subpass->color.layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t clear_word=0;
     if(color_plan.clear) {
         VkImage image=begin->framebuffer->attachments[0]->image;
@@ -171,7 +178,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(depth) {
         const VkAttachmentDescription *a=&pass->attachments[1];
         VkImage image=begin->framebuffer->attachments[1]->image;
-        if(ps5vk_attachment_plan(a,VK_FORMAT_D32_SFLOAT,pass->depth.layout,
+        if(ps5vk_attachment_plan(a,VK_FORMAT_D32_SFLOAT,subpass->depth.layout,
             VK_TRUE,&depth_plan)!=VK_SUCCESS ||
             image->info.extent.width!=begin->framebuffer->width ||
             image->info.extent.height!=begin->framebuffer->height)return VK_ERROR_FEATURE_NOT_PRESENT;

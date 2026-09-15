@@ -6,6 +6,10 @@ enum ps5vk_command_state { PS5VK_INITIAL, PS5VK_RECORDING, PS5VK_EXECUTABLE, PS5
 enum ps5vk_operation_type {
     PS5VK_DISPATCH, PS5VK_BARRIER, PS5VK_BEGIN_RENDER_PASS, PS5VK_DRAW,
     PS5VK_END_RENDER_PASS, PS5VK_DRAW_INDEXED, PS5VK_COPY_BUFFER_IMAGE,
+    /* Boundary between two subpasses of one render pass. It carries no work
+     * of its own; it records that the scope changed, so submission can derive
+     * the subpass structure from the immutable record. */
+    PS5VK_NEXT_SUBPASS,
     PS5VK_IMAGE_BARRIER, PS5VK_COPY_IMAGE_BUFFER, PS5VK_EVENT_SET,
     PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT, PS5VK_COPY_BUFFER,
     PS5VK_UPDATE_BUFFER, PS5VK_FILL_BUFFER, PS5VK_DISPATCH_INDIRECT,
@@ -74,6 +78,9 @@ struct ps5vk_operation {
      * not only on the recording buffer, so submission can re-check the rule
      * against the immutable record instead of trusting record-time state. */
     VkSubpassContents render_pass_contents;
+    /* Subpass this operation belongs to: the one a draw executes in, the one a
+     * boundary opens, or the one a pass begins or ends at. */
+    uint32_t subpass;
     VkRect2D render_area;
     VkViewport viewport;
     VkRect2D scissor;
@@ -133,9 +140,13 @@ struct VkCommandBuffer_T {
      * primary, but this buffer never began it: vkCmdEndRenderPass cannot close
      * it and vkEndCommandBuffer may end with it still active. */
     VkBool32 render_pass_inherited;
-    /* Contents mode of the pass this buffer began, meaningless while the pass
-     * is inherited. */
+    /* Contents mode of the subpass this buffer is currently recording, which
+     * each vkCmdNextSubpass replaces; meaningless while the pass is inherited. */
     VkSubpassContents render_pass_contents;
+    /* Index of the current subpass: advanced by vkCmdNextSubpass, taken from
+     * the inheritance record by a continuation secondary, and reset with the
+     * rest of the recording state. */
+    uint32_t subpass;
     VkViewport viewport;
     VkRect2D scissor;
     VkBool32 viewport_valid, scissor_valid;

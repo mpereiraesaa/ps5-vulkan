@@ -78,6 +78,32 @@ def d32_capabilities():
 
 
 class TestCommandSurfaceDocumentation(unittest.TestCase):
+    def test_public_tree_excludes_internal_milestones_and_session_links(self):
+        """Internal work labels and agent-session URLs are not public API facts."""
+        roots = [ROOT / name for name in ("src", "native", "include", "examples", "tests")]
+        paths = [ROOT / name for name in DOCUMENTS]
+        for root in roots:
+            if not root.exists():
+                continue
+            paths.extend(path for path in root.rglob("*")
+                         if path.is_file()
+                         and path.resolve() != Path(__file__).resolve()
+                         and path.suffix in {".c", ".h", ".md", ".py"})
+        milestone = re.compile(r"\bM[0-9]+\b")
+        for path in paths:
+            text = path.read_text(errors="replace")
+            relative = path.relative_to(ROOT)
+            self.assertIsNone(milestone.search(text),
+                              f"{relative} exposes an internal milestone label")
+            self.assertNotIn("claude.ai/code/session", text.lower(),
+                             f"{relative} exposes an agent-session URL")
+
+    def test_public_header_describes_the_current_subpass_surface(self):
+        header = (ROOT / "include/ps5vk/ps5vk.h").read_text()
+        self.assertNotIn("exactly one subpass", header)
+        self.assertNotIn("Secondary allocation is not supported", header)
+        self.assertIn("exact subpass", header)
+
     def test_structural_parity_claims_match_the_parity_gate(self):
         """No document may restate a parity count the audit no longer reports."""
         audit = audit_command_surface(ROOT)

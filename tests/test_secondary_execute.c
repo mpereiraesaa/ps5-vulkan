@@ -405,17 +405,28 @@ int main(void)
     assert(vkAllocateMemory(&d, &mi, NULL, &memory) == VK_SUCCESS);
     assert(vkBindImageMemory(&d, image, memory, 0) == VK_SUCCESS);
     struct VkImageView_T view = {.device = &d, .image = image};
-    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1,
-        .depth = {.attachment = VK_ATTACHMENT_UNUSED},
-        .attachments = {{.format = VK_FORMAT_B8G8R8A8_UNORM,
-                         .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    /* Each synthetic pass owns its own arrays: the object holds POINTERS to
+     * them now, so copying the struct would share one attachment array between
+     * two passes and a mutation meant for one would change both. */
+    VkAttachmentDescription bgra_attachment[1] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
+    struct ps5vk_subpass colour_only[1] = {
+        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = bgra_attachment, .subpasses = colour_only};
     /* A DIFFERENT object with the same shape: compatibility is defined by
      * attachment formats, sample counts and references, not by identity, so a
      * secondary recorded against this one must be accepted by the pass above. */
-    struct VkRenderPass_T twin = pass;
+    VkAttachmentDescription twin_attachment[1] = {bgra_attachment[0]};
+    struct ps5vk_subpass twin_subpasses[1] = {colour_only[0]};
+    struct VkRenderPass_T twin = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = twin_attachment, .subpasses = twin_subpasses};
     /* Same references, different format: incompatible. */
-    struct VkRenderPass_T foreign = pass;
-    foreign.attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkAttachmentDescription rgba_attachment[1] = {
+        {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
+    struct ps5vk_subpass foreign_subpasses[1] = {colour_only[0]};
+    struct VkRenderPass_T foreign = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = rgba_attachment, .subpasses = foreign_subpasses};
     struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4,
         .attachment_count = 1, .attachments = {&view},
         .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
@@ -507,31 +518,41 @@ int main(void)
      * references, not indices, counts or handles. This pass reaches the same
      * colour role through slot 1 and carries an extra attachment that no
      * reference names, with a different format: none of that matters. */
-    struct VkRenderPass_T shifted = {.device = &d, .attachment_count = 2,
-        .color = {.attachment = 1}, .depth = {.attachment = VK_ATTACHMENT_UNUSED},
-        .attachments = {{.format = VK_FORMAT_R8G8B8A8_UNORM,
-                         .samples = VK_SAMPLE_COUNT_1_BIT},
-                        {.format = VK_FORMAT_B8G8R8A8_UNORM,
-                         .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    VkAttachmentDescription shifted_attachments[2] = {
+        {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT},
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
+    struct ps5vk_subpass shifted_subpasses[1] = {
+        {.color = {.attachment = 1}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T shifted = {.device = &d, .attachment_count = 2, .subpass_count = 1,
+        .attachments = shifted_attachments, .subpasses = shifted_subpasses};
     assert(ps5vk_render_pass_compatible(&shifted, &pass));
     assert(ps5vk_render_pass_compatible(&pass, &shifted));
     /* Load and store ops and layouts are explicitly excluded from it. */
-    struct VkRenderPass_T reloaded = pass;
-    reloaded.attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    reloaded.attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    reloaded.attachments[0].initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    reloaded.color.layout = VK_IMAGE_LAYOUT_GENERAL;
+    VkAttachmentDescription reloaded_attachment[1] = {{
+        .format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}};
+    struct ps5vk_subpass reloaded_subpasses[1] = {
+        {.color = {.attachment = 0, .layout = VK_IMAGE_LAYOUT_GENERAL},
+         .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+    struct VkRenderPass_T reloaded = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = reloaded_attachment, .subpasses = reloaded_subpasses};
     assert(ps5vk_render_pass_compatible(&reloaded, &pass));
     /* What DOES break it: the referred format, the referred sample count, and
      * a reference that is used on one side and unused on the other. */
-    struct VkRenderPass_T resampled = pass;
-    resampled.attachments[0].samples = VK_SAMPLE_COUNT_4_BIT;
-    struct VkRenderPass_T with_depth = {.device = &d, .attachment_count = 2,
-        .color = {.attachment = 0}, .depth = {.attachment = 1},
-        .attachments = {{.format = VK_FORMAT_B8G8R8A8_UNORM,
-                         .samples = VK_SAMPLE_COUNT_1_BIT},
-                        {.format = VK_FORMAT_D32_SFLOAT,
-                         .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    VkAttachmentDescription resampled_attachment[1] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_4_BIT}};
+    struct ps5vk_subpass resampled_subpasses[1] = {colour_only[0]};
+    struct VkRenderPass_T resampled = {.device = &d, .attachment_count = 1, .subpass_count = 1,
+        .attachments = resampled_attachment, .subpasses = resampled_subpasses};
+    VkAttachmentDescription depth_attachments[2] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT},
+        {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT}};
+    struct ps5vk_subpass depth_subpasses[1] = {
+        {.color = {.attachment = 0}, .depth = {.attachment = 1}}};
+    struct VkRenderPass_T with_depth = {.device = &d, .attachment_count = 2, .subpass_count = 1,
+        .attachments = depth_attachments, .subpasses = depth_subpasses};
     assert(!ps5vk_render_pass_compatible(&foreign, &pass));
     assert(!ps5vk_render_pass_compatible(&resampled, &pass));
     assert(!ps5vk_render_pass_compatible(&with_depth, &pass));
@@ -612,20 +633,28 @@ int main(void)
         }
     }
 
-    /* --- a render pass that executes no work is refused where it is written -
-     * not accepted here and then rejected by the backend at submit. */
+    /* --- an empty render pass is LEGAL to record and unsupported to execute -
+     * its load and store ops alone are observable, so refusing it at record
+     * time would reject a conformant program. The recording is faithful and
+     * SUBMISSION is where this driver admits it cannot execute it. */
     probe = begun_primary(&d, pool);
     vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
     vkCmdEndRenderPass(probe);
-    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1 &&
-           probe->render_pass == &pass);
+    assert(vkEndCommandBuffer(probe) == VK_SUCCESS && probe->operation_count == 2 &&
+           probe->state == PS5VK_EXECUTABLE);
+    pass_submit.pCommandBuffers = &probe;
+    assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+    assert(!d.submission && !probe->pending_count);
     probe = begun_primary(&d, pool);
     vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(probe);
-    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
-    /* Naming EMPTY secondaries is not work either. The marker is recorded, but
-     * nothing it names executes, so the pass is still zero-body and is refused
-     * where it is written rather than surviving to the backend. */
+    assert(vkEndCommandBuffer(probe) == VK_SUCCESS && probe->operation_count == 2);
+    pass_submit.pCommandBuffers = &probe;
+    assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+    assert(!d.submission && !probe->pending_count);
+    /* Naming EMPTY secondaries is the same story: the marker is recorded, but
+     * nothing it names executes, so the pass carries no work and submission
+     * refuses it before any backend sees it. */
     {
         VkCommandBuffer empty_children[2];
         for (unsigned n = 0; n < 2; ++n) {
@@ -639,13 +668,20 @@ int main(void)
         vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
         vkCmdExecuteCommands(probe, 1, &empty_children[0]);
         vkCmdEndRenderPass(probe);
-        assert(probe->state == PS5VK_INVALID && probe->operation_count == 2);
+        assert(vkEndCommandBuffer(probe) == VK_SUCCESS && probe->operation_count == 3);
+        pass_submit.pCommandBuffers = &probe;
+        assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+        assert(!d.submission && !probe->pending_count &&
+               !empty_children[0]->pending_count);
         /* Several of them are still nothing. */
         probe = begun_primary(&d, pool);
         vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
         vkCmdExecuteCommands(probe, 2, empty_children);
         vkCmdEndRenderPass(probe);
-        assert(probe->state == PS5VK_INVALID && probe->operation_count == 2);
+        assert(vkEndCommandBuffer(probe) == VK_SUCCESS && probe->operation_count == 3);
+        pass_submit.pCommandBuffers = &probe;
+        assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+        assert(!d.submission && !probe->pending_count);
         /* An empty child ALONGSIDE one that draws is legal and keeps its place
          * in the order: the pass executes work, and naming an empty secondary
          * is a no-op, not an error. */

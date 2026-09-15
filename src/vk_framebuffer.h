@@ -46,8 +46,16 @@ static inline VkBool32 role_compatible(VkFramebuffer fb, uint32_t slot,
 static inline VkBool32 ps5vk_framebuffer_compatible(VkFramebuffer fb, VkRenderPass pass)
 {
     if (!fb || !pass || fb->device != pass->device) return VK_FALSE;
-    return role_compatible(fb, fb->color_attachment, pass, &pass->color) &&
-        role_compatible(fb, fb->depth_attachment, pass, &pass->depth) ?
-        VK_TRUE : VK_FALSE;
+    /* Every subpass of this profile draws into the same colour and depth
+     * roles, so the framebuffer has to satisfy each of them; a pass whose
+     * subpasses disagreed on a role would be refused by a framebuffer that
+     * can only carry one of each. */
+    for (uint32_t i = 0; i < pass->subpass_count; ++i) {
+        const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, i);
+        if (!role_compatible(fb, fb->color_attachment, pass, &subpass->color) ||
+            !role_compatible(fb, fb->depth_attachment, pass, &subpass->depth))
+            return VK_FALSE;
+    }
+    return VK_TRUE;
 }
 #endif

@@ -54,10 +54,13 @@ hardware acceptance.
   including offsets and signed base vertex.
 - One viewport and scissor, supplied statically at pipeline creation or through
   `vkCmdSetViewport` / `vkCmdSetScissor` before each affected draw.
-- One BGRA8 presentation attachment or RGBA8 off-screen color attachment, one
-  sample and one subpass. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
+- One BGRA8 presentation attachment or RGBA8 off-screen color attachment and
+  one sample. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
   `DONT_CARE` store semantics are supported by the bounded native path.
   Blending, logic ops and multisampling are unsupported.
+- One or two subpasses may be **described and recorded**; exactly one is
+  **executed**. Submitting a render pass that declares two is refused, so the
+  second subpass has no execution semantics yet.
 - Optional D32 depth attachment. Depth testing and writing are supported;
   stencil and depth bounds are unsupported.
 - Face culling and front-face selection are encoded by the native backend.
@@ -553,7 +556,7 @@ caller supplies is accepted and retained verbatim in that opaque copy, and
 nothing in this driver reads it.
 With that flag the same members describe the scope the secondary will execute
 in and are validated: `renderPass` must be a render pass of this device,
-`subpass` must be `0` because exactly one subpass exists, and `framebuffer` is
+`subpass` must name a subpass the inherited pass actually has, and `framebuffer` is
 **optional** - `VK_NULL_HANDLE` is accepted and the executing primary supplies
 the framebuffer, while a non-null one must be compatible with the inherited
 pass. The flag is accepted on a secondary only; a primary that sets it is
@@ -656,19 +659,76 @@ primary-only command into a secondary - `vkCmdBeginRenderPass`,
 poisons the recording transactionally, leaving no partial operation behind.
 
 A render pass that executes **no work at all** is an explicit fail-closed
-boundary of this profile. Vulkan permits an empty pass - its load and store
-ops alone are observable - but the bounded native path has no zero-body shape,
-so `vkCmdEndRenderPass` refuses it transactionally at record time rather than
-letting a recording the driver cannot execute be accepted and then rejected at
-submission. The test is the work that will **execute**, not the commands
-written: a pass whose only content is `vkCmdExecuteCommands` naming empty
-secondaries executes exactly as little as one that recorded nothing, and is
-refused the same way. Naming an empty secondary remains legal in itself; it
-simply contributes nothing, so it has to be accompanied by work that does.
+boundary of the native path. Vulkan permits an empty pass - its load and store
+ops alone are observable - so recording and ending it remain legal. Submission
+refuses that recording before any backend sees it because the bounded native
+path has no zero-body execution shape. The test is the work that will
+**execute**, not the commands written: a pass whose only content is
+`vkCmdExecuteCommands` naming empty secondaries executes exactly as little as
+one that recorded nothing, and is refused at submission in the same way.
+Naming an empty secondary remains legal and simply contributes no draw work.
 
-`vkCmdNextSubpass` is an explicit fail-closed boundary. The implementation
-accepts exactly one subpass, so it has no valid reachable invocation. Its
-presence is structural API coverage, not subpass support.
+## Multiple subpasses
+
+A render pass owns its supported shape: the attachment descriptions, one entry
+per subpass with that subpass's colour and depth references, and the dependency
+array. All of it is copied at creation into a single allocation, so a caller
+that mutates its own structures afterwards cannot change what the object
+recorded, and a failed creation leaves nothing behind. Preserve lists are not
+stored because every non-empty preserve list is outside this bounded profile.
+
+This profile describes **one or two** subpasses, each with exactly one colour
+reference and an optional D32 depth reference, over one or two attachments.
+**Every subpass names the same attachments**: a framebuffer here carries one
+colour role and one depth role derived from the pass, so a pass whose subpasses
+disagreed about which attachment is the colour one could be created and then
+served by no framebuffer at all. The layouts may still differ per subpass; only
+the attachment each role names is fixed.
+
+That constraint also settles the preserve list. Every attachment must be named
+by a subpass, and every subpass names the same ones, so no attachment can be
+preserved-but-unused: a non-empty `pPreserveAttachments` has no legal form here
+and is refused rather than stored where it could never mean anything.
+
+Creation refuses, rather than accepting and ignoring: a subpass count outside
+the range; a subpass without exactly one colour attachment; a nonzero
+`inputAttachmentCount` or a non-null `pResolveAttachments`, which are
+unimplemented - note that a non-null `pInputAttachments` beside a **zero** count
+is accepted, because Vulkan ignores the pointer there; an attachment index out
+of range; a depth reference that aliases the colour one; subpasses that name
+different attachments for a role; an attachment that no subpass references; a
+non-empty preserve list; and a dependency whose endpoints do not exist, that is
+a self-dependency, that runs backward between subpasses, or that joins external
+to external. A forward `0` to `1` edge and both external edges are accepted.
+
+`vkCmdNextSubpass` advances the recording by exactly one subpass. It is
+primary-only, requires a pass this buffer began, and requires a next subpass to
+exist. An **empty subpass is legal**, and so is an empty render pass: their
+load and store ops alone are observable, so recording them is accepted and
+recorded faithfully, and whether this driver can execute them is decided at
+submission rather than by refusing a conformant program. Each subpass carries
+its **own** contents mode, so a pass may draw inline in its first subpass and
+name secondaries in its second. `vkCmdEndRenderPass` requires the recording to
+have reached the **last** subpass, which is a structural requirement of the
+recording rather than a judgement about work: ending early would silently drop
+the subpasses never entered.
+
+A graphics pipeline belongs to **one subpass**. `vkCreateGraphicsPipelines`
+accepts any `subpass` the render pass actually has, derives the pipeline's
+formats from that subpass and stores the index; `vkCmdDraw` then refuses a
+pipeline whose subpass differs from the one being recorded, even when every
+format agrees, and submission re-derives the same check from the immutable
+record. A continuation secondary is likewise recorded for one subpass:
+`vkCmdExecuteCommands` requires the child's inherited `subpass` to equal the
+subpass it is being named in, not merely to belong to a compatible pass.
+
+**Execution stops at one subpass, and at work that exists.** Submitting a
+render pass that declares more than one subpass is refused, submitting one that
+carries no work is refused, and the native path refuses both independently, so
+a recording the driver cannot execute never reaches a backend. The subpass
+transitions, attachment lifetime across them and their ordering are a later
+slice; until then the model and the recording state machine are exactly what
+this profile claims, and nothing more.
 
 ## Compatibility boundary
 
