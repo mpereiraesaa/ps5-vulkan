@@ -217,6 +217,8 @@ check:
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_emit_ps5.c native/index_emit_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_agc_writer.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_gpu_span.c tests/test_draw_emit_ps5.c -o build/tests/test_draw_emit_ps5
 	./build/tests/test_draw_emit_ps5
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc tests/test_draw_parameters.c -o build/tests/test_draw_parameters
+	./build/tests/test_draw_parameters
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5
 	./build/tests/test_draw_state_ps5

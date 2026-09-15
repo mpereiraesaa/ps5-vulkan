@@ -98,6 +98,17 @@ int main(void)
     assert(commands[2]==10 && commands[3]==0x8c && commands[4]==2);
     assert(commands[5]==11 && commands[6]==0); /* No LLPC table address in base vertex. */
     assert(commands[7]==0xc && commands[8]==2 && commands[9]==0 && commands[10]==0);
+    /* Shader draw-parameter contract at the packet level: a non-indexed
+     * runtime draw publishes firstVertex as the base vertex and firstInstance
+     * as the base instance into the compiler-declared slots. The pinned CTS
+     * requires exactly this for the non-indexed base_vertex cases and for
+     * base_instance, so a change here must be deliberate. */
+    state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=3,.fragment_count=2,
+        .base_vertex_slot=0,.start_instance_slot=1,.lds_slot=2,.lds_value=0,
+        .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
+    state.sh_count=10;cursor=commands;calls=0;
+    assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)==VK_SUCCESS);
+    assert(commands[5]==11 && commands[6]==13);
     /* The integer vertex-format probe uses the real runtime vertex-table ABI
      * but deliberately isolates it from the still-unsupported combination of
      * runtime shaders with indexed emission. */
