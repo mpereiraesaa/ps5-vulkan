@@ -7,7 +7,9 @@ import unittest
 
 from tools.verify_consumer_resource_abi import (
     APP, INPASS_CHANGED, INPASS_HASH, SECONDARY_CONTROL_HASH,
-    SECONDARY_EXECUTED_HASH, TEXEL_FORMAT_CASES, TITLE, validate)
+    SECONDARY_EXECUTED_HASH, TEXEL_FORMAT_CASES, TITLE,
+    TWO_SUBPASS_CHANGED, TWO_SUBPASS_FIRST_HASH, TWO_SUBPASS_HASH,
+    TWO_SUBPASS_REVERSED_HASH, TWO_SUBPASS_SECOND_HASH, validate)
 
 
 # Secondary execution INSIDE a render pass, as the hardware emitted it. The
@@ -23,6 +25,16 @@ INPASS_MESSAGES = [
     f"bad_alpha=0 bad_sum=0 executed_hash={INPASS_HASH} "
     f"control_hash={INPASS_HASH}",
     "PS5VK_CONSUMER_INPASS_SECONDARY_RETIRED",
+]
+
+TWO_SUBPASS_MESSAGES = [
+    "PS5VK_CONSUMER_TWO_SUBPASS_START",
+    "PS5VK_CONSUMER_TWO_SUBPASS_SUCCESS "
+    f"multi={TWO_SUBPASS_HASH} ordered={TWO_SUBPASS_HASH} "
+    f"first={TWO_SUBPASS_FIRST_HASH} second={TWO_SUBPASS_SECOND_HASH} "
+    f"reversed={TWO_SUBPASS_REVERSED_HASH} changed={TWO_SUBPASS_CHANGED} "
+    "negative_distinct=1 bad_alpha=0 bad_sum=0",
+    "PS5VK_CONSUMER_TWO_SUBPASS_RETIRED",
 ]
 
 
@@ -138,7 +150,7 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 class ConsumerResourceAbiTests(unittest.TestCase):
     def fixture(self, edit=None, sampled=False, shared=False, visibility=None,
                 single=False, mixed=False, secondary=False, inpass=False,
-                texel_formats=False):
+                texel_formats=False, two_subpass=False):
         sampled = sampled or shared or single or mixed
         messages = list(MESSAGES)
         if inpass:
@@ -159,6 +171,26 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                 serial += 1
             messages[last + 1:last + 1] = [INPASS_MESSAGES[0]] + extra + \
                 INPASS_MESSAGES[1:]
+        if two_subpass:
+            serials = [int(message.split(" serial=", 1)[1].split()[0])
+                       for message in messages
+                       if message.startswith("PS5VK_GRAPHICS_PREPARED ")]
+            serial = max(serials) + 1
+            rows = [TWO_SUBPASS_MESSAGES[0]]
+            for scenario, draws in enumerate((2, 2, 1, 1, 2)):
+                if scenario == 0:
+                    rows.append(
+                        f"PS5VK_SUBPASS_BOUNDARY serial={serial} subpass=1 words=10")
+                rows.extend([
+                    f"PS5VK_GRAPHICS_PREPARED serial={serial} draws={draws} words=256",
+                    f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
+                    f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0",
+                    f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=8388608",
+                ])
+                serial += 1
+            rows.extend(TWO_SUBPASS_MESSAGES[1:])
+            at = messages.index("PS5VK_CONSUMER_PRESENT_SURFACE_DESTROYED")
+            messages[at:at] = rows
         if secondary:
             # Executing one named secondary costs exactly two extra compute
             # segments, one for the child and one for the parent that names it,
@@ -749,6 +781,49 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             messages[at:at] = INPASS_MESSAGES
         with self.assertRaises(ValueError):
             validate(*self.fixture(inpass=True, edit=hoist))
+
+    def test_two_subpass_witness_is_accepted_and_reported(self):
+        result = validate(*self.fixture(inpass=True, two_subpass=True))
+        self.assertTrue(result["two_subpass_witnessed"])
+        self.assertEqual(result["two_subpass_hash_fnv1a32"], TWO_SUBPASS_HASH)
+        self.assertEqual(result["graphics_submissions_checked"], 43)
+
+    def test_two_subpass_witness_is_fail_closed(self):
+        for dropped in TWO_SUBPASS_MESSAGES:
+            def drop(messages, dropped=dropped):
+                messages.remove(dropped)
+            with self.subTest(dropped=dropped.split()[0]), \
+                    self.assertRaises(ValueError):
+                validate(*self.fixture(inpass=True, two_subpass=True, edit=drop))
+
+        mutations = ((f"multi={TWO_SUBPASS_HASH}", "multi=84cc0cb4"),
+                     (f"ordered={TWO_SUBPASS_HASH}", "ordered=84cc0cb4"),
+                     (f"first={TWO_SUBPASS_FIRST_HASH}", "first=84cc0cb3"),
+                     (f"second={TWO_SUBPASS_SECOND_HASH}", "second=84cc0cb3"),
+                     ("negative_distinct=1", "negative_distinct=0"))
+        for old, new in mutations:
+            def mutate(messages, old=old, new=new):
+                index = messages.index(TWO_SUBPASS_MESSAGES[1])
+                messages[index] = messages[index].replace(old, new, 1)
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                validate(*self.fixture(inpass=True, two_subpass=True, edit=mutate))
+
+    def test_two_subpass_boundary_is_required_and_ordered(self):
+        def drop(messages):
+            messages[:] = [m for m in messages
+                           if not m.startswith("PS5VK_SUBPASS_BOUNDARY ")]
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(inpass=True, two_subpass=True, edit=drop))
+
+        def move_after_result(messages):
+            index = next(i for i, message in enumerate(messages)
+                         if message.startswith("PS5VK_SUBPASS_BOUNDARY "))
+            boundary = messages.pop(index)
+            result = messages.index(TWO_SUBPASS_MESSAGES[1])
+            messages.insert(result + 1, boundary)
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(inpass=True, two_subpass=True,
+                                   edit=move_after_result))
 
 
 if __name__ == "__main__":
