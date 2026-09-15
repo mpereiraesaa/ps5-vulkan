@@ -914,9 +914,9 @@ drift away from the documents again.
   children are never flattened into the primary: outside a pass each is
   expanded into its own submission segment, and inside one the pass and the
   children it names are submitted as a single segment because a render pass is
-  a single scope. Execution outside a render pass is qualified on hardware by
-  the consumer's bounded transfer oracle; the deterministic hardware draw
-  oracle for the in-pass path is still outstanding and is not claimed here.
+  a single scope. Both paths are qualified on hardware: execution outside
+  a render pass by the consumer's bounded transfer oracle, and execution inside
+  one by the in-pass draw oracle recorded at the end of this document.
   Nesting, cross-device children, a child that is neither pending nor
   executable, a repeated child without simultaneous use and every render-pass
   scope mismatch stay fail-closed.
@@ -1757,3 +1757,72 @@ the builder now lives in the host-tested packet helper where `make check`
 asserts its exact words. Second, the register-probe block is skipped for this
 scenario, because its `COPY_DATA` register reads are unrelated noise for an
 occlusion measurement and previously cost a console round trip on their own.
+
+## Secondary execution inside a render pass (2026-09-15)
+
+### The oracle
+
+The consumer renders the SAME triangle twice into the SAME
+`VK_FORMAT_B8G8R8A8_UNORM` 1920x1080 attachment, with the same pipeline and the
+same dynamic viewport and scissor. The only difference is how the draw reaches
+the pass. The first pass is begun with
+`VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS` and the primary records **no
+draw of its own**: it names one inherited continuation secondary. The second
+records the same draw **inline**. The two readbacks must be identical.
+
+A second continuation secondary is recorded against the same scope with a
+half-height viewport and **never named**. Equality therefore fails in every
+wrong direction: if the named secondary did not execute, the first readback
+keeps only its clear; if the driver also executed the unnamed one, its squashed
+triangle paints pixels the inline result does not have; if either drew
+something else, the images differ. The verifier additionally pins the image, so
+two wrong-but-equal results cannot pass either. Each pass is preceded by a
+sentinel pre-fill that neither the clear nor the draw produces, so a surface
+nothing wrote cannot read as a cleared one, and the second measurement cannot
+be the first one's leftovers.
+
+### Measured result, two identical runs
+
+Artifact `dist-consumer/PPSA99994/eboot.bin` sha256
+`ee620a192cab5554619368cae2b7edc842da70aa8ed938c7cf72848f26993103`, deployed by
+FTP and re-read with SELF conversion disabled with an exact match,
+ShadowMountPlus restarted and verified before each launch.
+
+- `20260915T080548726Z_PPSA99994_ps5vk_0xce3808d97067`, log sha256
+  `4b26a1e70fdd01469f35db231158583e3004a6f8fb989258936c1e62c5714a27`
+- `20260915T080656138Z_PPSA99994_ps5vk_0xce47bac92c41`, log sha256
+  `eb6e090249d7dda2ea170518ddf4a394cbe5154d9e3382a06280bdde10aff04f`
+
+Both runs are byte-identical in the witness line:
+
+```
+PS5VK_CONSUMER_INPASS_SECONDARY_SUCCESS named=1 unnamed_recorded=1
+executed_changed=471744 control_changed=471744 bad_alpha=0 bad_sum=0
+executed_hash=77abc830 control_hash=77abc830
+```
+
+Both ended with `BYE seq=506 reason=consumer-finite-end`,
+`zero_tracked_allocations=1` and `resources_retired=1`, and the title was
+confirmed stopped independently. 471744 is exactly the triangle area the
+eighteen-frame readback contract already pins, `1920 * 1080 * 91 / 400`,
+measured independently here.
+
+The log also shows the composition directly: the secondary-executed pass
+records `PS5VK_GRAPHICS_PREPARED serial=55 draws=1` for a primary that recorded
+no draw at all, so that draw reached the backend through the composed segment.
+
+### What this does and does not establish
+
+It establishes that a secondary recorded for render-pass continuation executes
+inside a primary's render pass and produces exactly the image the same draw
+produces inline, on the already qualified one-colour-plus-D32 profile. It does
+not establish multiple subpasses, `vkCmdNextSubpass`, input or resolve
+attachments, multisampling, query inheritance, or any conformance claim.
+
+One defect is worth recording, because only the console could find it. The
+first version of this scenario rendered the control into the second
+presentation image, and `vkQueueSubmit` refused it with `VK_ERROR_UNKNOWN`
+because that image was still display-busy from the last presented frame. The
+driver was right and the scenario was wrong; both passes now use the same
+attachment, which also makes inline versus secondary the only difference
+between the two measurements.

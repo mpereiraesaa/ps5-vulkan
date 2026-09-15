@@ -605,10 +605,19 @@ with is binding: an inline pass carries its own draws and admits no
 secondaries, while a secondary-contents pass admits no draw of its own and
 only `vkCmdExecuteCommands` and `vkCmdEndRenderPass` inside it. Inside a pass
 every named child must be a continuation whose inherited render pass is
-**compatible** with the executing one - matching attachment references,
-formats and sample counts, per Vulkan 1.0 chapter 7.2, not the same object -
-whose `subpass` is `0`, and whose inherited framebuffer is either
-`VK_NULL_HANDLE` or the framebuffer the pass is executing. Outside a pass a
+**compatible** with the executing one, whose `subpass` is `0`, and whose
+inherited framebuffer is either `VK_NULL_HANDLE` or the framebuffer the pass
+is executing.
+
+Compatibility follows Vulkan 1.0 chapter 7.2 and is a property of the
+corresponding attachment **references**: each pair must be both
+`VK_ATTACHMENT_UNUSED`, or both used and referring to attachments that agree
+on format and sample count. The numeric attachment indices, attachments no
+reference names, the total attachment count, initial and final layouts, the
+layout inside a reference, and load and store ops are all excluded, so a
+secondary recorded against a `LOAD` pass runs inside a `CLEAR` pass of the
+same shape, and one that reaches its colour attachment through a different
+slot is accepted. Object identity is not required. Outside a pass a
 continuation child is refused, because its recorded draws would have no scope,
 and a continuation child may carry nothing but draws of the pass it inherited.
 
@@ -635,6 +644,13 @@ query at all. Members Vulkan defines as ignored are not refused. Recording a
 primary-only command into a secondary - `vkCmdBeginRenderPass`,
 `vkCmdEndRenderPass`, `vkCmdNextSubpass` - or nesting `vkCmdExecuteCommands`
 poisons the recording transactionally, leaving no partial operation behind.
+
+A render pass that records **no work at all** is an explicit fail-closed
+boundary of this profile. Vulkan permits an empty pass - its load and store
+ops alone are observable - but the bounded native path has no zero-body shape,
+so `vkCmdEndRenderPass` refuses it transactionally at record time rather than
+letting a recording the driver cannot execute be accepted and then rejected at
+submission.
 
 `vkCmdNextSubpass` is an explicit fail-closed boundary. The implementation
 accepts exactly one subpass, so it has no valid reachable invocation. Its

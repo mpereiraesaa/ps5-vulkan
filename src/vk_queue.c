@@ -259,6 +259,11 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     /* Contents mode of the active pass, read back from the immutable record
      * rather than from recording state. */
     VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE;
+    /* Work recorded since the pass began. A zero-body pass is refused at
+     * record time; re-deriving it here means a recording that somehow reaches
+     * submission with an empty pass is still refused before any backend sees
+     * it, instead of being accepted and then rejected by the backend. */
+    unsigned pass_work = 0;
     for (unsigned j = 0; j < c->operation_count; ++j) {
         const struct ps5vk_operation *op = &c->operations[j];
         if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
@@ -277,6 +282,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 if (active) return 0;
                 active = op->render_pass; framebuffer = op->framebuffer;
                 contents = op->render_pass_contents;
+                pass_work = 0;
                 for (uint32_t n = 0; n < framebuffer->attachment_count; ++n) {
                     VkImageView view = framebuffer->attachments[n];
                     void *address; VkDeviceSize bytes;
@@ -291,7 +297,9 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                      * draws of its own. */
                     if (contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) return 0;
                     if (!draw_operation_valid(d, op)) return 0;
+                    ++pass_work;
                 } else {
+                    if (!pass_work) return 0;
                     active = NULL; framebuffer = NULL;
                     contents = VK_SUBPASS_CONTENTS_INLINE;
                 }
@@ -311,6 +319,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
              * a pass that pass must have been begun for secondary contents. */
             if (op->render_pass != active || op->framebuffer != framebuffer) return 0;
             if (active && contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) return 0;
+            if (active) ++pass_work;
             for (uint32_t n = 0; n < op->child_count; ++n) {
                 VkCommandBuffer child = children[n];
                 const VkBool32 simultaneous = child &&

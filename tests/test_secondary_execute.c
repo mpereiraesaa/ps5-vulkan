@@ -502,6 +502,77 @@ int main(void)
            d.submission->buffers[1] == floating && d.submission->buffers[2] == inside);
     assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
 
+    /* --- render-pass compatibility is about REFERENCES ------------------- */
+    /* Vulkan 1.0 chapter 7.2 compares the corresponding attachment
+     * references, not indices, counts or handles. This pass reaches the same
+     * colour role through slot 1 and carries an extra attachment that no
+     * reference names, with a different format: none of that matters. */
+    struct VkRenderPass_T shifted = {.device = &d, .attachment_count = 2,
+        .color = {.attachment = 1}, .depth = {.attachment = VK_ATTACHMENT_UNUSED},
+        .attachments = {{.format = VK_FORMAT_R8G8B8A8_UNORM,
+                         .samples = VK_SAMPLE_COUNT_1_BIT},
+                        {.format = VK_FORMAT_B8G8R8A8_UNORM,
+                         .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    assert(ps5vk_render_pass_compatible(&shifted, &pass));
+    assert(ps5vk_render_pass_compatible(&pass, &shifted));
+    /* Load and store ops and layouts are explicitly excluded from it. */
+    struct VkRenderPass_T reloaded = pass;
+    reloaded.attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    reloaded.attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    reloaded.attachments[0].initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    reloaded.color.layout = VK_IMAGE_LAYOUT_GENERAL;
+    assert(ps5vk_render_pass_compatible(&reloaded, &pass));
+    /* What DOES break it: the referred format, the referred sample count, and
+     * a reference that is used on one side and unused on the other. */
+    struct VkRenderPass_T resampled = pass;
+    resampled.attachments[0].samples = VK_SAMPLE_COUNT_4_BIT;
+    struct VkRenderPass_T with_depth = {.device = &d, .attachment_count = 2,
+        .color = {.attachment = 0}, .depth = {.attachment = 1},
+        .attachments = {{.format = VK_FORMAT_B8G8R8A8_UNORM,
+                         .samples = VK_SAMPLE_COUNT_1_BIT},
+                        {.format = VK_FORMAT_D32_SFLOAT,
+                         .samples = VK_SAMPLE_COUNT_1_BIT}}};
+    assert(!ps5vk_render_pass_compatible(&foreign, &pass));
+    assert(!ps5vk_render_pass_compatible(&resampled, &pass));
+    assert(!ps5vk_render_pass_compatible(&with_depth, &pass));
+    assert(!ps5vk_render_pass_compatible(NULL, &pass) &&
+           !ps5vk_render_pass_compatible(&pass, NULL));
+    /* And the compatible-but-different-shape pass is accepted end to end. */
+    {
+        VkCommandBufferInheritanceInfo through_slot_one = continues;
+        through_slot_one.renderPass = &shifted;
+        through_slot_one.framebuffer = VK_NULL_HANDLE;
+        VkCommandBufferBeginInfo slot_begin = continue_begin;
+        slot_begin.pInheritanceInfo = &through_slot_one;
+        VkCommandBuffer elsewhere = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        assert(vkBeginCommandBuffer(elsewhere, &slot_begin) == VK_SUCCESS);
+        vkCmdBindPipeline(elsewhere, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics);
+        vkCmdDraw(elsewhere, 3, 1, 0, 0);
+        assert(vkEndCommandBuffer(elsewhere) == VK_SUCCESS);
+        host = begun_primary(&d, pool);
+        vkCmdBeginRenderPass(host, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+        vkCmdExecuteCommands(host, 1, &elsewhere);
+        vkCmdEndRenderPass(host);
+        assert(vkEndCommandBuffer(host) == VK_SUCCESS);
+        pass_submit.pCommandBuffers = &host;
+        assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) == VK_SUCCESS);
+        assert(d.submission && d.submission->count == 2);
+        assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+        vkFreeCommandBuffers(&d, pool, 1, &elsewhere);
+    }
+
+    /* --- a render pass that records no work is refused where it is written -
+     * not accepted here and then rejected by the backend at submit. */
+    probe = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    vkCmdEndRenderPass(probe);
+    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1 &&
+           probe->render_pass == &pass);
+    probe = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdEndRenderPass(probe);
+    assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
+
     /* --- refused, each leaving the recording poisoned with no operation --- */
     /* a PRIMARY may never claim render-pass continuation */
     {

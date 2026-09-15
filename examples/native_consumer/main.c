@@ -1815,6 +1815,168 @@ static void run_consumer(VkDevice device, VkQueue queue, int is_continuous)
         }
     }
 
+    /* Deterministic hardware oracle for secondary execution INSIDE a render
+     * pass, on the already qualified one-colour-plus-D32 profile.
+     *
+     * The SAME attachment receives the SAME triangle twice, from the same
+     * pipeline with the same dynamic viewport and scissor. The only difference
+     * is HOW the draw reaches the pass: the first pass begins for
+     * VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS and records no draw of its
+     * own, naming an inherited continuation secondary; the second records the
+     * same draw INLINE. The two readbacks must be IDENTICAL.
+     *
+     * One attachment rather than two, for two reasons: the image presented
+     * last is still display-busy and may not be rendered into, and reusing one
+     * target makes the control tighter, because inline versus secondary is
+     * then the ONLY difference between the two measurements. Each pass is
+     * preceded by the sentinel pre-fill, so the second measurement cannot be
+     * the first one's leftovers.
+     *
+     * That equality is the discriminator, and it fails in every wrong way:
+     *   - if the named secondary did not execute, slot 0 keeps only its clear
+     *     and the hashes differ;
+     *   - if the driver executed the UNNAMED secondary as well, its squashed
+     *     viewport paints pixels the inline result does not have, and the
+     *     hashes differ;
+     *   - if either drew something else, the hashes differ, and both are
+     *     additionally pinned to exact values by the verifier.
+     * A second secondary is therefore recorded against the same scope and
+     * deliberately never named. Public headers only. */
+    if (!is_continuous) {
+        ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_INPASS_SECONDARY_START");
+        const size_t word_count = 1920 * 1080;
+        const uint32_t cleared = 0xff000000u;
+        VkCommandBufferAllocateInfo scbai = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = cmd_pool,
+            .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+            .commandBufferCount = 2
+        };
+        VkCommandBuffer inherited[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+        CHECK(vkAllocateCommandBuffers(device, &scbai, inherited));
+        VkCommandBufferInheritanceInfo inherit = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+            .renderPass = clear_pass,
+            .subpass = 0,
+            .framebuffer = framebuffers[0]
+        };
+        VkCommandBufferBeginInfo inherit_begin = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+            .pInheritanceInfo = &inherit
+        };
+        /* The one that is named draws exactly what the inline control draws. */
+        CHECK(vkBeginCommandBuffer(inherited[0], &inherit_begin));
+        vkCmdBindPipeline(inherited[0], VK_PIPELINE_BIND_POINT_GRAPHICS, dynamic_pipeline);
+        vkCmdSetViewport(inherited[0], 0, 1, &viewport);
+        vkCmdSetScissor(inherited[0], 0, 1, &scissor);
+        vkCmdDraw(inherited[0], 3, 1, 0, 0);
+        CHECK(vkEndCommandBuffer(inherited[0]));
+        /* The one that is NEVER named would be visible if it ran: a half-height
+         * viewport puts its triangle on pixels the correct result has not. */
+        VkViewport squashed = viewport;
+        squashed.height = viewport.height * 0.5f;
+        CHECK(vkBeginCommandBuffer(inherited[1], &inherit_begin));
+        vkCmdBindPipeline(inherited[1], VK_PIPELINE_BIND_POINT_GRAPHICS, dynamic_pipeline);
+        vkCmdSetViewport(inherited[1], 0, 1, &squashed);
+        vkCmdSetScissor(inherited[1], 0, 1, &scissor);
+        vkCmdDraw(inherited[1], 3, 1, 0, 0);
+        CHECK(vkEndCommandBuffer(inherited[1]));
+
+        VkClearValue oracle_clears[2] = {0};
+        oracle_clears[0].color.float32[3] = 1.0f;
+        oracle_clears[1].depthStencil.depth = 1.0f;
+        VkRenderPassBeginInfo oracle_begin = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = clear_pass,
+            .renderArea = {{0, 0}, {1920, 1080}},
+            .clearValueCount = 2,
+            .pClearValues = oracle_clears
+        };
+        VkCommandBufferBeginInfo oracle_record = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        VkSubmitInfo oracle_submit = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmd_buf
+        };
+        uint32_t measured_changed[2] = {0, 0}, measured_hash[2] = {0, 0};
+        uint64_t bad_alpha = 0, bad_sum = 0;
+        for (unsigned phase = 0; phase < 2; ++phase) {
+            const VkDeviceSize slot_offset = 0;
+            uint32_t *pixels = (uint32_t *)((unsigned char *)mapped_images + slot_offset);
+            /* Start from a pattern neither the clear nor the draw produces, so
+             * a surface nothing wrote cannot be mistaken for a cleared one. */
+            for (size_t w = 0; w < word_count; ++w) pixels[w] = sentinel_bg;
+            VkMappedMemoryRange flush_range = {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = image_memory, .offset = slot_offset,
+                .size = word_count * sizeof(uint32_t)
+            };
+            CHECK(vkFlushMappedMemoryRanges(device, 1, &flush_range));
+
+            CHECK(vkResetCommandBuffer(cmd_buf, 0));
+            CHECK(vkBeginCommandBuffer(cmd_buf, &oracle_record));
+            oracle_begin.framebuffer = framebuffers[0];
+            if (phase == 0) {
+                vkCmdBeginRenderPass(cmd_buf, &oracle_begin,
+                    VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+                vkCmdExecuteCommands(cmd_buf, 1, &inherited[0]);
+            } else {
+                vkCmdBeginRenderPass(cmd_buf, &oracle_begin, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, dynamic_pipeline);
+                vkCmdSetViewport(cmd_buf, 0, 1, &viewport);
+                vkCmdSetScissor(cmd_buf, 0, 1, &scissor);
+                vkCmdDraw(cmd_buf, 3, 1, 0, 0);
+            }
+            vkCmdEndRenderPass(cmd_buf);
+            CHECK(vkEndCommandBuffer(cmd_buf));
+            CHECK(vkQueueSubmit(queue, 1, &oracle_submit, VK_NULL_HANDLE));
+            CHECK(vkQueueWaitIdle(queue));
+
+            VkMappedMemoryRange inv_range = {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = image_memory, .offset = slot_offset,
+                .size = word_count * sizeof(uint32_t)
+            };
+            CHECK(vkInvalidateMappedMemoryRanges(device, 1, &inv_range));
+            uint32_t changed = 0;
+            for (size_t w = 0; w < word_count; ++w) {
+                uint32_t pixel = pixels[w];
+                if (pixel == cleared) continue;
+                ++changed;
+                if ((pixel >> 24) != 255) ++bad_alpha;
+                unsigned sum = (pixel & 255) + ((pixel >> 8) & 255) + ((pixel >> 16) & 255);
+                if (sum < 254 || sum > 256) ++bad_sum;
+            }
+            measured_changed[phase] = changed;
+            measured_hash[phase] = fnv1a32((const uint8_t *)pixels,
+                                           word_count * sizeof(uint32_t));
+        }
+        if (measured_hash[0] != measured_hash[1] ||
+            measured_changed[0] != measured_changed[1] ||
+            !measured_changed[0] || bad_alpha || bad_sum) {
+            ps5log_printf(PS5LOG_ERR,
+                "PS5VK_CONSUMER_INPASS_SECONDARY_FAILURE executed_changed=%u "
+                "control_changed=%u executed_hash=%08x control_hash=%08x "
+                "bad_alpha=%llu bad_sum=%llu",
+                measured_changed[0], measured_changed[1],
+                measured_hash[0], measured_hash[1],
+                (unsigned long long)bad_alpha, (unsigned long long)bad_sum);
+            ps5log_close("inpass-secondary-verification-failed");
+            exit(1);
+        }
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CONSUMER_INPASS_SECONDARY_SUCCESS named=1 unnamed_recorded=1 "
+            "executed_changed=%u control_changed=%u bad_alpha=%llu bad_sum=%llu "
+            "executed_hash=%08x control_hash=%08x",
+            measured_changed[0], measured_changed[1],
+            (unsigned long long)bad_alpha, (unsigned long long)bad_sum,
+            measured_hash[0], measured_hash[1]);
+        vkFreeCommandBuffers(device, cmd_pool, 2, inherited);
+        ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_INPASS_SECONDARY_RETIRED");
+    }
+
     /* Unmap before closing */
     vkUnmapMemory(device, image_memory);
 

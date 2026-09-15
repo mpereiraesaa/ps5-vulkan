@@ -140,6 +140,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
     unsigned last=first+1;
     while(last<range_end && cb->operations[last].type!=PS5VK_END_RENDER_PASS)++last;
+    /* last<first+2 is a pass with no work between begin and end. Recording
+     * already refuses that shape, so this is a defence in depth on the
+     * immutable record rather than a boundary a caller can reach: nothing is
+     * accepted at record time and rejected here. */
     if(first>=range_end || last>=range_end || last<first+2)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_operation *begin=&cb->operations[first]; VkRenderPass pass=begin->render_pass;

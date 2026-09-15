@@ -298,23 +298,41 @@ VKAPI_ATTR VkResult VKAPI_CALL vkResetCommandBuffer(VkCommandBuffer c, VkCommand
         (flags & ~VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT)) return INVALID;
     clear(c); return VK_SUCCESS;
 }
-/* Render-pass compatibility, Vulkan 1.0 chapter 7.2: two passes are compatible
- * when their attachment references match and each attachment agrees on format
- * and sample count. Load/store ops and layouts are explicitly NOT part of it,
- * so a secondary recorded against a LOAD pass may run inside a CLEAR pass of
- * the same shape. Comparing the objects by identity would refuse that, which
- * is a conformant use. */
+/* Two attachment REFERENCES are compatible when both are VK_ATTACHMENT_UNUSED,
+ * or both are used and the attachments they refer to agree on format and
+ * sample count. The numeric index is not part of it: two passes may reach the
+ * same attachment through different slots. */
+static VkBool32 reference_compatible(VkRenderPass a, const VkAttachmentReference *ra,
+    VkRenderPass b, const VkAttachmentReference *rb)
+{
+    const VkBool32 a_used = ra->attachment != VK_ATTACHMENT_UNUSED ? VK_TRUE : VK_FALSE;
+    const VkBool32 b_used = rb->attachment != VK_ATTACHMENT_UNUSED ? VK_TRUE : VK_FALSE;
+    if (a_used != b_used) return VK_FALSE;
+    if (!a_used) return VK_TRUE;
+    if (ra->attachment >= a->attachment_count ||
+        rb->attachment >= b->attachment_count) return VK_FALSE;
+    const VkAttachmentDescription *da = &a->attachments[ra->attachment];
+    const VkAttachmentDescription *db = &b->attachments[rb->attachment];
+    return da->format == db->format && da->samples == db->samples ? VK_TRUE : VK_FALSE;
+}
+
+/* Render-pass compatibility, Vulkan 1.0 chapter 7.2. It is defined on the
+ * corresponding attachment REFERENCES, and everything else is deliberately
+ * excluded: initial and final layouts, load and store ops, and the layout
+ * inside a reference are all allowed to differ, so a secondary recorded
+ * against a LOAD pass may run inside a CLEAR pass of the same shape.
+ *
+ * Three things this must NOT compare, each of which would refuse a conformant
+ * call: the total attachment count, because attachments no reference names are
+ * irrelevant and the arrays may differ in length; the numeric attachment
+ * indices, because the same role may sit in different slots; and object
+ * identity, because compatibility is a property of shape, not of handles. */
 VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b)
 {
     if (!a || !b) return VK_FALSE;
     if (a == b) return VK_TRUE;
-    if (a->attachment_count != b->attachment_count ||
-        a->color.attachment != b->color.attachment ||
-        a->depth.attachment != b->depth.attachment) return VK_FALSE;
-    for (uint32_t j = 0; j < a->attachment_count; ++j)
-        if (a->attachments[j].format != b->attachments[j].format ||
-            a->attachments[j].samples != b->attachments[j].samples) return VK_FALSE;
-    return VK_TRUE;
+    return reference_compatible(a, &a->color, b, &b->color) &&
+           reference_compatible(a, &a->depth, b, &b->depth) ? VK_TRUE : VK_FALSE;
 }
 
 /* A framebuffer is usable with a pass when it carries the same attachments in
@@ -691,9 +709,20 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
 {
     /* Primary-only, and unreachable in a secondary anyway because one can
      * never have begun a render pass; the level check keeps the rejection
-     * explicit rather than incidental. */
+     * explicit rather than incidental.
+     *
+     * A pass that records NO work is an explicit fail-closed boundary of this
+     * profile, refused here at record time rather than accepted and then
+     * refused by the backend at submit. Vulkan permits it - load and store ops
+     * alone are observable - but the bounded native path has no zero-body
+     * shape, and accepting a recording the driver cannot execute is worse than
+     * refusing it where the caller can see it. Only draws and
+     * vkCmdExecuteCommands can be recorded inside a pass, so the preceding
+     * operation still being the begin means nothing was recorded. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
-        !c->render_pass || c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
+        !c->render_pass || !c->operation_count ||
+        c->operations[c->operation_count - 1].type == PS5VK_BEGIN_RENDER_PASS ||
+        c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
     if(!op)return;
