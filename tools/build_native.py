@@ -31,8 +31,8 @@ def main():
     if observe_scene not in ("0", "1") or (observe_scene == "1" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_OBSERVE requires graphics profile API and must be 0 or 1")
     scissor_probe = os.environ.get("PS5VK_GRAPHICS_SCISSOR_PROBE", "0")
-    if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14") or (scissor_probe != "0" and not graphics_api):
-        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0-10 existing diagnostics, 11 layered images, 12 mipmaps, 13 vertex bindings, 14 explicit depth clear witness")
+    if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15") or (scissor_probe != "0" and not graphics_api):
+        raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0-10 existing diagnostics, 11 layered images, 12 mipmaps, 13 vertex bindings, 14 explicit depth clear witness, 15 occlusion-counter probe")
     mip_view_base=os.environ.get("PS5VK_MIP_VIEW_BASE","0")
     if mip_view_base not in ("0","1") or (mip_view_base!="0" and scissor_probe!="12"):
         raise SystemExit("PS5VK_MIP_VIEW_BASE must be 0, or 1 only for mipmap diagnostic")

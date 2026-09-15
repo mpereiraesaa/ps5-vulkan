@@ -21,10 +21,23 @@
 #include <string.h>
 /* Same FW ABI as the independently validated Xash3D native renderer. */
 extern uint32_t *sceAgcDcbDrawIndex(void *,uint32_t,const void *,uint64_t);
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
+/* GFX10 occlusion-counter probe. The begin and end event writes are built by
+ * ps5vk_graphics_occlusion_event (src/graphics_sync.c, host-tested there);
+ * begin addresses the slot base and end base+8. Each enabled render backend
+ * writes a 64-bit start at 16*i and a 64-bit end at 16*i+8 and sets bit 63 of
+ * each word when the dump lands, so the set of written pairs IS the enabled
+ * render-backend mask. The slot is deliberately sized for a generous upper
+ * bound: pairs no backend owns stay zero and are reported as unavailable
+ * instead of being read as fabricated results. */
+enum { PS5VK_OCCLUSION_PROBE_PAIRS = 64,
+       PS5VK_OCCLUSION_PROBE_BYTES = PS5VK_OCCLUSION_PROBE_PAIRS * 16 };
+#endif
 struct graphics_job {
     struct ps5vk_command_arena commands;
+    struct ps5vk_command_arena slot;
     struct ps5vk_prepared_draw draws[PS5VK_MAX_OPERATIONS];
-    unsigned count, words, attempted, complete;
+    unsigned count, words, attempted, complete, slot_active;
     uint64_t serial, start;
     VkImage color;
     VkImage readback_image;
@@ -46,6 +59,10 @@ static void release(VkDevice d,void *opaque)
 {
     (void)d; struct graphics_job *j=opaque;
     if(j->attempted && !j->complete)retain("inflight-release");
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
+    if(j->slot_active && ps5vk_command_arena_release(&j->slot)!=VK_SUCCESS)
+        retain("occlusion-slot-release");
+#endif
     if(ps5vk_command_arena_release(&j->commands)!=VK_SUCCESS)retain("command-release");
     for(unsigned i=0;i<j->count;++i)ps5vk_native_release_draw(&j->draws[i]);
     free(j);
@@ -165,6 +182,20 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     VkResult rc=ps5vk_command_arena_create(&j->commands);
     if(rc==VK_ERROR_DEVICE_LOST)retain("command-create");
     if(rc!=VK_SUCCESS)goto fail;
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
+    /* Owned, cache-line-aligned, zeroed GPU-visible slot. Creation zeroes it,
+     * which is what makes an unwritten pair read as unavailable. */
+    phase="occlusion-slot";
+    rc=ps5vk_command_arena_create(&j->slot);
+    if(rc==VK_ERROR_DEVICE_LOST)retain("occlusion-slot-create");
+    if(rc!=VK_SUCCESS)goto fail;
+    /* The arena is zeroed by the CPU, and this memory is non-coherent: flush
+     * the zeroed lines before the GPU writes the counter pair into them, or a
+     * dirty CPU line could later overwrite the hardware's words. The readback
+     * side flushes again only after the exact completion label. */
+    cache(j->slot.address,(size_t)PS5VK_OCCLUSION_PROBE_BYTES);
+    j->slot_active=1;
+#endif
     /* Record the scoped render-pass transitions transactionally. Resource
      * state becomes committed only after the exact GPU completion label. */
     phase="attachment-layout";
@@ -208,6 +239,16 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         &j->layouts,&cursor,end,cache);
     if(rc!=VK_SUCCESS)goto fail;
     phase="draw";
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
+    if(j->slot_active) {
+        size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),(uint64_t)(uintptr_t)j->slot.address);
+        if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_OCCLUSION_PROBE_BEGIN serial=%llu base=%llx pairs=%u",
+            (unsigned long long)j->serial,(unsigned long long)(uintptr_t)j->slot.address,
+            (unsigned)PS5VK_OCCLUSION_PROBE_PAIRS);
+    }
+#endif
     for(unsigned i=first+1;i<last;++i) {
         const struct ps5vk_operation *recorded=&cb->operations[i];
         struct ps5vk_operation resolved;
@@ -289,7 +330,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         } else rc=ps5vk_native_prepare_resource_draw(d,op,&begin->render_area,defaults,(uintptr_t)p->pair,draw);
         if(rc!=VK_SUCCESS)goto fail;
         ++j->count;
-#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
         if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)
             ps5log_printf(PS5LOG_MARK,"PS5VK_BINDINGS_PREPARED serial=%llu mask=%04x copied_bytes=%zu",
                 (unsigned long long)j->serial,vertex_usage,draw->vertex_bounce_bytes);
@@ -308,7 +349,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 draw->state->sh[k].offset,draw->state->sh[k].value);
 #endif
         if(!p->global_table){rc=VK_ERROR_UNKNOWN;goto fail;}
-#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
         if(draw->texture_table)
             for(unsigned k=0;k<12;++k)
                 ps5log_printf(PS5LOG_MARK,
@@ -338,6 +379,16 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 (uint32_t)(uintptr_t)p->global_table);
         if(rc!=VK_SUCCESS)goto fail;
     }
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
+    if(j->slot_active) {
+        size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),
+            (uint64_t)(uintptr_t)j->slot.address+8);
+        if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_OCCLUSION_PROBE_END serial=%llu base_plus_8=%llx",
+            (unsigned long long)j->serial,(unsigned long long)(uintptr_t)j->slot.address+8);
+    }
+#endif
     phase="postlude";
     if(last+1<range_end) {
         struct ps5vk_readback_plan plan={0};
@@ -345,7 +396,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         if(rc!=VK_SUCCESS)goto fail;
         j->readback_image=plan.image;j->readback_buffer=plan.buffer;
     }
-#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
     _Static_assert(8+PS5VK_GRAPHICS_PROBE_REGISTERS*4<=64,"probe must not overlap command words or leave reserved tail");
     uint32_t *probe=(uint32_t *)(ps5vk_command_arena_label(&j->commands)+1);
     for(unsigned i=0;i<PS5VK_GRAPHICS_PROBE_REGISTERS;++i)probe[i]=0xd15ea5e0u+i;
@@ -385,7 +436,7 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
     volatile uint64_t *label=ps5vk_command_arena_label(&j->commands);
     cache((const void *)label,8);uint64_t value=__atomic_load_n(label,__ATOMIC_ACQUIRE);
     if(value==j->serial) {
-#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
         volatile uint32_t *probe=(volatile uint32_t *)(label+1);
         cache((const void *)probe,PS5VK_GRAPHICS_PROBE_REGISTERS*4);
         for(unsigned i=0;i<PS5VK_GRAPHICS_PROBE_REGISTERS;++i)
@@ -417,6 +468,45 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
         if(ps5vk_layout_commit(&j->layouts)!=VK_SUCCESS)return VK_ERROR_DEVICE_LOST;
         j->complete=1;*completed=j->serial;
         ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_COMPLETED serial=%llu image_bytes=%llu",(unsigned long long)j->serial,(unsigned long long)bytes);
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
+        /* The occlusion readout is emitted only AFTER the completion marker, so
+         * the evidence itself shows the slot was read after the producing
+         * submission retired rather than merely stating that it was. The
+         * memory is non-coherent: invalidate before reading. */
+        if(j->slot_active && j->slot.address) {
+            cache((const void *)j->slot.address,(size_t)PS5VK_OCCLUSION_PROBE_BYTES);
+            const volatile uint64_t *slot=(const volatile uint64_t *)j->slot.address;
+            const uint64_t availability=UINT64_C(1)<<63;
+            uint64_t counter=0;
+            unsigned available=0,first_pair=0,highest_pair=0;
+            uint32_t mask_lo=0,mask_hi=0;
+            for(unsigned i=0;i<PS5VK_OCCLUSION_PROBE_PAIRS;++i) {
+                uint64_t begin=slot[2*i],end=slot[2*i+1];
+                int ok=(begin&availability)&&(end&availability);
+                if(!ok)continue;
+                uint64_t delta=(end&~availability)-(begin&~availability);
+                if(!available)first_pair=i;
+                highest_pair=i;
+                ++available;
+                if(i<32)mask_lo|=UINT32_C(1)<<i;else mask_hi|=UINT32_C(1)<<(i-32);
+                counter+=delta;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_OCCLUSION_PROBE_PAIR serial=%llu index=%u begin=%016llx end=%016llx delta=%llu",
+                    (unsigned long long)j->serial,i,(unsigned long long)begin,
+                    (unsigned long long)end,(unsigned long long)delta);
+            }
+            /* Report only measured facts. No self-certifying validity flag: the
+             * verifier derives validity from these numbers and the invariants
+             * it checks itself (contiguous unique indices from first_pair,
+             * highest_pair matching the last index, deltas summing to the
+             * counter, availability bit set in both words). */
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_OCCLUSION_PROBE_SLOT serial=%llu pairs=%u available=%u first_pair=%u highest_pair=%u mask_lo=%08x mask_hi=%08x counter=%llu",
+                (unsigned long long)j->serial,(unsigned)PS5VK_OCCLUSION_PROBE_PAIRS,
+                available,first_pair,highest_pair,mask_lo,mask_hi,
+                (unsigned long long)counter);
+        }
+#endif
         return VK_SUCCESS;
     }
     if(value || now(NULL)-j->start>UINT64_C(3000000000))return VK_ERROR_DEVICE_LOST;
