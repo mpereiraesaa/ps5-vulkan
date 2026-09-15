@@ -1098,8 +1098,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 134 mandatory limits satisfied, 64 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 106 mandatory format-feature cells satisfied
-with 556 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 110 mandatory format-feature cells satisfied
+with 552 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -1564,3 +1564,79 @@ This is bounded evidence for one set of 96 combined image samplers in a
 fragment-only pipeline with four update rounds. It does not advertise a limit by
 itself, says nothing about other descriptor types or about other stages, and is
 not a conformance claim; the reported limits remain unchanged in this change.
+
+## RGBA8 uniform texel buffer promotion (2026-09-15)
+
+`VK_FORMAT_R8G8B8A8_UNORM`, `VK_FORMAT_R8G8B8A8_SNORM`,
+`VK_FORMAT_R8G8B8A8_UINT` and `VK_FORMAT_R8G8B8A8_SINT` now publish
+`VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT` in the graphics profile, and
+`vkCreateBufferView` accepts them for
+`VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT`. This is the enablement half of the
+role implemented on `main` by the four-byte-RGBA8 slice; creation and reporting
+move together, so the reported set and the creatable set stay identical.
+
+The encoding is not new: a GFX10 buffer descriptor carries the combined
+DATA_FORMAT/NUM_FORMAT value that the sampled-image descriptor already stores
+(8_8_8_8 UNORM/SNORM/UINT/SINT are 56/57/60/61), and the completion word is the
+row's own selector meaning, `(X,Y,Z,W) = 0xfac` for a four-component row
+against `(X,0,0,1) = 0x204` for the one-component R32 rows.
+
+### The witness
+
+A new owned compute shader fetches one texel per invocation with
+`texelFetch(samplerBuffer)` from an RGBA8 buffer view, rounds every fetched
+channel back to its 8-bit value, packs the result as `R | G<<8 | B<<16 | A<<24`
+and XORs it with the integer input buffer. The CPU oracle predicts every output
+word from the bytes written into the texel buffer, so a wrong element word, a
+wrong channel completion, a scalar-replicated `(X,X,X,X)` mapping or an
+off-by-one record count each change the expected word. The existing
+`R32_UINT`/`R32_SINT`/`R32_SFLOAT` resource-ABI path is unchanged and keeps its
+recorded evidence; the new variant is selected by
+`tools/build_consumer.py --texel-rgba8` and
+`tools/run_consumer.py --texel-rgba8`, whose strict verifier also requires the
+device to report the bit it is about to use.
+
+The first attempt at this witness failed at indices 37..63 and the defect was
+in the C oracle, not in the driver: the per-channel expressions were not masked
+to eight bits, so `i*7+3` spilled from the blue byte into alpha while the GPU
+returned exactly the bytes written. The oracle now masks each channel, and the
+runs below are the corrected artifact.
+
+### Two identical runs
+
+Deployed `eboot.bin` SHA-256
+`848dae57ea7e6e19d1ef608bfea219606e9e7821b8952c1324674b4fd55b8596`, re-read
+with FTP SELF conversion disabled and matched exactly before each launch, with
+ShadowMountPlus restarted and verified before each launch. The RGBA8
+`texelFetch` SPIR-V SHA-256 is
+`e14a6bb98ef0a9abf725b1c30bb132cff22b5b2eb149eb7625201561b2e713a4`.
+
+- `20260914T234125783Z_PPSA99994_ps5vk_0xb2b1fcb0ecca`, log SHA-256
+  `18cf44694da9a1a52bb69027ed39e26e878bc6156b6facadacebfc968789238c`
+- `20260914T234134074Z_PPSA99994_ps5vk_0xb2b3eae2b6ae`, log SHA-256
+  `58b85c385daef9b95ece359faad8e43406c027791c1d41fe01634f9c4a8f930a`
+
+Both runs are byte-identical in every witness line and both passed the strict
+verifier (`strict_verified=true`, `lifecycle_ok=true`):
+
+- `PS5VK_CONSUMER_TEXEL_RGBA8_FORMAT format=r8g8b8a8_unorm
+  buffer_features=0x00000048 uniform_texel_reported=1` — the device reports
+  `VERTEX_BUFFER|UNIFORM_TEXEL_BUFFER` for the format being used;
+- `PS5VK_CONSUMER_TEXEL_RGBA8_SUCCESS format=r8g8b8a8_unorm texels=64
+  channels=4 packed_rgba_order=1 mismatches=0 guard_words=192
+  guard_mismatches=0`;
+- `PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS ... elements=64 mismatches=0`;
+- `PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1` and
+  `PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1`;
+- `BYE seq=484 reason=consumer-finite-end` in both.
+
+The title was closed and `running=none` was confirmed independently by
+`tools/control.py status` and by `tools/night_supervisor.py status`.
+
+This directly qualifies the shared four-component uniform-texel-buffer path
+with UNORM. The SNORM/UINT/SINT rows compose that result with their earlier
+format-specific conversion and shader-interface witnesses because all four
+rows use the same bounded descriptor path and four-component completion. The
+new payload did not fetch each of those three formats independently. This is
+not a CTS result or conformance claim, and it does not extend to storage texel
+buffers, blit, resolve, attachment clears or any other format family.

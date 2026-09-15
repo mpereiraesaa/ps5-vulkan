@@ -1,14 +1,17 @@
 {
   "schema": "ps5vk-physical-format-validation/1",
   "task": "ps5vk-vulkan10-formats-4byte-32bit",
-  "tables": ["formats-mandatory-features-4byte", "formats-mandatory-features-32bit"],
+  "tables": [
+    "formats-mandatory-features-4byte",
+    "formats-mandatory-features-32bit"
+  ],
   "console_used_by_this_task": true,
   "summary": {
     "mandatory_cells_in_scope": 287,
-    "satisfied_by_this_task": 8,
+    "satisfied_by_this_task": 12,
     "ready_pending_physical_validation": 0,
-    "blocked_without_backend": 279,
-    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated and enabled the eight entries below. The remaining 279 baseline cells require backend work; the count is not CTS coverage or conformance."
+    "blocked_without_backend": 275,
+    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated and enabled the eight A8B8G8R8 sampled entries below; the four-byte RGBA8 uniform-texel-buffer promotion of 2026-09-15 added the four RGBA8 entries from its own two-run texelFetch witness. The remaining 275 baseline cells require backend work; the count is not CTS coverage or conformance."
   },
   "qualification": {
     "status": "validated",
@@ -18,19 +21,38 @@
     "groups": {
       "sample": {
         "self_sha256": "dbad7e701b4203f7ea19080e8f8e0ca1b316c9a954b56a8347ce12d2f6c46607",
-        "log_sha256": ["ebba816ee063d8a0bf68b6783e2af5cd20a5805840242ea91dfc0cb1538f7bd7", "3e36477c514bd364677d03ff58635e0b7089f6f12747c97185359f188f95589b"]
+        "log_sha256": [
+          "ebba816ee063d8a0bf68b6783e2af5cd20a5805840242ea91dfc0cb1538f7bd7",
+          "3e36477c514bd364677d03ff58635e0b7089f6f12747c97185359f188f95589b"
+        ]
       },
       "filter": {
         "self_sha256": "cb7b50aea118b015ef8f83e25ca47b4d0e0b6b7e4a320d2ec6747b387e8e4233",
-        "log_sha256": ["810fa91c663c89a9d4297c7975a4969221baab3cb770dd925716163f019dbaa3", "c7eb3e0ff7636add9c0befbf65492cbb789bcab4aa91ac8e7cc3264ac3c4fca7"]
+        "log_sha256": [
+          "810fa91c663c89a9d4297c7975a4969221baab3cb770dd925716163f019dbaa3",
+          "c7eb3e0ff7636add9c0befbf65492cbb789bcab4aa91ac8e7cc3264ac3c4fca7"
+        ]
       },
       "uint": {
         "self_sha256": "854b60687f3a4754cbeb33ea882776963e2d93c64ac9c1d5b3377e3f9a30bac4",
-        "log_sha256": ["d35793639a624ed5ed0c2d61f8307577b3cc60100e1cada86bf6310f3975c313", "995a17d818c7d968fe7ec809772c0565257d7a624af6500f43e79140bdc34831"]
+        "log_sha256": [
+          "d35793639a624ed5ed0c2d61f8307577b3cc60100e1cada86bf6310f3975c313",
+          "995a17d818c7d968fe7ec809772c0565257d7a624af6500f43e79140bdc34831"
+        ]
       },
       "sint": {
         "self_sha256": "8cdf6ceaea24a72d5291075c1692d00e4e8f93a8253274b39deb395b64ae00b3",
-        "log_sha256": ["a3a7091c0f41ce651db18d278d340fdca79414987ece48db0289479832233c9e", "5f139f54dd0700a11b67552da37863a7946b13af7d1493a898740fb329bcad96"]
+        "log_sha256": [
+          "a3a7091c0f41ce651db18d278d340fdca79414987ece48db0289479832233c9e",
+          "5f139f54dd0700a11b67552da37863a7946b13af7d1493a898740fb329bcad96"
+        ]
+      },
+      "texel": {
+        "self_sha256": "848dae57ea7e6e19d1ef608bfea219606e9e7821b8952c1324674b4fd55b8596",
+        "log_sha256": [
+          "18cf44694da9a1a52bb69027ed39e26e878bc6156b6facadacebfc968789238c",
+          "58b85c385daef9b95ece359faad8e43406c027791c1d41fe01634f9c4a8f930a"
+        ]
       }
     }
   },
@@ -51,7 +73,12 @@
       "profile": "graphics",
       "shader_type": "float",
       "minimal_gpu_operation": "Create a 2D optimal-tiling image with usage SAMPLED|TRANSFER_DST, upload an asymmetric texel set through the ordinary buffer-to-image path, encode the T#/S# with ps5vk_texture_descriptor, sample with a nearest sampler in a fragment shader and read pixels from the diagnostic BGRA8 target.",
-      "texel_bytes": [64, 128, 192, 255],
+      "texel_bytes": [
+        64,
+        128,
+        192,
+        255
+      ],
       "expected_result": "exact BGRA8-target readback word 0xff4080c0 (R=0x40, G=0x80, B=0xc0, A=0xff), identical to the same bytes uploaded as VK_FORMAT_R8G8B8A8_UNORM; an RGBA8 target instead stores 0xffc08040",
       "host_test_limit": "Host tests prove descriptor word 0x03800000, the identity selectors, the texel size and the copy/layout arithmetic; only the texture unit decodes the packed component order."
     },
@@ -65,7 +92,12 @@
       "profile": "graphics",
       "shader_type": "float",
       "minimal_gpu_operation": "As the UNORM entry with the SNORM descriptor word 0x03900000 and an asymmetric positive texel set that distinguishes signed from unsigned normalization.",
-      "texel_bytes": [32, 64, 96, 127],
+      "texel_bytes": [
+        32,
+        64,
+        96,
+        127
+      ],
       "expected_result": "exact readback 0xff4080c1, identical to the recorded VK_FORMAT_R8G8B8A8_SNORM witness for the same bytes",
       "host_test_limit": "As the UNORM entry: the sign handling and component order are decided by the texture unit."
     },
@@ -79,7 +111,12 @@
       "profile": "graphics",
       "shader_type": "sRGB",
       "minimal_gpu_operation": "As the UNORM entry with the sRGB descriptor word 0x08200000 and the recorded VK_FORMAT_R8G8B8A8_SRGB texel set.",
-      "texel_bytes": [128, 64, 32, 255],
+      "texel_bytes": [
+        128,
+        64,
+        32,
+        255
+      ],
       "expected_result": "exact readback 0xff370d04, identical to the recorded VK_FORMAT_R8G8B8A8_SRGB witness for the same bytes",
       "host_test_limit": "The sRGB decode (0x80 to 0x37, 0x40 to 0x0d, 0x20 to 0x04) happens in the texture unit; a host test can only check that the sRGB descriptor word is selected."
     },
@@ -93,7 +130,12 @@
       "profile": "graphics",
       "shader_type": "uint",
       "minimal_gpu_operation": "As the UNORM entry with the integer descriptor word 0x03c00000, a typed usampler in the fragment shader and no linear filtering (Vulkan forbids it for integer formats).",
-      "texel_bytes": [51, 102, 153, 255],
+      "texel_bytes": [
+        51,
+        102,
+        153,
+        255
+      ],
       "expected_result": "exact readback 0xff336699, identical to the recorded VK_FORMAT_R8G8B8A8_UINT witness for the same bytes",
       "host_test_limit": "The typed sampled-image ABI and integer component order are consumed by the texture unit and the compiled shader; the host contract fixes only the descriptor word and the shader interface class."
     },
@@ -107,7 +149,12 @@
       "profile": "graphics",
       "shader_type": "sint",
       "minimal_gpu_operation": "As the UINT entry with the signed integer descriptor word 0x03d00000, a typed isampler and negative component values.",
-      "texel_bytes": [192, 32, 96, 127],
+      "texel_bytes": [
+        192,
+        32,
+        96,
+        127
+      ],
       "expected_result": "exact readback 0xff40a0e0, identical to the recorded VK_FORMAT_R8G8B8A8_SINT witness for the same bytes",
       "host_test_limit": "As the UINT entry for the signed case."
     },
@@ -121,7 +168,12 @@
       "profile": "graphics",
       "shader_type": "float",
       "minimal_gpu_operation": "Upload the opaque black/opaque white 2x2 checkerboard used by the recorded filter probes and sample its centre twice: once with VK_FILTER_NEAREST and once with VK_FILTER_LINEAR.",
-      "texel_bytes": [0, 0, 0, 255],
+      "texel_bytes": [
+        0,
+        0,
+        0,
+        255
+      ],
       "expected_result": "nearest 0xff000000 and linear 0xff808080 in both byte-identical runs",
       "host_test_limit": "The filter hardware decides the interpolated value; the host contract only proves that linear filtering is gated on a non-integer format and that the sampler encoding is accepted."
     },
@@ -135,7 +187,12 @@
       "profile": "graphics",
       "shader_type": "float",
       "minimal_gpu_operation": "The same checkerboard probe with the recorded SNORM fixture (black alpha 0x7f, white components 0x7f) and both filters.",
-      "texel_bytes": [0, 0, 0, 127],
+      "texel_bytes": [
+        0,
+        0,
+        0,
+        127
+      ],
       "expected_result": "nearest 0xff000000 and linear 0xff808080, matching the recorded VK_FORMAT_R8G8B8A8_SNORM filter witness",
       "host_test_limit": "As the UNORM filter entry."
     },
@@ -149,51 +206,122 @@
       "profile": "graphics",
       "shader_type": "sRGB",
       "minimal_gpu_operation": "The same opaque black/opaque white checkerboard with the sRGB descriptor word and both filters; the recorded sRGB fixture is used unchanged.",
-      "texel_bytes": [0, 0, 0, 255],
+      "texel_bytes": [
+        0,
+        0,
+        0,
+        255
+      ],
       "expected_result": "nearest 0xff000000 and linear 0xff808080, matching the recorded VK_FORMAT_R8G8B8A8_SRGB filter witness",
       "host_test_limit": "As the UNORM filter entry; 0 and 255 are sRGB fixed points, so decode must be covered by the sampled-image entry above."
+    },
+    {
+      "format": "VK_FORMAT_R8G8B8A8_UNORM",
+      "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
+      "evidence_group": "texel",
+      "capability": "PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER",
+      "enablement": "UNIFORM_TEXEL_BUFFER in the enabled mask for VK_FORMAT_R8G8B8A8_UNORM, so buffer-view creation and the reported feature bit move together",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "float4/compute",
+      "minimal_gpu_operation": "Create a 64-texel uniform-texel-buffer view with VK_FORMAT_R8G8B8A8_UNORM, bind it to a compute pipeline as a samplerBuffer, texelFetch one texel per invocation, round each channel back to its 8-bit value, pack R|G<<8|B<<16|A<<24 and XOR it with the integer input buffer.",
+      "expected_result": "Every output word equals the CPU oracle word computed from the bytes written into the texel buffer, with all guard words intact; a wrong element format, component order, scalar replication or record count changes the packed word.",
+      "host_test_limit": "Host tests prove the capability row, the derived GFX10 format value and completion word, the 4-byte element stride and NUM_RECORDS arithmetic and the refusal set; only the texture unit decodes the RGBA8 element and its channel order."
+    },
+    {
+      "format": "VK_FORMAT_R8G8B8A8_SNORM",
+      "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
+      "evidence_group": "texel",
+      "capability": "PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER",
+      "enablement": "UNIFORM_TEXEL_BUFFER in the enabled mask for VK_FORMAT_R8G8B8A8_SNORM, so buffer-view creation and the reported feature bit move together",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "float4/compute",
+      "minimal_gpu_operation": "Compositional qualification: the direct VK_FORMAT_R8G8B8A8_UNORM samplerBuffer texelFetch witness establishes the shared four-component buffer path, while the existing SNORM sampled-image witness establishes this row's GFX10 conversion and shader interface.",
+      "expected_result": "The shared buffer path returns four independent components in order and the independently witnessed SNORM encoding supplies the row-specific conversion; this payload did not fetch SNORM directly.",
+      "host_test_limit": "Host tests prove that buffer and image descriptors use the same row-owned GFX10 format value, completion word, 4-byte element stride and NUM_RECORDS arithmetic. The evidence is compositional, not a direct SNORM samplerBuffer run."
+    },
+    {
+      "format": "VK_FORMAT_R8G8B8A8_UINT",
+      "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
+      "evidence_group": "texel",
+      "capability": "PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER",
+      "enablement": "UNIFORM_TEXEL_BUFFER in the enabled mask for VK_FORMAT_R8G8B8A8_UINT, so buffer-view creation and the reported feature bit move together",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "float4/compute",
+      "minimal_gpu_operation": "Compositional qualification: the direct VK_FORMAT_R8G8B8A8_UNORM samplerBuffer texelFetch witness establishes the shared four-component buffer path, while the existing UINT sampled-image witness establishes this row's GFX10 conversion and typed shader interface.",
+      "expected_result": "The shared buffer path returns four independent components in order and the independently witnessed UINT encoding supplies the row-specific conversion/interface; this payload did not fetch UINT directly.",
+      "host_test_limit": "Host tests prove that buffer and image descriptors use the same row-owned GFX10 format value, completion word, 4-byte element stride and NUM_RECORDS arithmetic. The evidence is compositional, not a direct UINT samplerBuffer run."
+    },
+    {
+      "format": "VK_FORMAT_R8G8B8A8_SINT",
+      "feature": "VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT",
+      "evidence_group": "texel",
+      "capability": "PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER",
+      "enablement": "UNIFORM_TEXEL_BUFFER in the enabled mask for VK_FORMAT_R8G8B8A8_SINT, so buffer-view creation and the reported feature bit move together",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "float4/compute",
+      "minimal_gpu_operation": "Compositional qualification: the direct VK_FORMAT_R8G8B8A8_UNORM samplerBuffer texelFetch witness establishes the shared four-component buffer path, while the existing SINT sampled-image witness establishes this row's GFX10 conversion and typed shader interface.",
+      "expected_result": "The shared buffer path returns four independent components in order and the independently witnessed SINT encoding supplies the row-specific conversion/interface; this payload did not fetch SINT directly.",
+      "host_test_limit": "Host tests prove that buffer and image descriptors use the same row-owned GFX10 format value, completion word, 4-byte element stride and NUM_RECORDS arithmetic. The evidence is compositional, not a direct SINT samplerBuffer run."
     }
   ],
   "blocker_classification": [
     {
       "reason": "profile-has-no-image-model",
-      "profiles": ["compute"],
+      "profiles": [
+        "compute"
+      ],
       "cells": 165,
       "detail": "The compute profile installs neither format_properties nor image_properties and creates no graphics objects, so every mandatory format cell of the two tables is a blocker for that profile by construction."
     },
     {
       "reason": "no-blit-implementation",
-      "profiles": ["graphics"],
+      "profiles": [
+        "graphics"
+      ],
       "cells": 40,
       "detail": "vkCmdBlitImage rejects every call: there is no scaling/filtering packet and no bounded CPU contract, and BLIT is not COPY, so no BLIT_SRC/BLIT_DST bit may be published."
     },
     {
       "reason": "no-texel-buffer-descriptor",
-      "profiles": ["graphics"],
-      "cells": 32,
-      "detail": "Buffer views and texel-buffer descriptors exist only for the R32 UINT/SINT/SFLOAT uniform rows; there is no storage-texel-buffer descriptor type and no buffer-data-format mapping for the remaining formats."
+      "profiles": [
+        "graphics"
+      ],
+      "cells": 28,
+      "detail": "Buffer views and texel-buffer descriptors exist for the R32 UINT/SINT/SFLOAT uniform rows and, since the 2026-09-15 promotion, for the four four-component R8G8B8A8 rows with their own identity completion; there is still no storage-texel-buffer descriptor type and no buffer-data-format mapping for the remaining formats."
     },
     {
       "reason": "no-render-target-encoding",
-      "profiles": ["graphics"],
+      "profiles": [
+        "graphics"
+      ],
       "cells": 23,
       "detail": "Only B8G8R8A8_UNORM and R8G8B8A8_UNORM have a render-target encoding and a clear/draw/readback route; the native graphics compiler additionally requires colorWriteMask 15 with blendEnable false, so no blend bit is publishable either."
     },
     {
       "reason": "no-storage-image-abi",
-      "profiles": ["graphics"],
+      "profiles": [
+        "graphics"
+      ],
       "cells": 15,
       "detail": "There is no storage-image descriptor, image-load/store ABI or atomic path in the shader interface, so storage images and atomics cannot be inferred from texture descriptors."
     },
     {
       "reason": "implemented-pending-physical-diagnostic",
-      "profiles": ["graphics"],
+      "profiles": [
+        "graphics"
+      ],
       "cells": 0,
       "detail": "All eight A8B8G8R8_* sampled/filter entries were qualified in two identical-artifact runs per diagnostic group and are now enabled."
     },
     {
       "reason": "no-sampled-encoding",
-      "profiles": ["graphics"],
+      "profiles": [
+        "graphics"
+      ],
       "cells": 4,
       "detail": "B8G8R8A8_UNORM and B8G8R8A8_SRGB sampling needs a component swap that the pinned GPL reference does not encode and that no console witness covers; the profile deliberately does not sample BGRA."
     }

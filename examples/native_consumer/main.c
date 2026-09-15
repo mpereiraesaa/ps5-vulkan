@@ -3,6 +3,9 @@
 #include <ps5vk/ps5vk_present.h>
 #include "shaders.h"
 #include "resource_shader.h"
+#ifdef CONSUMER_TEXEL_RGBA8
+#include "texel_rgba8_shader.h"
+#endif
 #include "storage_width_shaders.h"
 #include "sync_shaders.h"
 #include "ps5log.h"
@@ -797,15 +800,44 @@ static void run_pipeline_cache_contract(VkDevice device, VkPipelineCache *out_ca
     *out_cache = cache;
 }
 
-static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache cache)
+static void run_runtime_compute(VkPhysicalDevice physical, VkDevice device, VkQueue queue,
+                                VkPipelineCache cache)
 {
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_COMPUTE_START");
+
+#ifndef CONSUMER_TEXEL_RGBA8
+    (void)physical;
+#endif
+
+#ifdef CONSUMER_TEXEL_RGBA8
+    /* The witness must run against a format the device actually reports, so
+     * the feature bit is checked here rather than assumed from the source. */
+    VkFormatProperties rgba8_properties;
+    memset(&rgba8_properties, 0, sizeof(rgba8_properties));
+    vkGetPhysicalDeviceFormatProperties(physical, VK_FORMAT_R8G8B8A8_UNORM,
+                                        &rgba8_properties);
+    const int rgba8_reported =
+        (rgba8_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT) != 0;
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_TEXEL_RGBA8_FORMAT format=r8g8b8a8_unorm "
+        "buffer_features=0x%08x uniform_texel_reported=%d",
+        (unsigned)rgba8_properties.bufferFeatures, rgba8_reported);
+    if (!rgba8_reported) {
+        ps5log_close("texel-rgba8-not-reported");
+        exit(1);
+    }
+#endif
 
     /* 1. Create compute shader module from owned SPIR-V */
     VkShaderModuleCreateInfo smci = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+#ifdef CONSUMER_TEXEL_RGBA8
+        .codeSize = sizeof(consumer_texel_rgba8_spirv),
+        .pCode = consumer_texel_rgba8_spirv
+#else
         .codeSize = sizeof(consumer_resource_spirv),
         .pCode = consumer_resource_spirv
+#endif
     };
     VkShaderModule comp_module = VK_NULL_HANDLE;
     CHECK(vkCreateShaderModule(device, &smci, NULL, &comp_module));
@@ -957,7 +989,16 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
 
     for (uint32_t i = 0; i < element_count; ++i) {
         map_in[dynamic_offset / sizeof(uint32_t) + i] = i * 100u + 42u;
+#ifdef CONSUMER_TEXEL_RGBA8
+        /* Deterministic RGBA8 bytes: a wrong element format, channel order or
+         * scalar completion changes the packed word the shader returns. */
+        ((uint8_t *)map_texel)[i * 4 + 0] = (uint8_t)(i * 3u + 1u);
+        ((uint8_t *)map_texel)[i * 4 + 1] = (uint8_t)(i * 5u + 2u);
+        ((uint8_t *)map_texel)[i * 4 + 2] = (uint8_t)(i * 7u + 3u);
+        ((uint8_t *)map_texel)[i * 4 + 3] = (uint8_t)(255u - (i & 0xffu));
+#else
         map_texel[i] = i * 31u;
+#endif
     }
     const VkDeviceSize dispatch_indirect_offset = 512;
     VkDispatchIndirectCommand *dispatch_indirect =
@@ -1018,9 +1059,15 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     VkBufferViewCreateInfo bvci = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
         .buffer = buffer_texel,
+#ifdef CONSUMER_TEXEL_RGBA8
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .offset = 0,
+        .range = element_count * 4u
+#else
         .format = VK_FORMAT_R32_UINT,
         .offset = 0,
         .range = element_count * sizeof(uint32_t)
+#endif
     };
     VkBufferView texel_view = VK_NULL_HANDLE;
     CHECK(vkCreateBufferView(device, &bvci, NULL, &texel_view));
@@ -1119,9 +1166,21 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
     uint32_t *results = map_out + output_word_offset;
     for (uint32_t i = 0; i < element_count; ++i) {
         uint32_t src_val = i * 100u + 42u;
+#ifdef CONSUMER_TEXEL_RGBA8
+        /* Mask every channel to its byte: the texel buffer stores 8-bit
+         * components, so an unmasked product would spill into the neighbour
+         * channel and make the oracle - not the driver - wrong. */
+        uint32_t packed =
+            (uint32_t)((i * 3u + 1u) & 0xffu) |
+            ((uint32_t)((i * 5u + 2u) & 0xffu) << 8) |
+            ((uint32_t)((i * 7u + 3u) & 0xffu) << 16) |
+            ((uint32_t)(255u - (i & 0xffu)) << 24);
+#else
+        uint32_t packed = i * 31u;
+#endif
         uint32_t expected =
             (src_val * multiplier + 0x1337u + extra_bias + push_addend) ^
-            (i * 31u);
+            packed;
         if (results[i] != expected) {
             results_correct = 0;
             ps5log_printf(PS5LOG_ERR, "Compute mismatch at %u: expected 0x%08x got 0x%08x", i, expected, results[i]);
@@ -1150,6 +1209,13 @@ static void run_runtime_compute(VkDevice device, VkQueue queue, VkPipelineCache 
         "elements=%u mismatches=0 guard_words=%u guard_mismatches=0",
         multiplier, extra_bias, push_addend, element_count,
         output_word_offset + guard_count);
+#ifdef CONSUMER_TEXEL_RGBA8
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_TEXEL_RGBA8_SUCCESS format=r8g8b8a8_unorm texels=%u "
+        "channels=4 packed_rgba_order=1 mismatches=0 guard_words=%u "
+        "guard_mismatches=0",
+        element_count, output_word_offset + guard_count);
+#endif
 
     /* Clean up compute resources in reverse order */
     vkDestroyFence(device, fence, NULL);
@@ -1753,7 +1819,7 @@ int main(void)
     VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
     run_pipeline_cache_contract(device, &pipeline_cache);
     run_buffer_transfer_contract(device, queue);
-    run_runtime_compute(device, queue, pipeline_cache);
+    run_runtime_compute(physical_device, device, queue, pipeline_cache);
 
     /* 5. Run byte- and word-exact 8/16-bit storage-buffer witnesses. */
     run_storage_width_compute(device, queue);

@@ -102,6 +102,16 @@ PENDING_FORMATS = {
     "VK_FORMAT_A8B8G8R8_UINT_PACK32",
     "VK_FORMAT_A8B8G8R8_SINT_PACK32",
 }
+# Four-byte RGBA8 uniform-texel-buffer rows, qualified by the two-run RGBA8
+# texelFetch witness recorded in VALIDATION.md. They are a different provenance
+# family from the registry-packing rows above, so they are listed separately.
+TEXEL_FORMATS = {
+    "VK_FORMAT_R8G8B8A8_UNORM",
+    "VK_FORMAT_R8G8B8A8_SNORM",
+    "VK_FORMAT_R8G8B8A8_UINT",
+    "VK_FORMAT_R8G8B8A8_SINT",
+}
+QUALIFIED_ENTRY_FORMATS = PENDING_FORMATS | TEXEL_FORMATS
 BGRA_FORMATS = {"VK_FORMAT_B8G8R8A8_UNORM", "VK_FORMAT_B8G8R8A8_SRGB"}
 
 
@@ -199,7 +209,7 @@ class TestFormatCapabilities(unittest.TestCase):
         for entry in entries:
             self.assertIn(entry["table"], TASK_TABLES)
             self.assertEqual(entry["profile"], "graphics")
-            self.assertIn(entry["format"], PENDING_FORMATS)
+            self.assertIn(entry["format"], QUALIFIED_ENTRY_FORMATS)
             row = self.by_name[entry["format"]]
             cap = entry["capability"].replace("PS5VK_FORMAT_CAP_", "")
             self.assertTrue(row["capabilities"] & CAP[cap], entry["capability"])

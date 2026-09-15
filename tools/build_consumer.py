@@ -67,6 +67,8 @@ def main():
     parser.add_argument("--single-set-samplers", action="store_true",
                         help="Qualify all 96 sampled descriptors inside one set")
     parser.add_argument("--check-only", action="store_true", help="Only verify header and symbol isolation")
+    parser.add_argument("--texel-rgba8", action="store_true",
+                        help="Witness a four-component RGBA8 uniform texel buffer")
     parser.add_argument("--use-staged-sdk", action="store_true",
                         help="Reuse dist-sdk without rebuilding it (caller guarantees freshness)")
     args = parser.parse_args()
@@ -132,6 +134,12 @@ def main():
         sys.executable, str(ROOT / "tools/prepare_consumer_sampled_shaders.py"),
         "--out", str(sampled_shader_header),
     ], check=True)
+    texel_shader_header = BUILD_DIR / "texel_rgba8_shader.h"
+    if args.texel_rgba8:
+        subprocess.run([
+            sys.executable, str(ROOT / "tools/prepare_consumer_texel_shader.py"),
+            "--out", str(texel_shader_header),
+        ], check=True)
     cflags = [
         "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
         "-ffunction-sections", "-fdata-sections",
@@ -149,6 +157,8 @@ def main():
         cflags.append("-DCONSUMER_SINGLE_SET_SAMPLERS=1")
     if args.mixed_resources:
         cflags.append("-DCONSUMER_MIXED_RESOURCES=1")
+    if args.texel_rgba8:
+        cflags.append("-DCONSUMER_TEXEL_RGBA8=1")
 
     has_native_toolchain = clang_wrapper.is_file() and linker.is_file() and builder.is_file()
 
@@ -318,6 +328,14 @@ def main():
         artifact["sampled_graphics"]["visibility_mask"] = sampler_visibility
         artifact["sampled_graphics"]["vertex_spirv_sha256"] = hashlib.sha256(
             sampled_shader_header.with_suffix(".shared.vert.spv").read_bytes()).hexdigest()
+    if args.texel_rgba8:
+        artifact["texel_rgba8"] = {
+            "format": "VK_FORMAT_R8G8B8A8_UNORM",
+            "texels": 64,
+            "channels": "R,G,B,A",
+            "shader_spirv_sha256": hashlib.sha256(
+                texel_shader_header.with_suffix(".spv").read_bytes()).hexdigest(),
+        }
     artifact_path = DIST_DIR.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")
 

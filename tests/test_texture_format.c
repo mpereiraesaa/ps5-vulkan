@@ -171,7 +171,9 @@ int main(void)
          VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
          VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
          VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT));
-    assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+    assert(properties.bufferFeatures ==
+        (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
+                               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
     assert(!properties.linearTilingFeatures);
     ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_UNORM, &properties);
     assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
@@ -188,10 +190,9 @@ int main(void)
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
                                VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
-    /* --- implemented-but-unpublished uniform texel buffer family ----------
-     * The four R8G8B8A8 rows carry the role in the implemented mask while the
-     * published mask withholds it, so the encoder is exercisable by host tests
-     * and the console witness still decides the feature bit. The derivation
+    /* --- witnessed uniform texel buffer family ----------------------------
+     * The four R8G8B8A8 rows carry the role in both masks after the two-run
+     * RGBA8 texelFetch witness recorded in VALIDATION.md. The derivation
      * helpers must return the pinned reference values: the GFX10 combined
      * 8_8_8_8 words are 56/57/60/61, four-component identity completion is
      * (X,Y,Z,W) = 0xfac, and a one-component row keeps (X,0,0,1) = 0x204. */
@@ -205,12 +206,12 @@ int main(void)
         assert(entry && entry->bytes_per_texel == 4);
         assert(ps5vk_texture_format_has(texel_formats[i],
                                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
-        assert(!ps5vk_texture_format_witnessed(texel_formats[i],
-                                               PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(texel_formats[i],
+                                              PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER));
         assert(ps5vk_texture_format_gfx10_format(entry) == texel_words[i]);
         assert(ps5vk_texture_format_dst_sel(entry) == UINT32_C(0xfac));
         ps5vk_texture_format_properties(texel_formats[i], &properties);
-        assert(!(properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+        assert(properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT);
     }
     assert(ps5vk_texture_format_gfx10_format(
         ps5vk_texture_format_lookup(VK_FORMAT_R32_UINT)) == 20u);
