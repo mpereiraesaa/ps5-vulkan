@@ -7,7 +7,7 @@ import unittest
 
 from tools.verify_consumer_resource_abi import (
     APP, INPASS_CHANGED, INPASS_HASH, SECONDARY_CONTROL_HASH,
-    SECONDARY_EXECUTED_HASH, TITLE, validate)
+    SECONDARY_EXECUTED_HASH, TEXEL_FORMAT_CASES, TITLE, validate)
 
 
 # Secondary execution INSIDE a render pass, as the hardware emitted it. The
@@ -137,7 +137,8 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 
 class ConsumerResourceAbiTests(unittest.TestCase):
     def fixture(self, edit=None, sampled=False, shared=False, visibility=None,
-                single=False, mixed=False, secondary=False, inpass=False):
+                single=False, mixed=False, secondary=False, inpass=False,
+                texel_formats=False):
         sampled = sampled or shared or single or mixed
         messages = list(MESSAGES)
         if inpass:
@@ -172,6 +173,27 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                     messages[index] = f"{prefix} serial={int(value) + 2} {tail}"
             at = messages.index("PS5VK_CONSUMER_COMPUTE_START")
             messages[at:at] = list(SECONDARY_MESSAGES)
+        if texel_formats:
+            rows = [f"PS5VK_CONSUMER_TEXEL_FORMATS_START cases={len(TEXEL_FORMAT_CASES)}",
+                    f"PS5VK_QUEUE_PREPARED serial=57 dispatches={len(TEXEL_FORMAT_CASES)}"]
+            for index in range(len(TEXEL_FORMAT_CASES)):
+                rows.extend([
+                    f"PS5VK_QUEUE_SUBMIT serial=57 index={index} rc=0",
+                    f"PS5VK_QUEUE_SUSPEND_POINT serial=57 index={index} rc=0",
+                    f"PS5VK_QUEUE_COMPLETED serial=57 index={index} token={index + 1:09x} gcr=0070f528",
+                ])
+            for index, (name, shader_class, byte_count, expected) in enumerate(TEXEL_FORMAT_CASES):
+                rows.append(
+                    f"PS5VK_CONSUMER_TEXEL_FORMAT_CASE index={index} name={name} "
+                    f"class={shader_class} bytes={byte_count} expected={expected} "
+                    f"actual={expected} mismatches=0")
+            rows.extend([
+                f"PS5VK_CONSUMER_TEXEL_FORMATS_SUCCESS cases={len(TEXEL_FORMAT_CASES)} "
+                f"components={len(TEXEL_FORMAT_CASES) * 4} mismatches=0 guard_mismatches=0",
+                "PS5VK_CONSUMER_TEXEL_FORMATS_RETIRED",
+            ])
+            at = messages.index("PS5VK_CONSUMER_TEST_SUCCESS")
+            messages[at:at] = rows
         if sampled:
             for index,message in enumerate(messages):
                 if message.startswith("PS5VK_GRAPHICS_") and " serial=" in message:
@@ -279,7 +301,42 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             elif shared:
                 artifact["sampled_graphics"].update(stage_profile="vertex-fragment", vertex_spirv_sha256="e"*64)
                 if visibility is not None:artifact["sampled_graphics"]["visibility_mask"]=visibility
+        if texel_formats:
+            artifact["texel_formats"] = {
+                "case_count": len(TEXEL_FORMAT_CASES),
+                "components_per_case": 4,
+                "shader_spirv_sha256": {
+                    "float": "1" * 64, "uint": "2" * 64, "sint": "3" * 64,
+                },
+            }
         return log, receipt, artifact
+
+    def test_uniform_texel_format_matrix_is_strict(self):
+        result = validate(*self.fixture(texel_formats=True), texel_formats=True)
+        self.assertEqual(result["uniform_texel_formats_checked"], 41)
+
+        def rejected(edit):
+            log, receipt, artifact = self.fixture(edit=edit, texel_formats=True)
+            with self.assertRaises(ValueError):
+                validate(log, receipt, artifact, texel_formats=True)
+
+        def corrupt_case(messages):
+            index = next(i for i, message in enumerate(messages)
+                         if "TEXEL_FORMAT_CASE index=8 " in message)
+            messages[index] = messages[index].replace("actual=3f800000", "actual=00000000")
+
+        def drop_completion(messages):
+            messages.remove(next(message for message in messages
+                            if message.startswith("PS5VK_QUEUE_COMPLETED serial=57 index=40 ")))
+
+        def corrupt_guard(messages):
+            index = messages.index(next(message for message in messages
+                if message.startswith("PS5VK_CONSUMER_TEXEL_FORMATS_SUCCESS ")))
+            messages[index] = messages[index].replace("guard_mismatches=0", "guard_mismatches=1")
+
+        for edit in (corrupt_case, drop_completion, corrupt_guard):
+            with self.subTest(edit=edit.__name__):
+                rejected(edit)
 
     def test_shared_visibility_is_exact_and_cannot_be_downgraded(self):
         for mask in (0x11,0x1f,0x7fffffff):

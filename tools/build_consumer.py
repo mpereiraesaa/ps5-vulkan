@@ -69,6 +69,8 @@ def main():
     parser.add_argument("--check-only", action="store_true", help="Only verify header and symbol isolation")
     parser.add_argument("--texel-rgba8", action="store_true",
                         help="Witness a four-component RGBA8 uniform texel buffer")
+    parser.add_argument("--texel-formats", action="store_true",
+                        help="Qualify the full staged uniform-texel format matrix")
     parser.add_argument("--use-staged-sdk", action="store_true",
                         help="Reuse dist-sdk without rebuilding it (caller guarantees freshness)")
     args = parser.parse_args()
@@ -78,6 +80,10 @@ def main():
         parser.error("Single-set qualification requires the finite consumer")
     if args.continuous and args.mixed_resources:
         parser.error("Mixed-resource qualification requires the finite consumer")
+    if args.continuous and args.texel_formats:
+        parser.error("Texel-format qualification requires the finite consumer")
+    if args.texel_rgba8 and args.texel_formats:
+        parser.error("Choose one uniform-texel witness")
     if sum((args.shared_stage_samplers, args.single_set_samplers,
             args.mixed_resources)) > 1:
         parser.error("Choose one sampled-descriptor profile")
@@ -140,6 +146,12 @@ def main():
             sys.executable, str(ROOT / "tools/prepare_consumer_texel_shader.py"),
             "--out", str(texel_shader_header),
         ], check=True)
+    texel_format_header = BUILD_DIR / "texel_format_shaders.h"
+    if args.texel_formats:
+        subprocess.run([
+            sys.executable, str(ROOT / "tools/prepare_consumer_texel_formats.py"),
+            "--out", str(texel_format_header),
+        ], check=True)
     cflags = [
         "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
         "-ffunction-sections", "-fdata-sections",
@@ -159,6 +171,8 @@ def main():
         cflags.append("-DCONSUMER_MIXED_RESOURCES=1")
     if args.texel_rgba8:
         cflags.append("-DCONSUMER_TEXEL_RGBA8=1")
+    if args.texel_formats:
+        cflags.append("-DCONSUMER_TEXEL_FORMATS=1")
 
     has_native_toolchain = clang_wrapper.is_file() and linker.is_file() and builder.is_file()
 
@@ -335,6 +349,17 @@ def main():
             "channels": "R,G,B,A",
             "shader_spirv_sha256": hashlib.sha256(
                 texel_shader_header.with_suffix(".spv").read_bytes()).hexdigest(),
+        }
+    if args.texel_formats:
+        artifact["texel_formats"] = {
+            "case_count": 41,
+            "components_per_case": 4,
+            "shader_spirv_sha256": {
+                kind: hashlib.sha256(
+                    texel_format_header.with_suffix(f".{kind}.spv").read_bytes()
+                ).hexdigest()
+                for kind in ("float", "uint", "sint")
+            },
         }
     artifact_path = DIST_DIR.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")
