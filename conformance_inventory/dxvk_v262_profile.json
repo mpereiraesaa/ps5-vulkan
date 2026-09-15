@@ -1,0 +1,657 @@
+{
+  "profile": {
+    "api_version": "1.3.204",
+    "capabilities": [
+      "vulkan10requirements",
+      "vulkan11requirements",
+      "vulkan12requirements",
+      "vulkan13requirements",
+      "d3d11_baseline",
+      "d3d11_level11_0"
+    ],
+    "description": "DXVK for D3D11 Feature Level 11.0 minimum requirements",
+    "id": "VP_DXVK_d3d11_level_11_0_baseline",
+    "label": "DXVK D3D11 Level 11.0 Baseline profile",
+    "version": 1
+  },
+  "requirements": [
+    {
+      "capabilities": [
+        "profile"
+      ],
+      "container": null,
+      "expected": "1.3.204",
+      "id": "api-version:apiVersion",
+      "kind": "api-version",
+      "name": "apiVersion"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": null,
+      "expected": 1,
+      "id": "extension:VK_EXT_robustness2",
+      "kind": "extension",
+      "name": "VK_EXT_robustness2"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": null,
+      "expected": 1,
+      "id": "extension:VK_EXT_transform_feedback",
+      "kind": "extension",
+      "name": "VK_EXT_transform_feedback"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+      "kind": "feature",
+      "name": "depthBiasClamp"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:depthClamp",
+      "kind": "feature",
+      "name": "depthClamp"
+    },
+    {
+      "capabilities": [
+        "d3d11_level11_0"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+      "kind": "feature",
+      "name": "drawIndirectFirstInstance"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+      "kind": "feature",
+      "name": "dualSrcBlend"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+      "kind": "feature",
+      "name": "fillModeNonSolid"
+    },
+    {
+      "capabilities": [
+        "d3d11_level11_0"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+      "kind": "feature",
+      "name": "fragmentStoresAndAtomics"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+      "kind": "feature",
+      "name": "fullDrawIndexUint32"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:geometryShader",
+      "kind": "feature",
+      "name": "geometryShader"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+      "kind": "feature",
+      "name": "imageCubeArray"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:independentBlend",
+      "kind": "feature",
+      "name": "independentBlend"
+    },
+    {
+      "capabilities": [
+        "d3d11_level11_0"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+      "kind": "feature",
+      "name": "multiDrawIndirect"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:multiViewport",
+      "kind": "feature",
+      "name": "multiViewport"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+      "kind": "feature",
+      "name": "occlusionQueryPrecise"
+    },
+    {
+      "capabilities": [
+        "vulkan10requirements"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+      "kind": "feature",
+      "name": "robustBufferAccess"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+      "kind": "feature",
+      "name": "sampleRateShading"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+      "kind": "feature",
+      "name": "shaderClipDistance"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+      "kind": "feature",
+      "name": "shaderCullDistance"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+      "kind": "feature",
+      "name": "shaderImageGatherExtended"
+    },
+    {
+      "capabilities": [
+        "d3d11_level11_0"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:tessellationShader",
+      "kind": "feature",
+      "name": "tessellationShader"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceFeatures",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+      "kind": "feature",
+      "name": "textureCompressionBC"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceRobustness2FeaturesEXT",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor",
+      "kind": "feature",
+      "name": "nullDescriptor"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceRobustness2FeaturesEXT",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2",
+      "kind": "feature",
+      "name": "robustBufferAccess2"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceTransformFeedbackFeaturesEXT",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
+      "kind": "feature",
+      "name": "geometryStreams"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceTransformFeedbackFeaturesEXT",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
+      "kind": "feature",
+      "name": "transformFeedback"
+    },
+    {
+      "capabilities": [
+        "vulkan11requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan11Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan11Features:multiview",
+      "kind": "feature",
+      "name": "multiview"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceVulkan11Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters",
+      "kind": "feature",
+      "name": "shaderDrawParameters"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+      "kind": "feature",
+      "name": "bufferDeviceAddress"
+    },
+    {
+      "capabilities": [
+        "vulkan12requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+      "kind": "feature",
+      "name": "hostQueryReset"
+    },
+    {
+      "capabilities": [
+        "vulkan12requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
+      "kind": "feature",
+      "name": "imagelessFramebuffer"
+    },
+    {
+      "capabilities": [
+        "d3d11_baseline"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
+      "kind": "feature",
+      "name": "samplerMirrorClampToEdge"
+    },
+    {
+      "capabilities": [
+        "vulkan12requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+      "kind": "feature",
+      "name": "separateDepthStencilLayouts"
+    },
+    {
+      "capabilities": [
+        "vulkan12requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:shaderSubgroupExtendedTypes",
+      "kind": "feature",
+      "name": "shaderSubgroupExtendedTypes"
+    },
+    {
+      "capabilities": [
+        "vulkan12requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId",
+      "kind": "feature",
+      "name": "subgroupBroadcastDynamicId"
+    },
+    {
+      "capabilities": [
+        "vulkan12requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
+      "kind": "feature",
+      "name": "timelineSemaphore"
+    },
+    {
+      "capabilities": [
+        "vulkan12requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+      "kind": "feature",
+      "name": "uniformBufferStandardLayout"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+      "kind": "feature",
+      "name": "vulkanMemoryModel"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+      "kind": "feature",
+      "name": "vulkanMemoryModelDeviceScope"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:computeFullSubgroups",
+      "kind": "feature",
+      "name": "computeFullSubgroups"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering",
+      "kind": "feature",
+      "name": "dynamicRendering"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:inlineUniformBlock",
+      "kind": "feature",
+      "name": "inlineUniformBlock"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:maintenance4",
+      "kind": "feature",
+      "name": "maintenance4"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl",
+      "kind": "feature",
+      "name": "pipelineCreationCacheControl"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:robustImageAccess",
+      "kind": "feature",
+      "name": "robustImageAccess"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
+      "kind": "feature",
+      "name": "shaderDemoteToHelperInvocation"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:shaderIntegerDotProduct",
+      "kind": "feature",
+      "name": "shaderIntegerDotProduct"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
+      "kind": "feature",
+      "name": "shaderTerminateInvocation"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory",
+      "kind": "feature",
+      "name": "shaderZeroInitializeWorkgroupMemory"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:subgroupSizeControl",
+      "kind": "feature",
+      "name": "subgroupSizeControl"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Features",
+      "expected": true,
+      "id": "feature:VkPhysicalDeviceVulkan13Features:synchronization2",
+      "kind": "feature",
+      "name": "synchronization2"
+    },
+    {
+      "capabilities": [
+        "vulkan11requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan11Properties",
+      "expected": 134217727,
+      "id": "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+      "kind": "property",
+      "name": "maxMultiviewInstanceIndex"
+    },
+    {
+      "capabilities": [
+        "vulkan11requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan11Properties",
+      "expected": 6,
+      "id": "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+      "kind": "property",
+      "name": "maxMultiviewViewCount"
+    },
+    {
+      "capabilities": [
+        "vulkan12requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan12Properties",
+      "expected": 2147483647,
+      "id": "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference",
+      "kind": "property",
+      "name": "maxTimelineSemaphoreValueDifference"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Properties",
+      "expected": 1073741824,
+      "id": "property:VkPhysicalDeviceVulkan13Properties:maxBufferSize",
+      "kind": "property",
+      "name": "maxBufferSize"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Properties",
+      "expected": 4,
+      "id": "property:VkPhysicalDeviceVulkan13Properties:maxDescriptorSetInlineUniformBlocks",
+      "kind": "property",
+      "name": "maxDescriptorSetInlineUniformBlocks"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Properties",
+      "expected": 4,
+      "id": "property:VkPhysicalDeviceVulkan13Properties:maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
+      "kind": "property",
+      "name": "maxDescriptorSetUpdateAfterBindInlineUniformBlocks"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Properties",
+      "expected": 256,
+      "id": "property:VkPhysicalDeviceVulkan13Properties:maxInlineUniformBlockSize",
+      "kind": "property",
+      "name": "maxInlineUniformBlockSize"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Properties",
+      "expected": 4,
+      "id": "property:VkPhysicalDeviceVulkan13Properties:maxInlineUniformTotalSize",
+      "kind": "property",
+      "name": "maxInlineUniformTotalSize"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Properties",
+      "expected": 4,
+      "id": "property:VkPhysicalDeviceVulkan13Properties:maxPerStageDescriptorInlineUniformBlocks",
+      "kind": "property",
+      "name": "maxPerStageDescriptorInlineUniformBlocks"
+    },
+    {
+      "capabilities": [
+        "vulkan13requirements"
+      ],
+      "container": "VkPhysicalDeviceVulkan13Properties",
+      "expected": 4,
+      "id": "property:VkPhysicalDeviceVulkan13Properties:maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks",
+      "kind": "property",
+      "name": "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks"
+    }
+  ],
+  "schema": "ps5vk-dxvk-profile/1",
+  "source": {
+    "artifact": "VP_DXVK_requirements.json",
+    "artifact_git_blob_sha1": "b41b2831a17679660fce6ede5f8a2c2935f890e0",
+    "artifact_sha256": "dbb2c8c6a34ac52b62b9fcb318b85c47dca9d865c765d9538be3bde70cf341d3",
+    "artifact_size_bytes": 18115,
+    "commit": "9d6f54a1ade20d1d27dd421024717a636f3d8c68",
+    "source_id": "dxvk",
+    "tag": "v2.6.2",
+    "tag_object": "e2373f9421f2c70583aea75c54219fbdcd67959c"
+  },
+  "summary": {
+    "api-version": 1,
+    "extension": 2,
+    "feature": 49,
+    "property": 10,
+    "requirements": 62
+  }
+}
