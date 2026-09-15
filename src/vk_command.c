@@ -335,19 +335,6 @@ VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b)
            reference_compatible(a, &a->depth, b, &b->depth) ? VK_TRUE : VK_FALSE;
 }
 
-/* A framebuffer is usable with a pass when it carries the same attachments in
- * the same roles with the same formats and sample counts. */
-static VkBool32 framebuffer_compatible(VkFramebuffer fb, VkRenderPass pass)
-{
-    if (!fb || !pass || fb->attachment_count != pass->attachment_count ||
-        fb->color_attachment != pass->color.attachment ||
-        fb->depth_attachment != pass->depth.attachment) return VK_FALSE;
-    for (uint32_t j = 0; j < pass->attachment_count; ++j)
-        if (fb->formats[j] != pass->attachments[j].format ||
-            fb->samples[j] != pass->attachments[j].samples) return VK_FALSE;
-    return VK_TRUE;
-}
-
 /* Inheritance a secondary may declare, checked against what this device can
  * truthfully do rather than against the structure's shape.
  *
@@ -377,7 +364,7 @@ static VkResult inheritance_valid(VkDevice d, const VkCommandBufferInheritanceIn
             i->renderPass->device != d || i->subpass ||
             (i->framebuffer &&
              (i->framebuffer->device != d ||
-              !framebuffer_compatible(i->framebuffer, i->renderPass))))
+              !ps5vk_framebuffer_compatible(i->framebuffer, i->renderPass))))
             return INVALID;
     }
     /* occlusionQueryEnable, queryFlags and pipelineStatistics describe queries
@@ -705,23 +692,48 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
     if (info->clearValueCount) memcpy(op->clears, info->pClearValues, info->clearValueCount * sizeof(VkClearValue));
     c->render_pass = pass; c->framebuffer = fb; c->render_pass_contents = contents;
 }
+/* Draw work recorded in the pass that is currently open.
+ *
+ * What counts is what will EXECUTE, not how many commands were written: a
+ * vkCmdExecuteCommands marker naming an empty secondary executes nothing, so
+ * counting markers would let a zero-body pass through. Only draws and
+ * vkCmdExecuteCommands can be recorded inside a pass, and a continuation child
+ * may carry nothing but draws, so a child's operation count IS its draw count. */
+static uint32_t open_pass_draw_work(VkCommandBuffer c)
+{
+    uint32_t work = 0, j = c->operation_count;
+    while (j) {
+        const struct ps5vk_operation *op = &c->operations[--j];
+        if (op->type == PS5VK_BEGIN_RENDER_PASS) break;
+        if (op->type != PS5VK_EXECUTE_COMMANDS) { ++work; continue; }
+        VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
+        if (!children) continue;
+        for (uint32_t n = 0; n < op->child_count; ++n)
+            if (children[n]) work += children[n]->operation_count;
+    }
+    return work;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
 {
     /* Primary-only, and unreachable in a secondary anyway because one can
      * never have begun a render pass; the level check keeps the rejection
      * explicit rather than incidental.
      *
-     * A pass that records NO work is an explicit fail-closed boundary of this
+     * A pass that executes NO work is an explicit fail-closed boundary of this
      * profile, refused here at record time rather than accepted and then
      * refused by the backend at submit. Vulkan permits it - load and store ops
      * alone are observable - but the bounded native path has no zero-body
      * shape, and accepting a recording the driver cannot execute is worse than
-     * refusing it where the caller can see it. Only draws and
-     * vkCmdExecuteCommands can be recorded inside a pass, so the preceding
-     * operation still being the begin means nothing was recorded. */
+     * refusing it where the caller can see it.
+     *
+     * The test is the DRAW WORK, not the command count: a pass whose only
+     * content is vkCmdExecuteCommands naming empty secondaries executes
+     * exactly as little as one that recorded nothing at all. Naming an empty
+     * child is still legal on its own - it just has to be accompanied by work
+     * that executes. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
-        !c->render_pass || !c->operation_count ||
-        c->operations[c->operation_count - 1].type == PS5VK_BEGIN_RENDER_PASS ||
+        !c->render_pass || !open_pass_draw_work(c) ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);

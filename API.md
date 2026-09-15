@@ -609,6 +609,16 @@ every named child must be a continuation whose inherited render pass is
 inherited framebuffer is either `VK_NULL_HANDLE` or the framebuffer the pass
 is executing.
 
+The inherited framebuffer is checked against the inherited render pass by the
+same rule, applied to the framebuffer's **roles**: its colour and depth
+attachments must agree with the corresponding references on used-versus-unused
+and on format and sample count, and their numeric slots need not match. This is
+a different and weaker requirement than the one `vkCmdBeginRenderPass` places
+on the framebuffer that actually **executes**, which must still line up with
+its render pass index for index, because the native path addresses attachments
+positionally. That stricter rule is a pre-existing boundary of the executing
+path and is not relaxed here.
+
 Compatibility follows Vulkan 1.0 chapter 7.2 and is a property of the
 corresponding attachment **references**: each pair must be both
 `VK_ATTACHMENT_UNUSED`, or both used and referring to attachments that agree
@@ -645,12 +655,16 @@ primary-only command into a secondary - `vkCmdBeginRenderPass`,
 `vkCmdEndRenderPass`, `vkCmdNextSubpass` - or nesting `vkCmdExecuteCommands`
 poisons the recording transactionally, leaving no partial operation behind.
 
-A render pass that records **no work at all** is an explicit fail-closed
+A render pass that executes **no work at all** is an explicit fail-closed
 boundary of this profile. Vulkan permits an empty pass - its load and store
 ops alone are observable - but the bounded native path has no zero-body shape,
 so `vkCmdEndRenderPass` refuses it transactionally at record time rather than
 letting a recording the driver cannot execute be accepted and then rejected at
-submission.
+submission. The test is the work that will **execute**, not the commands
+written: a pass whose only content is `vkCmdExecuteCommands` naming empty
+secondaries executes exactly as little as one that recorded nothing, and is
+refused the same way. Naming an empty secondary remains legal in itself; it
+simply contributes nothing, so it has to be accompanied by work that does.
 
 `vkCmdNextSubpass` is an explicit fail-closed boundary. The implementation
 accepts exactly one subpass, so it has no valid reachable invocation. Its

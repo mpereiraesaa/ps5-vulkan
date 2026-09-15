@@ -259,10 +259,12 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     /* Contents mode of the active pass, read back from the immutable record
      * rather than from recording state. */
     VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE;
-    /* Work recorded since the pass began. A zero-body pass is refused at
-     * record time; re-deriving it here means a recording that somehow reaches
-     * submission with an empty pass is still refused before any backend sees
-     * it, instead of being accepted and then rejected by the backend. */
+    /* DRAW work seen since the pass began - what will execute, not how many
+     * commands were written. A vkCmdExecuteCommands marker naming only empty
+     * secondaries executes nothing, so counting markers here would accept the
+     * zero-body pass that record time refuses. Re-derived from the immutable
+     * record so a recording that somehow reaches submission with an empty pass
+     * is still refused before any backend sees it. */
     unsigned pass_work = 0;
     for (unsigned j = 0; j < c->operation_count; ++j) {
         const struct ps5vk_operation *op = &c->operations[j];
@@ -319,7 +321,6 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
              * a pass that pass must have been begun for secondary contents. */
             if (op->render_pass != active || op->framebuffer != framebuffer) return 0;
             if (active && contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) return 0;
-            if (active) ++pass_work;
             for (uint32_t n = 0; n < op->child_count; ++n) {
                 VkCommandBuffer child = children[n];
                 const VkBool32 simultaneous = child &&
@@ -336,6 +337,10 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     return 0;
                 if (active) {
                     if (!continuation_child_valid(d, child, active, framebuffer)) return 0;
+                    /* A continuation child carries nothing but draws, so its
+                     * operation count is the work it contributes - and an
+                     * empty child contributes none. */
+                    pass_work += child->operation_count;
                 } else if (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
                     return 0;
                 if (!simultaneous) {

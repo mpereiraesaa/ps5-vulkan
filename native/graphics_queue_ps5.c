@@ -230,8 +230,12 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         if(body_count==PS5VK_MAX_OPERATIONS)return VK_ERROR_FEATURE_NOT_PRESENT;
         body[body_count++]=op;
     }
-    /* Every named buffer must have been consumed by a name in this pass. */
-    if(next_buffer!=s->count)return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Every named buffer must have been consumed by a name in this pass, and
+     * the pass must actually carry work: naming only empty secondaries expands
+     * to no draws at all, which is the zero-body shape recording already
+     * refuses. Defence in depth behind that check and the submission-time one,
+     * on the immutable record this backend is handed. */
+    if(next_buffer!=s->count || !body_count)return VK_ERROR_FEATURE_NOT_PRESENT;
     struct graphics_job *j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial; j->color=begin->framebuffer->attachments[0]->image;
     phase="command-arena";

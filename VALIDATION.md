@@ -1784,14 +1784,14 @@ be the first one's leftovers.
 ### Measured result, two identical runs
 
 Artifact `dist-consumer/PPSA99994/eboot.bin` sha256
-`ee620a192cab5554619368cae2b7edc842da70aa8ed938c7cf72848f26993103`, deployed by
+`383484e752f2e511d08ebd0e3326683c13c28018c6a69b274ef9d640c577dc8a`, deployed by
 FTP and re-read with SELF conversion disabled with an exact match,
 ShadowMountPlus restarted and verified before each launch.
 
-- `20260915T080548726Z_PPSA99994_ps5vk_0xce3808d97067`, log sha256
-  `4b26a1e70fdd01469f35db231158583e3004a6f8fb989258936c1e62c5714a27`
-- `20260915T080656138Z_PPSA99994_ps5vk_0xce47bac92c41`, log sha256
-  `eb6e090249d7dda2ea170518ddf4a394cbe5154d9e3382a06280bdde10aff04f`
+- `20260915T090900132Z_PPSA99994_ps5vk_0xd1aac7365e07`, log sha256
+  `00ba815d938a5f377798a614168d2fae851d1ae36ef3f3f9d88c1ebfd531fd36`
+- `20260915T090927164Z_PPSA99994_ps5vk_0xd1b112905834`, log sha256
+  `a87e4fc27c2671ba1cf269d043081cc294ea3a5fee1c2c2353c06ba9834a1eee`
 
 Both runs are byte-identical in the witness line:
 
@@ -1818,6 +1818,12 @@ inside a primary's render pass and produces exactly the image the same draw
 produces inline, on the already qualified one-colour-plus-D32 profile. It does
 not establish multiple subpasses, `vkCmdNextSubpass`, input or resolve
 attachments, multisampling, query inheritance, or any conformance claim.
+
+A zero-body render pass cannot be smuggled in through this path either: a pass
+whose only content names empty secondaries executes nothing, and recording,
+submission and the backend each derive the work that will actually execute
+rather than counting commands. Naming an empty secondary beside one that draws
+stays legal and keeps its place in the order.
 
 One defect is worth recording, because only the console could find it. The
 first version of this scenario rendered the control into the second

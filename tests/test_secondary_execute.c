@@ -561,7 +561,58 @@ int main(void)
         vkFreeCommandBuffers(&d, pool, 1, &elsewhere);
     }
 
-    /* --- a render pass that records no work is refused where it is written -
+    /* --- a NON-NULL inherited framebuffer of a compatible pass ------------
+     * The inherited pass reaches its colour role through slot 1 and carries an
+     * extra unreferenced attachment; the inherited framebuffer reaches the
+     * same role through slot 0. Compatibility is about roles, so this is a
+     * conformant pairing, and the executing framebuffer is still required to
+     * be the very same handle. */
+    {
+        VkCommandBufferInheritanceInfo named_fb = continues;
+        named_fb.renderPass = &shifted;
+        named_fb.framebuffer = &fb;
+        VkCommandBufferBeginInfo named_begin = continue_begin;
+        named_begin.pInheritanceInfo = &named_fb;
+        VkCommandBuffer paired = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        assert(vkBeginCommandBuffer(paired, &named_begin) == VK_SUCCESS);
+        assert(paired->framebuffer == &fb && paired->render_pass == &shifted);
+        vkCmdBindPipeline(paired, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics);
+        vkCmdDraw(paired, 3, 1, 0, 0);
+        assert(vkEndCommandBuffer(paired) == VK_SUCCESS);
+        host = begun_primary(&d, pool);
+        vkCmdBeginRenderPass(host, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+        vkCmdExecuteCommands(host, 1, &paired);
+        vkCmdEndRenderPass(host);
+        assert(vkEndCommandBuffer(host) == VK_SUCCESS);
+        pass_submit.pCommandBuffers = &host;
+        assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) == VK_SUCCESS);
+        assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+        vkFreeCommandBuffers(&d, pool, 1, &paired);
+    }
+    /* The role rule is not a licence: a framebuffer whose role disagrees with
+     * the pass on format, on sample count, or on used-versus-unused is still
+     * refused, and so is one of another device. */
+    {
+        struct VkFramebuffer_T wrong_format = fb;
+        wrong_format.formats[0] = VK_FORMAT_R8G8B8A8_UNORM;
+        struct VkFramebuffer_T wrong_samples = fb;
+        wrong_samples.samples[0] = VK_SAMPLE_COUNT_4_BIT;
+        struct VkFramebuffer_T no_colour = fb;
+        no_colour.color_attachment = VK_ATTACHMENT_UNUSED;
+        VkFramebuffer refused[3] = {&wrong_format, &wrong_samples, &no_colour};
+        for (unsigned n = 0; n < 3; ++n) {
+            VkCommandBufferInheritanceInfo mismatched = continues;
+            mismatched.framebuffer = refused[n];
+            VkCommandBufferBeginInfo mismatched_begin = continue_begin;
+            mismatched_begin.pInheritanceInfo = &mismatched;
+            VkCommandBuffer probe_child = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+            assert(vkBeginCommandBuffer(probe_child, &mismatched_begin) != VK_SUCCESS);
+            assert(probe_child->state == PS5VK_INITIAL);
+            vkFreeCommandBuffers(&d, pool, 1, &probe_child);
+        }
+    }
+
+    /* --- a render pass that executes no work is refused where it is written -
      * not accepted here and then rejected by the backend at submit. */
     probe = begun_primary(&d, pool);
     vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
@@ -572,6 +623,63 @@ int main(void)
     vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(probe);
     assert(probe->state == PS5VK_INVALID && probe->operation_count == 1);
+    /* Naming EMPTY secondaries is not work either. The marker is recorded, but
+     * nothing it names executes, so the pass is still zero-body and is refused
+     * where it is written rather than surviving to the backend. */
+    {
+        VkCommandBuffer empty_children[2];
+        for (unsigned n = 0; n < 2; ++n) {
+            empty_children[n] = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+            assert(vkBeginCommandBuffer(empty_children[n], &continue_begin) == VK_SUCCESS);
+            assert(vkEndCommandBuffer(empty_children[n]) == VK_SUCCESS);
+            assert(empty_children[n]->state == PS5VK_EXECUTABLE &&
+                   !empty_children[n]->operation_count);
+        }
+        probe = begun_primary(&d, pool);
+        vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+        vkCmdExecuteCommands(probe, 1, &empty_children[0]);
+        vkCmdEndRenderPass(probe);
+        assert(probe->state == PS5VK_INVALID && probe->operation_count == 2);
+        /* Several of them are still nothing. */
+        probe = begun_primary(&d, pool);
+        vkCmdBeginRenderPass(probe, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+        vkCmdExecuteCommands(probe, 2, empty_children);
+        vkCmdEndRenderPass(probe);
+        assert(probe->state == PS5VK_INVALID && probe->operation_count == 2);
+        /* An empty child ALONGSIDE one that draws is legal and keeps its place
+         * in the order: the pass executes work, and naming an empty secondary
+         * is a no-op, not an error. */
+        VkCommandBuffer ordered[3] = {empty_children[0], inside, empty_children[1]};
+        host = begun_primary(&d, pool);
+        vkCmdBeginRenderPass(host, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+        vkCmdExecuteCommands(host, 3, ordered);
+        vkCmdEndRenderPass(host);
+        assert(vkEndCommandBuffer(host) == VK_SUCCESS);
+        pass_submit.pCommandBuffers = &host;
+        assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) == VK_SUCCESS);
+        assert(d.submission && !d.submission->next && d.submission->count == 4 &&
+               d.submission->buffers[0] == host &&
+               d.submission->buffers[1] == empty_children[0] &&
+               d.submission->buffers[2] == inside &&
+               d.submission->buffers[3] == empty_children[1]);
+        assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+        /* Submission re-derives the same rule from the immutable record, so a
+         * pass whose work disappears after recording is refused there too and
+         * never reaches a backend. */
+        host = begun_primary(&d, pool);
+        vkCmdBeginRenderPass(host, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+        vkCmdExecuteCommands(host, 1, &inside);
+        vkCmdEndRenderPass(host);
+        assert(vkEndCommandBuffer(host) == VK_SUCCESS);
+        const uint32_t recorded = inside->operation_count;
+        inside->operation_count = 0;
+        pass_submit.pCommandBuffers = &host;
+        assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) != VK_SUCCESS);
+        assert(!d.submission && !host->pending_count && !inside->pending_count);
+        inside->operation_count = recorded;
+        for (unsigned n = 0; n < 2; ++n)
+            vkFreeCommandBuffers(&d, pool, 1, &empty_children[n]);
+    }
 
     /* --- refused, each leaving the recording poisoned with no operation --- */
     /* a PRIMARY may never claim render-pass continuation */
