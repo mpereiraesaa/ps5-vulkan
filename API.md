@@ -659,23 +659,23 @@ primary-only command into a secondary - `vkCmdBeginRenderPass`,
 poisons the recording transactionally, leaving no partial operation behind.
 
 A render pass that executes **no work at all** is an explicit fail-closed
-boundary of this profile. Vulkan permits an empty pass - its load and store
-ops alone are observable - but the bounded native path has no zero-body shape,
-so `vkCmdEndRenderPass` refuses it transactionally at record time rather than
-letting a recording the driver cannot execute be accepted and then rejected at
-submission. The test is the work that will **execute**, not the commands
-written: a pass whose only content is `vkCmdExecuteCommands` naming empty
-secondaries executes exactly as little as one that recorded nothing, and is
-refused the same way. Naming an empty secondary remains legal in itself; it
-simply contributes nothing, so it has to be accompanied by work that does.
+boundary of the native path. Vulkan permits an empty pass - its load and store
+ops alone are observable - so recording and ending it remain legal. Submission
+refuses that recording before any backend sees it because the bounded native
+path has no zero-body execution shape. The test is the work that will
+**execute**, not the commands written: a pass whose only content is
+`vkCmdExecuteCommands` naming empty secondaries executes exactly as little as
+one that recorded nothing, and is refused at submission in the same way.
+Naming an empty secondary remains legal and simply contributes no draw work.
 
 ## Multiple subpasses
 
-A render pass owns its shape: the attachment descriptions, one entry per
-subpass with that subpass's colour and depth references and its preserve list,
-and the dependency array. All of it is copied at creation into a single
-allocation, so a caller that mutates its own structures afterwards cannot
-change what the object recorded, and a failed creation leaves nothing behind.
+A render pass owns its supported shape: the attachment descriptions, one entry
+per subpass with that subpass's colour and depth references, and the dependency
+array. All of it is copied at creation into a single allocation, so a caller
+that mutates its own structures afterwards cannot change what the object
+recorded, and a failed creation leaves nothing behind. Preserve lists are not
+stored because every non-empty preserve list is outside this bounded profile.
 
 This profile describes **one or two** subpasses, each with exactly one colour
 reference and an optional D32 depth reference, over one or two attachments.

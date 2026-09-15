@@ -319,9 +319,10 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     /* Unreachable while only single-subpass passes may be
                      * submitted, and validated anyway so the rule lives with
                      * the record rather than with the refusal above: the
-                     * boundary must name the next subpass of the pass it is
-                     * in, and the subpass it leaves must have carried work. */
-                    if (op->subpass >= active->subpass_count || !pass_work) return 0;
+                     * boundary must name a later subpass of the pass it is in.
+                     * Empty subpasses are valid recordings, so this transition
+                     * does not require draw work in the subpass it leaves. */
+                    if (op->subpass >= active->subpass_count) return 0;
                     contents = op->render_pass_contents;
                     pass_work = 0;
                 } else {

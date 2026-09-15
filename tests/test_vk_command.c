@@ -307,9 +307,9 @@ static void multi_set_recording(void)
  * assembled as structs, so what is under test is the driver's own acceptance
  * of the shape and not a fixture that agrees with itself.
  *
- * Nothing here executes: M1 delivers the object model and the recording
- * transitions, and submitting a pass with more than one subpass stays
- * fail-closed until the execution slice implements it. */
+ * Nothing here executes: this test covers the object model and recording
+ * transitions, while submitting a pass with more than one subpass stays
+ * fail-closed until native execution implements it. */
 static VkResult image_requirements(VkDevice d, const VkImageCreateInfo *i,
                                    VkMemoryRequirements *r)
 { (void)d; (void)i; *r = (VkMemoryRequirements){4096, 256, 1}; return VK_SUCCESS; }

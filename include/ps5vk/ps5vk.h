@@ -641,8 +641,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(
     const VkRenderPassBeginInfo* pRenderPassBegin,
     VkSubpassContents contents);
 
-/* Current render passes contain exactly one subpass, so no valid transition
- * exists. The entry point is exported and invalidates recording fail-closed. */
+/* Advances a primary recording to the next declared subpass. Invalid scope or
+ * an out-of-range transition invalidates the recording fail-closed. */
 VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(
     VkCommandBuffer commandBuffer,
     VkSubpassContents contents);
@@ -650,8 +650,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(
 VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(
     VkCommandBuffer commandBuffer);
 
-/* Secondary allocation is not supported; execution is therefore always
- * fail-closed rather than accepting an invalid zero-count pseudo no-op. */
+/* Executes secondary command buffers in the primary's current scope. Inside a
+ * render pass, each secondary must inherit the compatible pass, exact subpass
+ * and compatible framebuffer; mismatches invalidate recording fail-closed. */
 VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(
     VkCommandBuffer commandBuffer,
     uint32_t commandBufferCount,

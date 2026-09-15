@@ -15,7 +15,7 @@ static int layout(VkImageLayout value, int depth, int initial)
  * an optional D32 depth reference that may not alias it, and nothing this
  * driver cannot execute. Input and resolve attachments are refused because
  * they are unimplemented, not tolerated because the structure has fields for
- * them. Preserve entries are validated here and owned by the object. */
+ * them. Non-empty preserve lists are outside the bounded profile. */
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
     VkAttachmentReference *color, VkAttachmentReference *depth)
 {
@@ -46,7 +46,7 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
 }
 
 /* Byte size of the object and everything it owns, with every multiplication
- * and addition checked. The four arrays are suballocated from one block, so
+ * and addition checked. The three arrays are suballocated from one block, so
  * there is no partially built object to roll back: either the single
  * allocation succeeds and the object is complete, or nothing was allocated. */
 static VkResult owned_bytes(const VkRenderPassCreateInfo *info, size_t *total)
@@ -151,12 +151,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     pass->attachment_count = info->attachmentCount;
     pass->subpass_count = info->subpassCount;
     pass->dependency_count = info->dependencyCount;
-    /* Suballocate the owned arrays from the single block in DESCENDING
-     * alignment order. ps5vk_subpass contains a pointer and so needs the
-     * strictest alignment; VkAttachmentDescription is a run of 32-bit enums
-     * whose size is not a multiple of that, so placing it first would leave
-     * every later array misaligned. The object's own size is a multiple of the
-     * pointer alignment, so the first array starts aligned. */
+    /* Suballocate the owned arrays from the single block in descending
+     * alignment order. All current array element types have 32-bit alignment;
+     * keeping the strictest-alignment-first rule explicit prevents a future
+     * element with wider alignment from being placed after an unpadded array.
+     * The object's own size is aligned for every pointer it stores. */
     unsigned char *cursor = (unsigned char *)pass + sizeof(*pass);
     struct ps5vk_subpass *subpasses = (struct ps5vk_subpass *)(void *)cursor;
     cursor += (size_t)info->subpassCount * sizeof(*subpasses);

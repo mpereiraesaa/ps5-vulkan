@@ -352,10 +352,10 @@ VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b)
  *
  * WITH VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT the scope members stop
  * being decorative: renderPass and subpass name the scope the secondary will
- * be executed in, so they are validated here. This device creates exactly one
- * subpass, so subpass must be 0; a higher index is refused rather than
- * accepted and quietly treated as the only one that exists. framebuffer is
- * OPTIONAL by the specification and VK_NULL_HANDLE is accepted: the driver
+ * be executed in, so they are validated here. The named subpass must exist in
+ * the inherited render pass; an out-of-range index is refused rather than
+ * clamped or treated as subpass zero. framebuffer is OPTIONAL by the
+ * specification and VK_NULL_HANDLE is accepted: the driver
  * takes the framebuffer from the executing primary, and refusing the null
  * handle would reject a conformant call.
  *
@@ -418,10 +418,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
         return INVALID;
     clear(c); c->usage = info->flags; c->state = PS5VK_RECORDING;
     if (c->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
-        /* Retained as an opaque owned copy of what the caller supplied. The
-         * ignored scope members are preserved verbatim rather than sanitised,
-         * so the record stays a faithful copy, and nothing in this driver
-         * reads them while RENDER_PASS_CONTINUE is unreachable. */
+        /* Retained as an opaque owned copy of what the caller supplied. When
+         * RENDER_PASS_CONTINUE is absent, the ignored scope members are
+         * preserved verbatim and never consulted. With the flag present they
+         * were validated above and seed the inherited recording scope. */
         c->inheritance = *info->pInheritanceInfo;
         c->inheritance_valid = VK_TRUE;
         /* A continuation secondary records INSIDE the inherited pass from its
@@ -715,10 +715,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
 /* Advance to the next subpass.
  *
  * The transition is exact: it is primary-only, it needs an open pass that this
- * buffer began, there must BE a next subpass, and the subpass being left must
- * have executed work of its own - an empty subpass is the zero-body shape
- * again, one subpass down. Each subpass carries its own contents mode, so a
- * pass may take its first subpass inline and name secondaries in the second.
+ * buffer began, and there must BE a next subpass. Empty subpasses are legal to
+ * record. Each subpass carries its own contents mode, so a pass may take its
+ * first subpass inline and name secondaries in the second.
  *
  * The transition is RECORDED as an operation rather than kept only in
  * recording state, so submission re-derives the subpass structure from the
@@ -816,8 +815,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
             (c->render_pass ? !continues : continues))
             { invalid(c); return; }
         /* Inside a pass the inherited scope must actually match the one the
-         * child is about to execute in: a compatible render pass, this
-         * device's only subpass, and either the primary's framebuffer or the
+         * child is about to execute in: a compatible render pass, the exact
+         * current subpass, and either the primary's framebuffer or the
          * null handle the specification allows a secondary to inherit. */
         if (c->render_pass &&
             (!child->inheritance_valid ||
