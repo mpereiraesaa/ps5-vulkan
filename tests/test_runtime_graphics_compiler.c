@@ -57,7 +57,7 @@ static void check_sparse_layout_static_use(void)
     /* Only the used set may require a table; the other three stay empty. */
     const uint32_t tables[PS5VK_MAX_SETS]={UINT32_C(0x1000),0,0,0};
     uint32_t vertex[16],pixel[16];
-    assert(!ps5vk_runtime_draw_values_sets(&p->arguments,0,0,
+    assert(!ps5vk_runtime_draw_values_sets(&p->arguments,0,0,0,
         p->arguments.vertex_buffer_valid?16u:0u,0,tables,vertex,pixel));
     assert(pixel[p->arguments.fragment_descriptor_slot[0]]==UINT32_C(0x1000));
     ps5vk_runtime_graphics_free(NULL,out);
@@ -114,9 +114,9 @@ static void check_descriptor_options(void)
     assert(!ps5vk_runtime_draw_abi_build(&program->vertex.metadata,&output.metadata,&abi));
     const uint32_t tables[4]={0x1000,0x2000,0x3000,0x4000};
     uint32_t vs[16],fs[16];
-    assert(!ps5vk_runtime_draw_values_sets(&abi,0,0,0,0,tables,vs,fs));
+    assert(!ps5vk_runtime_draw_values_sets(&abi,0,0,0,0,0,tables,vs,fs));
     for(unsigned s=0;s<4;++s)assert(fs[abi.fragment_descriptor_slot[s]]==tables[s]);
-    assert(ps5vk_runtime_draw_values(&abi,0,0,0,0,tables[0],vs,fs));
+    assert(ps5vk_runtime_draw_values(&abi,0,0,0,0,0,tables[0],vs,fs));
     ps5vk_runtime_graphics_free(NULL,compiled);
     free((void *)base.vertex.words);free((void *)base.fragment.words);
     psbc_free_output(&output);free((void *)module.words);
@@ -180,7 +180,7 @@ static void check_descriptor_options(void)
     assert(actual->vertex.machine_code_size && actual->fragment.machine_code_size);
     assert(!ps5vk_runtime_shader_build(&header,&actual->vertex));
     assert(!ps5vk_runtime_shader_build(&header,&actual->fragment));
-    assert(!ps5vk_runtime_draw_values_sets(&actual->arguments,0,0,0,0,tables,vs,fs));
+    assert(!ps5vk_runtime_draw_values_sets(&actual->arguments,0,0,0,0,0,tables,vs,fs));
     for(unsigned s=0;s<4;++s) {
         assert(actual->arguments.vertex_descriptor_valid[s] &&
                actual->arguments.fragment_descriptor_valid[s]);
@@ -216,7 +216,7 @@ static void check_descriptor_options(void)
     for(unsigned s=0;s<4;++s)sets[s].binding[7].stages=VK_SHADER_STAGE_VERTEX_BIT;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS);
     actual=compiled;
-    assert(!ps5vk_runtime_draw_values_sets(&actual->arguments,0,0,0,0,tables,vs,fs));
+    assert(!ps5vk_runtime_draw_values_sets(&actual->arguments,0,0,0,0,0,tables,vs,fs));
     for(unsigned s=0;s<4;++s) {
         assert(actual->arguments.vertex_descriptor_valid[s]);
         assert(!actual->arguments.fragment_descriptor_valid[s]);
