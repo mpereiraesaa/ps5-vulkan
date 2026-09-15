@@ -252,6 +252,7 @@ check:
 	$(PYTHON) tools/check_command_surface.py --check
 	$(PYTHON) tools/derive_dxvk_profile.py --check
 	$(PYTHON) tools/check_dxvk_profile.py --check
+	$(PYTHON) tools/check_dxvk_backlog.py --check
 	# Build the reporting fixture before Python discovery: reporting-matrix
 	# regression tests invoke the checker in process and must not skip for a
 	# fixture that this same target only planned to create later.

@@ -1,0 +1,231 @@
+{
+  "schema": "ps5vk-dxvk-v262-backlog/1",
+  "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
+  "source_matrix": "conformance_inventory/dxvk_v262_matrix.json",
+  "baseline": {
+    "captured_on": "2026-09-15",
+    "requirements": 61,
+    "excluded_satisfied_requirement_ids": [
+      "feature:VkPhysicalDeviceFeatures:robustBufferAccess"
+    ]
+  },
+  "policy": {
+    "scope": "The 61 blockers currently reported for the pinned DXVK v2.6.2 D3D11 feature-level 11_0 baseline.",
+    "completion_gate": {
+      "api": "satisfied",
+      "implementation": "implemented",
+      "cts": "cts-pass",
+      "native": "native-evidence",
+      "verdict": "satisfied"
+    },
+    "delivery": {
+      "branching": "One fresh topic branch from current main per pull request; no stacked pull requests.",
+      "file_budget": "Prefer 3-6 reviewed files per pull request; split a tranche when honest implementation needs more.",
+      "promotion": "Never advertise a feature, property, extension or API version before every completion-gate axis passes.",
+      "validation": "Host tests are necessary but native PS5 evidence and applicable upstream CTS are required for promotion."
+    }
+  },
+  "tranches": [
+    {
+      "id": "DXVK262-T01",
+      "order": 1,
+      "title": "Vulkan 1.1 draw-parameter foundation",
+      "depends_on": [],
+      "requirements": [
+        "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters"
+      ],
+      "acceptance": "Implement BaseVertex/BaseInstance/DrawIndex semantics through public query, device enablement, shader lowering, focused CTS and native readback."
+    },
+    {
+      "id": "DXVK262-T02",
+      "order": 2,
+      "title": "Vulkan 1.1 multiview",
+      "depends_on": ["DXVK262-T01"],
+      "requirements": [
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "acceptance": "Implement view masks and ViewIndex semantics, report measured non-zero limits, and validate layered native output plus focused CTS."
+    },
+    {
+      "id": "DXVK262-T03",
+      "order": 3,
+      "title": "Indirect and indexed draw semantics",
+      "depends_on": ["DXVK262-T01"],
+      "requirements": [
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect"
+      ],
+      "acceptance": "Execute the advertised indirect and 32-bit indexed paths on GPU, including firstInstance and multi-draw behavior, with deterministic readback and focused CTS."
+    },
+    {
+      "id": "DXVK262-T04",
+      "order": 4,
+      "title": "Programmable graphics stages and clip/cull distances",
+      "depends_on": ["DXVK262-T01", "DXVK262-T03"],
+      "requirements": [
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader"
+      ],
+      "acceptance": "Compile, create and execute geometry/tessellation pipelines and clip/cull built-ins with public API coverage, focused CTS and pixel-verified native cases."
+    },
+    {
+      "id": "DXVK262-T05",
+      "order": 5,
+      "title": "Rasterization and viewport state",
+      "depends_on": ["DXVK262-T03"],
+      "requirements": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:multiViewport"
+      ],
+      "acceptance": "Lower each advertised fixed-function state to AGC and verify observable native pixels and focused CTS, including non-solid fill and multiple viewports."
+    },
+    {
+      "id": "DXVK262-T06",
+      "order": 6,
+      "title": "Fragment output, blending and multisampling",
+      "depends_on": ["DXVK262-T04", "DXVK262-T05"],
+      "requirements": [
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading"
+      ],
+      "acceptance": "Implement independent and dual-source blend state, fragment storage/atomics and sample-rate execution with deterministic native verification and focused CTS."
+    },
+    {
+      "id": "DXVK262-T07",
+      "order": 7,
+      "title": "D3D11 resource and precise-query baseline",
+      "depends_on": ["DXVK262-T04"],
+      "requirements": [
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC"
+      ],
+      "acceptance": "Implement cube arrays, BC resources, extended gathers and precise occlusion results with format/property reporting, native readback and focused CTS."
+    },
+    {
+      "id": "DXVK262-T08",
+      "order": 8,
+      "title": "Vulkan 1.2 shader and memory model",
+      "depends_on": ["DXVK262-T02"],
+      "requirements": [
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:shaderSubgroupExtendedTypes",
+        "feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId",
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
+      ],
+      "acceptance": "Provide real address, layout, subgroup and memory-model semantics across public query/device creation, compiler/backend, synchronization, focused CTS and native data validation."
+    },
+    {
+      "id": "DXVK262-T09",
+      "order": 9,
+      "title": "Vulkan 1.2 lifecycle, render and timeline primitives",
+      "depends_on": ["DXVK262-T08"],
+      "requirements": [
+        "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+        "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
+        "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
+        "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+        "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
+        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+      ],
+      "acceptance": "Implement each lifecycle/render primitive and timeline ordering, report a measured limit, and prove behavior with focused CTS and native synchronization/readback."
+    },
+    {
+      "id": "DXVK262-T10",
+      "order": 10,
+      "title": "Vulkan 1.3 synchronization and dynamic rendering",
+      "depends_on": ["DXVK262-T09"],
+      "requirements": [
+        "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering",
+        "feature:VkPhysicalDeviceVulkan13Features:maintenance4",
+        "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl",
+        "feature:VkPhysicalDeviceVulkan13Features:synchronization2",
+        "property:VkPhysicalDeviceVulkan13Properties:maxBufferSize"
+      ],
+      "acceptance": "Implement synchronization2 and dynamic-rendering command semantics, maintenance4 and cache control, then validate the measured maxBufferSize through CTS and native execution."
+    },
+    {
+      "id": "DXVK262-T11",
+      "order": 11,
+      "title": "Vulkan 1.3 shader and subgroup behavior",
+      "depends_on": ["DXVK262-T08", "DXVK262-T10"],
+      "requirements": [
+        "feature:VkPhysicalDeviceVulkan13Features:computeFullSubgroups",
+        "feature:VkPhysicalDeviceVulkan13Features:robustImageAccess",
+        "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
+        "feature:VkPhysicalDeviceVulkan13Features:shaderIntegerDotProduct",
+        "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
+        "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory",
+        "feature:VkPhysicalDeviceVulkan13Features:subgroupSizeControl"
+      ],
+      "acceptance": "Implement compiler and runtime semantics for every advertised shader/subgroup feature with focused CTS and deterministic native compute/graphics validation."
+    },
+    {
+      "id": "DXVK262-T12",
+      "order": 12,
+      "title": "Inline uniform blocks and descriptor limits",
+      "depends_on": ["DXVK262-T10"],
+      "requirements": [
+        "feature:VkPhysicalDeviceVulkan13Features:inlineUniformBlock",
+        "property:VkPhysicalDeviceVulkan13Properties:maxDescriptorSetInlineUniformBlocks",
+        "property:VkPhysicalDeviceVulkan13Properties:maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
+        "property:VkPhysicalDeviceVulkan13Properties:maxInlineUniformBlockSize",
+        "property:VkPhysicalDeviceVulkan13Properties:maxInlineUniformTotalSize",
+        "property:VkPhysicalDeviceVulkan13Properties:maxPerStageDescriptorInlineUniformBlocks",
+        "property:VkPhysicalDeviceVulkan13Properties:maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks"
+      ],
+      "acceptance": "Implement inline-uniform descriptor allocation, updates, binding and limits; all reported floors must be measured and validated by focused CTS and native descriptor consumers."
+    },
+    {
+      "id": "DXVK262-T13",
+      "order": 13,
+      "title": "VK_EXT_robustness2",
+      "depends_on": ["DXVK262-T03", "DXVK262-T07", "DXVK262-T11"],
+      "requirements": [
+        "extension:VK_EXT_robustness2",
+        "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor",
+        "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2"
+      ],
+      "acceptance": "Implement the extension's null-descriptor and robust access semantics across supported resource paths before enumerating or accepting the extension."
+    },
+    {
+      "id": "DXVK262-T14",
+      "order": 14,
+      "title": "VK_EXT_transform_feedback",
+      "depends_on": ["DXVK262-T03", "DXVK262-T04"],
+      "requirements": [
+        "extension:VK_EXT_transform_feedback",
+        "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
+        "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback"
+      ],
+      "acceptance": "Implement transform-feedback buffers, counters, barriers and geometry-stream selection with focused CTS and deterministic native capture before advertising the extension."
+    },
+    {
+      "id": "DXVK262-T15",
+      "order": 15,
+      "title": "Vulkan 1.3.204 API promotion gate",
+      "depends_on": [
+        "DXVK262-T01", "DXVK262-T02", "DXVK262-T03", "DXVK262-T04",
+        "DXVK262-T05", "DXVK262-T06", "DXVK262-T07", "DXVK262-T08",
+        "DXVK262-T09", "DXVK262-T10", "DXVK262-T11", "DXVK262-T12",
+        "DXVK262-T13", "DXVK262-T14"
+      ],
+      "requirements": [
+        "api-version:apiVersion"
+      ],
+      "acceptance": "Promote apiVersion only after every prior profile leaf is satisfied and the wider cumulative Vulkan 1.0-1.3 core contract, applicable upstream CTS, native SDK consumer and repeated lifecycle runs are green."
+    }
+  ]
+}

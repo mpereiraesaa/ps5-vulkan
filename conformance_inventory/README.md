@@ -71,6 +71,7 @@ the block disagrees with the inventory.
 | `dxvk_v262_profile.json` | Exact derivative of DXVK v2.6.2's D3D11 FL11_0 baseline profile. |
 | `dxvk_v262_evidence.json` | Reviewed CTS/native evidence overrides; absence is deliberately a blocker. |
 | `dxvk_v262_matrix.json` | Fail-closed four-axis join of every profile leaf to API, implementation, CTS and native evidence. |
+| `dxvk_v262_backlog.json` | Stable partition of the 61 blockers observed on 2026-09-15 into ordered, dependency-aware implementation tranches. |
 | `validate.py` | Offline validator and report generator (standard library only). |
 | `tools/collect_baseline_surface.py` | Regenerates `baseline_surface.json` from the baseline sources. |
 | `tools/derive_core_target.py` | Regenerates `core_target.json` from the pinned specification section and `vk.xml`. |
