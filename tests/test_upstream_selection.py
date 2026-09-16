@@ -421,6 +421,57 @@ class UpstreamSelectionTests(unittest.TestCase):
                          "supported": False})
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
 
+    def test_current_execution_ledger_is_two_of_four_and_stays_final_false(self):
+        """The merged host work is recorded, not advertised: this tree now meets
+        the descriptor object model and the descriptor table encoding, and the
+        other two requirements keep the execution stage - and so the final
+        state - false. The blocker prose has to name both the true and the
+        outstanding requirements, and a leaf still may not re-enter strict
+        acceptance."""
+        contract = self.manifest["resource_contracts"][MV_CONTRACT]
+        requirements = contract["execution_requirements"]
+        self.assertEqual(
+            {"descriptor_object_model": True, "descriptor_table_encoding": True,
+             "compiler_lowering": False, "gpu_subpass_readback": False},
+            requirements)
+        self.assertEqual(2, sum(1 for value in requirements.values() if value))
+        self.assertEqual(4, len(requirements))
+        # Both stages and their conjunction: the resource stage is promoted on
+        # the console receipt, the execution stage is not, so the final state
+        # stays false.
+        self.assertTrue(contract["resource_supported"])
+        self.assertFalse(contract["execution_supported"])
+        self.assertFalse(contract["supported"])
+        blocker = contract["blocker"]
+        for named in ("two of the four recorded requirements are now true",
+                      "descriptor_object_model", "descriptor_table_encoding",
+                      "compiler_lowering", "gpu_subpass_readback",
+                      "48 leaves stay diagnostics"):
+            self.assertIn(named, blocker)
+        # The selection itself is unchanged: the same 117 acceptance cases and
+        # the same 53 diagnostics, 48 of which are the blocked family.
+        self.assertEqual(117, len(self.manifest["cases"]))
+        self.assertEqual(53, len(self.manifest["diagnostics"]))
+        self.assertEqual(48, len([case for case in self.manifest["diagnostics"]
+                                  if case["path"].startswith(MULTIVIEW_FAMILIES)]))
+        # The derived verdict agrees with the ledger: not eligible, no failure,
+        # nothing pending, and the only reason left is what is still missing.
+        witness = self._ready_witness()
+        eligible, verdict_failures, note, pending = self.gate._contract_verdict(
+            MV_CONTRACT, contract, witness[MV_CONTRACT], witness[MV_CONTRACT]["arrayLayers"])
+        self.assertFalse(eligible)
+        self.assertEqual([], verdict_failures)
+        self.assertEqual("", pending)
+        self.assertIn("execution requirements are not all met", note)
+        # So the strict manifest still passes with every leaf diagnostic, and a
+        # leaf that tries to use the contract is still refused.
+        self.assertEqual(0, self._gate_exit_code_with_witness(
+            copy.deepcopy(self.manifest), witness))
+        self.assertEqual(1, self._gate_exit_code_with_witness(
+            self._promote_one_leaf(copy.deepcopy(self.manifest),
+                                   "dEQP-VK.multiview.masks.get_query_pool_results.15"),
+            witness))
+
     def test_supported_must_be_the_conjunction_of_the_stages(self):
         for resource, execution in ((True, False), (False, True), (False, False)):
             manifest = copy.deepcopy(self.manifest)

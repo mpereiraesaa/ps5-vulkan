@@ -42,7 +42,7 @@
       ],
       "execution_requirements": {
         "descriptor_object_model": true,
-        "descriptor_table_encoding": false,
+        "descriptor_table_encoding": true,
         "compiler_lowering": false,
         "gpu_subpass_readback": false
       },
@@ -64,7 +64,7 @@
         "array_layers": 6,
         "teardown": "clean"
       },
-      "blocker": "Two stages. RESOURCE: promoted on physical-console evidence. One strict run of a temporary public-API probe on main's own driver created the exact shape - R8G8B8A8_UNORM, 2D, optimal tiling, flags 0, extent depth 1, one mip, one sample, six array layers and usage COLOR_ATTACHMENT|TRANSFER_SRC|INPUT_ATTACHMENT|TRANSFER_DST - after the format query answered VK_SUCCESS with maxArrayLayers 6, and binding it cost exactly six 128 KiB strides (786432 bytes) with a clean teardown; see hardware_evidence. No other format, usage set or layer count gained support. EXECUTION: still false. Of the four recorded execution requirements only descriptor_object_model is true (merged #114); descriptor_table_encoding, compiler_lowering and gpu_subpass_readback are false, so no shader reads these attachments on the GPU yet. The final state is the conjunction, so all 48 leaves stay diagnostics."
+      "blocker": "Two stages. RESOURCE: promoted on physical-console evidence. One strict run of a temporary public-API probe on main's own driver created the exact shape - R8G8B8A8_UNORM, 2D, optimal tiling, flags 0, extent depth 1, one mip, one sample, six array layers and usage COLOR_ATTACHMENT|TRANSFER_SRC|INPUT_ATTACHMENT|TRANSFER_DST - after the format query answered VK_SUCCESS with maxArrayLayers 6, and binding it cost exactly six 128 KiB strides (786432 bytes) with a clean teardown; see hardware_evidence. No other format, usage set or layer count gained support. EXECUTION: still false, but two of the four recorded requirements are now true. descriptor_object_model is true (merged #114) and descriptor_table_encoding is true (merged #118 and #119). The encoding role is bounded and honest: the table assigns this descriptor the exact 32-byte, eight DWORD resource-only GFX10 image record at its canonical offsets, and native draw preparation delivers it, failing closed on layout, ownership and cleanup with no sampler words ever written. compiler_lowering and gpu_subpass_readback remain false, so no shader reads these attachments on the GPU yet. The final state is the conjunction of both stages, so all 48 leaves stay diagnostics."
     }
   },
   "cases": [
