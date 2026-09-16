@@ -76,6 +76,138 @@ static void json_float(FILE *out, float value)
 
 static void json_bool(FILE *out, VkBool32 value) { fputs(value ? "true" : "false", out); }
 
+/* Usage bits by name, so a selection gate can compare the witnessed request
+ * with the contract it declares without duplicating the enum in another
+ * language. */
+static void print_usage_names(FILE *out, VkImageUsageFlags usage)
+{
+    const struct { VkImageUsageFlags bit; const char *name; } bits[] = {
+        {VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "VK_IMAGE_USAGE_TRANSFER_SRC_BIT"},
+        {VK_IMAGE_USAGE_TRANSFER_DST_BIT, "VK_IMAGE_USAGE_TRANSFER_DST_BIT"},
+        {VK_IMAGE_USAGE_SAMPLED_BIT, "VK_IMAGE_USAGE_SAMPLED_BIT"},
+        {VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, "VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT"},
+        {VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+         "VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT"},
+        {VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT, "VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT"},
+    };
+    fputs("[", out);
+    int first = 1;
+    for (size_t i = 0; i < sizeof(bits) / sizeof(bits[0]); ++i) {
+        if (!(usage & bits[i].bit)) continue;
+        fprintf(out, "%s\"%s\"", first ? "" : ", ", bits[i].name);
+        first = 0;
+    }
+    fputs("]", out);
+}
+
+/* The resource-footprint contract the pinned upstream multiview helper builds:
+ * a 2D RGBA8 array image, optimal tiling, one mip, one sample, six array layers
+ * (the deepest extent the selected legacy families render) and usage
+ * COLOR_ATTACHMENT | TRANSFER_SRC | INPUT_ATTACHMENT | TRANSFER_DST. The
+ * public query and a real vkCreateImage of exactly this request are both
+ * recorded for that one shape, so a selection gate can require every field and
+ * require the two paths to agree instead of reading C text. */
+/* One shape, both public paths: the query's answer for it and the result of
+ * really creating that image. A selection gate needs both, because a contract
+ * is only supported when the query covers the request and creation succeeds,
+ * and because the two disagreeing is itself a finding. */
+static void print_shape_probe(FILE *out, const char *indent, VkImageUsageFlags usage,
+                              uint32_t array_layers)
+{
+    const VkImageCreateInfo image_info = {
+        VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, // sType
+        NULL,                                // pNext
+        (VkImageCreateFlags)0,               // flags
+        VK_IMAGE_TYPE_2D,                    // imageType
+        VK_FORMAT_R8G8B8A8_UNORM,            // format
+        {64u, 64u, 1u},                      // extent
+        1u,                                  // mipLevels
+        array_layers,                        // arrayLayers
+        VK_SAMPLE_COUNT_1_BIT,               // samples
+        VK_IMAGE_TILING_OPTIMAL,             // tiling
+        usage,                               // usage
+        VK_SHARING_MODE_EXCLUSIVE,           // sharingMode
+        0u,                                  // queueFamilyIndexCount
+        NULL,                                // pQueueFamilyIndices
+        VK_IMAGE_LAYOUT_UNDEFINED,           // initialLayout
+    };
+    VkImageFormatProperties properties;
+    memset(&properties, 0, sizeof(properties));
+    const VkResult query_result = vkGetPhysicalDeviceImageFormatProperties(dump_physical,
+        image_info.format, image_info.imageType, image_info.tiling, image_info.usage,
+        image_info.flags, &properties);
+    VkDevice device = VK_NULL_HANDLE;
+    float priority = 1.0f;
+    const VkDeviceQueueCreateInfo queue_info = {
+        VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, NULL, 0u, 0u, 1u, &priority};
+    const VkDeviceCreateInfo device_info = {
+        VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, NULL, 0u, 1u, &queue_info,
+        0u, NULL, 0u, NULL, NULL};
+    const VkResult device_result = vkCreateDevice(dump_physical, &device_info, NULL, &device);
+    VkResult create_result = VK_ERROR_INITIALIZATION_FAILED;
+    if (device_result == VK_SUCCESS) {
+        /* The native platform installs these during configure; this host
+         * fixture installs the same image entry point the console path uses. */
+        device->graphics_enabled = VK_TRUE;
+        device->image_requirements = ps5vk_native_image_requirements;
+        VkImage image = VK_NULL_HANDLE;
+        create_result = vkCreateImage(device, &image_info, NULL, &image);
+        if (image) vkDestroyImage(device, image, NULL);
+        vkDestroyDevice(device, NULL);
+    }
+    const VkBool32 query_covers = query_result == VK_SUCCESS &&
+        properties.maxArrayLayers >= image_info.arrayLayers &&
+        properties.maxMipLevels >= image_info.mipLevels &&
+        (properties.sampleCounts & image_info.samples) &&
+        properties.maxExtent.width >= image_info.extent.width &&
+        properties.maxExtent.height >= image_info.extent.height;
+    const VkBool32 supported = query_covers && create_result == VK_SUCCESS;
+
+    fprintf(out, "%s\"format\": %u, \"formatName\": \"VK_FORMAT_R8G8B8A8_UNORM\",\n", indent,
+            (unsigned)image_info.format);
+    fprintf(out, "%s\"imageType\": %u, \"imageTypeName\": \"VK_IMAGE_TYPE_2D\",\n", indent,
+            (unsigned)image_info.imageType);
+    fprintf(out, "%s\"tiling\": %u, \"tilingName\": \"VK_IMAGE_TILING_OPTIMAL\",\n", indent,
+            (unsigned)image_info.tiling);
+    fprintf(out, "%s\"mipLevels\": %u, \"samples\": %u, \"arrayLayers\": %u,\n", indent,
+            image_info.mipLevels, (unsigned)image_info.samples, image_info.arrayLayers);
+    fprintf(out, "%s\"extent\": [%u, %u, %u],\n", indent, image_info.extent.width,
+            image_info.extent.height, image_info.extent.depth);
+    fprintf(out, "%s\"usage\": %u, \"usageNames\": ", indent, usage);
+    print_usage_names(out, image_info.usage);
+    fprintf(out, ",\n%s\"deviceResult\": %d, \"queryResult\": %d,\n", indent,
+            (int)device_result, (int)query_result);
+    fprintf(out, "%s\"queryMaxExtent\": [%u, %u, %u], \"queryMaxMipLevels\": %u, ", indent,
+            properties.maxExtent.width, properties.maxExtent.height,
+            properties.maxExtent.depth, properties.maxMipLevels);
+    fprintf(out, "\"queryMaxArrayLayers\": %u, \"querySampleCounts\": %u,\n",
+            properties.maxArrayLayers, properties.sampleCounts);
+    fprintf(out, "%s\"createResult\": %d,\n", indent, (int)create_result);
+    fprintf(out, "%s\"queryCovers\": %s, \"createSucceeded\": %s, \"supported\": %s",
+            indent, query_covers ? "true" : "false",
+            create_result == VK_SUCCESS ? "true" : "false", supported ? "true" : "false");
+}
+
+static void print_resource_contract_witness(FILE *out)
+{
+    const VkImageUsageFlags contract_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                             VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                             VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                                             VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    /* The deepest extent any selected legacy family renders is six layers, so
+     * that is the ceiling this witness has to cover. */
+    fputs("    \"multiview-attachment-image\": {\n", out);
+    print_shape_probe(out, "      ", contract_usage, 6u);
+    /* The same shape without the input-attachment role: what the driver can do
+     * today, so the layer ceiling can be read independently of the usage gap. */
+    fputs(",\n      \"withoutInputAttachment\": {\n", out);
+    print_shape_probe(out, "        ",
+                      contract_usage & ~(VkImageUsageFlags)VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+                      6u);
+    fputs("\n      }\n", out);
+    fputs("    }\n", out);
+}
+
 /* Print every field of the Vulkan 1.0 physical-device limit block by name, so
  * the matrix tool never has to guess which numbers were reported. */
 static void print_limits(FILE *out, const VkPhysicalDeviceLimits *l)
@@ -477,7 +609,9 @@ int main(int argc, char **argv)
                 (unsigned long long)properties_out.maxResourceSize);
         fprintf(stdout, "}%s\n", i + 1 == query_count + matrix_count ? "" : ",");
     }
-    fputs("  ]\n}\n", stdout);
+    fputs("  ],\n  \"resourceContractWitness\": {\n", stdout);
+    print_resource_contract_witness(stdout);
+    fputs("  }\n}\n", stdout);
 
     vkDestroyInstance(instance, NULL);
     return 0;

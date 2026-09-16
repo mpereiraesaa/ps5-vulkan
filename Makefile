@@ -138,7 +138,7 @@ check-sanitize:
 	./build/tests/test_vk_memory_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_device.c -o build/tests/test_vk_device_sanitized
 	./build/tests/test_vk_device_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tools/dump_device_reporting.c -o build/tests/dump_device_reporting_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tools/dump_device_reporting.c -o build/tests/dump_device_reporting_sanitized
 	./build/tests/dump_device_reporting_sanitized > /dev/null
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_pipeline_cache.c -o build/tests/test_pipeline_cache_sanitized
 	./build/tests/test_pipeline_cache_sanitized
@@ -279,7 +279,7 @@ check:
 	# Build the reporting fixture before Python discovery: reporting-matrix
 	# regression tests invoke the checker in process and must not skip for a
 	# fixture that this same target only planned to create later.
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tools/dump_device_reporting.c -o build/tests/dump_device_reporting
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tools/dump_device_reporting.c -o build/tests/dump_device_reporting
 	$(PYTHON) -m unittest discover -s tests -v
 	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include tests/test_submit_suspend.c -o build/tests/test_submit_suspend
 	./build/tests/test_submit_suspend

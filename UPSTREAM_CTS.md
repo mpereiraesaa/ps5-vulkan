@@ -91,13 +91,20 @@ than the reported `maxMultiviewViewCount` floor of 6: all of those stay
 excluded as before.
 
 `tools/check_upstream_selection.py` extends the frozen selection model from
-features, extensions and limits to that resource footprint. It derives the
-contract from the pinned helper, refuses an acceptance entry whose contract is
-missing, unknown or unsupported, refuses a contract the gate cannot derive or
-that disagrees with the derived one, refuses families the contracts do not
-cover (and contracts for families the selection no longer contains), and
-refuses a mismatch between the usage the format queries advertise and the usage
-`vkCreateImage` accepts. Feature bits alone can never widen the selection.
+features, extensions and limits to that resource footprint. The derivation
+covers the multiview attachment family today, not every upstream family that
+builds resources: it reads the factory branches the selected families use for
+the format and sample count, and the attachment constructor for the type,
+tiling, mip count, layer expression and usage. Support is not read from source
+text at all: `tools/dump_device_reporting.c` asks the public
+`vkGetPhysicalDeviceImageFormatProperties` for exactly that shape at the deepest
+layer count the selection needs, really creates that image through
+`vkCreateImage`, and the gate requires every declared contract field, the
+witnessed request and the measured support to agree - so a contract cannot be
+promoted by widening one accept/reject list, and the declared `supported` field
+cannot stay stale once the driver changes. Acceptance can never reference a
+missing, unknown or unsupported contract, the contracts must cover exactly the
+selected families, and feature bits alone can never widen the selection.
 
 The selection includes `dEQP-VK.api.smoke.triangle`. Its unchanged upstream
 body creates a graphics pipeline, records a real triangle draw into an RGBA8

@@ -44,7 +44,9 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.leaves = self.gate._multiview_leaf_requirements(
             text, self.gate._source_function_at_line(text, 4908))
         self.capabilities, self.capability_failures = self.gate._advertised_capabilities()
-        self.surface, self.surface_failures = self.gate._image_usage_surface()
+        self.witness, self.witness_failures = self.gate._resource_witness()
+        self.tests_text = text
+        self.util_text = (UPSTREAM / UTIL).read_text(encoding="utf-8", errors="replace")
 
     def _gate_exit_code_for_manifest(self, manifest):
         with tempfile.TemporaryDirectory() as tmp:
@@ -56,6 +58,18 @@ class UpstreamSelectionTests(unittest.TestCase):
                 return self.gate.main()
             finally:
                 self.gate.MANIFEST = original
+
+    def _derived_contract(self, tests_text=None, util_text=None):
+        tests_text = self.tests_text if tests_text is None else tests_text
+        util_text = self.util_text if util_text is None else util_text
+        leaves = self.gate._multiview_leaf_requirements(
+            tests_text, self.gate._source_function_at_line(tests_text, 4908))
+        family_types = {}
+        for leaf in leaves.values():
+            family_types.setdefault(leaf["family"], leaf["test_type"])
+        families = self.manifest["resource_contracts"][MV_CONTRACT]["families"]
+        return self.gate._multiview_attachment_contract(
+            util_text, tests_text, {name: family_types[name] for name in families})
 
     def _gate_exit_code_with_case(self, path, source, status="Pass",
                                   contract=MV_CONTRACT):
@@ -83,24 +97,99 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertFalse(self.capabilities["features"]["multiviewTessellationShader"])
         self.assertEqual(6, self.capabilities["max_multiview_view_count"])
 
-    def test_contract_is_derived_from_the_pinned_helper_and_is_blocked(self):
-        """(1) The gate derives the attachment the pinned helper builds, and the
-        measured input-attachment gap makes that contract unsupported."""
-        util_text = (UPSTREAM / UTIL).read_text(encoding="utf-8", errors="replace")
-        tests_text = self.source.read_text(encoding="utf-8", errors="replace")
-        derived = self.gate._multiview_attachment_contract(util_text, tests_text)
+    def test_contract_is_derived_from_the_selected_factory_branches(self):
+        """(1) The contract comes from the branches the selected families use,
+        and a different branch changes it."""
+        derived = self._derived_contract()
         declared = self.manifest["resource_contracts"][MV_CONTRACT]
         for field in ("format", "image_type", "tiling", "mip_levels", "samples",
                       "array_layers", "usage"):
             self.assertEqual(derived[field], declared[field], field)
         self.assertIn("VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT", derived["usage"])
-        self.assertEqual([], self.surface_failures)
-        self.assertEqual([], self.gate._query_create_mismatches(self.surface))
-        supported, reason = self.gate._contract_support(declared, self.surface)
-        self.assertFalse(supported)
-        self.assertIn("VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT", reason)
-        self.assertFalse(declared["supported"])
-        self.assertIn("INPUT_ATTACHMENT", declared["blocker"])
+
+        other_format = self.tests_text.replace(
+            "colorFormat = VK_FORMAT_R8G8B8A8_UNORM;", "colorFormat = VK_FORMAT_B8G8R8A8_UNORM;")
+        self.assertNotEqual(self.tests_text, other_format)
+        self.assertEqual("VK_FORMAT_B8G8R8A8_UNORM",
+                         self._derived_contract(tests_text=other_format)["format"])
+
+        other_samples = self.tests_text.replace(
+            "? VK_SAMPLE_COUNT_4_BIT : VK_SAMPLE_COUNT_1_BIT",
+            "? VK_SAMPLE_COUNT_4_BIT : VK_SAMPLE_COUNT_2_BIT")
+        self.assertEqual(2, self._derived_contract(tests_text=other_samples)["samples"])
+
+        # A declaration that no longer matches the source fails the gate.
+        stale = copy.deepcopy(self.manifest)
+        stale["resource_contracts"][MV_CONTRACT]["format"] = "VK_FORMAT_B8G8R8A8_UNORM"
+        self.assertEqual(1, self._gate_exit_code_for_manifest(stale))
+
+    def test_measured_witness_blocks_the_contract_on_two_findings(self):
+        """The blocked state is measured, not asserted: the query and the real
+        create both refuse the exact shape, and independently the same shape
+        without the input-attachment role still reports one array layer."""
+        self.assertEqual([], self.witness_failures)
+        measured = self.witness[MV_CONTRACT]
+        self.assertFalse(measured["supported"])
+        self.assertNotEqual(0, measured["queryResult"])
+        self.assertNotEqual(0, measured["createResult"])
+        probe = measured["withoutInputAttachment"]
+        self.assertEqual(0, probe["queryResult"])
+        self.assertEqual(0, probe["createResult"])
+        self.assertLess(probe["queryMaxArrayLayers"], measured["arrayLayers"])
+        self.assertFalse(probe["queryCovers"])
+
+        declared = self.manifest["resource_contracts"][MV_CONTRACT]
+        support, verdict_failures, reason = self.gate._contract_verdict(
+            MV_CONTRACT, declared, measured, measured["arrayLayers"])
+        self.assertFalse(support)
+        self.assertEqual([], verdict_failures)
+        self.assertIn("query answers", reason)
+        self.assertIn("vkCreateImage answers", reason)
+
+    def test_layers_still_block_after_the_usage_gap_is_closed(self):
+        """Simulation: with the usage blocker gone the layer ceiling still
+        prevents promotion, and the two public paths disagreeing is reported."""
+        declared = copy.deepcopy(self.manifest["resource_contracts"][MV_CONTRACT])
+        fixed_usage_only = {
+            "formatName": declared["format"], "imageTypeName": declared["image_type"],
+            "tilingName": declared["tiling"], "mipLevels": declared["mip_levels"],
+            "samples": declared["samples"], "arrayLayers": 6,
+            "usageNames": declared["usage"],
+            "queryResult": 0, "queryMaxMipLevels": 1, "querySampleCounts": 1,
+            "queryMaxArrayLayers": 1, "createResult": 0, "createSucceeded": True,
+            "queryCovers": False, "supported": False,
+        }
+        support, verdict_failures, reason = self.gate._contract_verdict(
+            MV_CONTRACT, declared, fixed_usage_only, 6)
+        self.assertFalse(support)
+        self.assertTrue(any("disagree" in failure for failure in verdict_failures))
+        self.assertIn("maxArrayLayers=1", reason)
+        self.assertIn("6", reason)
+
+        # ...and a witness that claims support while its own numbers say the
+        # query cannot cover the request is refused as well.
+        optimistic = dict(fixed_usage_only, queryCovers=True, supported=True)
+        support, verdict_failures, _ = self.gate._contract_verdict(
+            MV_CONTRACT, declared, optimistic, 6)
+        self.assertFalse(support)
+        self.assertTrue(any("disagrees with its own measurements" in f
+                            for f in verdict_failures))
+
+    def test_declared_support_cannot_be_stale(self):
+        """The declared supported field must equal what the driver measures, so
+        it cannot stay green after the driver changes."""
+        stale = copy.deepcopy(self.manifest)
+        stale["resource_contracts"][MV_CONTRACT]["supported"] = True
+        self.assertEqual(1, self._gate_exit_code_for_manifest(stale))
+
+    def test_witness_must_be_taken_at_the_required_ceiling(self):
+        witness = copy.deepcopy(self.witness)
+        witness[MV_CONTRACT]["arrayLayers"] = 1
+        declared = self.manifest["resource_contracts"][MV_CONTRACT]
+        support, verdict_failures, _ = self.gate._contract_verdict(
+            MV_CONTRACT, declared, witness[MV_CONTRACT], 6)
+        self.assertFalse(support)
+        self.assertTrue(any("witnessed at 1 layers" in f for f in verdict_failures))
 
     def test_blocked_leaves_stay_visible_and_traceable(self):
         """(3) All 48 measured failures remain, as blocked diagnostics naming the
