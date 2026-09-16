@@ -10,11 +10,22 @@ VkResult ps5vk_native_emit_scissor_replay(uint32_t **,uint32_t,
 /* One view of a multiview subpass, as the emission needs it: the view index the
  * vertex stage reads, and the pair of attachment targets that select this
  * view's layer. Both pairs are the SAME builder's output for the same image -
- * the target the draw was prepared with and this view's - so the emission
- * carries only the words the layer moves and never re-decides pipeline state.
- * A NULL view is the single-view path: no layer selection, view index zero.
- * These are plain host copies; nothing here is retained or mutated, and a
- * refused view writes no word and does not advance the caller's cursor. */
+ * the target the draw was prepared with and this view's - and each list has to
+ * have that builder's exact shape (ps5vk_target_offsets), differ only where the
+ * layer address is carried (ps5vk_target_carrier), and never move a word the
+ * pipeline state owns. The emission therefore carries only the words the layer
+ * moves and never re-decides pipeline state. A NULL view is the single-view
+ * path: no layer selection, view index zero. These are plain host copies;
+ * nothing here is retained or mutated.
+ *
+ * Failure contract, stated exactly: a view that fails either rule, a view index
+ * no mask can name, a half-given depth pair, a state without the metadata ABI
+ * and a footprint the target buffer cannot hold are all refused BEFORE the first
+ * word of the emission is written, so the caller's scratch is untouched. The
+ * historic emitter failures that can still follow (a capacity or callback
+ * failure inside the index/draw emitters) are the documented ones: the caller's
+ * cursor does not advance and the whole unsubmitted job is discarded, while the
+ * scratch may hold partial words. */
 struct ps5vk_view_emit {
     uint32_t view_index;
     const struct ps5vk_target_registers *prepared_color, *view_color;

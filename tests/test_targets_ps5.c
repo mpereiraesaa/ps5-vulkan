@@ -239,5 +239,70 @@ int main(void)
         assert(ps5vk_native_target(&device,&view,NULL,&depth1)==VK_ERROR_FEATURE_NOT_PRESENT &&
                !depth1.count);
     }
+    /* --- the target shapes the view rule is written against (T02-C3b) -----
+     * The emission allows a view to move only the words that carry an
+     * attachment address, which is a statement about what the pinned builders
+     * produce. Pin it here against targets the real builders make: the exact
+     * offset list per role, the two carriers per role, and the fact that moving
+     * a layer changes nothing else. A builder that changes shape fails here
+     * instead of quietly widening (or breaking) the emission's rule. */
+    {
+        base=UINT64_C(0x100020000);span_bytes=4*131072;
+        image.info.arrayLayers=4;
+        image.info.format=view.format=VK_FORMAT_B8G8R8A8_UNORM;
+        image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        view.range=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,4};
+        struct ps5vk_target_registers color_base,color_layer;
+        assert(ps5vk_native_target(&device,&view,defaults,&color_base)==VK_SUCCESS &&
+               color_base.count==PS5_COLOR_REGISTER_COUNT);
+        assert(ps5vk_native_view_layer_target(&device,&view,3u,defaults,&color_layer)==VK_SUCCESS);
+        for(unsigned i=0;i<color_base.count;++i)
+            assert(color_base.registers[i].offset==ps5vk_color_target_offsets[i] &&
+                   color_layer.registers[i].offset==ps5vk_color_target_offsets[i]);
+        unsigned color_moves=0;
+        for(unsigned i=0;i<color_base.count;++i) {
+            if(color_base.registers[i].value==color_layer.registers[i].value)continue;
+            ++color_moves;
+            assert(ps5vk_target_carrier(color_base.registers[i].offset));
+        }
+        /* The colour address is two words: 0x318 holds address>>8 and 0x390 holds
+         * (address>>40)&0xff, so three layers move exactly 3 * stride >> 8 in the
+         * first and nothing in the second at this address. */
+        assert(color_moves==1);
+        assert(ps5vk_target_carrier(0x318u) && ps5vk_target_carrier(0x390u));
+        assert(!ps5vk_target_carrier(0x31cu) && !ps5vk_target_carrier(0x200u));
+        image.info.format=view.format=VK_FORMAT_D32_SFLOAT;
+        image.info.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        view.range=(VkImageSubresourceRange){VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,4};
+        struct ps5vk_target_registers depth_base,depth_layer;
+        assert(ps5vk_native_target(&device,&view,NULL,&depth_base)==VK_SUCCESS &&
+               depth_base.count==PS5_DEPTH_REGISTER_COUNT);
+        assert(ps5vk_native_view_layer_target(&device,&view,3u,NULL,&depth_layer)==VK_SUCCESS);
+        for(unsigned i=0;i<depth_base.count;++i)
+            assert(depth_base.registers[i].offset==ps5vk_depth_target_offsets[i] &&
+                   depth_layer.registers[i].offset==ps5vk_depth_target_offsets[i]);
+        unsigned depth_moves=0;
+        int depth_render_control_equal=0;
+        for(unsigned i=0;i<depth_base.count;++i) {
+            const uint32_t offset=depth_base.registers[i].offset;
+            if(offset==0x200u)
+                depth_render_control_equal=
+                    depth_base.registers[i].value==depth_layer.registers[i].value;
+            if(depth_base.registers[i].value==depth_layer.registers[i].value)continue;
+            ++depth_moves;
+            assert(ps5vk_target_carrier(offset));
+        }
+        /* The D32 plan carries offset 0x200 in every target and the layer never
+         * moves it: refusing that word would make every multiview depth draw
+         * unrepresentable, which is exactly what the emission must not do. */
+        assert(depth_render_control_equal);
+        assert(depth_moves==2);            /* 0x012/0x014 lo, 0x01a/0x01c hi */
+        assert(ps5vk_target_carrier(0x012u) && ps5vk_target_carrier(0x014u) &&
+               ps5vk_target_carrier(0x01au) && ps5vk_target_carrier(0x01cu));
+        assert(!ps5vk_target_carrier(0x007u) && !ps5vk_target_carrier(0x2deu));
+        assert(ps5vk_target_offsets(PS5_COLOR_REGISTER_COUNT)!=NULL &&
+               ps5vk_target_offsets(PS5_DEPTH_REGISTER_COUNT)!=NULL &&
+               ps5vk_target_offsets(3u)==NULL);
+    }
     puts("Target address bridge: host registers only, no submission");
 }

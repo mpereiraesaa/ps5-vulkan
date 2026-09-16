@@ -358,8 +358,12 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         if(recorded->type==PS5VK_NEXT_SUBPASS) {
             /* The boundary names the subpass it enters: a record that names any
              * other one cannot say which subpass's view mask the draws that
-             * follow belong to. */
-            if(recorded->subpass!=subpass_index+1u) {
+             * follow belong to. The bound matters as much as the step, because
+             * the subpass it names indexes the pass's owned mask array - a
+             * record that names the pass's own subpass count or beyond is
+             * refused before anything is read. */
+            if(recorded->subpass!=subpass_index+1u ||
+               recorded->subpass>=pass->subpass_count) {
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
             }
             subpass_index=recorded->subpass;
@@ -480,9 +484,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
          * that mask, into that view's own layer. The whole expansion - the
          * ascending views, every view's colour and depth layer, and the words
          * each layer moves - is resolved before the first word of this draw is
-         * emitted, so a view the attachment cannot address leaves the draw
-         * unemitted instead of half-rendered. viewMask == 0 keeps exactly the
-         * single draw and target the profile has always emitted. */
+         * emitted, so a view the attachment cannot address is refused with
+         * nothing written for that draw (and, on any failure here, the whole
+         * unsubmitted job is discarded). viewMask == 0 keeps exactly the single
+         * draw and target the profile has always emitted. */
         const uint32_t view_mask=multiview->present?multiview->view_masks[subpass_index]:0u;
         struct ps5vk_view_emit view_emit[PS5VK_MAX_VIEW_MASK_VIEWS];
         struct ps5vk_target_registers view_prepared_color,view_prepared_depth;
@@ -555,6 +560,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 (uint32_t)(uintptr_t)p->global_table);
         if(rc!=VK_SUCCESS)goto fail;
     }
+    /* A pass must have reached its last subpass: recording refuses to end one
+     * early and the submission layer refuses it independently, so a body that
+     * never entered the last subpass cannot be executed without dropping it. */
+    if(subpass_index+1u!=pass->subpass_count) {rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
         size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),

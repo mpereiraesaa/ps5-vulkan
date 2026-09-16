@@ -23,8 +23,11 @@ enum { PS5VK_SET_CONTEXT_REG = 0xc0006900 };
 /* The registers the draw state writes AFTER the target block: this profile's
  * depth control, clip and cull policy, scissor and rasterization precision. A
  * view changes where an attachment's layers live, never how fragments are
- * decided, so a view target that names one of them is refused rather than
- * applied over the pipeline state. */
+ * decided, so a view that MOVES one of them is refused rather than applied over
+ * the pipeline state. Carrying the builder's own immutable value for one is not
+ * a move: the D32 target always contains offset 0x200 with its constant
+ * DB_RENDER_CONTROL value, and refusing that word would make every multiview
+ * depth draw unrepresentable. */
 static int pipeline_owned_register(uint32_t offset)
 {
     switch (offset) {
@@ -34,17 +37,33 @@ static int pipeline_owned_register(uint32_t offset)
     return 0;
 }
 
+/* The dwords a run-grouped emission of this register list takes: one packet per
+ * maximal run of consecutive offsets, each packet a header, the base offset and
+ * one word per register. Sparse lists become one packet per register. */
+static uint32_t context_run_words(const ps5_agc_register *registers, uint32_t count)
+{
+    uint32_t words = 0, emitted = 0;
+    while (emitted < count) {
+        uint32_t run = 1;
+        while (emitted + run < count &&
+               registers[emitted + run].offset == registers[emitted].offset + run) ++run;
+        words += run + 2u;
+        emitted += run;
+    }
+    return words;
+}
+
 static VkResult emit_context_runs(uint32_t **cursor, uint32_t capacity,
     const ps5_agc_register *registers, uint32_t count)
 {
     if (!cursor || !*cursor || !registers || !count) return VK_ERROR_UNKNOWN;
+    if (context_run_words(registers, count) > capacity) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor;
     uint32_t emitted = 0;
     while (emitted < count) {
         uint32_t run = 1;
         while (emitted + run < count &&
                registers[emitted + run].offset == registers[emitted].offset + run) ++run;
-        if (capacity - (uint32_t)(next - *cursor) < run + 2u) return VK_ERROR_OUT_OF_HOST_MEMORY;
         *next++ = (uint32_t)PS5VK_SET_CONTEXT_REG | (run << 16);
         *next++ = registers[emitted].offset;
         for (uint32_t k = 0; k < run; ++k) *next++ = registers[emitted + k].value;
@@ -56,37 +75,44 @@ static VkResult emit_context_runs(uint32_t **cursor, uint32_t capacity,
 
 /* Append the words a view's layer moves relative to the target the draw was
  * prepared with. Both lists are the same builder's output for the same image,
- * so a view may only differ where the layer address is carried: a different
- * count, a different offset, a repeated offset, or a pipeline-owned word is
- * refused. Nothing is written here - the caller emits only once every list of
- * the whole re-emission has been accepted. */
+ * so each list has to BE that builder's exact shape and a view may only differ
+ * where the layer address is carried (ps5vk_target_offsets and
+ * ps5vk_target_carrier): a list of another length, an offset that is not the
+ * builder's at that position, a changed word that does not carry the address,
+ * or a changed word the pipeline state owns are all refused. Nothing is written
+ * here - the caller emits only once every list of the whole re-emission has been
+ * accepted. */
 static VkResult collect_view_layer(ps5_agc_register *changed, uint32_t *changed_count,
     uint32_t capacity, const struct ps5vk_target_registers *prepared,
     const struct ps5vk_target_registers *view)
 {
     if (!changed || !changed_count || !prepared || !view || !view->count ||
-        prepared->count != view->count || view->count > PS5_DEPTH_REGISTER_COUNT ||
-        *changed_count > capacity || view->count > capacity - *changed_count)
+        prepared->count != view->count || *changed_count > capacity)
         return VK_ERROR_UNKNOWN;
+    const uint32_t *offsets = ps5vk_target_offsets(view->count);
+    if (!offsets || view->count > capacity - *changed_count) return VK_ERROR_UNKNOWN;
     for (uint32_t i = 0; i < view->count; ++i) {
-        if (prepared->registers[i].offset != view->registers[i].offset) return VK_ERROR_UNKNOWN;
-        if (i && view->registers[i].offset <= view->registers[i-1].offset) return VK_ERROR_UNKNOWN;
-        if (pipeline_owned_register(view->registers[i].offset)) return VK_ERROR_UNKNOWN;
-        if (view->registers[i].value != prepared->registers[i].value)
-            changed[(*changed_count)++] = view->registers[i];
+        if (prepared->registers[i].offset != offsets[i] ||
+            view->registers[i].offset != offsets[i]) return VK_ERROR_UNKNOWN;
+        if (prepared->registers[i].value == view->registers[i].value) continue;
+        if (!ps5vk_target_carrier(offsets[i])) return VK_ERROR_UNKNOWN;
+        if (pipeline_owned_register(offsets[i])) return VK_ERROR_UNKNOWN;
+        changed[(*changed_count)++] = view->registers[i];
     }
     return VK_SUCCESS;
 }
 
-/* The per-view layer selection of one re-emitted draw, assembled in full
- * before the emission writes its first word: a refused view therefore leaves
- * the emission with nothing written at all, not merely with nothing committed.
- * A view whose layer is already the prepared target contributes no word, which
- * is what keeps the multiview-disabled emission byte-identical. */
+/* The per-view layer selection of one re-emitted draw, assembled in full -
+ * including the dwords its packets will take - before the emission writes its
+ * first word, so every semantic view error is a refusal that leaves the target
+ * buffer untouched rather than merely unadvanced. A view whose layer is already
+ * the prepared target contributes no word at all, which is what keeps the
+ * multiview-disabled emission byte-identical. */
 static VkResult collect_view_targets(ps5_agc_register *changed,uint32_t *changed_count,
-    uint32_t capacity,const struct ps5vk_view_emit *view)
+    uint32_t *changed_words,uint32_t capacity,const struct ps5vk_view_emit *view)
 {
-    if (!view || view->view_index >= PS5VK_MAX_VIEW_MASK_VIEWS ||
+    if (!changed || !changed_count || !changed_words || !view ||
+        view->view_index >= PS5VK_MAX_VIEW_MASK_VIEWS ||
         !view->prepared_color || !view->view_color ||
         (!!view->prepared_depth != !!view->view_depth)) return VK_ERROR_UNKNOWN;
     VkResult rc = collect_view_layer(changed, changed_count, capacity,
@@ -94,7 +120,9 @@ static VkResult collect_view_targets(ps5_agc_register *changed,uint32_t *changed
     if (rc == VK_SUCCESS && view->prepared_depth)
         rc = collect_view_layer(changed, changed_count, capacity,
             view->prepared_depth, view->view_depth);
-    return rc;
+    if (rc != VK_SUCCESS) return rc;
+    *changed_words = context_run_words(changed, *changed_count);
+    return VK_SUCCESS;
 }
 
 VkResult ps5vk_native_emit_scissor_replay(uint32_t **cursor,uint32_t capacity,
@@ -149,13 +177,19 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
             runtime_vertex,runtime_pixel))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     ps5_agc_register view_changed[PS5_COLOR_REGISTER_COUNT + PS5_DEPTH_REGISTER_COUNT];
-    uint32_t view_changed_count=0;
+    uint32_t view_changed_count=0,view_words=0;
     if(view) {
-        VkResult view_rc=collect_view_targets(view_changed,&view_changed_count,
+        VkResult view_rc=collect_view_targets(view_changed,&view_changed_count,&view_words,
             PS5_COLOR_REGISTER_COUNT+PS5_DEPTH_REGISTER_COUNT,view);
         if(view_rc!=VK_SUCCESS)return view_rc;
     }
-    if (capacity < 13) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    /* The view's footprint is preflighted here, before the first word is
+     * written, so the only failures left after this point are this emitter's
+     * historic ones (a capacity or callback failure inside the emitters below).
+     * Those may leave bytes in this unsubmitted scratch - the documented
+     * contract is that the caller's cursor does not advance and the whole job is
+     * discarded - so no stronger promise is made or needed here. */
+    if (capacity < 13u + view_words) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;
     if (ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->cx, state->cx_count,
             mapping, mapping_bytes, sceAgcDcbSetCxRegistersIndirect) ||
