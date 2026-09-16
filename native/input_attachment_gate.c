@@ -44,7 +44,7 @@ static int promoted_resource(VkDevice device, VkImage image, VkImageView view)
         VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     if (info->format != VK_FORMAT_R8G8B8A8_UNORM || info->imageType != VK_IMAGE_TYPE_2D ||
         info->samples != VK_SAMPLE_COUNT_1_BIT || info->mipLevels != 1u ||
-        info->arrayLayers != (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR ||
+        info->arrayLayers != (uint32_t)PS5VK_INPUT_ATTACHMENT_LAYER_COUNT ||
         info->flags || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
         info->extent.depth != 1u || info->usage != usage) return 0;
     const VkImageSubresourceRange *range = &view->range;

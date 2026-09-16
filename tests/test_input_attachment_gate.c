@@ -40,7 +40,7 @@ static void fixture_init(struct gate_fixture *f)
     f->attachment_image.info.format = VK_FORMAT_R8G8B8A8_UNORM;
     f->attachment_image.info.imageType = VK_IMAGE_TYPE_2D;
     f->attachment_image.info.extent = (VkExtent3D){16, 16, 1};
-    f->attachment_image.info.arrayLayers = 6;
+    f->attachment_image.info.arrayLayers = PS5VK_INPUT_ATTACHMENT_LAYER_COUNT;
     f->attachment_image.info.mipLevels = 1;
     f->attachment_image.info.samples = VK_SAMPLE_COUNT_1_BIT;
     f->attachment_image.info.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -160,6 +160,9 @@ int main(void)
     assert(gate(&base) == VK_SUCCESS);
     assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) == 32);
     assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) == 48);
+    /* The contract is this gate's own measured six layers, independent of any
+     * reporting floor: the number is pinned here, not inherited. */
+    assert(PS5VK_INPUT_ATTACHMENT_LAYER_COUNT == 6);
 
     /* One mutation per refusal: the fixture is rebuilt each time and exactly
      * one thing about it changes, so the case says what it refuses. */
@@ -224,8 +227,8 @@ int main(void)
     MUTATE(f.attachment_image.info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT);
     MUTATE(f.attachment_image.info.usage &=
         ~(VkImageUsageFlags)VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    MUTATE(f.attachment_image.info.arrayLayers = 5);
-    MUTATE(f.attachment_image.info.arrayLayers = 7);
+    MUTATE(f.attachment_image.info.arrayLayers = PS5VK_INPUT_ATTACHMENT_LAYER_COUNT - 1);
+    MUTATE(f.attachment_image.info.arrayLayers = PS5VK_INPUT_ATTACHMENT_LAYER_COUNT + 1);
     MUTATE(f.attachment_image.info.format = VK_FORMAT_B8G8R8A8_UNORM);
     MUTATE(f.attachment_image.info.imageType = VK_IMAGE_TYPE_3D);
     MUTATE(f.attachment_image.info.samples = VK_SAMPLE_COUNT_2_BIT);

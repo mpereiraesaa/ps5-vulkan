@@ -6,6 +6,12 @@
 #include "vk_render_pass.h"
 #include "runtime_draw_abi.h"
 
+/* The exact layer count the promoted input-attachment resource was measured
+ * with. It is this gate's own constant on purpose: the multiview reporting
+ * floor happens to agree today, and a future change to that floor must not
+ * silently widen or narrow this execution profile. */
+enum { PS5VK_INPUT_ATTACHMENT_LAYER_COUNT = 6 };
+
 /* The bounded one-input subpass-read profile.
  *
  * A subpass may read exactly one attachment through exactly one fragment
