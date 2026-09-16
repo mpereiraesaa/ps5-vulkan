@@ -38,6 +38,17 @@ int main(void)
     assert(!ps5vk_graphics_release(out,8,UINT64_C(1)<<48,serial));
     assert(!ps5vk_graphics_release(out,8,(uintptr_t)out,serial));
     assert(!memcmp(out,saved,sizeof(out)));
+    uint32_t ordered[15],ordered_saved[15];
+    memset(ordered,0xa5,sizeof(ordered));memcpy(ordered_saved,ordered,sizeof(ordered));
+    assert(!ps5vk_graphics_release_wait(ordered,14,address,3));
+    assert(!ps5vk_graphics_release_wait(ordered,15,address,0));
+    assert(!ps5vk_graphics_release_wait(ordered,15,(uintptr_t)(ordered+12),3));
+    assert(!memcmp(ordered,ordered_saved,sizeof(ordered)));
+    assert(ps5vk_graphics_release_wait(ordered,15,address,3)==15);
+    assert(ordered[0]==0xc0064900 && ordered[1]==0x0070f514 && ordered[5]==3 && !ordered[6]);
+    assert(ordered[8]==0xc0053c00 && ordered[9]==0x13 &&
+        ordered[10]==ordered[3] && ordered[11]==ordered[4] &&
+        ordered[12]==3 && ordered[13]==0xffffffff && ordered[14]==4);
     /* GFX10 occlusion-counter event write. The opcode must sit at bits 15:8
      * (PKT3_EVENT_WRITE is 0x46 with a two-dword payload, so the header is
      * 0xC0024600) and the event word must decode to ZPASS_DONE (21) with
