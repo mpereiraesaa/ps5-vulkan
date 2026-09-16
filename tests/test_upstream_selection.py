@@ -35,6 +35,40 @@ class UpstreamSelectionTests(unittest.TestCase):
     def setUpClass(cls):
         cls.gate = load_gate()
         cls.manifest = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        cls.current_manifest = copy.deepcopy(cls.manifest)
+        # Explicit pre-execution fixture: retain the negative-stage regression
+        # tests after the real hardware-backed selection has been promoted.
+        leaves = [c for c in cls.manifest["cases"]
+                  if c["path"].startswith(MULTIVIEW_FAMILIES)]
+        cls.manifest["cases"] = [c for c in cls.manifest["cases"]
+                                 if not c["path"].startswith(MULTIVIEW_FAMILIES)]
+        for leaf in leaves:
+            leaf["expected_status"] = "Fail"
+        cls.manifest["diagnostics"].extend(leaves)
+        contract = cls.manifest["resource_contracts"][MV_CONTRACT]
+        contract["execution_requirements"]["gpu_subpass_readback"] = False
+        contract["execution_supported"] = False
+        contract["supported"] = False
+        contract.pop("execution_evidence", None)
+        contract["blocker"] = (
+            "Pre-execution fixture: three of the four recorded requirements are now true: "
+            "descriptor_object_model, descriptor_table_encoding, compiler_lowering. "
+            "gpu_subpass_readback is the sole remaining requirement; 48 leaves stay diagnostics.")
+
+    def test_canonical_selection_promotes_only_measured_multiview_leaves(self):
+        manifest = self.current_manifest
+        leaves = [c for c in manifest["cases"]
+                  if c["path"].startswith(MULTIVIEW_FAMILIES)]
+        self.assertEqual((165, 5, 48),
+                         (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
+        self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
+        self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
+        broken = copy.deepcopy(manifest)
+        contract = broken["resource_contracts"][MV_CONTRACT]
+        contract["execution_requirements"]["gpu_subpass_readback"] = False
+        contract["execution_supported"] = False
+        contract["supported"] = False
+        self.assertEqual(1, self._gate_exit_code_for_manifest(broken))
 
     def setUp(self):
         self.source = UPSTREAM / MODULE
@@ -421,7 +455,7 @@ class UpstreamSelectionTests(unittest.TestCase):
                          "supported": False})
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
 
-    def test_current_execution_ledger_is_three_of_four_and_stays_final_false(self):
+    def test_pre_execution_fixture_is_three_of_four_and_stays_final_false(self):
         """The merged host work is recorded, not advertised: this tree now meets
         the descriptor object model, the descriptor table encoding and the
         compiler lowering, and the one outstanding requirement keeps the

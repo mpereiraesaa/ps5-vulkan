@@ -48,10 +48,10 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 117 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 165 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
-  image-copy and binding-model combined-sampler cases). Only these
+  image-copy, binding-model combined-sampler and multiview cases). Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -68,20 +68,17 @@ refuses a duplicate selection, and refuses a checkout that is not that
 revision. The selection therefore cannot drift from the revision the packaging
 build compiles.
 
-The multiview render-pass families are kept as a blocked target rather than
-acceptance. Prerequisites alone do not make a family runnable: the pinned
-module builds every one of its attachments through `makeImageCreateInfo`
-(`external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderUtil.cpp:114`),
-which asks for a 2D `R8G8B8A8_UNORM` array image with one mip, one sample,
-optimal tiling, `arrayLayers = extent.depth` and usage
-`COLOR_ATTACHMENT | TRANSFER_SRC | INPUT_ATTACHMENT | TRANSFER_DST`. This
-profile neither accepts nor advertises `VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT`
-and has no input-attachment descriptor or subpass execution path, so the one
-run on canonical main `720ae713` refused every one of those 48 images with
-`VK_ERROR_UNKNOWN` from `vkCreateImage`. The manifest records that envelope as
-the `multiview-attachment-image` resource contract with its blocker, and the 48
-leaves stay listed as diagnostics so the measured failure and the promotion
-target remain visible. Within the same module, `renderpass2` needs
+The 48 multiview leaves are now accepted following unchanged upstream
+pixel-oracle execution, including masks, rectangular clears and vertex/fragment
+ViewIndex. Their shared attachment envelope is a 2D R8G8B8A8_UNORM array,
+one mip/sample, optimal tiling and usage
+`COLOR_ATTACHMENT | TRANSFER_SRC | INPUT_ATTACHMENT | TRANSFER_DST`.
+The historical main `720ae713` rejected that image usage; resource creation,
+descriptor delivery, compiler lowering and actual GPU subpass readback have
+since been implemented and measured separately. The manifest records both
+stages and their hardware identities; the combined regression passed 165/165.
+See [native acceptance](VALIDATION.md#multiview-native-acceptance).
+Five other diagnostic leaves remain outside acceptance. Within the same module, `renderpass2` needs
 `VK_KHR_create_renderpass2`, `dynamic_rendering` needs
 `VK_KHR_dynamic_rendering`, `index.geometry_shader` needs the core
 `geometryShader` feature plus `multiviewGeometryShader`,
