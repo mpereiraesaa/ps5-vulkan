@@ -76,5 +76,45 @@ int main(void)
     assert(ps5vk_descriptor_table_layout_build(4,sets,&out)==VK_SUCCESS);
     assert(out.descriptor_count==512 && out.set_bytes[3]==6144);
     sets[3].binding[31].count++;prefix(&sets[3]);rejects(4,sets);
+    /* The input-attachment role is a resource-only record: the encoder's eight
+     * DWORDs and no sampler payload. Its stride is half a combined T#/S#
+     * record, so a mixed table's canonical offsets are neither compacted nor
+     * re-based around it. */
+    assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)==32);
+    memset(sets,0,sizeof(sets));
+    for(unsigned s=0;s<2;++s) {
+        sets[s].binding[1]=(struct ps5vk_binding){.count=1,.stages=VK_SHADER_STAGE_FRAGMENT_BIT};
+        sets[s].type[1]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        sets[s].binding[4]=(struct ps5vk_binding){.count=2,.stages=VK_SHADER_STAGE_FRAGMENT_BIT};
+        sets[s].type[4]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        sets[s].binding[6]=(struct ps5vk_binding){.count=1,
+            .stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT};
+        sets[s].type[6]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        prefix(&sets[s]);
+    }
+    assert(ps5vk_descriptor_table_layout_build(2,sets,&out)==VK_SUCCESS);
+    assert(out.binding_count==6 && out.descriptor_count==8);
+    for(unsigned s=0;s<2;++s) {
+        assert(out.binding[s][0].byte_offset==0 && !out.binding[s][0].byte_stride);
+        assert(out.binding[s][1].byte_offset==0 && out.binding[s][1].byte_stride==16);
+        assert(out.binding[s][4].byte_offset==16 && out.binding[s][4].byte_stride==32);
+        assert(out.binding[s][6].byte_offset==80 && out.binding[s][6].byte_stride==48);
+        assert(out.set_bytes[s]==128);
+    }
+    struct ps5vk_set_signature mixed=sets[0];
+    struct ps5vk_descriptor_table_layout mixed_reference=out;
+    for(unsigned i=0;i<sizeof(visibility)/sizeof(visibility[0]);++i) {
+        sets[0].binding[4].stages=visibility[i];
+        assert(ps5vk_descriptor_table_layout_build(2,sets,&out)==VK_SUCCESS);
+        assert(!memcmp(&mixed_reference,&out,sizeof(out))); /* no re-basing */
+    }
+    sets[0]=mixed;
+    /* A zero-count input attachment still instantiates nothing, and declaring
+     * the type without descriptors stays a rejection rather than free storage. */
+    assert(ps5vk_descriptor_table_layout_build(2,sets,&out)==VK_SUCCESS &&
+        !memcmp(&mixed_reference,&out,sizeof(out)));
+    sets[0].binding[4]=(struct ps5vk_binding){0};
+    sets[0].type[4]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    prefix(&sets[0]);rejects(2,sets);
     puts("Descriptor tables: sparse mixed records, arrays, four sets, atomic rejection pass");
 }

@@ -11,18 +11,19 @@
 #include "texture_layout.h"
 #include "texture_format.h"
 #include <string.h>
-VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,uint32_t out[12])
+/* The GFX10 image fields both encoders share, and nothing else. The sampled
+ * entry adds its own usage rules before calling this and its sampler words
+ * after; the resource-only entry adds the input-attachment contract. Nothing
+ * here reads a sampler, and a failure leaves out untouched. */
+static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8])
 {
-    if(!d || !view || !sampler || !out || view->device!=d || sampler->device!=d || !view->image)return VK_ERROR_UNKNOWN;
     VkImage image=view->image;
     const struct ps5vk_texture_format *format=ps5vk_texture_format_lookup(view->format);
     if(!format || !ps5vk_texture_format_sampled_image(view->format) || image->info.format!=view->format ||
         view->range.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || !view->range.levelCount ||
         view->range.baseMipLevel>=image->info.mipLevels ||
         view->range.levelCount>image->info.mipLevels-view->range.baseMipLevel ||
-        !view->range.layerCount || image->info.mipLevels>PS5VK_MAX_TEXTURE_MIP_LEVELS ||
-        !(image->info.usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
-        (image->info.usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
+        !view->range.layerCount || image->info.mipLevels>PS5VK_MAX_TEXTURE_MIP_LEVELS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t slices=image->info.imageType==VK_IMAGE_TYPE_3D?
         image->info.extent.depth:image->info.arrayLayers;
@@ -90,7 +91,7 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     }
     /* Public Mesa gfx10-rsrc.json descriptor fields plus the pinned
      * ps5-opengl format and identity-swizzle mapping. */
-    uint32_t words[12]={0},width=image->info.extent.width-1;
+    uint32_t words[8]={0},width=image->info.extent.width-1;
     words[0]=(uint32_t)(address>>8);
     words[1]=(uint32_t)(address>>40)|format->descriptor_format_word|((width&3u)<<30);
     words[2]=(width>>2)|((image->info.extent.height-1)<<14)|(1u<<31);
@@ -99,5 +100,42 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
         ((view->range.baseMipLevel+view->range.levelCount-1)<<16);
     words[4]=dimension_word;
     words[5]=(4u<<20)|((image->info.mipLevels-1)<<4);
+    memcpy(out,words,sizeof(words));return VK_SUCCESS;
+}
+
+VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,uint32_t out[12])
+{
+    if(!d || !view || !sampler || !out || view->device!=d || sampler->device!=d || !view->image)return VK_ERROR_UNKNOWN;
+    const VkImageUsageFlags usage=view->image->info.usage;
+    if(!(usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
+       (usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t words[12];
+    VkResult rc=image_resource_words(d,view,words);
+    if(rc!=VK_SUCCESS)return rc;
     memcpy(words+8,sampler->words,16);memcpy(out,words,sizeof(words));return VK_SUCCESS;
+}
+
+VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t out[8])
+{
+    if(!d || !view || !out || view->device!=d || !view->image)return VK_ERROR_UNKNOWN;
+    const VkImage image=view->image;
+    if(image->device!=d)return VK_ERROR_UNKNOWN;
+    /* Exactly the resource contract this profile publishes and witnessed: the
+     * RGBA8 attachment shape, created for input-attachment use, viewed as a 2D
+     * or 2D_ARRAY image. Anything else - another format, a sampled-only image,
+     * a deeper or multisampled image, a 3D/1D/cube view - fails closed rather
+     * than being encoded as something the GPU was never witnessed to read. */
+    if(view->format!=VK_FORMAT_R8G8B8A8_UNORM || image->info.format!=view->format ||
+        image->info.imageType!=VK_IMAGE_TYPE_2D || image->info.extent.depth!=1u ||
+        image->info.mipLevels!=1u || image->info.samples!=VK_SAMPLE_COUNT_1_BIT ||
+        !image->info.arrayLayers ||
+        image->info.arrayLayers>(uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR ||
+        !(image->info.usage&VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) ||
+        !(view->view_type==VK_IMAGE_VIEW_TYPE_2D || view->view_type==VK_IMAGE_VIEW_TYPE_2D_ARRAY))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t words[8];
+    VkResult rc=image_resource_words(d,view,words);
+    if(rc!=VK_SUCCESS)return rc;
+    memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }
