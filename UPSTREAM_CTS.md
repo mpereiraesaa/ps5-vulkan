@@ -48,12 +48,12 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 213 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 165 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
-  image-copy and binding-model combined-sampler cases, plus the multiview
-  render-pass cases: `renderpass2` `clear_attachments`, `masks` and `index`).
-  Only these
+  image-copy and binding-model combined-sampler cases, plus 48 legacy
+  multiview render-pass cases: `clear_attachments`, `masks`,
+  `index.vertex_shader` and `index.fragment_shader`). Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -69,6 +69,23 @@ leaf name, group segments or source anchor the pinned sources do not produce,
 refuses a duplicate selection, and refuses a checkout that is not that
 revision. The selection therefore cannot drift from the revision the packaging
 build compiles.
+
+The multiview selection is bounded by what the device reports today. The pinned
+module builds a `renderpass2` and a `dynamic_rendering` variant of every family
+as well; the `renderpass2` leaves require `VK_KHR_create_renderpass2` and the
+dynamic-rendering leaves require `VK_KHR_dynamic_rendering`, and neither is
+advertised, so only the legacy render-pass variants are accepted. Within those,
+`index.geometry_shader` needs the core `geometryShader` feature plus
+`multiviewGeometryShader` and `index.tessellation_shader` needs
+`multiviewTessellationShader`; this device reports both multiview shader
+features false, so neither family is accepted. Two view-mask leaves of each
+accepted family - `8` and `1_2_4_8_16_32` - render extents deeper than the
+reported `maxMultiviewViewCount` floor of 6 and the pinned factory skips a case
+whose extent exceeds that floor, so they are excluded too. The host gate fails
+any acceptance entry whose derived prerequisites, or whose case extent, are not
+covered by the sources it reads for the device's advertised extensions,
+multiview features and view-count floor (`src/vk_device.c`,
+`src/vk_internal.h`).
 
 The selection includes `dEQP-VK.api.smoke.triangle`. Its unchanged upstream
 body creates a graphics pipeline, records a real triangle draw into an RGBA8
