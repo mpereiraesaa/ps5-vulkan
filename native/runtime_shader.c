@@ -85,8 +85,9 @@ static int distances_valid(const PsbcShaderMetadata *m,const PsbcRegisterWrite *
      * in this profile. */
     expected_out|=1u<<24;
     if(vs_out->value!=expected_out)return 0;
-    const unsigned slots=((clip&0x0fu)?1u:0u)+((clip&0xf0u)?1u:0u)+
-                         ((cull&0x0fu)?1u:0u)+((cull&0xf0u)?1u:0u);
+    /* Clip and cull distances share the two built-in distance slots, so the
+     * parameter allocation counts the packed components, not the features. */
+    const unsigned slots=((total&0x0fu)?1u:0u)+((total&0xf0u)?1u:0u);
     const unsigned parameters=m->output_semantic_count+slots;
     const uint32_t expected_config=(uint32_t)(((parameters?parameters:1u)-1u)<<1);
     return vs_out_config->value==expected_config;

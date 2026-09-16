@@ -23,7 +23,10 @@ def main():
     # regression is (opengnm-psbc Makefile's view-index rule). Every other
     # module keeps the default Vulkan 1.0 target this driver has always used.
     module_flags = {"view_index": ("--target-env", "vulkan1.1"),
-                    "view_index_instance": ("--target-env", "vulkan1.1")}
+                    "view_index_instance": ("--target-env", "vulkan1.1"),
+                    # The coverage witness declares the distance arrays; the
+                    # control is the same source with neither declared.
+                    "clip_cull_probe": ("-DWITH_DISTANCES=1",)}
     modules = (
         ("experiments/graphics/runtime_vertex_bindings_probe.vert", "runtime_vertex_bindings_probe.vert.spv", "vertex_bindings"),
         ("experiments/graphics/runtime_triangle.vert", "runtime_triangle.vert.spv", "vertex"),
@@ -39,6 +42,8 @@ def main():
         ("experiments/graphics/runtime_input_attachment.vert", "runtime_input_attachment.vert.spv", "input_attachment_vertex"),
         ("experiments/graphics/runtime_input_attachment_pattern.frag", "runtime_input_attachment_pattern.frag.spv", "input_attachment_pattern"),
         ("experiments/graphics/runtime_input_attachment_transform.frag", "runtime_input_attachment_transform.frag.spv", "input_attachment_transform"),
+        ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_probe.vert.spv", "clip_cull_probe"),
+        ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_control.vert.spv", "clip_cull_control"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

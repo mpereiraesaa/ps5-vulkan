@@ -124,6 +124,36 @@ static void check_clip_cull_distances(void)
            p->vertex.metadata.cull_distance_mask==0xf0u);
     ps5vk_runtime_graphics_free(NULL,out);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
+
+    /* The coverage witness declares both arrays and selects the distances with
+     * one specialization constant, so every mode shares the packed mask pair
+     * and the parameter accounting that counts the packed slots. The control is
+     * the same vertex stage with neither array declared. */
+    for(unsigned mode=0;mode<6;++mode) {
+        struct ps5vk_graphics_key probe={
+            .vertex=read_module("build/runtime-graphics/clip_cull_probe.vert.spv"),
+            .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        probe.vertex.specialization_count=1;
+        probe.vertex.specializations[0]=(struct ps5vk_graphics_specialization){
+            .constant_id=0,.size=sizeof(mode)};
+        memcpy(probe.vertex.specializations[0].data,&mode,sizeof(mode));
+        assert(ps5vk_spirv_graphics_interface(&probe));
+        assert(ps5vk_runtime_graphics_compile(NULL,&probe,&out)==VK_SUCCESS && out);
+        p=out;
+        assert(p->vertex.metadata.clip_distance_mask==0x03u &&
+               p->vertex.metadata.cull_distance_mask==0x0cu);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)probe.vertex.words);free((void *)probe.fragment.words);
+    }
+    key.vertex=read_module("build/runtime-graphics/clip_cull_control.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(!p->vertex.metadata.clip_distance_mask && !p->vertex.metadata.cull_distance_mask);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
     puts("Clip/cull distances: packed masks, register state and metadata refusal");
 }
 

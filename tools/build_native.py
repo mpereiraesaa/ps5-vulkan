@@ -53,6 +53,9 @@ def main():
     multiview_diagnostic = os.environ.get("PS5VK_MULTIVIEW_DIAGNOSTIC", "0")
     if multiview_diagnostic not in ("0", "1") or (multiview_diagnostic == "1" and not graphics_api):
         raise SystemExit("PS5VK_MULTIVIEW_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
+    clip_cull_probe = os.environ.get("PS5VK_CLIP_CULL_PROBE", "0")
+    if clip_cull_probe not in ("0", "1") or (clip_cull_probe == "1" and not graphics_api):
+        raise SystemExit("PS5VK_CLIP_CULL_PROBE requires the graphics profile API and must be 0 or 1")
     # The six-view witness is the only consumer of the diagnostic gate, so it
     # requires both: a real view mask AND a runtime-compiled vertex stage that
     # reads gl_ViewIndex. It is a single bounded scene, never combined with the
@@ -87,6 +90,14 @@ def main():
             scissor_probe != "0" or witnesses != "0" or continuous == "1" or
             observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
         raise SystemExit("PS5VK_INPUT_ATTACHMENT_PROBE is a bounded standalone scene")
+    if clip_cull_probe == "1" and (not graphics_api or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_CLIP_CULL_PROBE requires graphics API, runtime graphics and draw")
+    if clip_cull_probe == "1" and (multiview_view_probe == "1" or input_attachment_probe == "1" or
+            scissor_probe != "0" or witnesses != "0" or continuous == "1" or
+            observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
+        raise SystemExit("PS5VK_CLIP_CULL_PROBE is a bounded standalone scene")
     if scene_split == "1" and int(scissor_probe) >= 3:
         raise SystemExit("Planar triangle diagnostic cannot split the cube draw")
     shell_close = os.environ.get("PS5VK_SHELL_CLOSE") == "1"
@@ -283,6 +294,7 @@ def main():
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
+            common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]
@@ -297,6 +309,7 @@ def main():
                 # classifier the host regressions exercise decides the verdict
                 # on the console, so the readback is judged by proven code.
                 ROOT / "src/multiview_witness.c",
+                ROOT / "src/clip_cull_witness.c",
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
                 ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
@@ -439,6 +452,11 @@ def main():
                             scene_draw_partition="two-36-index-draws" if scene_split == "1" else "single-draw",
                             exit_control=exit_control, keep_agc_module=keep_agc_module,
                             termination="os-close-during-render" if continuous == "1" else ("shell-close-after-cleanup" if shell_close else "return-main"))
+            if clip_cull_probe == "1":
+                manifest.update(scene=None,
+                                geometry_fixture="clip-cull-distance-coverage",
+                                sample_count=1, clip_cull_probe=1,
+                                clip_cull_extent=64, clip_cull_cases=7)
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")
@@ -453,6 +471,11 @@ def main():
                         graphics_shader_source="owned-runtime-vertex-formats" if vertex_probe else "owned-runtime-triangle",
                         graphics_offline_library_role="negative-lookup-control-only")
         runtime_inputs = (("vertex", "runtime_triangle.vert"), ("fragment", "runtime_triangle.frag"))
+        if clip_cull_probe == "1":
+            # The one scene whose pre-raster stage exports clip and cull
+            # distances: recorded in the manifest so the artifact identity
+            # covers the shader that produced the readback.
+            manifest["graphics_shader_source"] = "owned-runtime-clip-cull-distances"
         if multiview_view_probe == "1":
             # The one scene whose vertex stage reads gl_ViewIndex, and the only
             # place the diagnostic gate is exercised. Recorded in the manifest so
