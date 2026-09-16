@@ -168,6 +168,12 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertFalse(declared["resource_supported"])
         self.assertFalse(declared["execution_supported"])
         self.assertFalse(declared["supported"])
+        # The execution stage is derived: only the object model is in place.
+        self.assertEqual({"descriptor_object_model": True,
+                          "descriptor_table_encoding": False,
+                          "compiler_lowering": False,
+                          "gpu_subpass_readback": False},
+                         declared["execution_requirements"])
         eligible, verdict_failures, reason = self.gate._contract_verdict(
             MV_CONTRACT, declared, measured, measured["arrayLayers"])
         self.assertFalse(eligible)
@@ -303,6 +309,14 @@ class UpstreamSelectionTests(unittest.TestCase):
             (lambda contract: contract.pop("supported"), "missing final state"),
             (lambda contract: contract.__setitem__("supported", "no"),
              "non-boolean final state"),
+            (lambda contract: contract.pop("execution_requirements"),
+             "no execution requirements"),
+            (lambda contract: contract["execution_requirements"].pop("compiler_lowering"),
+             "missing execution requirement"),
+            (lambda contract: contract["execution_requirements"].__setitem__(
+                "gpu_subpass_readback", "yes"), "non-boolean execution requirement"),
+            (lambda contract: contract["execution_requirements"].__setitem__(
+                "mystery_stage", True), "unknown execution requirement"),
         )
         for mutate, why in mutations:
             manifest = copy.deepcopy(self.manifest)
@@ -316,11 +330,30 @@ class UpstreamSelectionTests(unittest.TestCase):
         manifest["resource_contracts"][MV_CONTRACT]["resource_supported"] = True
         self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
 
-    def test_execution_cannot_be_claimed_without_the_resource(self):
+    def test_execution_flag_alone_cannot_claim_execution(self):
+        """Flipping the stage flag is not evidence: the derived requirement set
+        decides, so a lone execution_supported=true is rejected."""
         manifest = copy.deepcopy(self.manifest)
         manifest["resource_contracts"][MV_CONTRACT].update(
             {"execution_supported": True, "supported": False})
         self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
+        # ...and a complete requirement set with a stale flag is rejected too.
+        manifest = copy.deepcopy(self.manifest)
+        for key in ("descriptor_object_model", "descriptor_table_encoding", "compiler_lowering", "gpu_subpass_readback"):
+            manifest["resource_contracts"][MV_CONTRACT]["execution_requirements"][key] = True
+        manifest["resource_contracts"][MV_CONTRACT]["execution_supported"] = False
+        self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
+
+    def test_complete_execution_requirements_without_the_resource_stay_final_false(self):
+        """Executable semantics without a createable resource is a legitimate
+        intermediate state: the stages are independent, the final state is the
+        conjunction, and nothing is promoted."""
+        manifest = copy.deepcopy(self.manifest)
+        contract = manifest["resource_contracts"][MV_CONTRACT]
+        for key in ("descriptor_object_model", "descriptor_table_encoding", "compiler_lowering", "gpu_subpass_readback"):
+            contract["execution_requirements"][key] = True
+        contract.update({"execution_supported": True, "supported": False})
+        self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
 
     def test_supported_must_be_the_conjunction_of_the_stages(self):
         for resource, execution in ((True, False), (False, True), (False, False)):
@@ -353,13 +386,18 @@ class UpstreamSelectionTests(unittest.TestCase):
         witness = self._supported_witness()
         path = "dEQP-VK.multiview.masks.get_query_pool_results.15"
         manifest = copy.deepcopy(self.manifest)
-        manifest["resource_contracts"][MV_CONTRACT].update(
-            {"resource_supported": True, "execution_supported": True, "supported": True})
+        contract = manifest["resource_contracts"][MV_CONTRACT]
+        for key in ("descriptor_object_model", "descriptor_table_encoding", "compiler_lowering", "gpu_subpass_readback"):
+            contract["execution_requirements"][key] = True
+        contract.update({"resource_supported": True, "execution_supported": True,
+                         "supported": True})
         self.assertEqual(0, self._gate_exit_code_with_witness(manifest, witness))
         promoted = self._promote_one_leaf(copy.deepcopy(manifest), path)
         self.assertEqual(0, self._gate_exit_code_with_witness(promoted, witness))
         # ...and the same promotion without the execution stage is refused.
         frozen = copy.deepcopy(manifest)
+        frozen["resource_contracts"][MV_CONTRACT]["execution_requirements"][
+            "gpu_subpass_readback"] = False
         frozen["resource_contracts"][MV_CONTRACT].update(
             {"execution_supported": False, "supported": False})
         frozen = self._promote_one_leaf(frozen, path)

@@ -34,6 +34,12 @@ MULTIVIEW_UTIL_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
                          "vktMultiViewRenderUtil.cpp")
 MULTIVIEW_TEST_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
                          "vktMultiViewRenderTests.cpp")
+# The exact execution requirements a contract must name. Every key is required
+# and must be a real boolean; anything else - a missing key, an unknown one, a
+# non-boolean value - fails closed rather than being ignored, because the
+# execution stage is derived from these values and nothing else.
+EXECUTION_REQUIREMENTS = ("descriptor_object_model", "descriptor_table_encoding",
+                          "compiler_lowering", "gpu_subpass_readback")
 # VkSampleCountFlagBits values, so a derived branch name can be compared with the
 # number the fixture witnesses.
 SAMPLE_COUNT_FLAGS = {
@@ -693,47 +699,76 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
 
     # Two independent promotion stages. A resource the driver cannot create is
     # not the only reason to keep a family out of strict acceptance: the family
-    # also needs executable semantics, and neither stage may promote the other
-    # on its own. The final state is the conjunction, and only that state makes
-    # a contract eligible for acceptance.
-    stages: dict[str, bool] = {}
-    for stage in ("resource_supported", "execution_supported"):
-        if stage not in contract:
-            failures.append(f"resource contract {contract_id!r} declares no {stage!r} stage")
-        elif not isinstance(contract[stage], bool):
+    # also needs executable semantics, and that stage is DERIVED from an exact
+    # requirement set rather than asserted. An empty, partial, unknown or
+    # non-boolean requirement set can never promote anything, and a declared
+    # stage that disagrees with its own derivation fails closed.
+    resource_declared = contract.get("resource_supported")
+    if "resource_supported" not in contract:
+        failures.append(f"resource contract {contract_id!r} declares no 'resource_supported' stage")
+    elif not isinstance(resource_declared, bool):
+        failures.append(
+            f"resource contract {contract_id!r} declares resource_supported="
+            f"{resource_declared!r}, which is not a boolean")
+    requirements = contract.get("execution_requirements")
+    derived: dict[str, bool] = {}
+    if not isinstance(requirements, dict):
+        failures.append(
+            f"resource contract {contract_id!r} declares no execution_requirements object")
+    else:
+        unknown = sorted(set(requirements) - set(EXECUTION_REQUIREMENTS))
+        if unknown:
             failures.append(
-                f"resource contract {contract_id!r} declares {stage}="
-                f"{contract[stage]!r}, which is not a boolean")
-        else:
-            stages[stage] = contract[stage]
+                f"resource contract {contract_id!r} declares unknown execution requirements: "
+                + ", ".join(unknown))
+        for key in EXECUTION_REQUIREMENTS:
+            if key not in requirements:
+                failures.append(
+                    f"resource contract {contract_id!r} names no {key!r} execution requirement")
+            elif not isinstance(requirements[key], bool):
+                failures.append(
+                    f"resource contract {contract_id!r} declares execution requirement {key}="
+                    f"{requirements[key]!r}, which is not a boolean")
+            else:
+                derived[key] = requirements[key]
+    measured_execution = (len(derived) == len(EXECUTION_REQUIREMENTS) and all(derived.values()))
+    execution_declared = contract.get("execution_supported")
+    if "execution_supported" not in contract:
+        failures.append(f"resource contract {contract_id!r} declares no 'execution_supported' stage")
+    elif not isinstance(execution_declared, bool):
+        failures.append(
+            f"resource contract {contract_id!r} declares execution_supported="
+            f"{execution_declared!r}, which is not a boolean")
+    elif execution_declared != measured_execution:
+        failures.append(
+            f"resource contract {contract_id!r} declares execution_supported="
+            f"{execution_declared} while its execution requirements derive {measured_execution}")
+
     eligible = False
+    declared_supported = contract.get("supported")
     if "supported" not in contract:
         failures.append(f"resource contract {contract_id!r} declares no final 'supported' field")
-    elif not isinstance(contract["supported"], bool):
+    elif not isinstance(declared_supported, bool):
         failures.append(
             f"resource contract {contract_id!r} declares supported="
-            f"{contract['supported']!r}, which is not a boolean")
-    elif len(stages) == 2:
-        expected = stages["resource_supported"] and stages["execution_supported"]
-        if contract["supported"] != expected:
+            f"{declared_supported!r}, which is not a boolean")
+    else:
+        expected = measured_resource and measured_execution
+        if declared_supported != expected:
             failures.append(
-                f"resource contract {contract_id!r} declares supported="
-                f"{contract['supported']} while its stages are "
-                f"resource_supported={stages['resource_supported']} and "
-                f"execution_supported={stages['execution_supported']}")
-        if contract["supported"] and not expected:
+                f"resource contract {contract_id!r} declares supported={declared_supported} while "
+                f"the measured resource stage is {measured_resource} and the derived execution "
+                f"stage is {measured_execution}")
+        if declared_supported and not expected:
             failures.append(
                 f"resource contract {contract_id!r} claims support while a stage is false")
-        if stages["execution_supported"] and not stages["resource_supported"]:
+        if (isinstance(resource_declared, bool) and
+                resource_declared != measured_resource):
             failures.append(
-                f"resource contract {contract_id!r} claims executable semantics for a resource "
-                f"the driver cannot create")
-        if stages["resource_supported"] != measured_resource:
-            failures.append(
-                f"resource contract {contract_id!r} declares "
-                f"resource_supported={stages['resource_supported']} while the measured public "
-                f"query/create witness says {measured_resource}")
-        eligible = bool(expected and measured_resource)
+                f"resource contract {contract_id!r} declares resource_supported="
+                f"{resource_declared} while the measured public query/create witness says "
+                f"{measured_resource}")
+        eligible = bool(expected)
     reason = ""
     if not measured_resource:
         details = []
