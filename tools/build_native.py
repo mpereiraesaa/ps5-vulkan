@@ -288,6 +288,7 @@ def main():
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
                 ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
+                ROOT / "native/input_attachment_gate.c",
                 ROOT / "native/command_arena_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
                 ROOT / "src/triangle_readback.c", ROOT / "src/texture_descriptor.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_dma.c", ROOT / "src/image_layout_state.c",

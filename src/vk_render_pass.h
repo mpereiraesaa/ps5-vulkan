@@ -64,10 +64,15 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
  * The input references are parsed, validated and then copied into the pass's
  * own allocation, exactly like the attachment descriptions: no create-info
  * pointer survives the call. They are stored because a subpass that reads an
- * earlier attachment is a real structure this model has to describe honestly,
- * but nothing in this driver consumes them yet - the compiler metadata, the
- * command stream and the reporting surface make no claim that an input
- * attachment is read on the GPU. */
+ * earlier attachment is a real structure this model has to describe honestly.
+ * One measured profile of them is now consumed: native execution admits a
+ * single input reference at index 0 of a later subpass when it names the
+ * promoted attachment, is read in GENERAL through that attachment's own
+ * framebuffer view at the resource-only record width, and is ordered by one
+ * forward BY_REGION dependency (see native/input_attachment_gate.c). Every
+ * broader shape - a second reference, another index, another layout, another
+ * subpass pair - stays stored-only and fails closed, and no shader or
+ * reporting surface claims more than that one measured read. */
 struct ps5vk_subpass {
     VkAttachmentReference color, depth;
     /* Where this subpass's input references start in the pass's one owned
@@ -106,9 +111,9 @@ static inline const struct ps5vk_subpass *ps5vk_render_pass_subpass(
     return &pass->subpasses[index];
 }
 
-/* The owned input references of one subpass. Nothing consumes them yet: they
- * are stored so the model matches the pass it accepted, not to claim that a
- * shader reads them. */
+/* The owned input references of one subpass. The bounded native gate above
+ * consumes one of them per pass; the rest of the model still stores them only
+ * so the pass it accepted is described honestly. */
 static inline const VkAttachmentReference *ps5vk_render_pass_inputs(
     VkRenderPass pass, uint32_t index)
 {
