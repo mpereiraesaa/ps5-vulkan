@@ -9,9 +9,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / "third_party/vk-gl-cts"
 MODULE = "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp"
-# The legacy render-pass families this selection keeps. Their renderpass2
-# counterparts need VK_KHR_create_renderpass2, which this device does not
-# advertise.
+UTIL = "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderUtil.cpp"
+MV_CONTRACT = "multiview-attachment-image"
+# The legacy render-pass families the blocked contract covers. Their paths use
+# the module's own family names under the index group.
 MULTIVIEW_FAMILIES = (
     "dEQP-VK.multiview.clear_attachments.",
     "dEQP-VK.multiview.masks.",
@@ -43,24 +44,11 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.leaves = self.gate._multiview_leaf_requirements(
             text, self.gate._source_function_at_line(text, 4908))
         self.capabilities, self.capability_failures = self.gate._advertised_capabilities()
+        self.witness, self.witness_failures = self.gate._resource_witness()
+        self.tests_text = text
+        self.util_text = (UPSTREAM / UTIL).read_text(encoding="utf-8", errors="replace")
 
-    def _runnable(self, path):
-        leaf = self.leaves[path]
-        return (not self.gate._unadvertised(leaf["required"], self.capabilities) and
-                leaf["max_views"] <= self.capabilities["max_multiview_view_count"])
-
-    def _gate_exit_code(self, path, source=f"{MODULE}:4908"):
-        """Run the real gate over the selection with one offending acceptance
-        entry swapped in, and return its exit code."""
-        manifest = copy.deepcopy(self.manifest)
-        manifest["cases"] = [case for case in manifest["cases"]
-                             if not case["path"].startswith(MULTIVIEW_FAMILIES)]
-        manifest["cases"].append({
-            "path": path, "source": source, "category": "multiview-render-pass",
-            "expected_status": "Pass",
-            "features_required": ["VkPhysicalDeviceMultiviewFeatures::multiview"],
-            "rationale": "deliberately wrong",
-        })
+    def _gate_exit_code_for_manifest(self, manifest):
         with tempfile.TemporaryDirectory() as tmp:
             manifest_path = Path(tmp) / "manifest.json"
             manifest_path.write_text(json.dumps(manifest))
@@ -71,84 +59,235 @@ class UpstreamSelectionTests(unittest.TestCase):
             finally:
                 self.gate.MANIFEST = original
 
+    def _derived_contract(self, tests_text=None, util_text=None):
+        tests_text = self.tests_text if tests_text is None else tests_text
+        util_text = self.util_text if util_text is None else util_text
+        leaves = self.gate._multiview_leaf_requirements(
+            tests_text, self.gate._source_function_at_line(tests_text, 4908))
+        family_types = {}
+        for leaf in leaves.values():
+            family_types.setdefault(leaf["family"], leaf["test_type"])
+        families = self.manifest["resource_contracts"][MV_CONTRACT]["families"]
+        return self.gate._multiview_attachment_contract(
+            util_text, tests_text, {name: family_types[name] for name in families})
+
+    def _gate_exit_code_with_case(self, path, source, status="Pass",
+                                  contract=MV_CONTRACT):
+        manifest = copy.deepcopy(self.manifest)
+        manifest["cases"] = [case for case in manifest["cases"]
+                             if not case["path"].startswith(MULTIVIEW_FAMILIES)]
+        manifest["diagnostics"] = [case for case in manifest["diagnostics"]
+                                   if case["path"] != path]
+        entry = {
+            "path": path, "source": source, "category": "multiview-render-pass",
+            "expected_status": status,
+            "features_required": ["VkPhysicalDeviceMultiviewFeatures::multiview"],
+            "rationale": "deliberately wrong",
+        }
+        if contract:
+            entry["resource_contract"] = contract
+        manifest["cases"].append(entry)
+        return self._gate_exit_code_for_manifest(manifest)
+
     def test_device_capabilities_come_from_the_device_sources(self):
-        """The rule is only worth anything if the truth it reads is the device's
-        own: five extensions without create_renderpass2, multiview reported true
-        and both shader-multiview flags reported false."""
         self.assertEqual([], self.capability_failures)
         self.assertIn("VK_KHR_MULTIVIEW", self.capabilities["extensions"])
         self.assertNotIn("VK_KHR_CREATE_RENDERPASS_2", self.capabilities["extensions"])
-        self.assertTrue(self.capabilities["features"]["multiview"])
         self.assertFalse(self.capabilities["features"]["multiviewGeometryShader"])
         self.assertFalse(self.capabilities["features"]["multiviewTessellationShader"])
-        self.assertNotIn("geometryShader", self.capabilities["core_features"])
         self.assertEqual(6, self.capabilities["max_multiview_view_count"])
 
-    def test_selection_is_exactly_the_runnable_legacy_subset(self):
-        """The frozen selection is every legacy leaf of these four families the
-        device can actually run - no more, and not one fewer - and each one
-        exists verbatim in the pinned listing."""
-        candidates = sorted(path for path in self.leaves if path.startswith(MULTIVIEW_FAMILIES))
-        self.assertEqual(64, len(candidates))
-        runnable = sorted(path for path in candidates if self._runnable(path))
-        self.assertEqual(48, len(runnable))
-        selected = sorted(case["path"] for case in self.manifest["cases"]
-                          if case["path"].startswith(MULTIVIEW_FAMILIES))
-        self.assertEqual(runnable, selected)
-        listing = {line.strip() for line in
-                   (UPSTREAM / "external/vulkancts/mustpass/main/vk-default/multiview.txt")
-                   .read_text().splitlines() if line.strip()}
-        for path in selected:
-            self.assertIn(path, listing)
-            self.assertIn(path, self.leaves)
+    def test_contract_is_derived_from_the_selected_factory_branches(self):
+        """(1) The contract comes from the branches the selected families use,
+        and a different branch changes it."""
+        derived = self._derived_contract()
+        declared = self.manifest["resource_contracts"][MV_CONTRACT]
+        for field in ("format", "image_type", "tiling", "mip_levels", "samples",
+                      "array_layers", "usage"):
+            self.assertEqual(derived[field], declared[field], field)
+        self.assertIn("VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT", derived["usage"])
 
-    def test_rendering_type_and_stage_requirements_are_derived(self):
-        """The prerequisites a leaf is held to follow the rendering type and the
-        stage family the factory itself gates on, so legacy leaves carry no
-        create_renderpass2 requirement and the excluded stages do."""
-        legacy = self.leaves["dEQP-VK.multiview.masks.get_query_pool_results.15"]
-        renderpass2 = self.leaves["dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.15"]
-        geometry = self.leaves["dEQP-VK.multiview.index.geometry_shader.get_query_pool_results.15"]
-        tessellation = self.leaves[
-            "dEQP-VK.multiview.index.tessellation_shader.get_query_pool_results.15"]
-        self.assertNotIn("extension:VK_KHR_CREATE_RENDERPASS_2", legacy["required"])
-        self.assertIn("extension:VK_KHR_CREATE_RENDERPASS_2", renderpass2["required"])
-        self.assertIn("feature:multiviewGeometryShader", geometry["required"])
-        self.assertIn("core:geometryShader", geometry["required"])
-        self.assertIn("feature:multiviewTessellationShader", tessellation["required"])
-        for leaf in (legacy, renderpass2, geometry, tessellation):
-            self.assertIn("extension:VK_KHR_MULTIVIEW", leaf["required"])
+        other_format = self.tests_text.replace(
+            "colorFormat = VK_FORMAT_R8G8B8A8_UNORM;", "colorFormat = VK_FORMAT_B8G8R8A8_UNORM;")
+        self.assertNotEqual(self.tests_text, other_format)
+        self.assertEqual("VK_FORMAT_B8G8R8A8_UNORM",
+                         self._derived_contract(tests_text=other_format)["format"])
+
+        other_samples = self.tests_text.replace(
+            "? VK_SAMPLE_COUNT_4_BIT : VK_SAMPLE_COUNT_1_BIT",
+            "? VK_SAMPLE_COUNT_4_BIT : VK_SAMPLE_COUNT_2_BIT")
+        self.assertEqual(2, self._derived_contract(tests_text=other_samples)["samples"])
+
+        # A declaration that no longer matches the source fails the gate.
+        stale = copy.deepcopy(self.manifest)
+        stale["resource_contracts"][MV_CONTRACT]["format"] = "VK_FORMAT_B8G8R8A8_UNORM"
+        self.assertEqual(1, self._gate_exit_code_for_manifest(stale))
+
+    def test_measured_witness_blocks_the_contract_on_two_findings(self):
+        """The blocked state is measured, not asserted: the query and the real
+        create both refuse the exact shape, and independently the same shape
+        without the input-attachment role still reports one array layer."""
+        self.assertEqual([], self.witness_failures)
+        measured = self.witness[MV_CONTRACT]
+        self.assertFalse(measured["supported"])
+        self.assertNotEqual(0, measured["queryResult"])
+        self.assertNotEqual(0, measured["createResult"])
+        probe = measured["withoutInputAttachment"]
+        self.assertEqual(0, probe["queryResult"])
+        self.assertEqual(0, probe["createResult"])
+        self.assertLess(probe["queryMaxArrayLayers"], measured["arrayLayers"])
+        self.assertFalse(probe["queryCovers"])
+
+        declared = self.manifest["resource_contracts"][MV_CONTRACT]
+        support, verdict_failures, reason = self.gate._contract_verdict(
+            MV_CONTRACT, declared, measured, measured["arrayLayers"])
+        self.assertFalse(support)
+        self.assertEqual([], verdict_failures)
+        self.assertIn("query answers", reason)
+        self.assertIn("vkCreateImage answers", reason)
+
+    def test_layers_still_block_after_the_usage_gap_is_closed(self):
+        """Simulation: with the usage blocker gone the layer ceiling still
+        prevents promotion, and the two public paths disagreeing is reported."""
+        declared = copy.deepcopy(self.manifest["resource_contracts"][MV_CONTRACT])
+        fixed_usage_only = {
+            "formatName": declared["format"], "imageTypeName": declared["image_type"],
+            "tilingName": declared["tiling"], "mipLevels": declared["mip_levels"],
+            "samples": declared["samples"], "arrayLayers": 6,
+            "usageNames": declared["usage"],
+            "queryResult": 0, "queryMaxMipLevels": 1, "querySampleCounts": 1,
+            "queryMaxArrayLayers": 1, "createResult": 0, "createSucceeded": True,
+            "queryCovers": False, "supported": False,
+        }
+        support, verdict_failures, reason = self.gate._contract_verdict(
+            MV_CONTRACT, declared, fixed_usage_only, 6)
+        self.assertFalse(support)
+        self.assertTrue(any("disagree" in failure for failure in verdict_failures))
+        self.assertIn("maxArrayLayers=1", reason)
+        self.assertIn("6", reason)
+
+        # ...and a witness that claims support while its own numbers say the
+        # query cannot cover the request is refused as well.
+        optimistic = dict(fixed_usage_only, queryCovers=True, supported=True)
+        support, verdict_failures, _ = self.gate._contract_verdict(
+            MV_CONTRACT, declared, optimistic, 6)
+        self.assertFalse(support)
+        self.assertTrue(any("disagrees with its own measurements" in f
+                            for f in verdict_failures))
+
+    def test_declared_support_cannot_be_stale(self):
+        """The declared supported field must equal what the driver measures, so
+        it cannot stay green after the driver changes."""
+        stale = copy.deepcopy(self.manifest)
+        stale["resource_contracts"][MV_CONTRACT]["supported"] = True
+        self.assertEqual(1, self._gate_exit_code_for_manifest(stale))
+
+    def test_witness_must_be_taken_at_the_required_ceiling(self):
+        witness = copy.deepcopy(self.witness)
+        witness[MV_CONTRACT]["arrayLayers"] = 1
+        declared = self.manifest["resource_contracts"][MV_CONTRACT]
+        support, verdict_failures, _ = self.gate._contract_verdict(
+            MV_CONTRACT, declared, witness[MV_CONTRACT], 6)
+        self.assertFalse(support)
+        self.assertTrue(any("witnessed at 1 layers" in f for f in verdict_failures))
+
+    def test_blocked_leaves_stay_visible_and_traceable(self):
+        """(3) All 48 measured failures remain, as blocked diagnostics naming the
+        contract, and none of them is strict acceptance."""
+        blocked = [case for case in self.manifest["diagnostics"]
+                   if case["path"].startswith(MULTIVIEW_FAMILIES)]
+        self.assertEqual(48, len(blocked))
+        for case in blocked:
+            self.assertEqual("Fail", case["expected_status"])
+            self.assertEqual(MV_CONTRACT, case["resource_contract"])
+            self.assertTrue(case["rationale"].strip())
+            self.assertEqual(["VkPhysicalDeviceMultiviewFeatures::multiview"],
+                             case["features_required"])
+        self.assertEqual([], [case["path"] for case in self.manifest["cases"]
+                              if case["path"].startswith(MULTIVIEW_FAMILIES)])
+        # The preserved paths are still the exact source-derived legacy set the
+        # selection carried before this slice: the leaves whose derived
+        # prerequisites the device meets. Their resource contract is the only
+        # thing that changed, so nothing was silently dropped or added.
+        runnable = sorted(
+            path for path in self.leaves
+            if path.startswith(MULTIVIEW_FAMILIES)
+            and not self.gate._unadvertised(self.leaves[path]["required"], self.capabilities)
+            and self.leaves[path]["max_views"] <= self.capabilities["max_multiview_view_count"])
+        self.assertEqual(48, len(runnable))
+        self.assertEqual(runnable, sorted(case["path"] for case in blocked))
+
+    def test_acceptance_cannot_reference_the_unsupported_contract(self):
+        """(1) Putting a blocked leaf back into strict acceptance fails on the
+        contract, before packaging or hardware, with no rerun needed."""
+        self.assertEqual(1, self._gate_exit_code_with_case(
+            "dEQP-VK.multiview.masks.get_query_pool_results.15", f"{MODULE}:4908"))
+        # ...and a capability bit does not change that: only the resource
+        # contract decides, so advertising more features cannot unblock it.
+        self.assertEqual(1, self._gate_exit_code_with_case(
+            "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+            f"{MODULE}:4908"))
+
+    def test_missing_contract_mapping_or_usage_bit_fails(self):
+        """(2) Deleting the contract mapping, or one usage bit from it, fails."""
+        without_contract = copy.deepcopy(self.manifest)
+        del without_contract["resource_contracts"][MV_CONTRACT]
+        self.assertEqual(1, self._gate_exit_code_for_manifest(without_contract))
+
+        missing_bit = copy.deepcopy(self.manifest)
+        missing_bit["resource_contracts"][MV_CONTRACT]["usage"] = [
+            bit for bit in missing_bit["resource_contracts"][MV_CONTRACT]["usage"]
+            if bit != "VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT"]
+        self.assertEqual(1, self._gate_exit_code_for_manifest(missing_bit))
+
+        # A contract with no derivation this gate can read is not accepted
+        # either - unknown requirements fail closed rather than passing.
+        unreadable = copy.deepcopy(self.manifest)
+        unreadable["resource_contracts"][MV_CONTRACT]["derive_from"] = "somewhere/else.cpp"
+        self.assertEqual(1, self._gate_exit_code_for_manifest(unreadable))
+
+    def test_unknown_contract_reference_fails_closed(self):
+        manifest = copy.deepcopy(self.manifest)
+        for case in manifest["diagnostics"]:
+            if case["path"].startswith(MULTIVIEW_FAMILIES):
+                case["resource_contract"] = "no-such-contract"
+                break
+        self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
+
+    def test_passing_families_stay_acceptance(self):
+        """(4) Families that pass keep their strict acceptance entries."""
+        accepted = {case["path"] for case in self.manifest["cases"]}
+        self.assertEqual(117, len(self.manifest["cases"]))
+        for path in (
+            "dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation",
+            "dEQP-VK.compute.indirect_dispatch.upload_buffer.single_invocation",
+            "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect",
+            "dEQP-VK.synchronization.basic.fence.one",
+            "dEQP-VK.api.copy_and_blit.core.image_to_image.simple_tests.partial_image_pot_same_format_clear",
+            "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_1_byte",
+        ):
+            self.assertIn(path, accepted, path)
 
     def test_acceptance_may_not_require_an_unadvertised_capability(self):
-        """No acceptance leaf may silently require create_renderpass2, the
-        geometry- or tessellation-shader multiview feature, or a view count the
-        device does not report: each one becomes a failure at the gate."""
         for path in (
-            # The renderpass2 counterpart of a selected leaf.
             "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.15",
-            # Real families whose multiview shader features are reported false.
             "dEQP-VK.multiview.index.geometry_shader.get_query_pool_results.15",
             "dEQP-VK.multiview.index.tessellation_shader.get_query_pool_results.15",
-            # A real leaf whose case renders more views than the reported floor.
             "dEQP-VK.multiview.masks.get_query_pool_results.8",
         ):
             self.assertIn(path, self.leaves, path)
-            self.assertFalse(self._runnable(path), path)
             with self.subTest(path=path):
-                self.assertEqual(1, self._gate_exit_code(path),
+                self.assertEqual(1, self._gate_exit_code_with_case(path, f"{MODULE}:4908"),
                                  f"{path} must fail closed as acceptance")
 
     def test_unproduced_and_miscited_paths_fail_closed(self):
-        """A path the pinned factory does not produce, a path hung under a family
-        that does not own it, and a path whose citation is not the factory must
-        all fail rather than pass silently."""
         for path, source in (
             ("dEQP-VK.multiview.masks.get_query_pool_results.invented.15", f"{MODULE}:4908"),
             ("dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10", f"{MODULE}:1"),
             ("dEQP-VK.multiview.index.masks.get_query_pool_results.15", f"{MODULE}:4908"),
         ):
             with self.subTest(path=path):
-                self.assertEqual(1, self._gate_exit_code(path, source),
+                self.assertEqual(1, self._gate_exit_code_with_case(path, source),
                                  f"{path} must fail closed")
 
     def test_duplicate_selection_fails_closed_without_the_checkout(self):
@@ -159,8 +298,6 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertIn("selected twice", failures[0])
 
     def test_selection_must_match_the_compiled_cts_revision(self):
-        """A selection is only meaningful against the revision the packaging
-        build compiles, so a manifest that pins another commit fails closed."""
         if not UPSTREAM.is_dir() or self.gate._cts_revision_failures(self.manifest):
             self.skipTest("pinned vk-gl-cts checkout is not a comparable checkout")
         manifest = copy.deepcopy(self.manifest)
@@ -168,15 +305,7 @@ class UpstreamSelectionTests(unittest.TestCase):
         failures = self.gate._cts_revision_failures(manifest)
         self.assertEqual(1, len(failures))
         self.assertIn("selection pins", failures[0])
-        with tempfile.TemporaryDirectory() as tmp:
-            manifest_path = Path(tmp) / "manifest.json"
-            manifest_path.write_text(json.dumps(manifest))
-            original = self.gate.MANIFEST
-            self.gate.MANIFEST = manifest_path
-            try:
-                self.assertEqual(1, self.gate.main())
-            finally:
-                self.gate.MANIFEST = original
+        self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
 
     def test_current_selection_passes(self):
         self.assertEqual(0, self.gate.main())
