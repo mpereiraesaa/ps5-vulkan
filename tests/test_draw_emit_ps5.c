@@ -161,7 +161,7 @@ int main(void)
     cursor=commands;calls=0;index_calls=0;op.type=PS5VK_DRAW_INDEXED;op.index_count=6;
     op.vertex_offset=-2;op.first_instance=3;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,no_tables,&indices,draw_index)==VK_SUCCESS && calls==6 && index_calls==1);
+        0x567800,no_tables,NULL,&indices,draw_index)==VK_SUCCESS && calls==6 && index_calls==1);
     assert(cursor==commands+24);
     assert(commands[3]==0x8c && commands[4]==4);
     assert(commands[5]==0x567800 && commands[6]==0);
@@ -177,18 +177,18 @@ int main(void)
     struct ps5vk_index_fetch bad=indices;
     cursor=commands;calls=0;index_calls=0;bad.element_bytes=3;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,no_tables,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
+        0x567800,no_tables,NULL,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
     bad=indices;bad.address=0x12340001;cursor=commands;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,no_tables,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
+        0x567800,no_tables,NULL,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
     bad=indices;bad.available_count=5;cursor=commands;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,no_tables,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
+        0x567800,no_tables,NULL,&bad,draw_index)!=VK_SUCCESS && cursor==commands && !index_calls);
     /* Without the audited index callback the combination is refused before a
      * single word is written. */
     cursor=commands;calls=0;index_calls=0;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,no_tables,&indices,NULL)!=VK_SUCCESS && cursor==commands && !calls);
+        0x567800,no_tables,NULL,&indices,NULL)!=VK_SUCCESS && cursor==commands && !calls);
     /* The offline entry point shares that emitter, so the same malformed fetch
      * is refused there without advancing its caller either. */
     cursor=commands;
@@ -197,7 +197,7 @@ int main(void)
     /* Vulkan zero-count draws still have no rasterization side effects. */
     op.index_count=0;cursor=commands;calls=0;index_calls=0;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,no_tables,&indices,draw_index)==VK_SUCCESS && cursor==commands && !calls);
+        0x567800,no_tables,NULL,&indices,draw_index)==VK_SUCCESS && cursor==commands && !calls);
     op.index_count=6;state.runtime=vertex_format_abi;
     op.type=PS5VK_DRAW;state.runtime.fragment_descriptor_valid[0]=1;
     state.runtime.fragment_descriptor_slot[0]=0;
@@ -213,20 +213,20 @@ int main(void)
     }
     cursor=commands;calls=0;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,tables,NULL,NULL)==VK_SUCCESS && calls==6);
+        0x567800,tables,NULL,NULL,NULL)==VK_SUCCESS && calls==6);
     assert(commands[8]==0xc && commands[9]==4);
     for(unsigned s=0;s<4;++s)assert(commands[10+3-s]==tables[s]);
     cursor=commands;calls=0;tables[3]=0;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,tables,NULL,NULL)!=VK_SUCCESS && !calls && cursor==commands);
+        0x567800,tables,NULL,NULL,NULL)!=VK_SUCCESS && !calls && cursor==commands);
     tables[3]=0x40000;
     state.runtime.fragment_descriptor_slot[3]=3;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0x567800,tables,NULL,NULL)!=VK_SUCCESS && !calls && cursor==commands);
+        0x567800,tables,NULL,NULL,NULL)!=VK_SUCCESS && !calls && cursor==commands);
     state.runtime.fragment_descriptor_slot[3]=0;
     state.runtime.vertex_buffer_valid=0;state.runtime.vertex_buffer_usage_mask=0;
     assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
-        0,tables,NULL,NULL)==VK_SUCCESS); /* procedural VS + sampled FS */
+        0,tables,NULL,NULL,NULL)==VK_SUCCESS); /* procedural VS + sampled FS */
     state.runtime.fragment_descriptor_valid[0]=0;
     op.type=PS5VK_DRAW;
     state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,.fragment_count=2,
@@ -242,4 +242,91 @@ int main(void)
     state.runtime.lds_slot=1;state.sh_count=17;
     assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0)!=VK_SUCCESS);
     assert(cursor==commands && !calls);
+
+    /* --- T02-C3b: one prepared draw re-emitted per view -------------------
+     * A multiview subpass re-emits the same prepared draw once per view of its
+     * view mask. What this emitter owns at the packet level is where the view's
+     * layer selection lands (after the prepared target block, before the draw
+     * packet), that only the words the layer actually moves are written, and
+     * that the ViewIndex the vertex stage reads is that view's. The prepared
+     * draw's own register block is never rewritten: the view words belong to
+     * the emission that carried them. */
+    struct ps5vk_target_registers prepared={0},layer={0};
+    prepared.count=layer.count=3;
+    prepared.registers[0]=(ps5_agc_register){0x300u,0x00010000u};
+    prepared.registers[1]=(ps5_agc_register){0x301u,0x0000000bu};
+    prepared.registers[2]=(ps5_agc_register){0x310u,0x00000042u};
+    layer.registers[0]=(ps5_agc_register){0x300u,0x00030000u};   /* the layer moved */
+    layer.registers[1]=(ps5_agc_register){0x301u,0x0000000bu};   /* unchanged */
+    layer.registers[2]=(ps5_agc_register){0x310u,0x00000043u};   /* moved */
+    struct ps5vk_draw_state view_state={.cx_count=87,.modifier=5,.sh_count=10};
+    view_state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=5,.fragment_count=2,
+        .base_vertex_slot=0,.start_instance_slot=1,.draw_id_slot=UINT32_MAX,.view_index_slot=2,
+        .vertex_buffer_valid=1,.vertex_buffer_slot=3,.vertex_buffer_usage_mask=1,
+        .lds_slot=4,.lds_value=0,
+        .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
+    struct ps5vk_operation view_op={.type=PS5VK_DRAW,.vertex_count=3,.instance_count=1,
+        .first_vertex=11,.first_instance=13};
+    struct ps5vk_view_emit view={.view_index=2,.prepared_color=&prepared,.view_color=&layer,
+        .prepared_depth=NULL,.view_depth=NULL};
+    cursor=commands;calls=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&view_state,&view_state,sizeof(view_state),
+        &view_op,0x567800,no_tables,&view,NULL,NULL)==VK_SUCCESS && calls==6);
+    assert(cursor==commands+25);
+    assert(commands[0]==87 && commands[1]==3 && commands[2]==10);
+    /* One packet per moved register: the offsets between them are not
+     * consecutive, and the unchanged word between them is not carried. */
+    assert(commands[3]==0xc0016900 && commands[4]==0x300 && commands[5]==0x00030000);
+    assert(commands[6]==0xc0016900 && commands[7]==0x310 && commands[8]==0x00000043);
+    /* The draw parameters are the ones every runtime draw publishes, with the
+     * compiler-declared ViewIndex slot carrying this view rather than zero. */
+    assert(commands[9]==0x8c && commands[10]==5);
+    assert(commands[11]==11 && commands[12]==13 && commands[13]==2 && commands[14]==0x567800);
+    assert(commands[15]==0 && commands[16]==0xc && commands[17]==2);
+    /* A view whose layer is already the prepared target carries no word at all,
+     * which is what keeps the multiview-disabled emission byte-identical. */
+    struct ps5vk_view_emit same={.view_index=1,.prepared_color=&prepared,.view_color=&prepared,
+        .prepared_depth=NULL,.view_depth=NULL};
+    cursor=commands;calls=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&view_state,&view_state,sizeof(view_state),
+        &view_op,0x567800,no_tables,&same,NULL,NULL)==VK_SUCCESS && calls==6);
+    assert(cursor==commands+19);
+    assert(commands[3]==0x8c && commands[4]==5 && commands[5]==11 && commands[6]==13);
+    assert(commands[7]==1 && commands[8]==0x567800);
+    /* Fail-closed views: a target that is not this image's own arithmetic (a
+     * different offset or count), a word the pipeline state owns, a view index
+     * no mask can name, a depth pair only half given, and a state without the
+     * metadata ABI to deliver the view through. Each is refused with the
+     * caller's cursor untouched and no AGC call made. */
+    struct ps5vk_target_registers wrong_offsets=layer,wrong_count=layer,owned=prepared,
+        owned_layer=layer;
+    wrong_offsets.registers[1].offset=0x302u;
+    wrong_count.count=2;
+    owned.registers[0]=(ps5_agc_register){0x200u,0x00000000u};
+    owned.registers[1]=(ps5_agc_register){0x204u,0x00000000u};
+    owned.registers[2]=(ps5_agc_register){0x205u,0x00000000u};
+    owned_layer.registers[0]=(ps5_agc_register){0x200u,0x000000b6u};
+    owned_layer.registers[1]=(ps5_agc_register){0x204u,0x00000001u};
+    owned_layer.registers[2]=(ps5_agc_register){0x205u,0x00000002u};
+    struct ps5vk_view_emit refused=view;
+    refused.view_color=&wrong_offsets;
+    cursor=commands;calls=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&view_state,&view_state,sizeof(view_state),
+        &view_op,0x567800,no_tables,&refused,NULL,NULL)!=VK_SUCCESS && cursor==commands && !calls);
+    refused=view;refused.view_color=&wrong_count;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&view_state,&view_state,sizeof(view_state),
+        &view_op,0x567800,no_tables,&refused,NULL,NULL)!=VK_SUCCESS && cursor==commands && !calls);
+    refused=view;refused.prepared_color=&owned;refused.view_color=&owned_layer;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&view_state,&view_state,sizeof(view_state),
+        &view_op,0x567800,no_tables,&refused,NULL,NULL)!=VK_SUCCESS && cursor==commands && !calls);
+    refused=view;refused.view_index=PS5VK_MAX_VIEW_MASK_VIEWS;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&view_state,&view_state,sizeof(view_state),
+        &view_op,0x567800,no_tables,&refused,NULL,NULL)!=VK_SUCCESS && cursor==commands && !calls);
+    refused=view;refused.prepared_depth=&prepared;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&view_state,&view_state,sizeof(view_state),
+        &view_op,0x567800,no_tables,&refused,NULL,NULL)!=VK_SUCCESS && cursor==commands && !calls);
+    struct ps5vk_draw_state no_metadata=view_state;
+    no_metadata.runtime.enabled=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&no_metadata,&no_metadata,sizeof(no_metadata),
+        &view_op,0x567800,no_tables,&view,NULL,NULL)!=VK_SUCCESS && cursor==commands && !calls);
 }

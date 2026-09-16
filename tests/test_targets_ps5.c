@@ -148,5 +148,96 @@ int main(void)
             UINT64_MAX, &stride, &alignment, &bytes) == VK_ERROR_OUT_OF_HOST_MEMORY);
         assert(!stride && !alignment && !bytes);
     }
+    /* --- multiview view expansion (T02-C3b) -------------------------------
+     * A subpass view mask names the views its draws render. Expanding it has to
+     * produce exactly those views in ascending order - a view's layer and the
+     * ViewIndex its vertex stage reads have to agree - with multiview disabled
+     * staying exactly one view, and it has to refuse before a caller can emit
+     * anything at all. */
+    {
+        uint32_t views[5]={0xdeadbeefu,0xdeadbeefu,0xdeadbeefu,0xdeadbeefu,0xdeadbeefu};
+        uint32_t count=0;
+        assert(ps5vk_native_view_expand(0u,views,5u,&count)==VK_SUCCESS && count==1u &&
+               views[0]==0u && views[1]==0xdeadbeefu);
+        assert(ps5vk_native_view_expand(0b111u,views,5u,&count)==VK_SUCCESS && count==3u &&
+               views[0]==0u && views[1]==1u && views[2]==2u);
+        /* Sparse, and the highest bit a mask can name. */
+        assert(ps5vk_native_view_expand(0b101u,views,5u,&count)==VK_SUCCESS && count==2u &&
+               views[0]==0u && views[1]==2u);
+        assert(ps5vk_native_view_expand(0x80000001u,views,5u,&count)==VK_SUCCESS && count==2u &&
+               views[0]==0u && views[1]==31u);
+        /* A set the caller cannot hold is refused before anything is written:
+         * neither the array nor the count moves. */
+        views[0]=0u;views[1]=31u;count=2u;
+        assert(ps5vk_native_view_expand(0b101u,views,1u,&count)!=VK_SUCCESS &&
+               count==2u && views[0]==0u && views[1]==31u);
+        assert(ps5vk_native_view_expand(0u,NULL,5u,&count)==VK_ERROR_UNKNOWN);
+        assert(ps5vk_native_view_expand(0u,views,0u,&count)==VK_ERROR_UNKNOWN);
+    }
+    /* Which layer a view renders into: the view's own range has to carry the
+     * view (the multiview obligation an attachment view is created with), and
+     * the backing has to have that layer. Both roles are checked against their
+     * own view, and the base target the pass is prepared with stays layer zero
+     * of the image. */
+    {
+        base=UINT64_C(0x100020000);span_bytes=4*131072;
+        image.info.arrayLayers=4;
+        image.info.format=view.format=VK_FORMAT_B8G8R8A8_UNORM;
+        image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        view.range=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+        VkDeviceSize color_footprint=0;
+        assert(ps5vk_native_layer_footprint(&device,&image,&color_footprint)==VK_SUCCESS);
+        struct ps5vk_target_registers single,att0,att2,att3;
+        assert(ps5vk_native_view_layer_target(&device,&view,0u,defaults,&single)==VK_SUCCESS);
+        assert(ps5vk_native_view_layer_target(&device,&view,0u,defaults,&att0)==VK_SUCCESS &&
+               !memcmp(&att0,&single,sizeof(att0)));
+        /* One layer is one view: a second view is outside this view's range. */
+        assert(ps5vk_native_view_layer_target(&device,&view,1u,defaults,&att2)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !att2.count);
+        /* The multiview attachment shape: base layer zero and one layer per
+         * view. It prepares as the single-layer view always did, because the
+         * base target is layer zero either way, and each view is selected by
+         * the same per-layer arithmetic. */
+        view.range.layerCount=4;
+        assert(ps5vk_native_target(&device,&view,defaults,&att0)==VK_SUCCESS);
+        struct ps5vk_target_registers base_target=att0;
+        assert(ps5vk_native_view_layer_target(&device,&view,0u,defaults,&att0)==VK_SUCCESS);
+        assert(ps5vk_native_view_layer_target(&device,&view,2u,defaults,&att2)==VK_SUCCESS);
+        assert(ps5vk_native_view_layer_target(&device,&view,3u,defaults,&att3)==VK_SUCCESS);
+        assert(!memcmp(&att0,&base_target,sizeof(att0)));      /* view zero is the prepared target */
+        assert(att2.registers[0].offset==att0.registers[0].offset &&
+               att3.registers[0].offset==att0.registers[0].offset);
+        assert(att2.registers[0].value==att0.registers[0].value+2u*(uint32_t)(color_footprint>>8));
+        assert(att3.registers[0].value==att0.registers[0].value+3u*(uint32_t)(color_footprint>>8));
+        /* Outside the view's range, and inside the range but not the backing. */
+        assert(ps5vk_native_view_layer_target(&device,&view,4u,defaults,&att3)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !att3.count);
+        image.info.arrayLayers=3;
+        assert(ps5vk_native_view_layer_target(&device,&view,3u,defaults,&att3)!=VK_SUCCESS &&
+               !att3.count);
+        image.info.arrayLayers=4;
+        /* The depth role carries the same obligation from its own view, with
+         * its own footprint and alignment. */
+        image.info.format=view.format=VK_FORMAT_D32_SFLOAT;
+        image.info.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        view.range=(VkImageSubresourceRange){VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,2};
+        image.info.arrayLayers=2;
+        struct ps5vk_target_registers depth0,depth1;
+        assert(ps5vk_native_view_layer_target(&device,&view,0u,NULL,&depth0)==VK_SUCCESS &&
+               depth0.count==22);
+        assert(ps5vk_native_view_layer_target(&device,&view,1u,NULL,&depth1)==VK_SUCCESS);
+        assert(depth1.registers[7].offset==0x12 &&
+               depth1.registers[7].value>depth0.registers[7].value);
+        assert(ps5vk_native_view_layer_target(&device,&view,2u,NULL,&depth1)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !depth1.count);
+        view.range.layerCount=3;                     /* range says three, backing has two */
+        assert(ps5vk_native_view_layer_target(&device,&view,2u,NULL,&depth1)!=VK_SUCCESS &&
+               !depth1.count);
+        /* A view that does not start at layer zero still has no whole-image
+         * target, so it cannot be prepared as one. */
+        view.range.baseArrayLayer=1;
+        assert(ps5vk_native_target(&device,&view,NULL,&depth1)==VK_ERROR_FEATURE_NOT_PRESENT &&
+               !depth1.count);
+    }
     puts("Target address bridge: host registers only, no submission");
 }

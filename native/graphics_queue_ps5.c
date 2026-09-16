@@ -176,6 +176,21 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
            pass->dependencies[0].dstSubpass!=1)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
+    /* The views each subpass renders. The pass owns its multiview
+     * configuration - the create-info pointers were never retained - and what
+     * this executor needs from it is one mask per subpass. The ownership is
+     * checked here again rather than trusted: the mask a subpass reads has to
+     * be that subpass's, and a view-local dependency with a view offset moves
+     * every view by that offset, which the single pass boundary acquires for
+     * all views at once and cannot express. */
+    const struct ps5vk_render_pass_multiview *multiview=&pass->multiview;
+    if(multiview->present) {
+        if(multiview->subpass_count!=pass->subpass_count ||
+           multiview->dependency_count!=pass->dependency_count)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        for(uint32_t k=0;k<multiview->dependency_count;++k)
+            if(multiview->view_offsets[k])return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     struct ps5vk_attachment_plan color_plan={0},depth_plan={0};
     if(ps5vk_attachment_plan(&pass->attachments[0],color_format,
         subpass->color.layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -337,9 +352,17 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             (unsigned)PS5VK_OCCLUSION_PROBE_PAIRS);
     }
 #endif
+    uint32_t subpass_index=0;
     for(unsigned i=0;i<body_count;++i) {
         const struct ps5vk_operation *recorded=body[i];
         if(recorded->type==PS5VK_NEXT_SUBPASS) {
+            /* The boundary names the subpass it enters: a record that names any
+             * other one cannot say which subpass's view mask the draws that
+             * follow belong to. */
+            if(recorded->subpass!=subpass_index+1u) {
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+            }
+            subpass_index=recorded->subpass;
             size_t boundary=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
             if(!boundary){rc=VK_ERROR_UNKNOWN;goto fail;}
             cursor+=boundary;
@@ -453,13 +476,69 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                     "PS5VK_TEXTURE_DESCRIPTOR serial=%llu draw=%u word=%u value=%08x",
                     (unsigned long long)j->serial,j->count-1,k,draw->texture_table[k]);
 #endif
+        /* A subpass with a view mask renders the same draw once per view of
+         * that mask, into that view's own layer. The whole expansion - the
+         * ascending views, every view's colour and depth layer, and the words
+         * each layer moves - is resolved before the first word of this draw is
+         * emitted, so a view the attachment cannot address leaves the draw
+         * unemitted instead of half-rendered. viewMask == 0 keeps exactly the
+         * single draw and target the profile has always emitted. */
+        const uint32_t view_mask=multiview->present?multiview->view_masks[subpass_index]:0u;
+        struct ps5vk_view_emit view_emit[PS5VK_MAX_VIEW_MASK_VIEWS];
+        struct ps5vk_target_registers view_prepared_color,view_prepared_depth;
+        struct ps5vk_target_registers view_color[PS5VK_MAX_VIEW_MASK_VIEWS];
+        struct ps5vk_target_registers view_depth[PS5VK_MAX_VIEW_MASK_VIEWS];
+        uint32_t view_batch=1;
+        if(view_mask) {
+            /* The ViewIndex only exists in compiler metadata: without it the
+             * profile cannot tell whether a stage reads the built-in and has no
+             * slot to deliver the value through, so a multiview subpass runs on
+             * the metadata ABI or it does not run. */
+            if(!p->pair->runtime_arguments.enabled){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+            uint32_t view_indices[PS5VK_MAX_VIEW_MASK_VIEWS],view_count=0;
+            rc=ps5vk_native_view_expand(view_mask,view_indices,PS5VK_MAX_VIEW_MASK_VIEWS,&view_count);
+            if(rc!=VK_SUCCESS)goto fail;
+            VkFramebuffer fb=op->framebuffer;
+            /* The target the draw was prepared with is layer zero of the same
+             * builder, so the emission can carry only what a layer moves. */
+            rc=ps5vk_native_layer_target(d,fb->attachments[fb->color_attachment],0u,
+                defaults,&view_prepared_color);
+            if(rc!=VK_SUCCESS)goto fail;
+            if(depth) {
+                rc=ps5vk_native_layer_target(d,fb->attachments[fb->depth_attachment],0u,
+                    NULL,&view_prepared_depth);
+                if(rc!=VK_SUCCESS)goto fail;
+            }
+            for(uint32_t v=0;v<view_count;++v) {
+                rc=ps5vk_native_view_layer_target(d,fb->attachments[fb->color_attachment],
+                    view_indices[v],defaults,&view_color[v]);
+                if(rc!=VK_SUCCESS)goto fail;
+                if(depth) {
+                    rc=ps5vk_native_view_layer_target(d,fb->attachments[fb->depth_attachment],
+                        view_indices[v],NULL,&view_depth[v]);
+                    if(rc!=VK_SUCCESS)goto fail;
+                }
+                view_emit[v]=(struct ps5vk_view_emit){.view_index=view_indices[v],
+                    .prepared_color=&view_prepared_color,.view_color=&view_color[v],
+                    .prepared_depth=depth?&view_prepared_depth:NULL,
+                    .view_depth=depth?&view_depth[v]:NULL};
+            }
+            view_batch=view_count;
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_VIEW_EXPANSION serial=%llu subpass=%u mask=%08x views=%u",
+                (unsigned long long)j->serial,subpass_index,view_mask,view_count);
+        }
         if(p->pair->runtime_arguments.enabled) {
             uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
             for(unsigned s=0;s<PS5VK_RUNTIME_DESCRIPTOR_SETS;++s)
                 tables[s]=(uint32_t)(uintptr_t)draw->descriptor_tables[s];
-            rc=ps5vk_native_emit_runtime_draw(&cursor,(uint32_t)(end-cursor),draw->state,
-                draw->state,draw->bytes,op,(uint32_t)(uintptr_t)draw->vertex_table,tables,
-                op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
+            for(uint32_t v=0;v<view_batch;++v) {
+                rc=ps5vk_native_emit_runtime_draw(&cursor,(uint32_t)(end-cursor),draw->state,
+                    draw->state,draw->bytes,op,(uint32_t)(uintptr_t)draw->vertex_table,tables,
+                    view_mask?&view_emit[v]:NULL,
+                    op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
+                if(rc!=VK_SUCCESS)goto fail;
+            }
         } else if(vertex_usage) {
             if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;goto fail;}
             if(op->pipeline->set_count) {

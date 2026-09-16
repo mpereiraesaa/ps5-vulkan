@@ -13,6 +13,90 @@
 #include "ps5_gpu_span.h"
 #include <string.h>
 
+/* Public gfx10 SET_CONTEXT_REG packet, the same shape the scissor replay below
+ * already emits: a type-3 header whose payload length is the number of
+ * registers, the base register offset, then one word per register. Only
+ * consecutive offsets can share a packet, so a sparse register list becomes one
+ * packet per run. */
+enum { PS5VK_SET_CONTEXT_REG = 0xc0006900 };
+
+/* The registers the draw state writes AFTER the target block: this profile's
+ * depth control, clip and cull policy, scissor and rasterization precision. A
+ * view changes where an attachment's layers live, never how fragments are
+ * decided, so a view target that names one of them is refused rather than
+ * applied over the pipeline state. */
+static int pipeline_owned_register(uint32_t offset)
+{
+    switch (offset) {
+    case 0x094: case 0x095: case 0x200: case 0x204: case 0x205:
+    case 0x206: case 0x292: case 0x2f9: return 1;
+    }
+    return 0;
+}
+
+static VkResult emit_context_runs(uint32_t **cursor, uint32_t capacity,
+    const ps5_agc_register *registers, uint32_t count)
+{
+    if (!cursor || !*cursor || !registers || !count) return VK_ERROR_UNKNOWN;
+    uint32_t *next = *cursor;
+    uint32_t emitted = 0;
+    while (emitted < count) {
+        uint32_t run = 1;
+        while (emitted + run < count &&
+               registers[emitted + run].offset == registers[emitted].offset + run) ++run;
+        if (capacity - (uint32_t)(next - *cursor) < run + 2u) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        *next++ = (uint32_t)PS5VK_SET_CONTEXT_REG | (run << 16);
+        *next++ = registers[emitted].offset;
+        for (uint32_t k = 0; k < run; ++k) *next++ = registers[emitted + k].value;
+        emitted += run;
+    }
+    *cursor = next;
+    return VK_SUCCESS;
+}
+
+/* Append the words a view's layer moves relative to the target the draw was
+ * prepared with. Both lists are the same builder's output for the same image,
+ * so a view may only differ where the layer address is carried: a different
+ * count, a different offset, a repeated offset, or a pipeline-owned word is
+ * refused. Nothing is written here - the caller emits only once every list of
+ * the whole re-emission has been accepted. */
+static VkResult collect_view_layer(ps5_agc_register *changed, uint32_t *changed_count,
+    uint32_t capacity, const struct ps5vk_target_registers *prepared,
+    const struct ps5vk_target_registers *view)
+{
+    if (!changed || !changed_count || !prepared || !view || !view->count ||
+        prepared->count != view->count || view->count > PS5_DEPTH_REGISTER_COUNT ||
+        *changed_count > capacity || view->count > capacity - *changed_count)
+        return VK_ERROR_UNKNOWN;
+    for (uint32_t i = 0; i < view->count; ++i) {
+        if (prepared->registers[i].offset != view->registers[i].offset) return VK_ERROR_UNKNOWN;
+        if (i && view->registers[i].offset <= view->registers[i-1].offset) return VK_ERROR_UNKNOWN;
+        if (pipeline_owned_register(view->registers[i].offset)) return VK_ERROR_UNKNOWN;
+        if (view->registers[i].value != prepared->registers[i].value)
+            changed[(*changed_count)++] = view->registers[i];
+    }
+    return VK_SUCCESS;
+}
+
+/* The per-view layer selection of one re-emitted draw, assembled in full
+ * before the emission writes its first word: a refused view therefore leaves
+ * the emission with nothing written at all, not merely with nothing committed.
+ * A view whose layer is already the prepared target contributes no word, which
+ * is what keeps the multiview-disabled emission byte-identical. */
+static VkResult collect_view_targets(ps5_agc_register *changed,uint32_t *changed_count,
+    uint32_t capacity,const struct ps5vk_view_emit *view)
+{
+    if (!view || view->view_index >= PS5VK_MAX_VIEW_MASK_VIEWS ||
+        !view->prepared_color || !view->view_color ||
+        (!!view->prepared_depth != !!view->view_depth)) return VK_ERROR_UNKNOWN;
+    VkResult rc = collect_view_layer(changed, changed_count, capacity,
+        view->prepared_color, view->view_color);
+    if (rc == VK_SUCCESS && view->prepared_depth)
+        rc = collect_view_layer(changed, changed_count, capacity,
+            view->prepared_depth, view->view_depth);
+    return rc;
+}
+
 VkResult ps5vk_native_emit_scissor_replay(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state)
 {
@@ -36,11 +120,12 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     const struct ps5vk_operation *op, uint32_t global_table_low,
     uint32_t vertex_table_low, int vertex_input,
     const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit_index,const uint32_t *texture_low,
-    const uint32_t *descriptor_tables)
+    const uint32_t *descriptor_tables,const struct ps5vk_view_emit *view)
 {
     if (!cursor || !*cursor || !state || !op || op->type != (indices?PS5VK_DRAW_INDEXED:PS5VK_DRAW) ||
         !state->cx_count || state->cx_count > PS5VK_DRAW_CX_CAPACITY || !state->modifier ||
-        !ps5_gpu_span_visible(mapping, mapping_bytes, state, sizeof(*state))) return VK_ERROR_UNKNOWN;
+        !ps5_gpu_span_visible(mapping, mapping_bytes, state, sizeof(*state)) ||
+        (view && !state->runtime.enabled)) return VK_ERROR_UNKNOWN;
     /* Vulkan zero-count draws have no rasterization side effects. */
     if (!(indices?op->index_count:op->vertex_count) || !op->instance_count) return VK_SUCCESS;
     uint32_t runtime_vertex[16],runtime_pixel[16];
@@ -58,11 +143,18 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     if(state->runtime.enabled &&
         ps5vk_runtime_draw_values_sets(&state->runtime,ps5vk_draw_base_vertex(op),
             ps5vk_draw_base_instance(op),ps5vk_draw_index_value(op),
-            ps5vk_draw_view_index_value(op),
+            view?view->view_index:ps5vk_draw_view_index_value(op),
             vertex_input?vertex_table_low:0,state->push_constant_low,
             descriptor_tables?descriptor_tables:single_table,
             runtime_vertex,runtime_pixel))
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    ps5_agc_register view_changed[PS5_COLOR_REGISTER_COUNT + PS5_DEPTH_REGISTER_COUNT];
+    uint32_t view_changed_count=0;
+    if(view) {
+        VkResult view_rc=collect_view_targets(view_changed,&view_changed_count,
+            PS5_COLOR_REGISTER_COUNT+PS5_DEPTH_REGISTER_COUNT,view);
+        if(view_rc!=VK_SUCCESS)return view_rc;
+    }
     if (capacity < 13) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;
     if (ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->cx, state->cx_count,
@@ -75,6 +167,14 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     VkResult scissor_rc=ps5vk_native_emit_scissor_replay(&next,(uint32_t)(end-next),state);
     if(scissor_rc!=VK_SUCCESS)return scissor_rc;
 #endif
+    /* The view's own layer selection lands after the prepared target block and
+     * before anything that follows it, so the draw packet that follows renders
+     * into this view's layer. */
+    if(view_changed_count) {
+        VkResult view_rc=emit_context_runs(&next,(uint32_t)(end-next),
+            view_changed,view_changed_count);
+        if(view_rc!=VK_SUCCESS)return view_rc;
+    }
     const uint32_t procedural[3] = {global_table_low, ps5vk_draw_base_vertex(op),
         ps5vk_draw_base_instance(op)};
     const uint32_t vertex[4] = {global_table_low, vertex_table_low,
@@ -107,7 +207,7 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
 VkResult ps5vk_native_emit_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t mapping_bytes,
     const struct ps5vk_operation *op,uint32_t global_table_low)
-{ return emit_draw(cursor,capacity,state,mapping,mapping_bytes,op,global_table_low,0,0,NULL,NULL,NULL,NULL); }
+{ return emit_draw(cursor,capacity,state,mapping,mapping_bytes,op,global_table_low,0,0,NULL,NULL,NULL,NULL,NULL); }
 
 VkResult ps5vk_native_emit_vertex_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t mapping_bytes,
@@ -116,7 +216,7 @@ VkResult ps5vk_native_emit_vertex_draw(uint32_t **cursor,uint32_t capacity,
     /* Only the audited four-user-SGPR compiler ABI. This low word is not a
      * substitute for the caller's full-address aperture/lifetime validation. */
     if(vertex_table_low%16)return VK_ERROR_UNKNOWN;
-    return emit_draw(cursor,capacity,state,mapping,mapping_bytes,op,global_table_low,vertex_table_low,1,NULL,NULL,NULL,NULL);
+    return emit_draw(cursor,capacity,state,mapping,mapping_bytes,op,global_table_low,vertex_table_low,1,NULL,NULL,NULL,NULL,NULL);
 }
 VkResult ps5vk_native_emit_indexed_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t bytes,
@@ -124,7 +224,7 @@ VkResult ps5vk_native_emit_indexed_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit)
 {
     if(!indices || !emit || table%16)return VK_ERROR_UNKNOWN;
-    return emit_draw(cursor,capacity,state,mapping,bytes,op,global,table,1,indices,emit,NULL,NULL);
+    return emit_draw(cursor,capacity,state,mapping,bytes,op,global,table,1,indices,emit,NULL,NULL,NULL);
 }
 VkResult ps5vk_native_emit_textured_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t bytes,
@@ -132,17 +232,18 @@ VkResult ps5vk_native_emit_textured_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit)
 {
     if(vertex%16 || texture%16 || (indices && !emit))return VK_ERROR_UNKNOWN;
-    return emit_draw(cursor,capacity,state,mapping,bytes,op,global,vertex,1,indices,emit,&texture,NULL);
+    return emit_draw(cursor,capacity,state,mapping,bytes,op,global,vertex,1,indices,emit,&texture,NULL,NULL);
 }
 
 VkResult ps5vk_native_emit_runtime_draw(uint32_t **cursor,uint32_t capacity,
     const struct ps5vk_draw_state *state,const void *mapping,size_t bytes,
     const struct ps5vk_operation *op,uint32_t vertex,
     const uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS],
+    const struct ps5vk_view_emit *view,
     const struct ps5vk_index_fetch *indices,ps5vk_emit_index_fn emit)
 {
     if(!state || !state->runtime.enabled || !tables || vertex%16 || (indices && !emit))
         return VK_ERROR_UNKNOWN;
     return emit_draw(cursor,capacity,state,mapping,bytes,op,0,vertex,
-        state->runtime.vertex_buffer_valid,indices,emit,NULL,tables);
+        state->runtime.vertex_buffer_valid,indices,emit,NULL,tables,view);
 }
