@@ -679,24 +679,63 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
     mip_ok = witnessed.get("queryMaxMipLevels", 0) >= int(contract.get("mip_levels", 0))
     query_covers = query_answered and samples_ok and layers_ok and mip_ok
     create_ok = witnessed.get("createResult") == 0 and bool(witnessed.get("createSucceeded"))
-    measured_supported = query_covers and create_ok
+    measured_resource = query_covers and create_ok
     if bool(witnessed.get("queryCovers")) != query_covers or \
-            bool(witnessed.get("supported")) != measured_supported:
+            bool(witnessed.get("supported")) != measured_resource:
         failures.append(
             f"resource contract {contract_id!r}: the witness summary disagrees with its own "
             f"measurements (queryCovers={witnessed.get('queryCovers')}, "
             f"supported={witnessed.get('supported')})")
-    if bool(contract.get("supported")) != measured_supported:
-        failures.append(
-            f"resource contract {contract_id!r} declares supported={contract.get('supported')} "
-            f"while the driver measures {measured_supported}")
     if query_covers != create_ok:
         failures.append(
             f"resource contract {contract_id!r}: the image-format query and vkCreateImage "
             f"disagree about this shape (queryCovers={query_covers}, createSucceeded={create_ok})")
 
+    # Two independent promotion stages. A resource the driver cannot create is
+    # not the only reason to keep a family out of strict acceptance: the family
+    # also needs executable semantics, and neither stage may promote the other
+    # on its own. The final state is the conjunction, and only that state makes
+    # a contract eligible for acceptance.
+    stages: dict[str, bool] = {}
+    for stage in ("resource_supported", "execution_supported"):
+        if stage not in contract:
+            failures.append(f"resource contract {contract_id!r} declares no {stage!r} stage")
+        elif not isinstance(contract[stage], bool):
+            failures.append(
+                f"resource contract {contract_id!r} declares {stage}="
+                f"{contract[stage]!r}, which is not a boolean")
+        else:
+            stages[stage] = contract[stage]
+    eligible = False
+    if "supported" not in contract:
+        failures.append(f"resource contract {contract_id!r} declares no final 'supported' field")
+    elif not isinstance(contract["supported"], bool):
+        failures.append(
+            f"resource contract {contract_id!r} declares supported="
+            f"{contract['supported']!r}, which is not a boolean")
+    elif len(stages) == 2:
+        expected = stages["resource_supported"] and stages["execution_supported"]
+        if contract["supported"] != expected:
+            failures.append(
+                f"resource contract {contract_id!r} declares supported="
+                f"{contract['supported']} while its stages are "
+                f"resource_supported={stages['resource_supported']} and "
+                f"execution_supported={stages['execution_supported']}")
+        if contract["supported"] and not expected:
+            failures.append(
+                f"resource contract {contract_id!r} claims support while a stage is false")
+        if stages["execution_supported"] and not stages["resource_supported"]:
+            failures.append(
+                f"resource contract {contract_id!r} claims executable semantics for a resource "
+                f"the driver cannot create")
+        if stages["resource_supported"] != measured_resource:
+            failures.append(
+                f"resource contract {contract_id!r} declares "
+                f"resource_supported={stages['resource_supported']} while the measured public "
+                f"query/create witness says {measured_resource}")
+        eligible = bool(expected and measured_resource)
     reason = ""
-    if not measured_supported:
+    if not measured_resource:
         details = []
         if not query_answered:
             details.append(f"the format query answers {witnessed.get('queryResult')}")
@@ -716,7 +755,7 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
         if not create_ok:
             details.append(f"vkCreateImage answers {witnessed.get('createResult')}")
         reason = "; ".join(details)
-    return measured_supported, failures, reason
+    return eligible, failures, reason
 
 
 def main() -> int:
