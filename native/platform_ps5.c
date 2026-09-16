@@ -211,6 +211,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * direct and single-indirect contract this profile witnessed. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;
 #endif
+    /* Multiview is the capability the private six-view and instance witnesses
+     * measured on this console. The bit is internal for now: E1a advertises
+     * nothing, and the slice that enumerates the extension will do so from
+     * here together with the queries and the device negotiation. */
+    platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
     platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
