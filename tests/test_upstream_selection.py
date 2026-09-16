@@ -48,6 +48,32 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.tests_text = text
         self.util_text = (UPSTREAM / UTIL).read_text(encoding="utf-8", errors="replace")
 
+    def _supported_witness(self):
+        """The witness a driver that finally creates the shape would produce."""
+        witness, _ = self.gate._resource_witness()
+        measured = copy.deepcopy(witness[MV_CONTRACT])
+        measured.update({
+            "queryResult": 0, "createResult": 0, "createSucceeded": True,
+            "queryCovers": True, "supported": True,
+            "queryMaxArrayLayers": 6, "queryMaxMipLevels": 1, "querySampleCounts": 1,
+        })
+        return {MV_CONTRACT: measured}
+
+    def _gate_exit_code_with_witness(self, manifest, witness):
+        original = self.gate._resource_witness
+        self.gate._resource_witness = lambda: (witness, [])
+        try:
+            return self._gate_exit_code_for_manifest(manifest)
+        finally:
+            self.gate._resource_witness = original
+
+    def _promote_one_leaf(self, manifest, path):
+        entry = copy.deepcopy([c for c in manifest["diagnostics"] if c["path"] == path][0])
+        entry["expected_status"] = "Pass"
+        manifest["diagnostics"] = [c for c in manifest["diagnostics"] if c["path"] != path]
+        manifest["cases"].append(entry)
+        return manifest
+
     def _gate_exit_code_for_manifest(self, manifest):
         with tempfile.TemporaryDirectory() as tmp:
             manifest_path = Path(tmp) / "manifest.json"
@@ -139,9 +165,18 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertFalse(probe["queryCovers"])
 
         declared = self.manifest["resource_contracts"][MV_CONTRACT]
-        support, verdict_failures, reason = self.gate._contract_verdict(
+        self.assertFalse(declared["resource_supported"])
+        self.assertFalse(declared["execution_supported"])
+        self.assertFalse(declared["supported"])
+        # The execution stage is derived: only the object model is in place.
+        self.assertEqual({"descriptor_object_model": True,
+                          "descriptor_table_encoding": False,
+                          "compiler_lowering": False,
+                          "gpu_subpass_readback": False},
+                         declared["execution_requirements"])
+        eligible, verdict_failures, reason = self.gate._contract_verdict(
             MV_CONTRACT, declared, measured, measured["arrayLayers"])
-        self.assertFalse(support)
+        self.assertFalse(eligible)
         self.assertEqual([], verdict_failures)
         self.assertIn("query answers", reason)
         self.assertIn("vkCreateImage answers", reason)
@@ -150,6 +185,11 @@ class UpstreamSelectionTests(unittest.TestCase):
         """Simulation: with the usage blocker gone the layer ceiling still
         prevents promotion, and the two public paths disagreeing is reported."""
         declared = copy.deepcopy(self.manifest["resource_contracts"][MV_CONTRACT])
+        # The usage gap is closed, so the resource stage would be true, but the
+        # layer ceiling still refuses the shape; the final state stays false
+        # because the measured resource does not support it.
+        declared.update({"resource_supported": True, "execution_supported": False,
+                         "supported": False})
         fixed_usage_only = {
             "formatName": declared["format"], "imageTypeName": declared["image_type"],
             "tilingName": declared["tiling"], "mipLevels": declared["mip_levels"],
@@ -159,10 +199,12 @@ class UpstreamSelectionTests(unittest.TestCase):
             "queryMaxArrayLayers": 1, "createResult": 0, "createSucceeded": True,
             "queryCovers": False, "supported": False,
         }
-        support, verdict_failures, reason = self.gate._contract_verdict(
+        eligible, verdict_failures, reason = self.gate._contract_verdict(
             MV_CONTRACT, declared, fixed_usage_only, 6)
-        self.assertFalse(support)
+        self.assertFalse(eligible)
         self.assertTrue(any("disagree" in failure for failure in verdict_failures))
+        self.assertTrue(any("measured public query/create witness says False" in failure
+                            for failure in verdict_failures))
         self.assertIn("maxArrayLayers=1", reason)
         self.assertIn("6", reason)
 
@@ -253,6 +295,113 @@ class UpstreamSelectionTests(unittest.TestCase):
                 case["resource_contract"] = "no-such-contract"
                 break
         self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
+
+    def test_stage_fields_are_required_and_boolean(self):
+        """A missing or non-boolean stage field fails closed: the promotion
+        decision has to be explicit and machine-readable."""
+        mutations = (
+            (lambda contract: contract.pop("resource_supported"), "missing resource stage"),
+            (lambda contract: contract.pop("execution_supported"), "missing execution stage"),
+            (lambda contract: contract.__setitem__("resource_supported", "yes"),
+             "non-boolean resource stage"),
+            (lambda contract: contract.__setitem__("execution_supported", 1),
+             "non-boolean execution stage"),
+            (lambda contract: contract.pop("supported"), "missing final state"),
+            (lambda contract: contract.__setitem__("supported", "no"),
+             "non-boolean final state"),
+            (lambda contract: contract.pop("execution_requirements"),
+             "no execution requirements"),
+            (lambda contract: contract["execution_requirements"].pop("compiler_lowering"),
+             "missing execution requirement"),
+            (lambda contract: contract["execution_requirements"].__setitem__(
+                "gpu_subpass_readback", "yes"), "non-boolean execution requirement"),
+            (lambda contract: contract["execution_requirements"].__setitem__(
+                "mystery_stage", True), "unknown execution requirement"),
+        )
+        for mutate, why in mutations:
+            manifest = copy.deepcopy(self.manifest)
+            mutate(manifest["resource_contracts"][MV_CONTRACT])
+            self.assertEqual(1, self._gate_exit_code_for_manifest(manifest), why)
+
+    def test_resource_stage_must_match_the_measurement(self):
+        """The resource stage is the measured public query/create answer, so a
+        declaration that drifts from it fails."""
+        manifest = copy.deepcopy(self.manifest)
+        manifest["resource_contracts"][MV_CONTRACT]["resource_supported"] = True
+        self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
+
+    def test_execution_flag_alone_cannot_claim_execution(self):
+        """Flipping the stage flag is not evidence: the derived requirement set
+        decides, so a lone execution_supported=true is rejected."""
+        manifest = copy.deepcopy(self.manifest)
+        manifest["resource_contracts"][MV_CONTRACT].update(
+            {"execution_supported": True, "supported": False})
+        self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
+        # ...and a complete requirement set with a stale flag is rejected too.
+        manifest = copy.deepcopy(self.manifest)
+        for key in ("descriptor_object_model", "descriptor_table_encoding", "compiler_lowering", "gpu_subpass_readback"):
+            manifest["resource_contracts"][MV_CONTRACT]["execution_requirements"][key] = True
+        manifest["resource_contracts"][MV_CONTRACT]["execution_supported"] = False
+        self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
+
+    def test_complete_execution_requirements_without_the_resource_stay_final_false(self):
+        """Executable semantics without a createable resource is a legitimate
+        intermediate state: the stages are independent, the final state is the
+        conjunction, and nothing is promoted."""
+        manifest = copy.deepcopy(self.manifest)
+        contract = manifest["resource_contracts"][MV_CONTRACT]
+        for key in ("descriptor_object_model", "descriptor_table_encoding", "compiler_lowering", "gpu_subpass_readback"):
+            contract["execution_requirements"][key] = True
+        contract.update({"execution_supported": True, "supported": False})
+        self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
+
+    def test_supported_must_be_the_conjunction_of_the_stages(self):
+        for resource, execution in ((True, False), (False, True), (False, False)):
+            manifest = copy.deepcopy(self.manifest)
+            manifest["resource_contracts"][MV_CONTRACT].update(
+                {"resource_supported": resource, "execution_supported": execution,
+                 "supported": True})
+            self.assertEqual(1, self._gate_exit_code_for_manifest(manifest),
+                             f"resource={resource} execution={execution}")
+
+    def test_resource_only_success_stays_diagnostic_and_cannot_enter_acceptance(self):
+        """A future query/create success is not promotion: with no executable
+        semantics the family stays diagnostic and acceptance is refused."""
+        witness = self._supported_witness()
+        path = "dEQP-VK.multiview.masks.get_query_pool_results.15"
+
+        diagnostic = copy.deepcopy(self.manifest)
+        diagnostic["resource_contracts"][MV_CONTRACT].update(
+            {"resource_supported": True, "execution_supported": False, "supported": False})
+        self.assertEqual(0, self._gate_exit_code_with_witness(diagnostic, witness))
+        self.assertEqual(48, len([c for c in diagnostic["diagnostics"]
+                                  if c["path"].startswith(MULTIVIEW_FAMILIES)]))
+
+        acceptance = self._promote_one_leaf(copy.deepcopy(diagnostic), path)
+        self.assertEqual(1, self._gate_exit_code_with_witness(acceptance, witness))
+
+    def test_both_stages_true_is_the_only_promotable_state(self):
+        """With the resource created and executable semantics in place, and only
+        then, a leaf may re-enter strict acceptance."""
+        witness = self._supported_witness()
+        path = "dEQP-VK.multiview.masks.get_query_pool_results.15"
+        manifest = copy.deepcopy(self.manifest)
+        contract = manifest["resource_contracts"][MV_CONTRACT]
+        for key in ("descriptor_object_model", "descriptor_table_encoding", "compiler_lowering", "gpu_subpass_readback"):
+            contract["execution_requirements"][key] = True
+        contract.update({"resource_supported": True, "execution_supported": True,
+                         "supported": True})
+        self.assertEqual(0, self._gate_exit_code_with_witness(manifest, witness))
+        promoted = self._promote_one_leaf(copy.deepcopy(manifest), path)
+        self.assertEqual(0, self._gate_exit_code_with_witness(promoted, witness))
+        # ...and the same promotion without the execution stage is refused.
+        frozen = copy.deepcopy(manifest)
+        frozen["resource_contracts"][MV_CONTRACT]["execution_requirements"][
+            "gpu_subpass_readback"] = False
+        frozen["resource_contracts"][MV_CONTRACT].update(
+            {"execution_supported": False, "supported": False})
+        frozen = self._promote_one_leaf(frozen, path)
+        self.assertEqual(1, self._gate_exit_code_with_witness(frozen, witness))
 
     def test_passing_families_stay_acceptance(self):
         """(4) Families that pass keep their strict acceptance entries."""
