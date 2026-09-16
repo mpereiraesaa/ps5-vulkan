@@ -25,4 +25,7 @@ size_t ps5vk_graphics_acquire(uint32_t *, size_t capacity);
  * transition, not a completion signal and not a replacement for acquire. */
 size_t ps5vk_graphics_color_to_texture(uint32_t *, size_t capacity);
 size_t ps5vk_graphics_release(uint32_t *, size_t capacity, uint64_t address, uint64_t serial);
+/* Drain prior render work before a following ME/CP DMA write. The scratch
+ * token is distinct from the submission completion label and must start zero. */
+size_t ps5vk_graphics_release_wait(uint32_t *,size_t,uint64_t,uint32_t);
 #endif
