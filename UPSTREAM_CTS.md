@@ -48,18 +48,16 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 165 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 117 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
-  image-copy and binding-model combined-sampler cases, plus 48 legacy
-  multiview render-pass cases: `clear_attachments`, `masks`,
-  `index.vertex_shader` and `index.fragment_shader`). Only these
+  image-copy and binding-model combined-sampler cases). Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
   `diagnostics` list: upstream cases that are intentionally run separately and
-  are known not to satisfy acceptance prerequisites. They are never part of
-  strict acceptance.
+  are known not to satisfy acceptance prerequisites, including families kept as
+  blocked resource-contract targets. They are never part of strict acceptance.
 * **Executed**: what a given report actually contains, which the strict verifier
   checks case by case.
 
@@ -70,22 +68,36 @@ refuses a duplicate selection, and refuses a checkout that is not that
 revision. The selection therefore cannot drift from the revision the packaging
 build compiles.
 
-The multiview selection is bounded by what the device reports today. The pinned
-module builds a `renderpass2` and a `dynamic_rendering` variant of every family
-as well; the `renderpass2` leaves require `VK_KHR_create_renderpass2` and the
-dynamic-rendering leaves require `VK_KHR_dynamic_rendering`, and neither is
-advertised, so only the legacy render-pass variants are accepted. Within those,
-`index.geometry_shader` needs the core `geometryShader` feature plus
-`multiviewGeometryShader` and `index.tessellation_shader` needs
-`multiviewTessellationShader`; this device reports both multiview shader
-features false, so neither family is accepted. Two view-mask leaves of each
-accepted family - `8` and `1_2_4_8_16_32` - render extents deeper than the
-reported `maxMultiviewViewCount` floor of 6 and the pinned factory skips a case
-whose extent exceeds that floor, so they are excluded too. The host gate fails
-any acceptance entry whose derived prerequisites, or whose case extent, are not
-covered by the sources it reads for the device's advertised extensions,
-multiview features and view-count floor (`src/vk_device.c`,
-`src/vk_internal.h`).
+The multiview render-pass families are kept as a blocked target rather than
+acceptance. Prerequisites alone do not make a family runnable: the pinned
+module builds every one of its attachments through `makeImageCreateInfo`
+(`external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderUtil.cpp:114`),
+which asks for a 2D `R8G8B8A8_UNORM` array image with one mip, one sample,
+optimal tiling, `arrayLayers = extent.depth` and usage
+`COLOR_ATTACHMENT | TRANSFER_SRC | INPUT_ATTACHMENT | TRANSFER_DST`. This
+profile neither accepts nor advertises `VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT`
+and has no input-attachment descriptor or subpass execution path, so the one
+run on canonical main `720ae713` refused every one of those 48 images with
+`VK_ERROR_UNKNOWN` from `vkCreateImage`. The manifest records that envelope as
+the `multiview-attachment-image` resource contract with its blocker, and the 48
+leaves stay listed as diagnostics so the measured failure and the promotion
+target remain visible. Within the same module, `renderpass2` needs
+`VK_KHR_create_renderpass2`, `dynamic_rendering` needs
+`VK_KHR_dynamic_rendering`, `index.geometry_shader` needs the core
+`geometryShader` feature plus `multiviewGeometryShader`,
+`index.tessellation_shader` needs `multiviewTessellationShader`, and two
+view-mask leaves of each family (`8`, `1_2_4_8_16_32`) render extents deeper
+than the reported `maxMultiviewViewCount` floor of 6: all of those stay
+excluded as before.
+
+`tools/check_upstream_selection.py` extends the frozen selection model from
+features, extensions and limits to that resource footprint. It derives the
+contract from the pinned helper, refuses an acceptance entry whose contract is
+missing, unknown or unsupported, refuses a contract the gate cannot derive or
+that disagrees with the derived one, refuses families the contracts do not
+cover (and contracts for families the selection no longer contains), and
+refuses a mismatch between the usage the format queries advertise and the usage
+`vkCreateImage` accepts. Feature bits alone can never widen the selection.
 
 The selection includes `dEQP-VK.api.smoke.triangle`. Its unchanged upstream
 body creates a graphics pipeline, records a real triangle draw into an RGBA8

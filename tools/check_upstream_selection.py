@@ -25,6 +25,15 @@ INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
 # sources, not from the selection itself.
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
 INTERNAL_HEADER = ROOT / "src/vk_internal.h"
+# The driver's own image-usage surfaces, and the pinned upstream helper that
+# builds the resources a selected family actually needs.
+IMAGE_USAGE_CREATE_SOURCE = ROOT / "src/vk_memory.c"
+IMAGE_USAGE_PREDICATE_SOURCE = ROOT / "src/texture_format.c"
+IMAGE_USAGE_QUERY_SOURCE = ROOT / "src/graphics_formats.h"
+MULTIVIEW_UTIL_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
+                         "vktMultiViewRenderUtil.cpp")
+MULTIVIEW_TEST_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
+                         "vktMultiViewRenderTests.cpp")
 
 
 def _source_function_at_line(text: str, line_number: int) -> str:
@@ -260,9 +269,11 @@ def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dic
             for query in query_names:
                 for depth, mask in zip(depths, mask_names):
                     leaves[f"{family_prefix}{family}.{query}.{mask}"] = {
-                        "required": list(required), "max_views": depth}
+                        "required": list(required), "max_views": depth,
+                        "family": family, "test_type": test_type}
                 leaves[f"{family_prefix}{family}.{query}.max_multi_view_view_count"] = {
-                    "required": list(required), "max_views": limit_leaf_depth}
+                    "required": list(required), "max_views": limit_leaf_depth,
+                    "family": family, "test_type": test_type}
     return leaves
 
 
@@ -529,6 +540,126 @@ def _unadvertised(required: list[str], capabilities: dict) -> list[str]:
     return missing
 
 
+def _multiview_attachment_contract(util_text: str, tests_text: str) -> dict:
+    """Derive the attachment image the pinned multiview instances build.
+
+    A selection that only checks features and limits can still be unrunnable:
+    the upstream helper decides which image a family needs, and the driver has
+    to accept that exact resource. This derivation reads the helper instead of
+    trusting the manifest: the instance constructor's usage expression and the
+    factory's image-create call are both required to be present, and anything
+    that does not match returns nothing so the caller fails closed.
+    """
+    construction = (
+        "VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO" in util_text and
+        "VK_IMAGE_TILING_OPTIMAL" in util_text and
+        "VK_SHARING_MODE_EXCLUSIVE" in util_text and
+        "VK_IMAGE_LAYOUT_UNDEFINED" in util_text and
+        "{extent.width, extent.height, 1u}" in util_text and
+        "extent.depth" in util_text and
+        "ImageAttachment::ImageAttachment" in tests_text and
+        "imageUsageFlagsDependent" in tests_text and
+        "makeImageCreateInfo(VK_IMAGE_TYPE_2D, extent, colorFormat, imageUsageFlags, samples)"
+        in tests_text
+    )
+    if not construction:
+        return {}
+    dependent = re.search(r"imageUsageFlagsDependent\s*=\s*(.*?);", tests_text, re.DOTALL)
+    usage_tail = re.search(
+        r"imageUsageFlags\s*=\s*imageUsageFlagsDependent\s*\|\s*(.*?);", tests_text, re.DOTALL)
+    if not dependent or not usage_tail:
+        return {}
+    dependent_bits = set(re.findall(r"(VK_IMAGE_USAGE_[A-Z_]+_BIT)", dependent.group(1)))
+    if dependent_bits != {"VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT",
+                          "VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT"}:
+        return {}
+    tail_bits = set(re.findall(r"(VK_IMAGE_USAGE_[A-Z_]+_BIT)", usage_tail.group(1)))
+    if not tail_bits or "VK_FORMAT_R8G8B8A8_UNORM" not in tests_text:
+        return {}
+    return {
+        "format": "VK_FORMAT_R8G8B8A8_UNORM",
+        "image_type": "VK_IMAGE_TYPE_2D",
+        "tiling": "VK_IMAGE_TILING_OPTIMAL",
+        "mip_levels": 1,
+        "samples": 1,
+        "array_layers": "extent.depth",
+        "usage": sorted({"VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT"} | tail_bits),
+    }
+
+
+def _image_usage_surface() -> tuple[dict, list[str]]:
+    """Read what this driver accepts, and advertises, for image usage.
+
+    Creation accepts the usage mask in src/vk_memory.c narrowed by the exact
+    combinations in ps5vk_texture_format_image_usage, and the format queries
+    answer from that same predicate. A query that accepts a shape creation
+    refuses (or the reverse) is exactly the mismatch that let an unrunnable
+    family look runnable, so both surfaces are read here and compared.
+    """
+    failures: list[str] = []
+    create_text = IMAGE_USAGE_CREATE_SOURCE.read_text(encoding="utf-8", errors="replace")
+    predicate_text = IMAGE_USAGE_PREDICATE_SOURCE.read_text(encoding="utf-8", errors="replace")
+    query_text = IMAGE_USAGE_QUERY_SOURCE.read_text(encoding="utf-8", errors="replace")
+
+    mask_match = re.search(r"const VkImageUsageFlags supported = (.*?);", create_text, re.DOTALL)
+    if not mask_match:
+        failures.append("cannot read the accepted image-usage mask from src/vk_memory.c")
+        create_mask: set[str] = set()
+    else:
+        create_mask = set(re.findall(r"(VK_IMAGE_USAGE_[A-Z_]+_BIT)", mask_match.group(1)))
+
+    predicate = re.search(r"VkBool32 ps5vk_texture_format_image_usage\(.*?\n\}",
+                          predicate_text, re.DOTALL)
+    accepted: set[tuple[str, ...]] = set()
+    if not predicate:
+        failures.append("cannot read the image-usage predicate from src/texture_format.c")
+    else:
+        body = predicate.group(0)
+        aliases = dict(re.findall(
+            r"const VkImageUsageFlags (\w+)\s*=\s*(VK_IMAGE_USAGE_[A-Z_]+_BIT);", body))
+        for expression in re.findall(r"usage\s*==\s*(\([^()]*\)|\w+)", body):
+            bits = set(re.findall(r"(VK_IMAGE_USAGE_[A-Z_]+_BIT)", expression))
+            for alias, bit in aliases.items():
+                if re.search(rf"\b{alias}\b", expression):
+                    bits.add(bit)
+            if bits:
+                accepted.add(tuple(sorted(bits)))
+        if not accepted:
+            failures.append(
+                "cannot read the accepted image-usage combinations from src/texture_format.c")
+
+    query_uses_predicate = "ps5vk_texture_format_image_usage" in query_text
+    if not query_uses_predicate:
+        failures.append("the image-format query no longer consults the shared usage predicate")
+    return ({"create_mask": create_mask, "accepted": accepted,
+             "query_uses_predicate": query_uses_predicate}, failures)
+
+
+def _contract_support(contract: dict, surface: dict) -> tuple[bool, str]:
+    """Decide whether this driver can create the contract's resource."""
+    usage = set(contract.get("usage", []))
+    if not usage:
+        return False, "the contract declares no image usage"
+    outside = sorted(usage - surface["create_mask"])
+    if outside:
+        return False, f"{', '.join(outside)} is outside the image usage this driver accepts"
+    if tuple(sorted(usage)) not in surface["accepted"]:
+        return False, "no accepted image-usage combination matches this contract"
+    return True, ""
+
+
+def _query_create_mismatches(surface: dict) -> list[str]:
+    """Every advertised usage combination must also be one creation accepts."""
+    mismatches = []
+    for combination in sorted(surface["accepted"]):
+        outside = sorted(set(combination) - surface["create_mask"])
+        if outside:
+            mismatches.append(
+                "the image-format query accepts " + " | ".join(combination) +
+                " while vkCreateImage refuses " + ", ".join(outside))
+    return mismatches
+
+
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     # Diagnostics are frozen upstream cases that are executed but are known not
@@ -552,6 +683,41 @@ def main() -> int:
     acceptance_paths = {case["path"] for case in manifest["cases"]}
     capabilities, capability_failures = _advertised_capabilities()
     failures.extend(capability_failures)
+    # The resource footprint a family needs is derived from the pinned helper
+    # that builds it, and a family may only be strict acceptance when this
+    # driver can create that exact resource: features, limits and extensions
+    # alone do not make a leaf runnable.
+    contracts = manifest.get("resource_contracts", {})
+    image_surface: dict = {"create_mask": set(), "accepted": set()}
+    multiview_derived: dict = {}
+    multiview_util_path = UPSTREAM / MULTIVIEW_UTIL_SOURCE
+    multiview_test_path = UPSTREAM / MULTIVIEW_TEST_SOURCE
+    if multiview_util_path.is_file() and multiview_test_path.is_file():
+        multiview_derived = _multiview_attachment_contract(
+            multiview_util_path.read_text(encoding="utf-8", errors="replace"),
+            multiview_test_path.read_text(encoding="utf-8", errors="replace"))
+        image_surface, surface_failures = _image_usage_surface()
+        failures.extend(surface_failures)
+        failures.extend(_query_create_mismatches(image_surface))
+        if not multiview_derived:
+            failures.append(
+                "cannot derive the multiview attachment contract from the pinned sources")
+    for contract_id, declared in sorted(contracts.items()):
+        derive_from = declared.get("derive_from", "")
+        if derive_from != MULTIVIEW_TEST_SOURCE:
+            failures.append(
+                f"resource contract {contract_id!r} names no derivation this gate can read")
+            continue
+        if not multiview_derived:
+            continue
+        for field in ("format", "image_type", "tiling", "mip_levels", "samples",
+                      "array_layers", "usage"):
+            if declared.get(field) != multiview_derived.get(field):
+                failures.append(
+                    f"resource contract {contract_id!r} field {field!r} does not match the "
+                    f"attachment the pinned helper builds ({multiview_derived.get(field)!r})")
+    manifest_families: set[str] = set()
+    manifest_contract_ids: set[str] = set()
     integration_text = INTEGRATION_SOURCE.read_text(encoding="utf-8")
 
     for case in cases:
@@ -618,17 +784,43 @@ def main() -> int:
                     f"{path}: not produced by the pinned multiview factory "
                     f"{source_ref}")
             elif path in acceptance_paths:
+                manifest_families.add(derived_leaf["family"])
+                contract_id = case.get("resource_contract")
+                if not contract_id:
+                    failures.append(
+                        f"{path}: acceptance builds its attachment through the pinned helper "
+                        f"but names no resource contract")
+                elif contract_id not in contracts:
+                    failures.append(
+                        f"{path}: acceptance names unknown resource contract {contract_id!r}")
+                    manifest_contract_ids.add(contract_id)
+                else:
+                    manifest_contract_ids.add(contract_id)
+                    supported, reason = _contract_support(contracts[contract_id], image_surface)
+                    if not supported:
+                        failures.append(
+                            f"{path}: acceptance needs resource contract {contract_id!r}, which "
+                            f"this driver cannot create ({reason})")
                 missing = _unadvertised(derived_leaf["required"], capabilities)
-                if missing:
+                if missing and path in acceptance_paths:
                     failures.append(
                         f"{path}: acceptance requires {', '.join(missing)}, which "
                         f"this device does not advertise")
-                elif (capabilities["max_multiview_view_count"] and
+                elif (path in acceptance_paths and
+                      capabilities["max_multiview_view_count"] and
                       derived_leaf["max_views"] > capabilities["max_multiview_view_count"]):
                     failures.append(
                         f"{path}: acceptance needs maxMultiviewViewCount >= "
                         f"{derived_leaf['max_views']}; the reported floor is "
                         f"{capabilities['max_multiview_view_count']}")
+            else:
+                manifest_families.add(derived_leaf["family"])
+                contract_id = case.get("resource_contract")
+                if contract_id:
+                    manifest_contract_ids.add(contract_id)
+                    if contract_id not in contracts:
+                        failures.append(
+                            f"{path}: names unknown resource contract {contract_id!r}")
             continue
 
         # The leaf must be a literal name in the cited function/file, a bounded
@@ -687,6 +879,25 @@ def main() -> int:
             continue
         failures.append(
             f"{path}: leaf name {leaf!r} is not registered in {source_ref}")
+
+    # The declared contracts must cover exactly the families the selection
+    # contains. A family that appears without a contract would be a silent
+    # expansion nothing has vetted; a contract for a family that is no longer
+    # selected is stale. Both directions fail closed.
+    declared_families: set[str] = set()
+    for declared in contracts.values():
+        declared_families.update(declared.get("families", []))
+    if manifest_families or declared_families:
+        uncovered = sorted(manifest_families - declared_families)
+        stale = sorted(declared_families - manifest_families)
+        if uncovered:
+            failures.append(
+                "selected multiview families with no declared resource contract: "
+                + ", ".join(uncovered))
+        if stale:
+            failures.append(
+                "resource contracts declare families the selection does not contain: "
+                + ", ".join(stale))
 
     if failures:
         print("upstream selection check failed:", file=sys.stderr)
