@@ -123,6 +123,44 @@ int main(void)
         assert(v5.layer[5].expected == PIXELS && !v5.layer[5].other_view && !v5.layer[5].other);
     }
 
+    /* maxMultiviewInstanceIndex: the pinned value is 2^27-1 and can only be
+     * witnessed as an integer - it is not representable in a float - so the
+     * predicate and the shader share one integer form. Near misses are rejected
+     * here exactly as the shader's bit test rejects them. */
+    assert(ps5vk_multiview_witness_instance() == UINT32_C(0x07ffffff));
+    assert(ps5vk_multiview_witness_instance_exact(UINT32_C(0x07ffffff)));
+    assert(!ps5vk_multiview_witness_instance_exact(UINT32_C(0x08000000)));
+    assert(!ps5vk_multiview_witness_instance_exact(UINT32_C(0x07fffffe)));
+    assert(!ps5vk_multiview_witness_instance_exact(UINT32_C(0x0fffffff)));
+    assert(!ps5vk_multiview_witness_instance_exact(0u));
+    /* ...and the float round-trip the shader must NOT do would land on 2^27. */
+    {
+        const float rounded = (float)UINT32_C(0x07ffffff);
+        assert((uint32_t)rounded == UINT32_C(0x08000000));
+    }
+
+    /* A layer carrying the fixed instance-failure colour is an instance failure,
+     * not a foreign view, and it cannot pass. */
+    {
+        uint8_t failed[4];
+        ps5vk_multiview_witness_instance_fail_color(failed);
+        assert(failed[0] == 255u && failed[1] == 0u && failed[2] == 255u && failed[3] == 255u);
+        struct ps5vk_multiview_witness failed_layer = {0};
+        for (uint32_t i = 0; i < PIXELS; ++i)
+            ps5vk_multiview_witness_color_pixel(&failed_layer, 1u, failed);
+        assert(failed_layer.layer[1].instance_failed == PIXELS &&
+               !failed_layer.layer[1].expected && !failed_layer.layer[1].other_view &&
+               !failed_layer.layer[1].other && !failed_layer.layer[1].color_foreign_mask);
+        struct ps5vk_multiview_witness mixed = correct();
+        mixed.layer[3].pixels = mixed.layer[3].expected = 0;
+        mixed.layer[3].color_foreign_mask = 0;
+        mixed.layer[3].color_first_foreign_set = 0;
+        for (uint32_t i = 0; i < PIXELS; ++i)
+            ps5vk_multiview_witness_color_pixel(&mixed, 3u, failed);
+        assert(!ps5vk_multiview_witness_verify(&mixed, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));
+        assert(mixed.layer[3].instance_failed == PIXELS);
+    }
+
     /* A correct scene verifies. Its depth words were fed in the PREFIX order and
      * its counts are what the verdict reads, so the same footprint walked in any
      * order verifies too - which is the P1 point: no per-pixel depth coordinate
