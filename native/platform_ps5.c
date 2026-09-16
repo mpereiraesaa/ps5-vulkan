@@ -237,6 +237,6 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     const int graphics_submit = VK_FALSE;
 #endif
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
-        graphics_objects, graphics_submit);
+        graphics_objects, graphics_submit, platform->supported_features);
     return VK_SUCCESS;
 }

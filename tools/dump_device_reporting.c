@@ -65,7 +65,7 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
-        graphics_objects, graphics_submit);
+        graphics_objects, graphics_submit, platform->supported_features);
     return VK_SUCCESS;
 }
 

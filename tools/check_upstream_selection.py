@@ -531,13 +531,22 @@ def _advertised_capabilities() -> tuple[dict, list[str]]:
                 f"cannot read the reported {feature} feature from src/vk_device.c")
 
     core_body = re.search(r"static void get_core_features\(.*?\n\}", device, re.DOTALL)
+    # The core features are reported from a table of (member, platform bit)
+    # pairs: get_core_features zeroes the structure and assigns only the members
+    # the table names, each when the platform mask carries its bit. Both the
+    # table entries and any direct assignment inside the function count as
+    # advertisable; anything else in VkPhysicalDeviceFeatures is never reported.
+    core_table = re.search(r"core_feature_bits\[\]\s*=\s*\{(.*?)\n\};", device, re.DOTALL)
     if not core_body:
         failures.append("cannot read the core feature table from src/vk_device.c")
         core_features: set[str] = set()
     else:
-        # get_core_features zeroes the structure first, so only the features it
-        # assigns are advertised.
         core_features = set(re.findall(r"features->([A-Za-z0-9_]+)\s*=", core_body.group(0)))
+        if core_table:
+            core_features |= set(re.findall(
+                r"offsetof\(VkPhysicalDeviceFeatures,\s*([A-Za-z0-9_]+)\)", core_table.group(1)))
+        if not core_features:
+            failures.append("the core feature table in src/vk_device.c names no member")
 
     floor = re.search(r"PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR\s*=\s*(\d+)", header)
     if not floor:
