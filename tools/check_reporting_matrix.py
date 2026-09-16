@@ -716,7 +716,8 @@ def main() -> int:
                     "profile satisfies belong here; anything else stays a diagnostic.",
         },
         "profiles": {profile: {"deviceName": dump["deviceName"], "apiVersion": dump["apiVersion"],
-                               "vendorID": dump["vendorID"], "deviceID": dump["deviceID"]}
+                               "vendorID": dump["vendorID"], "deviceID": dump["deviceID"],
+                               "multiview_query": dump["multiviewQuery"]}
                      for profile, dump in dumps.items()},
         "limits": limits,
         "features": features,
