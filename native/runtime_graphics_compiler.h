@@ -22,6 +22,12 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *);
  * draw ABI. Success proves compiler options only, not native submission. */
 VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_key *,
     VkShaderStageFlagBits, PsbcCompileOptions *);
+/* True when the compiled pair only consumes capabilities the logical device
+ * enabled. The compiled metadata is the usage evidence: a distance array a
+ * shader declares but never writes does not require its feature, while one the
+ * compiler really exports does. */
+int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
+    const PsbcShaderMetadata *fragment,uint32_t feature_mask);
 /* Context is an existing ps5vk_compilation_cache. Lease data has the same
  * program view as the uncached adapter, but must use cached_release. */
 VkResult ps5vk_runtime_graphics_cached_acquire(void *,const struct ps5vk_graphics_key *,const void **);

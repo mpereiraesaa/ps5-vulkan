@@ -20,6 +20,18 @@ struct ps5vk_graphics_module_key {
  * Raster/depth/viewport dynamic state is not part of this shader compile key. */
 struct ps5vk_graphics_key {
     struct ps5vk_graphics_module_key vertex, fragment;
+    /* Optional geometry stage. A zero word_count means the pipeline has no
+     * geometry stage at all, which is how every pre-T04 key is read; when it is
+     * present the pre-raster stage is the merged vertex+geometry program the
+     * compiler emits from this pair, not the vertex module alone. */
+    struct ps5vk_graphics_module_key geometry;
+    /* The graphics feature bits the logical device enabled, so the compiler
+     * adapter can refuse a shader that consumes a capability the application
+     * never enabled instead of silently delivering it. This is an acceptance
+     * input rather than part of the program identity: the compiled artifact is
+     * the same either way, so library matching and the compile cache ignore
+     * it and the adapter checks it on every acquisition. */
+    uint32_t feature_mask;
     VkPrimitiveTopology topology;
     VkFormat color_format;
     VkSampleCountFlagBits samples;
@@ -32,6 +44,9 @@ struct ps5vk_graphics_key {
     uint32_t push_constant_size;
     VkShaderStageFlags push_constant_stages[PS5VK_MAX_PUSH_CONSTANT_DWORDS];
 };
+/* True when the pipeline carries a geometry stage. */
+static inline int ps5vk_graphics_has_geometry(const struct ps5vk_graphics_key *key)
+{ return key && key->geometry.words && key->geometry.word_count; }
 struct ps5vk_graphics_program {
     struct ps5vk_graphics_key key;
     const void *backend_data;

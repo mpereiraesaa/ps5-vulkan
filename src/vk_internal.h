@@ -10,6 +10,12 @@
 #ifndef PS5VK_MULTIVIEW_DIAGNOSTIC
 #define PS5VK_MULTIVIEW_DIAGNOSTIC 0
 #endif
+/* Private diagnostic gate for the optional-stage witnesses. The shipping path
+ * still requires the logical device to have enabled the feature; only a build
+ * that exists to measure the hardware skips that negotiation. */
+#ifndef PS5VK_GEOMETRY_SHADER_DIAGNOSTIC
+#define PS5VK_GEOMETRY_SHADER_DIAGNOSTIC 0
+#endif
 /* The widest mask the diagnostic build validates against, and therefore the most
  * layers the framebuffer rule below has to be able to serve. */
 enum { PS5VK_MULTIVIEW_DIAGNOSTIC_VIEWS = 6 };
@@ -55,6 +61,14 @@ enum ps5vk_feature_bits {
      * Public feature/property queries and device enablement use this bit;
      * platforms that cannot execute multiview leave it unset. */
     PS5VK_FEATURE_MULTIVIEW = 1u << 4,
+    /* T03 owns bits 5..7 and its own platform query. T04's optional graphics
+     * stages start here: each bit means "this device can and does deliver the
+     * capability", and the shipping gates refuse a shader that uses a feature
+     * whose bit the logical device did not enable. */
+    PS5VK_FEATURE_SHADER_CLIP_DISTANCE = 1u << 8,
+    PS5VK_FEATURE_SHADER_CULL_DISTANCE = 1u << 9,
+    PS5VK_FEATURE_GEOMETRY_SHADER = 1u << 10,
+    PS5VK_FEATURE_TESSELLATION_SHADER = 1u << 11,
 };
 
 /* The measured multiview floors: six views rendered into six ordered array

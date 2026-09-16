@@ -44,6 +44,8 @@ def main():
         ("experiments/graphics/runtime_input_attachment_transform.frag", "runtime_input_attachment_transform.frag.spv", "input_attachment_transform"),
         ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_probe.vert.spv", "clip_cull_probe"),
         ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_control.vert.spv", "clip_cull_control"),
+        ("experiments/graphics/runtime_geometry_probe.vert", "runtime_geometry_probe.vert.spv", "geometry_vertex"),
+        ("experiments/graphics/runtime_geometry_probe.geom", "runtime_geometry_probe.geom.spv", "geometry_stage"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
