@@ -9,6 +9,8 @@
 #include "graphics_sync.h"
 #include "graphics_limits.h"
 #include "targets_ps5.h"
+#include "input_attachment_probe.h"
+#include "input_attachment_gate.h"
 #include "multiview_witness.h"
 #include "vk_render_pass.h"
 #include "color_detile.h"
@@ -43,6 +45,9 @@
 #endif
 #ifndef PS5VK_RUNTIME_GRAPHICS
 #define PS5VK_RUNTIME_GRAPHICS 0
+#endif
+#ifndef PS5VK_INPUT_ATTACHMENT_PROBE
+#define PS5VK_INPUT_ATTACHMENT_PROBE 0
 #endif
 #if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
 /* Slice A measurement: the pattern seeded into the allocation slot no
@@ -1471,6 +1476,26 @@ int main(void)
             query_formats[q],query_usages[q],props.maxExtent.width,props.maxExtent.height,
             (unsigned long long)props.maxResourceSize);
     }
+#if PS5VK_INPUT_ATTACHMENT_PROBE
+    {
+        const VkImageUsageFlags usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT|
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        VkImageFormatProperties props;
+        CHECK(vkGetPhysicalDeviceImageFormatProperties(physical,
+            VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,
+            usage,0,&props));
+        if(props.maxArrayLayers<PS5VK_INPUT_ATTACHMENT_LAYER_COUNT ||
+           props.maxExtent.width<64 || props.maxExtent.height<64 ||
+           props.maxExtent.depth!=1 || props.sampleCounts!=VK_SAMPLE_COUNT_1_BIT)
+            fail("input-attachment-image-query",-1);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_INPUT_ATTACHMENT_QUERY format=%u usage=%u max_layers=%u "
+            "max_width=%u max_height=%u samples=%u",
+            VK_FORMAT_R8G8B8A8_UNORM,usage,props.maxArrayLayers,
+            props.maxExtent.width,props.maxExtent.height,props.sampleCounts);
+    }
+#endif
     if(PS5VK_IMAGE_TARGET) {
         VkImageFormatProperties props;
         VkImageType type=PS5VK_IMAGE_TARGET==3?VK_IMAGE_TYPE_3D:
@@ -1549,6 +1574,24 @@ int main(void)
     ps5log_close("graphics-api-end");
     /* Termination belongs to Close Game, as in every other bounded run. */
     if (PS5VK_SHELL_CLOSE) for (;;) sleep(1);
+    return 0;
+#endif
+#if PS5VK_INPUT_ATTACHMENT_PROBE
+    /* One bounded two-subpass run.  The function returns success only after a
+     * full deterministic GPU readback; no ordinary scene or presentation is
+     * mixed into this artifact. */
+    const struct ps5vk_input_attachment_probe_modules input_modules = {
+        .vertex = ps5vk_runtime_input_attachment_vertex,
+        .vertex_words = sizeof(ps5vk_runtime_input_attachment_vertex) / 4,
+        .pattern_fragment = ps5vk_runtime_input_attachment_pattern,
+        .pattern_fragment_words = sizeof(ps5vk_runtime_input_attachment_pattern) / 4,
+        .transform_fragment = ps5vk_runtime_input_attachment_transform,
+        .transform_fragment_words = sizeof(ps5vk_runtime_input_attachment_transform) / 4};
+    CHECK(ps5vk_input_attachment_probe(device, &input_modules));
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
     return 0;
 #endif
     VkAttachmentDescription attachment = {.format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,

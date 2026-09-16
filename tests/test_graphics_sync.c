@@ -17,6 +17,11 @@ int main(void)
     uint32_t out[10], saved[10]; memset(out,0x5a,sizeof(out)); memcpy(saved,out,sizeof(out));
     assert(!ps5vk_graphics_acquire(out,9) && !memcmp(out,saved,sizeof(out)));
     assert(ps5vk_graphics_acquire(out,10)==10 && out[0]==0xc0004200 && out[1]==0 && out[2]==0xc0065800 && out[9]==0x4381);
+    memcpy(out,saved,sizeof(out));
+    assert(!ps5vk_graphics_color_to_texture(out,7) && !memcmp(out,saved,sizeof(out)));
+    assert(ps5vk_graphics_color_to_texture(out,8)==8 &&
+        out[0]==0xc0064900 && out[1]==0x0070f52d &&
+        out[2]==0x00010000 && !out[3] && !out[4] && !out[5] && !out[6] && !out[7]);
     const uint64_t address=UINT64_C(0x123456789000), serial=UINT64_C(0xfedcba9876543210);
     assert(ps5vk_graphics_release(out,8,address,serial)==8);
     assert(out[1]==0x0070f514 && out[2]==0x42010000);

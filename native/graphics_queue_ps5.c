@@ -368,6 +368,17 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
             }
             subpass_index=recorded->subpass;
+            const struct ps5vk_subpass *next_subpass=
+                ps5vk_render_pass_subpass(pass,subpass_index);
+            if(next_subpass->input_count) {
+                size_t color_barrier=ps5vk_graphics_color_to_texture(
+                    cursor,(size_t)(end-cursor));
+                if(!color_barrier){rc=VK_ERROR_UNKNOWN;goto fail;}
+                cursor+=color_barrier;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_COLOR_TO_TEXTURE_BARRIER serial=%llu subpass=%u words=%zu",
+                    (unsigned long long)j->serial,recorded->subpass,color_barrier);
+            }
             size_t boundary=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
             if(!boundary){rc=VK_ERROR_UNKNOWN;goto fail;}
             cursor+=boundary;

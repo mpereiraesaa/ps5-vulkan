@@ -118,7 +118,7 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
          * must be the colour attachment whose tiled surface is detiled below.
          * Any other combination is not an implemented copy at all. */
         if (ps5vk_linear_staging_image(op->image_destination))
-            return ps5vk_colour_transfer_image(op->image_source) ?
+            return ps5vk_colour_readback_image(op->image_source) ?
                 PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
         return (transfer_role_source(op->image_source) &&
                 transfer_role_destination(op->image_destination)) ?
@@ -182,7 +182,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
      * else may name a linear destination, and a partial region is refused
      * because only the full surface has a proven readback mapping. */
     if (ps5vk_linear_staging_image(destination)) {
-        if (!ps5vk_colour_transfer_image(source) ||
+        if (!ps5vk_colour_readback_image(source) ||
             source_layout != VK_IMAGE_LAYOUT_GENERAL ||
             destination_layout != VK_IMAGE_LAYOUT_GENERAL ||
             source == destination ||
@@ -581,7 +581,7 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
         VkDeviceSize source_bytes = 0, destination_bytes = 0;
         if (!op->image_region_count || op->image_region_count != 1 || !regions ||
             op->owned_payload_size != (size_t)op->image_region_count * sizeof(*regions) ||
-            !ps5vk_colour_transfer_image(op->image_source) ||
+            !ps5vk_colour_readback_image(op->image_source) ||
             !ps5vk_linear_staging_image(op->image_destination) ||
             op->image_source == op->image_destination ||
             op->image_source_layout != VK_IMAGE_LAYOUT_GENERAL ||

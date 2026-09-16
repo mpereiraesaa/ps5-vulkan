@@ -614,11 +614,52 @@ static void check_input_attachment_descriptors(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+/* Compile the exact two pipeline pairs embedded by the native witness.  This
+ * catches interface-profile failures before deployment: in particular, the
+ * pattern stage must use an ordinary VS->FS location rather than a fragment
+ * built-in the bounded draw ABI does not expose. */
+static void check_input_attachment_probe_pipelines(void)
+{
+    struct ps5vk_set_signature set={0};
+    set.count=1;set.binding[0].count=1;set.binding[0].first=0;
+    set.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    set.type[0]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    for(unsigned binding=1;binding<PS5VK_MAX_BINDINGS;++binding)
+        set.binding[binding].first=1;
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/input_attachment_probe.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/input_attachment_pattern.frag.spv"),
+        .descriptor_set_count=1,.descriptor_sets=&set,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    const void *compiled=NULL;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    const struct ps5vk_runtime_graphics_program *program=compiled;
+    assert(!program->arguments.vertex_descriptor_valid[0]);
+    assert(!program->arguments.fragment_descriptor_valid[0]);
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    free((void *)key.fragment.words);
+
+    key.fragment=read_module("build/runtime-graphics/input_attachment_transform.frag.spv");
+    compiled=NULL;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    program=compiled;
+    assert(!program->arguments.vertex_descriptor_valid[0]);
+    assert(program->arguments.fragment_descriptor_valid[0]);
+    assert(program->arguments.fragment_used_bindings[0]==UINT64_C(1));
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 int main(void)
 {
     check_flat_interfaces();
     check_descriptor_options();
     check_input_attachment_descriptors();
+    check_input_attachment_probe_pipelines();
     check_sparse_layout_static_use();
     check_view_index_builtin();
     struct ps5vk_graphics_key key={

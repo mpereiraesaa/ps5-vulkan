@@ -261,12 +261,14 @@ int main(void)
         void *input_base;VkDeviceSize input_bytes;
         assert(ps5vk_image_span(&d,input_image,&input_base,&input_bytes)==VK_SUCCESS);
         uint32_t input_words[8];assert(ps5vk_image_resource_descriptor(&d,input_view,input_words)==VK_SUCCESS);
-        /* Word identity: address, format, dimensions, the 2D_ARRAY type word,
-         * the layer range of the view and the single-mip encoding. */
+        /* Word identity: address, format, dimensions, the tiled 2D_ARRAY type
+         * word, the layer range of the view and the single-mip encoding. The
+         * attachment is SW_64K_R_X, so a padded-linear resource word would be
+         * a valid address interpreted through the wrong pixel equation. */
         assert(input_words[0]==(uint32_t)((uintptr_t)input_base>>8));
         assert(input_words[1]==((uint32_t)((uintptr_t)input_base>>40)|(56u<<20)|(((64u-1u)&3u)<<30)));
         assert(input_words[2]==((63u>>2)|(63u<<14)|(1u<<31)));
-        assert(input_words[3]==(0x00000facu|(13u<<28)|(0u<<12)|((0u+1u-1u)<<16)));
+        assert(input_words[3]==(0x01b00facu|(13u<<28)|(0u<<12)|((0u+1u-1u)<<16)));
         assert(input_words[4]==((1u<<16)|4u));
         assert(input_words[5]==0x400000);
         /* The eight words are the whole record: nothing beyond them is written,
@@ -294,7 +296,7 @@ int main(void)
         single_vi.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
         VkImageView single_view;assert(vkCreateImageView(&d,&single_vi,NULL,&single_view)==VK_SUCCESS);
         assert(ps5vk_image_resource_descriptor(&d,single_view,sink)==VK_SUCCESS &&
-            sink[3]==0x90000facu && !sink[4] && !memcmp(sink,input_words,3*sizeof(uint32_t)));
+            sink[3]==0x91b00facu && !sink[4] && !memcmp(sink,input_words,3*sizeof(uint32_t)));
         memcpy(sink,expected,sizeof(sink));
         /* 3. A 1D view type, a cube view type and a 3D view type are refused. */
         VkImageViewCreateInfo plain=input_vi;plain.viewType=VK_IMAGE_VIEW_TYPE_2D;

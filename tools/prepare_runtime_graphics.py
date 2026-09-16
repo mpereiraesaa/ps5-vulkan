@@ -36,6 +36,9 @@ def main():
         ("experiments/graphics/runtime_vertex_format.frag", "runtime_vertex_format.frag.spv", "vertex_format_fragment"),
         ("experiments/graphics/runtime_texture.frag", "runtime_texture.frag.spv", "texture_fragment"),
         ("experiments/graphics/runtime_mipmap.vert", "runtime_mipmap.vert.spv", "mipmap_vertex"),
+        ("experiments/graphics/runtime_input_attachment.vert", "runtime_input_attachment.vert.spv", "input_attachment_vertex"),
+        ("experiments/graphics/runtime_input_attachment_pattern.frag", "runtime_input_attachment_pattern.frag.spv", "input_attachment_pattern"),
+        ("experiments/graphics/runtime_input_attachment_transform.frag", "runtime_input_attachment_transform.frag.spv", "input_attachment_transform"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
