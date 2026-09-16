@@ -69,13 +69,21 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
             /* The canonical table validates the full core visibility mask;
              * descriptor options project it onto the executing VS/FS stage.
              * Combined image samplers coexist with the mandatory uniform-buffer
-             * resources a real pipeline layout carries; every other descriptor
-             * type stays outside the profile instead of being half-delivered. */
+             * resources a real pipeline layout carries, and an input attachment
+             * is admitted as fragment-only resource-only image data: it is read
+             * by subpassLoad in a fragment shader, so a layout that exposes it
+             * to the vertex stage is refused rather than projected onto a stage
+             * that cannot read it. Every other descriptor type stays outside the
+             * profile instead of being half-delivered. */
             if(set->binding[b].count &&
                 (!(set->binding[b].stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)) ||
                 (set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
-                 set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)))return 0;
+                 set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
+                 set->type[b]!=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)))return 0;
+            if(set->binding[b].count &&
+               set->type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
+               set->binding[b].stages!=VK_SHADER_STAGE_FRAGMENT_BIT)return 0;
         }
     return 1;
 }
@@ -183,6 +191,15 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
     for(uint32_t s=0;s<key->descriptor_set_count;++s)
         for(uint32_t b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_binding *source=&key->descriptor_sets[s].binding[b];
+            /* An input attachment is fragment-visible resource-only image data.
+             * A declaration that exposes it to any other stage is not a
+             * declaration this profile can honour, so it fails closed here
+             * rather than being projected into a table that no longer says what
+             * the caller wrote. */
+            if(source->count &&
+               key->descriptor_sets[s].type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
+               source->stages!=VK_SHADER_STAGE_FRAGMENT_BIT)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
             if(!source->count || !(source->stages&stage))continue;
             if(count==PSBC_MAX_DESCRIPTOR_BINDINGS)return VK_ERROR_FEATURE_NOT_PRESENT;
             PsbcDescriptorType type;
@@ -193,6 +210,11 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
             case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
+            /* Fragment-only resource-only image data: the canonical table gives
+             * this role its own 32-byte record, so the PSBC type is the
+             * resource-only one and never the combined T#/S# pair. The stage
+             * projection above already keeps it out of every other stage. */
+            case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: type=PSBC_DESCRIPTOR_INPUT_ATTACHMENT;break;
             default:return VK_ERROR_FEATURE_NOT_PRESENT;
             }
             bindings[count++]=(PsbcDescriptorBinding){.set=s,.binding=b,.type=type,

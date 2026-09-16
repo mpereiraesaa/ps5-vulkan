@@ -2,6 +2,7 @@
 #include "compilation_cache.h"
 #include "spirv_graphics_interface.h"
 #include "vertex_format_probe.h"
+#include "descriptor_table_layout.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -431,10 +432,163 @@ static void check_flat_interfaces(void)
     ps5vk_runtime_graphics_free(NULL,compiled);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
+/* An input attachment is resource-only image data read by a fragment shader:
+ * subpassLoad() goes through the attachment's own eight DWORD image record and
+ * never through a sampler. The profile therefore admits the role as
+ * fragment-visible only, projects it onto PSBC's resource-only type at the
+ * canonical 32-byte stride - beside the 48-byte combined record of the same set
+ * - and delivers its set through the same user-SGPR path a combined sampler
+ * uses, while the combined behaviour itself stays what it was. */
+static void check_input_attachment_descriptors(void)
+{
+    struct ps5vk_set_signature sets[2]={0};
+    /* Set 0 mixes the two image roles, so the input attachment sits at the
+     * combined record's canonical 48-byte offset; set 1 carries an input
+     * attachment alone at offset zero. */
+    sets[0].binding[1].count=1;sets[0].binding[1].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sets[0].type[1]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    sets[0].binding[3].count=1;sets[0].binding[3].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sets[0].type[3]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    sets[1].binding[5].count=1;sets[1].binding[5].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sets[1].type[5]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    for(unsigned s=0;s<2;++s) {
+        uint32_t prefix=0;
+        for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+            sets[s].binding[b].first=prefix;
+            prefix+=sets[s].binding[b].count;
+        }
+        sets[s].count=prefix;
+    }
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/input_attachment.frag.spv"),
+        .descriptor_set_count=2,.descriptor_sets=sets,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_runtime_graphics_supported(&key));
+    /* The options carry the canonical table, not a packed rewrite of it: the
+     * combined pair keeps its 48 bytes and the resource-only role is exactly
+     * the 32-byte record the table assigns it. */
+    const PsbcDescriptorBinding expected[3]={
+        {0,1,PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER,1,0,48},
+        {0,3,PSBC_DESCRIPTOR_INPUT_ATTACHMENT,1,48,32},
+        {1,5,PSBC_DESCRIPTOR_INPUT_ATTACHMENT,1,0,32}};
+    assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)==
+        expected[1].stride);
+    PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
+        .entrypoint="main",.optimise=true,.address32_hi=2,.primitive_type=4,.rasterization_samples=1};
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_FRAGMENT_BIT,&options)==VK_SUCCESS);
+    assert(options.descriptor_binding_count==3);
+    for(unsigned i=0;i<3;++i) {
+        const PsbcDescriptorBinding *b=&options.descriptor_bindings[i];
+        assert(b->set==expected[i].set && b->binding==expected[i].binding &&
+            b->type==expected[i].type && b->array_size==expected[i].array_size &&
+            b->offset==expected[i].offset && b->stride==expected[i].stride);
+    }
+    /* The role is fragment-only: the vertex projection of the same key names
+     * none of the three bindings, so a subpass attachment can never be handed
+     * to a stage that cannot read it. */
+    PsbcCompileOptions vertex={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_VERTEX,
+        .entrypoint="main",.optimise=true,.address32_hi=2,.primitive_type=4,.rasterization_samples=1};
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_VERTEX_BIT,&vertex)==VK_SUCCESS);
+    assert(!vertex.descriptor_binding_count);
+    /* The real SPIR-V fixture goes through PSBC/ACO: nonempty pixel code plus
+     * the exact descriptor metadata, and the static use the stage really has. */
+    struct ps5vk_graphics_module_key module=read_module("build/runtime-graphics/input_attachment.frag.spv");
+    PsbcShaderOutput output={0};
+    assert(psbc_compile_shader(module.words,module.word_count*4,&options,&output)==PSBC_RESULT_OK);
+    assert(output.machine_code && output.machine_code_size &&
+        !(output.machine_code_size&3u) && output.metadata.hardware_stage==PSBC_HW_STAGE_PIXEL);
+    assert(output.metadata.descriptor_binding_count==3);
+    for(unsigned i=0;i<3;++i) {
+        const PsbcDescriptorBinding *b=&output.metadata.descriptor_bindings[i];
+        assert(b->set==expected[i].set && b->binding==expected[i].binding &&
+            b->type==expected[i].type && b->array_size==expected[i].array_size &&
+            b->offset==expected[i].offset && b->stride==expected[i].stride);
+    }
+    assert(output.metadata.descriptor_set_valid[0] && output.metadata.descriptor_set_valid[1]);
+    assert(output.metadata.descriptor_used_binding_mask[0]==((UINT64_C(1)<<1)|(UINT64_C(1)<<3)));
+    assert(output.metadata.descriptor_used_binding_mask[1]==(UINT64_C(1)<<5));
+    /* The compiled fragment stage and the composite draw ABI agree on what the
+     * shader uses: both sets are required, and the combined binding is still
+     * used exactly as before beside the two resource-only ones. */
+    const void *compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    const struct ps5vk_runtime_graphics_program *program=compiled;
+    const PsbcShaderMetadata *fs=&program->fragment.metadata;
+    assert(fs->descriptor_binding_count==3 &&
+        fs->descriptor_used_binding_mask[0]==((UINT64_C(1)<<1)|(UINT64_C(1)<<3)) &&
+        fs->descriptor_used_binding_mask[1]==(UINT64_C(1)<<5));
+    assert(program->arguments.fragment_descriptor_valid[0] &&
+        program->arguments.fragment_descriptor_valid[1] &&
+        !program->arguments.vertex_descriptor_valid[0] &&
+        !program->arguments.vertex_descriptor_valid[1]);
+    assert(program->arguments.fragment_used_bindings[0]==((UINT64_C(1)<<1)|(UINT64_C(1)<<3)) &&
+        program->arguments.fragment_used_bindings[1]==(UINT64_C(1)<<5));
+    const uint32_t tables[PS5VK_MAX_SETS]={UINT32_C(0x1000),UINT32_C(0x2000),0,0};
+    uint32_t vs[16],pixel[16];
+    assert(!ps5vk_runtime_draw_values_sets(&program->arguments,0,0,0,0,0,0,tables,vs,pixel));
+    for(unsigned s=0;s<2;++s)
+        assert(pixel[program->arguments.fragment_descriptor_slot[s]]==tables[s]);
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    /* Every refusal below leaves the caller's output untouched, and the PSBC
+     * validation refuses a record whose width disagrees with its type: the
+     * mutations reuse the accepted options and change exactly one field
+     * (0 stride, 1 type, 2 array size, 3 offset, 4 set). */
+    struct { unsigned binding, field; uint32_t value; } mutations[]={
+        {1,0,48},{1,0,16},{1,0,64},{0,0,32},{0,0,16},
+        {1,1,PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER},{1,1,PSBC_DESCRIPTOR_NONE},{1,1,99},
+        {1,2,0},{1,3,8},{1,4,PSBC_MAX_DESCRIPTOR_SETS}};
+    for(unsigned i=0;i<sizeof(mutations)/sizeof(mutations[0]);++i) {
+        PsbcCompileOptions bad=options;
+        PsbcDescriptorBinding *b=&bad.descriptor_bindings[mutations[i].binding];
+        if(mutations[i].field==0)b->stride=mutations[i].value;
+        else if(mutations[i].field==1)b->type=(PsbcDescriptorType)mutations[i].value;
+        else if(mutations[i].field==2)b->array_size=mutations[i].value;
+        else if(mutations[i].field==3)b->offset=mutations[i].value;
+        else b->set=mutations[i].value;
+        PsbcShaderOutput rejected={0};
+        assert(psbc_compile_shader(module.words,module.word_count*4,&bad,&rejected)==
+            PSBC_RESULT_INTERNAL_ERROR);
+        assert(!rejected.machine_code && !rejected.machine_code_size && !rejected.metadata.version);
+    }
+    /* A duplicate (set, binding) pair is refused too, and an accepted compile
+     * is not a licence for a malformed table: the second entry repeats the
+     * first one's binding number. */
+    PsbcCompileOptions duplicate=options;
+    duplicate.descriptor_bindings[1].binding=duplicate.descriptor_bindings[0].binding;
+    duplicate.descriptor_bindings[1].set=duplicate.descriptor_bindings[0].set;
+    PsbcShaderOutput dup_out={0};
+    assert(psbc_compile_shader(module.words,module.word_count*4,&duplicate,&dup_out)==
+        PSBC_RESULT_INTERNAL_ERROR && !dup_out.machine_code);
+    psbc_free_output(&output);
+    free((void *)module.words);
+    /* The profile gate is fail-closed before the compiler is reached: an input
+     * attachment exposed to any stage other than the fragment stage is refused,
+     * and the caller's options are left exactly as they were. */
+    const VkShaderStageFlags refused[]={VK_SHADER_STAGE_VERTEX_BIT,
+        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,VK_SHADER_STAGE_ALL,
+        VK_SHADER_STAGE_COMPUTE_BIT};
+    for(unsigned i=0;i<sizeof(refused)/sizeof(refused[0]);++i) {
+        struct ps5vk_set_signature widened[2]={0};
+        memcpy(widened,sets,sizeof(sets));
+        widened[0].binding[3].stages=refused[i];
+        struct ps5vk_graphics_key bad_key=key;
+        bad_key.descriptor_sets=widened;
+        assert(!ps5vk_runtime_graphics_supported(&bad_key));
+        PsbcCompileOptions saved=options;
+        assert(ps5vk_runtime_graphics_descriptor_options(&bad_key,VK_SHADER_STAGE_FRAGMENT_BIT,
+            &options)==VK_ERROR_FEATURE_NOT_PRESENT);
+        assert(!memcmp(&saved,&options,sizeof(options)));
+    }
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 int main(void)
 {
     check_flat_interfaces();
     check_descriptor_options();
+    check_input_attachment_descriptors();
     check_sparse_layout_static_use();
     check_view_index_builtin();
     struct ps5vk_graphics_key key={
