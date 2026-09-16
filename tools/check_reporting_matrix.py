@@ -152,7 +152,7 @@ ADVERTISED_FEATURES = {
 # than inventing an object-level rejection branch for compiler-side features.
 FALSE_CORE_FEATURE_GATE = (
     "src/vk_device.c",
-    "if (offset != robust_offset ||",
+    "if (!entry || !(supported & entry->bit)) return VK_ERROR_FEATURE_NOT_PRESENT;",
     "tests/test_vk_device.c",
     "for(size_t offset=0;offset<sizeof(features);offset+=sizeof(VkBool32))",
 )

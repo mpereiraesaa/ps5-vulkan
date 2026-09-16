@@ -22,12 +22,35 @@ static VkResult enumerate_extensions(const VkExtensionProperties *properties,
     return written < total ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
+/* The Vulkan 1.0 core features this driver can report, each behind exactly one
+ * platform bit: a member is reported true only when the platform mask carries
+ * its bit, and a request for it is honoured only under the same condition.
+ * Every other VkPhysicalDeviceFeatures member is reported false and refused
+ * before a device opens, whatever the platform could do. */
+static const struct core_feature_bit {
+    size_t offset;
+    uint32_t bit;
+} core_feature_bits[] = {
+    {offsetof(VkPhysicalDeviceFeatures, robustBufferAccess),
+     PS5VK_FEATURE_ROBUST_BUFFER_ACCESS},
+    {offsetof(VkPhysicalDeviceFeatures, fullDrawIndexUint32),
+     PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32},
+    {offsetof(VkPhysicalDeviceFeatures, multiDrawIndirect),
+     PS5VK_FEATURE_MULTI_DRAW_INDIRECT},
+    {offsetof(VkPhysicalDeviceFeatures, drawIndirectFirstInstance),
+     PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE},
+};
+
 static void get_core_features(const struct ps5vk_platform *platform,
                               VkPhysicalDeviceFeatures *features)
 {
     memset(features, 0, sizeof(*features));
-    features->robustBufferAccess =
-        !!(platform->supported_features & PS5VK_FEATURE_ROBUST_BUFFER_ACCESS);
+    for (size_t n = 0; n < sizeof(core_feature_bits) / sizeof(core_feature_bits[0]); ++n) {
+        if (!(platform->supported_features & core_feature_bits[n].bit)) continue;
+        const VkBool32 reported = VK_TRUE;
+        memcpy((unsigned char *)features + core_feature_bits[n].offset,
+               &reported, sizeof(reported));
+    }
 }
 
 static VkResult enable_core_features(const VkPhysicalDeviceFeatures *requested,
@@ -35,17 +58,18 @@ static VkResult enable_core_features(const VkPhysicalDeviceFeatures *requested,
 {
     if (!requested) return VK_SUCCESS;
     const unsigned char *bytes = (const unsigned char *)requested;
-    const size_t robust_offset = offsetof(VkPhysicalDeviceFeatures,
-                                          robustBufferAccess);
     for (size_t offset = 0; offset < sizeof(*requested); offset += sizeof(VkBool32)) {
         VkBool32 value;
         memcpy(&value, bytes + offset, sizeof(value));
         if (!value) continue;
         if (value != VK_TRUE) return INVALID;
-        if (offset != robust_offset ||
-            !(supported & PS5VK_FEATURE_ROBUST_BUFFER_ACCESS))
-            return VK_ERROR_FEATURE_NOT_PRESENT;
-        *enabled |= PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+        const struct core_feature_bit *entry = NULL;
+        for (size_t n = 0; n < sizeof(core_feature_bits) / sizeof(core_feature_bits[0]); ++n)
+            if (core_feature_bits[n].offset == offset) entry = &core_feature_bits[n];
+        /* A member without a platform bit, or whose bit the platform does not
+         * carry, is refused before a backend/device is opened. */
+        if (!entry || !(supported & entry->bit)) return VK_ERROR_FEATURE_NOT_PRESENT;
+        *enabled |= entry->bit;
     }
     return VK_SUCCESS;
 }

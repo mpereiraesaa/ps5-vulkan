@@ -39,8 +39,13 @@ static inline VkDeviceSize ps5vk_device_profile_allocation_granularity(int graph
                             : PS5VK_PROFILE_COMPUTE_ALLOCATION_GRANULARITY;
 }
 
+/* supported_features is the platform's PS5VK_FEATURE_* mask: the limits a
+ * reported feature obliges (today maxDrawIndirectCount) are derived from it
+ * here, so the native platform and the host reporting dump cannot report a
+ * feature and its limit from two different sources. */
 static inline void ps5vk_device_profile_init(VkPhysicalDeviceProperties *properties,
-    VkPhysicalDeviceMemoryProperties *memory, int graphics_objects, int graphics_submit)
+    VkPhysicalDeviceMemoryProperties *memory, int graphics_objects, int graphics_submit,
+    uint32_t supported_features)
 {
     const struct ps5vk_physical_profile_info info = {
         .name = graphics_submit ? PS5VK_PROFILE_GRAPHICS_NAME : PS5VK_PROFILE_COMPUTE_NAME,
@@ -52,6 +57,8 @@ static inline void ps5vk_device_profile_init(VkPhysicalDeviceProperties *propert
     };
     ps5vk_physical_profile_init(properties, memory, &info);
     if (graphics_submit) ps5vk_graphics_limits(&properties->limits);
+    properties->limits.maxDrawIndirectCount =
+        ps5vk_platform_max_draw_indirect_count(supported_features);
 }
 
 #endif
