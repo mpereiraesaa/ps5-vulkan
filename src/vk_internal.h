@@ -18,6 +18,12 @@ struct ps5vk_memory_backend {
 struct ps5vk_memory_backend ps5vk_native_memory_backend(void);
 struct ps5vk_memory_backend ps5vk_native_graphics_memory_backend(void);
 VkResult ps5vk_native_image_requirements(VkDevice, const VkImageCreateInfo *, VkMemoryRequirements *);
+/* Storage of one array layer of a color/depth attachment surface, and of a
+ * whole layered attachment: stride == the per-layer footprint slice A measured,
+ * bytes == stride * layers with an explicit overflow check. layers == 1
+ * reproduces the single-layer requirements exactly. */
+VkResult ps5vk_native_layered_storage(VkFormat, uint32_t width, uint32_t height,
+    uint64_t layers, VkDeviceSize *stride, VkDeviceSize *alignment, VkDeviceSize *bytes);
 struct ps5vk_native_memory_budget { uint64_t limit, used; };
 void ps5vk_native_queue_configure(VkDevice device);
 struct ps5vk_compiled_program;

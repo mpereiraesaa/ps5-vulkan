@@ -43,28 +43,18 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
     *out = result; return VK_SUCCESS;
 }
 
-/* One array layer's footprint, from the same arithmetic the image path uses:
- * the D32 layout for the depth target, the backend's own requirements for the
- * color target (128 KiB-aligned). Both are per-layer quantities, so a
- * layer-addressed surface is layer * footprint bytes. */
+/* One array layer's footprint: the image path's own storage arithmetic, so the
+ * layer a target names and the storage the image was given cannot disagree. */
 VkResult ps5vk_native_layer_footprint(VkDevice d, VkImage image, VkDeviceSize *out)
 {
     if (!out) return VK_ERROR_UNKNOWN;
     *out = 0;
     if (!d || !image) return VK_ERROR_UNKNOWN;
-    if (image->info.format == VK_FORMAT_D32_SFLOAT) {
-        struct ps5vk_depth_layout layout;
-        if (ps5vk_depth_layout(image->info.extent.width, image->info.extent.height, &layout))
-            return VK_ERROR_FORMAT_NOT_SUPPORTED;
-        *out = layout.bytes;
-        return VK_SUCCESS;
-    }
-    VkImageCreateInfo single = image->info;
-    single.arrayLayers = 1;
-    VkMemoryRequirements requirements;
-    VkResult rc = ps5vk_native_image_requirements(d, &single, &requirements);
+    VkDeviceSize stride = 0, alignment = 0, bytes = 0;
+    VkResult rc = ps5vk_native_layered_storage(image->info.format,
+        image->info.extent.width, image->info.extent.height, 1u, &stride, &alignment, &bytes);
     if (rc != VK_SUCCESS) return rc;
-    *out = requirements.size;
+    *out = stride;
     return VK_SUCCESS;
 }
 
