@@ -5,7 +5,7 @@
 
 enum { ID_LIMIT=65536, LOCATIONS=32, BLOCK_MEMBERS=8 };
 /* SPIR-V execution models this profile describes. */
-enum { MODEL_VERTEX=0, MODEL_FRAGMENT=4 };
+enum { MODEL_VERTEX=0, MODEL_GEOMETRY=3, MODEL_FRAGMENT=4 };
 /* Built-in decoration ids this profile knows by name. */
 enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
        BUILTIN_CULL_DISTANCE=4, BUILTIN_VERTEX_INDEX=42, BUILTIN_INSTANCE_INDEX=43,
@@ -22,30 +22,45 @@ struct interface {
     /* Declared gl_ClipDistance/gl_CullDistance array lengths, in components.
      * They start at zero and are set at most once per stage. */
     unsigned clip_distances, cull_distances;
+    /* A geometry stage's per-vertex input array length: the number of vertices
+     * of the input primitive, which the pipeline topology must agree with. */
+    unsigned input_vertices;
 };
 
-/* A declared float32 array of exactly `length` elements: the SPIR-V form of
- * gl_ClipDistance/gl_CullDistance, whether the front end writes it as a block
- * member or as a standalone variable. */
-static int declared_distance_array(const struct id_info *ids,unsigned bound,
-                                   unsigned type,unsigned *length)
+/* A declared array of a literal length: the form every per-vertex interface in
+ * this profile uses, whether it is a distance array, a geometry input array or
+ * a redeclared built-in block. */
+static int declared_array(const struct id_info *ids,unsigned bound,unsigned type,
+                          unsigned *length,unsigned *element)
 {
     if(!type || type>=bound)return 0;
     const struct id_info *array=&ids[type];
-    /* OpTypeArray: operand 1 is the element type, operand 2 the length. */
     if(array->op!=28 || !array->type || array->type>=bound || !array->count ||
        array->count>=bound)return 0;
-    const struct id_info *element=&ids[array->type];
     const struct id_info *constant=&ids[array->count];
-    if(element->op!=22 || element->count!=32)return 0;
     /* Only a literal 32-bit integer length is a declaration this profile can
      * bound; a spec constant or a non-integer length is not. */
     if(constant->op!=43 || !constant->type || constant->type>=bound)return 0;
     const struct id_info *constant_type=&ids[constant->type];
     if(constant_type->op!=21 || constant_type->count!=32)return 0;
-    if(!constant->count || constant->count>PS5VK_MAX_CLIP_DISTANCES)return 0;
+    if(!constant->count)return 0;
     *length=constant->count;
+    *element=array->type;
     return 1;
+}
+
+/* A declared float32 distance array: the SPIR-V form of gl_ClipDistance and
+ * gl_CullDistance, whether the front end writes it as a block member or as a
+ * standalone variable. */
+static int declared_distance_array(const struct id_info *ids,unsigned bound,
+                                   unsigned type,unsigned *length)
+{
+    unsigned element=0;
+    if(!declared_array(ids,bound,type,length,&element))return 0;
+    if(*length>PS5VK_MAX_CLIP_DISTANCES)return 0;
+    if(!element || element>=bound)return 0;
+    const struct id_info *component=&ids[element];
+    return component->op==22 && component->count==32;
 }
 
 /* gl_PerVertex may declare unused builtin arrays, so a declaration alone is
@@ -77,9 +92,15 @@ static int builtin_block(const struct ps5vk_graphics_module_key *m,
             } else if(w[4]==BUILTIN_CLIP_DISTANCE || w[4]==BUILTIN_CULL_DISTANCE) {
                 unsigned length=0;
                 if(!declared_distance_array(ids,bound,type,&length))return 0;
+                /* A block an earlier stage wrote is an input here: the members
+                 * are validated but they are not this stage's exports, so a
+                 * geometry stage may hold the unused arrays its predecessor and
+                 * successor both declare. */
                 unsigned *total=w[4]==BUILTIN_CLIP_DISTANCE?clip:cull;
-                if(*total)return 0;
-                *total=length;
+                if(total) {
+                    if(*total)return 0;
+                    *total=length;
+                }
             } else return 0;
             seen|=1u<<w[2];
         }
@@ -204,7 +225,27 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                type->op!=21 || type->count!=32)goto done;
             continue;
         }
-        if(type->op==30 && model==MODEL_VERTEX && d->storage==3 && d->location==~0u &&
+        /* A geometry stage input is an array: either the per-vertex gl_in block
+         * or a per-vertex varying array. Its length is the input primitive's
+         * vertex count (the caller checks it against the topology) and its
+         * element is what has to match the previous stage's output. */
+        if(type->op==28 && model==MODEL_GEOMETRY && d->storage==1) {
+            unsigned length=0,element=0;
+            if(!declared_array(ids,bound,ptr->type,&length,&element) ||
+               !element || element>=bound)goto done;
+            if(!out->input_vertices)out->input_vertices=length;
+            else if(out->input_vertices!=length)goto done;
+            struct id_info *component=&ids[element];
+            if(component->op==30 && d->location==~0u) {
+                /* An input block carries the previous stage's exports, so its
+                 * members are validated without being claimed as this stage's. */
+                if(!builtin_block(m,ids,bound,element,component->count,NULL,NULL))goto done;
+                continue;
+            }
+            type=component;
+        }
+        if(type->op==30 && (model==MODEL_VERTEX || model==MODEL_GEOMETRY) &&
+           d->storage==3 && d->location==~0u &&
            builtin_block(m,ids,bound,ptr->type,type->count,
                          &out->clip_distances,&out->cull_distances))continue;
         unsigned components=1;
@@ -221,7 +262,10 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
         /* Integer FS inputs are not interpolatable. Flat floats are also
          * valid; their PSBC semantic bit is preserved by the native header.
          * Interpolation decorations need not match VS output decorations. */
-        if(model==4 && d->storage==1 && numeric!=PS5VK_VERTEX_NUMERIC_FLOAT && !d->flat)
+        /* Integer outputs cannot be interpolated: both the fragment stage and a
+         * geometry stage's per-vertex inputs must be flat for them. */
+        if((model==MODEL_FRAGMENT || model==MODEL_GEOMETRY) && d->storage==1 &&
+           numeric!=PS5VK_VERTEX_NUMERIC_FLOAT && !d->flat)
             goto done;
         if(d->location>=LOCATIONS)goto done;
         struct interface_slot *locations=d->storage==1?out->inputs:out->outputs;
@@ -245,7 +289,10 @@ int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_k
     struct interface stage={0};
     if(clip_distances)*clip_distances=0;
     if(cull_distances)*cull_distances=0;
-    if(!reflect(module,MODEL_VERTEX,&stage))return 0;
+    /* Distances are a pre-raster export: the vertex stage, or the geometry
+     * stage when the pipeline has one, is where they are written. */
+    if(!reflect(module,MODEL_VERTEX,&stage) && !reflect(module,MODEL_GEOMETRY,&stage))
+        return 0;
     if(clip_distances)*clip_distances=stage.clip_distances;
     if(cull_distances)*cull_distances=stage.cull_distances;
     return 1;
@@ -253,11 +300,21 @@ int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_k
 
 int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
 {
-    struct interface vs={0},fs={0};
+    struct interface vs={0},fs={0},gs={0};
     if(!key || !reflect(&key->vertex,MODEL_VERTEX,&vs) ||
        !reflect(&key->fragment,MODEL_FRAGMENT,&fs))return 0;
+    const int has_geometry=ps5vk_graphics_has_geometry(key);
+    if(has_geometry) {
+        if(!reflect(&key->geometry,MODEL_GEOMETRY,&gs))return 0;
+        /* The geometry stage this profile compiles takes triangles: the
+         * per-vertex input array is exactly the three vertices of one. */
+        if(gs.input_vertices!=3)return 0;
+    }
     if(fs.outputs[0].components!=4 ||
        fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
+    /* The stage the fragment stage reads is the geometry stage when there is
+     * one, and the vertex stage otherwise. */
+    const struct interface *previous=has_geometry?&gs:&vs;
     for(unsigned i=0;i<LOCATIONS;++i) {
         unsigned matched=0;
         for(uint32_t a=0;a<key->vertex_attribute_count;++a)
@@ -275,8 +332,14 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
            (!vs.inputs[i].components && matched))return 0;
         if(i && fs.outputs[i].components)return 0;
         if(fs.inputs[i].components &&
-           (fs.inputs[i].components!=vs.outputs[i].components ||
-            fs.inputs[i].numeric!=vs.outputs[i].numeric))return 0;
+           (fs.inputs[i].components!=previous->outputs[i].components ||
+            fs.inputs[i].numeric!=previous->outputs[i].numeric))return 0;
+        /* A geometry stage's per-vertex inputs must be exactly what the vertex
+         * stage exported, component for component. */
+        if(has_geometry && gs.inputs[i].components &&
+           (gs.inputs[i].components!=vs.outputs[i].components ||
+            gs.inputs[i].numeric!=vs.outputs[i].numeric))return 0;
+        if(has_geometry && vs.outputs[i].components && !gs.inputs[i].components)return 0;
     }
     return 1;
 }

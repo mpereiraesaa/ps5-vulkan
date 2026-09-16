@@ -23,8 +23,14 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
      * Fixed 64-byte strings and explicit lengths prevent concatenation aliases. */
     enum { DESCRIPTOR_WORDS=1+PS5VK_MAX_SETS*(1+PS5VK_MAX_BINDINGS*4),
         VERTEX_WORDS=2+16*4+32*5,
-        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS };
-    size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count;
+        /* The optional geometry stage is part of the program identity: a
+         * pipeline that carries one must never reuse the pair compiled for the
+         * vertex stage alone. */
+        GEOMETRY_WORDS=1+1+16+1+64*4,
+        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS };
+    const int has_geometry=ps5vk_graphics_has_geometry(key);
+    size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count+
+        (has_geometry?key->geometry.word_count:0);
     uint32_t *words=calloc(count,sizeof(*words));
     if(!words)return NULL;
     words[0]=5; /* optimized vertex-table usage in metadata v11 */
@@ -82,11 +88,29 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
         words[at++]=a!=NULL;words[at++]=a?a->location:0;
         words[at++]=a?a->binding:0;words[at++]=a?a->format:0;words[at++]=a?a->offset:0;
     }
+    /* The geometry stage, present or absent, with its entry point and
+     * specialization map, so a three-stage pipeline can never alias a
+     * two-stage one. */
+    words[at++]=has_geometry?1u:0u;
+    words[at++]=has_geometry?(uint32_t)key->geometry.word_count:0u;
+    if(has_geometry) {
+        memcpy(words+at,key->geometry.entry,strlen(key->geometry.entry));at+=16;
+    } else at+=16;
+    words[at++]=key->geometry.specialization_count;
+    for(unsigned i=0;i<64;++i) {
+        words[at++]=key->geometry.specializations[i].constant_id;
+        words[at++]=key->geometry.specializations[i].size;
+        memcpy(words+at,key->geometry.specializations[i].data,8);at+=2;
+    }
     if(at!=HEADER_WORDS){free(words);return NULL;}
     memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
     memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
-    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v5",
-            VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,cache_key)) {
+    if(has_geometry)
+        memcpy(words+HEADER_WORDS+key->vertex.word_count+key->fragment.word_count,
+               key->geometry.words,key->geometry.word_count*4);
+    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v6",
+            VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|
+            (has_geometry?VK_SHADER_STAGE_GEOMETRY_BIT:0),0,cache_key)) {
         free(words);return NULL;
     }
     return words;
@@ -154,7 +178,12 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     lease->program.fragment.machine_code=(char *)(payload+1)+payload->vertex_bytes;
     lease->program.fragment.machine_code_size=(size_t)payload->fragment_bytes;
     struct ps5vk_runtime_shader header;
-    if(ps5vk_runtime_shader_build(&header,&lease->program.vertex) ||
+    /* A cached pair is accepted under the same capability gate the compiler
+     * applied when it was compiled, so an application that did not enable a
+     * distance feature cannot reach one through the cache. */
+    if(!ps5vk_runtime_graphics_feature_use_ok(&payload->vertex,&payload->fragment,
+            key->feature_mask) ||
+       ps5vk_runtime_shader_build(&header,&lease->program.vertex) ||
        ps5vk_runtime_shader_build(&header,&lease->program.fragment) ||
        ps5vk_runtime_draw_abi_build(&payload->vertex,&payload->fragment,&lease->program.arguments)) {
         free(lease);goto failed;

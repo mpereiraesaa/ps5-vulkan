@@ -59,15 +59,18 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     /* The pipeline is created for ONE subpass, which must exist in the pass it
      * names. A nonzero index is no longer refused outright: it identifies the
      * scope this pipeline may draw in. */
+    /* Two stages are the vertex+fragment profile every earlier tranche used;
+     * three add the optional geometry stage between them. Nothing else is
+     * accepted, so a tessellation or mesh stage still fails here. */
     if (in->pNext || in->flags || in->subpass >= in->renderPass->subpass_count ||
-        in->stageCount != 2 || !in->pStages ||
+        (in->stageCount != 2 && in->stageCount != 3) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkBool32 dynamic_viewport,dynamic_scissor;
     if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor))
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL;
-    for (unsigned i=0; i<2; ++i) {
+    const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL, *gs=NULL;
+    for (unsigned i=0; i<in->stageCount; ++i) {
         const VkPipelineShaderStageCreateInfo *s=&in->pStages[i];
         if (s->sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO || !s->module ||
             s->module->device != d || !s->pName) return VK_ERROR_UNKNOWN;
@@ -75,10 +78,18 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         uint32_t id;
         if (!ps5vk_shader_entry(s->module, s->stage, s->pName, &id)) return VK_ERROR_UNKNOWN;
         if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;
+        else if (s->stage == VK_SHADER_STAGE_GEOMETRY_BIT && !gs) gs=s;
         else if (s->stage == VK_SHADER_STAGE_FRAGMENT_BIT && !fs) fs=s;
         else return VK_ERROR_FEATURE_NOT_PRESENT;
     }
-    if (!vs || !fs) return VK_ERROR_UNKNOWN;
+    if (!vs || !fs || (in->stageCount==3 && !gs)) return VK_ERROR_UNKNOWN;
+    /* A geometry pipeline needs the feature the logical device enabled. The
+     * private witness build keeps its own gate, exactly as the multiview
+     * diagnostic does, so shipping behaviour stays the negotiation. */
+#if !PS5VK_GEOMETRY_SHADER_DIAGNOSTIC
+    if (gs && !(d->enabled_features & PS5VK_FEATURE_GEOMETRY_SHADER))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+#endif
     const VkPipelineVertexInputStateCreateInfo *v=in->pVertexInputState;
     const VkPipelineInputAssemblyStateCreateInfo *ia=in->pInputAssemblyState;
     const VkPipelineRasterizationStateCreateInfo *r=in->pRasterizationState;
@@ -153,6 +164,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     struct ps5vk_graphics_key key={
         .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
         .fragment={.words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName},
+        .geometry=gs? (struct ps5vk_graphics_module_key){
+            .words=gs->module->words,.word_count=gs->module->word_count,.entry=gs->pName} :
+            (struct ps5vk_graphics_module_key){0},
+        .feature_mask=d->enabled_features,
         .topology=ia->topology, .color_format=pass->attachments[subpass->color.attachment].format,
         .samples=m->rasterizationSamples, .color_write_mask=b->pAttachments[0].colorWriteMask,
         .blend_enable=b->pAttachments[0].blendEnable,
@@ -163,7 +178,8 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     memcpy(key.push_constant_stages,in->layout->push_constant_stages,
            sizeof(key.push_constant_stages));
     if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
-       !specialization_key(fs->pSpecializationInfo,&key.fragment))
+       !specialization_key(fs->pSpecializationInfo,&key.fragment) ||
+       (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const void *data=NULL;
     const struct ps5vk_graphics_program *program=NULL;

@@ -57,6 +57,23 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
     psbc_free_output(&p->vertex);psbc_free_output(&p->fragment);free(p);
 }
 
+int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
+    const PsbcShaderMetadata *fragment,uint32_t feature_mask)
+{
+    if(!pre_raster || !fragment)return 0;
+    if(pre_raster->clip_distance_mask &&
+       !(feature_mask & PS5VK_FEATURE_SHADER_CLIP_DISTANCE))return 0;
+    if(pre_raster->cull_distance_mask &&
+       !(feature_mask & PS5VK_FEATURE_SHADER_CULL_DISTANCE))return 0;
+    /* A merged pre-raster stage that reports the geometry source stage is a
+     * geometry pipeline, and it needs the feature like any other stage. */
+    if(pre_raster->source_stage==PSBC_STAGE_GEOMETRY &&
+       !(feature_mask & PS5VK_FEATURE_GEOMETRY_SHADER))return 0;
+    if(pre_raster->source_stage==PSBC_STAGE_TESS_EVAL &&
+       !(feature_mask & PS5VK_FEATURE_TESSELLATION_SHADER))return 0;
+    return 1;
+}
+
 static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
 {
     struct ps5vk_descriptor_table_layout tables;
@@ -92,6 +109,10 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
        key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
+    /* The merged vertex+geometry pre-raster stage is the next slice: until the
+     * adapter can compile and package it, a key with a geometry stage is
+     * refused instead of silently compiling its vertex stage alone. */
+    if(ps5vk_graphics_has_geometry(key))return 0;
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
     if(key->vertex_binding_count>16 || key->vertex_attribute_count>PSBC_MAX_VERTEX_ATTRIBUTES ||
@@ -308,6 +329,10 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     if(result!=PSBC_RESULT_OK)goto failed;
     if(!push_metadata_supported(&p->vertex.metadata,key,VK_SHADER_STAGE_VERTEX_BIT) ||
        !push_metadata_supported(&p->fragment.metadata,key,VK_SHADER_STAGE_FRAGMENT_BIT))goto failed;
+    /* The compiled stages are the usage evidence: refuse a pair that really
+     * consumes a capability the application never enabled. */
+    if(!ps5vk_runtime_graphics_feature_use_ok(&p->vertex.metadata,&p->fragment.metadata,
+        key->feature_mask))goto failed;
     struct ps5vk_runtime_shader header;
     if(ps5vk_runtime_shader_build(&header,&p->vertex) ||
        ps5vk_runtime_shader_build(&header,&p->fragment) ||

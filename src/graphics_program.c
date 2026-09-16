@@ -97,6 +97,11 @@ VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
             memcmp(p->push_constant_stages,key->push_constant_stages,
                    sizeof(p->push_constant_stages)) ||
             !equal_module(&p->vertex, &key->vertex) || !equal_module(&p->fragment, &key->fragment)) continue;
+        /* A record with a geometry stage matches only a key with the same
+         * geometry module: a two-stage program must never satisfy a three-stage
+         * pipeline by accident, and vice versa. */
+        if ((p->geometry.words!=NULL) != (key->geometry.words!=NULL)) continue;
+        if (key->geometry.words && !equal_module(&p->geometry, &key->geometry)) continue;
         /* Multiple matching records are an ambiguous compiler library, not
          * permission to choose the first potentially different backend object. */
         if (*out) { *out = NULL; return VK_ERROR_UNKNOWN; }
