@@ -6,12 +6,14 @@
 #include "descriptor_encode.h"
 #include <string.h>
 
-/* The runtime graphics profile delivers combined image samplers and mandatory
- * uniform buffers from the same per-set table. Every other descriptor type
- * stays out of the profile rather than being silently accepted. */
+/* The runtime graphics profile delivers combined image samplers, resource-only
+ * input attachments and mandatory uniform buffers from the same per-set table.
+ * Every other descriptor type stays out of the profile rather than being
+ * silently accepted. */
 static int graphics_descriptor_type(VkDescriptorType type)
 {
     return type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+        type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
         type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
         type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 }
@@ -51,6 +53,13 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
             if(!graphics_descriptor_type(set->signature.type[b]) ||
                !(binding->stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
+            /* An input attachment is fragment-visible resource-only image data.
+             * vkCreateDescriptorSetLayout admits only the fragment stage for
+             * it, so anything else here is a signature this path cannot
+             * deliver and must refuse rather than encode for the wrong stage. */
+            if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
+               binding->stages!=VK_SHADER_STAGE_FRAGMENT_BIT)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
             /* A binding no compiled stage dereferences is a declaration, not a
              * requirement: it needs no defined descriptor. A set the compiler
              * could not name (zero mask on both stages) keeps its whole
@@ -66,6 +75,17 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
                  * which is the only place that can read a buffer handle. */
                 if(graphics_buffer_type(set->signature.type[b]) &&
                    !set->buffers[index].buffer)return VK_ERROR_UNKNOWN;
+                /* The recorded view and the layout it is consumed through are
+                 * preconditions this path owns: the encoder receives a view
+                 * and cannot see a VkDescriptorImageInfo. VkDescriptorImageInfo's
+                 * sampler member is IGNORED for an input attachment, so it is
+                 * deliberately neither read nor rejected here or below. */
+                if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) {
+                    const VkDescriptorImageInfo *image=&set->images[index];
+                    if(!image->imageView ||
+                       (image->imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                        image->imageLayout!=VK_IMAGE_LAYOUT_GENERAL))return VK_ERROR_UNKNOWN;
+                }
             }
         }
     }
@@ -197,6 +217,12 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
                     VkDeviceSize dynamic=ps5vk_dynamic_descriptor_type(
                         set->signature.type[b])?op->descriptor_dynamic_offsets[index]:0;
                     rc=ps5vk_buffer_descriptor(d,&set->buffers[index],dynamic,words);
+                } else if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) {
+                    /* Resource-only image data: the encoder writes the eight
+                     * DWORD image record and nothing else, and it is never the
+                     * combined T#/S# path - an input attachment's slot in the
+                     * table can therefore never receive sampler words. */
+                    rc=ps5vk_image_resource_descriptor(d,set->images[index].imageView,words);
                 } else {
                     const VkDescriptorImageInfo *image=&set->images[index];
                     rc=ps5vk_texture_descriptor(d,image->imageView,image->sampler,words);
