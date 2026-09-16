@@ -37,10 +37,14 @@ uint32_t ps5vk_multiview_witness_clear_word(void);
  * `other_view` and `other` count those detiled pixels.
  *
  * DEPTH is counted over the layer's WHOLE footprint, not per pixel. The witness
- * vertex stage writes one UNIFORM depth per view and the pass clears with a
- * uniform dword, so both are tiling-invariant and the count itself is the
- * coverage proof: exactly 4096 words hold this view's depth, no word holds
- * another view's, and every remaining word still holds the clear value. This
+ * vertex stage writes one UNIFORM depth per view, which is tiling-invariant, so
+ * the count is the coverage proof: exactly 4096 words hold this view's depth and
+ * no word holds another view's. The rest of the footprint is REMainder the pass
+ * does not write: the pass loads it with LOAD_OP_DONT_CARE, so Vulkan guarantees
+ * nothing about that content and the verdict does not depend on it. The two
+ * remainder counters below are reported honestly - `depth_clear` for words that
+ * happen to hold the clear value and `depth_unknown` for everything else - and
+ * only their SUM is required, because DONT_CARE is allowed to be anything. This
  * driver does not have the 64KB_Z_X pixel equations, so no per-pixel depth
  * coordinate is claimed anywhere. */
 struct ps5vk_multiview_layer_witness {
@@ -74,11 +78,12 @@ void ps5vk_multiview_witness_guard(struct ps5vk_multiview_witness *w, uint32_t w
 /* The verdict, with `depth_footprint_words` the number of words one layer of the
  * depth attachment occupies (its stride divided by four). A layer verifies only
  * if its 4096 detiled pixels are all its own colour, its depth footprint holds
- * exactly 4096 words of its own depth, no word of another view's depth, no
- * unexplained word, and the rest of the footprint is exactly the clear value,
- * the six layers are therefore distinct, and every guard word still holds the
- * sentinel it was seeded with. Returns 1 and sets strict_verified, or returns 0
- * with the per-layer counts left in place for the caller to report. */
+ * exactly 4096 words of its own depth, no word of another view's depth, the
+ * remainder is accounted for (clear + unexplained == footprint - 4096, whatever
+ * LOAD_OP_DONT_CARE chose to leave there), the six layers are therefore
+ * distinct, and every guard word still holds the sentinel it was seeded with.
+ * Returns 1 and sets strict_verified, or returns 0 with the per-layer counts
+ * left in place for the caller to report. */
 int ps5vk_multiview_witness_verify(struct ps5vk_multiview_witness *w, uint32_t views,
     uint64_t depth_footprint_words);
 

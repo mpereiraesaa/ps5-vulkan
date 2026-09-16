@@ -1116,10 +1116,11 @@ static void multiview_witness_image(VkDevice d, VkFormat format, VkImageUsageFla
     CHECK(vkAllocateMemory(d,&ai,NULL,memory_out));
     CHECK(vkBindImageMemory(d,*image_out,*memory_out,0));
     CHECK(vkMapMemory(d,*memory_out,0,VK_WHOLE_SIZE,0,mapped_out));
-    /* The whole allocation is the sentinel before anything renders: the words
-     * the six views must write are judged by the oracle, and every other word -
-     * the rest of each layer and the trailing guard layer - is judged as an
-     * untouched guard. */
+    /* The whole allocation is the sentinel before anything renders. Only the
+     * TRAILING layer is a guard: the six layers the pass owns are loaded with
+     * LOAD_OP_DONT_CARE and written by the draw, so neither their padding nor
+     * anything else about them is untouched storage - their content is judged by
+     * the oracle's counts, never by the sentinel. */
     uint32_t *words=*mapped_out;
     for (VkDeviceSize i=0;i<req.size/4;++i) words[i]=PS5VK_MULTIVIEW_GUARD;
     CHECK(vkFlushMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
@@ -1152,12 +1153,15 @@ static void multiview_view_probe(VkDevice d)
     CHECK(vkCreateImageView(d,&cvi,NULL,&color_view));
     CHECK(vkCreateImageView(d,&dvi,NULL,&depth_view));
     VkAttachmentDescription attachments[2]={
+        /* DONT_CARE on both attachments: the execute path's CLEAR would DMA-fill
+         * the whole VkImage and overwrite the trailing guard layer, and the
+         * depth comparison is ALWAYS, so no prior value is needed at all. */
         {.format=VK_FORMAT_R8G8B8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
-         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
          .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
          .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
         {.format=VK_FORMAT_D32_SFLOAT,.samples=VK_SAMPLE_COUNT_1_BIT,
-         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
          .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
          .finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
     VkAttachmentReference colorref={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
@@ -1331,7 +1335,7 @@ static void multiview_view_probe(VkDevice d)
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_MULTIVIEW_VIEW_LAYER layer=%u view=%u pixels=%llu color_expected=%llu "
             "color_other_view=%llu color_other=%llu depth_expected=%llu depth_other=%llu "
-            "depth_clear=%llu depth_unknown=%llu",
+            "depth_remainder_clear=%llu depth_remainder_unknown=%llu",
             layer,ps5vk_multiview_witness_view(layer),(unsigned long long)witness.layer[layer].pixels,
             (unsigned long long)witness.layer[layer].expected,
             (unsigned long long)witness.layer[layer].other_view,
@@ -1342,7 +1346,7 @@ static void multiview_view_probe(VkDevice d)
             (unsigned long long)witness.layer[layer].depth_unknown);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_MULTIVIEW_VIEW_PROBE views=%u mask=%08x framebuffer_layers=1 extent=%u layers_per_image=%u "
-        "color=detiled depth=footprint_count depth_words_per_layer=%llu guard_layer=%u "
+        "color=detiled depth=footprint_count load_op=dont_care depth_words_per_layer=%llu guard_layer=%u "
         "guard_words=%llu guard_mismatches=%llu strict_verified=%d",
         PS5VK_MULTIVIEW_WITNESS_VIEWS,PS5VK_MULTIVIEW_WITNESS_MASK,PS5VK_MULTIVIEW_WITNESS_EXTENT,
         PS5VK_MULTIVIEW_WITNESS_LAYERS,(unsigned long long)depth_words_per_layer,

@@ -110,10 +110,12 @@ int ps5vk_multiview_witness_verify(struct ps5vk_multiview_witness *w, uint32_t v
             l->other_view || l->other)
             verified = 0;
         /* The depth footprint: exactly the 4096 words this view wrote, no word
-         * of another view, nothing unexplained, and the rest exactly cleared. */
+         * of another view, and the remainder accounted for - LOAD_OP_DONT_CARE
+         * promises nothing about it, so only the sum is required. */
         if (l->depth_expected != PS5VK_MULTIVIEW_WITNESS_PIXELS ||
-            l->depth_other || l->depth_unknown ||
-            l->depth_clear != depth_footprint_words - PS5VK_MULTIVIEW_WITNESS_PIXELS)
+            l->depth_other ||
+            l->depth_clear + l->depth_unknown !=
+                depth_footprint_words - PS5VK_MULTIVIEW_WITNESS_PIXELS)
             verified = 0;
     }
     /* Distinctness follows from "no layer holds another view's colour", but it

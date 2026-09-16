@@ -5,12 +5,15 @@
  * coverage, a touched guard - plus the case a global sum would wrongly accept:
  * six layers all holding the same data.
  *
- * Two regressions exist because of the P1 review: a layer's depth is judged by
+ * The regressions exist because of the P1 reviews: a layer's depth is judged by
  * COUNTING words over its whole footprint, so the 4096 words a view wrote do not
  * have to sit in the footprint's prefix (the old linear assumption would fail on
- * this driver's tiled 64KB_Z_X surfaces), and a footprint whose remaining words
- * hold the clear value is a valid one. Colour is only ever judged on DETILED
- * pixels, because the attachment is a tiled 64KB_R_X surface. */
+ * this driver's tiled 64KB_Z_X surfaces); and because the pass loads with
+ * LOAD_OP_DONT_CARE, the remainder of the footprint may hold the clear value,
+ * the sentinel it was seeded with, or any mixture - the verdict requires only
+ * that the remainder is accounted for, never that it is "clean". Colour is only
+ * ever judged on DETILED pixels, because the attachment is a tiled 64KB_R_X
+ * surface. */
 #include "multiview_witness.h"
 #include <assert.h>
 #include <stdio.h>
@@ -55,16 +58,31 @@ static void fill_layer(struct ps5vk_multiview_witness *w, uint32_t layer,
     }
 }
 
-/* A correct witness: six layers with scattered depth words and the trailing
- * layer's sentinels. */
-static struct ps5vk_multiview_witness correct(void)
+/* A correct witness: six layers, each with its 4096 own depth words plus a
+ * remainder of the caller's choosing (clear, unknown/sentinel, or a mixture),
+ * and the trailing layer's sentinels. */
+static struct ps5vk_multiview_witness correct_remainder(uint64_t clear_words)
 {
     struct ps5vk_multiview_witness w = {0};
-    for (uint32_t layer = 0; layer < PS5VK_MULTIVIEW_WITNESS_VIEWS; ++layer)
-        fill_layer(&w, layer, layer, layer, 1);
+    for (uint32_t layer = 0; layer < PS5VK_MULTIVIEW_WITNESS_VIEWS; ++layer) {
+        const uint8_t *rgba = color_of(layer);
+        for (uint32_t i = 0; i < PIXELS; ++i)
+            ps5vk_multiview_witness_color_pixel(&w, layer, rgba);
+        for (uint32_t i = 0; i < PIXELS; ++i)
+            ps5vk_multiview_witness_depth(&w, layer,
+                ps5vk_multiview_witness_depth_word(layer));
+        for (uint64_t i = PIXELS; i < FOOTPRINT_WORDS; ++i)
+            ps5vk_multiview_witness_depth(&w, layer,
+                i - PIXELS < clear_words ? ps5vk_multiview_witness_clear_word() : SENTINEL);
+    }
     for (uint32_t i = 0; i < GUARD_WORDS; ++i)
         ps5vk_multiview_witness_guard(&w, SENTINEL, SENTINEL);
     return w;
+}
+
+static struct ps5vk_multiview_witness correct(void)
+{
+    return correct_remainder(FOOTPRINT_WORDS - PIXELS);
 }
 
 int main(void)
@@ -123,6 +141,22 @@ int main(void)
     assert(ps5vk_multiview_witness_verify(&interleaved, PS5VK_MULTIVIEW_WITNESS_VIEWS,
         FOOTPRINT_WORDS) && interleaved.strict_verified);
 
+    /* LOAD_OP_DONT_CARE means the remainder may be anything: all sentinel, all
+     * clear, or a mixture. All three verify, and the counters say which was
+     * which - nothing here is called "clean padding". */
+    struct ps5vk_multiview_witness unknown_remainder = correct_remainder(0);
+    assert(ps5vk_multiview_witness_verify(&unknown_remainder, PS5VK_MULTIVIEW_WITNESS_VIEWS,
+        FOOTPRINT_WORDS) && unknown_remainder.strict_verified);
+    assert(!unknown_remainder.layer[0].depth_clear &&
+           unknown_remainder.layer[0].depth_unknown == FOOTPRINT_WORDS - PIXELS);
+    struct ps5vk_multiview_witness mixed_remainder =
+        correct_remainder((FOOTPRINT_WORDS - PIXELS) / 3u);
+    assert(ps5vk_multiview_witness_verify(&mixed_remainder, PS5VK_MULTIVIEW_WITNESS_VIEWS,
+        FOOTPRINT_WORDS) && mixed_remainder.strict_verified);
+    assert(mixed_remainder.layer[0].depth_clear == (FOOTPRINT_WORDS - PIXELS) / 3u &&
+           mixed_remainder.layer[0].depth_unknown ==
+               FOOTPRINT_WORDS - PIXELS - (FOOTPRINT_WORDS - PIXELS) / 3u);
+
     /* Six layers holding the SAME view's data: a global sum would accept it, the
      * oracle must not. */
     struct ps5vk_multiview_witness identical = {0};
@@ -158,15 +192,20 @@ int main(void)
     assert(unknown.layer[3].depth_unknown == 1u);
 
     /* One word too many of this view's own depth, and one word short of the
-     * clear count: the count is the proof, so both fail. */
+     * accounted remainder: the count is the proof, so both fail. */
     struct ps5vk_multiview_witness extra_depth = correct();
-    extra_depth.layer[0].depth_expected += 1u;
-    extra_depth.layer[0].depth_clear -= 1u;
+    --extra_depth.layer[0].depth_clear;
+    ++extra_depth.layer[0].depth_expected;
     assert(!ps5vk_multiview_witness_verify(&extra_depth, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));
     struct ps5vk_multiview_witness short_depth = correct();
-    short_depth.layer[0].depth_expected -= 1u;
-    short_depth.layer[0].depth_clear += 1u;
+    --short_depth.layer[0].depth_expected;
+    ++short_depth.layer[0].depth_clear;
     assert(!ps5vk_multiview_witness_verify(&short_depth, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));
+    /* A remainder that does not add up to the footprint is a failure even with
+     * the right expected count. */
+    struct ps5vk_multiview_witness unaccounted = correct();
+    --unaccounted.layer[0].depth_unknown;
+    assert(!ps5vk_multiview_witness_verify(&unaccounted, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));
 
     /* Lost colour coverage, a touched guard, and the wrong shape. */
     struct ps5vk_multiview_witness short_color = correct();
