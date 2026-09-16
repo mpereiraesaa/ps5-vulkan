@@ -48,15 +48,19 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.tests_text = text
         self.util_text = (UPSTREAM / UTIL).read_text(encoding="utf-8", errors="replace")
 
-    def _supported_witness(self):
-        """The witness a driver that finally creates the shape would produce."""
+    def _ready_witness(self):
+        """The measured host witness: this host can create the shape."""
         witness, _ = self.gate._resource_witness()
-        measured = copy.deepcopy(witness[MV_CONTRACT])
-        measured.update({
-            "queryResult": 0, "createResult": 0, "createSucceeded": True,
-            "queryCovers": True, "supported": True,
-            "queryMaxArrayLayers": 6, "queryMaxMipLevels": 1, "querySampleCounts": 1,
-        })
+        return {MV_CONTRACT: copy.deepcopy(witness[MV_CONTRACT])}
+
+    def _not_ready_witness(self):
+        """A host that cannot answer or create the shape, with a summary that
+        agrees with its own numbers."""
+        measured = copy.deepcopy(self._ready_witness()[MV_CONTRACT])
+        measured.update({"queryResult": -11, "createResult": -13, "createSucceeded": False,
+                         "queryCovers": False, "supported": False,
+                         "queryMaxArrayLayers": 0, "queryMaxMipLevels": 0,
+                         "querySampleCounts": 0})
         return {MV_CONTRACT: measured}
 
     def _gate_exit_code_with_witness(self, manifest, witness):
@@ -149,73 +153,76 @@ class UpstreamSelectionTests(unittest.TestCase):
         stale["resource_contracts"][MV_CONTRACT]["format"] = "VK_FORMAT_B8G8R8A8_UNORM"
         self.assertEqual(1, self._gate_exit_code_for_manifest(stale))
 
-    def test_measured_witness_blocks_the_contract_on_two_findings(self):
-        """The blocked state is measured, not asserted: the query and the real
-        create both refuse the exact shape, and independently the same shape
-        without the input-attachment role still reports one array layer."""
+    def test_host_readiness_is_measured_but_not_promoted(self):
+        """This host now creates the exact shape, and the neighbouring shape
+        stays single-layer; the manifest still declares the hardware stage false,
+        so the contract is promotion-pending, stays diagnostic, and cannot enter
+        acceptance."""
         self.assertEqual([], self.witness_failures)
         measured = self.witness[MV_CONTRACT]
-        self.assertFalse(measured["supported"])
-        self.assertNotEqual(0, measured["queryResult"])
-        self.assertNotEqual(0, measured["createResult"])
+        self.assertTrue(measured["supported"])
+        self.assertEqual(0, measured["queryResult"])
+        self.assertEqual((uint32_t := measured["arrayLayers"]), 6)
+        self.assertEqual(6, measured["queryMaxArrayLayers"])
+        self.assertEqual(0, measured["createResult"])
+        # The neighbouring readback shape without the input-attachment role is
+        # untouched: one layer, which is what keeps this from being a general
+        # input-attachment capability.
         probe = measured["withoutInputAttachment"]
         self.assertEqual(0, probe["queryResult"])
-        self.assertEqual(0, probe["createResult"])
-        self.assertLess(probe["queryMaxArrayLayers"], measured["arrayLayers"])
+        self.assertEqual(1, probe["queryMaxArrayLayers"])
         self.assertFalse(probe["queryCovers"])
 
         declared = self.manifest["resource_contracts"][MV_CONTRACT]
         self.assertFalse(declared["resource_supported"])
         self.assertFalse(declared["execution_supported"])
         self.assertFalse(declared["supported"])
-        # The execution stage is derived: only the object model is in place.
-        self.assertEqual({"descriptor_object_model": True,
-                          "descriptor_table_encoding": False,
-                          "compiler_lowering": False,
-                          "gpu_subpass_readback": False},
-                         declared["execution_requirements"])
-        eligible, verdict_failures, reason = self.gate._contract_verdict(
+        eligible, verdict_failures, note, pending = self.gate._contract_verdict(
             MV_CONTRACT, declared, measured, measured["arrayLayers"])
         self.assertFalse(eligible)
         self.assertEqual([], verdict_failures)
-        self.assertIn("query answers", reason)
-        self.assertIn("vkCreateImage answers", reason)
+        self.assertIn("not promoted", note)
+        self.assertIn("promotion awaits the physical-console witness", pending)
 
-    def test_layers_still_block_after_the_usage_gap_is_closed(self):
-        """Simulation: with the usage blocker gone the layer ceiling still
-        prevents promotion, and the two public paths disagreeing is reported."""
+        # ...and promoting a leaf while the stage is false is refused.
+        promoted = self._promote_one_leaf(copy.deepcopy(self.manifest),
+                                          "dEQP-VK.multiview.masks.get_query_pool_results.15")
+        self.assertEqual(1, self._gate_exit_code_with_witness(promoted, self._ready_witness()))
+
+    def test_declared_resource_requires_host_readiness(self):
+        """A hardware-promoted stage may not be claimed on a host the source
+        witness shows is not ready."""
         declared = copy.deepcopy(self.manifest["resource_contracts"][MV_CONTRACT])
-        # The usage gap is closed, so the resource stage would be true, but the
-        # layer ceiling still refuses the shape; the final state stays false
-        # because the measured resource does not support it.
+        declared.update({"resource_supported": True, "supported": False})
+        eligible, verdict_failures, _, _ = self.gate._contract_verdict(
+            MV_CONTRACT, declared, self._not_ready_witness()[MV_CONTRACT], 6)
+        self.assertFalse(eligible)
+        self.assertTrue(any("source query/create witness is not ready" in f
+                            for f in verdict_failures))
+        manifest = copy.deepcopy(self.manifest)
+        manifest["resource_contracts"][MV_CONTRACT]["resource_supported"] = True
+        self.assertEqual(1, self._gate_exit_code_with_witness(
+            manifest, self._not_ready_witness()))
+
+    def test_declared_resource_with_ready_host_is_valid_but_not_final(self):
+        """Declared true with a ready host is a resource-valid state; the
+        execution stage still decides final support, and acceptance needs it."""
+        declared = copy.deepcopy(self.manifest["resource_contracts"][MV_CONTRACT])
         declared.update({"resource_supported": True, "execution_supported": False,
                          "supported": False})
-        fixed_usage_only = {
-            "formatName": declared["format"], "imageTypeName": declared["image_type"],
-            "tilingName": declared["tiling"], "mipLevels": declared["mip_levels"],
-            "samples": declared["samples"], "arrayLayers": 6,
-            "usageNames": declared["usage"],
-            "queryResult": 0, "queryMaxMipLevels": 1, "querySampleCounts": 1,
-            "queryMaxArrayLayers": 1, "createResult": 0, "createSucceeded": True,
-            "queryCovers": False, "supported": False,
-        }
-        eligible, verdict_failures, reason = self.gate._contract_verdict(
-            MV_CONTRACT, declared, fixed_usage_only, 6)
+        eligible, verdict_failures, note, pending = self.gate._contract_verdict(
+            MV_CONTRACT, declared, self._ready_witness()[MV_CONTRACT], 6)
         self.assertFalse(eligible)
-        self.assertTrue(any("disagree" in failure for failure in verdict_failures))
-        self.assertTrue(any("measured public query/create witness says False" in failure
-                            for failure in verdict_failures))
-        self.assertIn("maxArrayLayers=1", reason)
-        self.assertIn("6", reason)
-
-        # ...and a witness that claims support while its own numbers say the
-        # query cannot cover the request is refused as well.
-        optimistic = dict(fixed_usage_only, queryCovers=True, supported=True)
-        support, verdict_failures, _ = self.gate._contract_verdict(
-            MV_CONTRACT, declared, optimistic, 6)
-        self.assertFalse(support)
-        self.assertTrue(any("disagrees with its own measurements" in f
-                            for f in verdict_failures))
+        self.assertEqual([], verdict_failures)
+        self.assertEqual("", pending)
+        self.assertIn("execution requirements are not all met", note)
+        manifest = copy.deepcopy(self.manifest)
+        manifest["resource_contracts"][MV_CONTRACT]["resource_supported"] = True
+        self.assertEqual(0, self._gate_exit_code_with_witness(
+            manifest, self._ready_witness()))
+        promoted = self._promote_one_leaf(
+            copy.deepcopy(manifest), "dEQP-VK.multiview.masks.get_query_pool_results.15")
+        self.assertEqual(1, self._gate_exit_code_with_witness(promoted, self._ready_witness()))
 
     def test_declared_support_cannot_be_stale(self):
         """The declared supported field must equal what the driver measures, so
@@ -228,7 +235,7 @@ class UpstreamSelectionTests(unittest.TestCase):
         witness = copy.deepcopy(self.witness)
         witness[MV_CONTRACT]["arrayLayers"] = 1
         declared = self.manifest["resource_contracts"][MV_CONTRACT]
-        support, verdict_failures, _ = self.gate._contract_verdict(
+        support, verdict_failures, _, _ = self.gate._contract_verdict(
             MV_CONTRACT, declared, witness[MV_CONTRACT], 6)
         self.assertFalse(support)
         self.assertTrue(any("witnessed at 1 layers" in f for f in verdict_failures))
@@ -323,13 +330,6 @@ class UpstreamSelectionTests(unittest.TestCase):
             mutate(manifest["resource_contracts"][MV_CONTRACT])
             self.assertEqual(1, self._gate_exit_code_for_manifest(manifest), why)
 
-    def test_resource_stage_must_match_the_measurement(self):
-        """The resource stage is the measured public query/create answer, so a
-        declaration that drifts from it fails."""
-        manifest = copy.deepcopy(self.manifest)
-        manifest["resource_contracts"][MV_CONTRACT]["resource_supported"] = True
-        self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
-
     def test_execution_flag_alone_cannot_claim_execution(self):
         """Flipping the stage flag is not evidence: the derived requirement set
         decides, so a lone execution_supported=true is rejected."""
@@ -367,7 +367,7 @@ class UpstreamSelectionTests(unittest.TestCase):
     def test_resource_only_success_stays_diagnostic_and_cannot_enter_acceptance(self):
         """A future query/create success is not promotion: with no executable
         semantics the family stays diagnostic and acceptance is refused."""
-        witness = self._supported_witness()
+        witness = self._ready_witness()
         path = "dEQP-VK.multiview.masks.get_query_pool_results.15"
 
         diagnostic = copy.deepcopy(self.manifest)
@@ -383,7 +383,7 @@ class UpstreamSelectionTests(unittest.TestCase):
     def test_both_stages_true_is_the_only_promotable_state(self):
         """With the resource created and executable semantics in place, and only
         then, a leaf may re-enter strict acceptance."""
-        witness = self._supported_witness()
+        witness = self._ready_witness()
         path = "dEQP-VK.multiview.masks.get_query_pool_results.15"
         manifest = copy.deepcopy(self.manifest)
         contract = manifest["resource_contracts"][MV_CONTRACT]

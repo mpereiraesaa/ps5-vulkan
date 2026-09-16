@@ -347,6 +347,15 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
                   VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
         usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return VK_TRUE;
+    /* The pinned multiview helper's attachment adds the input-attachment role
+     * to that same readback colour shape. Only a row that can already be a
+     * readback colour target has it, and only for this exact usage set, so no
+     * input-attachment support is inferred for another format, another usage
+     * combination or a row without the readback role. */
+    if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
+        usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) && usage == depth) return VK_TRUE;
     /* Depth target that vkCmdClearDepthStencilImage may clear. Vulkan requires
      * the transfer-destination usage on the cleared image, so the combination

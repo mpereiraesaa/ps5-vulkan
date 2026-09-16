@@ -147,6 +147,91 @@ static void submit_and_wait(VkCommandBuffer command)
     vkDestroyFence(device, fence, NULL);
 }
 
+/* The exact input-attachment resource the pinned multiview helper needs: 2D
+ * R8G8B8A8_UNORM, optimal tiling, flags 0, extent depth 1, one mip, one sample,
+ * arrayLayers 1..6, usage COLOR_ATTACHMENT|TRANSFER_SRC|INPUT_ATTACHMENT|
+ * TRANSFER_DST. Creation uses the REAL native requirement arithmetic here, so
+ * the layer accounting and its overflow guard are exercised too. */
+static void input_attachment_shape(void)
+{
+    const VkImageUsageFlags exact = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                    VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                                    VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    const VkImageCreateInfo base = {.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType=VK_IMAGE_TYPE_2D, .format=VK_FORMAT_R8G8B8A8_UNORM,
+        .extent={WIDTH, HEIGHT, 1u}, .mipLevels=1u, .arrayLayers=1u,
+        .samples=VK_SAMPLE_COUNT_1_BIT, .tiling=VK_IMAGE_TILING_OPTIMAL,
+        .usage=exact, .sharingMode=VK_SHARING_MODE_EXCLUSIVE};
+
+    /* One layer and the six-layer boundary both create, and the requirement
+     * arithmetic really covers every layer: six layers are six strides. */
+    VkDeviceSize single_stride = 0, single_alignment = 0, single_bytes = 0;
+    assert(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM, WIDTH, HEIGHT, 1u,
+                                        &single_stride, &single_alignment, &single_bytes) == VK_SUCCESS);
+    for (uint32_t layers = 1u; layers <= (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR; ++layers) {
+        VkImageCreateInfo info = base; info.arrayLayers = layers;
+        VkImage image = VK_NULL_HANDLE;
+        assert(vkCreateImage(device, &info, NULL, &image) == VK_SUCCESS && image);
+        VkMemoryRequirements requirements;
+        vkGetImageMemoryRequirements(device, image, &requirements);
+        assert(requirements.size == single_bytes * layers &&
+               requirements.alignment == single_alignment && requirements.memoryTypeBits == 1u);
+        vkDestroyImage(device, image, NULL);
+    }
+    /* ...and the arithmetic refuses a count that would wrap rather than
+     * reporting a small size for it. */
+    VkDeviceSize stride = 0, alignment = 0, bytes = 0;
+    assert(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM, WIDTH, HEIGHT, UINT64_MAX,
+                                        &stride, &alignment, &bytes) != VK_SUCCESS);
+
+    /* Deeper than the measured floor is refused: the query reports six, so
+     * creation may not accept seven. */
+    VkImageCreateInfo info = base;
+    info.arrayLayers = (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR + 1u;
+    VkImage image = (VkImage)(uintptr_t)1;
+    unsigned before = device->graphics_objects;
+    assert(vkCreateImage(device, &info, NULL, &image) == VK_ERROR_FEATURE_NOT_PRESENT &&
+           image == VK_NULL_HANDLE && device->graphics_objects == before);
+
+    /* Every neighbouring usage fails closed with no partial publication: a
+     * missing role, an extra role, and a role set the query does not answer. */
+    /* The same shape WITHOUT the input-attachment role is the draw colour
+     * target this profile already supported, so it keeps working unchanged -
+     * the new role did not redefine it. */
+    info = base; info.usage = exact & ~(VkImageUsageFlags)VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    info.arrayLayers = 1u;
+    image = VK_NULL_HANDLE;
+    assert(vkCreateImage(device, &info, NULL, &image) == VK_SUCCESS && image);
+    vkDestroyImage(device, image, NULL);
+    const VkImageUsageFlags neighbours[] = {
+        exact & ~(VkImageUsageFlags)VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        exact & ~(VkImageUsageFlags)VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        exact | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+    };
+    for (unsigned i = 0; i < sizeof(neighbours)/sizeof(neighbours[0]); ++i) {
+        info = base; info.usage = neighbours[i]; info.arrayLayers = 2u;
+        image = (VkImage)(uintptr_t)1;
+        before = device->graphics_objects;
+        VkResult rc = vkCreateImage(device, &info, NULL, &image);
+        assert(rc != VK_SUCCESS && image == VK_NULL_HANDLE &&
+               device->graphics_objects == before);
+    }
+    /* ...and the same usage on another format is refused as well: the shape is
+     * exactly one colour format, not an input-attachment capability. */
+    const VkFormat other_formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
+                                      VK_FORMAT_R8G8B8A8_UINT};
+    for (unsigned i = 0; i < sizeof(other_formats)/sizeof(other_formats[0]); ++i) {
+        info = base; info.format = other_formats[i]; info.arrayLayers = 2u;
+        image = (VkImage)(uintptr_t)1;
+        before = device->graphics_objects;
+        assert(vkCreateImage(device, &info, NULL, &image) != VK_SUCCESS &&
+               image == VK_NULL_HANDLE && device->graphics_objects == before);
+    }
+}
+
 int main(void)
 {
     VkInstance instance;
@@ -995,8 +1080,9 @@ int main(void)
     vkDestroyImage(device, destination, NULL);
     vkDestroyImage(device, source, NULL);
     vkDestroyCommandPool(device, pool, NULL);
+    input_attachment_shape();
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
-    puts("image copy, colour clear and whole-subresource depth clear: pass");
+    puts("image copy, colour clear, depth clear and the input-attachment shape: pass");
     return 0;
 }

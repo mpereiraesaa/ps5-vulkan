@@ -648,15 +648,22 @@ def _resource_witness() -> tuple[dict, list[str]]:
 
 
 def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
-                      required_layers: int) -> tuple[bool, list[str], str]:
+                      required_layers: int) -> tuple[bool, list[str], str, str]:
     """Compare one declared contract with the measured witness, field by field.
 
-    Support is recomputed from the primitive measurements - the query's answer
-    and ceilings, and the real vkCreateImage result - rather than trusting the
-    fixture's summary flag, and the summary is then required to agree with that
-    recomputation. The returned failures are the consistency problems that are
-    wrong whatever the driver can do; the reason explains why the measured
-    driver cannot create the shape.
+    The witness is the public query/create answer for this host, i.e.
+    IMPLEMENTATION READINESS - not physical-console evidence. Promoting a
+    contract to resource_supported is a separate decision that needs a console
+    witness, so readiness without that declaration is a valid promotion-pending
+    state: it keeps every family diagnostic, it is reported rather than silently
+    ignored, and it can never make anything eligible for acceptance.
+
+    Readiness and the declared stages are all recomputed from primitives rather
+    than trusted: the witness summary must agree with its own numbers, the
+    execution stage derives from the requirement set, and the final state is the
+    DECLARED resource stage AND the derived execution stage. Returns the
+    eligibility for acceptance, the consistency failures, the note explaining a
+    non-eligible contract, and the promotion-pending state when there is one.
     """
     failures: list[str] = []
     for field, measured in (("format", witnessed.get("formatName")),
@@ -685,9 +692,9 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
     mip_ok = witnessed.get("queryMaxMipLevels", 0) >= int(contract.get("mip_levels", 0))
     query_covers = query_answered and samples_ok and layers_ok and mip_ok
     create_ok = witnessed.get("createResult") == 0 and bool(witnessed.get("createSucceeded"))
-    measured_resource = query_covers and create_ok
+    host_ready = query_covers and create_ok
     if bool(witnessed.get("queryCovers")) != query_covers or \
-            bool(witnessed.get("supported")) != measured_resource:
+            bool(witnessed.get("supported")) != host_ready:
         failures.append(
             f"resource contract {contract_id!r}: the witness summary disagrees with its own "
             f"measurements (queryCovers={witnessed.get('queryCovers')}, "
@@ -697,19 +704,25 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
             f"resource contract {contract_id!r}: the image-format query and vkCreateImage "
             f"disagree about this shape (queryCovers={query_covers}, createSucceeded={create_ok})")
 
-    # Two independent promotion stages. A resource the driver cannot create is
-    # not the only reason to keep a family out of strict acceptance: the family
-    # also needs executable semantics, and that stage is DERIVED from an exact
-    # requirement set rather than asserted. An empty, partial, unknown or
-    # non-boolean requirement set can never promote anything, and a declared
-    # stage that disagrees with its own derivation fails closed.
+    # The declared resource stage is the hardware-evidence decision; the host
+    # witness above is readiness for it. Claiming the stage without readiness is
+    # an over-claim and fails closed; readiness without the stage is the
+    # promotion-pending state, reported but never promotable.
     resource_declared = contract.get("resource_supported")
     if "resource_supported" not in contract:
         failures.append(f"resource contract {contract_id!r} declares no 'resource_supported' stage")
+        resource_declared = None
     elif not isinstance(resource_declared, bool):
         failures.append(
             f"resource contract {contract_id!r} declares resource_supported="
             f"{resource_declared!r}, which is not a boolean")
+        resource_declared = None
+    elif resource_declared and not host_ready:
+        failures.append(
+            f"resource contract {contract_id!r} declares resource_supported=true while the "
+            f"source query/create witness is not ready (queryCovers={query_covers}, "
+            f"createSucceeded={create_ok})")
+
     requirements = contract.get("execution_requirements")
     derived: dict[str, bool] = {}
     if not isinstance(requirements, dict):
@@ -731,46 +744,43 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
                     f"{requirements[key]!r}, which is not a boolean")
             else:
                 derived[key] = requirements[key]
-    measured_execution = (len(derived) == len(EXECUTION_REQUIREMENTS) and all(derived.values()))
+    derived_execution = (len(derived) == len(EXECUTION_REQUIREMENTS) and all(derived.values()))
     execution_declared = contract.get("execution_supported")
     if "execution_supported" not in contract:
         failures.append(f"resource contract {contract_id!r} declares no 'execution_supported' stage")
+        execution_declared = None
     elif not isinstance(execution_declared, bool):
         failures.append(
             f"resource contract {contract_id!r} declares execution_supported="
             f"{execution_declared!r}, which is not a boolean")
-    elif execution_declared != measured_execution:
+        execution_declared = None
+    elif execution_declared != derived_execution:
         failures.append(
             f"resource contract {contract_id!r} declares execution_supported="
-            f"{execution_declared} while its execution requirements derive {measured_execution}")
+            f"{execution_declared} while its execution requirements derive {derived_execution}")
 
-    eligible = False
+    # The final state is the DECLARED resource stage AND the derived execution
+    # stage. Host readiness never enters this expression, so no build can
+    # promote a family by implementing a path the console has not witnessed.
     declared_supported = contract.get("supported")
+    expected_supported = None
+    if resource_declared is not None and execution_declared is not None:
+        expected_supported = bool(resource_declared and derived_execution)
     if "supported" not in contract:
         failures.append(f"resource contract {contract_id!r} declares no final 'supported' field")
     elif not isinstance(declared_supported, bool):
         failures.append(
             f"resource contract {contract_id!r} declares supported="
             f"{declared_supported!r}, which is not a boolean")
-    else:
-        expected = measured_resource and measured_execution
-        if declared_supported != expected:
-            failures.append(
-                f"resource contract {contract_id!r} declares supported={declared_supported} while "
-                f"the measured resource stage is {measured_resource} and the derived execution "
-                f"stage is {measured_execution}")
-        if declared_supported and not expected:
-            failures.append(
-                f"resource contract {contract_id!r} claims support while a stage is false")
-        if (isinstance(resource_declared, bool) and
-                resource_declared != measured_resource):
-            failures.append(
-                f"resource contract {contract_id!r} declares resource_supported="
-                f"{resource_declared} while the measured public query/create witness says "
-                f"{measured_resource}")
-        eligible = bool(expected)
-    reason = ""
-    if not measured_resource:
+    elif expected_supported is not None and declared_supported != expected_supported:
+        failures.append(
+            f"resource contract {contract_id!r} declares supported={declared_supported} while the "
+            f"declared resource stage is {resource_declared} and the derived execution stage is "
+            f"{derived_execution}")
+    eligible = bool(expected_supported) and bool(declared_supported)
+
+    host_reason = ""
+    if not host_ready:
         details = []
         if not query_answered:
             details.append(f"the format query answers {witnessed.get('queryResult')}")
@@ -789,8 +799,28 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
                     f"{contract.get('samples')}")
         if not create_ok:
             details.append(f"vkCreateImage answers {witnessed.get('createResult')}")
-        reason = "; ".join(details)
-    return eligible, failures, reason
+        host_reason = "; ".join(details)
+
+    # A promotion-pending contract is reported, never silently ignored: the host
+    # can create the shape, but the stage that makes it acceptance is the
+    # hardware-evidence decision this build has not made.
+    pending = ""
+    if host_ready and not resource_declared:
+        pending = (f"resource contract {contract_id!r}: host readiness is true and "
+                   f"resource_supported is false - promotion awaits the physical-console witness, "
+                   f"so every family stays diagnostic")
+    note = ""
+    if not eligible:
+        reasons = []
+        if not host_ready:
+            reasons.append(host_reason)
+        if not resource_declared:
+            reasons.append("resource_supported is not promoted (host readiness is not "
+                           "physical-console evidence)")
+        if not derived_execution:
+            reasons.append("execution requirements are not all met")
+        note = "; ".join(reason for reason in reasons if reason)
+    return eligible, failures, note, pending
 
 
 def main() -> int:
@@ -826,6 +856,7 @@ def main() -> int:
     multiview_derived: dict = {}
     contract_support: dict[str, bool] = {}
     contract_reasons: dict[str, str] = {}
+    contract_pending: list[str] = []
     manifest_paths = {case["path"] for case in
                       manifest["cases"] + manifest.get("diagnostics", [])}
     if multiview_util_path.is_file() and multiview_test_path.is_file():
@@ -884,11 +915,13 @@ def main() -> int:
                     f"resource contract {contract_id!r} covers no selected leaf, so its "
                     f"ceiling cannot be checked")
                 continue
-            supported, verdict_failures, reason = _contract_verdict(
+            supported, verdict_failures, reason, pending = _contract_verdict(
                 contract_id, declared, evidenced, required_layers)
             failures.extend(verdict_failures)
             contract_support[contract_id] = supported
             contract_reasons[contract_id] = reason
+            if pending:
+                contract_pending.append(pending)
     manifest_families: set[str] = set()
     manifest_contract_ids: set[str] = set()
     integration_text = INTEGRATION_SOURCE.read_text(encoding="utf-8")
@@ -971,8 +1004,8 @@ def main() -> int:
                     manifest_contract_ids.add(contract_id)
                     if not contract_support.get(contract_id, False):
                         failures.append(
-                            f"{path}: acceptance needs resource contract {contract_id!r}, which "
-                            f"this driver cannot create "
+                            f"{path}: acceptance needs final support for resource contract "
+                            f"{contract_id!r} "
                             f"({contract_reasons.get(contract_id) or 'no measured witness'})")
                 missing = _unadvertised(derived_leaf["required"], capabilities)
                 if missing and path in acceptance_paths:
@@ -1080,6 +1113,11 @@ def main() -> int:
 
     accepted = len(manifest["cases"])
     diagnostics = len(manifest.get("diagnostics", []))
+    # A promotion-pending contract is reported, never silently ignored: the host
+    # can create the shape, but the stage that makes it acceptance is a
+    # hardware-evidence decision this build has not made.
+    for note in contract_pending:
+        print(f"pending: {note}")
     print(f"Upstream selection check passed: {len(cases)} cases traceable to sources "
           f"({accepted} acceptance, {diagnostics} diagnostic).")
     return 0

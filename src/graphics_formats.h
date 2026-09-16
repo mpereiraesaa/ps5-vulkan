@@ -10,6 +10,7 @@
 #define PS5VK_GRAPHICS_FORMATS_H
 #include <vulkan/vulkan_core.h>
 #include "graphics_limits.h"
+#include "vk_internal.h"
 #include "texture_format.h"
 #include "texture_layout.h"
 
@@ -164,11 +165,22 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) &&
         ps5vk_texture_format_witnessed(format,PS5VK_FORMAT_CAP_TRANSFER_DST) &&
         usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    /* The one input-attachment shape this profile publishes: the readback
+     * colour attachment plus the input role. Its layer ceiling is the measured
+     * multiview view-count floor, and every other attachment stays
+     * single-layer. */
+    const VkBool32 input_attachment_shape =
+        ps5vk_texture_format_witnessed(format, PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
+        usage == (VkImageUsageFlags)(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     uint32_t width=0,height=0,depth=1,layers=1;
     if(attachment || depth_clear_target) {
         if(type!=VK_IMAGE_TYPE_2D || flags)return VK_ERROR_FORMAT_NOT_SUPPORTED;
         width=height=format==VK_FORMAT_B8G8R8A8_UNORM?
             PS5VK_MAX_COLOR_DIMENSION:PS5VK_MAX_IMAGE_2D;
+        if(input_attachment_shape) layers=PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR;
     } else if(transfer_only && type==VK_IMAGE_TYPE_2D && !flags) {
         width=height=PS5VK_MAX_IMAGE_2D;
     } else if(sampled && type==VK_IMAGE_TYPE_1D && !flags) {
