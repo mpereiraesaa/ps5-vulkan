@@ -2,9 +2,9 @@
 #include <assert.h>
 #include <string.h>
 
-static unsigned char source[65536],destination[64*64*4];
+static unsigned char source[6*131072],destination[6*64*64*4+32];
 static VkResult span_result;
-static VkDeviceSize source_size=sizeof(source),destination_size=sizeof(destination);
+static VkDeviceSize source_size=65536,destination_size=64*64*4;
 VkResult ps5vk_image_span(VkDevice d,VkImage i,void **p,VkDeviceSize *n)
 { assert(d && i);*p=source;*n=source_size;return span_result; }
 VkResult ps5vk_buffer_span(VkDevice d,VkBuffer b,VkDeviceSize offset,VkDeviceSize size,void **p,VkDeviceSize *n)
@@ -55,7 +55,7 @@ int main(void)
     for(unsigned failure=0;failure<16;++failure) {
         memcpy(ops,saved,sizeof(ops));layouts=(struct ps5vk_layout_state){0};
         plan=(struct ps5vk_readback_plan){0};span_result=VK_SUCCESS;
-        source_size=sizeof(source);destination_size=sizeof(destination);
+        source_size=65536;destination_size=64*64*4;
         unsigned count=4;VkImage color=NULL;
         switch(failure) {
         case 0:count=3;break;
@@ -87,4 +87,45 @@ int main(void)
     ops[1].copy_region.bufferOffset=4;
     assert(ps5vk_readback_commands(&device,ops,4,&image,&layouts,&plan)!=VK_SUCCESS);
     assert(!memcmp(&layouts,&before,sizeof(layouts)));
+
+    /* Six tiled layers become six tight buffer slices, including explicit
+     * tight rowLength/imageHeight. Distinct per-layer ramps detect a repeated
+     * layer zero, a tight GPU stride, or a copy that touches padding. */
+    memcpy(ops,saved,sizeof(ops));
+    image.info.imageType=VK_IMAGE_TYPE_2D;
+    image.info.arrayLayers=6;
+    image.info.usage|=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    image.layout=VK_IMAGE_LAYOUT_GENERAL;
+    ops[0].image_barrier.oldLayout=VK_IMAGE_LAYOUT_GENERAL;
+    ops[1].copy_region.imageSubresource.layerCount=6;
+    ops[1].copy_region.bufferRowLength=64;
+    ops[1].copy_region.bufferImageHeight=64;
+    source_size=sizeof(source);destination_size=6*64*64*4;
+    layouts=(struct ps5vk_layout_state){0};plan=(struct ps5vk_readback_plan){0};
+    assert(ps5vk_readback_commands(&device,ops,4,NULL,&layouts,&plan)==VK_SUCCESS);
+    assert(plan.layer_stride==131072 && image.layout==VK_IMAGE_LAYOUT_GENERAL);
+    memset(source,0x37,sizeof(source));
+    for(unsigned layer=0;layer<6;++layer)for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        uint32_t value=0xff000000u|(layer<<16)|(y<<8)|x;
+        memcpy(source+layer*131072+ps5vk_rgba8_64k_rx_offset(x,y,64),&value,4);
+    }
+    assert(!ps5vk_readback_detile(&image,plan.layer_stride,destination,destination_size,source,source_size));
+    for(unsigned layer=0;layer<6;++layer)for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        uint32_t value;
+        memcpy(&value,destination+((layer*64+y)*64+x)*4,4);
+        assert(value==(0xff000000u|(layer<<16)|(y<<8)|x));
+    }
+    for(unsigned i=destination_size;i<sizeof(destination);++i)assert(destination[i]==0xa5);
+    for(unsigned failure=0;failure<4;++failure) {
+        layouts=(struct ps5vk_layout_state){0};plan=(struct ps5vk_readback_plan){0};
+        source_size=sizeof(source);destination_size=6*64*64*4;
+        ops[1].copy_region.imageSubresource.layerCount=6;
+        ops[1].copy_region.bufferImageHeight=64;
+        if(failure==0)--source_size;
+        if(failure==1)--destination_size;
+        if(failure==2)ops[1].copy_region.imageSubresource.layerCount=5;
+        if(failure==3)ops[1].copy_region.bufferImageHeight=63;
+        assert(ps5vk_readback_commands(&device,ops,4,NULL,&layouts,&plan)!=VK_SUCCESS);
+        assert(!layouts.count && !plan.image);
+    }
 }
