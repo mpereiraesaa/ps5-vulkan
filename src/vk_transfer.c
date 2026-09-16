@@ -1,5 +1,6 @@
 #include "vk_command.h"
 #include "vk_image.h"
+#include "vk_image_transfer.h"
 #include "texture_copy.h"
 #include "texture_format.h"
 #include <stdint.h>
@@ -168,26 +169,30 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
         op->copy_layout=layout;op->copy_region=regions[0];
         return;
     }
+    const int array_color=ps5vk_array_color_image(image);
     if(!d->graphics_enabled || !ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
         image->info.format!=VK_FORMAT_R8G8B8A8_UNORM || image->info.mipLevels!=1 ||
-        image->info.arrayLayers!=1 || image->info.extent.depth!=1 ||
+        (!array_color && image->info.arrayLayers!=1) || image->info.extent.depth!=1 ||
         (image->info.usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT))!=
             (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
-        (image->info.usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|
-                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) {invalid(c);return;}
+        (!array_color && (image->info.usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|
+                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))) {invalid(c);return;}
     const VkBufferImageCopy *r=&regions[0];
-    const uint64_t pixels=(uint64_t)image->info.extent.width*image->info.extent.height;
+    const uint64_t plane=(uint64_t)image->info.extent.width*image->info.extent.height;
+    if(!image->info.arrayLayers || plane>UINT64_MAX/4/image->info.arrayLayers){invalid(c);return;}
+    const uint64_t pixels=plane*image->info.arrayLayers;
     void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
-    if(r->bufferOffset || r->bufferRowLength || r->bufferImageHeight ||
+    if(r->bufferOffset || (r->bufferRowLength && r->bufferRowLength!=image->info.extent.width) ||
+        (r->bufferImageHeight && r->bufferImageHeight!=image->info.extent.height) ||
         r->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
         r->imageSubresource.mipLevel || r->imageSubresource.baseArrayLayer ||
-        r->imageSubresource.layerCount!=1 || r->imageOffset.x || r->imageOffset.y ||
+        r->imageSubresource.layerCount!=image->info.arrayLayers || r->imageOffset.x || r->imageOffset.y ||
         r->imageOffset.z || r->imageExtent.width!=image->info.extent.width ||
         r->imageExtent.height!=image->info.extent.height || r->imageExtent.depth!=1 ||
         pixels>UINT64_MAX/4 ||
         ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
         ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS ||
-        dst_bytes<pixels*4) {invalid(c);return;}
+        dst_bytes<pixels*4 || overlaps((uintptr_t)src,src_bytes,(uintptr_t)dst,pixels*4)) {invalid(c);return;}
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
         PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
     if(!op)return;
