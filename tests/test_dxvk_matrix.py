@@ -1,6 +1,7 @@
 import copy
 import importlib.util
 import json
+import tempfile
 from pathlib import Path
 import unittest
 
@@ -73,6 +74,48 @@ class DxvkMatrixTests(unittest.TestCase):
              if row["verdict"] == "satisfied"])
         self.assertNotIn("not-run",
                          {row["native"]["state"] for row in document["requirements"]})
+
+    def test_capability_probe_accepts_one_strict_run(self):
+        """One strict run is evidence; zero runs is not.
+
+        The owner workflow removed the redundant two-identical-run policy, so
+        the receipt must accept a single well-formed run - and every row that
+        cites the capability probe must then name that one run and its
+        artifact, never a mixture of artifacts."""
+        evidence = json.loads(matrix.EVIDENCE.read_text())
+        original = matrix.EVIDENCE
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "evidence.json"
+            matrix.EVIDENCE = path
+            try:
+                broken = copy.deepcopy(evidence)
+                broken["capability_probe"]["runs"] = []
+                path.write_text(json.dumps(broken))
+                with self.assertRaisesRegex(ValueError, "capability-probe evidence"):
+                    matrix.generate()
+
+                single = copy.deepcopy(evidence)
+                single["capability_probe"]["runs"] = single["capability_probe"]["runs"][:1]
+                path.write_text(json.dumps(single))
+                document = matrix.generate()
+                # Every row that takes its evidence FROM the probe (same
+                # artifact) must cite exactly that one run: no row may keep an
+                # older run beside the current artifact. Rows with their own
+                # override keep their own artifacts.
+                cited = [row for row in document["requirements"]
+                         if row["native"].get("artifact_sha256") ==
+                            single["capability_probe"]["artifact_sha256"]]
+                self.assertTrue(cited)
+                for row in cited:
+                    self.assertEqual(1, len(row["native"]["run_ids"]), row["id"])
+                    self.assertEqual([run["id"] for run in single["capability_probe"]["runs"]],
+                                     row["native"]["run_ids"], row["id"])
+                    self.assertEqual(single["capability_probe"]["artifact_sha256"],
+                                     row["native"]["artifact_sha256"], row["id"])
+                self.assertEqual(1, document["summary"]["satisfied"])
+                self.assertEqual(61, document["summary"]["blocker"])
+            finally:
+                matrix.EVIDENCE = original
 
     def test_removing_one_evidence_axis_cannot_stay_green(self):
         document = matrix.generate()

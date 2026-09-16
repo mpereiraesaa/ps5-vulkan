@@ -369,6 +369,33 @@ int main(void)
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
     d.graphics_enabled=1;
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_SUCCESS);
+    /* T02-E1b shipping gate: a real view mask is accepted only on a device that
+     * ENABLED the feature. The extension being reachable is not enough - the
+     * same device without the enabled feature refuses the mask - and the
+     * accepted pass really owns it. */
+    {
+        const uint32_t masks[1] = {0x3fu};
+        VkRenderPassMultiviewCreateInfo multiview = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
+            .subpassCount = 1, .pViewMasks = masks};
+        VkRenderPassCreateInfo masked = info; masked.pNext = &multiview;
+        VkRenderPass gated = VK_NULL_HANDLE;
+        assert(vkCreateRenderPass(&d, &masked, NULL, &gated) == VK_ERROR_FEATURE_NOT_PRESENT && !gated);
+        struct VkDevice_T enabled = d;
+        enabled.enabled_features |= PS5VK_FEATURE_MULTIVIEW;
+        assert(vkCreateRenderPass(&enabled, &masked, NULL, &gated) == VK_SUCCESS && gated);
+        assert(gated->multiview.present && gated->multiview.view_masks[0] == 0x3fu);
+        vkDestroyRenderPass(&enabled, gated, NULL);
+        /* The reported limit is the measured floor: a mask whose most
+         * significant bit reaches it is refused. */
+        const uint32_t too_wide[1] = {0x40u};
+        multiview.pViewMasks = too_wide;
+        VkRenderPass wide = VK_NULL_HANDLE;
+        assert(vkCreateRenderPass(&enabled, &masked, NULL, &wide) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !wide);
+        /* Nothing was created on the fixture device itself, so the object
+         * counters the rest of this test checks are untouched. */
+    }
     attachments[0].format=VK_FORMAT_UNDEFINED; color.attachment=1;
     assert(pass->attachments[0].format == VK_FORMAT_B8G8R8A8_UNORM &&
            ps5vk_render_pass_subpass(pass, 0)->color.attachment == 0 &&

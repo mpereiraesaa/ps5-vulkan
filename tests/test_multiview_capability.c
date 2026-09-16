@@ -117,22 +117,33 @@ int main(void)
     };
     for (unsigned i = 0; i < sizeof(forbidden) / sizeof(forbidden[0]); ++i)
         assert(!strstr(source, forbidden[i]));
-    struct {
-        const char *path;
-        const char *forbidden;
-    } public_side[] = {
+    /* E1b has now landed the surface, so the foundation's "nothing advertises
+     * yet" guard becomes the opposite assertion: the device source must name
+     * the extension, the feature structure and the property structure, and the
+     * render-pass source must consult the ENABLED FEATURE. A file that lost any
+     * of them would silently drop the public surface or the gate. */
+    static const char *must_appear[][2] = {
         {"src/vk_device.c", "VK_KHR_MULTIVIEW_EXTENSION_NAME"},
-        {"src/vk_device.c", "VK_PHYSICAL_DEVICE_MULTIVIEW_FEATURES"},
+        {"src/vk_device.c", "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES"},
+        {"src/vk_device.c", "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES"},
         {"src/vk_render_pass.c", "PS5VK_FEATURE_MULTIVIEW"},
     };
-    for (unsigned i = 0; i < sizeof(public_side) / sizeof(public_side[0]); ++i) {
-        FILE *f = fopen(public_side[i].path, "rb");
+    for (unsigned i = 0; i < sizeof(must_appear) / sizeof(must_appear[0]); ++i) {
+        FILE *f = fopen(must_appear[i][0], "rb");
         assert(f);
         const size_t n = fread(source, 1, sizeof(source) - 1, f);
         fclose(f);
         source[n] = '\0';
-        assert(!strstr(source, public_side[i].forbidden));
+        assert(strstr(source, must_appear[i][1]));
     }
+    /* ...and the private diagnostic knob still belongs to the platform build,
+     * not to the shipping device path. */
+    FILE *device_file = fopen("src/vk_device.c", "rb");
+    assert(device_file);
+    const size_t device_bytes = fread(source, 1, sizeof(source) - 1, device_file);
+    fclose(device_file);
+    source[device_bytes] = '\0';
+    assert(!strstr(source, "PS5VK_MULTIVIEW_DIAGNOSTIC"));
     puts("Multiview capability: internal bit and measured floors, nothing advertised");
     return 0;
 }

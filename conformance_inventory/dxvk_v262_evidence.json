@@ -1,108 +1,104 @@
 {
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
- "capability_probe": {
-  "artifact_sha256": "7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593",
-  "device_api": "1.0.0",
-  "device_extensions": 4,
-  "requirements": 62,
-  "satisfied_ids": [
-   "feature:VkPhysicalDeviceFeatures:robustBufferAccess"
-  ],
-  "runs": [
-   {
-    "id": "20260915T210947412Z_PPSA99994_ps5vk_0xf8ffef0f6ba6",
-    "log_sha256": "a8714a3b90b10daf72a5548bddba4cd604bf782e3d185b0b71427dd8230631d7"
-   },
-   {
-    "id": "20260915T211224694Z_PPSA99994_ps5vk_0xf9248da2b03d",
-    "log_sha256": "18507cfe84212641043ab7e8edffb1fe5f44d682e608b173376c1eeacbb7e91d"
-   }
-  ],
+  "capability_probe": {
+    "artifact_sha256": "40393d3b60d1f9f9742a3618023b323f4c2161c844a3c0a4e4ca5918ab53d802",
+    "device_api": "1.0.0",
+    "device_extensions": 5,
+    "requirements": 62,
+    "satisfied_ids": [
+      "feature:VkPhysicalDeviceFeatures:robustBufferAccess"
+    ],
+    "runs": [
+      {
+        "id": "20260916T080336344Z_PPSA99994_ps5vk_0x11cad8293d12a",
+        "log_sha256": "0e51b666b346f761249e710dae4803632cb246d0c347a8b003bdb22c4b09557c"
+      }
+    ],
     "transport": "ps5log/1",
     "verifier": "tools/verify_dxvk_probe.py"
   },
- "requirements": {
-  "feature:VkPhysicalDeviceVulkan11Features:multiview": {
-   "_comment": "The T02 slices are implemented and measured natively for TWO private floors - the six-view pass (mask 0x3f) and the maxMultiviewInstanceIndex floor firstInstance=0x07ffffff - each with host gates and one strict hardware run. This says nothing about the public feature, the two Vulkan 1.1 multiview properties or the CTS leaf set, which stay unpromoted on purpose: there is no cts override here, and the instance floor is NOT a claim about the reported maxMultiviewInstanceIndex.",
-   "native": {
-    "state": "native-evidence",
-    "run_ids": [
-     "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2",
-     "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
-    ],
-    "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
-    "refs": [
-     "VALIDATION.md#dxvk-262-multiview-six-view-witness",
-     "VALIDATION.md#dxvk-262-multiview-instance-floor"
-    ],
-    "artifact_sha256_refs": {
-     "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
-     "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da"
+  "requirements": {
+    "feature:VkPhysicalDeviceVulkan11Features:multiview": {
+      "_comment": "The T02 slices are implemented and measured natively for TWO private floors - the six-view pass (mask 0x3f) and the maxMultiviewInstanceIndex floor firstInstance=0x07ffffff - each with host gates and one strict hardware run. This says nothing about the public feature, the two Vulkan 1.1 multiview properties or the CTS leaf set, which stay unpromoted on purpose: there is no cts override here, and the instance floor is NOT a claim about the reported maxMultiviewInstanceIndex.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2",
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
+        ],
+        "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
+        "refs": [
+          "VALIDATION.md#dxvk-262-multiview-six-view-witness",
+          "VALIDATION.md#dxvk-262-multiview-instance-floor"
+        ],
+        "artifact_sha256_refs": {
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da"
+        },
+        "note": "Two strict private runs. Six-view: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard, strict_verified=1. Instance floor: the same scene with exactly one instance at firstInstance=0x07ffffff, both built-in slots present (view_index_slot and start_instance_slot), instance_witness=1, instance_failed=0 in all six layers, strict_verified=1."
+      }
     },
-    "note": "Two strict private runs. Six-view: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard, strict_verified=1. Instance floor: the same scene with exactly one instance at firstInstance=0x07ffffff, both built-in slots present (view_index_slot and start_instance_slot), instance_witness=1, instance_failed=0 in all six layers, strict_verified=1."
-   }
-  },
-  "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": {
-   "_comment": "Private floor evidence only. The six-view witness rendered six views into six array layers of one pass with mask 0x3f, which measures the view count as at least 6; the property itself is NOT reported and the profile still advertises no multiview feature. There is no cts override here.",
-   "native": {
-    "state": "native-evidence",
-    "run_ids": [
-     "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
-    ],
-    "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
-    "refs": [
-     "VALIDATION.md#dxvk-262-multiview-six-view-witness"
-    ],
-    "note": "One strict six-view run witnesses a view count of at least 6 (mask 0x3f, six ordered layers, strict_verified=1). The reported maxMultiviewViewCount is unchanged."
-   }
-  },
-  "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": {
-   "_comment": "Private floor evidence only. The instance witness issued exactly one instance at firstInstance=0x07ffffff, which measures the instance index as at least 134217727; the property itself is NOT reported and the profile still advertises no multiview feature. There is no cts override here.",
-   "native": {
-    "state": "native-evidence",
-    "run_ids": [
-     "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
-    ],
-    "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
-    "refs": [
-     "VALIDATION.md#dxvk-262-multiview-instance-floor"
-    ],
-    "note": "One strict run with instance_count=1 and firstInstance=0x07ffffff witnesses an instance index of at least 134217727, with instance_witness=1, instance_failed=0 in all six layers and strict_verified=1. The reported maxMultiviewInstanceIndex is unchanged."
-   }
-  },
-  "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
-   "cts": {
-    "state": "cts-pass",
-    "cases": [
-     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw",
-     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed",
-     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indirect",
-     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed_indirect",
-     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw",
-     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
-     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
-     "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect"
-    ],
-    "refs": [
-     "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15",
-     "UPSTREAM_CTS.md"
-    ],
-    "note": "The eight applicable leaves: the four base_vertex and the four non-first-instance base_instance cases. The two FIRST_INSTANCE leaves need drawIndirectFirstInstance and the four draw_index leaves need multiDrawIndirect, both of which this profile reports false, so they are excluded rather than reported as NotSupported."
-   },
-   "native": {
-    "state": "native-evidence",
-    "run_ids": [
-     "20260915T210924328Z_PPSA99994_ps5vk_0xf8fa8f2840e9"
-    ],
-    "artifact_sha256": "69ef5b3fa83641febbaad2edd477664135c108cd336c895cf335d1c4dbe77fab",
-    "refs": [
-     "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15"
-    ],
-    "note": "The public-SDK witness covers direct, indexed, indirect and instanced draws with pinned BaseVertex/BaseInstance/DrawIndex=0 triples in the colour attachment, and the same frames copied into the linear staging image and read back through vkGetImageSubresourceLayout, plus the transfer-destination clear/upload witness."
-   }
-  },
-  "api-version:apiVersion": {
+    "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": {
+      "_comment": "Private floor evidence only. The six-view witness rendered six views into six array layers of one pass with mask 0x3f, which measures the view count as at least 6; the property itself is NOT reported and the profile still advertises no multiview feature. There is no cts override here.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
+        ],
+        "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+        "refs": [
+          "VALIDATION.md#dxvk-262-multiview-six-view-witness"
+        ],
+        "note": "One strict six-view run witnesses a view count of at least 6 (mask 0x3f, six ordered layers, strict_verified=1). The reported maxMultiviewViewCount is unchanged."
+      }
+    },
+    "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": {
+      "_comment": "Private floor evidence only. The instance witness issued exactly one instance at firstInstance=0x07ffffff, which measures the instance index as at least 134217727; the property itself is NOT reported and the profile still advertises no multiview feature. There is no cts override here.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
+        ],
+        "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
+        "refs": [
+          "VALIDATION.md#dxvk-262-multiview-instance-floor"
+        ],
+        "note": "One strict run with instance_count=1 and firstInstance=0x07ffffff witnesses an instance index of at least 134217727, with instance_witness=1, instance_failed=0 in all six layers and strict_verified=1. The reported maxMultiviewInstanceIndex is unchanged."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indirect",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed_indirect",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect"
+        ],
+        "refs": [
+          "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "The eight applicable leaves: the four base_vertex and the four non-first-instance base_instance cases. The two FIRST_INSTANCE leaves need drawIndirectFirstInstance and the four draw_index leaves need multiDrawIndirect, both of which this profile reports false, so they are excluded rather than reported as NotSupported."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260915T210924328Z_PPSA99994_ps5vk_0xf8fa8f2840e9"
+        ],
+        "artifact_sha256": "69ef5b3fa83641febbaad2edd477664135c108cd336c895cf335d1c4dbe77fab",
+        "refs": [
+          "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15"
+        ],
+        "note": "The public-SDK witness covers direct, indexed, indirect and instanced draws with pinned BaseVertex/BaseInstance/DrawIndex=0 triples in the colour attachment, and the same frames copied into the linear staging image and read back through vkGetImageSubresourceLayout, plus the transfer-destination clear/upload witness."
+      }
+    },
+    "api-version:apiVersion": {
       "native": {
         "state": "witnessed-blocker",
         "observed": "1.0.0",

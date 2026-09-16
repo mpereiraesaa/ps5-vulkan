@@ -612,6 +612,162 @@ static void lifecycle(void)
     VkDevice d, other;
     assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
     assert(vkCreateDevice(p, &info, NULL, &other) == VK_SUCCESS && d != other);
+    /* T02-E1b: the multiview surface. The extension is enumerated exactly when
+     * the platform capability is present, the feature and property chains answer
+     * the measured truth, and the device negotiation is fail-closed without ever
+     * creating a device it should not. */
+    {
+        /* The device under test carries whatever platform mask the surrounding
+         * test installed, so the capability is set explicitly here and restored
+         * afterwards - the points being tested are the reporting and the
+         * negotiation, not how this fixture was built. */
+        const uint32_t saved_features = p->platform.supported_features;
+        p->platform.supported_features |= PS5VK_FEATURE_MULTIVIEW;
+        VkExtensionProperties extensions[8]; uint32_t extension_count = 8;
+        assert(vkEnumerateDeviceExtensionProperties(p, NULL, &extension_count, extensions) == VK_SUCCESS);
+        int enumerated = 0;
+        for (uint32_t n = 0; n < extension_count; ++n)
+            if (!strcmp(extensions[n].extensionName, VK_KHR_MULTIVIEW_EXTENSION_NAME))
+                enumerated = 1;
+        assert(enumerated);
+        /* Enumeration follows the Vulkan two-call contract: a partial buffer is
+         * reported as INCOMPLETE with the count of what actually fitted, and an
+         * empty query reports the full count. */
+        {
+            const uint32_t extra = (uint32_t)(PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                PS5VK_FEATURE_STORAGE_BUFFER_16BIT | PS5VK_FEATURE_SHADER_DRAW_PARAMETERS);
+            const uint32_t with_extra = p->platform.supported_features | extra;
+            p->platform.supported_features = with_extra;
+            uint32_t total = 0;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &total, NULL) == VK_SUCCESS);
+            assert(total >= 5);
+            uint32_t partial = 2;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &partial, extensions) == VK_INCOMPLETE);
+            assert(partial == 2);
+            for (uint32_t n = 0; n < partial; ++n) assert(extensions[n].extensionName[0]);
+            uint32_t none = 0;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &none, extensions) == VK_INCOMPLETE && !none);
+            p->platform.supported_features = with_extra & ~extra;
+        }
+        VkPhysicalDeviceMultiviewFeatures mv_features = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES};
+        VkPhysicalDeviceFeatures2 features2 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &mv_features};
+        vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+        assert(mv_features.multiview == VK_TRUE);
+        assert(mv_features.multiviewGeometryShader == VK_FALSE &&
+               mv_features.multiviewTessellationShader == VK_FALSE);
+        VkPhysicalDeviceMultiviewProperties mv_properties = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
+        VkPhysicalDeviceProperties2 properties2 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &mv_properties};
+        vkGetPhysicalDeviceProperties2KHR(p, &properties2);
+        assert(mv_properties.maxMultiviewViewCount == PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR);
+        assert(mv_properties.maxMultiviewInstanceIndex == PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR);
+        /* Without the capability both answers are zero and the extension is not
+         * enumerated at all. */
+        p->platform.supported_features &= ~(uint32_t)PS5VK_FEATURE_MULTIVIEW;
+        extension_count = 8;
+        assert(vkEnumerateDeviceExtensionProperties(p, NULL, &extension_count, extensions) == VK_SUCCESS);
+        for (uint32_t n = 0; n < extension_count; ++n)
+            assert(strcmp(extensions[n].extensionName, VK_KHR_MULTIVIEW_EXTENSION_NAME));
+        mv_features.multiview = VK_TRUE;
+        vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+        assert(mv_features.multiview == VK_FALSE);
+        mv_properties.maxMultiviewViewCount = 99u; mv_properties.maxMultiviewInstanceIndex = 99u;
+        vkGetPhysicalDeviceProperties2KHR(p, &properties2);
+        assert(!mv_properties.maxMultiviewViewCount && !mv_properties.maxMultiviewInstanceIndex);
+        p->platform.supported_features = saved_features | PS5VK_FEATURE_MULTIVIEW;
+        /* The extension needs the instance's properties2 dependency... */
+        VkDeviceQueueCreateInfo mv_queue; float mv_priority;
+        VkDeviceCreateInfo mv_info = device_info(&mv_queue, &mv_priority);
+        const char *mv_names[1] = {VK_KHR_MULTIVIEW_EXTENSION_NAME};
+        mv_info.enabledExtensionCount = 1; mv_info.ppEnabledExtensionNames = mv_names;
+        VkDevice mv_device = VK_NULL_HANDLE;
+        VkInstance plain = instance();
+        VkPhysicalDevice plain_physical = physical(plain);
+        assert(!plain->features2_extension_enabled);
+        assert(vkCreateDevice(plain_physical, &mv_info, NULL, &mv_device) ==
+               VK_ERROR_EXTENSION_NOT_PRESENT && !mv_device);
+        /* A platform that does NOT carry the capability and is asked for the
+         * extension is refused, and refused before anything is created. */
+        {
+            const uint32_t without = saved_features & ~(uint32_t)PS5VK_FEATURE_MULTIVIEW;
+            /* The instance dependency is satisfied here on purpose, so the ONLY
+             * reason left for the refusal is the missing platform capability. */
+            const VkBool32 saved_f2 = p->instance->features2_extension_enabled;
+            p->instance->features2_extension_enabled = VK_TRUE;
+            p->platform.supported_features = without;
+            VkDevice refused = VK_NULL_HANDLE;
+            assert(vkCreateDevice(p, &mv_info, NULL, &refused) ==
+                   VK_ERROR_EXTENSION_NOT_PRESENT && !refused);
+            p->instance->features2_extension_enabled = saved_f2;
+            p->platform.supported_features = saved_features | PS5VK_FEATURE_MULTIVIEW;
+        }
+        /* An unknown structure inside an output chain is ignored, as a query
+         * must be: the known structures still get their answers. */
+        {
+            VkBaseOutStructure unknown = {.sType = (VkStructureType)0x7fffffff, .pNext = NULL};
+            mv_features.multiview = VK_FALSE;
+            mv_properties.maxMultiviewViewCount = 0; mv_properties.maxMultiviewInstanceIndex = 0;
+            mv_features.pNext = &unknown;
+            mv_properties.pNext = &unknown;
+            vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+            assert(mv_features.multiview == VK_TRUE);
+            vkGetPhysicalDeviceProperties2KHR(p, &properties2);
+            assert(mv_properties.maxMultiviewViewCount == PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR &&
+                   mv_properties.maxMultiviewInstanceIndex == PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR);
+            mv_features.pNext = NULL; mv_properties.pNext = NULL;
+        }
+        /* ...and on an instance that has it, the extension alone is enough: the
+         * feature structure is optional, so the device is created with the
+         * feature DISABLED and a non-zero mask would still be refused. */
+        /* The dependency rule itself is what the negative above proved; for the
+         * positive cases the flag is set on the device under test's own instance,
+         * because this fixture enumerates one physical device whose instance is
+         * the first one it was asked with. Both are restored at the end. */
+        const VkBool32 saved_features2 = p->instance->features2_extension_enabled;
+        p->instance->features2_extension_enabled = VK_TRUE;
+        VkPhysicalDevice dependency_physical = p;
+        assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) == VK_SUCCESS);
+        assert(!(mv_device->enabled_features & PS5VK_FEATURE_MULTIVIEW));
+        vkDestroyDevice(mv_device, NULL);
+        /* Asking for the feature turns it on... */
+        VkPhysicalDeviceMultiviewFeatures requested = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES, .multiview = VK_TRUE};
+        mv_info.pNext = &requested;
+        assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) == VK_SUCCESS &&
+               (mv_device->enabled_features & PS5VK_FEATURE_MULTIVIEW));
+        vkDestroyDevice(mv_device, NULL);
+        /* ...duplicating the structure is refused, and so is asking for it
+         * without the extension, and so are the two unimplemented flavours. */
+        VkPhysicalDeviceMultiviewFeatures duplicate = requested;
+        requested.pNext = &duplicate;
+        mv_device = VK_NULL_HANDLE;
+        assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) == VK_ERROR_UNKNOWN && !mv_device);
+        requested.pNext = NULL;
+        VkDeviceCreateInfo no_extension = device_info(&mv_queue, &mv_priority);
+        no_extension.pNext = &requested;
+        mv_device = VK_NULL_HANDLE;
+        assert(vkCreateDevice(dependency_physical, &no_extension, NULL, &mv_device) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !mv_device);
+        requested.multiviewGeometryShader = VK_TRUE;
+        mv_device = VK_NULL_HANDLE;
+        assert(vkCreateDevice(p, &mv_info, NULL, &mv_device) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !mv_device);
+        requested.multiviewGeometryShader = VK_FALSE;
+        requested.multiviewTessellationShader = VK_TRUE;
+        mv_device = VK_NULL_HANDLE;
+        assert(vkCreateDevice(p, &mv_info, NULL, &mv_device) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !mv_device);
+        requested.multiviewTessellationShader = VK_FALSE;
+        requested.multiview = 7u;   /* not a boolean */
+        mv_device = VK_NULL_HANDLE;
+        assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) == VK_ERROR_UNKNOWN && !mv_device);
+        requested.multiview = VK_TRUE;
+        p->instance->features2_extension_enabled = saved_features2;
+        vkDestroyInstance(plain, NULL);
+    }
     assert(vkGetInstanceProcAddr(NULL, "vkCreateInstance") == (PFN_vkVoidFunction)vkCreateInstance);
     assert(!vkGetInstanceProcAddr(NULL, "vkCreateDevice"));
     assert(vkGetInstanceProcAddr(i, "vkCreateDevice") == (PFN_vkVoidFunction)vkCreateDevice);
