@@ -220,13 +220,34 @@ int main(void)
         m->user_sgpr_count = 3; m->ngg_lds_layout_user_data_dword = 1;
         assert(!ps5vk_runtime_draw_abi_build(m, &fragment, &abi));
         assert(abi.view_index_slot == UINT32_MAX);
-        /* A fragment-stage view index is refused: the built-in is a vertex
-         * value in this ABI, so a fragment slot could only be filled from a
-         * value the stage was never handed. */
+        /* Both stages receive the same per-view value at independent slots. */
         *m = base_vertex; fragment = base_fragment;
+        m->user_sgpr_count = 3; m->ngg_lds_layout_user_data_dword = 1;
+        m->view_index_valid = true; m->view_index_user_data_dword = 2;
         fragment.user_sgpr_count = 2;
         fragment.view_index_valid = true; fragment.view_index_user_data_dword = 1;
+        assert(!ps5vk_runtime_draw_abi_build(m, &fragment, &abi));
+        assert(abi.fragment_view_index_valid && abi.fragment_view_index_slot==1);
+        assert(!ps5vk_runtime_draw_values_sets(&abi,31,17,0,5,0,0,
+            tables_zero,vertex,pixel));
+        assert(vertex[2]==5 && pixel[1]==5);
+        fragment.view_index_user_data_dword=fragment.user_sgpr_count;
         assert(ps5vk_runtime_draw_abi_build(m, &fragment, &abi));
+        fragment.view_index_valid=false; fragment.view_index_user_data_dword=1;
+        assert(ps5vk_runtime_draw_abi_build(m, &fragment, &abi));
+        /* Slot collisions must reject before either bank is written. */
+        uint32_t old_vertex[16],old_pixel[16];
+        memcpy(old_vertex,vertex,sizeof(vertex));memcpy(old_pixel,pixel,sizeof(pixel));
+        abi.push_constant_size=4; abi.fragment_push_slot=abi.fragment_view_index_slot;
+        assert(ps5vk_runtime_draw_values_sets(&abi,31,17,0,5,0,4,
+            tables_zero,vertex,pixel));
+        assert(!memcmp(old_vertex,vertex,sizeof(vertex)) && !memcmp(old_pixel,pixel,sizeof(pixel)));
+        abi.push_constant_size=0;abi.fragment_push_slot=UINT32_MAX;
+        abi.fragment_descriptor_valid[0]=1;abi.fragment_descriptor_slot[0]=abi.fragment_view_index_slot;
+        const uint32_t collision_tables[4]={16,0,0,0};
+        assert(ps5vk_runtime_draw_values_sets(&abi,31,17,0,5,0,0,
+            collision_tables,vertex,pixel));
+        assert(!memcmp(old_vertex,vertex,sizeof(vertex)) && !memcmp(old_pixel,pixel,sizeof(pixel)));
         /* Malformed pairs are refused rather than discarded: invalid with a
          * nonzero dword, and valid but outside the declared block. */
         *m = base_vertex; fragment = base_fragment;
