@@ -50,6 +50,9 @@ def main():
     layer_probe = os.environ.get("PS5VK_LAYER_PROBE", "0")
     if layer_probe not in ("0", "1") or (layer_probe == "1" and not graphics_api):
         raise SystemExit("PS5VK_LAYER_PROBE requires the graphics profile API and must be 0 or 1")
+    multiview_diagnostic = os.environ.get("PS5VK_MULTIVIEW_DIAGNOSTIC", "0")
+    if multiview_diagnostic not in ("0", "1") or (multiview_diagnostic == "1" and not graphics_api):
+        raise SystemExit("PS5VK_MULTIVIEW_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
     if scene_split == "1" and int(scissor_probe) >= 3:
         raise SystemExit("Planar triangle diagnostic cannot split the cube draw")
     shell_close = os.environ.get("PS5VK_SHELL_CLOSE") == "1"
@@ -242,6 +245,7 @@ def main():
                 raise SystemExit("Split-draw diagnostic requires scene3d.pipe")
             common += ["-DPS5VK_GRAPHICS_SCENE_SPLIT=" + scene_split]
             common += ["-DPS5VK_LAYER_PROBE=" + layer_probe]
+            common += ["-DPS5VK_MULTIVIEW_DIAGNOSTIC=" + multiview_diagnostic]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]

@@ -1,6 +1,28 @@
 #include "vk_framebuffer.h"
 #include <string.h>
 
+/* The array layers an attachment view has to carry for a pass that uses view
+ * masks: one layer per view, so the highest view index any subpass that names
+ * this attachment renders, plus one. Zero means the pass has no masks at all,
+ * which is every pass the shipping build can create, and zero adds no
+ * requirement anywhere below. */
+static uint32_t attachment_view_count(VkRenderPass pass, uint32_t attachment)
+{
+    const struct ps5vk_render_pass_multiview *multiview = &pass->multiview;
+    if (!multiview->present) return 0;
+    uint32_t views = 0;
+    for (uint32_t s = 0; s < multiview->subpass_count; ++s) {
+        const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, s);
+        if (subpass->color.attachment != attachment &&
+            subpass->depth.attachment != attachment) continue;
+        const uint32_t mask = multiview->view_masks[s];
+        /* A view mask is 32 bits wide, so a view index is a bit position. */
+        for (uint32_t bit = 0; bit < 32u; ++bit)
+            if (mask & (UINT32_C(1) << bit)) views = bit + 1u;
+    }
+    return views;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebufferCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkFramebuffer *out)
 {
@@ -29,6 +51,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
         if (!height) height = 1;
         if (!(view->image->info.usage & usage) || info->width > width || info->height > height)
             return VK_ERROR_UNKNOWN;
+        /* A pass with view masks renders each subpass once per view, into the
+         * attachment view's own layers, so that view has to START at layer zero
+         * and carry every view the subpasses naming it render. The view's range
+         * was already validated against the image it was created on
+         * (vkCreateImageView), so a backing with fewer layers than the mask
+         * needs cannot satisfy this and is refused here. The framebuffer itself
+         * still has exactly one layer. */
+        const uint32_t views = attachment_view_count(pass, i);
+        if (views && (view->range.baseArrayLayer || view->range.layerCount < views))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkFramebuffer fb = ps5vk_object_alloc(d->custom_allocator ? &d->allocator : NULL, allocator,

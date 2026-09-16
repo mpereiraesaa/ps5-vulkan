@@ -132,6 +132,23 @@ class NativeDiagnosticOptions(unittest.TestCase):
     def test_shell_close_requires_graphics_api(self):
         self.rejected({"PS5VK_SHELL_CLOSE": "1"}, "requires graphics profile API")
 
+    def test_multiview_diagnostic_is_graphics_only(self):
+        self.rejected({"PS5VK_MULTIVIEW_DIAGNOSTIC": "1"},
+                      "requires the graphics profile API")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
+                      "must be 0 or 1")
+
+    def test_multiview_diagnostic_stays_private(self):
+        """The six-view gate is a private build switch, never a reported one."""
+        for public in (ROOT / "include").rglob("*.h"):
+            self.assertNotIn("PS5VK_MULTIVIEW_DIAGNOSTIC", public.read_text(),
+                             f"{public} must not expose the diagnostic gate")
+        self.assertIn("PS5VK_MULTIVIEW_DIAGNOSTIC",
+                      (ROOT / "src/vk_internal.h").read_text())
+        self.assertIn("PS5VK_MULTIVIEW_DIAGNOSTIC",
+                      (ROOT / "tools/build_native.py").read_text())
+
     def test_exit_control_requires_graphics_api(self):
         self.rejected({"PS5VK_EXIT_CONTROL": "3"}, "requires the graphics profile API")
 

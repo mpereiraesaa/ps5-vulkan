@@ -150,15 +150,23 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     }
     /* The multiview obligations are checked against the pass this call is
      * creating, after the dependencies they refer to are themselves valid.
-     * This profile advertises no multiview feature, so the feature argument is
-     * false here and every accepted view mask must be zero; the same function
-     * is exercised with the feature enabled by the host regressions so the
-     * slice that enables it inherits validation that is already proven. */
+     * This profile advertises no multiview feature, so every accepted view mask
+     * must be zero and the same function is exercised with the feature enabled
+     * by the host regressions. The private diagnostic gate is the only thing
+     * that can pass a real feature state instead, and it does not touch what the
+     * device reports: the shipping build keeps multiview disabled with a zero
+     * view limit, and a non-zero mask stays refused there. */
     struct ps5vk_render_pass_multiview owned_multiview = {0};
     if (multiview) {
-        VkResult rc = ps5vk_render_pass_multiview_validate(info, multiview, VK_FALSE,
-            0u /* maxMultiviewViewCount reported by this profile today */,
-            &owned_multiview);
+#if PS5VK_MULTIVIEW_DIAGNOSTIC
+        const VkBool32 multiview_enabled = VK_TRUE;
+        const uint32_t max_multiview_view_count = PS5VK_MULTIVIEW_DIAGNOSTIC_VIEWS;
+#else
+        const VkBool32 multiview_enabled = VK_FALSE;
+        const uint32_t max_multiview_view_count = 0u; /* reported by this profile */
+#endif
+        VkResult rc = ps5vk_render_pass_multiview_validate(info, multiview,
+            multiview_enabled, max_multiview_view_count, &owned_multiview);
         if (rc != VK_SUCCESS) return rc;
     }
     size_t bytes = 0;
