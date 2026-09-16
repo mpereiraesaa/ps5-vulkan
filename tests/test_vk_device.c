@@ -765,6 +765,65 @@ static void lifecycle(void)
         mv_device = VK_NULL_HANDLE;
         assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) == VK_ERROR_UNKNOWN && !mv_device);
         requested.multiview = VK_TRUE;
+        /* The CTS builds one device chain for every rendering type it
+         * exercises, so a multiview case always chains
+         * VkPhysicalDeviceDynamicRenderingFeatures behind the multiview
+         * structure with the feature left at its default false. That neutral
+         * shape must create the device; the feature itself stays unimplemented,
+         * so a true request fails closed and the extension stays unadvertised. */
+        {
+            VkPhysicalDeviceDynamicRenderingFeatures dynamic = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+                .pNext = NULL,
+                .dynamicRendering = VK_FALSE};
+            const unsigned devices_before = p->instance->devices;
+            unsigned opens_before = opened;
+            requested.pNext = &dynamic;
+            assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) == VK_SUCCESS);
+            assert(opened == opens_before + 1 && p->instance->devices == devices_before + 1);
+            assert(mv_device->enabled_features & PS5VK_FEATURE_MULTIVIEW);
+            vkDestroyDevice(mv_device, NULL);
+            assert(p->instance->devices == devices_before);
+            /* Asking for the feature is refused with the precise
+             * unsupported-feature result, before a backend is opened or a
+             * device is published. */
+            dynamic.dynamicRendering = VK_TRUE;
+            mv_device = VK_NULL_HANDLE; opens_before = opened;
+            assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) ==
+                   VK_ERROR_FEATURE_NOT_PRESENT && !mv_device && opened == opens_before &&
+                   p->instance->devices == devices_before);
+            /* Not a boolean at all. */
+            dynamic.dynamicRendering = 2u;
+            mv_device = VK_NULL_HANDLE; opens_before = opened;
+            assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) ==
+                   VK_ERROR_UNKNOWN && !mv_device && opened == opens_before &&
+                   p->instance->devices == devices_before);
+            /* One structure only, whatever value it carries. */
+            dynamic.dynamicRendering = VK_FALSE;
+            VkPhysicalDeviceDynamicRenderingFeatures dynamic_copy = dynamic;
+            dynamic.pNext = &dynamic_copy;
+            mv_device = VK_NULL_HANDLE; opens_before = opened;
+            assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) ==
+                   VK_ERROR_UNKNOWN && !mv_device && opened == opens_before &&
+                   p->instance->devices == devices_before);
+            dynamic.pNext = NULL;
+            /* The recognised structure is the only thing that changed: dynamic
+             * rendering stays unadvertised, and an input structure this profile
+             * does not implement is still refused rather than ignored. */
+            {
+                VkExtensionProperties names[8]; uint32_t count = 8;
+                assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, names) == VK_SUCCESS);
+                for (uint32_t n = 0; n < count; ++n)
+                    assert(strcmp(names[n].extensionName, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME));
+            }
+            VkBaseInStructure unhandled = {.sType = (VkStructureType)0x7ffffffe, .pNext = NULL};
+            requested.pNext = &unhandled;
+            mv_device = VK_NULL_HANDLE; opens_before = opened;
+            assert(vkCreateDevice(dependency_physical, &mv_info, NULL, &mv_device) ==
+                   VK_ERROR_FEATURE_NOT_PRESENT && !mv_device && opened == opens_before &&
+                   p->instance->devices == devices_before);
+            requested.pNext = NULL;
+        }
         p->instance->features2_extension_enabled = saved_features2;
         vkDestroyInstance(plain, NULL);
     }
