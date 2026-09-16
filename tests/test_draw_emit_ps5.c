@@ -280,6 +280,7 @@ int main(void)
            depth_prepared.registers[21].value==depth_layer.registers[21].value);
     struct ps5vk_draw_state view_state={.cx_count=87,.modifier=5,.sh_count=10};
     view_state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=5,.fragment_count=2,
+        .fragment_view_index_valid=1,.fragment_view_index_slot=1,
         .base_vertex_slot=0,.start_instance_slot=1,.draw_id_slot=UINT32_MAX,.view_index_slot=2,
         .vertex_buffer_valid=1,.vertex_buffer_slot=3,.vertex_buffer_usage_mask=1,
         .lds_slot=4,.lds_value=0,
@@ -302,6 +303,7 @@ int main(void)
     assert(commands[9]==0x8c && commands[10]==5);
     assert(commands[11]==11 && commands[12]==13 && commands[13]==2 && commands[14]==0x567800);
     assert(commands[15]==0 && commands[16]==0xc && commands[17]==2);
+    assert(commands[18]==0 && commands[19]==2); /* fragment ViewIndex, same replay */
     /* Colour and depth together: the depth layer's four carried words follow,
      * and the depth target's own 0x200 word is NOT among them - the D32 shape
      * always contains it and the layer never moves it, so a multiview depth

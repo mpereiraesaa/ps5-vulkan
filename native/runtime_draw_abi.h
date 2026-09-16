@@ -21,12 +21,11 @@ struct ps5vk_runtime_draw_abi {
      * read that value. draw_id_slot is the DrawIndex slot (metadata v13); a
      * stage that reads the built-in always has a real slot here, so a caller
      * cannot leave the built-in unwritten by accident. view_index_slot is the
-     * multiview ViewIndex slot (metadata v14); this profile advertises no
-     * multiview, so the value delivered through it is zero, and it is present
-     * only when the compiler says the vertex stage really reads the built-in.
+     * vertex multiview ViewIndex slot (metadata v14), present only when read.
      * A zero-initialised struct names slot 0 for every one of these fields and
      * is therefore rejected as a collision, never silently accepted. */
     uint32_t base_vertex_slot, start_instance_slot, draw_id_slot, view_index_slot;
+    uint32_t fragment_view_index_valid, fragment_view_index_slot;
     uint32_t vertex_buffer_valid, vertex_buffer_slot;
     uint32_t vertex_buffer_usage_mask;
     uint32_t lds_slot, lds_value;
@@ -68,6 +67,13 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
     }
     uint32_t vertex[16]={0},pixel[16]={0};
     uint32_t vertex_used=0,pixel_used=0;
+    if(a->fragment_view_index_valid>1 ||
+       (a->fragment_view_index_valid ? a->fragment_view_index_slot>=a->fragment_count :
+        a->fragment_view_index_slot!=0))return -1;
+    if(a->fragment_view_index_valid) {
+        pixel[a->fragment_view_index_slot]=view_index;
+        pixel_used|=1u<<a->fragment_view_index_slot;
+    }
     for(unsigned i=0;i<7;++i)if(slots[i]!=UINT32_MAX)vertex_used|=1u<<slots[i];
     if(a->base_vertex_slot!=UINT32_MAX)vertex[a->base_vertex_slot]=base_vertex;
     if(a->start_instance_slot!=UINT32_MAX)vertex[a->start_instance_slot]=instance;
@@ -84,6 +90,7 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
            (a->fragment_push_slot!=UINT32_MAX && a->fragment_push_slot>=a->fragment_count))return -1;
         if(a->vertex_push_slot!=UINT32_MAX)vertex[a->vertex_push_slot]=push_constant_low;
         if(a->fragment_push_slot!=UINT32_MAX) {
+            if(pixel_used&(1u<<a->fragment_push_slot))return -1;
             pixel[a->fragment_push_slot]=push_constant_low;
             pixel_used|=1u<<a->fragment_push_slot;
         }
@@ -111,10 +118,8 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
 
 /* Compatibility bridge for existing one-table command emitters. A compiled
  * multi-set program cannot pass here with missing addresses. The view index is
- * passed explicitly as zero: this profile advertises no multiview, so every
- * draw it executes is view zero, and a shader that reads the built-in through a
- * compiler-declared slot must be handed that value rather than an unwritten
- * register. A multiview slice would pass the real index here. */
+ * passed explicitly as zero for non-multiview draws; multiview uses the
+ * sets entry point to deliver each replay's real index to both stages. */
 static inline int ps5vk_runtime_draw_values(const struct ps5vk_runtime_draw_abi *a,
     uint32_t base_vertex,uint32_t instance,uint32_t draw_index,uint32_t vertex_buffer_low,
     uint32_t push_constant_low,uint32_t descriptor_set0_low,
