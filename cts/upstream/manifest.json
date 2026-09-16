@@ -44,10 +44,10 @@
         "descriptor_object_model": true,
         "descriptor_table_encoding": true,
         "compiler_lowering": true,
-        "gpu_subpass_readback": false
+        "gpu_subpass_readback": true
       },
-      "execution_supported": false,
-      "supported": false,
+      "execution_supported": true,
+      "supported": true,
       "resource_supported": true,
       "hardware_evidence": {
         "source_commit": "346b7838414cb4d126962c05dfb29fafa9ab592d",
@@ -64,7 +64,27 @@
         "array_layers": 6,
         "teardown": "clean"
       },
-      "blocker": "Two stages. RESOURCE: promoted on physical-console evidence. One strict run of a temporary public-API probe on main's own driver created the exact shape - R8G8B8A8_UNORM, 2D, optimal tiling, flags 0, extent depth 1, one mip, one sample, six array layers and usage COLOR_ATTACHMENT|TRANSFER_SRC|INPUT_ATTACHMENT|TRANSFER_DST - after the format query answered VK_SUCCESS with maxArrayLayers 6, and binding it cost exactly six 128 KiB strides (786432 bytes) with a clean teardown; see hardware_evidence. No other format, usage set or layer count gained support. EXECUTION: still false, but three of the four recorded requirements are now true. descriptor_object_model is true (merged #114); descriptor_table_encoding is true (merged #118 and #119), which is the exact 32-byte, eight DWORD resource-only GFX10 record at its canonical offsets delivered through native draw preparation; and compiler_lowering is true (merged PSBC #10 with ps5-vulkan #121), which is the pinned PSBC/ACO compiler reading a fragment subpassLoad through a distinct resource-only input-attachment descriptor at that same 32-byte stride, mapped in the RADV/Mesa layout as VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT and never as a combined T#/S#, with fragment-only admission and fail-closed stride, type, stage, ownership and metadata checks. gpu_subpass_readback is false and is now the sole remaining requirement: nothing in this tree reads a subpass attachment on the GPU, so no shader output has been measured on a console. The final state is the conjunction of both stages, so all 48 leaves stay diagnostics."
+      "blocker": "None for the selected bounded shape. Resource evidence is preserved below. Actual fragment subpassLoad readback passed in the independent GPU oracle (4096/4096 pixels, intact guards); all 48 original multiview leaves and the combined 165-case selection passed unchanged upstream oracles. This does not admit unsupported multiview geometry/tessellation, renderpass2, query or multisample families.",
+      "execution_evidence": {
+        "reference": "VALIDATION.md#multiview-native-acceptance",
+        "input_attachment": {
+          "run_id": "20260916T192041030Z_PPSA99994_ps5vk_0x141a00db047f9",
+          "artifact_sha256": "fccbe810989ec007c490a7f99ab56e9dda306a801e7b930a6fccb0d6c614e7c6",
+          "matched_pixels": 4096,
+          "total_pixels": 4096,
+          "guard_mismatches": 0
+        },
+        "upstream": {
+          "run_id": "20260916T203823854Z_PPSA99994_upstream-cts_0x145ddaffc8494",
+          "artifact_sha256": "deaabb648bf288ab7cd1ec4c8788378785206e62957adab5fbb7e3019d080dd8",
+          "selection_sha256": "984ab83f7c7586eea2243847f494e4db20784b4590d2772332912ab653aaad8c",
+          "qpa_sha256": "11cef34a5320ec66eac1fc3de5884efb44c7db31b1e35363ccd4f2e1b347648d",
+          "pass_count": 165,
+          "fail_count": 0,
+          "multiview_pass_count": 48,
+          "lifecycle_ok": true
+        }
+      }
     }
   },
   "cases": [
@@ -427,7 +447,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:929",
       "category": "storage-8bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer8BitAccess"],
+      "features_required": [
+        "storageBuffer8BitAccess"
+      ],
       "rationale": "Original upstream SPIR-V assembly case converts 128 signed 32-bit SSBO values to tightly packed signed 8-bit SSBO elements and byte-compares the GPU result."
     },
     {
@@ -435,7 +457,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:929",
       "category": "storage-8bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer8BitAccess"],
+      "features_required": [
+        "storageBuffer8BitAccess"
+      ],
       "rationale": "Original upstream SPIR-V assembly case converts 128 unsigned 32-bit SSBO values to tightly packed unsigned 8-bit SSBO elements and byte-compares the GPU result."
     },
     {
@@ -443,7 +467,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:929",
       "category": "storage-8bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer8BitAccess"],
+      "features_required": [
+        "storageBuffer8BitAccess"
+      ],
       "rationale": "Original upstream SPIR-V assembly case validates signed two-lane vector narrowing from 32-bit to packed 8-bit storage-buffer elements."
     },
     {
@@ -451,7 +477,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:929",
       "category": "storage-8bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer8BitAccess"],
+      "features_required": [
+        "storageBuffer8BitAccess"
+      ],
       "rationale": "Original upstream SPIR-V assembly case validates unsigned two-lane vector narrowing from 32-bit to packed 8-bit storage-buffer elements."
     },
     {
@@ -459,7 +487,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:2309",
       "category": "storage-16bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer16BitAccess"],
+      "features_required": [
+        "storageBuffer16BitAccess"
+      ],
       "rationale": "Original upstream BufferBlock case converts signed scalar 32-bit SSBO elements to tightly packed signed 16-bit SSBO elements and compares the exact output."
     },
     {
@@ -467,7 +497,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:2309",
       "category": "storage-16bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer16BitAccess"],
+      "features_required": [
+        "storageBuffer16BitAccess"
+      ],
       "rationale": "Original upstream BufferBlock case converts unsigned scalar 32-bit SSBO elements to tightly packed unsigned 16-bit SSBO elements and compares the exact output."
     },
     {
@@ -475,7 +507,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:2309",
       "category": "storage-16bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer16BitAccess"],
+      "features_required": [
+        "storageBuffer16BitAccess"
+      ],
       "rationale": "Original upstream BufferBlock case validates signed two-lane vector narrowing from 32-bit to packed 16-bit SSBO elements."
     },
     {
@@ -483,7 +517,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:2309",
       "category": "storage-16bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer16BitAccess"],
+      "features_required": [
+        "storageBuffer16BitAccess"
+      ],
       "rationale": "Original upstream BufferBlock case validates unsigned two-lane vector narrowing from 32-bit to packed 16-bit SSBO elements."
     },
     {
@@ -491,7 +527,9 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm16bitStorageTests.cpp:1128",
       "category": "storage-16bit",
       "expected_status": "Pass",
-      "features_required": ["storageBuffer16BitAccess"],
+      "features_required": [
+        "storageBuffer16BitAccess"
+      ],
       "rationale": "Original upstream BufferBlock case reads tightly packed signed 16-bit SSBO elements, sign-extends them to 32-bit output and compares all 128 values."
     },
     {
@@ -825,148 +863,754 @@
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_1_byte",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1782",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-read body and result oracle, with a one-byte descriptor range."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_3_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1782",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-read body and result oracle, with a three-byte descriptor range."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_4_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1782",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-read body and result oracle, with one complete uint descriptor element."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_32_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1782",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-read body and result oracle, with a 32-byte descriptor range."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_1_byte",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1786",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-write body and guard-region oracle, with a one-byte descriptor range."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_3_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1786",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-write body and guard-region oracle, with a three-byte descriptor range."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_4_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1786",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-write body and guard-region oracle, with one complete uint descriptor element."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_32_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1786",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 SSBO out-of-bounds scalar-write body and guard-region oracle, with a 32-byte descriptor range."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_1_byte",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with a one-byte descriptor range."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_3_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with a three-byte descriptor range."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_4_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with one complete uint descriptor element."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_32_bytes",
       "source": "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp:1776",
-      "category": "robust-buffer-access", "expected_status": "Pass", "features_required": ["robustBufferAccess"],
+      "category": "robust-buffer-access",
+      "expected_status": "Pass",
+      "features_required": [
+        "robustBufferAccess"
+      ],
       "rationale": "Original upstream Vulkan 1.0 UBO out-of-bounds scalar-read body and result oracle, with a 32-byte descriptor range."
     },
     {
       "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex.single_descriptor.2d",
       "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9698",
-      "category": "graphics-sampler", "expected_status": "Pass", "features_required": [],
+      "category": "graphics-sampler",
+      "expected_status": "Pass",
+      "features_required": [],
       "rationale": "Original upstream single-descriptor mutable combined-image-sampler body and four-quadrant image oracle, executed from the vertex stage only. Measured Pass twice on the same signed artifact before acceptance."
     },
     {
       "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.fragment.single_descriptor.2d",
       "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9698",
-      "category": "graphics-sampler", "expected_status": "Pass", "features_required": [],
+      "category": "graphics-sampler",
+      "expected_status": "Pass",
+      "features_required": [],
       "rationale": "Original upstream single-descriptor mutable combined-image-sampler body and four-quadrant image oracle, executed from the fragment stage only. Measured Pass twice on the same signed artifact before acceptance."
     },
     {
       "path": "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex_fragment.single_descriptor.2d",
       "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp:9698",
-      "category": "graphics-sampler", "expected_status": "Pass", "features_required": [],
+      "category": "graphics-sampler",
+      "expected_status": "Pass",
+      "features_required": [],
       "rationale": "Original upstream single-descriptor mutable combined-image-sampler body and four-quadrant image oracle, executed from the vertex and fragment stages together. Measured Pass twice on the same signed artifact before acceptance."
     },
     {
       "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:501",
-      "category": "graphics-draw-parameters", "expected_status": "Pass",
-      "features_required": ["shaderDrawParameters"],
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters"
+      ],
       "rationale": "Original upstream direct non-indexed draw with firstVertex = 2 and firstInstance = 2. The pinned VertexFetchShaderDrawParameters.vert accepts a vertex only when gl_VertexIndex - gl_BaseVertexARB equals the recorded reference index and gl_DrawIDARB is zero, and the group's image oracle is the upstream reference rasterizer."
     },
     {
       "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:501",
-      "category": "graphics-draw-parameters", "expected_status": "Pass",
-      "features_required": ["shaderDrawParameters"],
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters"
+      ],
       "rationale": "Original upstream indexed draw with uint32 indices, firstIndex = 11 and vertexOffset = 1. It judges the signed vertexOffset half of the BaseVertex contract and the DrawIndex = 0 value through the upstream image oracle."
     },
     {
       "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indirect",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:501",
-      "category": "graphics-draw-parameters", "expected_status": "Pass",
-      "features_required": ["shaderDrawParameters"],
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters"
+      ],
       "rationale": "Original upstream single-draw vkCmdDrawIndirect command built by the downstream factory; drawCount stays 1, so the profile's maxDrawIndirectCount of 1 is what executes and the upstream image oracle judges the result."
     },
     {
       "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed_indirect",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:501",
-      "category": "graphics-draw-parameters", "expected_status": "Pass",
-      "features_required": ["shaderDrawParameters"],
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters"
+      ],
       "rationale": "Original upstream single-draw vkCmdDrawIndexedIndirect command, judging the indirect vertexOffset path and DrawIndex = 0 with the upstream image oracle."
     },
     {
       "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
-      "category": "graphics-draw-parameters", "expected_status": "Pass",
-      "features_required": ["shaderDrawParameters"],
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters"
+      ],
       "rationale": "Original upstream instanced direct draw with firstInstance = 2. The pinned shader derives gl_InstanceIndex - gl_BaseInstanceARB, so the case judges the BaseInstance contract together with the DrawIndex = 0 value."
     },
     {
       "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
-      "category": "graphics-draw-parameters", "expected_status": "Pass",
-      "features_required": ["shaderDrawParameters"],
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters"
+      ],
       "rationale": "Original upstream instanced indexed draw with firstInstance = 2, firstIndex = 11 and vertexOffset = 1, judged by the upstream reference rasterizer."
     },
     {
       "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
-      "category": "graphics-draw-parameters", "expected_status": "Pass",
-      "features_required": ["shaderDrawParameters"],
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters"
+      ],
       "rationale": "Original upstream single-draw indirect command whose firstInstance field is zero, which is the only indirect firstInstance shape this profile executes; the upstream image oracle judges the result."
     },
     {
       "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
-      "category": "graphics-draw-parameters", "expected_status": "Pass",
-      "features_required": ["shaderDrawParameters"],
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters"
+      ],
       "rationale": "Original upstream single-draw indexed indirect command with a zero firstInstance field and a non-zero vertexOffset, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "resource_contract": "multiview-attachment-image",
+      "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
     }
   ],
   "diagnostics": [
@@ -975,7 +1619,9 @@
       "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:682",
       "category": "buffer-transfer-dedicated-allocation-gap",
       "expected_status": "NotSupported",
-      "features_required": ["VK_KHR_dedicated_allocation"],
+      "features_required": [
+        "VK_KHR_dedicated_allocation"
+      ],
       "rationale": "Measured unchanged upstream result: the dedicated allocator requires VK_KHR_dedicated_allocation, which the Vulkan 1.0 profile does not advertise. The equivalent suballocation update oracle is strict acceptance; this leaf remains an explicit diagnostic rather than being silently dropped."
     },
     {
@@ -983,7 +1629,9 @@
       "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:752",
       "category": "buffer-transfer-dedicated-allocation-gap",
       "expected_status": "NotSupported",
-      "features_required": ["VK_KHR_dedicated_allocation"],
+      "features_required": [
+        "VK_KHR_dedicated_allocation"
+      ],
       "rationale": "Measured unchanged upstream result: the dedicated allocator requires VK_KHR_dedicated_allocation, which the Vulkan 1.0 profile does not advertise. VK_WHOLE_SIZE tail rounding is independently covered by the native public consumer and remains diagnostic here until that extension is implemented."
     },
     {
@@ -1007,536 +1655,10 @@
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:1898",
       "category": "storage-8bit-memory-precondition",
       "expected_status": "NotSupported",
-      "features_required": ["storageBuffer8BitAccess"],
+      "features_required": [
+        "storageBuffer8BitAccess"
+      ],
       "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.get_query_pool_results.15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
-    },
-    {
-      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
-      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
-      "category": "multiview-render-pass",
-      "expected_status": "Fail",
-      "features_required": [
-        "VkPhysicalDeviceMultiviewFeatures::multiview"
-      ],
-      "resource_contract": "multiview-attachment-image",
-      "rationale": "Blocked resource-contract target, preserved rather than deleted. The upstream attachment helper builds a 2D R8G8B8A8_UNORM array image whose usage includes VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT (see the multiview-attachment-image contract), and this driver neither accepts nor advertises that usage, so the leaf cannot pass: measured on canonical main 720ae713 as vkCreateImage returning VK_ERROR_UNKNOWN for all 48 multiview leaves. It returns to strict acceptance only when the contract is supported."
     }
   ]
 }
