@@ -1,10 +1,15 @@
 # DXVK v2.6.2 implementation backlog
 
-This backlog turns the 61 current blockers for
+This backlog turns the 61 original blockers for
 `VP_DXVK_d3d11_level_11_0_baseline` into 15 ordered implementation tranches.
 The exact baseline membership lives in
 `conformance_inventory/dxvk_v262_backlog.json`; this document explains how to
 execute it.
+
+Current checkpoint: multiview (T02) has all three requirements satisfied by
+public KHR queries, dedicated floor witnesses and 48 passing original CTS
+leaves within a 165/165 regression. The live matrix is 4/62 ready with 58
+blockers. The ordered table preserves the original tranche membership.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
 11_0 baseline. Reaching 62/62 means that this profile has complete API,

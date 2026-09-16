@@ -2,25 +2,37 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "40393d3b60d1f9f9742a3618023b323f4c2161c844a3c0a4e4ca5918ab53d802",
+    "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
     "device_api": "1.0.0",
     "device_extensions": 5,
     "requirements": 62,
     "satisfied_ids": [
-      "feature:VkPhysicalDeviceFeatures:robustBufferAccess"
+      "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+      "feature:VkPhysicalDeviceVulkan11Features:multiview",
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"
     ],
     "runs": [
       {
-        "id": "20260916T080336344Z_PPSA99994_ps5vk_0x11cad8293d12a",
-        "log_sha256": "0e51b666b346f761249e710dae4803632cb246d0c347a8b003bdb22c4b09557c"
+        "id": "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93",
+        "log_sha256": "010b52a9464940324dcfd33c8fc48be242850680676c2f1ec9aa923a2c21afd2"
       }
     ],
     "transport": "ps5log/1",
-    "verifier": "tools/verify_dxvk_probe.py"
+    "verifier": "tools/verify_dxvk_probe.py",
+    "query_routes": [
+      {
+        "route": "VK_KHR_multiview",
+        "multiview": "1",
+        "maxMultiviewViewCount": "6",
+        "maxMultiviewInstanceIndex": "134217727"
+      }
+    ],
+    "source_matrix_sha256": "f7afeeb9c9ca6b6c8c53c2d5740f1086b0e9a5a67d72899842549cb5d17d888c"
   },
   "requirements": {
     "feature:VkPhysicalDeviceVulkan11Features:multiview": {
-      "_comment": "The T02 slices are implemented and measured natively for TWO private floors - the six-view pass (mask 0x3f) and the maxMultiviewInstanceIndex floor firstInstance=0x07ffffff - each with host gates and one strict hardware run. This says nothing about the public feature, the two Vulkan 1.1 multiview properties or the CTS leaf set, which stay unpromoted on purpose: there is no cts override here, and the instance floor is NOT a claim about the reported maxMultiviewInstanceIndex.",
+      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
       "native": {
         "state": "native-evidence",
         "run_ids": [
@@ -37,10 +49,67 @@
           "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da"
         },
         "note": "Two strict private runs. Six-view: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard, strict_verified=1. Instance floor: the same scene with exactly one instance at firstInstance=0x07ffffff, both built-in slots present (view_index_slot and start_instance_slot), instance_witness=1, instance_failed=0 in all six layers, strict_verified=1."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
+        ],
+        "refs": [
+          "VALIDATION.md#multiview-native-acceptance"
+        ],
+        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor."
       }
     },
     "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": {
-      "_comment": "Private floor evidence only. The six-view witness rendered six views into six array layers of one pass with mask 0x3f, which measures the view count as at least 6; the property itself is NOT reported and the profile still advertises no multiview feature. There is no cts override here.",
+      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
       "native": {
         "state": "native-evidence",
         "run_ids": [
@@ -50,11 +119,68 @@
         "refs": [
           "VALIDATION.md#dxvk-262-multiview-six-view-witness"
         ],
-        "note": "One strict six-view run witnesses a view count of at least 6 (mask 0x3f, six ordered layers, strict_verified=1). The reported maxMultiviewViewCount is unchanged."
+        "note": "One strict six-view run witnesses a view count of at least 6 (mask 0x3f, six ordered layers, strict_verified=1)."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
+        ],
+        "refs": [
+          "VALIDATION.md#multiview-native-acceptance"
+        ],
+        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor."
       }
     },
     "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": {
-      "_comment": "Private floor evidence only. The instance witness issued exactly one instance at firstInstance=0x07ffffff, which measures the instance index as at least 134217727; the property itself is NOT reported and the profile still advertises no multiview feature. There is no cts override here.",
+      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
       "native": {
         "state": "native-evidence",
         "run_ids": [
@@ -64,7 +190,64 @@
         "refs": [
           "VALIDATION.md#dxvk-262-multiview-instance-floor"
         ],
-        "note": "One strict run with instance_count=1 and firstInstance=0x07ffffff witnesses an instance index of at least 134217727, with instance_witness=1, instance_failed=0 in all six layers and strict_verified=1. The reported maxMultiviewInstanceIndex is unchanged."
+        "note": "One strict run with instance_count=1 and firstInstance=0x07ffffff witnesses an instance index of at least 134217727, with instance_witness=1, instance_failed=0 in all six layers and strict_verified=1."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
+        ],
+        "refs": [
+          "VALIDATION.md#multiview-native-acceptance"
+        ],
+        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor."
       }
     },
     "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
