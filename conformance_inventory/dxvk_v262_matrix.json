@@ -4,13 +4,14 @@
     "device_extensions": [
       "VK_KHR_16bit_storage",
       "VK_KHR_8bit_storage",
+      "VK_KHR_multiview",
       "VK_KHR_shader_draw_parameters",
       "VK_KHR_storage_buffer_storage_class"
     ],
     "native_probe": {
       "artifact_sha256": "7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593",
       "device_api": "1.0.0",
-      "device_extensions": 4,
+      "device_extensions": 5,
       "requirements": 62,
       "runs": [
         {

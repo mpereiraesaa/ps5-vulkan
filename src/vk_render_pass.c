@@ -158,12 +158,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
      * view limit, and a non-zero mask stays refused there. */
     struct ps5vk_render_pass_multiview owned_multiview = {0};
     if (multiview) {
+        /* Shipping: a real view mask is accepted only on a device that ENABLED
+         * the feature, which vkCreateDevice grants only for VK_KHR_multiview
+         * with the measured capability and the properties2 dependency. The
+         * private diagnostic build keeps its own gate, so the existing witness
+         * is unchanged and keeps reporting exactly what it always did. */
 #if PS5VK_MULTIVIEW_DIAGNOSTIC
         const VkBool32 multiview_enabled = VK_TRUE;
         const uint32_t max_multiview_view_count = PS5VK_MULTIVIEW_DIAGNOSTIC_VIEWS;
 #else
-        const VkBool32 multiview_enabled = VK_FALSE;
-        const uint32_t max_multiview_view_count = 0u; /* reported by this profile */
+        const VkBool32 multiview_enabled =
+            (d->enabled_features & PS5VK_FEATURE_MULTIVIEW) != 0;
+        const uint32_t max_multiview_view_count = (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR;
 #endif
         VkResult rc = ps5vk_render_pass_multiview_validate(info, multiview,
             multiview_enabled, max_multiview_view_count, &owned_multiview);

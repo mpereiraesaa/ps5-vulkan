@@ -152,6 +152,17 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES) {
             ((VkPhysicalDeviceShaderDrawParametersFeatures *)next)->shaderDrawParameters =
                 !!(p->platform.supported_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
+            /* The queried feature follows the internal capability exactly, and
+             * only the multiview core feature: geometry and tessellation
+             * shader multiview are not implemented and are reported false. */
+            VkPhysicalDeviceMultiviewFeatures *features =
+                (VkPhysicalDeviceMultiviewFeatures *)next;
+            features->multiview =
+                (VkBool32)ps5vk_platform_multiview_supported(p->platform.supported_features);
+            features->multiviewGeometryShader = VK_FALSE;
+            features->multiviewTessellationShader = VK_FALSE;
         }
     }
 }
@@ -161,6 +172,21 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
     if (!p || !out || out->sType != VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2)
         return;
     vkGetPhysicalDeviceProperties(p, &out->properties);
+    for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext; next;
+         next = next->pNext) {
+        if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES) {
+            /* ONLY the floors this profile measured, and zero when the platform
+             * does not carry the capability: no invented maxima. */
+            VkPhysicalDeviceMultiviewProperties *properties =
+                (VkPhysicalDeviceMultiviewProperties *)next;
+            const int supported =
+                ps5vk_platform_multiview_supported(p->platform.supported_features);
+            properties->maxMultiviewViewCount =
+                supported ? (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR : 0u;
+            properties->maxMultiviewInstanceIndex =
+                supported ? (uint32_t)PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR : 0u;
+        }
+    }
 }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice p,
     VkPhysicalDeviceMemoryProperties2 *out)
@@ -267,7 +293,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkExtensionProperties properties[4];
+    VkExtensionProperties properties[5];
     uint32_t total = 0;
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
@@ -287,6 +313,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME,
             VK_KHR_SHADER_DRAW_PARAMETERS_SPEC_VERSION};
+    }
+    if (p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW) {
+        properties[total++] = (VkExtensionProperties){VK_KHR_MULTIVIEW_EXTENSION_NAME,
+                                                      VK_KHR_MULTIVIEW_SPEC_VERSION};
     }
     return enumerate_extensions(properties, total, count, out);
 }
@@ -312,7 +342,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         return INVALID;
     }
     VkBool32 storage_class = VK_FALSE, extension8 = VK_FALSE, extension16 = VK_FALSE;
-    VkBool32 draw_parameters = VK_FALSE;
+    VkBool32 draw_parameters = VK_FALSE, multiview_extension = VK_FALSE;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -325,6 +355,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &extension16;
         else if (!strcmp(name, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME))
             seen = &draw_parameters;
+        else if (!strcmp(name, VK_KHR_MULTIVIEW_EXTENSION_NAME))
+            seen = &multiview_extension;
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -339,9 +371,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
          (!storage_class || !p->instance->features2_extension_enabled)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
+    if (multiview_extension &&
+        (!(p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+
     uint32_t enabled_features = 0;
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
-    VkBool32 saw_draw_parameters = VK_FALSE;
+    VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2) {
@@ -388,6 +425,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
              * memory remains unadvertised and requesting it fails closed. */
             if (!valid_bool(features->protectedMemory)) return INVALID;
             if (features->protectedMemory) return VK_ERROR_FEATURE_NOT_PRESENT;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
+            /* Enabling the extension does NOT oblige the caller to ask for the
+             * feature: the structure may be absent, or present with all three
+             * flags false, and the device is created with the feature disabled
+             * either way. Asking for it is what has to hold up. */
+            if (saw_multiview) return INVALID;
+            saw_multiview = VK_TRUE;
+            const VkPhysicalDeviceMultiviewFeatures *features =
+                (const VkPhysicalDeviceMultiviewFeatures *)next;
+            if (!valid_bool(features->multiview) ||
+                !valid_bool(features->multiviewGeometryShader) ||
+                !valid_bool(features->multiviewTessellationShader)) return INVALID;
+            if (features->multiviewGeometryShader || features->multiviewTessellationShader)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (features->multiview) {
+                if (!multiview_extension ||
+                    !(p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features |= PS5VK_FEATURE_MULTIVIEW;
+            }
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES) {
             const VkPhysicalDeviceShaderDrawParametersFeatures *features =
