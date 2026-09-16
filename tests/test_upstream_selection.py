@@ -153,41 +153,91 @@ class UpstreamSelectionTests(unittest.TestCase):
         stale["resource_contracts"][MV_CONTRACT]["format"] = "VK_FORMAT_B8G8R8A8_UNORM"
         self.assertEqual(1, self._gate_exit_code_for_manifest(stale))
 
-    def test_host_readiness_is_measured_but_not_promoted(self):
-        """This host now creates the exact shape, and the neighbouring shape
-        stays single-layer; the manifest still declares the hardware stage false,
-        so the contract is promotion-pending, stays diagnostic, and cannot enter
-        acceptance."""
+    def test_resource_stage_is_promoted_on_hardware_evidence(self):
+        """This host creates the exact shape and the manifest promotes the
+        resource stage with a well-formed hardware receipt; the execution stage
+        is still false, so nothing is final and nothing enters acceptance."""
         self.assertEqual([], self.witness_failures)
         measured = self.witness[MV_CONTRACT]
         self.assertTrue(measured["supported"])
         self.assertEqual(0, measured["queryResult"])
-        self.assertEqual((uint32_t := measured["arrayLayers"]), 6)
         self.assertEqual(6, measured["queryMaxArrayLayers"])
         self.assertEqual(0, measured["createResult"])
         # The neighbouring readback shape without the input-attachment role is
-        # untouched: one layer, which is what keeps this from being a general
-        # input-attachment capability.
+        # untouched: one layer, so this is not a general capability.
         probe = measured["withoutInputAttachment"]
         self.assertEqual(0, probe["queryResult"])
         self.assertEqual(1, probe["queryMaxArrayLayers"])
         self.assertFalse(probe["queryCovers"])
 
         declared = self.manifest["resource_contracts"][MV_CONTRACT]
-        self.assertFalse(declared["resource_supported"])
+        self.assertTrue(declared["resource_supported"])
         self.assertFalse(declared["execution_supported"])
         self.assertFalse(declared["supported"])
+        evidence = declared["hardware_evidence"]
+        self.assertEqual(6, evidence["array_layers"])
+        self.assertEqual(6, evidence["query_max_array_layers"])
+        self.assertEqual("VK_SUCCESS", evidence["create_result"])
         eligible, verdict_failures, note, pending = self.gate._contract_verdict(
             MV_CONTRACT, declared, measured, measured["arrayLayers"])
         self.assertFalse(eligible)
         self.assertEqual([], verdict_failures)
-        self.assertIn("not promoted", note)
-        self.assertIn("promotion awaits the physical-console witness", pending)
+        self.assertEqual("", pending)
+        self.assertIn("execution requirements are not all met", note)
 
-        # ...and promoting a leaf while the stage is false is refused.
         promoted = self._promote_one_leaf(copy.deepcopy(self.manifest),
                                           "dEQP-VK.multiview.masks.get_query_pool_results.15")
         self.assertEqual(1, self._gate_exit_code_with_witness(promoted, self._ready_witness()))
+
+    def test_hardware_promotion_requires_a_complete_receipt(self):
+        """resource_supported is a physical-console claim: without a complete,
+        well-formed receipt every promotion is refused."""
+        mutations = (
+            (lambda contract: contract.pop("hardware_evidence"), "no receipt"),
+            (lambda contract: contract["hardware_evidence"].pop("run_id"), "missing run id"),
+            (lambda contract: contract["hardware_evidence"].pop("firmware"), "missing firmware"),
+            (lambda contract: contract["hardware_evidence"].pop("title"), "missing title"),
+            (lambda contract: contract["hardware_evidence"].pop("teardown"), "missing teardown"),
+            (lambda contract: contract["hardware_evidence"].pop("allocation_bytes"),
+             "missing allocation"),
+            (lambda contract: contract["hardware_evidence"].__setitem__("artifact_sha256", "deadbeef"),
+             "short artifact digest"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "artifact_sha256", "Z" * 64), "non-hex artifact digest"),
+            (lambda contract: contract["hardware_evidence"].__setitem__("log_sha256", ""),
+             "empty log digest"),
+            (lambda contract: contract["hardware_evidence"].__setitem__("run_id", "   "),
+             "blank run id"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "query_result", "VK_ERROR_FORMAT_NOT_SUPPORTED"), "query not successful"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "create_result", "VK_ERROR_UNKNOWN"), "create not successful"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "bind_result", "VK_ERROR_UNKNOWN"), "bind not successful"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "query_max_array_layers", 5), "query below six layers"),
+            (lambda contract: contract["hardware_evidence"].__setitem__("array_layers", 1),
+             "fewer than six layers"),
+            (lambda contract: contract["hardware_evidence"].__setitem__("allocation_bytes", 0),
+             "zero allocation"),
+            (lambda contract: contract["hardware_evidence"].__setitem__("teardown", "dirty"),
+             "unclean teardown"),
+            (lambda contract: contract["hardware_evidence"].__setitem__("mystery", True),
+             "unknown evidence field"),
+            (lambda contract: contract["hardware_evidence"].__setitem__("array_layers", True),
+             "boolean layer count"),
+        )
+        for mutate, why in mutations:
+            manifest = copy.deepcopy(self.manifest)
+            mutate(manifest["resource_contracts"][MV_CONTRACT])
+            self.assertEqual(1, self._gate_exit_code_with_witness(
+                manifest, self._ready_witness()), why)
+
+    def test_evidence_without_the_promoted_stage_fails(self):
+        """Evidence for an unpromoted stage is a stale claim, not a spare one."""
+        manifest = copy.deepcopy(self.manifest)
+        manifest["resource_contracts"][MV_CONTRACT]["resource_supported"] = False
+        self.assertEqual(1, self._gate_exit_code_with_witness(manifest, self._ready_witness()))
 
     def test_declared_resource_requires_host_readiness(self):
         """A hardware-promoted stage may not be claimed on a host the source
@@ -352,7 +402,11 @@ class UpstreamSelectionTests(unittest.TestCase):
         contract = manifest["resource_contracts"][MV_CONTRACT]
         for key in ("descriptor_object_model", "descriptor_table_encoding", "compiler_lowering", "gpu_subpass_readback"):
             contract["execution_requirements"][key] = True
-        contract.update({"execution_supported": True, "supported": False})
+        # Withdrawing the promoted resource stage means withdrawing its receipt
+        # too: evidence for an unpromoted stage fails closed.
+        contract.pop("hardware_evidence", None)
+        contract.update({"resource_supported": False, "execution_supported": True,
+                         "supported": False})
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
 
     def test_supported_must_be_the_conjunction_of_the_stages(self):

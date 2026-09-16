@@ -40,6 +40,14 @@ MULTIVIEW_TEST_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
 # execution stage is derived from these values and nothing else.
 EXECUTION_REQUIREMENTS = ("descriptor_object_model", "descriptor_table_encoding",
                           "compiler_lowering", "gpu_subpass_readback")
+# The exact, fail-closed hardware-evidence record a promoted resource stage must
+# carry. A physical-console claim with a missing, unknown, ill-typed or
+# unsuccessful field is not evidence, so no promotion can rest on one.
+HARDWARE_EVIDENCE_FIELDS = ("artifact_sha256", "run_id", "log_sha256", "firmware", "title",
+                            "query_result", "query_max_array_layers", "create_result",
+                            "bind_result", "allocation_bytes", "array_layers", "teardown")
+HARDWARE_EVIDENCE_REQUIRED_LAYERS = 6
+HEX_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 # VkSampleCountFlagBits values, so a derived branch name can be compared with the
 # number the fixture witnesses.
 SAMPLE_COUNT_FLAGS = {
@@ -722,6 +730,59 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
             f"resource contract {contract_id!r} declares resource_supported=true while the "
             f"source query/create witness is not ready (queryCovers={query_covers}, "
             f"createSucceeded={create_ok})")
+
+    # The resource stage is a physical-console claim, so it must carry the exact
+    # well-formed record a console witness produces. Nothing else can promote it,
+    # and evidence for an unpromoted stage fails closed in the other direction.
+    evidence = contract.get("hardware_evidence")
+    if resource_declared:
+        if not isinstance(evidence, dict):
+            failures.append(
+                f"resource contract {contract_id!r} declares resource_supported=true without a "
+                f"hardware_evidence object")
+        else:
+            unknown = sorted(set(evidence) - set(HARDWARE_EVIDENCE_FIELDS))
+            if unknown:
+                failures.append(
+                    f"resource contract {contract_id!r} hardware evidence carries unknown fields: "
+                    + ", ".join(unknown))
+            for field in HARDWARE_EVIDENCE_FIELDS:
+                if field not in evidence:
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence names no {field!r}")
+            for field in ("artifact_sha256", "log_sha256"):
+                if not isinstance(evidence.get(field), str) or not HEX_DIGEST.match(evidence.get(field, "")):
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence {field} is not a "
+                        f"64-character lowercase hex digest")
+            for field in ("run_id", "firmware", "title"):
+                if not isinstance(evidence.get(field), str) or not evidence.get(field, "").strip():
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence {field} is empty")
+            for field in ("query_result", "create_result", "bind_result"):
+                if evidence.get(field) != "VK_SUCCESS":
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence {field} is not "
+                        f"VK_SUCCESS")
+            for field, minimum in (("query_max_array_layers", HARDWARE_EVIDENCE_REQUIRED_LAYERS),
+                                   ("array_layers", HARDWARE_EVIDENCE_REQUIRED_LAYERS)):
+                value = evidence.get(field)
+                if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence {field} is not an "
+                        f"integer at or above {minimum}")
+            allocation = evidence.get("allocation_bytes")
+            if isinstance(allocation, bool) or not isinstance(allocation, int) or allocation <= 0:
+                failures.append(
+                    f"resource contract {contract_id!r} hardware evidence allocation_bytes is not "
+                    f"a positive integer")
+            if evidence.get("teardown") != "clean":
+                failures.append(
+                    f"resource contract {contract_id!r} hardware evidence teardown is not clean")
+    elif isinstance(evidence, dict):
+        failures.append(
+            f"resource contract {contract_id!r} carries hardware evidence while "
+            f"resource_supported is false")
 
     requirements = contract.get("execution_requirements")
     derived: dict[str, bool] = {}
