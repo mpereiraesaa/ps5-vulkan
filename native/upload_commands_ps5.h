@@ -91,7 +91,8 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                                                          VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)) &&
                  !(op->dst_stage & ~(VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
                                                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT))) ||
-                ((!color || b->image==color) && ps5vk_color_discard_barrier(b))))
+                ((!color || b->image==color) && ps5vk_color_discard_barrier(b)) ||
+                ps5vk_array_color_barrier(b)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);
             if(rc!=VK_SUCCESS)return rc;
@@ -110,12 +111,13 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
             if(rc!=VK_SUCCESS)return rc;
             flush(source,(size_t)source_bytes);
             n=ps5vk_texture_dma(*cursor,(size_t)(end-*cursor),(uintptr_t)source,(uintptr_t)destination,&copy);
-        } else if(op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE) {
+        } else if(op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE || op->type==PS5VK_CLEAR_COLOR_IMAGE) {
             /* The same uniform-DWORD fill the render pass emits for its depth
              * load-op clear. Every texel of the one-sample D32 surface takes
              * the identical word, so the whole allocation is filled and the
              * 64KB_Z_X pixel equations are not needed or claimed. */
-            if(!ps5vk_depth_clear_image(op->image_destination))return VK_ERROR_FEATURE_NOT_PRESENT;
+            if(op->type==PS5VK_CLEAR_COLOR_IMAGE ? !ps5vk_array_color_clear(op) :
+                !ps5vk_depth_clear_image(op->image_destination))return VK_ERROR_FEATURE_NOT_PRESENT;
             void *destination;VkDeviceSize destination_bytes;
             VkResult rc=ps5vk_layout_require(layouts,op->image_destination,
                 op->image_destination_layout);
