@@ -405,9 +405,14 @@ static void input_attachments(void)
     assert(layout->signature.type[3]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
         layout->signature.binding[3].count==1);
     vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    /* pImmutableSamplers is meaningful only for SAMPLER and
+     * COMBINED_IMAGE_SAMPLER; for an input attachment it is IGNORED, so a
+     * non-null pointer is neither read nor rejected. */
     VkSampler immutable = VK_NULL_HANDLE;
     binding.pImmutableSamplers = &immutable;
-    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    binding.pImmutableSamplers = NULL;
     binding.pImmutableSamplers = NULL;
     /* VUID 01510: an input attachment is fragment-stage only, so every other
      * visibility - including a mixed mask that contains the fragment bit - is
@@ -420,11 +425,14 @@ static void input_attachments(void)
         binding.stageFlags = wrong_stages[i];
         assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
     }
-    /* VUID 01510 also permits an empty visibility mask, but this profile's
-     * bounded rule already refuses a zero mask for every descriptor role, and
-     * this slice does not widen that. */
+    /* VUID 01510 permits an empty visibility mask for this descriptor type, and
+     * the zero mask is accepted here without widening any other role: the
+     * stored signature keeps the mask the caller asked for. */
     binding.stageFlags = 0;
-    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_UNKNOWN && !layout);
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    assert(layout->signature.binding[3].stages == 0 &&
+        layout->signature.binding[3].count == 1);
+    vkDestroyDescriptorSetLayout(&d,layout,NULL);
     binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
     vkDestroyDescriptorSetLayout(&d,layout,NULL);
@@ -507,6 +515,8 @@ static void input_attachments(void)
     assert(d.lifetime_errors == 8 && set->defined[0] &&
         set->images[0].imageView == &view &&
         set->images[0].imageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+        /* The ignored handle is canonicalized rather than stored. */
+        set->images[0].sampler == VK_NULL_HANDLE &&
         set->generation == generation + 1);
     generation = set->generation;
     /* A write covers several elements at once, and one invalid element rejects
@@ -569,7 +579,8 @@ static void input_attachments(void)
         .dstSet=destination,.dstBinding=3,.dstArrayElement=0,.descriptorCount=1};
     vkUpdateDescriptorSets(&d,0,NULL,1,&copy);
     assert(destination->defined[0] && destination->images[0].imageView==&view &&
-        destination->image_resources[0]==&image && d.lifetime_errors == 11);
+        destination->image_resources[0]==&image &&
+        destination->images[0].sampler==VK_NULL_HANDLE && d.lifetime_errors == 11);
     /* A copy between different descriptor types is refused. */
     VkDescriptorSetLayoutBinding sampled = {.binding=3,
         .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.descriptorCount=1,

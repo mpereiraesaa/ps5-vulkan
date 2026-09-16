@@ -118,8 +118,15 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
         if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_DESCRIPTOR_SET, w->dstSet)) { ++d->lifetime_errors; return; }
         for (uint32_t k = 0; k < w->descriptorCount; ++k) {
             if(image) {
-                w->dstSet->images[dst[k]]=w->pImageInfo[k];
-                w->dstSet->image_resources[dst[k]]=w->pImageInfo[k].imageView->image;
+                VkDescriptorImageInfo stored = w->pImageInfo[k];
+                /* The sampler member is ignored for an input attachment, so it
+                 * is canonicalized rather than copied: a future consumer must
+                 * not be able to observe application data this descriptor type
+                 * never uses, and a copied descriptor carries the canonical
+                 * value too. */
+                if(input) stored.sampler = VK_NULL_HANDLE;
+                w->dstSet->images[dst[k]]=stored;
+                w->dstSet->image_resources[dst[k]]=stored.imageView->image;
             } else if(texel) w->dstSet->texel_views[dst[k]]=w->pTexelBufferView[k];
             else w->dstSet->buffers[dst[k]] = w->pBufferInfo[k];
             w->dstSet->defined[dst[k]] = VK_TRUE;
@@ -183,11 +190,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         VkBool32 buffer=base_type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
             base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         VkBool32 texel=b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-        if (b->descriptorCount && !valid_descriptor_stages(b->stageFlags))
-            return INVALID;
         /* VUID-VkDescriptorSetLayoutBinding-descriptorType-01510: an input
-         * attachment is read by a fragment shader, so its visibility is either
-         * nothing or exactly the fragment stage. */
+         * attachment is read by a fragment shader, so its visibility is EITHER
+         * nothing or exactly the fragment stage. The empty mask is therefore
+         * legal for this one descriptor type and is accepted here; every other
+         * role keeps the profile's rule that a used binding needs a real
+         * mask. */
+        if (b->descriptorCount && !(input && !b->stageFlags) &&
+            !valid_descriptor_stages(b->stageFlags))
+            return INVALID;
         if (b->descriptorCount && input && b->stageFlags &&
             b->stageFlags != VK_SHADER_STAGE_FRAGMENT_BIT)
             return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -197,7 +208,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         /* Layout visibility is not shader-stage execution. The common mask
          * validator above applies to images too; backend support is checked
          * when a pipeline consumes the signature. */
-        if (b->descriptorCount && (image ? (!d->graphics_enabled || b->pImmutableSamplers) :
+        /* pImmutableSamplers is meaningful only for SAMPLER and
+         * COMBINED_IMAGE_SAMPLER; for an input attachment it is IGNORED, so it
+         * is neither read nor rejected there. */
+        if (b->descriptorCount && (image ? (!d->graphics_enabled ||
+                (b->pImmutableSamplers && !input)) :
                 (!(buffer||texel) || b->pImmutableSamplers)))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount > PS5VK_MAX_DESCRIPTORS - signature.count)
