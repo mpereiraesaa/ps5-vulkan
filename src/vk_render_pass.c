@@ -78,7 +78,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO)
         return VK_ERROR_UNKNOWN;
     if (!d->graphics_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
-    if (info->pNext || info->flags ||
+    /* Exactly one optional VkRenderPassMultiviewCreateInfo is understood; any
+     * other structure, or a second copy of it, stays fail-closed. */
+    const VkRenderPassMultiviewCreateInfo *multiview = NULL;
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
+         next; next = next->pNext) {
+        if (next->sType != VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO || multiview)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        multiview = (const VkRenderPassMultiviewCreateInfo *)next;
+    }
+    if (info->flags ||
         !info->subpassCount || info->subpassCount > PS5VK_MAX_SUBPASSES || !info->pSubpasses ||
         !info->attachmentCount || info->attachmentCount > PS5VK_MAX_ATTACHMENTS ||
         !info->pAttachments ||
@@ -139,6 +148,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
             (dep->dependencyFlags & ~VK_DEPENDENCY_BY_REGION_BIT) ||
             !dep->srcStageMask || !dep->dstStageMask) return VK_ERROR_FEATURE_NOT_PRESENT;
     }
+    /* The multiview obligations are checked against the pass this call is
+     * creating, after the dependencies they refer to are themselves valid.
+     * This profile advertises no multiview feature, so the feature argument is
+     * false here and every accepted view mask must be zero; the same function
+     * is exercised with the feature enabled by the host regressions so the
+     * slice that enables it inherits validation that is already proven. */
+    struct ps5vk_render_pass_multiview owned_multiview = {0};
+    if (multiview) {
+        VkResult rc = ps5vk_render_pass_multiview_validate(info, multiview, VK_FALSE,
+            0u /* maxMultiviewViewCount reported by this profile today */,
+            &owned_multiview);
+        if (rc != VK_SUCCESS) return rc;
+    }
     size_t bytes = 0;
     if (owned_bytes(info, &bytes) != VK_SUCCESS)
         return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -174,7 +196,88 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     pass->attachments = attachments;
     pass->subpasses = subpasses;
     pass->dependencies = dependencies;
+    pass->multiview = owned_multiview;
     ++d->graphics_objects; *out = pass; return VK_SUCCESS;
+}
+
+VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info,
+    const VkRenderPassMultiviewCreateInfo *multiview, VkBool32 multiview_enabled,
+    uint32_t max_multiview_view_count, struct ps5vk_render_pass_multiview *out)
+{
+    if (!info || !multiview || !out) return VK_ERROR_UNKNOWN;
+    memset(out, 0, sizeof(*out));
+    /* A chained structure, a count that does not match the pass, or a missing
+     * array where one is required cannot be interpreted at all. */
+    if (multiview->pNext ||
+        (multiview->subpassCount && multiview->subpassCount != info->subpassCount) ||
+        (multiview->dependencyCount && multiview->dependencyCount != info->dependencyCount) ||
+        (multiview->subpassCount && !multiview->pViewMasks) ||
+        (multiview->dependencyCount && !multiview->pViewOffsets) ||
+        multiview->correlationMaskCount > PS5VK_MAX_CORRELATION_MASKS ||
+        (multiview->correlationMaskCount && !multiview->pCorrelationMasks))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t view_masks[PS5VK_MAX_SUBPASSES] = {0};
+    int32_t view_offsets[PS5VK_MAX_DEPENDENCIES] = {0};
+    const uint32_t subpass_count = multiview->subpassCount;
+    const uint32_t dependency_count = multiview->dependencyCount;
+    for (uint32_t i = 0; i < subpass_count; ++i) view_masks[i] = multiview->pViewMasks[i];
+    for (uint32_t i = 0; i < dependency_count; ++i) view_offsets[i] = multiview->pViewOffsets[i];
+    /* 02513: multiview is all-or-nothing for a render pass, so the masks are
+     * either all zero (multiview disabled) or all non-zero. */
+    unsigned non_zero = 0;
+    for (uint32_t i = 0; i < subpass_count; ++i) non_zero += view_masks[i] != 0;
+    if (non_zero && non_zero != subpass_count) return VK_ERROR_FEATURE_NOT_PRESENT;
+    const VkBool32 enabled = non_zero != 0;
+    /* 06555: without the feature, every view mask must be zero. 06697: with
+     * it, the most significant bit of each mask must be below the reported
+     * maxMultiviewViewCount. */
+    if (enabled && !multiview_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (enabled) {
+        for (uint32_t i = 0; i < subpass_count; ++i) {
+            uint32_t msb = 0;
+            for (uint32_t bit = 0; bit < 32u; ++bit)
+                if (view_masks[i] & (UINT32_C(1) << bit)) msb = bit;
+            if (msb >= max_multiview_view_count) return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
+    }
+    for (uint32_t i = 0; i < dependency_count; ++i) {
+        const VkSubpassDependency *dep = &info->pDependencies[i];
+        const VkBool32 view_local =
+            (dep->dependencyFlags & VK_DEPENDENCY_VIEW_LOCAL_BIT) != 0;
+        /* 02512: a view offset is only meaningful for a view-local dependency.
+         * 01930: a non-zero offset needs two different subpasses to relate. */
+        if (!view_local && view_offsets[i]) return VK_ERROR_FEATURE_NOT_PRESENT;
+        if (view_offsets[i] && dep->srcSubpass == dep->dstSubpass)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        /* 02514: with every mask zero there is no view for a view-local
+         * dependency to relate. */
+        if (!enabled && view_local) return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    /* 02515: correlation masks describe views that may be rendered
+     * concurrently, which cannot be stated when multiview is disabled. */
+    if (!enabled && multiview->correlationMaskCount) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* 00841: a view index may not appear in more than one correlation mask.
+     * They remain hints: nothing in the driver executes them. */
+    uint32_t seen = 0;
+    for (uint32_t i = 0; i < multiview->correlationMaskCount; ++i) {
+        const uint32_t mask = multiview->pCorrelationMasks[i];
+        for (uint32_t bit = 0; bit < 32u; ++bit) {
+            const uint32_t flag = UINT32_C(1) << bit;
+            if (!(mask & flag)) continue;
+            if (seen & flag) return VK_ERROR_FEATURE_NOT_PRESENT;
+            seen |= flag;
+        }
+    }
+    out->present = VK_TRUE;
+    out->subpass_count = subpass_count;
+    out->dependency_count = dependency_count;
+    out->correlation_mask_count = multiview->correlationMaskCount;
+    memcpy(out->view_masks, view_masks, sizeof(out->view_masks));
+    memcpy(out->view_offsets, view_offsets, sizeof(out->view_offsets));
+    if (multiview->correlationMaskCount)
+        memcpy(out->correlation_masks, multiview->pCorrelationMasks,
+               (size_t)multiview->correlationMaskCount * sizeof(out->correlation_masks[0]));
+    return VK_SUCCESS;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkDestroyRenderPass(VkDevice d, VkRenderPass pass,
