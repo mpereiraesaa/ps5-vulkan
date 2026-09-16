@@ -106,14 +106,17 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
             /* Vertex-stage scalar built-ins the runtime ABI really delivers:
              * VertexIndex (42) and InstanceIndex (43) come from the geometry
              * path - the compiler lowers the latter as instance id plus the
-             * start-instance slot - and BaseVertex (4424), BaseInstance (4425)
-             * and DrawIndex (4426) come from the user-SGPR block the draw
-             * emitter fills from the recorded draw. They are not vertex
-             * attributes, so they never enter the input map, and anything else
-             * stays refused. */
+             * start-instance slot - and BaseVertex (4424), BaseInstance (4425),
+             * DrawIndex (4426) and ViewIndex (4440) come from the user-SGPR
+             * block the draw emitter fills from the recorded draw. ViewIndex is
+             * the multiview one: the compiler declares its slot in metadata v14,
+             * and the draw expansion hands each view's index to it. All of them
+             * are vertex-stage inputs rather than vertex attributes, so they
+             * never enter the input map, none of them may be read by the
+             * fragment stage, and anything else stays refused. */
             if(d->location!=~0u || model!=0 || d->storage!=1 ||
                (d->builtin!=42 && d->builtin!=43 && d->builtin!=4424 &&
-                d->builtin!=4425 && d->builtin!=4426) ||
+                d->builtin!=4425 && d->builtin!=4426 && d->builtin!=4440) ||
                type->op!=21 || type->count!=32)goto done;
             continue;
         }

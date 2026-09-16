@@ -15,6 +15,104 @@ static struct ps5vk_graphics_module_key read_module(const char *path)
     assert(fread(code,1,(size_t)bytes,f)==(size_t)bytes);fclose(f);
     return (struct ps5vk_graphics_module_key){.words=code,.word_count=(size_t)bytes/4,.entry="main"};
 }
+
+/* Single-word patches over the test's OWN copy of a module. The two negatives
+ * below are the same SPIR-V with exactly one thing changed - the entry point's
+ * execution model, or the built-in a decoration names - so the case says what
+ * it refuses and nothing else. */
+static int patch_entry_model(struct ps5vk_graphics_module_key *m, uint32_t model)
+{
+    uint32_t *words=(uint32_t *)m->words;
+    for(size_t at=5;at<m->word_count;at+=words[at]>>16) {
+        if((words[at]&65535u)==15u && (words[at]>>16)>=4u) { words[at+1]=model; return 1; }
+    }
+    return 0;
+}
+static int patch_builtin(struct ps5vk_graphics_module_key *m, uint32_t from, uint32_t to)
+{
+    uint32_t *words=(uint32_t *)m->words;
+    for(size_t at=5;at<m->word_count;at+=words[at]>>16) {
+        if((words[at]&65535u)==71u && (words[at]>>16)==4u && words[at+2]==11u &&
+           words[at+3]==from) { words[at+3]=to; return 1; }
+    }
+    return 0;
+}
+
+/* T02-D1b-i: BuiltIn ViewIndex (4440) is a vertex-stage input built-in the draw
+ * ABI delivers through the compiler-declared user-SGPR slot, exactly like
+ * DrawIndex. It is not a vertex attribute, it may not be read by the fragment
+ * stage, and it does not make the other built-ins acceptable: the metadata has
+ * to declare the slot, and the delivered word has to be the view the caller
+ * passed. */
+static void check_view_index_builtin(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/view_index.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    /* The vertex stage reads the built-in and NO vertex attribute, so the
+     * interface must accept it with an empty input map. */
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    const struct ps5vk_runtime_graphics_program *p=compiled;
+    const PsbcShaderMetadata *vs=&p->vertex.metadata;
+    /* Metadata v14 declares the slot, inside the user-SGPR block the stage
+     * really uses, and the fragment stage that does not read the built-in must
+     * not declare one. */
+    assert(vs->view_index_valid);
+    assert(vs->view_index_user_data_dword<vs->user_sgpr_count);
+    assert(!p->fragment.metadata.view_index_valid);
+    assert(p->arguments.view_index_slot==vs->view_index_user_data_dword);
+    assert(p->arguments.view_index_slot!=UINT32_MAX &&
+           p->arguments.view_index_slot<p->arguments.vertex_count);
+    /* And the ABI really carries the view: the declared slot holds the index the
+     * caller passed, beside the other draw parameters. */
+    uint32_t vertex[16],pixel[16];
+    const uint32_t tables[4]={0,0,0,0};
+    assert(!ps5vk_runtime_draw_values_sets(&p->arguments,7u,0u,0u,5u,0u,0u,tables,vertex,pixel));
+    assert(vertex[p->arguments.view_index_slot]==5u);
+    assert(vertex[p->arguments.base_vertex_slot]==7u);
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    /* Every refusal below leaves the output untouched (null), so the caller can
+     * never mistake a failed compilation for a program to free. */
+    const void *out=NULL;
+    /* ViewIndex is a vertex input built-in, never an attribute: a key that
+     * declared an attribute for it could not be matched to the module. */
+    VkVertexInputBindingDescription binding={.binding=0,.stride=4,
+        .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription attribute={.location=0,.binding=0,
+        .format=VK_FORMAT_R32_SINT,.offset=0};
+    struct ps5vk_graphics_key attributed=key;
+    attributed.vertex_binding_count=1;attributed.vertex_attribute_count=1;
+    attributed.vertex_bindings=&binding;attributed.vertex_attributes=&attribute;
+    assert(!ps5vk_spirv_graphics_interface(&attributed));
+    assert(ps5vk_runtime_graphics_compile(NULL,&attributed,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+
+    /* The same module declared as a FRAGMENT entry point: the built-in is
+     * refused there, which is the rule the compiler side already enforces by
+     * lowering a fragment ViewIndex to zero and reporting no slot. */
+    struct ps5vk_graphics_module_key fragment_model=read_module("build/runtime-graphics/view_index.vert.spv");
+    assert(patch_entry_model(&fragment_model,4u));
+    struct ps5vk_graphics_key wrong_stage=key;
+    wrong_stage.fragment=fragment_model;
+    assert(!ps5vk_spirv_graphics_interface(&wrong_stage));
+    assert(ps5vk_runtime_graphics_compile(NULL,&wrong_stage,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)fragment_model.words);
+
+    /* And an unknown built-in stays refused: only the five draw parameters and
+     * ViewIndex are delivered this way. */
+    struct ps5vk_graphics_module_key unknown=read_module("build/runtime-graphics/view_index.vert.spv");
+    assert(patch_builtin(&unknown,4440u,4441u));
+    struct ps5vk_graphics_key unknown_key=key;
+    unknown_key.vertex=unknown;
+    assert(!ps5vk_spirv_graphics_interface(&unknown_key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&unknown_key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)unknown.words);
+    free((void *)key.vertex.words);
+    free((void *)key.fragment.words);
+}
 /* A four-set layout whose fragment shader dereferences one sampler and whose
  * vertex shader dereferences none: the declaration survives in the metadata,
  * but only the set the optimized NIR really reads becomes a native requirement.
@@ -338,6 +436,7 @@ int main(void)
     check_flat_interfaces();
     check_descriptor_options();
     check_sparse_layout_static_use();
+    check_view_index_builtin();
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
