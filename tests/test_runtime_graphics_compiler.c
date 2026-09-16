@@ -39,12 +39,8 @@ static int patch_builtin(struct ps5vk_graphics_module_key *m, uint32_t from, uin
     return 0;
 }
 
-/* T02-D1b-i: BuiltIn ViewIndex (4440) is a vertex-stage input built-in the draw
- * ABI delivers through the compiler-declared user-SGPR slot, exactly like
- * DrawIndex. It is not a vertex attribute, it may not be read by the fragment
- * stage, and it does not make the other built-ins acceptable: the metadata has
- * to declare the slot, and the delivered word has to be the view the caller
- * passed. */
+/* ViewIndex is delivered to both stages through independently declared slots.
+ * It is not a vertex attribute and does not admit other unsupported built-ins. */
 static void check_view_index_builtin(void)
 {
     struct ps5vk_graphics_key key={
@@ -76,6 +72,22 @@ static void check_view_index_builtin(void)
     assert(vertex[p->arguments.view_index_slot]==5u);
     assert(vertex[p->arguments.base_vertex_slot]==7u);
     ps5vk_runtime_graphics_free(NULL,compiled);
+    struct ps5vk_graphics_key both=key;
+    both.fragment=read_module("build/runtime-graphics/view_index.frag.spv");
+    assert(ps5vk_spirv_graphics_interface(&both));
+    compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&both,&compiled)==VK_SUCCESS && compiled);
+    p=compiled;
+    assert(p->fragment.metadata.view_index_valid);
+    assert(p->arguments.fragment_view_index_valid);
+    assert(p->arguments.fragment_view_index_slot==p->fragment.metadata.view_index_user_data_dword);
+    for(uint32_t view=0;view<6;++view) {
+        assert(!ps5vk_runtime_draw_values_sets(&p->arguments,7,0,0,view,0,0,tables,vertex,pixel));
+        assert(vertex[p->arguments.view_index_slot]==view);
+        assert(pixel[p->arguments.fragment_view_index_slot]==view);
+    }
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    free((void *)both.fragment.words);
     /* Every refusal below leaves the output untouched (null), so the caller can
      * never mistake a failed compilation for a program to free. */
     const void *out=NULL;
@@ -91,9 +103,8 @@ static void check_view_index_builtin(void)
     assert(!ps5vk_spirv_graphics_interface(&attributed));
     assert(ps5vk_runtime_graphics_compile(NULL,&attributed,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
 
-    /* The same module declared as a FRAGMENT entry point: the built-in is
-     * refused there, which is the rule the compiler side already enforces by
-     * lowering a fragment ViewIndex to zero and reporting no slot. */
+    /* Changing only the execution model does not turn this vertex module into
+     * a legal fragment module: it still has VertexIndex and a position block. */
     struct ps5vk_graphics_module_key fragment_model=read_module("build/runtime-graphics/view_index.vert.spv");
     assert(patch_entry_model(&fragment_model,4u));
     struct ps5vk_graphics_key wrong_stage=key;
