@@ -296,11 +296,9 @@ static void multiple_subpasses(struct VkDevice_T *d)
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     info.subpassCount = 2; info.pSubpasses = subpasses;
 
-    /* a requested input or resolve attachment is refused rather than ignored */
+    /* a requested resolve attachment is refused rather than ignored: input
+     * references are part of the object model now, resolve is not. */
     VkAttachmentReference extra = {0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    subpasses[1].inputAttachmentCount = 1; subpasses[1].pInputAttachments = &extra;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
-    subpasses[1].inputAttachmentCount = 0; subpasses[1].pInputAttachments = NULL;
     subpasses[1].pResolveAttachments = &extra;
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     subpasses[1].pResolveAttachments = NULL;
@@ -347,6 +345,104 @@ static void multiple_subpasses(struct VkDevice_T *d)
     }
     between = good;
     assert(d->graphics_objects == objects);
+}
+
+/* The input-attachment object model: the references of every subpass are
+ * validated against this profile and then copied into the pass's own
+ * allocation, so nothing a caller does afterwards can change what the pass
+ * describes. Nothing consumes them yet - that is the next slice - so these
+ * regressions are about the owned representation and every fail-closed edge. */
+static void input_attachments(struct VkDevice_T *d)
+{
+    VkAttachmentDescription attachments[2] = {
+        {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {.format=VK_FORMAT_R8G8B8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+    VkAttachmentReference color = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference inputs[2] = {
+        {1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED}};
+    VkSubpassDescription subpasses[2] = {
+        {.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+         .colorAttachmentCount=1, .pColorAttachments=&color},
+        {.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+         .colorAttachmentCount=1, .pColorAttachments=&color,
+         .inputAttachmentCount=2, .pInputAttachments=inputs}};
+    VkRenderPassCreateInfo info = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount=2, .pAttachments=attachments,
+        .subpassCount=2, .pSubpasses=subpasses};
+    VkRenderPass pass = VK_NULL_HANDLE;
+
+    /* Attachment 1 has no colour or depth role at all: the input reference is
+     * the only use that keeps it reachable, which is exactly the shape a later
+     * subpass reading an earlier attachment has. */
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS);
+    assert(pass->input_count == 2);
+    assert(pass->subpasses[0].input_count == 0);
+    assert(pass->subpasses[1].input_first == 0 && pass->subpasses[1].input_count == 2);
+    const VkAttachmentReference *owned = ps5vk_render_pass_inputs(pass, 1);
+    assert(owned[0].attachment == 1 && owned[0].layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    assert(owned[1].attachment == VK_ATTACHMENT_UNUSED);
+    /* The owned copy is the pass's, not the caller's: mutating either the
+     * reference array or the subpass description afterwards changes nothing. */
+    inputs[0].layout = VK_IMAGE_LAYOUT_GENERAL; inputs[0].attachment = VK_ATTACHMENT_UNUSED;
+    inputs[1].attachment = 0;
+    subpasses[1].inputAttachmentCount = 0;
+    assert(owned[0].attachment == 1 && owned[0].layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    assert(owned[1].attachment == VK_ATTACHMENT_UNUSED);
+    assert(pass->subpasses[1].input_count == 2);
+    subpasses[1].inputAttachmentCount = 2;
+    inputs[0].attachment = 1; inputs[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    inputs[1].attachment = VK_ATTACHMENT_UNUSED;
+    vkDestroyRenderPass(d, pass, NULL);
+
+    /* Fail-closed edges. Every one of them leaves the output untouched and
+     * creates no object. */
+    unsigned before = d->graphics_objects;
+    VkAttachmentReference bad = {2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    subpasses[1].pInputAttachments = &bad; subpasses[1].inputAttachmentCount = 1;
+    pass = (VkRenderPass)(uintptr_t)1;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN &&
+           pass == VK_NULL_HANDLE && d->graphics_objects == before);
+    bad.attachment = 1;
+    /* A layout a subpass may not read through: Vulkan forbids these for an
+     * input reference, and the profile refuses them rather than storing them. */
+    const VkImageLayout illegal[] = {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PREINITIALIZED,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL + 4096};
+    for (unsigned i = 0; i < sizeof(illegal)/sizeof(illegal[0]); ++i) {
+        bad.layout = (VkImageLayout)illegal[i];
+        assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN &&
+               pass == VK_NULL_HANDLE && d->graphics_objects == before);
+    }
+    /* A count without an array cannot be interpreted. */
+    subpasses[1].pInputAttachments = NULL;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT &&
+           pass == VK_NULL_HANDLE && d->graphics_objects == before);
+    /* More references than the model holds. */
+    VkAttachmentReference too_many[PS5VK_MAX_INPUT_ATTACHMENTS + 1];
+    for (uint32_t i = 0; i < PS5VK_MAX_INPUT_ATTACHMENTS + 1; ++i)
+        too_many[i] = (VkAttachmentReference){1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    subpasses[1].pInputAttachments = too_many;
+    subpasses[1].inputAttachmentCount = PS5VK_MAX_INPUT_ATTACHMENTS + 1;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT &&
+           pass == VK_NULL_HANDLE && d->graphics_objects == before);
+    /* And an attachment that nothing references is still refused, whether the
+     * input entry is removed or turned into VK_ATTACHMENT_UNUSED. */
+    subpasses[1].pInputAttachments = inputs;
+    subpasses[1].inputAttachmentCount = 2;
+    inputs[0].attachment = VK_ATTACHMENT_UNUSED;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT &&
+           pass == VK_NULL_HANDLE && d->graphics_objects == before);
+    inputs[0].attachment = 1;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS);
+    vkDestroyRenderPass(d, pass, NULL);
+    assert(d->graphics_objects == before);
 }
 
 int main(void)
@@ -450,5 +546,6 @@ int main(void)
     assert(!d.graphics_objects);
     multiple_subpasses(&d);
     multiview_model(&d);
+    input_attachments(&d);
     puts("Render pass owned subpass/attachment/dependency data: host only; no execution");
 }

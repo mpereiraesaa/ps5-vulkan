@@ -1,4 +1,5 @@
 #include "vk_descriptor.h"
+#include "vk_image.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -366,8 +367,161 @@ static void dynamic_buffer_resources(void)
     vkDestroyDescriptorPool(&d,pool,NULL);vkDestroyDescriptorSetLayout(&d,layout,NULL);
     vkDestroyBuffer(&d,buffer,NULL);vkFreeMemory(&d,memory,NULL);
 }
+/* Input attachments are an image-view-only descriptor role: their own pool
+ * accounting, their own layout rules, and a write that stores the view and its
+ * image while claiming no GPU consumption. Every fail-closed edge below leaves
+ * the descriptor undefined and the set's generation untouched. */
+static void input_attachments(void)
+{
+    struct VkDevice_T d = {.graphics_enabled=VK_TRUE}, other = {.graphics_enabled=VK_TRUE};
+    struct VkImage_T image = {0}, foreign_image = {0};
+    image.device = &d; foreign_image.device = &other;
+    struct VkImageView_T view = {0}, foreign_view = {0}, no_image = {0}, wrong_type = {0};
+    view.device = &d; view.image = &image; view.view_type = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = VK_FORMAT_R8G8B8A8_UNORM;
+    foreign_view.device = &other; foreign_view.image = &foreign_image;
+    foreign_view.view_type = VK_IMAGE_VIEW_TYPE_2D;
+    no_image.device = &d; no_image.view_type = VK_IMAGE_VIEW_TYPE_2D;
+    wrong_type.device = &d; wrong_type.image = &image; wrong_type.view_type = VK_IMAGE_VIEW_TYPE_3D;
+
+    /* Layout: an input attachment is an image role with no sampler, and it
+     * needs the graphics backend exactly like the sampled image role. */
+    VkDescriptorSetLayoutBinding binding = {.binding=3,
+        .descriptorType=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,.descriptorCount=1,
+        .stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT};
+    VkDescriptorSetLayoutCreateInfo li = {
+        .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount=1,.pBindings=&binding};
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS && layout);
+    assert(layout->signature.type[3]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
+        layout->signature.binding[3].count==1);
+    vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    VkSampler immutable = VK_NULL_HANDLE;
+    binding.pImmutableSamplers = &immutable;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+    binding.pImmutableSamplers = NULL;
+    d.graphics_enabled = VK_FALSE;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+    d.graphics_enabled = VK_TRUE;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+
+    /* Pool: the role has its own accounting, so a pool sized for sampled
+     * images does not hold input attachments and a pool sized for input
+     * attachments does not hold sampled images. */
+    VkDescriptorPoolSize size = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1};
+    VkDescriptorPoolCreateInfo pi = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets=1,.poolSizeCount=1,.pPoolSizes=&size};
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorPool(&d,&pi,NULL,&pool)==VK_SUCCESS);
+    VkDescriptorSetAllocateInfo ai = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool=pool,.descriptorSetCount=1,.pSetLayouts=&layout};
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    assert(vkAllocateDescriptorSets(&d,&ai,&set)==VK_ERROR_OUT_OF_POOL_MEMORY && !set);
+    assert(!pool->image_used && !pool->input_used);
+    vkDestroyDescriptorPool(&d,pool,NULL);
+    size.type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    assert(vkCreateDescriptorPool(&d,&pi,NULL,&pool)==VK_SUCCESS);
+    /* The previous pool was destroyed, so the allocate info must name the new
+     * one rather than keep pointing at freed memory. */
+    ai.descriptorPool = pool;
+    assert(vkAllocateDescriptorSets(&d,&ai,&set)==VK_SUCCESS && pool->input_used==1 &&
+        !pool->image_used);
+
+    /* A valid write stores the view and its image. */
+    VkDescriptorImageInfo image_info = {.sampler=VK_NULL_HANDLE,.imageView=&view,
+        .imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkWriteDescriptorSet write = {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet=set,.dstBinding=3,.dstArrayElement=0,.descriptorCount=1,
+        .descriptorType=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,.pImageInfo=&image_info};
+    vkUpdateDescriptorSets(&d,1,&write,0,NULL);
+    assert(!d.lifetime_errors && set->defined[0]);
+    assert(set->images[0].imageView==&view && set->image_resources[0]==&image &&
+        set->images[0].sampler==VK_NULL_HANDLE);
+    uint64_t generation = set->generation;
+    /* GENERAL is the other layout a subpass may read through. */
+    image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    vkUpdateDescriptorSets(&d,1,&write,0,NULL);
+    assert(!d.lifetime_errors && set->defined[0] && set->images[0].imageLayout==VK_IMAGE_LAYOUT_GENERAL &&
+        set->generation == generation + 1);
+    generation = set->generation;
+
+    /* Fail-closed edges: the write is refused as a whole and the previously
+     * stored reference stays exactly as it was. */
+    VkDescriptorImageInfo saved = set->images[0];
+    VkSampler sampler = VK_NULL_HANDLE;
+    struct { VkDescriptorImageInfo info; unsigned expected_errors; const char *why; } cases[] = {
+        {{(VkSampler)&sampler, &view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 1, "sampler"},
+        {{VK_NULL_HANDLE, NULL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 2, "no view"},
+        {{VK_NULL_HANDLE, &foreign_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 3, "foreign view"},
+        {{VK_NULL_HANDLE, &no_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 4, "view without image"},
+        {{VK_NULL_HANDLE, &wrong_type, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 5, "not a 2D view"},
+        {{VK_NULL_HANDLE, &view, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}, 6, "unreadable layout"},
+        {{VK_NULL_HANDLE, &view, VK_IMAGE_LAYOUT_UNDEFINED}, 7, "undefined layout"},
+    };
+    for (unsigned i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
+        VkDescriptorImageInfo bad_info = cases[i].info;
+        if (i == 3) bad_info.imageView = &no_image;
+        VkWriteDescriptorSet bad = write; bad.pImageInfo = &bad_info;
+        vkUpdateDescriptorSets(&d,1,&bad,0,NULL);
+        assert(d.lifetime_errors == cases[i].expected_errors);
+        assert(set->generation == generation && set->images[0].imageView == saved.imageView &&
+            set->images[0].imageLayout == saved.imageLayout && set->defined[0]);
+    }
+    /* A write of zero descriptors is not a selection. */
+    VkWriteDescriptorSet empty = write; empty.descriptorCount = 0;
+    vkUpdateDescriptorSets(&d,1,&empty,0,NULL);
+    assert(d.lifetime_errors == 8 && set->generation == generation);
+    /* The image view must belong to this device even when the image does. */
+    foreign_view.device = &d; foreign_view.image = &foreign_image;
+    VkDescriptorImageInfo foreign_info = {.sampler=VK_NULL_HANDLE,.imageView=&foreign_view,
+        .imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkWriteDescriptorSet foreign = write; foreign.pImageInfo = &foreign_info;
+    vkUpdateDescriptorSets(&d,1,&foreign,0,NULL);
+    assert(d.lifetime_errors == 9 && set->generation == generation);
+
+    /* Copies move the stored reference between sets of the same type. */
+    VkDescriptorPool second_pool = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorPool(&d,&pi,NULL,&second_pool)==VK_SUCCESS);
+    VkDescriptorSet destination = VK_NULL_HANDLE;
+    ai.descriptorPool = second_pool;
+    assert(vkAllocateDescriptorSets(&d,&ai,&destination)==VK_SUCCESS);
+    VkCopyDescriptorSet copy = {.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET,
+        .srcSet=set,.srcBinding=3,.srcArrayElement=0,
+        .dstSet=destination,.dstBinding=3,.dstArrayElement=0,.descriptorCount=1};
+    vkUpdateDescriptorSets(&d,0,NULL,1,&copy);
+    assert(destination->defined[0] && destination->images[0].imageView==&view &&
+        destination->image_resources[0]==&image && d.lifetime_errors == 9);
+    /* A copy between different descriptor types is refused. */
+    VkDescriptorSetLayoutBinding sampled = {.binding=3,
+        .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.descriptorCount=1,
+        .stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT};
+    li.pBindings = &sampled;
+    VkDescriptorSetLayout sampled_layout = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&sampled_layout)==VK_SUCCESS);
+    VkDescriptorPoolSize sampled_size = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1};
+    VkDescriptorPoolCreateInfo sampled_pi = pi; sampled_pi.pPoolSizes = &sampled_size;
+    VkDescriptorPool sampled_pool = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorPool(&d,&sampled_pi,NULL,&sampled_pool)==VK_SUCCESS);
+    VkDescriptorSet sampled_set = VK_NULL_HANDLE;
+    ai.descriptorPool = sampled_pool; ai.pSetLayouts = &sampled_layout;
+    assert(vkAllocateDescriptorSets(&d,&ai,&sampled_set)==VK_SUCCESS);
+    VkCopyDescriptorSet crossed = copy; crossed.dstSet = sampled_set;
+    vkUpdateDescriptorSets(&d,0,NULL,1,&crossed);
+    assert(d.lifetime_errors == 10 && !sampled_set->defined[0]);
+
+    /* Freeing returns the role's accounting. */
+    assert(vkResetDescriptorPool(&d,pool,0)==VK_SUCCESS && !pool->input_used);
+    vkDestroyDescriptorPool(&d,pool,NULL);
+    vkDestroyDescriptorPool(&d,second_pool,NULL);
+    vkDestroyDescriptorPool(&d,sampled_pool,NULL);
+    vkDestroyDescriptorSetLayout(&d,sampled_layout,NULL);
+    vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    assert(!d.descriptor_objects);
+}
+
 int main(void)
 {
-    lifecycle(); rollback(); negative(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources();
+    lifecycle(); rollback(); negative(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources(); input_attachments();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }
