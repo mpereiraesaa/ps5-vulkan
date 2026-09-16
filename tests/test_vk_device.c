@@ -689,6 +689,36 @@ static void lifecycle(void)
         assert(!plain->features2_extension_enabled);
         assert(vkCreateDevice(plain_physical, &mv_info, NULL, &mv_device) ==
                VK_ERROR_EXTENSION_NOT_PRESENT && !mv_device);
+        /* A platform that does NOT carry the capability and is asked for the
+         * extension is refused, and refused before anything is created. */
+        {
+            const uint32_t without = saved_features & ~(uint32_t)PS5VK_FEATURE_MULTIVIEW;
+            /* The instance dependency is satisfied here on purpose, so the ONLY
+             * reason left for the refusal is the missing platform capability. */
+            const VkBool32 saved_f2 = p->instance->features2_extension_enabled;
+            p->instance->features2_extension_enabled = VK_TRUE;
+            p->platform.supported_features = without;
+            VkDevice refused = VK_NULL_HANDLE;
+            assert(vkCreateDevice(p, &mv_info, NULL, &refused) ==
+                   VK_ERROR_EXTENSION_NOT_PRESENT && !refused);
+            p->instance->features2_extension_enabled = saved_f2;
+            p->platform.supported_features = saved_features | PS5VK_FEATURE_MULTIVIEW;
+        }
+        /* An unknown structure inside an output chain is ignored, as a query
+         * must be: the known structures still get their answers. */
+        {
+            VkBaseOutStructure unknown = {.sType = (VkStructureType)0x7fffffff, .pNext = NULL};
+            mv_features.multiview = VK_FALSE;
+            mv_properties.maxMultiviewViewCount = 0; mv_properties.maxMultiviewInstanceIndex = 0;
+            mv_features.pNext = &unknown;
+            mv_properties.pNext = &unknown;
+            vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+            assert(mv_features.multiview == VK_TRUE);
+            vkGetPhysicalDeviceProperties2KHR(p, &properties2);
+            assert(mv_properties.maxMultiviewViewCount == PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR &&
+                   mv_properties.maxMultiviewInstanceIndex == PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR);
+            mv_features.pNext = NULL; mv_properties.pNext = NULL;
+        }
         /* ...and on an instance that has it, the extension alone is enough: the
          * feature structure is optional, so the device is created with the
          * feature DISABLED and a non-zero mask would still be refused. */
