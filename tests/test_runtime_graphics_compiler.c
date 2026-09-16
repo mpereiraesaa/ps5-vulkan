@@ -41,6 +41,92 @@ static int patch_builtin(struct ps5vk_graphics_module_key *m, uint32_t from, uin
 
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
+/* Clip and cull distances leave the pre-raster stage through the packed
+ * position registers, and the pinned compiler already emits the matching
+ * context state. What this checks is the adapter contract: exactly the
+ * consistent combinations are packaged, and a mask whose registers disagree
+ * with it is refused instead of being trusted. GPU execution is a separate
+ * native gate. */
+static PsbcRegisterWrite *context_register(PsbcShaderMetadata *m,unsigned offset)
+{
+    for(unsigned i=0;i<m->context_register_count;++i)
+        if(m->context_registers[i].offset==offset)return &m->context_registers[i];
+    return NULL;
+}
+
+static void check_clip_cull_distances(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/clip_distance.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->vertex.metadata.clip_distance_mask==0x03u);
+    assert(!p->vertex.metadata.cull_distance_mask);
+    /* The compiler's standalone information pass reserves a parameter slot for
+     * the distances, which is the one unresolved field these shaders carry. */
+    assert(p->vertex.metadata.unresolved_fields==
+           (PSBC_UNRESOLVED_PROGRAM_CHECKSUM|PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE|
+            PSBC_UNRESOLVED_AGC_LINKAGE));
+    struct ps5vk_runtime_shader header;
+    assert(!ps5vk_runtime_shader_build(&header,&p->vertex));
+    /* State that contradicts the mask is refused: a non-contiguous clip mask,
+     * a cull mask the registers do not carry, a missing packed position
+     * register, a cleared distance enable, a changed export count, a width
+     * past the two registers and a pixel stage that claims a distance. */
+    PsbcShaderOutput mutated=p->vertex;
+    mutated.metadata.clip_distance_mask=0x05u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    mutated.metadata.cull_distance_mask=0x04u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    context_register(&mutated.metadata,0x1c3u)->value=0x04u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    context_register(&mutated.metadata,0x207u)->value&=~(1u<<22);
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    context_register(&mutated.metadata,0x1b1u)->value=0u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    mutated.metadata.clip_distance_mask=0xffu;
+    mutated.metadata.cull_distance_mask=0x0fu;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    context_register(&mutated.metadata,0x1c3u)->offset=0x0fffu;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->fragment;
+    mutated.metadata.clip_distance_mask=0x01u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+
+    /* Cull-only and the four-plus-four ceiling: the two shapes whose packed
+     * register count differs from the clip-only one. */
+    key.vertex=read_module("build/runtime-graphics/cull_distance.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(!p->vertex.metadata.clip_distance_mask && p->vertex.metadata.cull_distance_mask==0x01u);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    key.vertex=read_module("build/runtime-graphics/clip_cull_distance.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(p->vertex.metadata.clip_distance_mask==0x0fu &&
+           p->vertex.metadata.cull_distance_mask==0xf0u);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    puts("Clip/cull distances: packed masks, register state and metadata refusal");
+}
+
 static void check_view_index_builtin(void)
 {
     struct ps5vk_graphics_key key={
@@ -673,6 +759,7 @@ int main(void)
     check_input_attachment_probe_pipelines();
     check_sparse_layout_static_use();
     check_view_index_builtin();
+    check_clip_cull_distances();
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),

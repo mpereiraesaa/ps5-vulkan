@@ -25,6 +25,73 @@ static const PsbcRegisterWrite *find(const PsbcRegisterWrite *r, uint32_t n, uns
     return NULL;
 }
 
+static unsigned count_bits(uint32_t value)
+{
+    unsigned bits=0;
+    for (;value;value&=value-1) ++bits;
+    return bits;
+}
+
+/* Clip and cull distances are exported through the packed position registers
+ * past POS0: the pre-raster stage writes the combined components four at a time
+ * into POS1/POS2, and the pixel state reads the enable bits back from
+ * PA_CL_VS_OUT_CNTL. The compiled metadata carries both the exported-component
+ * masks and the context registers that describe them, so this adapter requires
+ * the two to agree instead of trusting a mask:
+ *
+ *  - the masks use the packed numbering the compiler exports (clip distances
+ *    form the low components, cull distances continue immediately after them),
+ *    and cannot exceed the eight components those two registers hold;
+ *  - SPI_SHADER_POS_FORMAT must declare exactly POS0 plus one 4-component
+ *    register per four exported components, and nothing else;
+ *  - PA_CL_VS_OUT_CNTL must carry the clip mask in its clip enables, the whole
+ *    packed mask in its cull enables, the two CCDIST vector enables that match
+ *    them, and no miscellaneous vector a shader of this profile cannot write;
+ *  - SPI_VS_OUT_CONFIG must count the parameter exports the compiled output
+ *    semantics describe plus one parameter per CLIP_DIST0/1 or CULL_DIST0/1
+ *    slot the masks occupy, which is how the standalone information pass
+ *    accounts for distances a fragment stage never reads.
+ *
+ * The compiler's standalone information pass reserves those parameter slots
+ * unconditionally (a linked pipeline only does so when the next stage reads the
+ * distances), which is why a clip/cull shader reports PSBC_UNRESOLVED_AGC_LINKAGE:
+ * the parameter semantics it could not resolve are exactly the distance slots
+ * this function accounts for. The caller accepts that one unresolved field only
+ * when this check proves the state agrees with the masks. */
+static int distances_valid(const PsbcShaderMetadata *m,const PsbcRegisterWrite *cx,
+                           uint32_t cx_count)
+{
+    const uint32_t clip=m->clip_distance_mask,cull=m->cull_distance_mask;
+    const uint32_t total=clip|cull;
+    if(!total)return 1;
+    const unsigned clip_count=count_bits(clip),cull_count=count_bits(cull);
+    const unsigned components=clip_count+cull_count;
+    if(!components || components>8)return 0;
+    if(clip!=((1u<<clip_count)-1u))return 0;
+    if(cull!=(((1u<<cull_count)-1u)<<clip_count))return 0;
+    const PsbcRegisterWrite *pos_format=find(cx,cx_count,0x1c3u);
+    const PsbcRegisterWrite *vs_out=find(cx,cx_count,0x207u);
+    const PsbcRegisterWrite *vs_out_config=find(cx,cx_count,0x1b1u);
+    if(!pos_format || !vs_out || !vs_out_config)return 0;
+    const unsigned pos_registers=1u+(components+3u)/4u;
+    uint32_t expected_pos=0;
+    for(unsigned i=0;i<pos_registers;++i)expected_pos|=4u<<(4u*i);
+    if(pos_format->value!=expected_pos)return 0;
+    uint32_t expected_out=clip|(total<<8);
+    if(total&0x0fu)expected_out|=1u<<22;
+    if(total&0xf0u)expected_out|=1u<<23;
+    /* A second packed position register always travels on the miscellaneous
+     * side bus on gfx10.3, and no other miscellaneous vector is representable
+     * in this profile. */
+    expected_out|=1u<<24;
+    if(vs_out->value!=expected_out)return 0;
+    const unsigned slots=((clip&0x0fu)?1u:0u)+((clip&0xf0u)?1u:0u)+
+                         ((cull&0x0fu)?1u:0u)+((cull&0xf0u)?1u:0u);
+    const unsigned parameters=m->output_semantic_count+slots;
+    const uint32_t expected_config=(uint32_t)(((parameters?parameters:1u)-1u)<<1);
+    return vs_out_config->value==expected_config;
+}
+
 static ps5_agc_register convert(PsbcRegisterWrite r)
 { return (ps5_agc_register){r.offset,r.value}; }
 
@@ -158,11 +225,17 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
         m->address32_hi!=2 || m->user_sgpr_count>16 || m->scratch_valid ||
         m->scratch_bytes_per_wave || m->scratch_size_per_thread || m->streamout_valid ||
-        m->clip_distance_mask || m->cull_distance_mask ||
         m->input_semantic_count>PSBC_MAX_SEMANTICS || m->output_semantic_count>PSBC_MAX_SEMANTICS ||
         (vs && m->input_semantic_count) || (fs && m->output_semantic_count) ||
         (m->unresolved_fields & ~(PSBC_UNRESOLVED_PROGRAM_CHECKSUM |
-            (vs ? PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE : 0)))) return -2;
+            (vs ? (PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE |
+                   ((m->clip_distance_mask || m->cull_distance_mask) ?
+                    PSBC_UNRESOLVED_AGC_LINKAGE : 0)) : 0)))) return -2;
+    /* Distances are a pre-raster export only, and their masks must agree with
+     * the state the same compiler emitted for them. */
+    if(vs) {
+        if(!distances_valid(m,m->context_registers,m->context_register_count))return -2;
+    } else if(m->clip_distance_mask || m->cull_distance_mask) return -2;
     if (m->vertex_buffer_table_valid ?
         (!vs || m->vertex_buffer_table_user_data_dword>=m->user_sgpr_count ||
          !m->vertex_buffer_usage_mask || m->vertex_buffer_usage_mask>0xffffu || m->vertex_buffer_per_attribute) :
