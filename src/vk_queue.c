@@ -293,11 +293,9 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                 return 0;
             if (op->type == PS5VK_BEGIN_RENDER_PASS) {
                 if (active) return 0;
-                /* Native execution is deliberately bounded to one or two
-                 * subpasses.  Wider render passes remain representable by the
-                 * object model but are refused before a backend sees them. */
+                /* Use the object model's bound at submission as well. */
                 if (!op->render_pass->subpass_count ||
-                    op->render_pass->subpass_count > 2)
+                    op->render_pass->subpass_count > PS5VK_MAX_SUBPASSES)
                     return 0;
                 if (op->subpass) return 0;
                 active = op->render_pass; framebuffer = op->framebuffer;

@@ -9,9 +9,9 @@
  * The limits below are this profile's, not Vulkan's, and they are enforced at
  * creation so an unsupported shape is refused where the caller can see it
  * rather than accepted and failed later. */
-enum { PS5VK_MAX_SUBPASSES = 2 };
+enum { PS5VK_MAX_SUBPASSES = 8 };
 enum { PS5VK_MAX_ATTACHMENTS = 2 };
-enum { PS5VK_MAX_DEPENDENCIES = 4 };
+enum { PS5VK_MAX_DEPENDENCIES = 16 };
 enum { PS5VK_MAX_CORRELATION_MASKS = 4 };
 enum { PS5VK_MAX_INPUT_ATTACHMENTS = 4 };
 
