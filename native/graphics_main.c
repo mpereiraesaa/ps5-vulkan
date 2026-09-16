@@ -1256,7 +1256,16 @@ static void multiview_view_probe(VkDevice d)
        !ps5vk_multiview_witness_instance_exact(first_instance) ||
        (uint32_t)(float)first_instance==first_instance)
         fail("multiview-witness-instance-pin",-1);
+    /* gl_InstanceIndex is the compiler's instance id PLUS the start-instance
+     * user-SGPR, so a metadata regression that dropped that slot would reach the
+     * GPU with a value the probe cannot distinguish from a wrong one. The gate
+     * therefore requires the slot itself, in range, and relies on the existing
+     * ABI collision validation for uniqueness. */
+    if(abi->start_instance_slot==UINT32_MAX || abi->start_instance_slot>=abi->vertex_count)
+        fail("multiview-witness-start-instance-slot",-1);
 #endif
+    if(abi->start_instance_slot!=UINT32_MAX && abi->start_instance_slot>=abi->vertex_count)
+        fail("multiview-witness-start-instance-range",-1);
     uint32_t views[PS5VK_MULTIVIEW_WITNESS_VIEWS],view_count=0;
     if(ps5vk_native_view_expand(PS5VK_MULTIVIEW_WITNESS_MASK,views,
         PS5VK_MULTIVIEW_WITNESS_VIEWS,&view_count)!=VK_SUCCESS ||
@@ -1276,9 +1285,11 @@ static void multiview_view_probe(VkDevice d)
             fail("multiview-witness-layer-order",-1);
     }
     ps5log_printf(PS5LOG_MARK,
-        "PS5VK_MULTIVIEW_VIEW_GATE mask=%08x views=%u view_index_slot=%u vertex_count=%u "
+        "PS5VK_MULTIVIEW_VIEW_GATE mask=%08x views=%u view_index_slot=%u start_instance_slot=%u "
+        "vertex_count=%u "
         "color_first=%08x color_step=%08x depth_first=%08x depth_step=%08x",
-        PS5VK_MULTIVIEW_WITNESS_MASK,view_count,abi->view_index_slot,abi->vertex_count,
+        PS5VK_MULTIVIEW_WITNESS_MASK,view_count,abi->view_index_slot,abi->start_instance_slot,
+        abi->vertex_count,
         color_bases[0],color_bases[1]-color_bases[0],depth_bases[0],depth_bases[1]-depth_bases[0]);
 
     /* The command buffer lives in a pool, exactly as the offline scene does: the
