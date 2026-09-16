@@ -50,6 +50,7 @@
       "supported": false,
       "resource_supported": true,
       "hardware_evidence": {
+        "source_commit": "346b7838414cb4d126962c05dfb29fafa9ab592d",
         "artifact_sha256": "1676acdf0dfa7aa22ccf20f0b82058cd4a2398ca1d5238cb45f488332441b401",
         "run_id": "20260916T133056296Z_PPSA99994_ps5vk_0x12e8a3ac3454d",
         "log_sha256": "a78d606a228c0ee714445c8d6e7ec6f9f975a4a71df699164974d5b07618ba7c",

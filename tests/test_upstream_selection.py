@@ -175,6 +175,7 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertFalse(declared["execution_supported"])
         self.assertFalse(declared["supported"])
         evidence = declared["hardware_evidence"]
+        self.assertEqual("346b7838414cb4d126962c05dfb29fafa9ab592d", evidence["source_commit"])
         self.assertEqual(6, evidence["array_layers"])
         self.assertEqual(6, evidence["query_max_array_layers"])
         self.assertEqual("VK_SUCCESS", evidence["create_result"])
@@ -194,6 +195,17 @@ class UpstreamSelectionTests(unittest.TestCase):
         well-formed receipt every promotion is refused."""
         mutations = (
             (lambda contract: contract.pop("hardware_evidence"), "no receipt"),
+            (lambda contract: contract["hardware_evidence"].pop("source_commit"),
+             "missing source commit"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "source_commit", "346b7838"), "short source commit"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "source_commit", "346b7838414cb4d126962c05dfb29fafa9ab592"), "39-character commit id"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "source_commit", "Z" * 40), "non-hex source commit"),
+            (lambda contract: contract["hardware_evidence"].__setitem__(
+                "source_commit", "346B7838414CB4D126962C05DFB29FAFA9AB592D"),
+             "uppercase source commit"),
             (lambda contract: contract["hardware_evidence"].pop("run_id"), "missing run id"),
             (lambda contract: contract["hardware_evidence"].pop("firmware"), "missing firmware"),
             (lambda contract: contract["hardware_evidence"].pop("title"), "missing title"),

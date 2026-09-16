@@ -43,11 +43,15 @@ EXECUTION_REQUIREMENTS = ("descriptor_object_model", "descriptor_table_encoding"
 # The exact, fail-closed hardware-evidence record a promoted resource stage must
 # carry. A physical-console claim with a missing, unknown, ill-typed or
 # unsuccessful field is not evidence, so no promotion can rest on one.
-HARDWARE_EVIDENCE_FIELDS = ("artifact_sha256", "run_id", "log_sha256", "firmware", "title",
+HARDWARE_EVIDENCE_FIELDS = ("source_commit", "artifact_sha256", "run_id", "log_sha256",
+                            "firmware", "title",
                             "query_result", "query_max_array_layers", "create_result",
                             "bind_result", "allocation_bytes", "array_layers", "teardown")
 HARDWARE_EVIDENCE_REQUIRED_LAYERS = 6
 HEX_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+# A revision, not a digest: the exact commit the witnessed artifact was built
+# from, so the receipt ties the run to one source revision.
+COMMIT_ID = re.compile(r"[0-9a-f]{40}\Z")
 # VkSampleCountFlagBits values, so a derived branch name can be compared with the
 # number the fixture witnesses.
 SAMPLE_COUNT_FLAGS = {
@@ -750,6 +754,11 @@ def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
                 if field not in evidence:
                     failures.append(
                         f"resource contract {contract_id!r} hardware evidence names no {field!r}")
+            if not isinstance(evidence.get("source_commit"), str) or \
+                    not COMMIT_ID.match(evidence.get("source_commit", "")):
+                failures.append(
+                    f"resource contract {contract_id!r} hardware evidence source_commit is not a "
+                    f"40-character lowercase hex commit id")
             for field in ("artifact_sha256", "log_sha256"):
                 if not isinstance(evidence.get(field), str) or not HEX_DIGEST.match(evidence.get(field, "")):
                     failures.append(
