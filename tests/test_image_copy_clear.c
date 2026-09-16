@@ -230,6 +230,69 @@ static void input_attachment_shape(void)
         assert(vkCreateImage(device, &info, NULL, &image) != VK_SUCCESS &&
                image == VK_NULL_HANDLE && device->graphics_objects == before);
     }
+
+    /* Reproduce the native probe's second submission end to end.  The source
+     * is the exact six-layer input-attachment backing after its render pass;
+     * the destination is the one linear staging role.  This pins queue-time
+     * classification as well as record-time acceptance. */
+    info = base; info.arrayLayers = 6u;
+    VkImage target = VK_NULL_HANDLE;
+    assert(vkCreateImage(device, &info, NULL, &target) == VK_SUCCESS);
+    VkMemoryRequirements target_requirements;
+    vkGetImageMemoryRequirements(device, target, &target_requirements);
+    VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = target_requirements.size, .memoryTypeIndex = 0};
+    VkDeviceMemory target_memory = VK_NULL_HANDLE;
+    assert(vkAllocateMemory(device, &allocation, NULL, &target_memory) == VK_SUCCESS);
+    assert(vkBindImageMemory(device, target, target_memory, 0) == VK_SUCCESS);
+    target->layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkImageCreateInfo staging_info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {WIDTH, HEIGHT, 1}, .mipLevels = 1, .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_LINEAR,
+        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkImage readback = VK_NULL_HANDLE;
+    assert(vkCreateImage(device, &staging_info, NULL, &readback) == VK_SUCCESS);
+    VkMemoryRequirements readback_requirements;
+    vkGetImageMemoryRequirements(device, readback, &readback_requirements);
+    allocation.allocationSize = readback_requirements.size;
+    VkDeviceMemory readback_memory = VK_NULL_HANDLE;
+    assert(vkAllocateMemory(device, &allocation, NULL, &readback_memory) == VK_SUCCESS);
+    assert(vkBindImageMemory(device, readback, readback_memory, 0) == VK_SUCCESS);
+
+    VkCommandPool saved_pool = pool;
+    VkCommandPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
+    assert(vkCreateCommandPool(device, &pool_info, NULL, &pool) == VK_SUCCESS);
+    VkCommandBuffer command = begin();
+    VkImageMemoryBarrier staging_in = transfer_barrier(readback,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 0,
+        VK_ACCESS_TRANSFER_WRITE_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &staging_in);
+    VkImageCopy whole = {
+        .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .extent = {WIDTH, HEIGHT, 1}};
+    vkCmdCopyImage(command, target, VK_IMAGE_LAYOUT_GENERAL, readback,
+                   VK_IMAGE_LAYOUT_GENERAL, 1, &whole);
+    VkImageMemoryBarrier staging_out = transfer_barrier(readback,
+        VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 0, NULL, 1, &staging_out);
+    assert(command->state == PS5VK_RECORDING);
+    submit_and_wait(command);
+    assert(readback->layout == VK_IMAGE_LAYOUT_GENERAL);
+    vkDestroyImage(device, readback, NULL);
+    vkFreeMemory(device, readback_memory, NULL);
+    vkDestroyImage(device, target, NULL);
+    vkFreeMemory(device, target_memory, NULL);
+    vkDestroyCommandPool(device, pool, NULL);
+    pool = saved_pool;
 }
 
 int main(void)

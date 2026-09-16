@@ -118,7 +118,7 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
          * must be the colour attachment whose tiled surface is detiled below.
          * Any other combination is not an implemented copy at all. */
         if (ps5vk_linear_staging_image(op->image_destination))
-            return ps5vk_colour_transfer_image(op->image_source) ?
+            return ps5vk_colour_readback_image(op->image_source) ?
                 PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
         return (transfer_role_source(op->image_source) &&
                 transfer_role_destination(op->image_destination)) ?
