@@ -25,13 +25,13 @@ class DxvkBacklogTests(unittest.TestCase):
         self.document = json.loads(backlog.BACKLOG.read_text())
         self.matrix = json.loads(backlog.MATRIX.read_text())
 
-    def test_current_61_blockers_are_partitioned_exactly_once(self):
+    def test_original_61_blockers_keep_membership_after_multiview_promotion(self):
         summary = backlog.validate(self.document, self.matrix)
         self.assertEqual(15, summary["tranches"])
         self.assertEqual(61, summary["requirements"])
-        self.assertEqual(0, summary["implementation_ready"])
-        self.assertEqual(0, summary["profile_satisfied"])
-        self.assertEqual(61, summary["remaining_profile_blockers"])
+        self.assertEqual(3, summary["implementation_ready"])
+        self.assertEqual(3, summary["profile_satisfied"])
+        self.assertEqual(58, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,
@@ -59,6 +59,7 @@ class DxvkBacklogTests(unittest.TestCase):
                     backlog.validate(broken, self.matrix)
 
     def test_implementation_readiness_is_distinct_from_profile_satisfaction(self):
+        baseline = backlog.validate(self.document, self.matrix)
         promoted = copy.deepcopy(self.matrix)
         identifier = self.document["tranches"][0]["requirements"][0]
         row = next(item for item in promoted["requirements"]
@@ -67,16 +68,16 @@ class DxvkBacklogTests(unittest.TestCase):
         row["cts"]["state"] = "cts-pass"
         row["native"]["state"] = "native-evidence"
         summary = backlog.validate(self.document, promoted)
-        self.assertEqual(1, summary["implementation_ready"])
-        self.assertEqual(0, summary["profile_satisfied"])
-        self.assertEqual(61, summary["remaining_profile_blockers"])
+        self.assertEqual(baseline["implementation_ready"] + 1, summary["implementation_ready"])
+        self.assertEqual(baseline["profile_satisfied"], summary["profile_satisfied"])
+        self.assertEqual(baseline["remaining_profile_blockers"], summary["remaining_profile_blockers"])
 
         row["api"]["state"] = "satisfied"
         row["verdict"] = "satisfied"
         summary = backlog.validate(self.document, promoted)
-        self.assertEqual(1, summary["implementation_ready"])
-        self.assertEqual(1, summary["profile_satisfied"])
-        self.assertEqual(60, summary["remaining_profile_blockers"])
+        self.assertEqual(baseline["implementation_ready"] + 1, summary["implementation_ready"])
+        self.assertEqual(baseline["profile_satisfied"] + 1, summary["profile_satisfied"])
+        self.assertEqual(baseline["remaining_profile_blockers"] - 1, summary["remaining_profile_blockers"])
 
     def test_initially_satisfied_requirement_may_not_regress(self):
         regressed = copy.deepcopy(self.matrix)

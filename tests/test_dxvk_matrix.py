@@ -22,11 +22,29 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
-    def test_multiview_floors_are_private_evidence_on_every_row(self):
-        """The two multiview floors are measured natively and attached to the
-        feature AND to both properties, with the run that measured each one - and
-        none of the three may turn into implementation or CTS evidence, or fall
-        back to 'unmeasured', while the capability stays unpromoted."""
+    def test_multiview_equivalence_never_invents_values_or_other_features(self):
+        profile = json.loads(derive.OUTPUT.read_text())
+        rows = [r for r in profile["requirements"] if r["id"] in matrix.MULTIVIEW_FIELDS]
+        query = {"route": "VK_KHR_multiview", "multiview": True,
+                 "maxMultiviewViewCount": 6, "maxMultiviewInstanceIndex": 134217727}
+        extensions = {"VK_KHR_multiview"}
+        for row in rows:
+            field = matrix.MULTIVIEW_FIELDS[row["id"]]
+            api, implementation = matrix.multiview_axes(row, query, extensions)
+            self.assertEqual("satisfied", api["state"])
+            self.assertEqual("implemented", implementation["state"])
+            for bad in ({}, {**query, "route": "invented"}, {**query, field: "6"}):
+                with self.assertRaises(ValueError):
+                    matrix.multiview_axes(row, bad, extensions)
+            with self.assertRaises(ValueError):
+                matrix.multiview_axes(row, query, set())
+            api, implementation = matrix.multiview_axes(
+                row, {**query, field: False if field == "multiview" else 0}, extensions)
+            self.assertEqual(("blocker", "missing"), (api["state"], implementation["state"]))
+        self.assertIsNone(matrix.multiview_axes({"id": "api-version:apiVersion"}, query, extensions))
+
+    def test_multiview_promotes_with_preserved_floor_evidence(self):
+        """Promotion preserves the exact historical floor witnesses."""
         document = matrix.generate()
         six_view_run = "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
         six_view_artifact = "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01"
@@ -47,17 +65,18 @@ class DxvkMatrixTests(unittest.TestCase):
             self.assertEqual(runs, set(row["native"]["run_ids"]), identifier)
             self.assertIn(row["native"]["artifact_sha256"], artifacts, identifier)
             self.assertNotEqual("not-run", row["native"]["state"], identifier)
-            # Never implementation or CTS evidence: the capability is unpromoted.
-            self.assertEqual("missing", row["implementation"]["state"], identifier)
-            self.assertEqual("not-mapped", row["cts"]["state"], identifier)
+            self.assertEqual("implemented", row["implementation"]["state"], identifier)
+            self.assertEqual("cts-pass", row["cts"]["state"], identifier)
+            self.assertEqual("VK_KHR_multiview", row["api"]["via"], identifier)
+            self.assertEqual("satisfied", row["verdict"], identifier)
+            self.assertEqual(48, len(row["cts"]["cases"]))
         # Both properties name exactly the run that measured their floor.
         self.assertNotEqual(
             rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"]["native"],
             rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"]["native"])
-        # ...and the profile is no readier than before: same ready count, no CTS
-        # or implementation movement.
-        self.assertEqual(1, document["summary"]["satisfied"])
-        self.assertEqual(61, document["summary"]["blocker"])
+        # Three multiview rows advance; API 1.3 remains a separate blocker.
+        self.assertEqual(4, document["summary"]["satisfied"])
+        self.assertEqual(58, document["summary"]["blocker"])
 
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
@@ -66,10 +85,13 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(1, document["summary"]["satisfied"])
-        self.assertEqual(61, document["summary"]["blocker"])
+        self.assertEqual(4, document["summary"]["satisfied"])
+        self.assertEqual(58, document["summary"]["blocker"])
         self.assertEqual(
-            ["feature:VkPhysicalDeviceFeatures:robustBufferAccess"],
+            ["feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+             "feature:VkPhysicalDeviceVulkan11Features:multiview",
+             "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+             "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"],
             [row["id"] for row in document["requirements"]
              if row["verdict"] == "satisfied"])
         self.assertNotIn("not-run",
@@ -112,8 +134,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(1, document["summary"]["satisfied"])
-                self.assertEqual(61, document["summary"]["blocker"])
+                self.assertEqual(4, document["summary"]["satisfied"])
+                self.assertEqual(58, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 

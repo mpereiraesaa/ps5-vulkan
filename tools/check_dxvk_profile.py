@@ -24,6 +24,36 @@ OUTPUT = ROOT / "conformance_inventory/dxvk_v262_matrix.json"
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
 VULKAN_HEADER = ROOT / "third_party/vulkan-headers/include/vulkan/vulkan_core.h"
 SCHEMA = "ps5vk-dxvk-matrix/1"
+MULTIVIEW_FIELDS = {
+    "feature:VkPhysicalDeviceVulkan11Features:multiview": "multiview",
+    "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": "maxMultiviewViewCount",
+    "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": "maxMultiviewInstanceIndex",
+}
+
+
+def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, dict] | None:
+    """Resolve only the three reviewed core/KHR equivalent semantics.
+
+    The route stays visible and the separate apiVersion row stays blocked.
+    Query values come from the compiled public-entry-point reporting fixture,
+    never from the expected DXVK floor or a hand-authored evidence override.
+    """
+    field = MULTIVIEW_FIELDS.get(row["id"])
+    if field is None:
+        return None
+    if query.get("route") != "VK_KHR_multiview" or "VK_KHR_multiview" not in extensions:
+        raise ValueError("multiview reporting route is absent or unsupported")
+    value = query.get(field)
+    if ((field == "multiview" and not isinstance(value, bool)) or
+            (field != "multiview" and (isinstance(value, bool) or not isinstance(value, int) or value < 0))):
+        raise ValueError("invalid multiview public query value")
+    satisfied = value >= row["expected"]
+    return ({"state": "satisfied" if satisfied else "blocker", "observed": value,
+             "expected": row["expected"], "via": "VK_KHR_multiview",
+             "detail": "Equivalent KHR field; Vulkan 1.2 aggregate structs and API 1.3 remain unadvertised."},
+            {"state": "implemented" if satisfied else "missing",
+             "refs": ["src/vk_device.c", "src/vk_render_pass.c", "native/graphics_queue_ps5.c"],
+             "detail": "Reviewed multiview execution; the separate CTS and native axes must also pass."})
 
 
 def canonical(value: object) -> str:
@@ -191,6 +221,10 @@ def generate() -> dict:
         api = api_for(requirement, feature_reports, extensions, current_api)
         implementation = implementation_for(
             requirement, feature_reports, extensions, current_api)
+        multiview = multiview_axes(requirement,
+            reporting["profiles"]["graphics"].get("multiview_query", {}), extensions)
+        if multiview is not None:
+            api, implementation = multiview
         cts = cts_join(related, override.get("cts"), selected_cases)
         if "native" in override:
             native = override["native"]

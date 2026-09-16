@@ -40,10 +40,11 @@ and Close Game both passed. The historical six-view and instance-floor
 execution witnesses below remain intact and supply the dedicated boundary
 evidence; the selected CTS leaves alone do not test the maximum instance index.
 
-These runs provide the native evidence for multiview; profile-matrix promotion
-is a separate integration step. The runtime still reports API 1.0, not Vulkan
-1.2 aggregate queries or DXVK compatibility. Raw QPA and transport logs remain
-private; sanitized identities are recorded here and in the manifest.
+The three corresponding profile rows are now satisfied; the matrix is **4/62
+ready, 58 blockers**. This does not advertise the Vulkan 1.2 aggregate query
+structures or raise `apiVersion` above 1.0. The equivalent KHR fields and the
+separate unmet API-1.3 requirement remain explicit. Raw QPA and transport logs
+remain private; sanitized identities are recorded here and in the manifest.
 
 ## Layer-addressed target measurement (2026-09-15, DXVK262-T02 slice A)
 
@@ -1400,11 +1401,13 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked profile matrix remains 1/62 satisfied and 61 blockers.
-The new [multiview native acceptance](#multiview-native-acceptance) is recorded
-above; joining that evidence to the explicit KHR query route in the profile
-matrix is the next integration step. The API 1.3.204 floor remains blocked.
-A successful query alone is never enough to satisfy a row.
+The current checked result is 4/62 satisfied and 58 blockers. Core
+`robustBufferAccess` and the three multiview requirements have all four axes.
+The multiview probe uses explicitly tagged equivalent KHR queries, not the
+unimplemented Vulkan 1.2 aggregate structs. The API 1.3.204 floor remains
+blocked. See [multiview native acceptance](#multiview-native-acceptance) for the
+fresh query artifact and the independent execution evidence. A successful
+query alone is never enough to satisfy a row.
 
 The optional native consumer is built with:
 
