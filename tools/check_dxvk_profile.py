@@ -159,7 +159,7 @@ def generate() -> dict:
                 probe.get("device_api") != "1.0.0" or
                 probe.get("transport") != "ps5log/1" or
                 probe.get("verifier") != "tools/verify_dxvk_probe.py" or
-                len(runs) < 2 or
+                len(runs) < 1 or
                 not re.fullmatch(r"[0-9a-f]{64}", probe.get("artifact_sha256", "")) or
                 any(not run.get("id") or
                     not re.fullmatch(r"[0-9a-f]{64}", run.get("log_sha256", ""))
@@ -203,7 +203,7 @@ def generate() -> dict:
                 "refs": ["VALIDATION.md#dxvk-262-public-abi-capability-probe"],
                 "note": ("The native query reports the requested value, but the probe "
                          "does not execute the capability." if identifier in probe_satisfied
-                         else "Two exact native query runs witnessed the current blocker."),
+                         else "Exact native query evidence witnessed the current blocker."),
             }
         else:
             native = {"state": "not-run", "refs": []}

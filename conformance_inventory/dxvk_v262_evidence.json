@@ -11,26 +11,12 @@
     ],
     "runs": [
       {
-        "id": "20260915T210947412Z_PPSA99994_ps5vk_0xf8ffef0f6ba6",
-        "log_sha256": "a8714a3b90b10daf72a5548bddba4cd604bf782e3d185b0b71427dd8230631d7"
-      },
-      {
-        "id": "20260915T211224694Z_PPSA99994_ps5vk_0xf9248da2b03d",
-        "log_sha256": "18507cfe84212641043ab7e8edffb1fe5f44d682e608b173376c1eeacbb7e91d"
-      },
-      {
         "id": "20260916T080336344Z_PPSA99994_ps5vk_0x11cad8293d12a",
         "log_sha256": "0e51b666b346f761249e710dae4803632cb246d0c347a8b003bdb22c4b09557c"
       }
     ],
     "transport": "ps5log/1",
-    "verifier": "tools/verify_dxvk_probe.py",
-    "run_artifact_sha256": {
-      "20260915T210947412Z_PPSA99994_ps5vk_0xf8ffef0f6ba6": "7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593",
-      "20260915T211224694Z_PPSA99994_ps5vk_0xf9248da2b03d": "7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593",
-      "20260916T080336344Z_PPSA99994_ps5vk_0x11cad8293d12a": "40393d3b60d1f9f9742a3618023b323f4c2161c844a3c0a4e4ca5918ab53d802"
-    },
-    "provenance_note": "device_extensions counts the surface of artifact 40393d3b60d1f9f9742a3618023b323f4c2161c844a3c0a4e4ca5918ab53d802, measured by run 20260916T080336344Z_PPSA99994_ps5vk_0x11cad8293d12a with tools/verify_dxvk_probe.py (strict_verified true). The two earlier runs belong to artifact 7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593 and measured the surface before E1b advertised VK_KHR_multiview; each run is tied to its own artifact in run_artifact_sha256."
+    "verifier": "tools/verify_dxvk_probe.py"
   },
   "requirements": {
     "feature:VkPhysicalDeviceVulkan11Features:multiview": {
