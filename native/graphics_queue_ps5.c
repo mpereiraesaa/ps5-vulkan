@@ -148,10 +148,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(first>=range_end || last>=range_end || last<first+2)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_operation *begin=&cb->operations[first]; VkRenderPass pass=begin->render_pass;
-    /* Execute the exact shared-role profile: one or two subpasses using the
+    /* Execute the shared-role profile: ordered subpasses using the
      * same color/depth attachments and layouts. Wider graphs, or graphs that
      * would need attachment rebinding/layout changes, remain fail-closed. */
-    if(!pass->subpass_count || pass->subpass_count>2)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(!pass->subpass_count || pass->subpass_count>PS5VK_MAX_SUBPASSES)return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(pass,0);
     int depth=subpass->depth.attachment!=VK_ATTACHMENT_UNUSED;
     VkFormat color_format=begin->framebuffer->attachments[0]->image->info.format;
@@ -167,14 +167,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
            next->depth.layout!=subpass->depth.layout)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
-    /* A full acquire at the boundary is stronger than either no explicit
-     * dependency or one forward 0->1 dependency. Other dependency graphs are
-     * not silently approximated. */
-    if(pass->subpass_count==1) {
-        if(pass->dependency_count)return VK_ERROR_FEATURE_NOT_PRESENT;
-    } else if(pass->dependency_count) {
-        if(pass->dependency_count!=1 || pass->dependencies[0].srcSubpass!=0 ||
-           pass->dependencies[0].dstSubpass!=1)
+    /* Every forward edge is covered by flushing CB and acquiring at each
+     * intervening boundary, across all views. Self-dependencies only declare
+     * allowed in-pass scopes; they do not schedule work by themselves. */
+    for(uint32_t i=0;i<pass->dependency_count;++i) {
+        const VkSubpassDependency *dep=&pass->dependencies[i];
+        if(dep->srcSubpass>=pass->subpass_count ||
+           dep->dstSubpass>=pass->subpass_count ||
+           dep->srcSubpass>dep->dstSubpass)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     /* The views each subpass renders. The pass owns its multiview
@@ -370,7 +370,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             subpass_index=recorded->subpass;
             const struct ps5vk_subpass *next_subpass=
                 ps5vk_render_pass_subpass(pass,subpass_index);
-            if(next_subpass->input_count) {
+            if(next_subpass->input_count || pass->dependency_count) {
                 size_t color_barrier=ps5vk_graphics_color_to_texture(
                     cursor,(size_t)(end-cursor));
                 if(!color_barrier){rc=VK_ERROR_UNKNOWN;goto fail;}
