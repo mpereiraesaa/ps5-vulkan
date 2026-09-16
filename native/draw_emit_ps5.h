@@ -8,7 +8,7 @@
 VkResult ps5vk_native_emit_scissor_replay(uint32_t **,uint32_t,
     const struct ps5vk_draw_state *);
 /* One view of a multiview subpass, as the emission needs it: the view index the
- * vertex stage reads, and the pair of attachment targets that select this
+ * vertex/fragment stages read, and the pair of attachment targets that select this
  * view's layer. Both pairs are the SAME builder's output for the same image -
  * the target the draw was prepared with and this view's - and each list has to
  * have that builder's exact shape (ps5vk_target_offsets), differ only where the

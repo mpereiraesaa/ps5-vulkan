@@ -4,13 +4,9 @@
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
 
-/* Private diagnostic gate for the native six-view work (T02-D1a), OFF unless a
- * build asks for it. It is deliberately NOT part of the public headers and it
- * changes no query: the profile still advertises no multiview feature and still
- * reports a zero maxMultiviewViewCount, and this switch only decides whether
- * vkCreateRenderPass accepts a real view mask in a build that exists to measure
- * one. Every other build keeps the answer the profile reports, so a non-zero
- * mask stays refused there. */
+/* Legacy private diagnostic override, OFF unless a probe asks for it.
+ * It changes no public query. Normal builds use the platform capability and
+ * the feature enabled on the device, rather than this measurement override. */
 #ifndef PS5VK_MULTIVIEW_DIAGNOSTIC
 #define PS5VK_MULTIVIEW_DIAGNOSTIC 0
 #endif
@@ -55,18 +51,15 @@ enum ps5vk_feature_bits {
      * delivered as zero because multiDrawIndirect stays false. Requesting more
      * than one draw per command is still refused. */
     PS5VK_FEATURE_SHADER_DRAW_PARAMETERS = 1u << 3,
-    /* VK_KHR_multiview, measured privately on the owned console. The two
-     * floors below are what the private witnesses actually established; they
-     * are INTERNAL facts, not reported values. E1a only carries the capability
-     * and the numbers: nothing enumerates the extension, nothing answers a
-     * public query from them, and vkCreateDevice and the render-pass path are
-     * untouched until the slice that can advertise them atomically. */
+    /* VK_KHR_multiview on the measured graphics/runtime-compiler path.
+     * Public feature/property queries and device enablement use this bit;
+     * platforms that cannot execute multiview leave it unset. */
     PS5VK_FEATURE_MULTIVIEW = 1u << 4,
 };
 
 /* The measured multiview floors: six views rendered into six ordered array
  * layers, and one instance at firstInstance 0x07ffffff (2^27-1). Both are
- * floors - "at least this much" - and neither is a reported property value. */
+ * measured floors, also used as the conservative public KHR property values. */
 enum {
     PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR = 6,
     PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR = 134217727,

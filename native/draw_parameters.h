@@ -35,14 +35,11 @@
  * more than one draw per command (multiDrawIndirect is false), so every draw
  * it executes is that first draw and the value is zero.
  *
- * What still blocks advertising the feature is the evidence for that supported
- * contract, not the DrawIndex value: the upstream CTS leaves for direct and
- * single-indirect draws have not been run and no native witness of the slot
- * exists yet. Multi-draw is a separate T03 expansion, not a prerequisite: the
- * pinned CTS leaves that judge non-zero DrawIndex values are all multi-draw,
- * they are legitimately NotSupported while multiDrawIndirect is false, and
- * nothing here waits on them. ps5vk_draw_index_supported() reports that
- * advertisement gate rather than whether a value can be delivered.
+ * The direct/single-indirect contract is now independently witnessed and
+ * advertised through the device platform mask. Multi-draw remains a separate
+ * expansion: this helper still supplies zero for a single draw and does not
+ * claim non-zero DrawIndex support. The legacy diagnostic supported() helper
+ * below is not consulted by public feature queries.
  */
 #ifndef PS5VK_DRAW_PARAMETERS_H
 #define PS5VK_DRAW_PARAMETERS_H
@@ -71,30 +68,24 @@ static inline uint32_t ps5vk_draw_index_value(const struct ps5vk_operation *op)
     return 0u;
 }
 
-/* The ViewIndex a shader must observe for one recorded draw. This profile
- * advertises no multiview, so every draw it executes renders view zero and the
- * pinned specification makes that the value of the built-in. The compiler
- * declares a slot only when the vertex stage really reads gl_ViewIndex, so a
- * shader that reads it gets the specified zero instead of whatever the
- * register happened to hold. A multiview slice must pass the view being
- * rendered here rather than this constant. */
+/* Default ViewIndex for the single-view path. Multiview replay supplies the
+ * actual view explicitly to both stages' independently assigned ABI slots;
+ * this fallback is not the public capability query. */
 static inline uint32_t ps5vk_draw_view_index_value(const struct ps5vk_operation *op)
 {
     (void)op;
     return 0u;
 }
 
-/* The public advertisement gate: false until the evidence for the supported
- * direct/single-indirect contract exists (the upstream CTS leaves plus a native
- * witness). Multi-draw is a separate T03 expansion and does not gate it. */
+/* Legacy single-draw diagnostic helper, not a public advertisement gate.
+ * Device queries use the platform feature mask. Multi-draw stays unsupported. */
 static inline uint32_t ps5vk_draw_index_supported(void)
 {
     return 0u;
 }
 
-/* Multiview is not advertised, so no draw carries a non-zero view index and
- * nothing here waits on it; this stays false until the promotion slice reports
- * the feature and every completion-gate axis passes. */
+/* Legacy single-view diagnostic helper, not the public multiview feature.
+ * Real multiview support is queried through the platform/device feature mask. */
 static inline uint32_t ps5vk_draw_view_index_supported(void)
 {
     return 0u;
