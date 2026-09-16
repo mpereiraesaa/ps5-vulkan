@@ -7,6 +7,43 @@
 #include "graphics_formats.h"
 #include <string.h>
 
+/* Storage of one array layer of an attachment surface, and of a whole layered
+ * attachment. The per-layer quantity is the footprint the single-layer path has
+ * always used, and the one slice A measured by pointing the target registers at
+ * a second slot: color targets are 128 KiB-aligned, D32 uses the 64KB_Z_X
+ * layout's own alignment (64 KiB). A layer stride is that footprint, so layer N
+ * begins at N * stride and every layer starts on an address the target builders
+ * accept. `layers` is multiplied with an explicit overflow check, and
+ * `layers == 1` reproduces the single-layer requirements exactly. */
+VkResult ps5vk_native_layered_storage(VkFormat format, uint32_t width, uint32_t height,
+    uint64_t layers, VkDeviceSize *stride, VkDeviceSize *alignment, VkDeviceSize *bytes)
+{
+    if (!stride || !alignment || !bytes || !layers) return VK_ERROR_UNKNOWN;
+    /* The layer count is 64-bit so the multiplication below is the only thing
+     * standing between a caller and a wrapped size. */
+    *stride = 0; *alignment = 0; *bytes = 0;
+    const int color = format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_R8G8B8A8_UNORM;
+    const int depth = format == VK_FORMAT_D32_SFLOAT;
+    if ((!color && !depth) || !width || !height) return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    if (color && (width > PS5VK_MAX_COLOR_DIMENSION || height > PS5VK_MAX_COLOR_DIMENSION))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    struct ps5vk_depth_layout layout;
+    if (ps5vk_depth_layout(width, height, &layout)) return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    /* One-sample 32-bit 64KB_R_X and 64KB_Z_X share footprint arithmetic but
+     * not pixel equations; the existing color-target builder requires a 128 KiB
+     * base, the depth builder its layout alignment. */
+    const uint64_t base_alignment = color ? 131072u : layout.alignment;
+    if (!base_alignment || (base_alignment & (base_alignment - 1u)) ||
+        layout.bytes > UINT64_MAX - (base_alignment - 1u))
+        return VK_ERROR_UNKNOWN;
+    const uint64_t layer_bytes = (layout.bytes + base_alignment - 1u) & ~(base_alignment - 1u);
+    if (!layer_bytes || layer_bytes > UINT64_MAX / layers) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    *stride = layer_bytes;
+    *alignment = base_alignment;
+    *bytes = layer_bytes * layers;
+    return VK_SUCCESS;
+}
+
 VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *info,
                                         VkMemoryRequirements *out)
 {
@@ -50,7 +87,9 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     const int cube=info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     if ((info->flags && !cube) ||
         (attachment && (info->flags || info->imageType!=VK_IMAGE_TYPE_2D ||
-                        info->arrayLayers!=1 || info->extent.depth!=1)) ||
+                        !info->arrayLayers ||
+                        info->arrayLayers>PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
+                        info->extent.depth!=1)) ||
         (!attachment && info->imageType==VK_IMAGE_TYPE_1D &&
          (cube || info->extent.height!=1 || info->extent.depth!=1 ||
           !info->arrayLayers || info->arrayLayers>PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
@@ -85,17 +124,13 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
         *out=(VkMemoryRequirements){texture.bytes,texture.alignment,1};return VK_SUCCESS;
     }
-    struct ps5vk_depth_layout layout;
-    if(info->format==VK_FORMAT_B8G8R8A8_UNORM &&
-       (info->extent.width>PS5VK_MAX_COLOR_DIMENSION || info->extent.height>PS5VK_MAX_COLOR_DIMENSION))
-        return VK_ERROR_FORMAT_NOT_SUPPORTED;
-    if (ps5vk_depth_layout(info->extent.width, info->extent.height, &layout))
-        return VK_ERROR_FORMAT_NOT_SUPPORTED;
-    /* One-sample 32-bit 64KB_R_X and 64KB_Z_X have identical 128x128
-     * block geometry, NOT identical pixel equations. Reuse footprint arithmetic
-     * only. The existing color-target builder requires a 128 KiB base. */
-    uint64_t alignment = color ? 131072u : layout.alignment;
-    uint64_t size = (layout.bytes + alignment - 1) & ~(alignment - 1);
+    /* Layered attachments: one footprint per array layer, so the same storage
+     * model slice A measured now describes an array target. arrayLayers == 1
+     * reproduces the previous requirements byte for byte. */
+    VkDeviceSize stride = 0, alignment = 0, size = 0;
+    VkResult layered = ps5vk_native_layered_storage(info->format, info->extent.width,
+        info->extent.height, info->arrayLayers, &stride, &alignment, &size);
+    if (layered != VK_SUCCESS) return layered;
     *out = (VkMemoryRequirements){size, alignment, 1};
     return VK_SUCCESS;
 }

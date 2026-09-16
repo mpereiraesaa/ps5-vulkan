@@ -903,6 +903,88 @@ int main(void)
         vkDestroyImage(device, colour, NULL);
     }
 
+    /* --- layered attachment storage (T02-C3a) -----------------------------
+     * Color and depth attachments may now name more than one array layer. The
+     * storage is one footprint per layer, so creation, the layer target
+     * selection and the image-view ranges have to agree about which layers
+     * exist: a 2D_ARRAY view may address any layer the image really has and
+     * none beyond it. */
+    {
+        VkImageCreateInfo layered = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {WIDTH, HEIGHT, 1},
+            .mipLevels = 1, .arrayLayers = 3, .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+        VkImage array = VK_NULL_HANDLE;
+        assert(vkCreateImage(device, &layered, NULL, &array) == VK_SUCCESS);
+        VkMemoryRequirements layered_requirements;
+        vkGetImageMemoryRequirements(device, array, &layered_requirements);
+        VkMemoryAllocateInfo layered_allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = layered_requirements.size, .memoryTypeIndex = 0u};
+        VkDeviceMemory layered_memory = VK_NULL_HANDLE;
+        assert(vkAllocateMemory(device, &layered_allocation, NULL, &layered_memory) == VK_SUCCESS);
+        assert(vkBindImageMemory(device, array, layered_memory, 0) == VK_SUCCESS);
+        VkDeviceSize stride = 0, alignment = 0, bytes = 0;
+        assert(ps5vk_native_layered_storage(layered.format, WIDTH, HEIGHT, 3u,
+            &stride, &alignment, &bytes) == VK_SUCCESS);
+        assert(layered_requirements.size == bytes &&
+               layered_requirements.alignment == alignment);
+        /* The whole array is addressable, and nothing beyond it is. */
+        VkImageViewCreateInfo array_view = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = array,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY, .format = layered.format,
+            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 3}};
+        VkImageView view = VK_NULL_HANDLE;
+        assert(vkCreateImageView(device, &array_view, NULL, &view) == VK_SUCCESS);
+        vkDestroyImageView(device, view, NULL);
+        /* A sub-range that stays inside the image is addressable; one that
+         * reaches past the last layer is not. */
+        array_view.subresourceRange = (VkImageSubresourceRange){
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1, 2};
+        assert(vkCreateImageView(device, &array_view, NULL, &view) == VK_SUCCESS);
+        vkDestroyImageView(device, view, NULL);
+        array_view.subresourceRange = (VkImageSubresourceRange){
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1, 3};
+        assert(vkCreateImageView(device, &array_view, NULL, &view) == VK_ERROR_UNKNOWN);
+        array_view.subresourceRange = (VkImageSubresourceRange){
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 3, 1};
+        assert(vkCreateImageView(device, &array_view, NULL, &view) == VK_ERROR_UNKNOWN);
+        /* One layer still behaves exactly as before. */
+        VkImage single = make_image(VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, NULL);
+        VkMemoryRequirements single_requirements;
+        vkGetImageMemoryRequirements(device, single, &single_requirements);
+        assert(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM, WIDTH, HEIGHT, 1u,
+            &stride, &alignment, &bytes) == VK_SUCCESS);
+        assert(single_requirements.size == bytes &&
+               single_requirements.alignment == alignment);
+        vkDestroyImage(device, single, NULL);
+        /* Depth attachments take layers under the same model with the depth
+         * role's own alignment. */
+        layered.format = VK_FORMAT_D32_SFLOAT;
+        layered.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        VkImage depth_array = VK_NULL_HANDLE;
+        assert(vkCreateImage(device, &layered, NULL, &depth_array) == VK_SUCCESS);
+        VkMemoryRequirements depth_requirements;
+        vkGetImageMemoryRequirements(device, depth_array, &depth_requirements);
+        VkMemoryAllocateInfo depth_allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = depth_requirements.size, .memoryTypeIndex = 0u};
+        VkDeviceMemory depth_memory = VK_NULL_HANDLE;
+        assert(vkAllocateMemory(device, &depth_allocation, NULL, &depth_memory) == VK_SUCCESS);
+        assert(vkBindImageMemory(device, depth_array, depth_memory, 0) == VK_SUCCESS);
+        assert(ps5vk_native_layered_storage(VK_FORMAT_D32_SFLOAT, WIDTH, HEIGHT, 3u,
+            &stride, &alignment, &bytes) == VK_SUCCESS);
+        assert(depth_requirements.size == bytes && depth_requirements.alignment == alignment);
+        vkDestroyImage(device, depth_array, NULL);
+        vkFreeMemory(device, depth_memory, NULL);
+        vkDestroyImage(device, array, NULL);
+        vkFreeMemory(device, layered_memory, NULL);
+    }
+
     vkDestroyBuffer(device, alias_buffer, NULL);
     vkDestroyImage(device, alias_destination, NULL);
     vkDestroyImage(device, alias_source, NULL);

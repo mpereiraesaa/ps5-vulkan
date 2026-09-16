@@ -1,5 +1,6 @@
 #include "targets_ps5.h"
 #include "presentation_format_ps5.h"
+#include "graphics_limits.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -102,5 +103,50 @@ int main(void)
     view.range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     assert(ps5vk_native_layer_target(&device, &view, 0, defaults, &layer1) != VK_SUCCESS);
     base = color_base;
+
+    /* --- layered attachment storage (T02-C3a) -----------------------------
+     * The measurement above established that a layer is addressable, so the
+     * storage model has to describe one: a per-layer stride that is the same
+     * footprint, an alignment the target builders accept, a total size that is
+     * the stride times the layer count with an explicit overflow check, and
+     * arrayLayers == 1 unchanged from the single-layer requirements. */
+    {
+        VkDeviceSize stride = 0, alignment = 0, bytes = 0, rgba_stride = 0;
+        assert(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM, 64u, 64u, 3u,
+            &stride, &alignment, &bytes) == VK_SUCCESS);
+        assert(alignment == 131072u && !(stride % alignment) && bytes == 3u * stride);
+        rgba_stride = stride;
+        assert(ps5vk_native_layered_storage(VK_FORMAT_B8G8R8A8_UNORM, 64u, 64u, 2u,
+            &stride, &alignment, &bytes) == VK_SUCCESS);
+        assert(bytes == 2u * stride && alignment == 131072u);
+        /* Depth uses the 64KB_Z_X layout alignment, which is why a mixed
+         * surface has to take the stricter color alignment for its own
+         * layers. */
+        assert(ps5vk_native_layered_storage(VK_FORMAT_D32_SFLOAT, 64u, 64u, 2u,
+            &stride, &alignment, &bytes) == VK_SUCCESS);
+        assert(!(alignment % 65536u) && !(stride % alignment) && bytes == 2u * stride);
+        /* One layer reproduces the previous single-layer requirements. */
+        assert(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM, 64u, 64u, 1u,
+            &stride, &alignment, &bytes) == VK_SUCCESS);
+        assert(bytes == stride && stride == rgba_stride && alignment == 131072u);
+        /* Unsupported formats, an empty layer count and an overflowing layer
+         * count are refused rather than described. */
+        assert(ps5vk_native_layered_storage(VK_FORMAT_R8_UNORM, 64u, 64u, 2u,
+            &stride, &alignment, &bytes) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+        assert(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM, 64u, 64u, 0u,
+            &stride, &alignment, &bytes) == VK_ERROR_UNKNOWN);
+        assert(ps5vk_native_layered_storage(VK_FORMAT_B8G8R8A8_UNORM,
+            PS5VK_MAX_COLOR_DIMENSION + 1u, 64u, 2u, &stride, &alignment, &bytes) ==
+            VK_ERROR_FORMAT_NOT_SUPPORTED);
+        /* A layer count far beyond the image limit still has to produce the
+         * product rather than a wrapped size, and the first count whose product
+         * does not fit is refused. */
+        assert(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM, 64u, 64u,
+            UINT32_MAX, &stride, &alignment, &bytes) == VK_SUCCESS);
+        assert(bytes == (VkDeviceSize)rgba_stride * UINT32_MAX);
+        assert(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM, 64u, 64u,
+            UINT64_MAX, &stride, &alignment, &bytes) == VK_ERROR_OUT_OF_HOST_MEMORY);
+        assert(!stride && !alignment && !bytes);
+    }
     puts("Target address bridge: host registers only, no submission");
 }
