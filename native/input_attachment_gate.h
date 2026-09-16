@@ -10,13 +10,17 @@
  *
  * A subpass may read exactly one attachment through exactly one fragment
  * binding, and only in the shape this driver has measured end to end: the
- * descriptor is the resource-only image record (32 bytes, no sampler words),
- * its recorded view IS the framebuffer view of the subpass's own input
- * reference at index 0, both the descriptor and that reference name GENERAL,
- * and a single forward BY_REGION dependency carries the colour write of
- * subpass 0 to the fragment input-attachment read of the later subpass. Every
- * other shape fails closed here, before any packet is emitted, and this is the
- * only place native execution learns what an input attachment may be.
+ * resource is the promoted attachment itself - RGBA8 2D, one mip, one sample,
+ * six layers, depth one, no flags, optimal tiling and exactly the
+ * colour/transfer-source/input-attachment/transfer-destination usage - read
+ * through one layer-0 2D colour view on the same device; the descriptor is the
+ * one-element resource-only image record (32 bytes, no sampler words); its
+ * recorded view IS the framebuffer view of the subpass's own input reference at
+ * index 0, both the descriptor and that reference name GENERAL, and a single
+ * forward BY_REGION dependency carries the colour write of subpass 0 to the
+ * fragment input-attachment read of the later subpass. Every other shape fails
+ * closed here, before any packet is emitted, and this is the only place native
+ * execution learns what an input attachment may be.
  *
  * The function takes the real objects rather than a summary of them so the
  * same rule the driver executes is the rule the host tests exercise. It never

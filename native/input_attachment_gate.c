@@ -23,10 +23,36 @@ static int forward_dependency(const VkRenderPass pass, uint32_t subpass)
             dependency->dstStageMask == VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT &&
             dependency->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
             dependency->dstAccessMask == VK_ACCESS_INPUT_ATTACHMENT_READ_BIT &&
-            (dependency->dependencyFlags & VK_DEPENDENCY_BY_REGION_BIT))
+            dependency->dependencyFlags == VK_DEPENDENCY_BY_REGION_BIT)
             return 1;
     }
     return 0;
+}
+
+/* The exact promoted resource this profile has measured: one RGBA8 2D six-layer
+ * attachment created for the colour/transfer/input-attachment roles, read
+ * through a single-layer, single-level colour view of layer 0 on the same
+ * device. A descriptor that names any other image or view has not been
+ * witnessed, so it is refused rather than read as if it had been. */
+static int promoted_resource(VkDevice device, VkImage image, VkImageView view)
+{
+    if (!image || !view || image->device != device || view->device != device ||
+        view->image != image) return 0;
+    const VkImageCreateInfo *info = &image->info;
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (info->format != VK_FORMAT_R8G8B8A8_UNORM || info->imageType != VK_IMAGE_TYPE_2D ||
+        info->samples != VK_SAMPLE_COUNT_1_BIT || info->mipLevels != 1u ||
+        info->arrayLayers != (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR ||
+        info->flags || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
+        info->extent.depth != 1u || info->usage != usage) return 0;
+    const VkImageSubresourceRange *range = &view->range;
+    if (view->view_type != VK_IMAGE_VIEW_TYPE_2D || view->format != info->format ||
+        range->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT || range->baseMipLevel ||
+        range->levelCount != 1u || range->baseArrayLayer || range->layerCount != 1u)
+        return 0;
+    return 1;
 }
 
 VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_t subpass,
@@ -46,6 +72,9 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
      * declaration, a set only the vertex stage was given, or a binding no
      * compiled fragment stage dereferences is not this profile. */
     if (binding->stages != VK_SHADER_STAGE_FRAGMENT_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* One element, not an array: the measured profile reads one attachment, and
+     * a second element would be a second descriptor this gate never sized. */
+    if (binding->count != 1) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!abi->enabled || !abi->fragment_descriptor_valid[set_index] ||
         abi->vertex_descriptor_valid[set_index] ||
         !(abi->fragment_used_bindings[set_index] & (UINT64_C(1) << binding_index)))
@@ -59,8 +88,11 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
     const struct ps5vk_subpass *stage = &pass->subpasses[subpass];
     /* Missing, UNUSED or multiplied input references are all refused: the read
      * this profile serves is pInputAttachments[0] of that subpass and nothing
-     * else. */
-    if (stage->input_count != 1) return VK_ERROR_FEATURE_NOT_PRESENT;
+     * else. The subpass's slice is bounds-checked against the pass's own array
+     * before it is indexed, so a malformed pass cannot be read at all. */
+    if (stage->input_count != 1 || stage->input_first >= pass->input_count ||
+        pass->input_count - stage->input_first < stage->input_count)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     const VkAttachmentReference *reference = &pass->inputs[stage->input_first];
     if (reference->attachment == VK_ATTACHMENT_UNUSED) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (reference->attachment >= pass->attachment_count ||
@@ -81,6 +113,9 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
         set->images[element_index].imageView != framebuffer->attachments[reference->attachment] ||
         set->image_resources[element_index] !=
             framebuffer->attachments[reference->attachment]->image)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (!promoted_resource(device, set->image_resources[element_index],
+            set->images[element_index].imageView))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if (set->images[element_index].imageLayout != VK_IMAGE_LAYOUT_GENERAL)
         return VK_ERROR_FEATURE_NOT_PRESENT;

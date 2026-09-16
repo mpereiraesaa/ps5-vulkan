@@ -15,7 +15,7 @@
 enum { GATE_SET = 0, GATE_BINDING = 0, GATE_ELEMENT = 0, GATE_SUBPASS = 1 };
 
 struct gate_fixture {
-    struct VkDevice_T device;
+    struct VkDevice_T device, foreign_device;
     struct VkImageView_T attachment_view, other_view;
     struct VkImage_T attachment_image, other_image;
     struct VkDescriptorPool_T pool;
@@ -39,11 +39,20 @@ static void fixture_init(struct gate_fixture *f)
     f->attachment_image.device = &f->device;
     f->attachment_image.info.format = VK_FORMAT_R8G8B8A8_UNORM;
     f->attachment_image.info.imageType = VK_IMAGE_TYPE_2D;
+    f->attachment_image.info.extent = (VkExtent3D){16, 16, 1};
     f->attachment_image.info.arrayLayers = 6;
     f->attachment_image.info.mipLevels = 1;
+    f->attachment_image.info.samples = VK_SAMPLE_COUNT_1_BIT;
+    f->attachment_image.info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    f->attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     f->attachment_view.device = &f->device;
     f->attachment_view.image = &f->attachment_image;
     f->attachment_view.view_type = VK_IMAGE_VIEW_TYPE_2D;
+    f->attachment_view.format = f->attachment_image.info.format;
+    f->attachment_view.range = (VkImageSubresourceRange){
+        VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     f->other_view = f->attachment_view;
     f->other_view.image = &f->other_image;
 
@@ -162,6 +171,9 @@ int main(void)
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     MUTATE(f.set.signature.binding[GATE_BINDING].stages = VK_SHADER_STAGE_ALL);
     MUTATE(f.set.signature.binding[GATE_BINDING].stages = 0);
+    /* One element, not an array: a descriptorCount of two would be a second
+     * attachment this profile never sized or measured. */
+    MUTATE(f.set.signature.binding[GATE_BINDING].count = 2);
     /* Vertex-only delivery, an unusable ABI and a binding no compiled fragment
      * stage dereferences are all refused. */
     MUTATE(f.abi.fragment_descriptor_valid[GATE_SET] = VK_FALSE);
@@ -172,6 +184,10 @@ int main(void)
     MUTATE(f.pass.subpass_count = 1);
     MUTATE(f.pass.subpasses[GATE_SUBPASS].input_count = 0);
     MUTATE(f.pass.subpasses[GATE_SUBPASS].input_count = 2);
+    /* The subpass's slice of the pass's own input array is bounds-checked
+     * before it is indexed, so a malformed pass is never read at all. */
+    MUTATE(f.pass.subpasses[GATE_SUBPASS].input_first = 1);
+    MUTATE(f.pass.input_count = 0);
     MUTATE(f.pass.inputs[0].attachment = VK_ATTACHMENT_UNUSED);
     MUTATE(f.pass.inputs[0].attachment = 1);
     MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -197,6 +213,35 @@ int main(void)
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
     MUTATE(f.dependencies[0].dstAccessMask =
         VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+    /* The measured dependency is BY_REGION and nothing else: an extra flag is a
+     * different transition than the one that was witnessed. */
+    MUTATE(f.dependencies[0].dependencyFlags =
+        VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_VIEW_LOCAL_BIT);
+    /* The promoted resource shape itself: the exact image and the exact
+     * layer-0 view, one field at a time. */
+    MUTATE(f.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    MUTATE(f.attachment_image.info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT);
+    MUTATE(f.attachment_image.info.usage &=
+        ~(VkImageUsageFlags)VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    MUTATE(f.attachment_image.info.arrayLayers = 5);
+    MUTATE(f.attachment_image.info.arrayLayers = 7);
+    MUTATE(f.attachment_image.info.format = VK_FORMAT_B8G8R8A8_UNORM);
+    MUTATE(f.attachment_image.info.imageType = VK_IMAGE_TYPE_3D);
+    MUTATE(f.attachment_image.info.samples = VK_SAMPLE_COUNT_2_BIT);
+    MUTATE(f.attachment_image.info.mipLevels = 2);
+    MUTATE(f.attachment_image.info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
+    MUTATE(f.attachment_image.info.tiling = VK_IMAGE_TILING_LINEAR);
+    MUTATE(f.attachment_image.info.extent.depth = 2);
+    MUTATE(f.attachment_view.range.baseArrayLayer = 1);
+    MUTATE(f.attachment_view.range.layerCount = 6);
+    MUTATE(f.attachment_view.range.baseMipLevel = 1);
+    MUTATE(f.attachment_view.range.levelCount = 2);
+    MUTATE(f.attachment_view.range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT);
+    MUTATE(f.attachment_view.view_type = VK_IMAGE_VIEW_TYPE_2D_ARRAY);
+    MUTATE(f.attachment_view.format = VK_FORMAT_B8G8R8A8_UNORM);
+    MUTATE(f.attachment_view.device = &f.foreign_device);
+    MUTATE(f.attachment_image.device = &f.foreign_device);
 #undef MUTATE
 
     /* A read in the subpass that produced the pixels has nothing to read. */
