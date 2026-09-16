@@ -25801,12 +25801,24 @@
       "apiVersion": 4194304,
       "deviceID": 0,
       "deviceName": "ps5vk gfx1013 experimental compute profile",
+      "multiview_query": {
+        "maxMultiviewInstanceIndex": 0,
+        "maxMultiviewViewCount": 0,
+        "multiview": false,
+        "route": "VK_KHR_multiview"
+      },
       "vendorID": 4098
     },
     "graphics": {
       "apiVersion": 4194304,
       "deviceID": 0,
       "deviceName": "ps5vk gfx1013 experimental graphics profile",
+      "multiview_query": {
+        "maxMultiviewInstanceIndex": 134217727,
+        "maxMultiviewViewCount": 6,
+        "multiview": true,
+        "route": "VK_KHR_multiview"
+      },
       "vendorID": 4098
     }
   },

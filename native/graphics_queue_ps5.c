@@ -9,6 +9,7 @@
 #include "texture_dma.h"
 #include "upload_commands_ps5.h"
 #include "readback_commands_ps5.h"
+#include "color_rect_clear.h"
 #include "color_clear.h"
 #include "color_detile.h"
 #include "attachment_ops.h"
@@ -43,6 +44,7 @@ struct graphics_job {
     VkImage color;
     VkImage readback_image;
     VkBuffer readback_buffer;
+    VkDeviceSize readback_stride;
     struct ps5vk_layout_state layouts;
 };
 static uint64_t now(void *unused)
@@ -91,6 +93,7 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
         rc=ps5vk_readback_commands(d,cb->operations+first,count,NULL,&j->layouts,&plan);
         if(rc==VK_SUCCESS) {
             j->color=j->readback_image=plan.image;j->readback_buffer=plan.buffer;
+            j->readback_stride=plan.layer_stride;
         }
     } else rc=ps5vk_upload_commands(d,cb->operations+first,count,NULL,&j->layouts,&cursor,end,cache);
     if(rc!=VK_SUCCESS)goto fail;
@@ -130,7 +133,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         unsigned type=cb->operations[first].type;
         if(type!=PS5VK_BARRIER && type!=PS5VK_IMAGE_BARRIER &&
            type!=PS5VK_COPY_BUFFER_IMAGE && type!=PS5VK_COPY_IMAGE_BUFFER &&
-           type!=PS5VK_CLEAR_DEPTH_STENCIL_IMAGE)
+           type!=PS5VK_CLEAR_DEPTH_STENCIL_IMAGE && type!=PS5VK_CLEAR_COLOR_IMAGE)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         ++first;
     }
@@ -234,7 +237,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     unsigned body_count=0,next_buffer=1;
     for(unsigned i=first+1;i<last;++i) {
         const struct ps5vk_operation *op=&cb->operations[i];
-        if(op->type==PS5VK_NEXT_SUBPASS) {
+        if(op->type==PS5VK_NEXT_SUBPASS || op->type==PS5VK_CLEAR_ATTACHMENT) {
             if(body_count==PS5VK_MAX_OPERATIONS)return VK_ERROR_FEATURE_NOT_PRESENT;
             body[body_count++]=op;
             continue;
@@ -300,6 +303,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     cache(j->slot.address,(size_t)PS5VK_OCCLUSION_PROBE_BYTES);
     j->slot_active=1;
 #endif
+    uint32_t *start=j->commands.address,*cursor=start,*end=start+PS5VK_COMMAND_ARENA_WORDS;
+    cursor+=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+    /* Prelude transitions/clears precede attachment load operations in both
+     * the command stream and the tentative layout transaction. */
+    phase="prelude";
+    rc=ps5vk_upload_commands(d,cb->operations+range_first,first-range_first,j->color,
+        &j->layouts,&cursor,end,cache);
+    if(rc!=VK_SUCCESS)goto fail;
     /* Record the scoped render-pass transitions transactionally. Resource
      * state becomes committed only after the exact GPU completion label. */
     phase="attachment-layout";
@@ -313,8 +324,6 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
     ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT];
     if(ps5_color_select_runtime_defaults(defaults,sceAgcGetRegisterDefaults())) {rc=VK_ERROR_INITIALIZATION_FAILED;goto fail;}
-    uint32_t *start=j->commands.address,*cursor=start,*end=start+PS5VK_COMMAND_ARENA_WORDS;
-    cursor+=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
     if(color_plan.clear) {
         void *address;VkDeviceSize bytes;
         rc=ps5vk_image_span(d,j->color,&address,&bytes);
@@ -338,10 +347,6 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
         if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
     }
-    phase="prelude";
-    rc=ps5vk_upload_commands(d,cb->operations+range_first,first-range_first,j->color,
-        &j->layouts,&cursor,end,cache);
-    if(rc!=VK_SUCCESS)goto fail;
     phase="draw";
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
@@ -356,6 +361,37 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     uint32_t subpass_index=0;
     for(unsigned i=0;i<body_count;++i) {
         const struct ps5vk_operation *recorded=body[i];
+        if(recorded->type==PS5VK_CLEAR_ATTACHMENT) {
+            if(recorded->subpass!=subpass_index || !ps5vk_clear_attachment_valid(recorded)) {
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+            }
+            VkImageView view=recorded->framebuffer->attachments[
+                ps5vk_render_pass_subpass(pass,subpass_index)->color.attachment];
+            void *address;VkDeviceSize bytes,stride;
+            rc=ps5vk_image_span(d,view->image,&address,&bytes);
+            if(rc!=VK_SUCCESS)goto fail;
+            rc=ps5vk_native_layer_footprint(d,view->image,&stride);
+            if(rc!=VK_SUCCESS || !stride || stride>bytes/view->image->info.arrayLayers) {
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+            }
+            /* The final reserved tail word is a private intra-submission
+             * token, never the label that poll() treats as GPU completion. */
+            size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
+                (uintptr_t)(ps5vk_command_arena_label(&j->commands)+7),i+1u);
+            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            VkDeviceSize offset=(VkDeviceSize)view->range.baseArrayLayer*stride;
+            n=ps5vk_color_rect_clear(cursor,(size_t)(end-cursor),
+                (uintptr_t)address+offset,bytes-offset,(size_t)stride,
+                view->image->info.extent.width,view->image->info.extent.height,
+                view->range.layerCount,multiview->present?multiview->view_masks[subpass_index]:0,
+                recorded->clear_rect.rect,recorded->clear_word);
+            if(!n){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}cursor+=n;
+            n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            continue;
+        }
         if(recorded->type==PS5VK_NEXT_SUBPASS) {
             /* The boundary names the subpass it enters: a record that names any
              * other one cannot say which subpass's view mask the draws that
@@ -611,10 +647,20 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 #endif
     phase="postlude";
     if(last+1<range_end) {
-        struct ps5vk_readback_plan plan={0};
-        rc=ps5vk_readback_commands(d,cb->operations+last+1,range_end-last-1,j->color,&j->layouts,&plan);
-        if(rc!=VK_SUCCESS)goto fail;
-        j->readback_image=plan.image;j->readback_buffer=plan.buffer;
+        unsigned readback=0;
+        for(unsigned k=last+1;k<range_end;++k)
+            readback|=cb->operations[k].type==PS5VK_COPY_IMAGE_BUFFER;
+        if(readback) {
+            struct ps5vk_readback_plan plan={0};
+            rc=ps5vk_readback_commands(d,cb->operations+last+1,range_end-last-1,j->color,&j->layouts,&plan);
+            if(rc!=VK_SUCCESS)goto fail;
+            j->readback_image=plan.image;j->readback_buffer=plan.buffer;
+            j->readback_stride=plan.layer_stride;
+        } else {
+            rc=ps5vk_upload_commands(d,cb->operations+last+1,range_end-last-1,j->color,
+                &j->layouts,&cursor,end,cache);
+            if(rc!=VK_SUCCESS)goto fail;
+        }
     }
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
     _Static_assert(8+PS5VK_GRAPHICS_PROBE_REGISTERS*4<=64,"probe must not overlap command words or leave reserved tail");
@@ -673,8 +719,8 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
             VkImage image=j->readback_image;
             if(!image || ps5vk_buffer_span(d,j->readback_buffer,0,VK_WHOLE_SIZE,
                     &destination,&destination_bytes)!=VK_SUCCESS ||
-               ps5vk_rgba8_64k_rx_detile(destination,(size_t)destination_bytes,address,(size_t)bytes,
-                    image->info.extent.width,image->info.extent.height))
+               ps5vk_readback_detile(image,(size_t)j->readback_stride,
+                    destination,(size_t)destination_bytes,address,(size_t)bytes))
                 return VK_ERROR_DEVICE_LOST;
             /* This bounded implementation performs the transfer-copy result
              * publication on the CPU only after exact GPU completion. The

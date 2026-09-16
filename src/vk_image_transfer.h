@@ -3,13 +3,12 @@
 #include "vk_command.h"
 #include <string.h>
 
-/* Vulkan 1.0 image copy / colour clear domain.
+/* Bounded image copy / colour clear domains.
  *
- * Only the role this profile can describe truthfully is implemented: an RGBA8
- * image whose usage is drawn from TRANSFER_SRC/TRANSFER_DST alone, which the
- * driver backs with the padded linear layout used by the upload path (256-byte
- * row pitch). The tiled colour-attachment layout has no linear addressing and
- * is refused here rather than faked with a linear memset.
+ * RGBA8 images whose usage is drawn from TRANSFER_SRC/TRANSFER_DST alone use
+ * the padded linear frontend layout (256-byte row pitch). Tiled array/input
+ * colour attachments never enter that executor: whole-array clears and
+ * in-render-pass colour rectangles use ordered native GPU DMA packets.
  *
  * vkCmdClearDepthStencilImage executes for the whole subresource of a one-
  * sample D32_SFLOAT target that also carries transfer-destination usage. A
@@ -17,13 +16,13 @@
  * DWORD fill the render pass already uses for its depth load-op clear writes
  * exactly the right image without the 64KB_Z_X pixel equations this codebase
  * still does not claim; partial ranges, rectangles, stencil aspects and
- * multisample images therefore remain fail-closed. vkCmdClearAttachments is
- * exposed and fully validated but fail closed: a mid-render-pass attachment
- * clear would need a DCB clear path that does not exist yet.
+ * multisample images therefore remain fail-closed for depth/stencil clears.
+ * vkCmdClearAttachments records bounded RGBA8/BGRA8 colour rectangles and the
+ * native backend orders prior colour writes, tiled fills and later rendering.
  *
- * Effects execute in start_submission when the frontend segment reaches the
- * head, never at record time; the destination allocation range is flushed
- * through the memory backend after each driver-originated write. */
+ * Frontend effects execute in start_submission when their segment reaches the
+ * head, never at record time; the memory backend flushes each frontend write.
+ * GPU effects commit resource state only after exact completion is observed. */
 VkBool32 ps5vk_image_transfer_operation(enum ps5vk_operation_type type);
 
 /* Which executor owns a recorded image operation: the pure transfer role's row

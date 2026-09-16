@@ -40,6 +40,17 @@ def unassigned_format_table_digest(rows):
 
 
 class TestReportingMatrix(unittest.TestCase):
+    def test_multiview_queries_are_graphics_only_and_keep_the_route(self):
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        self.assertEqual(
+            {"route": "VK_KHR_multiview", "multiview": True,
+             "maxMultiviewViewCount": 6, "maxMultiviewInstanceIndex": 134217727},
+            data["profiles"]["graphics"]["multiview_query"])
+        compute = data["profiles"]["compute"]["multiview_query"]
+        self.assertFalse(compute["multiview"])
+        self.assertEqual(0, compute["maxMultiviewViewCount"])
+        self.assertEqual(0, compute["maxMultiviewInstanceIndex"])
+
     def test_cross_table_format_snapshot_matches_the_audited_baseline(self):
         """Changes outside the original two-table audit require explicit review."""
         data = json.loads(
