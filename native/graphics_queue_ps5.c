@@ -1,6 +1,7 @@
 #include "vk_queue.h"
 #include "vk_indirect.h"
 #include "draw_prepare_ps5.h"
+#include "input_attachment_gate.h"
 #include "command_arena_ps5.h"
 #include "graphics_sync.h"
 #include "image_layout_state.h"
@@ -387,6 +388,16 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         /* Check each sampled resource, not just element zero of set zero.
          * Preparation validates generations and copies exactly these tables. */
         if(op->pipeline->set_count>PS5VK_MAX_SETS){rc=VK_ERROR_UNKNOWN;goto fail;}
+        /* The one-input profile: how many input-attachment bindings the whole
+         * pipeline declares. The gate refuses anything but exactly one, so a
+         * second attachment can never be half-served. */
+        uint32_t input_bindings=0;
+        if(p->pair->runtime_arguments.enabled)
+            for(unsigned s=0;s<op->pipeline->set_count;++s)
+                for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b)
+                    if(op->pipeline->sets[s].binding[b].count &&
+                       op->pipeline->sets[s].type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
+                        ++input_bindings;
         for(unsigned set_index=0;set_index<op->pipeline->set_count;++set_index) {
             if(p->pair->runtime_arguments.enabled &&
                !p->pair->runtime_arguments.fragment_descriptor_valid[set_index] &&
@@ -402,8 +413,9 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 const VkDescriptorType type=set->signature.type[b];
                 const int buffer_type=type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
                     type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                const int input_type=type==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
                 if(binding->count && type!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
-                   !buffer_type) {
+                   !buffer_type && !input_type) {
                     rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
                 }
                 if(binding->first>PS5VK_MAX_DESCRIPTORS ||
@@ -426,6 +438,18 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                         if(!set->buffers[index].buffer) {
                             rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
                         }
+                        continue;
+                    }
+                    if(input_type) {
+                        /* An input attachment is not a sampled resource: it is
+                         * the subpass's own framebuffer view read at GENERAL
+                         * through the resource-only record, and the bounded
+                         * one-input rule lives in one place so the driver and
+                         * its tests decide the same shape. */
+                        rc=ps5vk_input_attachment_gate(d,op->render_pass,subpass_index,
+                            op->framebuffer,set,binding,b,type,index,input_bindings,
+                            &p->pair->runtime_arguments,set_index);
+                        if(rc!=VK_SUCCESS)goto fail;
                         continue;
                     }
                     if(!set->image_resources[index] ||
