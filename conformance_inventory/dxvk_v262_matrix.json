@@ -1329,13 +1329,19 @@
       "kind": "feature",
       "name": "multiview",
       "native": {
-        "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
-        "note": "One strict six-view run: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard and strict_verified=1.",
+        "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
+        "artifact_sha256_refs": {
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da"
+        },
+        "note": "Two strict private runs. Six-view: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard, strict_verified=1. Instance floor: the same scene with exactly one instance at firstInstance=0x07ffffff, both built-in slots present (view_index_slot and start_instance_slot), instance_witness=1, instance_failed=0 in all six layers, strict_verified=1.",
         "refs": [
-          "VALIDATION.md#dxvk-262-multiview-six-view-witness"
+          "VALIDATION.md#dxvk-262-multiview-six-view-witness",
+          "VALIDATION.md#dxvk-262-multiview-instance-floor"
         ],
         "run_ids": [
-          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2",
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
         ],
         "state": "native-evidence"
       },
@@ -2442,16 +2448,15 @@
       "kind": "property",
       "name": "maxMultiviewInstanceIndex",
       "native": {
-        "artifact_sha256": "7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593",
-        "note": "Two exact native query runs witnessed the current blocker.",
+        "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
+        "note": "One strict run with instance_count=1 and firstInstance=0x07ffffff witnesses an instance index of at least 134217727, with instance_witness=1, instance_failed=0 in all six layers and strict_verified=1. The reported maxMultiviewInstanceIndex is unchanged.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#dxvk-262-multiview-instance-floor"
         ],
         "run_ids": [
-          "20260915T210947412Z_PPSA99994_ps5vk_0xf8ffef0f6ba6",
-          "20260915T211224694Z_PPSA99994_ps5vk_0xf9248da2b03d"
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
       "verdict": "blocker"
     },
@@ -2483,16 +2488,15 @@
       "kind": "property",
       "name": "maxMultiviewViewCount",
       "native": {
-        "artifact_sha256": "7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593",
-        "note": "Two exact native query runs witnessed the current blocker.",
+        "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+        "note": "One strict six-view run witnesses a view count of at least 6 (mask 0x3f, six ordered layers, strict_verified=1). The reported maxMultiviewViewCount is unchanged.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#dxvk-262-multiview-six-view-witness"
         ],
         "run_ids": [
-          "20260915T210947412Z_PPSA99994_ps5vk_0xf8ffef0f6ba6",
-          "20260915T211224694Z_PPSA99994_ps5vk_0xf9248da2b03d"
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
       "verdict": "blocker"
     },
@@ -2860,8 +2864,8 @@
         "satisfied": 1
       },
       "native": {
-        "blocker": 59,
-        "satisfied": 3
+        "blocker": 57,
+        "satisfied": 5
       }
     },
     "requirements": 62,

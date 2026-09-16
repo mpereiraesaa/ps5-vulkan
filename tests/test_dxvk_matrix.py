@@ -21,6 +21,43 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_multiview_floors_are_private_evidence_on_every_row(self):
+        """The two multiview floors are measured natively and attached to the
+        feature AND to both properties, with the run that measured each one - and
+        none of the three may turn into implementation or CTS evidence, or fall
+        back to 'unmeasured', while the capability stays unpromoted."""
+        document = matrix.generate()
+        six_view_run = "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
+        six_view_artifact = "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01"
+        instance_run = "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
+        instance_artifact = "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da"
+        rows = {row["id"]: row for row in document["requirements"]}
+        expected = {
+            "feature:VkPhysicalDeviceVulkan11Features:multiview":
+                ({six_view_run, instance_run}, {six_view_artifact, instance_artifact}),
+            "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount":
+                ({six_view_run}, {six_view_artifact}),
+            "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex":
+                ({instance_run}, {instance_artifact}),
+        }
+        for identifier, (runs, artifacts) in expected.items():
+            row = rows[identifier]
+            self.assertEqual("native-evidence", row["native"]["state"], identifier)
+            self.assertEqual(runs, set(row["native"]["run_ids"]), identifier)
+            self.assertIn(row["native"]["artifact_sha256"], artifacts, identifier)
+            self.assertNotEqual("not-run", row["native"]["state"], identifier)
+            # Never implementation or CTS evidence: the capability is unpromoted.
+            self.assertEqual("missing", row["implementation"]["state"], identifier)
+            self.assertEqual("not-mapped", row["cts"]["state"], identifier)
+        # Both properties name exactly the run that measured their floor.
+        self.assertNotEqual(
+            rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"]["native"],
+            rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"]["native"])
+        # ...and the profile is no readier than before: same ready count, no CTS
+        # or implementation movement.
+        self.assertEqual(1, document["summary"]["satisfied"])
+        self.assertEqual(61, document["summary"]["blocker"])
+
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
         matrix.validate(document)
