@@ -55,7 +55,31 @@ enum ps5vk_feature_bits {
      * Public feature/property queries and device enablement use this bit;
      * platforms that cannot execute multiview leave it unset. */
     PS5VK_FEATURE_MULTIVIEW = 1u << 4,
+    /* Vulkan 1.0 core indirect and indexed draw features (DXVK262-T03). Each
+     * bit is set by a platform only when the executable path behind it exists
+     * and was measured; the logical device carries the bits the application
+     * enabled, and the indirect frontend consults THOSE, not the physical
+     * mask, so an application that did not enable a feature keeps the
+     * fail-closed rules of a device without it. */
+    /* VkDraw*IndirectCommand::firstInstance may be non-zero. */
+    PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE = 1u << 5,
+    /* vkCmdDraw*Indirect drawCount may exceed one; DrawIndex is the command
+     * index and maxDrawIndirectCount is the core floor of 65535. */
+    PS5VK_FEATURE_MULTI_DRAW_INDIRECT = 1u << 6,
+    /* The full 32-bit range of VK_INDEX_TYPE_UINT32 indices. */
+    PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 = 1u << 7,
 };
+
+/* The maxDrawIndirectCount a platform mask commits to: the pinned core table
+ * requires 2^16-1 once multiDrawIndirect is supported and exactly 1 otherwise.
+ * One helper decides it so the physical limit, the recording bound and the
+ * queue-head re-validation cannot disagree. */
+enum { PS5VK_MULTI_DRAW_INDIRECT_COUNT = 65535 };
+static inline uint32_t ps5vk_platform_max_draw_indirect_count(uint32_t supported_features)
+{
+    return (supported_features & PS5VK_FEATURE_MULTI_DRAW_INDIRECT) ?
+        (uint32_t)PS5VK_MULTI_DRAW_INDIRECT_COUNT : 1u;
+}
 
 /* The measured multiview floors: six views rendered into six ordered array
  * layers, and one instance at firstInstance 0x07ffffff (2^27-1). Both are

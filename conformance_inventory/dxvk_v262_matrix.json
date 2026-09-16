@@ -318,7 +318,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
       "implementation": {
-        "detail": "firstInstance must be zero (src/vk_indirect.c)",
+        "detail": "firstInstance must be zero unless the feature is enabled on the device (src/vk_indirect.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],

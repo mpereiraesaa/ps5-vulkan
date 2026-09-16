@@ -2,14 +2,12 @@
  *
  * This file is deliberately a contract and negative-regression test, not an
  * enablement. Delivery is implemented: BaseVertex, BaseInstance and DrawIndex
- * all reach the compiler-declared slots, with DrawIndex zero because ps5vk
- * refuses more than one draw per command. The public feature bit stays false
- * only until the evidence for that supported direct/single-indirect contract
- * exists - the upstream CTS leaves for those draws and a native witness.
- * Multi-draw is separate: its CTS leaves are legitimately NotSupported while
- * multiDrawIndirect is false. What is pinned here is the exact value mapping the
- * pinned upstream CTS requires and the exact boundary that keeps the feature
- * unadvertised, so neither can drift silently while the tranche is in progress.
+ * all reach the compiler-declared slots. DrawIndex is the command index the
+ * queue-head resolution stored in the snapshot (zero for direct draws and for
+ * a single indirect command), so a multi-draw expansion delivers a distinct
+ * value per command without touching this data flow. What is pinned here is
+ * the exact value mapping the pinned upstream CTS requires and the slot
+ * validation that keeps the three words independent.
  */
 #include "draw_parameters.h"
 #include "runtime_draw_abi.h"
@@ -82,6 +80,15 @@ int main(void)
      * multiDrawIndirect is false, so it does not gate this. */
     assert(ps5vk_draw_index_value(&draw) == 0u);
     assert(ps5vk_draw_index_value(&indexed) == 0u);
+    /* A resolved multi-draw snapshot carries the command index the queue head
+     * assigned (vk_indirect.c); the value is read from the snapshot, never
+     * derived from a counter, so a zero-primitive command keeps its index. */
+    struct ps5vk_operation third = draw;
+    third.draw_index = 2; third.vertex_count = 0;
+    assert(ps5vk_draw_index_value(&third) == 2u);
+    third.draw_index = 65534;
+    assert(ps5vk_draw_index_value(&third) == 65534u);
+    assert(ps5vk_draw_index_value(NULL) == 0u);
     abi.draw_id_slot = 1; /* collides with the start-instance slot */
     assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0u, 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == -1);
@@ -100,6 +107,13 @@ int main(void)
     assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0u, 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == 0);
     assert(vertex[0] == 3u); /* the DrawIndex word reaches the block */
+    assert(vertex[1] == 5u);
+    memset(vertex, 0, sizeof(vertex));
+    assert(ps5vk_runtime_draw_values_sets(&abi, ps5vk_draw_base_vertex(&third),
+        ps5vk_draw_base_instance(&third), ps5vk_draw_index_value(&third),
+        ps5vk_draw_view_index_value(&third), 0, 0,
+        (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == 0);
+    assert(vertex[0] == 65534u); /* the snapshot's own index, unmodified */
     assert(vertex[1] == 5u);
     assert(ps5vk_draw_index_supported() == 0u);
 

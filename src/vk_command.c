@@ -1,4 +1,5 @@
 #include "vk_command.h"
+#include "vk_indirect.h"
 #include "vk_query_pool.h"
 #include "vk_image.h"
 #include "vk_image_transfer.h"
@@ -948,13 +949,23 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer c,uint32_t count,uin
     op->vertex_offset=base;op->indices=c->indices;
 }
 static int indirect_draw_valid(VkCommandBuffer c,VkBuffer buffer,VkDeviceSize offset,
-    uint32_t count,uint32_t stride,VkDeviceSize command_size)
+    uint32_t count,uint32_t stride,enum ps5vk_operation_type type)
 {
-    if(!c || (offset&3u) || count>1 ||
-       (count>1 && ((stride&3u) || stride<command_size)))return 0;
-    if(count)return indirect_buffer_valid(c,buffer,offset,command_size);
-    if(c->state!=PS5VK_RECORDING ||
-       !ps5vk_buffer_usage(c->pool->device,buffer,VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT))return 0;
+    if(!c || c->state!=PS5VK_RECORDING || (offset&3u))return 0;
+    VkDevice d=c->pool->device;
+    /* drawCount is bounded by the physical maxDrawIndirectCount, and more than
+     * one command additionally needs multiDrawIndirect ENABLED on this device:
+     * a physical device that could execute many commands does not license an
+     * application that did not ask for the feature. The span the call reads -
+     * stride rules included - is decided by the same checked helper the
+     * queue-head re-validation uses, so recording cannot accept a shape the
+     * head later refuses. */
+    if(count>d->physical->platform.properties.limits.maxDrawIndirectCount ||
+       (count>1 && !(d->enabled_features&PS5VK_FEATURE_MULTI_DRAW_INDIRECT)))return 0;
+    VkDeviceSize length=0;
+    if(!ps5vk_indirect_argument_span(type,count,stride,&length))return 0;
+    if(count)return indirect_buffer_valid(c,buffer,offset,length);
+    if(!ps5vk_buffer_usage(d,buffer,VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT))return 0;
     void *address=NULL;VkDeviceSize available=0;
     /* drawCount == 0 does not access command data, so Vulkan imposes no
      * offset-plus-command-size bound in that case.  Still prove that the
@@ -965,7 +976,7 @@ static int indirect_draw_valid(VkCommandBuffer c,VkBuffer buffer,VkDeviceSize of
 VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirect(VkCommandBuffer c,VkBuffer buffer,
     VkDeviceSize offset,uint32_t count,uint32_t stride)
 {
-    if(!indirect_draw_valid(c,buffer,offset,count,stride,sizeof(VkDrawIndirectCommand)))
+    if(!indirect_draw_valid(c,buffer,offset,count,stride,PS5VK_DRAW_INDIRECT))
         {invalid(c);return;}
     vkCmdDraw(c,0,0,0,0);if(!c || c->state!=PS5VK_RECORDING)return;
     struct ps5vk_operation *op=&c->operations[c->operation_count-1];
@@ -975,8 +986,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirect(VkCommandBuffer c,VkBuffer buffer,
 VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirect(VkCommandBuffer c,VkBuffer buffer,
     VkDeviceSize offset,uint32_t count,uint32_t stride)
 {
-    if(!indirect_draw_valid(c,buffer,offset,count,stride,
-        sizeof(VkDrawIndexedIndirectCommand))){invalid(c);return;}
+    if(!indirect_draw_valid(c,buffer,offset,count,stride,PS5VK_DRAW_INDEXED_INDIRECT))
+        {invalid(c);return;}
     vkCmdDrawIndexed(c,0,0,0,0,0);if(!c || c->state!=PS5VK_RECORDING)return;
     struct ps5vk_operation *op=&c->operations[c->operation_count-1];
     op->type=PS5VK_DRAW_INDEXED_INDIRECT;op->indirect_buffer=buffer;

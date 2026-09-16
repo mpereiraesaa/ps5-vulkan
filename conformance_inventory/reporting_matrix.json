@@ -236,7 +236,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "firstInstance must be zero (src/vk_indirect.c)",
+      "detail": "firstInstance must be zero unless the feature is enabled on the device (src/vk_indirect.c)",
       "feature": "drawIndirectFirstInstance",
       "kind": "feature",
       "profile": "graphics",
@@ -953,7 +953,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "firstInstance must be zero (src/vk_indirect.c)",
+      "detail": "firstInstance must be zero unless the feature is enabled on the device (src/vk_indirect.c)",
       "feature": "drawIndirectFirstInstance",
       "kind": "feature",
       "profile": "compute",
