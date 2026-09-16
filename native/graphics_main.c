@@ -1343,7 +1343,9 @@ static void multiview_view_probe(VkDevice d)
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_MULTIVIEW_VIEW_LAYER layer=%u view=%u pixels=%llu color_expected=%llu "
             "color_other_view=%llu color_other=%llu depth_expected=%llu depth_other=%llu "
-            "depth_remainder_clear=%llu depth_remainder_unknown=%llu",
+            "depth_remainder_clear=%llu depth_remainder_unknown=%llu "
+            "color_first_foreign=%02x%02x%02x%02x color_foreign_views=%02x color_foreign_view=%u "
+            "depth_foreign_views=%02x depth_foreign_view=%u",
             layer,ps5vk_multiview_witness_view(layer),(unsigned long long)witness.layer[layer].pixels,
             (unsigned long long)witness.layer[layer].expected,
             (unsigned long long)witness.layer[layer].other_view,
@@ -1351,7 +1353,11 @@ static void multiview_view_probe(VkDevice d)
             (unsigned long long)witness.layer[layer].depth_expected,
             (unsigned long long)witness.layer[layer].depth_other,
             (unsigned long long)witness.layer[layer].depth_clear,
-            (unsigned long long)witness.layer[layer].depth_unknown);
+            (unsigned long long)witness.layer[layer].depth_unknown,
+            witness.layer[layer].color_first_foreign[0],witness.layer[layer].color_first_foreign[1],
+            witness.layer[layer].color_first_foreign[2],witness.layer[layer].color_first_foreign[3],
+            witness.layer[layer].color_foreign_mask,witness.layer[layer].color_foreign_view,
+            witness.layer[layer].depth_foreign_mask,witness.layer[layer].depth_foreign_view);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_MULTIVIEW_VIEW_PROBE views=%u mask=%08x framebuffer_layers=1 extent=%u layers_per_image=%u "
         "color=detiled depth=footprint_count load_op=dont_care depth_words_per_layer=%llu guard_layer=%u "

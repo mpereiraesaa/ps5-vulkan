@@ -50,6 +50,13 @@ uint32_t ps5vk_multiview_witness_clear_word(void);
 struct ps5vk_multiview_layer_witness {
     uint64_t pixels, expected, other_view, other;
     uint64_t depth_expected, depth_other, depth_clear, depth_unknown;
+    /* Fail-closed diagnosis, so a foreign colour is identifiable rather than
+     * guessed at: the first detiled pixel that was not this layer's own, the set
+     * of foreign views whose colour or depth was seen, and the single view index
+     * when everything foreign belonged to the same candidate (0xff otherwise). */
+    uint32_t color_foreign_mask, color_foreign_view;
+    uint8_t color_first_foreign[4], color_first_foreign_set;
+    uint32_t depth_foreign_mask, depth_foreign_view;
 };
 
 struct ps5vk_multiview_witness {

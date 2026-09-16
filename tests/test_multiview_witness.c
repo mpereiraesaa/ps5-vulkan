@@ -90,7 +90,10 @@ int main(void)
     /* The expectations are exact, pairwise distinct, and the clear word is the
      * one a depth-1.0 clear writes. */
     const uint8_t red[PS5VK_MULTIVIEW_WITNESS_VIEWS] = {16, 32, 48, 64, 80, 96};
-    const uint8_t green[PS5VK_MULTIVIEW_WITNESS_VIEWS] = {0, 32, 64, 96, 128, 160};
+    /* Green is UNORM8 round-to-nearest of view/8, so view 5 is 159 and not 160:
+     * 0.625 * 255 = 159.375. The first hardware run's oracle said 160, and this
+     * regression is what keeps that off-by-one from coming back. */
+    const uint8_t green[PS5VK_MULTIVIEW_WITNESS_VIEWS] = {0, 32, 64, 96, 128, 159};
     const uint32_t depth[PS5VK_MULTIVIEW_WITNESS_VIEWS] = {
         0x3d800000u, 0x3e000000u, 0x3e400000u, 0x3e800000u, 0x3ea00000u, 0x3ec00000u};
     assert(ps5vk_multiview_witness_clear_word() == 0x3f800000u);
@@ -107,6 +110,17 @@ int main(void)
             assert(rgba[0] != cb[0] && rgba[1] != cb[1]);
             assert(depth[view] != depth[other]);
         }
+    }
+    /* The exact colour of view 5, byte for byte, and the near-miss case: a layer
+     * filled with it is correct after the fix. */
+    {
+        uint8_t rgba[4];
+        ps5vk_multiview_witness_color(5u, rgba);
+        assert(rgba[0] == 96u && rgba[1] == 159u && rgba[2] == 128u && rgba[3] == 255u);
+        struct ps5vk_multiview_witness v5 = {0};
+        for (uint32_t i = 0; i < PIXELS; ++i)
+            ps5vk_multiview_witness_color_pixel(&v5, 5u, rgba);
+        assert(v5.layer[5].expected == PIXELS && !v5.layer[5].other_view && !v5.layer[5].other);
     }
 
     /* A correct scene verifies. Its depth words were fed in the PREFIX order and
@@ -179,13 +193,49 @@ int main(void)
     assert(!ps5vk_multiview_witness_verify(&alias, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));
     assert(alias.layer[2].expected == PIXELS / 2u && alias.layer[2].other_view == PIXELS / 2u);
 
+    /* A layer holding exactly ONE other view's colour names that view, byte for
+     * byte, which is the diagnostic the next run will use: layer 2 filled with
+     * view 5's colour must report mask 0x20 and view 5. */
+    struct ps5vk_multiview_witness foreign_color = correct();
+    foreign_color.layer[2].pixels = foreign_color.layer[2].expected =
+        foreign_color.layer[2].other_view = foreign_color.layer[2].other = 0;
+    foreign_color.layer[2].color_foreign_mask = 0;
+    foreign_color.layer[2].color_first_foreign_set = 0;
+    for (uint32_t i = 0; i < PIXELS; ++i)
+        ps5vk_multiview_witness_color_pixel(&foreign_color, 2u, color_of(5u));
+    assert(!ps5vk_multiview_witness_verify(&foreign_color, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));
+    assert(foreign_color.layer[2].other_view == PIXELS && !foreign_color.layer[2].expected);
+    assert(foreign_color.layer[2].color_foreign_mask == (UINT32_C(1) << 5) &&
+           foreign_color.layer[2].color_foreign_view == 5u);
+    assert(foreign_color.layer[2].color_first_foreign_set &&
+           foreign_color.layer[2].color_first_foreign[0] == 96u &&
+           foreign_color.layer[2].color_first_foreign[1] == 159u &&
+           foreign_color.layer[2].color_first_foreign[2] == 128u);
+
+    /* A colour no view produces is `other`, and it must NOT be reported as a
+     * foreign view: the diagnosis has to stay honest about what it saw. */
+    struct ps5vk_multiview_witness unclaimed = correct();
+    unclaimed.layer[4].pixels = unclaimed.layer[4].expected = 0;
+    unclaimed.layer[4].color_foreign_mask = 0;
+    unclaimed.layer[4].color_first_foreign_set = 0;
+    for (uint32_t i = 0; i < PIXELS; ++i)
+        ps5vk_multiview_witness_color_pixel(&unclaimed, 4u,
+            (const uint8_t[]){0x11u, 0x22u, 0x33u, 0xffu});
+    assert(!ps5vk_multiview_witness_verify(&unclaimed, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));
+    assert(unclaimed.layer[4].other == PIXELS && !unclaimed.layer[4].other_view &&
+           !unclaimed.layer[4].color_foreign_mask);
+    assert(unclaimed.layer[4].color_first_foreign_set &&
+           unclaimed.layer[4].color_first_foreign[0] == 0x11u);
+
     /* A depth word belonging to another view, and one belonging to nobody. */
     struct ps5vk_multiview_witness foreign = correct();
     foreign.layer[1].depth_expected -= 1u;
     foreign.layer[1].depth_clear += 1u;
     ps5vk_multiview_witness_depth(&foreign, 1u, ps5vk_multiview_witness_depth_word(4u));
     assert(!ps5vk_multiview_witness_verify(&foreign, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));
-    assert(foreign.layer[1].depth_other == 1u && !foreign.layer[1].depth_unknown);
+    assert(foreign.layer[1].depth_other == 1u && !foreign.layer[1].depth_unknown &&
+           foreign.layer[1].depth_foreign_mask == (UINT32_C(1) << 4) &&
+           foreign.layer[1].depth_foreign_view == 4u);
     struct ps5vk_multiview_witness unknown = correct();
     ps5vk_multiview_witness_depth(&unknown, 3u, 0x12345678u);
     assert(!ps5vk_multiview_witness_verify(&unknown, PS5VK_MULTIVIEW_WITNESS_VIEWS, FOOTPRINT_WORDS));

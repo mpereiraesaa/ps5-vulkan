@@ -6,18 +6,29 @@ uint32_t ps5vk_multiview_witness_view(uint32_t layer)
     return layer;
 }
 
+/* float -> UNORM8 exactly as a target conversion does it: multiply by 255 and
+ * round to nearest. This matters: view 5's green is 5/8 = 0.625 and
+ * 0.625 * 255 = 159.375, which rounds to 159 and NOT to 160 - the first hardware
+ * run's oracle said 160 and counted that one byte as a foreign colour. */
+static uint8_t unorm8(float value)
+{
+    if (!(value > 0.0f)) return 0;
+    if (value >= 1.0f) return 255;
+    return (uint8_t)(value * 255.0f + 0.5f);
+}
+
 /* The witness vertex stage's formula, in the canonical RGBA byte order the
  * readback boundary converts to: red = (view+1)/16, green = view/8, blue = 1/2,
- * alpha = 1. Those are 16, 32, 48, 64, 80 and 96 for red and 0, 32, 64, 96, 128
- * and 160 for green across the six views, so every view has a colour no other
- * view can produce. */
+ * alpha = 1. Through unorm8 that is 16, 32, 48, 64, 80, 96 for red and
+ * 0, 32, 64, 96, 128, 159 for green across the six views, so every view still has
+ * a colour no other view can produce. */
 void ps5vk_multiview_witness_color(uint32_t view, uint8_t rgba[4])
 {
     if (!rgba) return;
     if (view >= PS5VK_MULTIVIEW_WITNESS_VIEWS) { memset(rgba, 0, 4); return; }
-    rgba[0] = (uint8_t)((view + 1u) * 16u);
-    rgba[1] = (uint8_t)(view * 32u);
-    rgba[2] = 128u;
+    rgba[0] = unorm8((float)(view + 1u) / 16.0f);
+    rgba[1] = unorm8((float)view / 8.0f);
+    rgba[2] = unorm8(0.5f);
     rgba[3] = 255u;
 }
 
@@ -53,6 +64,13 @@ void ps5vk_multiview_witness_color_pixel(struct ps5vk_multiview_witness *w, uint
     ps5vk_multiview_witness_color(view, expected);
     if (same_color(rgba, expected)) ++layer->expected;
     else {
+        /* The first pixel of this layer that was not its own, whatever it turned
+         * out to be, so the diagnostic is complete even for a colour no view
+         * claims. */
+        if (!layer->color_first_foreign_set) {
+            memcpy(layer->color_first_foreign, rgba, 4);
+            layer->color_first_foreign_set = 1;
+        }
         /* Any other view's colour is aliasing, not a shading difference: the
          * six colours are distinct by construction. */
         int foreign = 0;
@@ -60,7 +78,13 @@ void ps5vk_multiview_witness_color_pixel(struct ps5vk_multiview_witness *w, uint
             if (other == view) continue;
             uint8_t candidate[4];
             ps5vk_multiview_witness_color(other, candidate);
-            if (same_color(rgba, candidate)) { foreign = 1; break; }
+            if (same_color(rgba, candidate)) {
+                foreign = 1;
+                layer->color_foreign_mask |= UINT32_C(1) << other;
+                layer->color_foreign_view = layer->color_foreign_mask == (UINT32_C(1) << other) ?
+                    other : 0xffu;
+                break;
+            }
         }
         if (foreign) ++layer->other_view; else ++layer->other;
     }
@@ -77,7 +101,13 @@ void ps5vk_multiview_witness_depth(struct ps5vk_multiview_witness *w, uint32_t v
         int foreign = 0;
         for (uint32_t other = 0; other < PS5VK_MULTIVIEW_WITNESS_VIEWS; ++other) {
             if (other == view) continue;
-            if (word == ps5vk_multiview_witness_depth_word(other)) { foreign = 1; break; }
+            if (word == ps5vk_multiview_witness_depth_word(other)) {
+                foreign = 1;
+                layer->depth_foreign_mask |= UINT32_C(1) << other;
+                layer->depth_foreign_view = layer->depth_foreign_mask == (UINT32_C(1) << other) ?
+                    other : 0xffu;
+                break;
+            }
         }
         if (foreign) ++layer->depth_other; else ++layer->depth_unknown;
     }
