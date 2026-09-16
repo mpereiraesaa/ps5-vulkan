@@ -111,10 +111,10 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
              * block the draw emitter fills from the recorded draw. ViewIndex is
              * the multiview one: the compiler declares its slot in metadata v14,
              * and the draw expansion hands each view's index to it. All of them
-             * are vertex-stage inputs rather than vertex attributes, so they
-             * never enter the input map, none of them may be read by the
-             * fragment stage, and anything else stays refused. */
-            if(d->location!=~0u || model!=0 || d->storage!=1 ||
+             * are inputs rather than vertex attributes. Fragment ViewIndex is
+             * also delivered through its own declared user-SGPR slot; other
+             * fragment built-ins are outside this profile. */
+            if(d->location!=~0u || (model!=0 && !(model==4 && d->builtin==4440)) || d->storage!=1 ||
                (d->builtin!=42 && d->builtin!=43 && d->builtin!=4424 &&
                 d->builtin!=4425 && d->builtin!=4426 && d->builtin!=4440) ||
                type->op!=21 || type->count!=32)goto done;
