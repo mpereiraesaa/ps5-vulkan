@@ -71,10 +71,31 @@ static inline uint32_t ps5vk_draw_index_value(const struct ps5vk_operation *op)
     return 0u;
 }
 
+/* The ViewIndex a shader must observe for one recorded draw. This profile
+ * advertises no multiview, so every draw it executes renders view zero and the
+ * pinned specification makes that the value of the built-in. The compiler
+ * declares a slot only when the vertex stage really reads gl_ViewIndex, so a
+ * shader that reads it gets the specified zero instead of whatever the
+ * register happened to hold. A multiview slice must pass the view being
+ * rendered here rather than this constant. */
+static inline uint32_t ps5vk_draw_view_index_value(const struct ps5vk_operation *op)
+{
+    (void)op;
+    return 0u;
+}
+
 /* The public advertisement gate: false until the evidence for the supported
  * direct/single-indirect contract exists (the upstream CTS leaves plus a native
  * witness). Multi-draw is a separate T03 expansion and does not gate it. */
 static inline uint32_t ps5vk_draw_index_supported(void)
+{
+    return 0u;
+}
+
+/* Multiview is not advertised, so no draw carries a non-zero view index and
+ * nothing here waits on it; this stays false until the promotion slice reports
+ * the feature and every completion-gate axis passes. */
+static inline uint32_t ps5vk_draw_view_index_supported(void)
 {
     return 0u;
 }

@@ -92,7 +92,7 @@ int main(void)
     assert(ps5vk_native_emit_textured_draw(&cursor,64,&state,&state,sizeof(state),&op,
         0x123400,0x567800,0x900000,NULL,NULL)==VK_SUCCESS && cursor==commands+18);
     state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,.fragment_count=2,
-        .base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.draw_id_slot=UINT32_MAX,
+        .base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.draw_id_slot=UINT32_MAX,.view_index_slot=UINT32_MAX,
         .lds_slot=1,.lds_value=0,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     state.sh_count=10;cursor=commands;calls=0;
@@ -106,7 +106,7 @@ int main(void)
      * requires exactly this for the non-indexed base_vertex cases and for
      * base_instance, so a change here must be deliberate. */
     state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=3,.fragment_count=2,
-        .base_vertex_slot=0,.start_instance_slot=1,.draw_id_slot=UINT32_MAX,.lds_slot=2,.lds_value=0,
+        .base_vertex_slot=0,.start_instance_slot=1,.draw_id_slot=UINT32_MAX,.view_index_slot=UINT32_MAX,.lds_slot=2,.lds_value=0,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     state.sh_count=10;cursor=commands;calls=0;
     assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)==VK_SUCCESS);
@@ -118,7 +118,7 @@ int main(void)
      * the block's zero fill, so a collision with any other declared slot is a
      * fail-closed error rather than a silent overwrite. */
     state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=4,.fragment_count=2,
-        .base_vertex_slot=0,.start_instance_slot=1,.draw_id_slot=2,.lds_slot=3,.lds_value=0,
+        .base_vertex_slot=0,.start_instance_slot=1,.draw_id_slot=2,.view_index_slot=UINT32_MAX,.lds_slot=3,.lds_value=0,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     state.sh_count=10;cursor=commands;calls=0;
     assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)==VK_SUCCESS);
@@ -137,7 +137,7 @@ int main(void)
     /* The integer vertex-format probe uses the real runtime vertex-table ABI. */
     const struct ps5vk_runtime_draw_abi vertex_format_abi={.enabled=1,.vertex_count=3,.fragment_count=2,
         .base_vertex_slot=1,.start_instance_slot=UINT32_MAX,
-        .draw_id_slot=UINT32_MAX,
+        .draw_id_slot=UINT32_MAX,.view_index_slot=UINT32_MAX,
         .vertex_buffer_valid=1,.vertex_buffer_slot=0,.vertex_buffer_usage_mask=1,.lds_slot=2,.lds_value=0,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     state.runtime=vertex_format_abi;
@@ -153,7 +153,7 @@ int main(void)
      * still comes from the fetched index buffer instead of a DrawIndexAuto. */
     const struct ps5vk_runtime_draw_abi indexed_abi={.enabled=1,.vertex_count=4,.fragment_count=2,
         .base_vertex_slot=2,.start_instance_slot=3,
-        .draw_id_slot=UINT32_MAX,
+        .draw_id_slot=UINT32_MAX,.view_index_slot=UINT32_MAX,
         .vertex_buffer_valid=1,.vertex_buffer_slot=0,.vertex_buffer_usage_mask=1,.lds_slot=1,.lds_value=0,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     const uint32_t no_tables[4]={0,0,0,0};
@@ -230,7 +230,7 @@ int main(void)
     state.runtime.fragment_descriptor_valid[0]=0;
     op.type=PS5VK_DRAW;
     state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,.fragment_count=2,
-        .base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.draw_id_slot=UINT32_MAX,
+        .base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.draw_id_slot=UINT32_MAX,.view_index_slot=UINT32_MAX,
         .lds_slot=1,.lds_value=0,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     cursor=commands;calls=0;state.runtime.lds_slot=0;

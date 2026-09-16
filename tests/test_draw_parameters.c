@@ -51,24 +51,24 @@ int main(void)
      * compiler-declared slots, and nothing else. */
     struct ps5vk_runtime_draw_abi abi = {
         .enabled = 1, .vertex_count = 3, .fragment_count = 1,
-        .base_vertex_slot = 0, .start_instance_slot = 1, .draw_id_slot = UINT32_MAX,
+        .base_vertex_slot = 0, .start_instance_slot = 1, .draw_id_slot = UINT32_MAX, .view_index_slot = UINT32_MAX,
         .lds_slot = 2, .lds_value = 0,
         .vertex_push_slot = UINT32_MAX, .fragment_push_slot = UINT32_MAX};
     uint32_t vertex[16], pixel[16];
     memset(vertex, 0, sizeof(vertex));
     memset(pixel, 0, sizeof(pixel));
     assert(ps5vk_runtime_draw_values_sets(&abi, ps5vk_draw_base_vertex(&draw),
-        ps5vk_draw_base_instance(&draw), ps5vk_draw_index_value(&draw), 0, 0, NULL,
+        ps5vk_draw_base_instance(&draw), ps5vk_draw_index_value(&draw), ps5vk_draw_view_index_value(&draw), 0, 0, NULL,
         vertex, pixel) == -1);
     assert(ps5vk_runtime_draw_values_sets(&abi, ps5vk_draw_base_vertex(&draw),
-        ps5vk_draw_base_instance(&draw), ps5vk_draw_index_value(&draw), 0, 0,
+        ps5vk_draw_base_instance(&draw), ps5vk_draw_index_value(&draw), ps5vk_draw_view_index_value(&draw), 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == 0);
     assert(vertex[abi.base_vertex_slot] == 11u);
     assert(vertex[abi.start_instance_slot] == 5u);
 
     memset(vertex, 0, sizeof(vertex));
     assert(ps5vk_runtime_draw_values_sets(&abi, ps5vk_draw_base_vertex(&indexed),
-        ps5vk_draw_base_instance(&indexed), ps5vk_draw_index_value(&indexed), 0, 0,
+        ps5vk_draw_base_instance(&indexed), ps5vk_draw_index_value(&indexed), ps5vk_draw_view_index_value(&indexed), 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == 0);
     assert(vertex[abi.base_vertex_slot] == 2147483647u);
     assert(vertex[abi.start_instance_slot] == 7u);
@@ -83,25 +83,52 @@ int main(void)
     assert(ps5vk_draw_index_value(&draw) == 0u);
     assert(ps5vk_draw_index_value(&indexed) == 0u);
     abi.draw_id_slot = 1; /* collides with the start-instance slot */
-    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0, 0,
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0u, 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == -1);
     abi.draw_id_slot = 2; /* collides with the LDS slot */
-    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0, 0,
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0u, 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == -1);
     abi.draw_id_slot = 0;
-    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0, 0,
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0u, 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == -1);
     abi.draw_id_slot = 3; /* outside the declared vertex block */
-    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0, 0,
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0u, 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == -1);
     abi.draw_id_slot = 0;
     abi.base_vertex_slot = UINT32_MAX;
     memset(vertex, 0, sizeof(vertex));
-    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0, 0,
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 3u, 0u, 0, 0,
         (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == 0);
     assert(vertex[0] == 3u); /* the DrawIndex word reaches the block */
     assert(vertex[1] == 5u);
     assert(ps5vk_draw_index_supported() == 0u);
+
+    /* ViewIndex delivery: the compiler declares a slot only when the vertex
+     * stage really reads gl_ViewIndex, and this profile advertises no
+     * multiview, so the value delivered through it is the specification's zero
+     * rather than whatever the register happened to hold. The slot obeys the
+     * same range and collision rules as every other word of the block. */
+    assert(ps5vk_draw_view_index_value(&draw) == 0u);
+    assert(ps5vk_draw_view_index_value(&indexed) == 0u);
+    assert(ps5vk_draw_view_index_supported() == 0u);
+    abi.draw_id_slot = UINT32_MAX;
+    abi.view_index_slot = 1; /* collides with the start-instance slot */
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 0u, 0u, 0, 0,
+        (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == -1);
+    abi.view_index_slot = 2; /* collides with the LDS slot */
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 0u, 0u, 0, 0,
+        (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == -1);
+    abi.view_index_slot = 3; /* outside the declared vertex block */
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 0u, 0u, 0, 0,
+        (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == -1);
+    abi.view_index_slot = 0;
+    abi.base_vertex_slot = UINT32_MAX;
+    memset(vertex, 0, sizeof(vertex));
+    assert(ps5vk_runtime_draw_values_sets(&abi, 11u, 5u, 0u,
+        ps5vk_draw_view_index_value(&draw), 0, 0,
+        (const uint32_t[4]){0, 0, 0, 0}, vertex, pixel) == 0);
+    assert(vertex[0] == 0u); /* the ViewIndex word reaches the block */
+    assert(vertex[1] == 5u);
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
     _Static_assert(offsetof(struct ps5vk_runtime_draw_abi, base_vertex_slot) !=
                    offsetof(struct ps5vk_runtime_draw_abi, start_instance_slot),
