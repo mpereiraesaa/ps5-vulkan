@@ -183,25 +183,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
         const VkSubpassDependency *dep = &info->pDependencies[i];
         const VkBool32 src_external = dep->srcSubpass == VK_SUBPASS_EXTERNAL;
         const VkBool32 dst_external = dep->dstSubpass == VK_SUBPASS_EXTERNAL;
-        /* Endpoints must exist, at least one end must be a real subpass, and a
-         * subpass-to-subpass edge must point FORWARD: a backward edge or a
-         * self-dependency would describe execution this driver does not
-         * perform, so it is refused rather than stored and ignored. */
+        /* Forward dependencies are serviced by the native subpass boundary.
+         * A view-local, BY_REGION self-dependency declares the scope available
+         * to an in-pass barrier; it does not itself execute a barrier. The
+         * command recorder still checks every actual in-pass operation. */
+        const VkBool32 self = !src_external && !dst_external &&
+            dep->srcSubpass == dep->dstSubpass;
+        const VkDependencyFlags local_region =
+            VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_VIEW_LOCAL_BIT;
         if ((!src_external && dep->srcSubpass >= info->subpassCount) ||
             (!dst_external && dep->dstSubpass >= info->subpassCount) ||
             (src_external && dst_external) ||
-            (!src_external && !dst_external && dep->srcSubpass >= dep->dstSubpass) ||
-            (dep->dependencyFlags & ~VK_DEPENDENCY_BY_REGION_BIT) ||
+            (!src_external && !dst_external && dep->srcSubpass > dep->dstSubpass) ||
+            (self && (dep->dependencyFlags & local_region) != local_region) ||
+            (dep->dependencyFlags & ~local_region) ||
+            ((dep->dependencyFlags & VK_DEPENDENCY_VIEW_LOCAL_BIT) &&
+             (!multiview || src_external || dst_external)) ||
             !dep->srcStageMask || !dep->dstStageMask) return VK_ERROR_FEATURE_NOT_PRESENT;
     }
-    /* The multiview obligations are checked against the pass this call is
-     * creating, after the dependencies they refer to are themselves valid.
-     * This profile advertises no multiview feature, so every accepted view mask
-     * must be zero and the same function is exercised with the feature enabled
-     * by the host regressions. The private diagnostic gate is the only thing
-     * that can pass a real feature state instead, and it does not touch what the
-     * device reports: the shipping build keeps multiview disabled with a zero
-     * view limit, and a non-zero mask stays refused there. */
+    /* Validate masks and view-local dependencies against the enabled device
+     * feature and measured view limit, after validating the dependency graph.
+     * Merely placing a multiview structure in pNext does not enable a feature. */
     struct ps5vk_render_pass_multiview owned_multiview = {0};
     if (multiview) {
         /* Shipping: a real view mask is accepted only on a device that ENABLED
@@ -307,10 +309,13 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t view_masks[PS5VK_MAX_SUBPASSES] = {0};
     int32_t view_offsets[PS5VK_MAX_DEPENDENCIES] = {0};
-    const uint32_t subpass_count = multiview->subpassCount;
-    const uint32_t dependency_count = multiview->dependencyCount;
-    for (uint32_t i = 0; i < subpass_count; ++i) view_masks[i] = multiview->pViewMasks[i];
-    for (uint32_t i = 0; i < dependency_count; ++i) view_offsets[i] = multiview->pViewOffsets[i];
+    /* Zero counts specify implicit zero masks/offsets for the whole pass.
+     * Normalize to the pass counts so view-local validation also runs when
+     * pViewOffsets is omitted, as in the upstream multiview constructor. */
+    const uint32_t subpass_count = info->subpassCount;
+    const uint32_t dependency_count = info->dependencyCount;
+    for (uint32_t i = 0; i < multiview->subpassCount; ++i) view_masks[i] = multiview->pViewMasks[i];
+    for (uint32_t i = 0; i < multiview->dependencyCount; ++i) view_offsets[i] = multiview->pViewOffsets[i];
     /* 02513: multiview is all-or-nothing for a render pass, so the masks are
      * either all zero (multiview disabled) or all non-zero. */
     unsigned non_zero = 0;

@@ -289,8 +289,7 @@ static void multiple_subpasses(struct VkDevice_T *d)
     subpasses[1].pDepthStencilAttachment = &depth;
 
     /* more subpasses than the profile executes */
-    VkSubpassDescription three[3] = {subpasses[0], subpasses[1], subpasses[0]};
-    info.subpassCount = 3; info.pSubpasses = three;
+    info.subpassCount = PS5VK_MAX_SUBPASSES + 1; info.pSubpasses = subpasses;
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     info.subpassCount = 0;
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
@@ -451,6 +450,61 @@ static void input_attachments(struct VkDevice_T *d)
     assert(d->graphics_objects == before);
 }
 
+static void six_view_subpass_chain(struct VkDevice_T *d)
+{
+    const uint32_t saved_features = d->enabled_features;
+    d->enabled_features |= PS5VK_FEATURE_MULTIVIEW;
+    VkAttachmentDescription attachment = {.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT, .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference color = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpasses[6];
+    VkSubpassDependency dependencies[6];
+    uint32_t masks[6];
+    for (uint32_t i=0; i<6; ++i) {
+        masks[i] = 1u << i;
+        subpasses[i] = (VkSubpassDescription){.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .colorAttachmentCount=1, .pColorAttachments=&color};
+        dependencies[i] = (VkSubpassDependency){.srcSubpass=i, .dstSubpass=i<5 ? i+1 : i,
+            .srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            .srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstAccessMask=VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+            .dependencyFlags=VK_DEPENDENCY_VIEW_LOCAL_BIT |
+                (i==5 ? VK_DEPENDENCY_BY_REGION_BIT : 0)};
+    }
+    /* The pinned CTS omits offsets (count zero): every dependency still has
+     * an implicit zero offset and must still undergo view-local validation. */
+    VkRenderPassMultiviewCreateInfo mv = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
+        .subpassCount=6, .pViewMasks=masks};
+    VkRenderPassCreateInfo info = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext=&mv, .attachmentCount=1, .pAttachments=&attachment,
+        .subpassCount=6, .pSubpasses=subpasses, .dependencyCount=6,
+        .pDependencies=dependencies};
+    VkRenderPass pass = NULL;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass)==VK_SUCCESS);
+    assert(pass->subpass_count==6 && pass->multiview.dependency_count==6);
+    for (uint32_t i=0; i<6; ++i) {
+        assert(pass->multiview.view_masks[i]==(1u<<i));
+        assert(pass->multiview.view_offsets[i]==0);
+        masks[i]=0;
+    }
+    assert(pass->multiview.view_masks[5]==32); /* owned, not borrowed */
+    vkDestroyRenderPass(d, pass, NULL);
+    assert(vkCreateRenderPass(d, &info, NULL, &pass)==VK_ERROR_FEATURE_NOT_PRESENT);
+    for (uint32_t i=0; i<6; ++i) masks[i]=1u<<i;
+    dependencies[5].dependencyFlags=VK_DEPENDENCY_VIEW_LOCAL_BIT;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass)==VK_ERROR_FEATURE_NOT_PRESENT);
+    dependencies[5].dependencyFlags |= VK_DEPENDENCY_BY_REGION_BIT;
+    dependencies[4].dstSubpass=3;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass)==VK_ERROR_FEATURE_NOT_PRESENT);
+    dependencies[4].dstSubpass=5;
+    d->enabled_features=saved_features;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass)==VK_ERROR_FEATURE_NOT_PRESENT);
+}
+
 int main(void)
 {
     struct VkDevice_T d = {0};
@@ -553,5 +607,6 @@ int main(void)
     multiple_subpasses(&d);
     multiview_model(&d);
     input_attachments(&d);
+    six_view_subpass_chain(&d);
     puts("Render pass owned subpass/attachment/dependency data: host only; no execution");
 }
