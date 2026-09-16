@@ -630,6 +630,25 @@ static void lifecycle(void)
             if (!strcmp(extensions[n].extensionName, VK_KHR_MULTIVIEW_EXTENSION_NAME))
                 enumerated = 1;
         assert(enumerated);
+        /* Enumeration follows the Vulkan two-call contract: a partial buffer is
+         * reported as INCOMPLETE with the count of what actually fitted, and an
+         * empty query reports the full count. */
+        {
+            const uint32_t extra = (uint32_t)(PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                PS5VK_FEATURE_STORAGE_BUFFER_16BIT | PS5VK_FEATURE_SHADER_DRAW_PARAMETERS);
+            const uint32_t with_extra = p->platform.supported_features | extra;
+            p->platform.supported_features = with_extra;
+            uint32_t total = 0;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &total, NULL) == VK_SUCCESS);
+            assert(total >= 5);
+            uint32_t partial = 2;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &partial, extensions) == VK_INCOMPLETE);
+            assert(partial == 2);
+            for (uint32_t n = 0; n < partial; ++n) assert(extensions[n].extensionName[0]);
+            uint32_t none = 0;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &none, extensions) == VK_INCOMPLETE && !none);
+            p->platform.supported_features = with_extra & ~extra;
+        }
         VkPhysicalDeviceMultiviewFeatures mv_features = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES};
         VkPhysicalDeviceFeatures2 features2 = {
