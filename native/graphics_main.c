@@ -1179,9 +1179,16 @@ static void multiview_view_probe(VkDevice d)
         .attachmentCount=2,.pAttachments=fb_attachments,
         .width=PS5VK_MULTIVIEW_WITNESS_EXTENT,.height=PS5VK_MULTIVIEW_WITNESS_EXTENT,.layers=1};
     VkFramebuffer fb; CHECK(vkCreateFramebuffer(d,&fi,NULL,&fb));
-    const struct ps5vk_graphics_module_key modules[2]={
+    struct ps5vk_graphics_module_key modules[2]={
         {.words=ps5vk_runtime_view_index,.word_count=sizeof(ps5vk_runtime_view_index)/4,.entry="main"},
         {.words=ps5vk_runtime_fragment,.word_count=sizeof(ps5vk_runtime_fragment)/4,.entry="main"}};
+#if PS5VK_MULTIVIEW_INSTANCE_PROBE
+    /* The instance witness: the same six-view scene, with the vertex stage that
+     * also bit-tests gl_InstanceIndex against the pinned floor. */
+    modules[0]=(struct ps5vk_graphics_module_key){
+        .words=ps5vk_runtime_view_index_instance,
+        .word_count=sizeof(ps5vk_runtime_view_index_instance)/4,.entry="main"};
+#endif
     VkShaderModule shaders[2];
     for (unsigned j=0;j<2;++j) {
         VkShaderModuleCreateInfo si={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1233,6 +1240,23 @@ static void multiview_view_probe(VkDevice d)
     if(!pass->multiview.present || pass->multiview.subpass_count!=1 ||
        pass->multiview.view_masks[0]!=PS5VK_MULTIVIEW_WITNESS_MASK)
         fail("multiview-witness-pass-mask",-1);
+    /* The instance witness pins its whole input in the probe, before anything is
+     * recorded: EXACTLY one instance whose firstInstance is the floor this slice
+     * is about, and the same value the oracle and the shader bit-test agree on.
+     * A mismatch fails here, with no submission. */
+    const uint32_t first_instance=
+#if PS5VK_MULTIVIEW_INSTANCE_PROBE
+        UINT32_C(0x07ffffff);
+#else
+        0u;
+#endif
+    const uint32_t instance_count=1u;
+#if PS5VK_MULTIVIEW_INSTANCE_PROBE
+    if(first_instance!=ps5vk_multiview_witness_instance() ||
+       !ps5vk_multiview_witness_instance_exact(first_instance) ||
+       (uint32_t)(float)first_instance==first_instance)
+        fail("multiview-witness-instance-pin",-1);
+#endif
     uint32_t views[PS5VK_MULTIVIEW_WITNESS_VIEWS],view_count=0;
     if(ps5vk_native_view_expand(PS5VK_MULTIVIEW_WITNESS_MASK,views,
         PS5VK_MULTIVIEW_WITNESS_VIEWS,&view_count)!=VK_SUCCESS ||
@@ -1277,7 +1301,12 @@ static void multiview_view_probe(VkDevice d)
         .clearValueCount=2,.pClearValues=clears};
     vkCmdBeginRenderPass(cb,&rbi,VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
-    vkCmdDraw(cb,3,1,0,0);
+    /* Exactly one instance, at the pinned first instance: no multi-instance draw
+     * and no other value is recorded in this scene. */
+    vkCmdDraw(cb,3,instance_count,0,first_instance);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_MULTIVIEW_VIEW_DRAW vertices=3 instance_count=%u first_instance=%08x",
+        instance_count,first_instance);
     vkCmdEndRenderPass(cb);
     CHECK(vkEndCommandBuffer(cb));
     /* Exactly one draw: the six passes over the subpass are the backend's
@@ -1345,7 +1374,7 @@ static void multiview_view_probe(VkDevice d)
             "color_other_view=%llu color_other=%llu depth_expected=%llu depth_other=%llu "
             "depth_remainder_clear=%llu depth_remainder_unknown=%llu "
             "color_first_foreign=%02x%02x%02x%02x color_foreign_views=%02x color_foreign_view=%u "
-            "depth_foreign_views=%02x depth_foreign_view=%u",
+            "depth_foreign_views=%02x depth_foreign_view=%u instance_failed=%llu",
             layer,ps5vk_multiview_witness_view(layer),(unsigned long long)witness.layer[layer].pixels,
             (unsigned long long)witness.layer[layer].expected,
             (unsigned long long)witness.layer[layer].other_view,
@@ -1357,15 +1386,22 @@ static void multiview_view_probe(VkDevice d)
             witness.layer[layer].color_first_foreign[0],witness.layer[layer].color_first_foreign[1],
             witness.layer[layer].color_first_foreign[2],witness.layer[layer].color_first_foreign[3],
             witness.layer[layer].color_foreign_mask,witness.layer[layer].color_foreign_view,
-            witness.layer[layer].depth_foreign_mask,witness.layer[layer].depth_foreign_view);
+            witness.layer[layer].depth_foreign_mask,witness.layer[layer].depth_foreign_view,
+            (unsigned long long)witness.layer[layer].instance_failed);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_MULTIVIEW_VIEW_PROBE views=%u mask=%08x framebuffer_layers=1 extent=%u layers_per_image=%u "
         "color=detiled depth=footprint_count load_op=dont_care depth_words_per_layer=%llu guard_layer=%u "
-        "guard_words=%llu guard_mismatches=%llu strict_verified=%d",
+        "guard_words=%llu guard_mismatches=%llu instance=%08x instance_count=%u instance_witness=%d strict_verified=%d",
         PS5VK_MULTIVIEW_WITNESS_VIEWS,PS5VK_MULTIVIEW_WITNESS_MASK,PS5VK_MULTIVIEW_WITNESS_EXTENT,
         PS5VK_MULTIVIEW_WITNESS_LAYERS,(unsigned long long)depth_words_per_layer,
         PS5VK_MULTIVIEW_WITNESS_VIEWS,(unsigned long long)witness.guard_words,
-        (unsigned long long)witness.guard_mismatches,verified);
+        (unsigned long long)witness.guard_mismatches,first_instance,instance_count,
+#if PS5VK_MULTIVIEW_INSTANCE_PROBE
+        1,
+#else
+        0,
+#endif
+        verified);
     if(!verified)fail("multiview-witness-verdict",-1);
 
     /* The queue is idle and the readback is done: the pool releases the command

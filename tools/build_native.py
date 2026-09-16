@@ -61,6 +61,14 @@ def main():
     multiview_view_probe = os.environ.get("PS5VK_MULTIVIEW_VIEW_PROBE", "0")
     if multiview_view_probe not in ("0", "1"):
         raise SystemExit("PS5VK_MULTIVIEW_VIEW_PROBE must be 0 or 1")
+    # The instance witness is the six-view scene with ONE instance whose
+    # firstInstance is the pinned floor 0x07ffffff: it needs the scene, so it
+    # cannot be selected on its own.
+    multiview_instance_probe = os.environ.get("PS5VK_MULTIVIEW_INSTANCE_PROBE", "0")
+    if multiview_instance_probe not in ("0", "1"):
+        raise SystemExit("PS5VK_MULTIVIEW_INSTANCE_PROBE must be 0 or 1")
+    if multiview_instance_probe == "1" and multiview_view_probe != "1":
+        raise SystemExit("PS5VK_MULTIVIEW_INSTANCE_PROBE requires PS5VK_MULTIVIEW_VIEW_PROBE=1")
     if multiview_view_probe == "1" and os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1":
         raise SystemExit("PS5VK_MULTIVIEW_VIEW_PROBE requires the runtime graphics profile (PS5VK_RUNTIME_GRAPHICS=1)")
     if multiview_view_probe == "1" and multiview_diagnostic != "1":
@@ -262,6 +270,7 @@ def main():
             common += ["-DPS5VK_LAYER_PROBE=" + layer_probe]
             common += ["-DPS5VK_MULTIVIEW_DIAGNOSTIC=" + multiview_diagnostic]
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
+            common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]
@@ -440,6 +449,12 @@ def main():
                 "guard_layer": 6, "diagnostic_gate": True}
             runtime_inputs = (("vertex", "runtime_view_index.vert"),
                               ("fragment", "runtime_triangle.frag"))
+            if multiview_instance_probe == "1":
+                manifest["graphics_shader_source"] = "owned-runtime-view-index-instance"
+                manifest["multiview_witness"]["instance_witness"] = {
+                    "first_instance": "0x07ffffff", "instance_count": 1}
+                runtime_inputs = (("vertex", "runtime_view_index_instance.vert"),
+                                  ("fragment", "runtime_triangle.frag"))
         if scissor_probe == "13":
             manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
             manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"

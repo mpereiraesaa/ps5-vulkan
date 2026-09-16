@@ -22,12 +22,14 @@ def main():
     # target environment, exactly as the compiler fork's own ViewIndex
     # regression is (opengnm-psbc Makefile's view-index rule). Every other
     # module keeps the default Vulkan 1.0 target this driver has always used.
-    module_flags = {"view_index": ("--target-env", "vulkan1.1")}
+    module_flags = {"view_index": ("--target-env", "vulkan1.1"),
+                    "view_index_instance": ("--target-env", "vulkan1.1")}
     modules = (
         ("experiments/graphics/runtime_vertex_bindings_probe.vert", "runtime_vertex_bindings_probe.vert.spv", "vertex_bindings"),
         ("experiments/graphics/runtime_triangle.vert", "runtime_triangle.vert.spv", "vertex"),
         ("experiments/graphics/runtime_triangle.frag", "runtime_triangle.frag.spv", "fragment"),
         ("experiments/graphics/runtime_view_index.vert", "runtime_view_index.vert.spv", "view_index"),
+        ("experiments/graphics/runtime_view_index_instance.vert", "runtime_view_index_instance.vert.spv", "view_index_instance"),
         ("experiments/graphics/runtime_vertex_sint.vert", "runtime_vertex_sint.vert.spv", "vertex_sint"),
         ("experiments/graphics/runtime_vertex_uint.vert", "runtime_vertex_uint.vert.spv", "vertex_uint"),
         ("experiments/graphics/runtime_vertex_unorm.vert", "runtime_vertex_unorm.vert.spv", "vertex_unorm"),
