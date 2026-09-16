@@ -14,7 +14,9 @@
  * rendered another view's data is visible as itself holding foreign pixels -
  * which is what aliasing between layers looks like - and the depth of each layer
  * is checked independently of its colour. */
-enum { PS5VK_MULTIVIEW_WITNESS_VIEWS = 6 };
+enum { PS5VK_MULTIVIEW_WITNESS_VIEWS = 6,
+       /* One layer of the witness is 64x64 pixels. */
+       PS5VK_MULTIVIEW_WITNESS_PIXELS = 64 * 64 };
 
 /* The view a witness layer is expected to hold: 0..5, the bits of a six-view
  * mask in ascending order. */
@@ -23,43 +25,61 @@ uint32_t ps5vk_multiview_witness_view(uint32_t layer);
 /* The colour of one view in canonical RGBA byte order, and its D32 word. */
 void ps5vk_multiview_witness_color(uint32_t view, uint8_t rgba[4]);
 uint32_t ps5vk_multiview_witness_depth_word(uint32_t view);
+/* The D32 word a render pass CLEAR of depth 1.0 writes, which is what a word of
+ * a layer's footprint holds when the view did not write it. */
+uint32_t ps5vk_multiview_witness_clear_word(void);
 
-/* What one layer of the readback contains. `pixels` counts the pixels examined,
- * `expected` those holding this layer's own colour, `other_view` those holding
- * another view's colour, and `other` everything else. Depth is counted the same
- * way and independently of colour. */
+/* What one layer of the readback contains.
+ *
+ * COLOUR is judged on the layer's 4096 pixels, but only after the real detile:
+ * a colour attachment here is a tiled 64KB_R_X surface, so reading its first
+ * words as if they were linear pixels is meaningless. `pixels`, `expected`,
+ * `other_view` and `other` count those detiled pixels.
+ *
+ * DEPTH is counted over the layer's WHOLE footprint, not per pixel. The witness
+ * vertex stage writes one UNIFORM depth per view and the pass clears with a
+ * uniform dword, so both are tiling-invariant and the count itself is the
+ * coverage proof: exactly 4096 words hold this view's depth, no word holds
+ * another view's, and every remaining word still holds the clear value. This
+ * driver does not have the 64KB_Z_X pixel equations, so no per-pixel depth
+ * coordinate is claimed anywhere. */
 struct ps5vk_multiview_layer_witness {
     uint64_t pixels, expected, other_view, other;
-    uint64_t depth_expected, depth_other, depth_unknown;
+    uint64_t depth_expected, depth_other, depth_clear, depth_unknown;
 };
 
 struct ps5vk_multiview_witness {
     uint32_t views;
     uint64_t pixels_per_layer;
+    uint64_t depth_footprint_words;
     uint64_t guard_words, guard_mismatches;
     struct ps5vk_multiview_layer_witness layer[PS5VK_MULTIVIEW_WITNESS_VIEWS];
     int strict_verified;
 };
 
-/* Classify one pixel of one layer. `rgba` is in canonical RGBA order (the
- * readback boundary converts the target's own byte order) and `depth` is the raw
- * D32 word exactly as it came back. */
-void ps5vk_multiview_witness_pixel(struct ps5vk_multiview_witness *w, uint32_t view,
-    const uint8_t rgba[4], uint32_t depth);
+/* Classify one DETILED colour pixel of one layer, in canonical RGBA order. */
+void ps5vk_multiview_witness_color_pixel(struct ps5vk_multiview_witness *w,
+    uint32_t view, const uint8_t rgba[4]);
+
+/* Classify one word of one layer's depth footprint: this view's depth, another
+ * view's depth, the clear value, or something unexplained. */
+void ps5vk_multiview_witness_depth(struct ps5vk_multiview_witness *w, uint32_t view,
+    uint32_t word);
 
 /* Fold one guard word: the part of a layer's storage the render must not touch,
  * including the trailing layer beyond the views the pass renders. */
 void ps5vk_multiview_witness_guard(struct ps5vk_multiview_witness *w, uint32_t word,
     uint32_t sentinel);
 
-/* The verdict. With every pixel of every layer classified and every guard word
- * folded in, a witness verifies only if each layer is FULLY covered by its own
- * colour, holds its own depth everywhere that colour landed, contains no pixel of
- * another view's colour and no depth word belonging to another view, the six
- * layers are therefore distinct, and every guard word still holds the sentinel it
- * was seeded with. Returns 1 and sets strict_verified, or returns 0 with the
- * per-layer counts left in place for the caller to report. */
+/* The verdict, with `depth_footprint_words` the number of words one layer of the
+ * depth attachment occupies (its stride divided by four). A layer verifies only
+ * if its 4096 detiled pixels are all its own colour, its depth footprint holds
+ * exactly 4096 words of its own depth, no word of another view's depth, no
+ * unexplained word, and the rest of the footprint is exactly the clear value,
+ * the six layers are therefore distinct, and every guard word still holds the
+ * sentinel it was seeded with. Returns 1 and sets strict_verified, or returns 0
+ * with the per-layer counts left in place for the caller to report. */
 int ps5vk_multiview_witness_verify(struct ps5vk_multiview_witness *w, uint32_t views,
-    uint64_t pixels_per_layer);
+    uint64_t depth_footprint_words);
 
 #endif

@@ -11,6 +11,7 @@
 #include "targets_ps5.h"
 #include "multiview_witness.h"
 #include "vk_render_pass.h"
+#include "color_detile.h"
 
 #include "vk_image_transfer.h"
 #include "texture_layout.h"
@@ -1290,45 +1291,62 @@ static void multiview_view_probe(VkDevice d)
         .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=depth_memory,.offset=0,.size=VK_WHOLE_SIZE}));
     const uint8_t *color_bytes=color_map; const uint32_t *depth_words=depth_map;
     const uint64_t pixels=(uint64_t)PS5VK_MULTIVIEW_WITNESS_EXTENT*PS5VK_MULTIVIEW_WITNESS_EXTENT;
+    const uint64_t depth_words_per_layer=depth_stride/4;
+    uint8_t detiled[PS5VK_MULTIVIEW_WITNESS_EXTENT*PS5VK_MULTIVIEW_WITNESS_EXTENT*4];
     struct ps5vk_multiview_witness witness={0};
     for(uint32_t layer=0;layer<PS5VK_MULTIVIEW_WITNESS_VIEWS;++layer) {
-        const uint8_t *pixels_base=color_bytes+(VkDeviceSize)layer*color_stride;
+        /* Colour is a tiled 64KB_R_X surface: its first words are NOT pixels. Every
+         * layer is detiled by the driver's own arithmetic first, and only the
+         * resulting 4096 linear pixels reach the oracle. */
+        if(ps5vk_rgba8_64k_rx_detile(detiled,sizeof(detiled),
+            color_bytes+(VkDeviceSize)layer*color_stride,(size_t)color_stride,
+            PS5VK_MULTIVIEW_WITNESS_EXTENT,PS5VK_MULTIVIEW_WITNESS_EXTENT))
+            fail("multiview-witness-detile",-1);
+        for(uint64_t p=0;p<pixels;++p)
+            ps5vk_multiview_witness_color_pixel(&witness,layer,detiled+4*p);
+        /* Depth has no such equations in this driver - depth_layout.h says so -
+         * and none are invented here. Because the witness stage writes ONE
+         * uniform depth per view and the pass clears with a uniform dword, both
+         * are tiling-invariant, so the whole footprint is COUNTED: exactly 4096
+         * words of this view, no word of another view, the rest exactly cleared.
+         * That is the coverage and independence proof, without Z_X coordinates. */
         const uint32_t *depth_base=depth_words+((VkDeviceSize)layer*depth_stride)/4;
-        for(uint64_t p=0;p<pixels;++p) {
-            const uint8_t rgba[4]={pixels_base[4*p],pixels_base[4*p+1],pixels_base[4*p+2],pixels_base[4*p+3]};
-            ps5vk_multiview_witness_pixel(&witness,layer,rgba,depth_base[p]);
-        }
-        for(VkDeviceSize w=pixels*4;w<color_stride;w+=4)
-            ps5vk_multiview_witness_guard(&witness,
-                *(const uint32_t *)(color_bytes+(VkDeviceSize)layer*color_stride+w),PS5VK_MULTIVIEW_GUARD);
-        for(VkDeviceSize w=pixels;w<depth_stride/4;++w)
-            ps5vk_multiview_witness_guard(&witness,depth_base[w],PS5VK_MULTIVIEW_GUARD);
+        for(uint64_t w=0;w<depth_words_per_layer;++w)
+            ps5vk_multiview_witness_depth(&witness,layer,depth_base[w]);
     }
-    /* The trailing guard layer, on both attachments. */
+    /* Only the TRAILING layer is a guard: the six the pass owns are cleared and
+     * written across their whole footprint, so their padding is not untouched
+     * storage and is judged by the depth counts above instead. */
+    const uint32_t *color_guard=(const uint32_t *)(color_bytes+
+        (VkDeviceSize)PS5VK_MULTIVIEW_WITNESS_VIEWS*color_stride);
     for(VkDeviceSize w=0;w<color_stride/4;++w)
-        ps5vk_multiview_witness_guard(&witness,
-            ((const uint32_t *)(color_bytes+(VkDeviceSize)PS5VK_MULTIVIEW_WITNESS_VIEWS*color_stride))[w],
-            PS5VK_MULTIVIEW_GUARD);
+        ps5vk_multiview_witness_guard(&witness,color_guard[w],PS5VK_MULTIVIEW_GUARD);
+    const uint32_t *depth_guard=depth_words+
+        (VkDeviceSize)PS5VK_MULTIVIEW_WITNESS_VIEWS*depth_stride/4;
     for(VkDeviceSize w=0;w<depth_stride/4;++w)
-        ps5vk_multiview_witness_guard(&witness,
-            depth_words[(VkDeviceSize)PS5VK_MULTIVIEW_WITNESS_VIEWS*depth_stride/4+w],PS5VK_MULTIVIEW_GUARD);
-    const int verified=ps5vk_multiview_witness_verify(&witness,PS5VK_MULTIVIEW_WITNESS_VIEWS,pixels);
+        ps5vk_multiview_witness_guard(&witness,depth_guard[w],PS5VK_MULTIVIEW_GUARD);
+    const int verified=ps5vk_multiview_witness_verify(&witness,
+        PS5VK_MULTIVIEW_WITNESS_VIEWS,depth_words_per_layer);
     for(uint32_t layer=0;layer<PS5VK_MULTIVIEW_WITNESS_VIEWS;++layer)
         ps5log_printf(PS5LOG_MARK,
-            "PS5VK_MULTIVIEW_VIEW_LAYER layer=%u view=%u pixels=%llu expected=%llu other_view=%llu other=%llu "
-            "depth_expected=%llu depth_other=%llu depth_unknown=%llu",
+            "PS5VK_MULTIVIEW_VIEW_LAYER layer=%u view=%u pixels=%llu color_expected=%llu "
+            "color_other_view=%llu color_other=%llu depth_expected=%llu depth_other=%llu "
+            "depth_clear=%llu depth_unknown=%llu",
             layer,ps5vk_multiview_witness_view(layer),(unsigned long long)witness.layer[layer].pixels,
             (unsigned long long)witness.layer[layer].expected,
             (unsigned long long)witness.layer[layer].other_view,
             (unsigned long long)witness.layer[layer].other,
             (unsigned long long)witness.layer[layer].depth_expected,
             (unsigned long long)witness.layer[layer].depth_other,
+            (unsigned long long)witness.layer[layer].depth_clear,
             (unsigned long long)witness.layer[layer].depth_unknown);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_MULTIVIEW_VIEW_PROBE views=%u mask=%08x framebuffer_layers=1 extent=%u layers_per_image=%u "
+        "color=detiled depth=footprint_count depth_words_per_layer=%llu guard_layer=%u "
         "guard_words=%llu guard_mismatches=%llu strict_verified=%d",
         PS5VK_MULTIVIEW_WITNESS_VIEWS,PS5VK_MULTIVIEW_WITNESS_MASK,PS5VK_MULTIVIEW_WITNESS_EXTENT,
-        PS5VK_MULTIVIEW_WITNESS_LAYERS,(unsigned long long)witness.guard_words,
+        PS5VK_MULTIVIEW_WITNESS_LAYERS,(unsigned long long)depth_words_per_layer,
+        PS5VK_MULTIVIEW_WITNESS_VIEWS,(unsigned long long)witness.guard_words,
         (unsigned long long)witness.guard_mismatches,verified);
     if(!verified)fail("multiview-witness-verdict",-1);
 
