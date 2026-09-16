@@ -1257,9 +1257,17 @@ static void multiview_view_probe(VkDevice d)
         PS5VK_MULTIVIEW_WITNESS_MASK,view_count,abi->view_index_slot,abi->vertex_count,
         color_bases[0],color_bases[1]-color_bases[0],depth_bases[0],depth_bases[1]-depth_bases[0]);
 
+    /* The command buffer lives in a pool, exactly as the offline scene does: the
+     * first hardware attempt was invalidated by a harness error because this
+     * allocation named no pool, and the driver refused it before anything was
+     * recorded. The pool owns the buffer, so destroying it after the queue is
+     * idle releases both. */
+    VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex=0};
+    VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
     VkCommandBuffer cb=VK_NULL_HANDLE;
     VkCommandBufferAllocateInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+        .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
     CHECK(vkAllocateCommandBuffers(d,&cbi,&cb));
     VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     CHECK(vkBeginCommandBuffer(cb,&begin));
@@ -1354,6 +1362,9 @@ static void multiview_view_probe(VkDevice d)
         (unsigned long long)witness.guard_mismatches,verified);
     if(!verified)fail("multiview-witness-verdict",-1);
 
+    /* The queue is idle and the readback is done: the pool releases the command
+     * buffer it owns here, before any device teardown. */
+    vkDestroyCommandPool(d,pool,NULL);
     vkDestroyPipeline(d,pipeline,NULL);
     vkDestroyPipelineLayout(d,layout,NULL);
     vkDestroyShaderModule(d,shaders[0],NULL); vkDestroyShaderModule(d,shaders[1],NULL);
