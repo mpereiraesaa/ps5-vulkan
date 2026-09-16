@@ -8,6 +8,11 @@
 #include "command_arena_ps5.h"
 #include "graphics_sync.h"
 #include "graphics_limits.h"
+#include "targets_ps5.h"
+#include "multiview_witness.h"
+#include "vk_render_pass.h"
+#include "color_detile.h"
+
 #include "vk_image_transfer.h"
 #include "texture_layout.h"
 #include "triangle_readback.h"
@@ -1083,6 +1088,299 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     if(set_layout)texture_destroy(d,&texture);
     if(depth_image){vkDestroyImageView(d,depth_view,NULL);vkDestroyImage(d,depth_image,NULL);vkFreeMemory(d,depth_memory,NULL);}
 }
+#if defined(PS5VK_MULTIVIEW_VIEW_PROBE) && PS5VK_MULTIVIEW_VIEW_PROBE
+/* T02-D1b: the private six-view witness. One render pass with a real view mask
+ * renders one draw into six array layers, a runtime vertex stage that reads
+ * gl_ViewIndex gives every layer its own colour and its own depth, and the
+ * readback judges each layer separately - identity, order, coverage, guards and
+ * aliasing - through the same oracle the host regressions exercise. Nothing is
+ * advertised and no query changes; the pass exists only because the diagnostic
+ * build lets vkCreateRenderPass accept the mask. */
+enum { PS5VK_MULTIVIEW_WITNESS_EXTENT = 64,
+       /* One more layer than the pass renders: the trailing layer is a guard the
+        * render must never touch, so "no aliasing off the end" is measured. */
+       PS5VK_MULTIVIEW_WITNESS_LAYERS = 7,
+       PS5VK_MULTIVIEW_WITNESS_MASK = 0x3f };
+#define PS5VK_MULTIVIEW_GUARD UINT32_C(0x5a5a5a5a)
+
+static void multiview_witness_image(VkDevice d, VkFormat format, VkImageUsageFlags usage,
+    VkDeviceSize *stride_out, VkImage *image_out, VkDeviceMemory *memory_out, void **mapped_out)
+{
+    VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.imageType=VK_IMAGE_TYPE_2D,
+        .format=format,.extent={PS5VK_MULTIVIEW_WITNESS_EXTENT,PS5VK_MULTIVIEW_WITNESS_EXTENT,1},
+        .mipLevels=1,.arrayLayers=PS5VK_MULTIVIEW_WITNESS_LAYERS,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.usage=usage,.tiling=VK_IMAGE_TILING_OPTIMAL};
+    CHECK(vkCreateImage(d,&ii,NULL,image_out));
+    VkMemoryRequirements req; vkGetImageMemoryRequirements(d,*image_out,&req);
+    VkMemoryAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=req.size};
+    CHECK(vkAllocateMemory(d,&ai,NULL,memory_out));
+    CHECK(vkBindImageMemory(d,*image_out,*memory_out,0));
+    CHECK(vkMapMemory(d,*memory_out,0,VK_WHOLE_SIZE,0,mapped_out));
+    /* The whole allocation is the sentinel before anything renders. Only the
+     * TRAILING layer is a guard: the six layers the pass owns are loaded with
+     * LOAD_OP_DONT_CARE and written by the draw, so neither their padding nor
+     * anything else about them is untouched storage - their content is judged by
+     * the oracle's counts, never by the sentinel. */
+    uint32_t *words=*mapped_out;
+    for (VkDeviceSize i=0;i<req.size/4;++i) words[i]=PS5VK_MULTIVIEW_GUARD;
+    CHECK(vkFlushMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+        .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=*memory_out,.offset=0,.size=req.size}));
+    VkDeviceSize stride=0, alignment=0, bytes=0;
+    if (ps5vk_native_layered_storage(format,PS5VK_MULTIVIEW_WITNESS_EXTENT,
+        PS5VK_MULTIVIEW_WITNESS_EXTENT,1,&stride,&alignment,&bytes)!=VK_SUCCESS)
+        fail("multiview-witness-storage",-1);
+    if (!stride || bytes!=stride || stride*PS5VK_MULTIVIEW_WITNESS_LAYERS>req.size)
+        fail("multiview-witness-stride",-1);
+    *stride_out=stride;
+}
+
+static void multiview_view_probe(VkDevice d)
+{
+    VkDeviceSize color_stride=0,depth_stride=0;
+    VkImage color_image,depth_image; VkDeviceMemory color_memory,depth_memory;
+    void *color_map=NULL,*depth_map=NULL;
+    multiview_witness_image(d,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        &color_stride,&color_image,&color_memory,&color_map);
+    multiview_witness_image(d,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        &depth_stride,&depth_image,&depth_memory,&depth_map);
+    VkImageSubresourceRange color_range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,PS5VK_MULTIVIEW_WITNESS_VIEWS};
+    VkImageSubresourceRange depth_range={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,PS5VK_MULTIVIEW_WITNESS_VIEWS};
+    VkImageViewCreateInfo cvi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=color_image,
+        .viewType=VK_IMAGE_VIEW_TYPE_2D_ARRAY,.format=VK_FORMAT_R8G8B8A8_UNORM,.subresourceRange=color_range};
+    VkImageViewCreateInfo dvi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=depth_image,
+        .viewType=VK_IMAGE_VIEW_TYPE_2D_ARRAY,.format=VK_FORMAT_D32_SFLOAT,.subresourceRange=depth_range};
+    VkImageView color_view,depth_view;
+    CHECK(vkCreateImageView(d,&cvi,NULL,&color_view));
+    CHECK(vkCreateImageView(d,&dvi,NULL,&depth_view));
+    VkAttachmentDescription attachments[2]={
+        /* DONT_CARE on both attachments: the execute path's CLEAR would DMA-fill
+         * the whole VkImage and overwrite the trailing guard layer, and the
+         * depth comparison is ALWAYS, so no prior value is needed at all. */
+        {.format=VK_FORMAT_R8G8B8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {.format=VK_FORMAT_D32_SFLOAT,.samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
+    VkAttachmentReference colorref={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference depthref={1,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpass={.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount=1,.pColorAttachments=&colorref,.pDepthStencilAttachment=&depthref};
+    const uint32_t view_masks[1]={PS5VK_MULTIVIEW_WITNESS_MASK};
+    VkRenderPassMultiviewCreateInfo multiview={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
+        .subpassCount=1,.pViewMasks=view_masks};
+    VkRenderPassCreateInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,.pNext=&multiview,
+        .attachmentCount=2,.pAttachments=attachments,.subpassCount=1,.pSubpasses=&subpass};
+    VkRenderPass pass; CHECK(vkCreateRenderPass(d,&ri,NULL,&pass));
+    VkImageView fb_attachments[2]={color_view,depth_view};
+    VkFramebufferCreateInfo fi={.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,.renderPass=pass,
+        .attachmentCount=2,.pAttachments=fb_attachments,
+        .width=PS5VK_MULTIVIEW_WITNESS_EXTENT,.height=PS5VK_MULTIVIEW_WITNESS_EXTENT,.layers=1};
+    VkFramebuffer fb; CHECK(vkCreateFramebuffer(d,&fi,NULL,&fb));
+    const struct ps5vk_graphics_module_key modules[2]={
+        {.words=ps5vk_runtime_view_index,.word_count=sizeof(ps5vk_runtime_view_index)/4,.entry="main"},
+        {.words=ps5vk_runtime_fragment,.word_count=sizeof(ps5vk_runtime_fragment)/4,.entry="main"}};
+    VkShaderModule shaders[2];
+    for (unsigned j=0;j<2;++j) {
+        VkShaderModuleCreateInfo si={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=modules[j].word_count*4,.pCode=modules[j].words};
+        CHECK(vkCreateShaderModule(d,&si,NULL,&shaders[j]));
+    }
+    VkPipelineShaderStageCreateInfo stages[2]={
+        {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=shaders[0],.pName="main"},
+        {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=shaders[1],.pName="main"}};
+    VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+    VkPipelineRasterizationStateCreateInfo raster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
+    VkPipelineMultisampleStateCreateInfo ms={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+    VkViewport viewport={0,0,PS5VK_MULTIVIEW_WITNESS_EXTENT,PS5VK_MULTIVIEW_WITNESS_EXTENT,0,1};
+    VkRect2D scissor={{0,0},{PS5VK_MULTIVIEW_WITNESS_EXTENT,PS5VK_MULTIVIEW_WITNESS_EXTENT}};
+    VkPipelineViewportStateCreateInfo vp={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount=1,.pViewports=&viewport,.scissorCount=1,.pScissors=&scissor};
+    VkPipelineColorBlendAttachmentState blend_attachment={.colorWriteMask=15};
+    VkPipelineColorBlendStateCreateInfo blend={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount=1,.pAttachments=&blend_attachment};
+    /* Depth is WRITTEN, so the depth layer is evidence about which view rendered
+     * into it: the comparison never rejects (the witness vertex stage's depth is
+     * a function of the view) and the clear value only fills what is not drawn. */
+    VkPipelineDepthStencilStateCreateInfo depth_state={.sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable=VK_TRUE,.depthWriteEnable=VK_TRUE,.depthCompareOp=VK_COMPARE_OP_ALWAYS};
+    VkPipelineLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPipelineLayout layout; CHECK(vkCreatePipelineLayout(d,&li,NULL,&layout));
+    VkGraphicsPipelineCreateInfo pi={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .layout=layout,.renderPass=pass,.stageCount=2,.pStages=stages,
+        .pVertexInputState=&vi,.pInputAssemblyState=&ia,.pRasterizationState=&raster,
+        .pMultisampleState=&ms,.pViewportState=&vp,.pColorBlendState=&blend,
+        .pDepthStencilState=&depth_state};
+    VkPipeline pipeline; CHECK(vkCreateGraphicsPipelines(d,0,1,&pi,NULL,&pipeline));
+
+    /* PRE-SUBMIT GATE. Nothing below this point is allowed to reach the GPU
+     * unless the compiled stage really receives a view index, the pass really
+     * owns the mask, the mask really expands to the six views in order, and the
+     * six attachment targets really address six distinct ordered layers. A
+     * mismatch fails here, with no submission at all. */
+    const struct ps5vk_native_graphics_pipeline *native=pipeline->graphics_state;
+    if(!native || !native->pair || !native->pair->ready)fail("multiview-witness-pipeline",-1);
+    const struct ps5vk_runtime_draw_abi *abi=&native->pair->runtime_arguments;
+    if(!abi->enabled || abi->view_index_slot==UINT32_MAX ||
+       abi->view_index_slot>=abi->vertex_count)fail("multiview-witness-metadata-slot",-1);
+    if(!pass->multiview.present || pass->multiview.subpass_count!=1 ||
+       pass->multiview.view_masks[0]!=PS5VK_MULTIVIEW_WITNESS_MASK)
+        fail("multiview-witness-pass-mask",-1);
+    uint32_t views[PS5VK_MULTIVIEW_WITNESS_VIEWS],view_count=0;
+    if(ps5vk_native_view_expand(PS5VK_MULTIVIEW_WITNESS_MASK,views,
+        PS5VK_MULTIVIEW_WITNESS_VIEWS,&view_count)!=VK_SUCCESS ||
+       view_count!=PS5VK_MULTIVIEW_WITNESS_VIEWS)fail("multiview-witness-expansion",-1);
+    for(uint32_t v=0;v<view_count;++v)if(views[v]!=v)fail("multiview-witness-view-order",-1);
+    ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT];
+    if(ps5_color_select_runtime_defaults(defaults,sceAgcGetRegisterDefaults()))fail("multiview-witness-defaults",-1);
+    uint32_t color_bases[PS5VK_MULTIVIEW_WITNESS_VIEWS],depth_bases[PS5VK_MULTIVIEW_WITNESS_VIEWS];
+    for(uint32_t v=0;v<view_count;++v) {
+        struct ps5vk_target_registers color_target,depth_target;
+        if(ps5vk_native_view_layer_target(d,color_view,views[v],defaults,&color_target)!=VK_SUCCESS ||
+           ps5vk_native_view_layer_target(d,depth_view,views[v],NULL,&depth_target)!=VK_SUCCESS)
+            fail("multiview-witness-layer-target",-1);
+        color_bases[v]=color_target.registers[0].value;
+        depth_bases[v]=depth_target.registers[7].value;
+        if(v && (color_bases[v]<=color_bases[v-1] || depth_bases[v]<=depth_bases[v-1]))
+            fail("multiview-witness-layer-order",-1);
+    }
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_MULTIVIEW_VIEW_GATE mask=%08x views=%u view_index_slot=%u vertex_count=%u "
+        "color_first=%08x color_step=%08x depth_first=%08x depth_step=%08x",
+        PS5VK_MULTIVIEW_WITNESS_MASK,view_count,abi->view_index_slot,abi->vertex_count,
+        color_bases[0],color_bases[1]-color_bases[0],depth_bases[0],depth_bases[1]-depth_bases[0]);
+
+    /* The command buffer lives in a pool, exactly as the offline scene does: the
+     * first hardware attempt was invalidated by a harness error because this
+     * allocation named no pool, and the driver refused it before anything was
+     * recorded. The pool owns the buffer, so destroying it after the queue is
+     * idle releases both. */
+    VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex=0};
+    VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
+    VkCommandBuffer cb=VK_NULL_HANDLE;
+    VkCommandBufferAllocateInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+    CHECK(vkAllocateCommandBuffers(d,&cbi,&cb));
+    VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    CHECK(vkBeginCommandBuffer(cb,&begin));
+    VkClearValue clears[2]={{.color={.float32={0,0,0,1}}},{.depthStencil={1.0f,0}}};
+    VkRenderPassBeginInfo rbi={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,.renderPass=pass,
+        .framebuffer=fb,.renderArea={{0,0},{PS5VK_MULTIVIEW_WITNESS_EXTENT,PS5VK_MULTIVIEW_WITNESS_EXTENT}},
+        .clearValueCount=2,.pClearValues=clears};
+    vkCmdBeginRenderPass(cb,&rbi,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+    vkCmdDraw(cb,3,1,0,0);
+    vkCmdEndRenderPass(cb);
+    CHECK(vkEndCommandBuffer(cb));
+    /* Exactly one draw: the six passes over the subpass are the backend's
+     * expansion of this one command, which the gate above proved it produces. */
+    if(cb->operation_count!=3)fail("multiview-witness-record",-1);
+    unsigned draws=0;
+    for(unsigned i=0;i<cb->operation_count;++i)
+        if(cb->operations[i].type==PS5VK_DRAW)++draws;
+    if(draws!=1)fail("multiview-witness-draw",-1);
+    VkQueue queue; vkGetDeviceQueue(d,0,0,&queue);
+    VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.commandBufferCount=1,.pCommandBuffers=&cb};
+    CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
+    CHECK(vkQueueWaitIdle(queue));
+    ps5log_line(PS5LOG_MARK,"PS5VK_MULTIVIEW_VIEW_SUBMITTED draws=1 views=6 mask=0000003f");
+
+    /* Read back through the REAL per-layer addressing: each layer's own stride,
+     * every pixel classified by the shared oracle, and everything outside the
+     * six rendered layers - the rest of each layer and the whole trailing guard
+     * layer - folded in as guards. */
+    CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+        .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=color_memory,.offset=0,.size=VK_WHOLE_SIZE}));
+    CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+        .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=depth_memory,.offset=0,.size=VK_WHOLE_SIZE}));
+    const uint8_t *color_bytes=color_map; const uint32_t *depth_words=depth_map;
+    const uint64_t pixels=(uint64_t)PS5VK_MULTIVIEW_WITNESS_EXTENT*PS5VK_MULTIVIEW_WITNESS_EXTENT;
+    const uint64_t depth_words_per_layer=depth_stride/4;
+    uint8_t detiled[PS5VK_MULTIVIEW_WITNESS_EXTENT*PS5VK_MULTIVIEW_WITNESS_EXTENT*4];
+    struct ps5vk_multiview_witness witness={0};
+    for(uint32_t layer=0;layer<PS5VK_MULTIVIEW_WITNESS_VIEWS;++layer) {
+        /* Colour is a tiled 64KB_R_X surface: its first words are NOT pixels. Every
+         * layer is detiled by the driver's own arithmetic first, and only the
+         * resulting 4096 linear pixels reach the oracle. */
+        if(ps5vk_rgba8_64k_rx_detile(detiled,sizeof(detiled),
+            color_bytes+(VkDeviceSize)layer*color_stride,(size_t)color_stride,
+            PS5VK_MULTIVIEW_WITNESS_EXTENT,PS5VK_MULTIVIEW_WITNESS_EXTENT))
+            fail("multiview-witness-detile",-1);
+        for(uint64_t p=0;p<pixels;++p)
+            ps5vk_multiview_witness_color_pixel(&witness,layer,detiled+4*p);
+        /* Depth has no such equations in this driver - depth_layout.h says so -
+         * and none are invented here. Because the witness stage writes ONE
+         * uniform depth per view and the pass clears with a uniform dword, both
+         * are tiling-invariant, so the whole footprint is COUNTED: exactly 4096
+         * words of this view, no word of another view, the rest exactly cleared.
+         * That is the coverage and independence proof, without Z_X coordinates. */
+        const uint32_t *depth_base=depth_words+((VkDeviceSize)layer*depth_stride)/4;
+        for(uint64_t w=0;w<depth_words_per_layer;++w)
+            ps5vk_multiview_witness_depth(&witness,layer,depth_base[w]);
+    }
+    /* Only the TRAILING layer is a guard: the six the pass owns are cleared and
+     * written across their whole footprint, so their padding is not untouched
+     * storage and is judged by the depth counts above instead. */
+    const uint32_t *color_guard=(const uint32_t *)(color_bytes+
+        (VkDeviceSize)PS5VK_MULTIVIEW_WITNESS_VIEWS*color_stride);
+    for(VkDeviceSize w=0;w<color_stride/4;++w)
+        ps5vk_multiview_witness_guard(&witness,color_guard[w],PS5VK_MULTIVIEW_GUARD);
+    const uint32_t *depth_guard=depth_words+
+        (VkDeviceSize)PS5VK_MULTIVIEW_WITNESS_VIEWS*depth_stride/4;
+    for(VkDeviceSize w=0;w<depth_stride/4;++w)
+        ps5vk_multiview_witness_guard(&witness,depth_guard[w],PS5VK_MULTIVIEW_GUARD);
+    const int verified=ps5vk_multiview_witness_verify(&witness,
+        PS5VK_MULTIVIEW_WITNESS_VIEWS,depth_words_per_layer);
+    for(uint32_t layer=0;layer<PS5VK_MULTIVIEW_WITNESS_VIEWS;++layer)
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_MULTIVIEW_VIEW_LAYER layer=%u view=%u pixels=%llu color_expected=%llu "
+            "color_other_view=%llu color_other=%llu depth_expected=%llu depth_other=%llu "
+            "depth_remainder_clear=%llu depth_remainder_unknown=%llu "
+            "color_first_foreign=%02x%02x%02x%02x color_foreign_views=%02x color_foreign_view=%u "
+            "depth_foreign_views=%02x depth_foreign_view=%u",
+            layer,ps5vk_multiview_witness_view(layer),(unsigned long long)witness.layer[layer].pixels,
+            (unsigned long long)witness.layer[layer].expected,
+            (unsigned long long)witness.layer[layer].other_view,
+            (unsigned long long)witness.layer[layer].other,
+            (unsigned long long)witness.layer[layer].depth_expected,
+            (unsigned long long)witness.layer[layer].depth_other,
+            (unsigned long long)witness.layer[layer].depth_clear,
+            (unsigned long long)witness.layer[layer].depth_unknown,
+            witness.layer[layer].color_first_foreign[0],witness.layer[layer].color_first_foreign[1],
+            witness.layer[layer].color_first_foreign[2],witness.layer[layer].color_first_foreign[3],
+            witness.layer[layer].color_foreign_mask,witness.layer[layer].color_foreign_view,
+            witness.layer[layer].depth_foreign_mask,witness.layer[layer].depth_foreign_view);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_MULTIVIEW_VIEW_PROBE views=%u mask=%08x framebuffer_layers=1 extent=%u layers_per_image=%u "
+        "color=detiled depth=footprint_count load_op=dont_care depth_words_per_layer=%llu guard_layer=%u "
+        "guard_words=%llu guard_mismatches=%llu strict_verified=%d",
+        PS5VK_MULTIVIEW_WITNESS_VIEWS,PS5VK_MULTIVIEW_WITNESS_MASK,PS5VK_MULTIVIEW_WITNESS_EXTENT,
+        PS5VK_MULTIVIEW_WITNESS_LAYERS,(unsigned long long)depth_words_per_layer,
+        PS5VK_MULTIVIEW_WITNESS_VIEWS,(unsigned long long)witness.guard_words,
+        (unsigned long long)witness.guard_mismatches,verified);
+    if(!verified)fail("multiview-witness-verdict",-1);
+
+    /* The queue is idle and the readback is done: the pool releases the command
+     * buffer it owns here, before any device teardown. */
+    vkDestroyCommandPool(d,pool,NULL);
+    vkDestroyPipeline(d,pipeline,NULL);
+    vkDestroyPipelineLayout(d,layout,NULL);
+    vkDestroyShaderModule(d,shaders[0],NULL); vkDestroyShaderModule(d,shaders[1],NULL);
+    vkDestroyFramebuffer(d,fb,NULL); vkDestroyRenderPass(d,pass,NULL);
+    vkDestroyImageView(d,color_view,NULL); vkDestroyImageView(d,depth_view,NULL);
+    vkUnmapMemory(d,color_memory); vkUnmapMemory(d,depth_memory);
+    vkDestroyImage(d,color_image,NULL); vkDestroyImage(d,depth_image,NULL);
+    vkFreeMemory(d,color_memory,NULL); vkFreeMemory(d,depth_memory,NULL);
+}
+#endif
 int main(void)
 {
     struct timespec ts = {0}; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1193,6 +1491,19 @@ int main(void)
         ps5log_close("exit-control-device-end");
         return 0;
     }
+#if PS5VK_MULTIVIEW_VIEW_PROBE
+    /* The witness is the whole run: one six-view scene, no other diagnostic. */
+    multiview_view_probe(device);
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    if (PS5VK_SHELL_CLOSE)
+        ps5log_line(PS5LOG_MARK,"PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
+    ps5log_close("graphics-api-end");
+    /* Termination belongs to Close Game, as in every other bounded run. */
+    if (PS5VK_SHELL_CLOSE) for (;;) sleep(1);
+    return 0;
+#endif
     VkAttachmentDescription attachment = {.format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
         .loadOp=PS5VK_GRAPHICS_SCENE?VK_ATTACHMENT_LOAD_OP_CLEAR:VK_ATTACHMENT_LOAD_OP_DONT_CARE,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
