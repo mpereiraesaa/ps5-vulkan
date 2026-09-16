@@ -58,10 +58,61 @@ quoted strict run `20260915T233257773Z_PPSA99994_ps5vk_0x100d0018b47fa` (sha256
 `53590a744240319f23ea4adb8ba73e9307f09feb6de742819e46444bb3a05b59`). The
 console was released with `running=none` confirmed.
 
-What this does *not* claim: that multiview is implementable end to end. It
-answers the address-selection question that every later slice depends on, and
-nothing about view masks, `ViewIndex` lowering, per-view query results or the
-CTS leaf set - each of those is a separate slice with its own evidence.
+What this does *not* claim: anything about view masks, `ViewIndex` lowering,
+per-view query results or the CTS leaf set. It answers the address-selection
+question that every later slice depends on; the view-mask and `ViewIndex` work
+that followed is recorded below.
+
+## DXVK 262 multiview six-view witness
+
+Slice A above established that a layer is addressable. The slices that followed
+landed the pieces that address selection needs and then measured them once, end
+to end, on the console. The canonical run is
+`20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2` (log SHA-256
+`e49e80220af638b69f20f7b8c7503a05316e518a411f64a1df772a50c64070fe`), from the
+native artifact `eboot.bin` SHA-256
+`92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01`, built with
+the private diagnostic gate (`PS5VK_MULTIVIEW_DIAGNOSTIC=1`) and the witness knob
+(`PS5VK_MULTIVIEW_VIEW_PROBE=1`), deployed with exact FTP readback and
+ShadowMountPlus refreshed and verified before the launch.
+
+```text
+PS5VK_MULTIVIEW_VIEW_GATE mask=0000003f views=6 view_index_slot=1 vertex_count=3 color_first=02000200 color_step=00000200 depth_first=02001000 depth_step=00000100
+PS5VK_MULTIVIEW_VIEW_SUBMITTED draws=1 views=6 mask=0000003f
+PS5VK_MULTIVIEW_VIEW_LAYER layer=0..5 view=0..5 pixels=4096 color_expected=4096 color_other_view=0 color_other=0 depth_expected=4096 depth_other=0 depth_remainder_clear=0 depth_remainder_unknown=12288 color_first_foreign=00000000 color_foreign_views=00 depth_foreign_views=00
+PS5VK_MULTIVIEW_VIEW_PROBE views=6 mask=0000003f framebuffer_layers=1 extent=64 layers_per_image=7 color=detiled depth=footprint_count load_op=dont_care depth_words_per_layer=16384 guard_layer=6 guard_words=49152 guard_mismatches=0 strict_verified=1
+PS5VK_GRAPHICS_API_CLEANUP_COMPLETE
+PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1
+BYE seq=36 reason=graphics-api-end
+```
+
+One native draw with a real `0x3f` view mask rendered into six 64x64 array layers
+of one seven-layer image, the seventh layer being a guard. The compiled runtime
+vertex stage declared the `ViewIndex` slot in its metadata (slot 1 of 3), the
+draw ABI delivered each view's index to it, and the backend emitted one draw per
+view in ascending order into ordered, distinct colour and depth targets. Every
+layer's DETILED colour is exactly its own view's colour (4096 of 4096 pixels, no
+pixel of another view anywhere) and every layer's depth footprint holds exactly
+its own view's 4096 words with none of another view's; the remaining 12288 words
+per layer still hold the sentinel the probe seeded, and the complete trailing
+seventh layer of both attachments is untouched (49152 guard words, 0 mismatches).
+Close Game then reported a verified close and the console returned to
+`running=none`.
+
+Two earlier runs of this work are **invalidated, not evidence**: the first one
+(`20260916T042417717Z_PPSA99994_ps5vk_0x110b5d18f767e`) failed before any
+submission because the probe's command-buffer allocation named no command pool -
+a harness error, and its pre-submit gate is the only thing it shows; the second
+(`20260916T044546978Z_PPSA99994_ps5vk_0x111e1ff6ec7c9`) failed the verdict on the
+oracle's UNORM8 expectation for view 5 (green is `5/8*255 = 159.375`, which
+rounds to 159, not 160). Neither run says anything about GPU behaviour beyond
+what is written here, and the canonical run above supersedes both.
+
+What this does *not* claim: that multiview can be advertised. The public feature
+and query still report it as absent, `maxMultiviewViewCount` and
+`maxMultiviewInstanceIndex` are still unmeasured and unreported, and the CTS leaf
+set is untouched - each of those is a separate slice with its own evidence, and
+nothing here promotes the capability.
 
 ## Shader draw parameters promotion (2026-09-15)
 

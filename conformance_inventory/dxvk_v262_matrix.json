@@ -1329,16 +1329,15 @@
       "kind": "feature",
       "name": "multiview",
       "native": {
-        "artifact_sha256": "7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593",
-        "note": "Two exact native query runs witnessed the current blocker.",
+        "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+        "note": "One strict six-view run: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard and strict_verified=1.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#dxvk-262-multiview-six-view-witness"
         ],
         "run_ids": [
-          "20260915T210947412Z_PPSA99994_ps5vk_0xf8ffef0f6ba6",
-          "20260915T211224694Z_PPSA99994_ps5vk_0xf9248da2b03d"
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
       "verdict": "blocker"
     },
@@ -2861,8 +2860,8 @@
         "satisfied": 1
       },
       "native": {
-        "blocker": 60,
-        "satisfied": 2
+        "blocker": 59,
+        "satisfied": 3
       }
     },
     "requirements": 62,
