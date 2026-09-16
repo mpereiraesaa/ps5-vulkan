@@ -374,8 +374,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
      * what the corresponding capability query reports too. */
     if (info->tiling != VK_IMAGE_TILING_OPTIMAL && !linear_staging)
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    /* The mask admits the input-attachment role so the pinned multiview
+     * helper's exact shape can be validated below; the exact-combination
+     * predicate is what actually accepts a usage set, so every other role
+     * combination stays refused. */
     const VkImageUsageFlags supported = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    /* The input-attachment role is bounded by the measured six-view floor: the
+     * format query reports exactly that ceiling for this shape, so creation has
+     * to refuse anything deeper rather than accept a shape the query says does
+     * not exist. No other role is affected. */
+    if ((info->usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) &&
+        info->arrayLayers > (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!info->usage || info->usage & ~supported || !info->extent.width || !info->extent.height ||
         !info->extent.depth || !info->mipLevels ||
         (info->imageType==VK_IMAGE_TYPE_1D &&

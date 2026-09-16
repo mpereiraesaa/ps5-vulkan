@@ -142,6 +142,31 @@ int main(void)
         assert(!ps5vk_texture_format_image_usage(format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
         assert(ps5vk_texture_format_sampled_encoding(format));
     }
+    /* The pinned multiview helper's attachment adds the input-attachment role
+     * to the R8G8B8A8_UNORM readback colour shape. Exactly that combination is
+     * accepted: a missing role, an extra role or any other format is refused,
+     * so no input-attachment support is inferred anywhere else. */
+    {
+        const VkImageUsageFlags exact = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM, exact));
+        const VkImageUsageFlags rejected[] = {
+            exact & ~(VkImageUsageFlags)VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            exact & ~(VkImageUsageFlags)VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            exact | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT};
+        for (unsigned i = 0; i < sizeof(rejected)/sizeof(rejected[0]); ++i)
+            assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM, rejected[i]));
+        const VkFormat other[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
+                                  VK_FORMAT_R8G8B8A8_UINT};
+        for (unsigned i = 0; i < sizeof(other)/sizeof(other[0]); ++i)
+            assert(!ps5vk_texture_format_image_usage(other[i], exact));
+    }
+
     assert(ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UNORM_PACK32,
         PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
     assert(!ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UINT_PACK32,

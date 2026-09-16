@@ -304,6 +304,10 @@ static void lifecycle(void)
               * exists; nothing else does. */
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                      VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             /* The pinned multiview helper's attachment: that same readback
+              * shape plus an input-attachment role, and nothing else. */
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) ||
              usage==VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
              usage==(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)));
     }
@@ -380,8 +384,21 @@ static void lifecycle(void)
                                              VK_IMAGE_USAGE_TRANSFER_DST_BIT));
             const uint32_t expected_mips=!attachment &&
                 (usage&VK_IMAGE_USAGE_SAMPLED_BIT)?15u:1u;
+            /* The one input-attachment shape the pinned multiview helper needs
+             * reports the measured six-view layer floor; every other attachment
+             * (and the pure transfer role) stays single-layer, so the query and
+             * creation agree about exactly which shape has layers. */
+            const VkBool32 input_attachment_shape =
+                image_formats[f]==VK_FORMAT_R8G8B8A8_UNORM &&
+                usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT|
+                        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+            const uint32_t expected_layers = input_attachment_shape ?
+                PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR :
+                (attachment||transfer_only?1u:PS5VK_MAX_IMAGE_ARRAY_LAYERS);
             assert(ip.maxMipLevels==expected_mips &&
-                ip.maxArrayLayers==(attachment||transfer_only?1u:PS5VK_MAX_IMAGE_ARRAY_LAYERS) &&
+                ip.maxArrayLayers==expected_layers &&
                 ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT);
             assert(ip.maxResourceSize==p->platform.max_allocation);
         } else assert(result==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
