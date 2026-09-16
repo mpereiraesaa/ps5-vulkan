@@ -129,6 +129,31 @@ static int run_dxvk262_capability_probe(void)
         extension_result = vkEnumerateDeviceExtensionProperties(
             physical, NULL, &extension_count, extensions);
 
+    /* The profile names promoted core fields; the 1.0 runtime exposes their
+     * identical multiview semantics through KHR, not Vulkan 1.2 aggregates.
+     * Keep the actual route explicit. This does not satisfy the API-version
+     * requirement or claim DXVK can create a 1.3 device today. */
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count, VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
+        VkPhysicalDeviceMultiviewFeatures multiview = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &multiview};
+        VkPhysicalDeviceMultiviewProperties limits = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
+        VkPhysicalDeviceProperties2 properties_query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &limits};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        vkGetPhysicalDeviceProperties2KHR(physical, &properties_query);
+        features11.multiview = multiview.multiview;
+        properties11.maxMultiviewViewCount = limits.maxMultiviewViewCount;
+        properties11.maxMultiviewInstanceIndex = limits.maxMultiviewInstanceIndex;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_MULTIVIEW_QUERY route=VK_KHR_multiview multiview=%u "
+            "maxMultiviewViewCount=%u maxMultiviewInstanceIndex=%u",
+            multiview.multiview, limits.maxMultiviewViewCount, limits.maxMultiviewInstanceIndex);
+    }
+
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",
         DXVK262_PROFILE_ID, DXVK262_PROFILE_API_VERSION,
