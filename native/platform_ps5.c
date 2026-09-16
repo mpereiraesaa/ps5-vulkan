@@ -210,6 +210,12 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     /* The graphics runtime path delivers the draw-parameter built-ins for the
      * direct and single-indirect contract this profile witnessed. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;
+    /* Multiview belongs to the same measured graphics path and nowhere else:
+     * the private six-view and instance witnesses ran through exactly this
+     * build, so a runtime-compiler build WITHOUT the graphics API must not
+     * report itself multiview-capable - it cannot execute a render pass or a
+     * draw at all. The bit stays internal here; E1a advertises nothing. */
+    platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

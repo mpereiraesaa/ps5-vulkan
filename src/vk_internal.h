@@ -55,7 +55,30 @@ enum ps5vk_feature_bits {
      * delivered as zero because multiDrawIndirect stays false. Requesting more
      * than one draw per command is still refused. */
     PS5VK_FEATURE_SHADER_DRAW_PARAMETERS = 1u << 3,
+    /* VK_KHR_multiview, measured privately on the owned console. The two
+     * floors below are what the private witnesses actually established; they
+     * are INTERNAL facts, not reported values. E1a only carries the capability
+     * and the numbers: nothing enumerates the extension, nothing answers a
+     * public query from them, and vkCreateDevice and the render-pass path are
+     * untouched until the slice that can advertise them atomically. */
+    PS5VK_FEATURE_MULTIVIEW = 1u << 4,
 };
+
+/* The measured multiview floors: six views rendered into six ordered array
+ * layers, and one instance at firstInstance 0x07ffffff (2^27-1). Both are
+ * floors - "at least this much" - and neither is a reported property value. */
+enum {
+    PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR = 6,
+    PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR = 134217727,
+};
+
+/* Internal capability gate for the multiview work: true only when the platform
+ * mask carries the bit, so a build or platform without it reports the internal
+ * support as false rather than inheriting an assumption from the profile. */
+static inline int ps5vk_platform_multiview_supported(uint32_t supported_features)
+{
+    return !!(supported_features & PS5VK_FEATURE_MULTIVIEW);
+}
 struct ps5vk_compiler {
     void *context;
     VkResult (*resolve)(void *, const uint32_t *, size_t, const char *,

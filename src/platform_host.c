@@ -46,6 +46,11 @@ __attribute__((weak)) VkResult ps5vk_platform_query(struct ps5vk_platform *p)
     p->max_allocation = 64 * 1024 * 1024;
     p->queue_flags = VK_QUEUE_COMPUTE_BIT;
     p->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+    /* The host platform carries the same internal multiview capability the
+     * console does, so the host tests exercise the paths that will consume it.
+     * It is an internal bit: nothing here enumerates VK_KHR_multiview or
+     * answers a public query from it. */
+    p->supported_features |= PS5VK_FEATURE_MULTIVIEW;
     const struct ps5vk_physical_profile_info profile = {
         .name = "ps5vk host platform",
         .heap_size = p->max_allocation,
