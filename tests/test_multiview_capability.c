@@ -44,6 +44,29 @@ int main(void)
     fclose(ps5);
     source[bytes] = '\0';
     assert(strstr(source, "PS5VK_FEATURE_MULTIVIEW"));
+    /* ...and it is guarded by the graphics-api+graphics-draw build condition,
+     * not merely present somewhere in the file: a runtime-compiler-only build
+     * must NOT report itself multiview-capable, because it cannot execute a
+     * render pass or a draw. The invariant is positional, so it cannot be
+     * satisfied by an unconditional line elsewhere. */
+    {
+        const char *guard = "#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW";
+        const char *bit = strstr(source, "PS5VK_FEATURE_MULTIVIEW");
+        const char *guard_at = strstr(source, guard);
+        assert(guard_at && bit && bit > guard_at);
+        assert(!strstr(bit + 1, "PS5VK_FEATURE_MULTIVIEW"));   /* exactly one site */
+        /* The guard's matching #endif must close after the bit and before the
+         * runtime-compiler block's #else, which is where the compiler-only
+         * configuration starts. */
+        const char *else_at = strstr(guard_at, "\n#else");
+        assert(else_at && bit < else_at);
+        const char *endif_at = strstr(bit, "\n#endif");
+        assert(endif_at && endif_at < else_at);
+        /* Everything between the guard and its #endif is the only place the bit
+         * may live, so the compiler-only branch below cannot carry it. */
+        const char *bit_in_else = strstr(else_at, "PS5VK_FEATURE_MULTIVIEW");
+        assert(!bit_in_else);
+    }
     /* The slice is foundation-only: no public surface may mention the
      * extension, the capability or the floors yet. */
     static const char *forbidden[] = {
