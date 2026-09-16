@@ -83,16 +83,20 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
 {
     if(!v || !f || !out || v->version!=PSBC_SHADER_METADATA_VERSION || f->version!=PSBC_SHADER_METADATA_VERSION ||
        v->vertex_buffer_per_attribute || f->vertex_buffer_usage_mask || f->vertex_buffer_per_attribute ||
-       /* BaseVertex, BaseInstance and DrawIndex are vertex-stage built-ins. A
-        * fragment-stage slot has no meaning here, and every absent slot must
-        * come with a zero dword so a malformed pair cannot be discarded. */
-       f->draw_id_valid || f->base_vertex_valid || f->start_instance_valid ||
+       /* BaseVertex, BaseInstance, DrawIndex and ViewIndex are vertex-stage
+        * built-ins. A fragment-stage slot has no meaning here, and every absent
+        * slot must come with a zero dword so a malformed pair cannot be
+        * discarded. */
+       f->draw_id_valid || f->view_index_valid ||
+       f->base_vertex_valid || f->start_instance_valid ||
        !slot_pair_ok(v->base_vertex_valid,v->base_vertex_user_data_dword,v->user_sgpr_count) ||
        !slot_pair_ok(v->start_instance_valid,v->start_instance_user_data_dword,v->user_sgpr_count) ||
        !slot_pair_ok(v->draw_id_valid,v->draw_id_user_data_dword,v->user_sgpr_count) ||
+       !slot_pair_ok(v->view_index_valid,v->view_index_user_data_dword,v->user_sgpr_count) ||
        !slot_pair_ok(f->base_vertex_valid,f->base_vertex_user_data_dword,f->user_sgpr_count) ||
        !slot_pair_ok(f->start_instance_valid,f->start_instance_user_data_dword,f->user_sgpr_count) ||
        !slot_pair_ok(f->draw_id_valid,f->draw_id_user_data_dword,f->user_sgpr_count) ||
+       !slot_pair_ok(f->view_index_valid,f->view_index_user_data_dword,f->user_sgpr_count) ||
        v->source_stage!=PSBC_STAGE_VERTEX ||
        v->hardware_stage!=PSBC_HW_STAGE_NGG || f->source_stage!=PSBC_STAGE_FRAGMENT ||
        f->hardware_stage!=PSBC_HW_STAGE_PIXEL || !v->ngg_lds_layout_valid ||
@@ -110,6 +114,7 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .base_vertex_slot=v->base_vertex_valid?v->base_vertex_user_data_dword:UINT32_MAX,
         .start_instance_slot=v->start_instance_valid?v->start_instance_user_data_dword:UINT32_MAX,
         .draw_id_slot=v->draw_id_valid?v->draw_id_user_data_dword:UINT32_MAX,
+        .view_index_slot=v->view_index_valid?v->view_index_user_data_dword:UINT32_MAX,
         .vertex_buffer_valid=v->vertex_buffer_table_valid,
         .vertex_buffer_slot=v->vertex_buffer_table_user_data_dword,
         .vertex_buffer_usage_mask=v->vertex_buffer_usage_mask,
@@ -130,7 +135,10 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         if(abi.vertex_descriptor_valid[s] || abi.fragment_descriptor_valid[s])tables[s]=16*(s+1);
     }
     uint32_t vertex[16],pixel[16];
-    if(ps5vk_runtime_draw_values_sets(&abi,0,0,0,abi.vertex_buffer_valid?16:0,
+    /* Validation of the published ABI: the draw-path values are probed once
+     * with zeros, including the view index, which this profile always delivers
+     * as zero because no multiview feature is advertised. */
+    if(ps5vk_runtime_draw_values_sets(&abi,0,0,0,0,abi.vertex_buffer_valid?16:0,
         abi.push_constant_size?4:0,tables,
         vertex,pixel))return -1;
     *out=abi;
@@ -164,8 +172,13 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if (!slot_pair_ok(m->base_vertex_valid,m->base_vertex_user_data_dword,m->user_sgpr_count) ||
         !slot_pair_ok(m->start_instance_valid,m->start_instance_user_data_dword,m->user_sgpr_count) ||
         !slot_pair_ok(m->draw_id_valid,m->draw_id_user_data_dword,m->user_sgpr_count) ||
-        /* BaseVertex, BaseInstance and DrawIndex are vertex-stage built-ins. */
-        (!vs && (m->base_vertex_valid || m->start_instance_valid || m->draw_id_valid))) return -2;
+        !slot_pair_ok(m->view_index_valid,m->view_index_user_data_dword,m->user_sgpr_count) ||
+        /* BaseVertex, BaseInstance, DrawIndex and ViewIndex are vertex-stage
+         * built-ins: a fragment stage that declares any of them is refused
+         * rather than handed a slot the draw path would fill from a vertex
+         * value. */
+        (!vs && (m->base_vertex_valid || m->start_instance_valid || m->draw_id_valid ||
+                 m->view_index_valid))) return -2;
     if (!registers_valid(m->context_registers,m->context_register_count,PSBC_MAX_CONTEXT_REGISTERS) ||
         !registers_valid(m->shader_registers,m->shader_register_count,PSBC_MAX_SHADER_REGISTERS)) return -2;
     unsigned lo=vs?0xc8:8, rsrc=vs?0x8a:0xa;
