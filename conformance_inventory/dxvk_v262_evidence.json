@@ -23,6 +23,20 @@
     "verifier": "tools/verify_dxvk_probe.py"
   },
  "requirements": {
+  "feature:VkPhysicalDeviceVulkan11Features:multiview": {
+   "_comment": "The T02 slices are implemented and measured natively: the mask/ViewIndex ABI, the layered attachment model, the view expansion and the six-view witness all have host gates and one strict hardware run. This says nothing about the public feature, the two Vulkan 1.1 multiview properties or the CTS leaf set, which stay unpromoted on purpose - there is no cts override here.",
+   "native": {
+    "state": "native-evidence",
+    "run_ids": [
+     "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
+    ],
+    "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+    "refs": [
+     "VALIDATION.md#dxvk-262-multiview-six-view-witness"
+    ],
+    "note": "One strict six-view run: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard and strict_verified=1."
+   }
+  },
   "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
    "cts": {
     "state": "cts-pass",
