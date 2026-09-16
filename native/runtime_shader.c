@@ -168,7 +168,7 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
        !slot_pair_ok(f->start_instance_valid,f->start_instance_user_data_dword,f->user_sgpr_count) ||
        !slot_pair_ok(f->draw_id_valid,f->draw_id_user_data_dword,f->user_sgpr_count) ||
        !slot_pair_ok(f->view_index_valid,f->view_index_user_data_dword,f->user_sgpr_count) ||
-       v->source_stage!=PSBC_STAGE_VERTEX ||
+       (v->source_stage!=PSBC_STAGE_VERTEX && v->source_stage!=PSBC_STAGE_GEOMETRY) ||
        v->hardware_stage!=PSBC_HW_STAGE_NGG || f->source_stage!=PSBC_STAGE_FRAGMENT ||
        f->hardware_stage!=PSBC_HW_STAGE_PIXEL || !v->ngg_lds_layout_valid ||
        v->output_semantic_count>PSBC_MAX_SEMANTICS || f->input_semantic_count>PSBC_MAX_SEMANTICS ||
@@ -221,7 +221,12 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if (!d || !c || !c->machine_code || !c->machine_code_size ||
         (c->machine_code_size & 3u) || c->machine_code_size>16u*1024u*1024u) return -1;
     const PsbcShaderMetadata *m=&c->metadata;
-    int vs=m->source_stage==PSBC_STAGE_VERTEX && m->hardware_stage==PSBC_HW_STAGE_NGG;
+    /* The pre-raster stage is the vertex program, or the merged vertex+geometry
+     * program when the pipeline carries a geometry stage: its source stage then
+     * names the last programmable stage it contains. */
+    const int has_geometry=m->source_stage==PSBC_STAGE_GEOMETRY;
+    int vs=(m->source_stage==PSBC_STAGE_VERTEX || has_geometry) &&
+        m->hardware_stage==PSBC_HW_STAGE_NGG;
     int fs=m->source_stage==PSBC_STAGE_FRAGMENT && m->hardware_stage==PSBC_HW_STAGE_PIXEL;
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
         m->address32_hi!=2 || m->user_sgpr_count>16 || m->scratch_valid ||
@@ -265,6 +270,16 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
         !find(m->context_registers,m->context_register_count,0x2ab) ||
         !m->ngg_lds_layout_valid || m->ngg_lds_layout_user_data_dword>=m->user_sgpr_count ||
         m->ngg_lds_layout>UINT16_MAX)) return -3;
+    /* A geometry stage's pipeline state is the merged program's: the output
+     * topology, the maximum vertices it may emit, the subgroup and on-chip
+     * limits and the ring item size all have to be present, or the GE would run
+     * with whatever the previous pipeline left behind. */
+    if (has_geometry) {
+        static const unsigned geometry_registers[]={0x1ffu,0x291u,0x29bu,0x2abu,0x2ceu,0x2d3u};
+        for (unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
+            if(!find(m->context_registers,m->context_register_count,geometry_registers[i]))
+                return -3;
+    }
     if (fs && (m->linkage_valid || m->ngg_lds_layout_valid)) return -3;
     if(fs) {
         const PsbcRegisterWrite *z=find(m->context_registers,m->context_register_count,0x1c4);
@@ -282,8 +297,11 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     d->header.sh_registers=relative(&d->header.sh_registers,d->shader);
     for (uint32_t i=0;i<m->context_register_count;++i) {
         d->context[i]=convert(m->context_registers[i]);
-        /* NGG VS exports unscaled vertex indices; no API geometry shader. */
-        if (vs && d->context[i].offset==0x2ab) d->context[i].value=1;
+        /* A vertex-only NGG program exports unscaled vertex indices and runs one
+         * item per vertex; with a geometry stage the ring item size is the
+         * merged program's, which the compiler computed and the register check
+         * above required, so it is left exactly as emitted. */
+        if (vs && !has_geometry && d->context[i].offset==0x2ab) d->context[i].value=1;
     }
     for (uint32_t i=0;i<m->shader_register_count;++i) d->shader[i]=convert(m->shader_registers[i]);
     if (vs) {

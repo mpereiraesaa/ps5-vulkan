@@ -201,10 +201,21 @@ static void check_geometry_stage(void)
     memcpy(key.geometry.specializations[0].data,&passthrough,sizeof(passthrough));
     assert(ps5vk_spirv_graphics_interface(&key));
     const void *out=(void *)1;
-    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
-    /* The same key without the feature is not a geometry pipeline at all. */
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    /* The compiled pre-raster stage is the merged program: it names the geometry
+     * source stage, keeps the NGG layout and exports the varying the fragment
+     * stage reads. */
+    assert(p->vertex.metadata.source_stage==PSBC_STAGE_GEOMETRY &&
+           p->vertex.metadata.hardware_stage==PSBC_HW_STAGE_NGG);
+    assert(p->vertex.metadata.ngg_lds_layout_valid && p->vertex.metadata.output_semantic_count==1);
+    assert(!p->vertex.metadata.clip_distance_mask && !p->vertex.metadata.cull_distance_mask);
+    ps5vk_runtime_graphics_free(NULL,out);
+    /* The same key without the feature is refused: the compiled program is the
+     * usage evidence and the shipping gate is the negotiation. */
     key.feature_mask=0;
     assert(ps5vk_spirv_graphics_interface(&key));
+    out=(void *)1;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     /* A geometry stage whose per-vertex input array is not the three vertices of
      * one triangle has no input primitive this profile can feed it. */
@@ -218,7 +229,7 @@ static void check_geometry_stage(void)
     free((void *)patched.words);
     free((void *)key.vertex.words);free((void *)key.geometry.words);
     free((void *)key.fragment.words);
-    puts("Geometry stage: vertex/geometry/fragment link described, merged path still refused");
+    puts("Geometry stage: vertex/geometry/fragment link and the merged pre-raster program");
 }
 
 static void check_view_index_builtin(void)
