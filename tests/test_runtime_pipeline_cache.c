@@ -226,6 +226,46 @@ int main(void)
     device->enabled_features = 0;
     cpci.stage.module = module;
 
+    /* Capability bits that belong to another stage must not stop a compute
+     * pipeline. The console platform declares multiview and the pinned CTS
+     * enables the feature on every device it creates, so a compute-only case
+     * carries a bit the compute adapter has no PSBC option for; refusing it
+     * failed every compute pipeline on hardware as VK_ERROR_UNKNOWN from
+     * vkCreateComputePipelines. */
+    {
+        VkPipeline with_multiview = VK_NULL_HANDLE;
+        device->enabled_features = PS5VK_FEATURE_MULTIVIEW;
+        assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                        &with_multiview) == VK_SUCCESS);
+        assert(with_multiview != VK_NULL_HANDLE);
+        assert(with_multiview->program.gfx == 1013);
+        vkDestroyPipeline(device, with_multiview, NULL);
+
+        /* The same pipeline with every currently declared capability bit set:
+         * the two narrow-storage bits are mapped into compiler options and the
+         * rest are irrelevant to this shader, so the combined mask must still
+         * compile rather than trip the unknown-bit check. */
+        const uint32_t all_declared = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
+                                      PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+                                      PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                                      PS5VK_FEATURE_SHADER_DRAW_PARAMETERS |
+                                      PS5VK_FEATURE_MULTIVIEW;
+        VkPipeline with_all = VK_NULL_HANDLE;
+        device->enabled_features = all_declared;
+        assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                        &with_all) == VK_SUCCESS);
+        vkDestroyPipeline(device, with_all, NULL);
+
+        /* A bit the adapter does not know is still refused, and no pipeline
+         * object is published for it. */
+        VkPipeline unknown_bit = (VkPipeline)(uintptr_t)1;
+        device->enabled_features = all_declared | (1u << 31);
+        assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                        &unknown_bit) == VK_ERROR_UNKNOWN);
+        assert(unknown_bit == VK_NULL_HANDLE);
+        device->enabled_features = 0;
+    }
+
     /* Teardown */
     vkDestroyPipeline(device, pipeline3, NULL);
     vkDestroyShaderModule(device, module, NULL);
