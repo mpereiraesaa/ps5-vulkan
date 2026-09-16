@@ -10,6 +10,42 @@
 
 VkResult ps5vk_platform_query(struct ps5vk_platform *);
 
+/* The capability line is placed correctly only when the guard that encloses it
+ * is the LAST copy of that exact guard before it. platform_ps5.c contains
+ * several identical graphics guards - the queue_flags block is one - so the
+ * first match says nothing about the feature assignment; only the nearest
+ * preceding guard does, and the bit has to sit before that guard's own #endif
+ * with no #else in between. Pure string work, so the negative fixtures below
+ * run it too. */
+static const char *last_before(const char *hay, const char *needle, const char *before)
+{
+    const char *found = NULL;
+    for (const char *at = strstr(hay, needle); at && at < before;
+         at = strstr(at + 1, needle))
+        found = at;
+    return found;
+}
+
+static int capability_placement_ok(const char *source)
+{
+    const char *guard = "#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW";
+    const char *bit = strstr(source, "PS5VK_FEATURE_MULTIVIEW");
+    if (!bit || strstr(bit + 1, "PS5VK_FEATURE_MULTIVIEW")) return 0;
+    const char *guard_at = last_before(source, guard, bit);
+    if (!guard_at || last_before(source, guard, bit) != guard_at) return 0;
+    const char *endif_at = strstr(guard_at, "\n#endif");
+    if (!endif_at || !(guard_at < bit && bit < endif_at)) return 0;
+    /* The guard directly encloses the bit: nothing re-opens the branch between
+     * them and no #else splits it before the bit. */
+    if (last_before(source, guard, bit) != guard_at) return 0;
+    if (strstr(guard_at, "\n#else") && strstr(guard_at, "\n#else") < endif_at) return 0;
+    /* The compiler-only configuration, which starts at the runtime-compiler
+     * block's #else, must not carry the bit at all. */
+    const char *compiler_else = strstr(endif_at, "\n#else");
+    if (compiler_else && strstr(compiler_else, "PS5VK_FEATURE_MULTIVIEW")) return 0;
+    return 1;
+}
+
 int main(void)
 {
     /* The floors are exactly what the two private witnesses measured: six views
@@ -44,29 +80,36 @@ int main(void)
     fclose(ps5);
     source[bytes] = '\0';
     assert(strstr(source, "PS5VK_FEATURE_MULTIVIEW"));
-    /* ...and it is guarded by the graphics-api+graphics-draw build condition,
-     * not merely present somewhere in the file: a runtime-compiler-only build
-     * must NOT report itself multiview-capable, because it cannot execute a
-     * render pass or a draw. The invariant is positional, so it cannot be
-     * satisfied by an unconditional line elsewhere. */
-    {
-        const char *guard = "#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW";
-        const char *bit = strstr(source, "PS5VK_FEATURE_MULTIVIEW");
-        const char *guard_at = strstr(source, guard);
-        assert(guard_at && bit && bit > guard_at);
-        assert(!strstr(bit + 1, "PS5VK_FEATURE_MULTIVIEW"));   /* exactly one site */
-        /* The guard's matching #endif must close after the bit and before the
-         * runtime-compiler block's #else, which is where the compiler-only
-         * configuration starts. */
-        const char *else_at = strstr(guard_at, "\n#else");
-        assert(else_at && bit < else_at);
-        const char *endif_at = strstr(bit, "\n#endif");
-        assert(endif_at && endif_at < else_at);
-        /* Everything between the guard and its #endif is the only place the bit
-         * may live, so the compiler-only branch below cannot carry it. */
-        const char *bit_in_else = strstr(else_at, "PS5VK_FEATURE_MULTIVIEW");
-        assert(!bit_in_else);
-    }
+    /* ...and it is guarded by the LAST matching graphics-api+draw guard before
+     * it, so a runtime-compiler-only build cannot report itself
+     * multiview-capable. The check is a pure function of the text, so the two
+     * fixtures below prove it rejects the placements a first-match scan would
+     * have accepted. */
+    assert(capability_placement_ok(source));
+    static const char unguarded[] =
+        "#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW\n"
+        "    platform->queue_flags = VK_QUEUE_GRAPHICS_BIT;\n"
+        "#endif\n"
+        "    platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;\n"
+        "#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW\n"
+        "    platform->supported_features |= PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;\n"
+        "#endif\n";
+    /* The old placement: an earlier identical guard exists, but the bit is NOT
+     * inside the nearest one. A first-match scan accepted this; it must not. */
+    assert(!capability_placement_ok(unguarded));
+    static const char compiler_only[] =
+        "#if defined(PS5VK_RUNTIME_COMPILER) && PS5VK_RUNTIME_COMPILER\n"
+        "    platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;\n"
+        "#else\n"
+        "#endif\n";
+    assert(!capability_placement_ok(compiler_only));
+    static const char inside_else[] =
+        "#if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW\n"
+        "    platform->supported_features |= PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;\n"
+        "#else\n"
+        "    platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;\n"
+        "#endif\n";
+    assert(!capability_placement_ok(inside_else));
     /* The slice is foundation-only: no public surface may mention the
      * extension, the capability or the floors yet. */
     static const char *forbidden[] = {
