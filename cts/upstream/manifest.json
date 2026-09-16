@@ -918,6 +918,966 @@
       "category": "graphics-draw-parameters", "expected_status": "Pass",
       "features_required": ["shaderDrawParameters"],
       "rationale": "Original upstream single-draw indexed indirect command with a zero firstInstance field and a non-zero vertexOffset, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.cmd_copy_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.cmd_copy_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.get_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.get_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview clear-attachments body: the factory's own view masks and query paths drive vkCmdClearAttachments, and its per-view oracle compares every layer against the expected contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.cmd_copy_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.get_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.get_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.cmd_copy_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.cmd_copy_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.get_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.get_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.geometry_shader.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.cmd_copy_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.cmd_copy_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.get_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.get_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.tessellation_shader.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.cmd_copy_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.get_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.get_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex-in-stage body: the shader reads gl_ViewIndex and the upstream oracle compares each layer against the value that view should have rendered."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.cmd_copy_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.cmd_copy_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.1_2_4_8_16_32",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
+    },
+    {
+      "path": "dEQP-VK.multiview.renderpass2.masks.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream multiview view-mask body: the factory's fixed mask tables drive one render pass per view set, and the upstream oracle verifies per-view layer contents."
     }
   ],
   "diagnostics": [

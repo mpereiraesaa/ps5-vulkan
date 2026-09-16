@@ -48,10 +48,12 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 109 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 213 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
-  image-copy and binding-model combined-sampler cases). Only these
+  image-copy and binding-model combined-sampler cases, plus the multiview
+  render-pass cases: `renderpass2` `clear_attachments`, `masks` and `index`).
+  Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -60,6 +62,13 @@ were the same thing:
   strict acceptance.
 * **Executed**: what a given report actually contains, which the strict verifier
   checks case by case.
+
+Every selected and diagnostic path is resolved against the pinned CTS revision
+in "Pinned inputs": `tools/check_upstream_selection.py` refuses a path whose
+leaf name, group segments or source anchor the pinned sources do not produce,
+refuses a duplicate selection, and refuses a checkout that is not that
+revision. The selection therefore cannot drift from the revision the packaging
+build compiles.
 
 The selection includes `dEQP-VK.api.smoke.triangle`. Its unchanged upstream
 body creates a graphics pipeline, records a real triangle draw into an RGBA8

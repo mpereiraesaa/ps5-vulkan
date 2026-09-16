@@ -12,6 +12,7 @@ the check reports that it was skipped instead of failing.
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,6 +107,95 @@ def _mapping_group_segment(text: str, segment: str) -> bool:
     # These focused cases intentionally use only decimal literals from the
     # pinned arrays; expressions such as 1 * 1024 * 1024 + 1 are not guessed.
     return int(value) in {int(token) for token in re.findall(r"\b\d+\b", match.group(1))}
+
+
+def _multiview_leaf_paths(text: str, function_text: str) -> set[str]:
+    """Derive the full multiview renderpass2 leaf paths of the pinned module.
+
+    The upstream factory registers its leaves through createViewMasksName() over
+    fixed view-mask tables, two query names and a shader-family table whose
+    order matches the module's TestType enum. The four ViewIndex-in-stage
+    families hang under one extra "index" group, and the rest sit directly under
+    the rendering-type group. Only the three families this integration selects
+    are derived - clear_attachments, masks and index - and only when the module
+    still contains that exact construction and the cited function is the
+    factory that owns it.
+
+    The derivation returns whole paths rather than bare leaf names: the factory
+    produces one "get_query_pool_results" and one "cmd_copy_query_pool_results"
+    child per family, so a selection that kept a real leaf but moved it under a
+    family that does not own it would otherwise pass by naming literals that do
+    exist elsewhere in the module.
+    """
+    construction = (
+        '"renderpass2"' in text and
+        "createViewMasksName" in text and
+        '"max_multi_view_view_count"' in text and
+        '"get_query_pool_results"' in text and
+        '"cmd_copy_query_pool_results"' in text and
+        'new tcu::TestCaseGroup(testCtx, "index")' in text and
+        "const uint32_t minSupportedMultiviewViewCount" in text and
+        "groupViewIndex->addChild" in function_text and
+        "targetGroupPtr->addChild" in function_text and
+        "shaderName[testTypeNdx]" in function_text
+    )
+    if not construction:
+        return set()
+
+    enum_match = re.search(r"enum TestType\s*\{(.*?)\};", text, re.DOTALL)
+    families_match = re.search(
+        r"const string shaderName\[TEST_TYPE_LAST\]\s*=\s*\{(.*?)\n    \};",
+        function_text, re.DOTALL)
+    if not enum_match or not families_match:
+        return set()
+    test_types = [name for name in re.findall(r"([A-Z][A-Z0-9_]+)", enum_match.group(1))
+                  if name != "TEST_TYPE_LAST"]
+    family_names = re.findall(r'"([a-z0-9_]+)"', families_match.group(1))
+    if len(test_types) != len(family_names):
+        return set()
+
+    # Which families the factory hangs under the "index" group: the cases whose
+    # switch arm calls groupViewIndex->addChild.
+    index_arm = re.search(
+        r"case (TEST_TYPE_VIEW_INDEX_IN_VERTEX):(.*?)default:", function_text, re.DOTALL)
+    if not index_arm or "groupViewIndex->addChild" not in index_arm.group(2):
+        return set()
+    index_types = {index_arm.group(1)} | set(
+        re.findall(r"case (TEST_TYPE_[A-Z0-9_]+):", index_arm.group(2)))
+    if not index_types:
+        return set()
+    index_families = {family_names[test_types.index(name)]
+                      for name in test_types if name in index_types}
+
+    # The view-mask leaves: the six fixed tables, then the iteration table the
+    # factory fills one bit at a time up to its own supported view count.
+    mask_names: list[str] = []
+    tables = re.findall(r"viewMasks\[(\d+)\]\.push_back\((\d+)u\);", function_text)
+    by_index: dict[str, list[str]] = {}
+    for index, value in tables:
+        by_index.setdefault(index, []).append(value)
+    for index in sorted(by_index, key=int):
+        mask_names.append("_".join(by_index[index]))
+    supported = re.search(r"minSupportedMultiviewViewCount\s*=\s*(\d+)u", function_text)
+    if not supported:
+        return set()
+    bits = int(supported.group(1))
+    mask_names.append("_".join(str(1 << bit) for bit in range(bits)))
+
+    query_names = ("get_query_pool_results", "cmd_copy_query_pool_results")
+    leaves: set[str] = set()
+    for family in ("clear_attachments", "masks"):
+        for query in query_names:
+            for mask in mask_names:
+                leaves.add(f"dEQP-VK.multiview.renderpass2.{family}.{query}.{mask}")
+            leaves.add(f"dEQP-VK.multiview.renderpass2.{family}.{query}.max_multi_view_view_count")
+    for family in sorted(index_families):
+        for query in query_names:
+            for mask in mask_names:
+                leaves.add(f"dEQP-VK.multiview.renderpass2.index.{family}.{query}.{mask}")
+            leaves.add(
+                f"dEQP-VK.multiview.renderpass2.index.{family}.{query}.max_multi_view_view_count")
+    return leaves
 
 
 def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
@@ -265,6 +355,37 @@ def _duplicate_selection_failures(manifest: dict) -> list[str]:
     return failures
 
 
+def _cts_revision_failures(manifest: dict) -> list[str]:
+    """Reject a selection that is not validated against the compiled revision.
+
+    tools/build_upstream_cts.py compiles the package from third_party/vk-gl-cts
+    and already refuses a checkout that is not the revision cts_pin records. The
+    same rule belongs here, at selection time, so a manifest edit cannot be
+    accepted against one revision while the packaging build uses another: the
+    leaf names, group segments and source anchors all belong to one revision.
+    The checkout is ignored by the lab repository and some environments vendor
+    it without its own metadata; a directory that is not its own git work tree
+    cannot be compared here and stays the build's check.
+    """
+    commit = manifest.get("cts_pin", {}).get("commit")
+    if not commit or not UPSTREAM.is_dir():
+        return []
+    try:
+        top = subprocess.check_output(
+            ["git", "-C", str(UPSTREAM), "rev-parse", "--show-toplevel"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        actual = subprocess.check_output(
+            ["git", "-C", str(UPSTREAM), "rev-parse", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    if Path(top).resolve() != UPSTREAM.resolve():
+        return []
+    if actual != commit:
+        return [f"third_party/vk-gl-cts is at {actual}; the selection pins {commit}"]
+    return []
+
+
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     # Diagnostics are frozen upstream cases that are executed but are known not
@@ -273,17 +394,18 @@ def main() -> int:
     cases = manifest["cases"] + manifest.get("diagnostics", [])
 
     duplicate_failures = _duplicate_selection_failures(manifest)
+    revision_failures = _cts_revision_failures(manifest)
 
     if not UPSTREAM.is_dir():
-        if duplicate_failures:
+        if duplicate_failures or revision_failures:
             print("upstream selection check failed:", file=sys.stderr)
-            for failure in duplicate_failures:
+            for failure in duplicate_failures + revision_failures:
                 print(f"  {failure}", file=sys.stderr)
             return 1
         print("upstream vk-gl-cts checkout not present; selection check skipped")
         return 0
 
-    failures = list(duplicate_failures)
+    failures = list(duplicate_failures) + revision_failures
     integration_text = INTEGRATION_SOURCE.read_text(encoding="utf-8")
 
     for case in cases:
@@ -331,6 +453,20 @@ def main() -> int:
                     f"integration or {module_root}")
 
         function_text = _source_function_at_line(text, source_line)
+
+        # The multiview render factory composes every renderpass2 leaf from the
+        # shader-family table, the two query names and the fixed view-mask
+        # tables, so its membership is checked against the whole derived path.
+        # A real leaf moved under a family or query group that does not own it
+        # would otherwise pass by naming literals that exist elsewhere in the
+        # module. Applied to this one pinned module, and it fails closed when the
+        # module no longer contains the construction it is derived from.
+        if source_path.name == "vktMultiViewRenderTests.cpp":
+            if path not in _multiview_leaf_paths(text, function_text):
+                failures.append(
+                    f"{path}: not produced by the pinned multiview factory "
+                    f"{source_ref}")
+            continue
 
         # The leaf must be a literal name in the cited function/file, a bounded
         # table-derived name, or a number produced
