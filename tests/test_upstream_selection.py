@@ -421,20 +421,20 @@ class UpstreamSelectionTests(unittest.TestCase):
                          "supported": False})
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
 
-    def test_current_execution_ledger_is_two_of_four_and_stays_final_false(self):
+    def test_current_execution_ledger_is_three_of_four_and_stays_final_false(self):
         """The merged host work is recorded, not advertised: this tree now meets
-        the descriptor object model and the descriptor table encoding, and the
-        other two requirements keep the execution stage - and so the final
-        state - false. The blocker prose has to name both the true and the
-        outstanding requirements, and a leaf still may not re-enter strict
-        acceptance."""
+        the descriptor object model, the descriptor table encoding and the
+        compiler lowering, and the one outstanding requirement keeps the
+        execution stage - and so the final state - false. The blocker prose has
+        to name both the true and the outstanding requirements, and a leaf still
+        may not re-enter strict acceptance."""
         contract = self.manifest["resource_contracts"][MV_CONTRACT]
         requirements = contract["execution_requirements"]
         self.assertEqual(
             {"descriptor_object_model": True, "descriptor_table_encoding": True,
-             "compiler_lowering": False, "gpu_subpass_readback": False},
+             "compiler_lowering": True, "gpu_subpass_readback": False},
             requirements)
-        self.assertEqual(2, sum(1 for value in requirements.values() if value))
+        self.assertEqual(3, sum(1 for value in requirements.values() if value))
         self.assertEqual(4, len(requirements))
         # Both stages and their conjunction: the resource stage is promoted on
         # the console receipt, the execution stage is not, so the final state
@@ -443,10 +443,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertFalse(contract["execution_supported"])
         self.assertFalse(contract["supported"])
         blocker = contract["blocker"]
-        for named in ("two of the four recorded requirements are now true",
+        for named in ("three of the four recorded requirements are now true",
                       "descriptor_object_model", "descriptor_table_encoding",
                       "compiler_lowering", "gpu_subpass_readback",
-                      "48 leaves stay diagnostics"):
+                      "sole remaining requirement", "48 leaves stay diagnostics"):
             self.assertIn(named, blocker)
         # The selection itself is unchanged: the same 117 acceptance cases and
         # the same 53 diagnostics, 48 of which are the blocked family.
