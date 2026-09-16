@@ -72,19 +72,21 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
                 const VkDescriptorImageInfo *v=&w->pImageInfo[k];
                 void *address;VkDeviceSize bytes;
                 if(input) {
-                   /* Image-view-only: no sampler, a 2D view of a live image on
-                    * this device, read through a layout a subpass may use. The
-                    * usage obligation belongs to the subpass that consumes the
-                    * descriptor, and this driver executes no such subpass yet,
-                     * so no usage bit and no bound allocation are required
-                     * here - both are consumption-time obligations this slice
-                     * deliberately does not claim. */
-                   if(v->sampler || !v->imageView || v->imageView->device!=d ||
-                       !v->imageView->image || v->imageView->image->device!=d ||
-                       (v->imageView->view_type!=VK_IMAGE_VIEW_TYPE_2D &&
-                        v->imageView->view_type!=VK_IMAGE_VIEW_TYPE_2D_ARRAY) ||
+                   /* Image-view-only: a 2D view of a live image on this device,
+                    * whose image was created for input attachment use
+                    * (VUID-VkWriteDescriptorSet-descriptorType-00338), read
+                    * through a layout a subpass may use. VkDescriptorImageInfo's
+                    * sampler member is IGNORED for this descriptor type, so it
+                    * is deliberately neither read nor rejected. The bound
+                    * allocation stays a consumption-time obligation this slice
+                    * does not claim. */
+                   if(!v->imageView || v->imageView->device!=d ||
+                      !v->imageView->image || v->imageView->image->device!=d ||
+                      !(v->imageView->image->info.usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) ||
+                      (v->imageView->view_type!=VK_IMAGE_VIEW_TYPE_2D &&
+                       v->imageView->view_type!=VK_IMAGE_VIEW_TYPE_2D_ARRAY) ||
                       (v->imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-                        v->imageLayout!=VK_IMAGE_LAYOUT_GENERAL)) {
+                       v->imageLayout!=VK_IMAGE_LAYOUT_GENERAL)) {
                         ++d->lifetime_errors;return;
                     }
                     continue;
@@ -183,6 +185,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         VkBool32 texel=b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
         if (b->descriptorCount && !valid_descriptor_stages(b->stageFlags))
             return INVALID;
+        /* VUID-VkDescriptorSetLayoutBinding-descriptorType-01510: an input
+         * attachment is read by a fragment shader, so its visibility is either
+         * nothing or exactly the fragment stage. */
+        if (b->descriptorCount && input && b->stageFlags &&
+            b->stageFlags != VK_SHADER_STAGE_FRAGMENT_BIT)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount && base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
             !d->uniform_buffer_alignment)
             return VK_ERROR_FEATURE_NOT_PRESENT;

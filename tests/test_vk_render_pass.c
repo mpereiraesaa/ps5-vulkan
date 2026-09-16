@@ -414,7 +414,13 @@ static void input_attachments(struct VkDevice_T *d)
      * input reference, and the profile refuses them rather than storing them. */
     const VkImageLayout illegal[] = {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PREINITIALIZED,
                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL + 4096};
+                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL + 4096,
+                                     /* VUID 06912 forbids both attachment layouts for a real
+                                      * input reference: an input attachment is read, not
+                                      * attached, so neither is a legal read layout. */
+                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                     VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                     VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
     for (unsigned i = 0; i < sizeof(illegal)/sizeof(illegal[0]); ++i) {
         bad.layout = (VkImageLayout)illegal[i];
         assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN &&

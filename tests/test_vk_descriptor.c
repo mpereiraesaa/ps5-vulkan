@@ -374,8 +374,16 @@ static void dynamic_buffer_resources(void)
 static void input_attachments(void)
 {
     struct VkDevice_T d = {.graphics_enabled=VK_TRUE}, other = {.graphics_enabled=VK_TRUE};
-    struct VkImage_T image = {0}, foreign_image = {0};
-    image.device = &d; foreign_image.device = &other;
+    struct VkImage_T image = {0}, foreign_image = {0}, unqualified_image = {0};
+    image.device = &d; foreign_image.device = &other; unqualified_image.device = &d;
+    /* VUID 00338: the descriptor's image must have been created for input
+     * attachment use. The fixture sets exactly the bit the check requires. */
+    image.info.usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    foreign_image.info.usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    unqualified_image.info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    struct VkImageView_T unqualified_view = {0};
+    unqualified_view.device = &d; unqualified_view.image = &unqualified_image;
+    unqualified_view.view_type = VK_IMAGE_VIEW_TYPE_2D;
     struct VkImageView_T view = {0}, foreign_view = {0}, no_image = {0}, wrong_type = {0};
     view.device = &d; view.image = &image; view.view_type = VK_IMAGE_VIEW_TYPE_2D;
     view.format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -401,6 +409,25 @@ static void input_attachments(void)
     binding.pImmutableSamplers = &immutable;
     assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
     binding.pImmutableSamplers = NULL;
+    /* VUID 01510: an input attachment is fragment-stage only, so every other
+     * visibility - including a mixed mask that contains the fragment bit - is
+     * refused. */
+    const VkShaderStageFlags wrong_stages[] = {VK_SHADER_STAGE_VERTEX_BIT,
+        VK_SHADER_STAGE_COMPUTE_BIT,
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        VK_SHADER_STAGE_ALL};
+    for (unsigned i = 0; i < sizeof(wrong_stages)/sizeof(wrong_stages[0]); ++i) {
+        binding.stageFlags = wrong_stages[i];
+        assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+    }
+    /* VUID 01510 also permits an empty visibility mask, but this profile's
+     * bounded rule already refuses a zero mask for every descriptor role, and
+     * this slice does not widen that. */
+    binding.stageFlags = 0;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_UNKNOWN && !layout);
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(&d,layout,NULL);
     d.graphics_enabled = VK_FALSE;
     assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
     d.graphics_enabled = VK_TRUE;
@@ -449,36 +476,87 @@ static void input_attachments(void)
     /* Fail-closed edges: the write is refused as a whole and the previously
      * stored reference stays exactly as it was. */
     VkDescriptorImageInfo saved = set->images[0];
-    VkSampler sampler = VK_NULL_HANDLE;
+    VkSampler sampler = (VkSampler)(uintptr_t)0xdeadbeef;
     struct { VkDescriptorImageInfo info; unsigned expected_errors; const char *why; } cases[] = {
-        {{(VkSampler)&sampler, &view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 1, "sampler"},
-        {{VK_NULL_HANDLE, NULL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 2, "no view"},
-        {{VK_NULL_HANDLE, &foreign_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 3, "foreign view"},
-        {{VK_NULL_HANDLE, &no_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 4, "view without image"},
-        {{VK_NULL_HANDLE, &wrong_type, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 5, "not a 2D view"},
+        {{VK_NULL_HANDLE, NULL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 1, "no view"},
+        {{VK_NULL_HANDLE, &foreign_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 2, "foreign view"},
+        {{VK_NULL_HANDLE, &no_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 3, "view without image"},
+        {{VK_NULL_HANDLE, &wrong_type, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 4, "not a 2D view"},
+        {{VK_NULL_HANDLE, &unqualified_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 5,
+         "image without the input-attachment usage"},
         {{VK_NULL_HANDLE, &view, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}, 6, "unreadable layout"},
-        {{VK_NULL_HANDLE, &view, VK_IMAGE_LAYOUT_UNDEFINED}, 7, "undefined layout"},
+        {{VK_NULL_HANDLE, &view, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}, 7,
+         "attachment layout is not an input layout"},
+        {{VK_NULL_HANDLE, &view, VK_IMAGE_LAYOUT_UNDEFINED}, 8, "undefined layout"},
     };
     for (unsigned i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
         VkDescriptorImageInfo bad_info = cases[i].info;
-        if (i == 3) bad_info.imageView = &no_image;
         VkWriteDescriptorSet bad = write; bad.pImageInfo = &bad_info;
         vkUpdateDescriptorSets(&d,1,&bad,0,NULL);
         assert(d.lifetime_errors == cases[i].expected_errors);
         assert(set->generation == generation && set->images[0].imageView == saved.imageView &&
             set->images[0].imageLayout == saved.imageLayout && set->defined[0]);
     }
+    /* VkDescriptorImageInfo's sampler member is IGNORED for this descriptor
+     * type, so a garbage handle is neither read nor rejected: the view and the
+     * layout are what the descriptor stores. */
+    VkDescriptorImageInfo ignored_sampler = {.sampler = sampler, .imageView = &view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkWriteDescriptorSet ignored = write; ignored.pImageInfo = &ignored_sampler;
+    vkUpdateDescriptorSets(&d,1,&ignored,0,NULL);
+    assert(d.lifetime_errors == 8 && set->defined[0] &&
+        set->images[0].imageView == &view &&
+        set->images[0].imageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+        set->generation == generation + 1);
+    generation = set->generation;
+    /* A write covers several elements at once, and one invalid element rejects
+     * the WHOLE write: element one stays exactly as it was, and the second
+     * element is never published. */
+    VkDescriptorSetLayoutBinding two_bindings = {.binding=3,
+        .descriptorType=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,.descriptorCount=2,
+        .stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT};
+    VkDescriptorSetLayoutCreateInfo two_info = {
+        .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount=1,.pBindings=&two_bindings};
+    VkDescriptorSetLayout two_layout = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorSetLayout(&d,&two_info,NULL,&two_layout)==VK_SUCCESS);
+    VkDescriptorPoolSize two_size = {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,2};
+    VkDescriptorPoolCreateInfo two_pi = pi; two_pi.pPoolSizes = &two_size;
+    VkDescriptorPool two_pool = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorPool(&d,&two_pi,NULL,&two_pool)==VK_SUCCESS);
+    VkDescriptorSetAllocateInfo two_ai = ai; two_ai.descriptorPool = two_pool;
+    two_ai.pSetLayouts = &two_layout;
+    VkDescriptorSet two_set = VK_NULL_HANDLE;
+    assert(vkAllocateDescriptorSets(&d,&two_ai,&two_set)==VK_SUCCESS);
+    VkDescriptorImageInfo pair[2] = {
+        {VK_NULL_HANDLE, &view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {VK_NULL_HANDLE, &unqualified_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+    VkWriteDescriptorSet pair_write = {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet=two_set,.dstBinding=3,.dstArrayElement=0,.descriptorCount=2,
+        .descriptorType=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,.pImageInfo=pair};
+    vkUpdateDescriptorSets(&d,1,&pair_write,0,NULL);
+    assert(d.lifetime_errors == 9);
+    assert(!two_set->defined[0] && !two_set->defined[1] && two_set->generation == 1);
+    /* The valid pair publishes both elements at once. */
+    pair[1] = pair[0];
+    vkUpdateDescriptorSets(&d,1,&pair_write,0,NULL);
+    assert(d.lifetime_errors == 9 && two_set->defined[0] && two_set->defined[1] &&
+        two_set->images[0].imageView == &view && two_set->images[1].imageView == &view &&
+        two_set->generation == 2);
+    vkDestroyDescriptorPool(&d,two_pool,NULL);
+    vkDestroyDescriptorSetLayout(&d,two_layout,NULL);
+
     /* A write of zero descriptors is not a selection. */
     VkWriteDescriptorSet empty = write; empty.descriptorCount = 0;
     vkUpdateDescriptorSets(&d,1,&empty,0,NULL);
-    assert(d.lifetime_errors == 8 && set->generation == generation);
+    assert(d.lifetime_errors == 10 && set->generation == generation);
     /* The image view must belong to this device even when the image does. */
     foreign_view.device = &d; foreign_view.image = &foreign_image;
     VkDescriptorImageInfo foreign_info = {.sampler=VK_NULL_HANDLE,.imageView=&foreign_view,
         .imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     VkWriteDescriptorSet foreign = write; foreign.pImageInfo = &foreign_info;
     vkUpdateDescriptorSets(&d,1,&foreign,0,NULL);
-    assert(d.lifetime_errors == 9 && set->generation == generation);
+    assert(d.lifetime_errors == 11 && set->generation == generation);
 
     /* Copies move the stored reference between sets of the same type. */
     VkDescriptorPool second_pool = VK_NULL_HANDLE;
@@ -491,7 +569,7 @@ static void input_attachments(void)
         .dstSet=destination,.dstBinding=3,.dstArrayElement=0,.descriptorCount=1};
     vkUpdateDescriptorSets(&d,0,NULL,1,&copy);
     assert(destination->defined[0] && destination->images[0].imageView==&view &&
-        destination->image_resources[0]==&image && d.lifetime_errors == 9);
+        destination->image_resources[0]==&image && d.lifetime_errors == 11);
     /* A copy between different descriptor types is refused. */
     VkDescriptorSetLayoutBinding sampled = {.binding=3,
         .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.descriptorCount=1,
@@ -508,7 +586,7 @@ static void input_attachments(void)
     assert(vkAllocateDescriptorSets(&d,&ai,&sampled_set)==VK_SUCCESS);
     VkCopyDescriptorSet crossed = copy; crossed.dstSet = sampled_set;
     vkUpdateDescriptorSets(&d,0,NULL,1,&crossed);
-    assert(d.lifetime_errors == 10 && !sampled_set->defined[0]);
+    assert(d.lifetime_errors == 12 && !sampled_set->defined[0]);
 
     /* Freeing returns the role's accounting. */
     assert(vkResetDescriptorPool(&d,pool,0)==VK_SUCCESS && !pool->input_used);

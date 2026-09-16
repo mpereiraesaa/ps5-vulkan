@@ -11,18 +11,17 @@ static int layout(VkImageLayout value, int depth, int initial)
         (!depth && value == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
-/* The layouts a subpass may name for an input reference. Vulkan forbids
- * UNDEFINED, PREINITIALIZED and the transfer/present layouts here; of the ones
- * that are legal, this profile accepts exactly the layouts whose attachment
- * semantics it already models, so an input reference can never name a layout
- * the rest of the driver has no meaning for. */
+/* The layouts a subpass may name for an input reference. VUID 06912 forbids
+ * the colour- and depth-attachment layouts outright for a real input reference
+ * (an input attachment is read, not attached), and Vulkan also forbids
+ * UNDEFINED, PREINITIALIZED and the transfer/present layouts. Of what remains,
+ * this profile models exactly the two read layouts it can describe, so an input
+ * reference can never name a layout the rest of the driver has no meaning
+ * for. */
 static int input_layout(VkImageLayout value)
 {
-    return value == VK_IMAGE_LAYOUT_GENERAL ||
-        value == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
-        value == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
-        value == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
-        value == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    return value == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
+        value == VK_IMAGE_LAYOUT_GENERAL;
 }
 
 /* One subpass description against this profile: exactly one colour reference,
