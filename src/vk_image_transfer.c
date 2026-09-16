@@ -276,7 +276,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
     VkDevice d = c->pool->device;
     void *address = NULL;
     VkDeviceSize bytes = 0;
-    if (!transfer_role_destination(image) || !layout_is_transfer_destination(image_layout) ||
+    const VkBool32 tiled = ps5vk_array_color_image(image) &&
+        (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    if ((!transfer_role_destination(image) && !tiled) || !layout_is_transfer_destination(image_layout) ||
         ps5vk_image_span(d, image, &address, &bytes) != VK_SUCCESS) {
         ps5vk_command_invalidate(c);
         return;
@@ -293,7 +295,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
         if (r->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT || r->baseMipLevel ||
             (r->levelCount != 1 && r->levelCount != VK_REMAINING_MIP_LEVELS) ||
             r->baseArrayLayer ||
-            (r->layerCount != 1 && r->layerCount != VK_REMAINING_ARRAY_LAYERS)) {
+            (r->layerCount != image->info.arrayLayers && r->layerCount != VK_REMAINING_ARRAY_LAYERS)) {
             ps5vk_command_invalidate(c);
             return;
         }
@@ -391,15 +393,43 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearAttachments(VkCommandBuffer c,
     uint32_t attachment_count, const VkClearAttachment *attachments,
     uint32_t rect_count, const VkClearRect *rects)
 {
-    (void)attachments; (void)rects;
     if (!c || c->state != PS5VK_RECORDING) { ps5vk_command_invalidate(c); return; }
-    if (!attachment_count || !attachments || !rect_count || !rects || !c->render_pass) {
+    if (attachment_count!=1 || !attachments || !rect_count || !rects || !c->render_pass ||
+        c->level!=VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
+        c->render_pass_contents!=VK_SUBPASS_CONTENTS_INLINE ||
+        c->operation_count>PS5VK_MAX_OPERATIONS || rect_count>PS5VK_MAX_OPERATIONS-c->operation_count ||
+        attachments[0].aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || attachments[0].colorAttachment!=0) {
         ps5vk_command_invalidate(c);
         return;
     }
-    /* Fail closed: a clear recorded inside a render pass needs a DCB clear path
-     * (or a tiled writer) that this profile does not implement yet. */
-    ps5vk_command_invalidate(c);
+    const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(c->render_pass,c->subpass);
+    if(!subpass || !c->framebuffer || subpass->color.attachment>=c->framebuffer->attachment_count) {
+        ps5vk_command_invalidate(c);return;
+    }
+    VkImageView view=c->framebuffer->attachments[subpass->color.attachment];
+    uint32_t word;
+    if(!view || !view->image || !(view->image->info.format==VK_FORMAT_B8G8R8A8_UNORM?
+        ps5vk_color_clear_bgra8(attachments[0].clearValue.color.float32,&word):
+        ps5vk_color_clear_rgba8(attachments[0].clearValue.color.float32,&word))) {
+        ps5vk_command_invalidate(c);return;
+    }
+    VkRect2D render_area={0};
+    for(unsigned i=c->operation_count;i>0;--i)
+        if(c->operations[i-1].type==PS5VK_BEGIN_RENDER_PASS) {
+            render_area=c->operations[i-1].render_area;break;
+        }
+    struct ps5vk_operation probe={.type=PS5VK_CLEAR_ATTACHMENT,
+        .render_pass=c->render_pass,.framebuffer=c->framebuffer,.subpass=c->subpass,
+        .render_pass_contents=c->render_pass_contents,.render_area=render_area,
+        .image_destination=view->image,.clear_word=word};
+    for(uint32_t i=0;i<rect_count;++i) {
+        probe.clear_rect=rects[i];
+        if(!ps5vk_clear_attachment_valid(&probe)){ps5vk_command_invalidate(c);return;}
+    }
+    struct ps5vk_operation *ops=ps5vk_command_reserve_operations(c,PS5VK_CLEAR_ATTACHMENT,
+        PS5VK_OPERATION_INSIDE_RENDER_PASS,rect_count);
+    if(!ops)return;
+    for(uint32_t i=0;i<rect_count;++i){ops[i]=probe;ops[i].clear_rect=rects[i];}
 }
 
 VkResult ps5vk_image_transfer_execute(VkDevice d, const struct ps5vk_operation *op)
