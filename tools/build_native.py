@@ -53,6 +53,21 @@ def main():
     multiview_diagnostic = os.environ.get("PS5VK_MULTIVIEW_DIAGNOSTIC", "0")
     if multiview_diagnostic not in ("0", "1") or (multiview_diagnostic == "1" and not graphics_api):
         raise SystemExit("PS5VK_MULTIVIEW_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
+    # The six-view witness is the only consumer of the diagnostic gate, so it
+    # requires both: a real view mask AND a runtime-compiled vertex stage that
+    # reads gl_ViewIndex. It is a single bounded scene, never combined with the
+    # other probes, with witnesses or with continuous mode, so its telemetry
+    # cannot be confused with another diagnostic's.
+    multiview_view_probe = os.environ.get("PS5VK_MULTIVIEW_VIEW_PROBE", "0")
+    if multiview_view_probe not in ("0", "1"):
+        raise SystemExit("PS5VK_MULTIVIEW_VIEW_PROBE must be 0 or 1")
+    if multiview_view_probe == "1" and os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1":
+        raise SystemExit("PS5VK_MULTIVIEW_VIEW_PROBE requires the runtime graphics profile (PS5VK_RUNTIME_GRAPHICS=1)")
+    if multiview_view_probe == "1" and multiview_diagnostic != "1":
+        raise SystemExit("PS5VK_MULTIVIEW_VIEW_PROBE requires PS5VK_MULTIVIEW_DIAGNOSTIC=1")
+    if multiview_view_probe == "1" and (scissor_probe != "0" or witnesses != "0" or continuous == "1" or
+                                        observe_scene != "0" or scene_split == "1"):
+        raise SystemExit("PS5VK_MULTIVIEW_VIEW_PROBE is a bounded standalone scene and cannot be combined with other probes, witnesses, observation or continuous mode")
     if scene_split == "1" and int(scissor_probe) >= 3:
         raise SystemExit("Planar triangle diagnostic cannot split the cube draw")
     shell_close = os.environ.get("PS5VK_SHELL_CLOSE") == "1"
@@ -246,6 +261,7 @@ def main():
             common += ["-DPS5VK_GRAPHICS_SCENE_SPLIT=" + scene_split]
             common += ["-DPS5VK_LAYER_PROBE=" + layer_probe]
             common += ["-DPS5VK_MULTIVIEW_DIAGNOSTIC=" + multiview_diagnostic]
+            common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]
@@ -256,6 +272,10 @@ def main():
             sources += [(p.stem, p, []) for p in sorted((ROOT / "src").glob("vk_*.c"))]
             sources += [(p.stem, p, []) for p in (
                 ROOT / "native/graphics_main.c", ROOT / "native/compute_main.c", ROOT / "native/platform_ps5.c", ROOT / "src/scene_geometry.c", ROOT / "src/scene_region.c", ROOT / "src/sampler_core_probe.c", ROOT / "src/sampled_format_probe.c", ROOT / "src/integer_sampled_probe.c", ROOT / "src/vertex_format_probe.c", ROOT / "src/color_clear.c", ROOT / "src/color_detile.c",
+                # The witness oracle is part of the artifact: the same pure
+                # classifier the host regressions exercise decides the verdict
+                # on the console, so the readback is judged by proven code.
+                ROOT / "src/multiview_witness.c",
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
                 ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
@@ -409,6 +429,17 @@ def main():
                         graphics_shader_source="owned-runtime-vertex-formats" if vertex_probe else "owned-runtime-triangle",
                         graphics_offline_library_role="negative-lookup-control-only")
         runtime_inputs = (("vertex", "runtime_triangle.vert"), ("fragment", "runtime_triangle.frag"))
+        if multiview_view_probe == "1":
+            # The one scene whose vertex stage reads gl_ViewIndex, and the only
+            # place the diagnostic gate is exercised. Recorded in the manifest so
+            # the artifact's identity covers the shader that produced it.
+            manifest["graphics_shader_source"] = "owned-runtime-view-index"
+            manifest["multiview_witness"] = {
+                "view_mask": "0x3f", "views": 6, "framebuffer_layers": 1,
+                "layers_per_image": 7, "extent": [64, 64],
+                "guard_layer": 6, "diagnostic_gate": True}
+            runtime_inputs = (("vertex", "runtime_view_index.vert"),
+                              ("fragment", "runtime_triangle.frag"))
         if scissor_probe == "13":
             manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
             manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"
