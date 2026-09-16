@@ -86,7 +86,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     /* A geometry pipeline needs the feature the logical device enabled. The
      * private witness build keeps its own gate, exactly as the multiview
      * diagnostic does, so shipping behaviour stays the negotiation. */
-#if !PS5VK_GEOMETRY_SHADER_DIAGNOSTIC
+#if !PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
     if (gs && !(d->enabled_features & PS5VK_FEATURE_GEOMETRY_SHADER))
         return VK_ERROR_FEATURE_NOT_PRESENT;
 #endif

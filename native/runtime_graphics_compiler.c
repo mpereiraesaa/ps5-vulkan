@@ -61,6 +61,13 @@ int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
     const PsbcShaderMetadata *fragment,uint32_t feature_mask)
 {
     if(!pre_raster || !fragment)return 0;
+#if PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
+    /* The witness builds exist to measure these capabilities before any of them
+     * is advertised, so they skip the negotiation gate the shipping build
+     * enforces on every acquisition. */
+    (void)feature_mask;
+    return 1;
+#else
     if(pre_raster->clip_distance_mask &&
        !(feature_mask & PS5VK_FEATURE_SHADER_CLIP_DISTANCE))return 0;
     if(pre_raster->cull_distance_mask &&
@@ -72,6 +79,7 @@ int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
     if(pre_raster->source_stage==PSBC_STAGE_TESS_EVAL &&
        !(feature_mask & PS5VK_FEATURE_TESSELLATION_SHADER))return 0;
     return 1;
+#endif
 }
 
 static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
@@ -109,10 +117,9 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
        key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
-    /* The merged vertex+geometry pre-raster stage is the next slice: until the
-     * adapter can compile and package it, a key with a geometry stage is
-     * refused instead of silently compiling its vertex stage alone. */
-    if(ps5vk_graphics_has_geometry(key))return 0;
+    /* A geometry stage is compiled through the merged entry point, so its own
+     * module passes the same structural screening as the other two. */
+    if(ps5vk_graphics_has_geometry(key) && !module_supported(&key->geometry,3))return 0;
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
     if(key->vertex_binding_count>16 || key->vertex_attribute_count>PSBC_MAX_VERTEX_ATTRIBUTES ||
@@ -199,10 +206,14 @@ static PsbcVertexFormat vertex_format(VkFormat format)
 }
 
 VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_key *key,
-    VkShaderStageFlagBits stage,PsbcCompileOptions *options)
+    VkShaderStageFlags stages,PsbcCompileOptions *options)
 {
-    if(!key || !options || (stage!=VK_SHADER_STAGE_VERTEX_BIT &&
-            stage!=VK_SHADER_STAGE_FRAGMENT_BIT))return VK_ERROR_UNKNOWN;
+    /* `stages` is the set of stages whose bindings the table must carry: a
+     * single stage for a standalone compilation, and every stage of the merged
+     * pre-raster program when the compiler links a vertex+geometry pair. */
+    if(!key || !options || !(stages&(VK_SHADER_STAGE_VERTEX_BIT|
+            VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
+        return VK_ERROR_UNKNOWN;
     struct ps5vk_descriptor_table_layout tables;
     VkResult rc=ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
         key->descriptor_sets,&tables);
@@ -221,7 +232,7 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
                key->descriptor_sets[s].type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
                source->stages!=VK_SHADER_STAGE_FRAGMENT_BIT)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
-            if(!source->count || !(source->stages&stage))continue;
+            if(!source->count || !(source->stages&stages))continue;
             if(count==PSBC_MAX_DESCRIPTOR_BINDINGS)return VK_ERROR_FEATURE_NOT_PRESENT;
             PsbcDescriptorType type;
             switch(key->descriptor_sets[s].type[b]) {
@@ -253,7 +264,7 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
 
 static int apply_parameters(PsbcCompileOptions *options,
                             const struct ps5vk_graphics_module_key *module,
-                            const struct ps5vk_graphics_key *key,VkShaderStageFlagBits stage)
+                            const struct ps5vk_graphics_key *key,VkShaderStageFlags stages)
 {
     options->specialization_constant_count=module->specialization_count;
     for(uint32_t i=0;i<module->specialization_count;++i) {
@@ -267,10 +278,10 @@ static int apply_parameters(PsbcCompileOptions *options,
             if(module->specializations[i].constant_id==module->specializations[j].constant_id)return 0;
     options->force_indirect_push_constants=false;
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
-        if(key->push_constant_stages[i]&stage)options->force_indirect_push_constants=true;
+        if(key->push_constant_stages[i]&stages)options->force_indirect_push_constants=true;
     options->vertex_attribute_count=0;
-    if(ps5vk_runtime_graphics_descriptor_options(key,stage,options)!=VK_SUCCESS)return 0;
-    if(stage==VK_SHADER_STAGE_VERTEX_BIT) {
+    if(ps5vk_runtime_graphics_descriptor_options(key,stages,options)!=VK_SUCCESS)return 0;
+    if(stages&VK_SHADER_STAGE_VERTEX_BIT) {
         for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
             const VkVertexInputAttributeDescription *source=&key->vertex_attributes[i];
             const VkVertexInputBindingDescription *binding=NULL;
@@ -322,12 +333,34 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     if(p->fragment.metadata.input_semantic_count>PSBC_MAX_SEMANTICS)goto failed;
     for(unsigned i=0;i<p->fragment.metadata.input_semantic_count;++i)
         if((p->fragment.metadata.input_semantics[i]&255u)==PSBC_SEMANTIC_PRIMITIVE_ID)goto failed;
-    options.stage=PSBC_STAGE_VERTEX;options.ngg=true;
+    options.ngg=true;
     options.entrypoint=key->vertex.entry;options.omit_implicit_primitive_id=true;
     if(!apply_parameters(&options,&key->vertex,key,VK_SHADER_STAGE_VERTEX_BIT))goto failed;
-    result=psbc_compile_shader(key->vertex.words,key->vertex.word_count*4u,&options,&p->vertex);
+    if(ps5vk_graphics_has_geometry(key)) {
+        /* A geometry pipeline's pre-raster stage is the merged vertex+geometry
+         * program: the compiler links the pair, so the compiled metadata
+         * describes the last programmable stage the hardware runs before
+         * rasterization. The geometry stage's own entry point and descriptors
+         * come from its module key. */
+        options.stage=PSBC_STAGE_GEOMETRY;
+        options.entrypoint=key->geometry.entry;
+        /* One merged shader carries one specialization map. The module that has
+         * constants supplies it; a pipeline that specializes both halves is
+         * refused instead of silently keeping one of the two maps. */
+        if(key->geometry.specialization_count && key->vertex.specialization_count)goto failed;
+        const struct ps5vk_graphics_module_key *specialized=
+            key->geometry.specialization_count?&key->geometry:&key->vertex;
+        if(!apply_parameters(&options,specialized,key,
+                VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT))goto failed;
+        result=psbc_compile_geometry_pipeline(key->vertex.words,key->vertex.word_count*4u,
+            key->geometry.words,key->geometry.word_count*4u,&options,&p->vertex);
+    } else {
+        options.stage=PSBC_STAGE_VERTEX;
+        result=psbc_compile_shader(key->vertex.words,key->vertex.word_count*4u,&options,&p->vertex);
+    }
     if(result!=PSBC_RESULT_OK)goto failed;
-    if(!push_metadata_supported(&p->vertex.metadata,key,VK_SHADER_STAGE_VERTEX_BIT) ||
+    if(!push_metadata_supported(&p->vertex.metadata,key,
+            ps5vk_graphics_has_geometry(key)?VK_SHADER_STAGE_GEOMETRY_BIT:VK_SHADER_STAGE_VERTEX_BIT) ||
        !push_metadata_supported(&p->fragment.metadata,key,VK_SHADER_STAGE_FRAGMENT_BIT))goto failed;
     /* The compiled stages are the usage evidence: refuse a pair that really
      * consumes a capability the application never enabled. */

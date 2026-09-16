@@ -10,11 +10,13 @@
 #ifndef PS5VK_MULTIVIEW_DIAGNOSTIC
 #define PS5VK_MULTIVIEW_DIAGNOSTIC 0
 #endif
-/* Private diagnostic gate for the optional-stage witnesses. The shipping path
- * still requires the logical device to have enabled the feature; only a build
- * that exists to measure the hardware skips that negotiation. */
-#ifndef PS5VK_GEOMETRY_SHADER_DIAGNOSTIC
-#define PS5VK_GEOMETRY_SHADER_DIAGNOSTIC 0
+/* Private diagnostic gate for the optional-stage witnesses (geometry,
+ * tessellation and the clip/cull distances they export). The shipping path
+ * requires the logical device to have enabled the feature; only a build that
+ * exists to measure the hardware skips that negotiation, exactly as the
+ * multiview witness build does. */
+#ifndef PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
+#define PS5VK_OPTIONAL_STAGE_DIAGNOSTIC 0
 #endif
 /* The widest mask the diagnostic build validates against, and therefore the most
  * layers the framebuffer rule below has to be able to serve. */

@@ -21,7 +21,7 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *);
 /* Shared descriptor-table lowering, independent of the currently enabled
  * draw ABI. Success proves compiler options only, not native submission. */
 VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_key *,
-    VkShaderStageFlagBits, PsbcCompileOptions *);
+    VkShaderStageFlags, PsbcCompileOptions *);
 /* True when the compiled pair only consumes capabilities the logical device
  * enabled. The compiled metadata is the usage evidence: a distance array a
  * shader declares but never writes does not require its feature, while one the

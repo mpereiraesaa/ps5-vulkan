@@ -295,6 +295,10 @@ def main():
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
+            # Both optional-stage witnesses skip the feature-negotiation gate:
+            # they exist to measure capabilities that are not advertised yet.
+            common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + 
+                       ("1" if (clip_cull_probe == "1") else "0")]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]
