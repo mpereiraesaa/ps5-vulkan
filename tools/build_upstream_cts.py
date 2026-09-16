@@ -18,7 +18,13 @@ SELECTION_MANIFEST = ROOT / "cts/upstream/manifest.json"
 # Upstream shader sources the packaged cases load from the /app0 data archive.
 DATASET_SHADER_SOURCES = (
     "vulkan/draw/VertexFetchShaderDrawParameters.vert",
+    "vulkan/draw/VertexFetchShaderDrawParametersDrawIndex.vert",
+    "vulkan/draw/VertexFetch.vert",
+    "vulkan/draw/VertexFetchInstanceIndex.vert",
+    "vulkan/draw/VertexFetchInstanced.vert",
+    "vulkan/draw/VertexFetchInstancedFirstInstance.vert",
     "vulkan/draw/VertexFetch.frag",
+    "vulkan/draw/NegateData.comp",
 )
 
 def sha256_file(path: Path) -> str:
@@ -794,6 +800,9 @@ def main():
         # group parameters. The module's base class carries the pipeline,
         # vertex-input and render-pass setup the oracle compares against.
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp",
+        # Indirect-draw module: original upstream multi-command, firstInstance
+        # and instanced bodies over the same base class and image oracle.
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp",
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBaseClass.cpp",
         # The base class builds its buffers, images and render pass through the
         # module's own create-info and object helpers.
@@ -977,8 +986,9 @@ def main():
 
     # The packaged CTS reads its data archive from /app0 (the title directory),
     # so the selected cases that load upstream shader sources need those files
-    # beside eboot.bin. Only the draw-parameter module's two sources are staged;
-    # the rest of the selection builds its shaders in code.
+    # beside eboot.bin. Only the draw modules' sources are staged (the
+    # registered factories load them by name even for unselected leaves); the
+    # rest of the selection builds its shaders in code.
     for relative in DATASET_SHADER_SOURCES:
         source = cts_root / "external/vulkancts/data" / relative
         if not source.is_file():
