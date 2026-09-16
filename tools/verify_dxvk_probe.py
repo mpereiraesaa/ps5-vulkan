@@ -42,7 +42,8 @@ def wire_expected(row: dict) -> int:
     return value
 
 
-def validate(run: Path, artifact_manifest: Path, artifact_path: Path) -> dict:
+def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
+             matrix_snapshot: Path | None = None) -> dict:
     profile_bytes = PROFILE.read_bytes()
     profile = json.loads(profile_bytes)
     expected_rows = profile["requirements"]
@@ -65,7 +66,7 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path) -> dict:
         "requirements": len(expected_rows),
         "profile_sha256": hashlib.sha256(profile_bytes).hexdigest(),
         "matrix_sha256": hashlib.sha256(
-            (ROOT / "conformance_inventory/dxvk_v262_matrix.json").read_bytes()
+            (matrix_snapshot or ROOT / "conformance_inventory/dxvk_v262_matrix.json").read_bytes()
         ).hexdigest(),
     }, "artifact DXVK contract")
 
@@ -134,6 +135,20 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path) -> dict:
         satisfied += verdict == "satisfied"
         observed[identifier] = value
 
+    multiview_ids = {
+        "multiview": "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "maxMultiviewViewCount": "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+        "maxMultiviewInstanceIndex": "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+    }
+    routes = [row for kind, row in messages if kind == "DXVK262_MULTIVIEW_QUERY"]
+    version = tuple(int(part) for part in begin["device_api"].split("."))
+    if routes or (version < (1, 2, 0) and any(observed[i] for i in multiview_ids.values())):
+        require(len(routes) == 1 and routes[0].get("route") == "VK_KHR_multiview",
+                "explicit multiview query route")
+        for field, identifier in multiview_ids.items():
+            require(routes[0].get(field) == str(observed[identifier]),
+                    "multiview route value mismatch")
+
     total = len(expected_rows)
     blockers = total - satisfied
     compatible = int(satisfied == total)
@@ -154,6 +169,8 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path) -> dict:
         "artifact_eboot_sha256": digest,
         "observed": observed,
         "source_log": str(log_path),
+        "query_routes": routes,
+        "source_matrix_sha256": dxvk["matrix_sha256"],
     }
 
 
@@ -164,8 +181,10 @@ def main() -> int:
                         default=ROOT / "dist-consumer/artifact.json")
     parser.add_argument("--artifact", type=Path,
                         default=ROOT / "dist-consumer/PPSA99994/eboot.bin")
+    parser.add_argument("--matrix-snapshot", type=Path,
+                        help="Immutable build-time matrix; permits verifying historical runs after promotion")
     args = parser.parse_args()
-    print(json.dumps(validate(args.run, args.manifest, args.artifact), indent=2))
+    print(json.dumps(validate(args.run, args.manifest, args.artifact, args.matrix_snapshot), indent=2))
     return 0
 
 

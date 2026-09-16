@@ -148,6 +148,47 @@ class DxvkProbeTests(unittest.TestCase):
         finally:
             fixture.tmp.cleanup()
 
+    def test_multiview_requires_explicit_matching_query_route(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        values = {"multiview": 1, "maxMultiviewViewCount": 6,
+                  "maxMultiviewInstanceIndex": 134217727}
+        records = list(fixture.records)
+        for i, record in enumerate(records):
+            for field, value in values.items():
+                if f":{field} " in record:
+                    records[i] = record.replace("observed=0", f"observed={value}").replace(
+                        "status=blocker", "status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61", "satisfied=4 blockers=58")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit multiview query route"):
+            fixture.validate()
+        route = ("DXVK262_MULTIVIEW_QUERY route=VK_KHR_multiview "
+                 "multiview=1 maxMultiviewViewCount=6 maxMultiviewInstanceIndex=134217727")
+        records.insert(1, route)
+        fixture.write(records)
+        self.assertEqual(4, fixture.validate()["satisfied"])
+        bad = list(records)
+        bad[1] = route.replace("maxMultiviewViewCount=6", "maxMultiviewViewCount=7")
+        fixture.write(bad)
+        with self.assertRaisesRegex(ValueError, "route value mismatch"):
+            fixture.validate()
+        records.insert(1, route)
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit multiview query route"):
+            fixture.validate()
+
+    def test_historical_matrix_snapshot_remains_hash_bound(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        snapshot = Path(fixture.tmp.name) / "matrix.json"
+        snapshot.write_bytes((ROOT / "conformance_inventory/dxvk_v262_matrix.json").read_bytes())
+        self.assertTrue(probe.validate(fixture.run, fixture.manifest, fixture.eboot,
+                                       snapshot)["strict_verified"])
+        snapshot.write_bytes(b"wrong matrix")
+        with self.assertRaisesRegex(ValueError, "artifact DXVK contract"):
+            probe.validate(fixture.run, fixture.manifest, fixture.eboot, snapshot)
+
 
 if __name__ == "__main__":
     unittest.main()
