@@ -39,6 +39,11 @@ static int descriptors_valid(const PsbcShaderMetadata *m)
         uint32_t stride=0;
         switch(b->type) {
         case PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER:stride=48;break;
+        /* The resource-only image record an input attachment is read through:
+         * the same eight DWORDs a sampled T# occupies, with no sampler words,
+         * so a metadata record that claims 48 bytes for this type - or 32 for
+         * a combined pair - is refused instead of being sized by its words. */
+        case PSBC_DESCRIPTOR_INPUT_ATTACHMENT:stride=32;break;
         case PSBC_DESCRIPTOR_UNIFORM_BUFFER:
         case PSBC_DESCRIPTOR_STORAGE_BUFFER:
         case PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER:stride=16;break;

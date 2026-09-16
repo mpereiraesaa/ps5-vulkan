@@ -28,6 +28,7 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_format.frag -o build/runtime-graphics/vertex_format.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_texture.frag -o build/runtime-graphics/texture.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_descriptor_arrays.frag -o build/runtime-graphics/descriptor_arrays.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_input_attachment.frag -o build/runtime-graphics/input_attachment.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_shared_sets.vert -o build/runtime-graphics/shared_sets.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_shared_sets.frag -o build/runtime-graphics/shared_sets.frag.spv
 	$(GLSLANG) -V -DVERTEX_SAMPLERS_ONLY=1 experiments/graphics/runtime_shared_sets.frag -o build/runtime-graphics/vertex_sets.frag.spv
