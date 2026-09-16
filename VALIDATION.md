@@ -3,6 +3,48 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Multiview native acceptance
+
+On 2026-09-16 the original 48 multiview leaves (masks, rectangular clears,
+vertex ViewIndex and fragment ViewIndex) passed unchanged upstream pixel oracles.
+The subsequent combined selection passed **165/165**, with no failures,
+NotSupported cases, missing results or transport gaps. Five unrelated diagnostic
+cases remain outside acceptance. This is focused execution, not full CTS or
+Vulkan conformance.
+
+The combined run `20260916T203823854Z_PPSA99994_upstream-cts_0x145ddaffc8494`
+used:
+
+- SELF SHA-256: `deaabb648bf288ab7cd1ec4c8788378785206e62957adab5fbb7e3019d080dd8`.
+- Selection SHA-256: `984ab83f7c7586eea2243847f494e4db20784b4590d2772332912ab653aaad8c`.
+- QPA SHA-256: `11cef34a5320ec66eac1fc3de5884efb44c7db31b1e35363ccd4f2e1b347648d`
+  (11,080,881 bytes; 28,857 reassembled chunks).
+- Process exit 0, strict identity/result verification and verified Close Game.
+- PSBC commit `c96cb63ba2c3b65b22ae76457e726dde7aeb2ace`, including a real
+  fragment user-SGPR for ViewIndex and the full 0–31 compiler range.
+
+The prerequisite input-attachment oracle is separate:
+`20260916T192041030Z_PPSA99994_ps5vk_0x141a00db047f9`, SELF
+`fccbe810989ec007c490a7f99ab56e9dda306a801e7b930a6fccb0d6c614e7c6`.
+It measured an actual fragment subpassLoad across a colour-write/input-read
+dependency: 4096/4096 pixels matched the CPU reference (hash `e5c69f45`),
+with 1024 guard words intact. Image creation alone is not that evidence.
+
+A fresh public-SDK capability run,
+`20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93`, SELF
+`d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82`,
+measured `multiview=true`, `maxMultiviewViewCount=6` and
+`maxMultiviewInstanceIndex=134217727` using the explicitly recorded
+`VK_KHR_multiview` feature/property query route. Strict TCP ps5log/1 verification
+and Close Game both passed. The historical six-view and instance-floor
+execution witnesses below remain intact and supply the dedicated boundary
+evidence; the selected CTS leaves alone do not test the maximum instance index.
+
+These runs provide the native evidence for multiview; profile-matrix promotion
+is a separate integration step. The runtime still reports API 1.0, not Vulkan
+1.2 aggregate queries or DXVK compatibility. Raw QPA and transport logs remain
+private; sanitized identities are recorded here and in the manifest.
+
 ## Layer-addressed target measurement (2026-09-15, DXVK262-T02 slice A)
 
 Multiview's normative core is per-view broadcast into one framebuffer layer per
@@ -108,12 +150,10 @@ oracle's UNORM8 expectation for view 5 (green is `5/8*255 = 159.375`, which
 rounds to 159, not 160). Neither run says anything about GPU behaviour beyond
 what is written here, and the canonical run above supersedes both.
 
-What this does *not* claim: that multiview can be advertised. Both floors are now
-privately measured - the view count is at least 6 and the instance index at least
-134217727 (0x07ffffff) - but both remain PUBLICLY unreported and unadvertised: the
-public feature and query still report multiview as absent, the two Vulkan 1.1
-property values are not surfaced anywhere, and the CTS leaf set is untouched.
-Nothing here promotes the capability.
+Historical scope: this witness by itself did not justify advertising multiview.
+It measured the floors privately without changing public queries or CTS.
+The later [native acceptance](#multiview-native-acceptance) adds original CTS
+execution and a fresh public KHR query; it does not rewrite this run's identity.
 
 ## DXVK 262 multiview instance floor
 
@@ -150,12 +190,11 @@ detiled colour and their own counted depth footprint, the trailing guard layer i
 untouched, `strict_verified=1`, and the lifecycle closed cleanly with Close Game
 verified and the console back at `running=none`.
 
-This is evidence for the private floor `0x07ffffff` only: the measured instance
-index is at least 134217727, and the measured view count from the six-view run
-above is at least 6, but neither value is reported publicly. It does **not** report
-`maxMultiviewInstanceIndex` or `maxMultiviewViewCount`, does not enable the
-multiview feature, and changes no public query, `apiVersion` or CTS selection:
-promoting the capability remains a separate, explicitly authorised step.
+This historical run measures the instance floor `0x07ffffff`; it did not itself
+change public queries or the CTS selection. The later
+[native acceptance](#multiview-native-acceptance) supplies the separate public
+query and execution evidence used for promotion. The original floor measurement
+and its artifact remain unchanged.
 
 ## Shader draw parameters promotion (2026-09-15)
 
@@ -1361,12 +1400,11 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is 1/62 satisfied and 61 blockers. Only core
-`robustBufferAccess` has all four evidence axes; every Vulkan 1.1+ structure,
-the Vulkan 1.3.204 API floor and the two required extension surfaces remain
-blocked unless separately implemented and witnessed. This intentionally makes
-the matrix more conservative than either the source inventory or a successful
-struct query.
+The current checked profile matrix remains 1/62 satisfied and 61 blockers.
+The new [multiview native acceptance](#multiview-native-acceptance) is recorded
+above; joining that evidence to the explicit KHR query route in the profile
+matrix is the next integration step. The API 1.3.204 floor remains blocked.
+A successful query alone is never enough to satisfy a row.
 
 The optional native consumer is built with:
 

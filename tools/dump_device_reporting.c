@@ -61,6 +61,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     if (!graphics_objects)
         platform->supported_features |= PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                         PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
+    if (graphics_submit)
+        platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit);
@@ -488,6 +490,10 @@ int main(int argc, char **argv)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES};
     VkPhysicalDeviceShaderDrawParametersFeatures draw_parameters = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES};
+    VkPhysicalDeviceMultiviewFeatures multiview = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES};
+    VkPhysicalDeviceMultiviewProperties multiview_properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
     uint32_t extensions = 0;
     (void)vkEnumerateDeviceExtensionProperties(dump_physical, NULL, &extensions, NULL);
     char **extension_names = extensions ? calloc(extensions, sizeof(*extension_names)) : NULL;
@@ -499,9 +505,19 @@ int main(int argc, char **argv)
     storage8.pNext = &storage16;
     storage16.pNext = &protected_memory;
     protected_memory.pNext = &draw_parameters;
+    draw_parameters.pNext = &multiview;
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = &storage8};
     vkGetPhysicalDeviceFeatures2KHR(dump_physical, &features2);
+    VkPhysicalDeviceProperties2 properties2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &multiview_properties};
+    vkGetPhysicalDeviceProperties2KHR(dump_physical, &properties2);
+    fprintf(stdout, "  \"multiviewQuery\": {\"route\": \"VK_KHR_multiview\", "
+        "\"multiview\": %s, \"maxMultiviewViewCount\": %u, "
+        "\"maxMultiviewInstanceIndex\": %u},\n",
+        multiview.multiview ? "true" : "false", multiview_properties.maxMultiviewViewCount,
+        multiview_properties.maxMultiviewInstanceIndex);
     fprintf(stdout, "  \"extensionCount\": %u,\n", extensions);
     fputs("  \"extensions\": [", stdout);
     for (uint32_t i = 0; i < extensions; ++i)
