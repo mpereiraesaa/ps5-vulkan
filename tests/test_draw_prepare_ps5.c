@@ -13,14 +13,27 @@ static size_t expected_bytes=sizeof(struct ps5vk_draw_state);
 static VkResult fetch_rc;
 static VkResult texture_rc;
 static VkImageView texture_fail_view;
+static unsigned texture_calls, resource_calls;
+static VkResult resource_rc;
+static VkImageView resource_fail_view;
 static VkResult buffer_rc;
 static VkBuffer buffer_fail;
 static VkDeviceSize last_buffer_dynamic, first_set_buffer_dynamic;
 static unsigned buffer_calls;
 static struct ps5vk_runtime_draw_abi runtime;
 VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView v,VkSampler s,uint32_t out[12])
-{(void)d;(void)s;for(unsigned i=0;i<12;++i)out[i]=100+i+256*(uintptr_t)v;
+{(void)d;(void)s;++texture_calls;for(unsigned i=0;i<12;++i)out[i]=100+i+256*(uintptr_t)v;
  return texture_fail_view && v==texture_fail_view?VK_ERROR_UNKNOWN:texture_rc;}
+/* The audited eight-word resource record is produced by the resource-only
+ * encoder, whose own test pins a record of exactly 8 DWORDs and no sampler
+ * words. This stub owns the placement question instead: which words of which
+ * record the input-attachment role writes, and that the combined entry point is
+ * never the one asked to write them. It has no sampler parameter at all, which
+ * is the same reason the real entry point cannot read the ignored
+ * VkDescriptorImageInfo::sampler of an input attachment. */
+VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView v,uint32_t out[8])
+{(void)d;++resource_calls;for(unsigned i=0;i<8;++i)out[i]=300+i+256*(uintptr_t)v;
+ return resource_fail_view && v==resource_fail_view?VK_ERROR_UNKNOWN:resource_rc;}
 /* The audited GFX1013 buffer record is exercised by its own encoder test; this
  * fixture owns placement, ordering and fail-closed behaviour in the graphics
  * table. */
@@ -405,4 +418,164 @@ int main(void)
     allocated=allocations;
     assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS &&
            allocations==allocated && !prepared.backing);
+
+    /* Resource-only input attachments. The table gives every element eight
+     * DWORDs, so a mixed buffer/input/combined set keeps its canonical offsets,
+     * the input records can never receive sampler words, and the role is
+     * dispatched to the resource-only encoder - whose signature has no sampler
+     * parameter and which is never the combined entry point. */
+    {
+        struct VkDescriptorPool_T in_pool={.device=&d};
+        struct VkPipeline_T in_pipeline={.device=&d};
+        struct ps5vk_operation in_op=op;
+        struct VkDevice_T foreign={0};
+        struct VkDescriptorSet_T in={0};
+        uint32_t prefix=0;
+        for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+            struct ps5vk_binding *binding=&in.signature.binding[b];
+            binding->first=prefix;
+            if(b==1) {
+                binding->count=1;binding->stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+                in.signature.type[b]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;prefix+=1;
+            } else if(b==3) {
+                binding->count=2;binding->stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+                in.signature.type[b]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;prefix+=2;
+            } else if(b==5) {
+                binding->count=1;binding->stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+                in.signature.type[b]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;prefix+=1;
+            } else if(b==7) {
+                binding->count=1;binding->stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+                in.signature.type[b]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;prefix+=1;
+            }
+        }
+        /* Canonical byte offsets: 16 buffer, 32/32 input, 32 unused, 48 combined. */
+        in.signature.count=prefix;in.pool=&in_pool;in.generation=31;
+        for(unsigned e=0;e<prefix;++e)in.defined[e]=VK_TRUE;
+        in.buffers[0]=(VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)1,0,64};
+        /* Input attachments carry no sampler: both accepted layouts work with
+         * VkDescriptorImageInfo::sampler left null, because nothing reads it. */
+        in.images[1]=(VkDescriptorImageInfo){NULL,(VkImageView)(uintptr_t)101,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        in.images[2]=(VkDescriptorImageInfo){NULL,(VkImageView)(uintptr_t)102,
+            VK_IMAGE_LAYOUT_GENERAL};
+        /* Binding 5 is declared with count 1 but no compiled stage names it, so
+         * it stays undefined and viewless and its record must stay zero. */
+        in.defined[3]=VK_FALSE;
+        in.images[3]=(VkDescriptorImageInfo){NULL,NULL,VK_IMAGE_LAYOUT_UNDEFINED};
+        in.images[4]=(VkDescriptorImageInfo){(VkSampler)(uintptr_t)9,(VkImageView)(uintptr_t)103,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        in_pipeline.set_count=1;in_pipeline.sets[0]=in.signature;
+        in_op.pipeline=&in_pipeline;in_op.sets[0]=&in;in_op.generations[0]=in.generation;
+        runtime=(struct ps5vk_runtime_draw_abi){.enabled=1};
+        runtime.fragment_descriptor_valid[0]=1;
+        runtime.fragment_used_bindings[0]=(UINT64_C(1)<<1)|(UINT64_C(1)<<3)|(UINT64_C(1)<<7);
+        expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+160;
+        unsigned in_allocated=allocations;
+        unsigned in_texture_calls=texture_calls,in_resource_calls=resource_calls;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)==
+            VK_SUCCESS);
+        assert(prepared.bytes==expected_bytes && prepared.descriptor_bytes[0]==160 &&
+            prepared.texture_table==prepared.descriptor_tables[0] && allocations==in_allocated+1);
+        const uint32_t *t=prepared.descriptor_tables[0];
+        for(unsigned i=0;i<4;++i)assert(t[i]==200+i+256);
+        for(unsigned i=0;i<8;++i)assert(t[4+i]==300+i+256*101);   /* input element 0 */
+        for(unsigned i=0;i<8;++i)assert(t[12+i]==300+i+256*102);  /* input element 1 */
+        for(unsigned i=0;i<8;++i)assert(t[20+i]==0);              /* unused declaration */
+        for(unsigned i=0;i<12;++i)assert(t[28+i]==100+i+256*103); /* combined record */
+        assert(resource_calls==in_resource_calls+2 && texture_calls==in_texture_calls+1);
+        /* Releasing twice is idempotent and clears the published result. */
+        ps5vk_native_release_draw(&prepared);ps5vk_native_release_draw(&prepared);
+        assert(allocations==releases && !prepared.state && !prepared.backing &&
+            !prepared.descriptor_tables[0] && !prepared.texture_table);
+        /* Each refusal below leaves the caller's prepared draw untouched, and
+         * the three pre-allocation ones never even allocate. */
+        in.images[1].imageView=NULL;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==in_allocated+1 && releases==allocations &&
+            !prepared.backing && !prepared.state);
+        in.images[1].imageView=(VkImageView)(uintptr_t)101;
+        in.images[1].imageLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==in_allocated+1 && !prepared.backing);
+        in.images[1].imageLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==in_allocated+1 && !prepared.backing);
+        in.images[1].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        /* No visibility at all is refused by the canonical layout, and a
+         * visibility the layout may not declare for this role - vertex-only,
+         * vertex+fragment or the ALL convenience mask - is refused here. */
+        in.signature.binding[3].stages=0;in_pipeline.sets[0]=in.signature;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==in_allocated+1 && !prepared.backing);
+        const VkShaderStageFlags refused[]={VK_SHADER_STAGE_VERTEX_BIT,
+            VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,VK_SHADER_STAGE_ALL,
+            VK_SHADER_STAGE_COMPUTE_BIT};
+        for(unsigned i=0;i<sizeof(refused)/sizeof(refused[0]);++i) {
+            in.signature.binding[3].stages=refused[i];in_pipeline.sets[0]=in.signature;
+            assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)==
+                VK_ERROR_FEATURE_NOT_PRESENT && allocations==in_allocated+1 && !prepared.backing);
+        }
+        in.signature.binding[3].stages=VK_SHADER_STAGE_FRAGMENT_BIT;in_pipeline.sets[0]=in.signature;
+        /* A descriptor type outside the profile stays unsupported. */
+        in.signature.type[3]=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;in_pipeline.sets[0]=in.signature;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)==
+            VK_ERROR_FEATURE_NOT_PRESENT && allocations==in_allocated+1 && !prepared.backing);
+        in.signature.type[3]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;in_pipeline.sets[0]=in.signature;
+        /* Ownership, generation and signature identity are all mandatory. */
+        in_pool.device=&foreign;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==in_allocated+1 && !prepared.backing);
+        in_pool.device=&d;in.generation=32;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==in_allocated+1 && !prepared.backing);
+        /* Signature drift alone is refused: the pipeline declares a different
+         * visibility for a binding the live set still carries. */
+        in.generation=31;in_pipeline.sets[0].binding[7].stages=VK_SHADER_STAGE_VERTEX_BIT;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==in_allocated+1 && !prepared.backing);
+        in_pipeline.sets[0]=in.signature;
+        /* Encoder failure and flush failure both release the whole block. */
+        resource_fail_view=(VkImageView)(uintptr_t)101;
+        unsigned hits=allocations;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)==
+            VK_ERROR_UNKNOWN && allocations==hits+1 && releases==allocations &&
+            !prepared.backing && !prepared.state && !prepared.descriptor_tables[0]);
+        resource_fail_view=NULL;resource_rc=VK_ERROR_FEATURE_NOT_PRESENT;hits=allocations;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)==
+            VK_ERROR_FEATURE_NOT_PRESENT && allocations==hits+1 && releases==allocations &&
+            !prepared.backing);
+        resource_rc=VK_SUCCESS;flush_rc=VK_ERROR_MEMORY_MAP_FAILED;hits=allocations;
+        assert(ps5vk_native_prepare_resource_draw(&d,&in_op,&area,NULL,shader_address,&prepared)==
+            VK_ERROR_MEMORY_MAP_FAILED && allocations==hits+1 && releases==allocations &&
+            !prepared.backing);
+        flush_rc=VK_SUCCESS;
+        /* The precompiled single-table ABI (no runtime draw ABI) delivers the
+         * same resource-only record through the texture-table slot. */
+        struct VkPipeline_T single_pipeline={.device=&d};
+        struct ps5vk_operation single_op=in_op;
+        struct VkDescriptorSet_T single={0};
+        single.pool=&in_pool;single.generation=41;
+        single.signature.count=1;
+        single.signature.binding[0]=(struct ps5vk_binding){.count=1,
+            .stages=VK_SHADER_STAGE_FRAGMENT_BIT};
+        single.signature.type[0]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)single.signature.binding[b].first=1;
+        single.defined[0]=VK_TRUE;
+        single.images[0]=(VkDescriptorImageInfo){NULL,(VkImageView)(uintptr_t)111,
+            VK_IMAGE_LAYOUT_GENERAL};
+        single_pipeline.set_count=1;single_pipeline.sets[0]=single.signature;
+        single_op.pipeline=&single_pipeline;single_op.sets[0]=&single;
+        single_op.generations[0]=single.generation;
+        runtime=(struct ps5vk_runtime_draw_abi){0};
+        expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+32;
+        in_texture_calls=texture_calls;in_resource_calls=resource_calls;hits=allocations;
+        assert(ps5vk_native_prepare_resource_draw(&d,&single_op,&area,NULL,shader_address,&prepared)==
+            VK_SUCCESS);
+        assert(prepared.bytes==expected_bytes && prepared.descriptor_bytes[0]==32 &&
+            prepared.texture_table==prepared.descriptor_tables[0] && allocations==hits+1);
+        for(unsigned i=0;i<8;++i)assert(prepared.texture_table[i]==300+i+256*111);
+        assert(resource_calls==in_resource_calls+1 && texture_calls==in_texture_calls);
+        ps5vk_native_release_draw(&prepared);
+        assert(allocations==releases && !prepared.descriptor_tables[0] && !prepared.state);
+    }
 }
