@@ -183,6 +183,9 @@ check-sanitize:
 	./build/tests/test_vk_queue_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache_sanitized
 	./build/tests/test_compilation_cache_sanitized
+	$(MAKE) graphics-stage-shaders
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/spirv_graphics_interface.c src/texture_format.c tests/test_graphics_stages.c -o build/tests/test_graphics_stages_sanitized
+	./build/tests/test_graphics_stages_sanitized
 check:
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc tests/test_descriptor_table_layout.c -o build/tests/test_descriptor_table_layout
@@ -359,6 +362,7 @@ check:
 	$(PYTHON) tools/build_sdk.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host
+	$(MAKE) check-graphics-stages
 	$(MAKE) check-upstream-cts
 	@if [ -d third_party/psbc-reference ]; then \
 		$(MAKE) test-compiler; \
@@ -397,6 +401,21 @@ compiler-control:
 	$(PYTHON) tools/compile_control.py
 native-bootstrap:
 	$(PYTHON) tools/build_native.py
+# Clip/cull distance declarations are an interface-policy contract: the
+# fixtures need the pinned front end and the pinned headers, not PSBC, so this
+# gate runs with the host contracts instead of the compiler integration tests.
+.PHONY: check-graphics-stages graphics-stage-shaders
+graphics-stage-shaders:
+	mkdir -p build/runtime-graphics
+	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_clip_distance.vert -o build/runtime-graphics/clip_distance.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_cull_distance.vert -o build/runtime-graphics/cull_distance.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_distance.vert -o build/runtime-graphics/clip_cull_distance.vert.spv
+check-graphics-stages: graphics-stage-shaders
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/spirv_graphics_interface.c src/texture_format.c tests/test_graphics_stages.c -o build/tests/test_graphics_stages
+	./build/tests/test_graphics_stages
 # Genuine upstream VK-GL-CTS: cross-compile the focused native payload.
 # Host-only contract checks for the upstream CTS selection and verifier. These
 # never require the console, so CI can run them.

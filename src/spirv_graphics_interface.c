@@ -3,26 +3,84 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { ID_LIMIT=65536, LOCATIONS=32 };
+enum { ID_LIMIT=65536, LOCATIONS=32, BLOCK_MEMBERS=8 };
+/* SPIR-V execution models this profile describes. */
+enum { MODEL_VERTEX=0, MODEL_FRAGMENT=4 };
+/* Built-in decoration ids this profile knows by name. */
+enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
+       BUILTIN_CULL_DISTANCE=4, BUILTIN_VERTEX_INDEX=42, BUILTIN_INSTANCE_INDEX=43,
+       BUILTIN_BASE_VERTEX=4424, BUILTIN_BASE_INSTANCE=4425, BUILTIN_DRAW_INDEX=4426,
+       BUILTIN_VIEW_INDEX=4440 };
 struct id_info {
     unsigned op, type, count, signedness, storage, location, builtin, forbidden, selected, flat;
+    /* OpTypeStruct member type ids, for the bounded built-in block below. */
+    unsigned member_types[BLOCK_MEMBERS];
 };
 struct interface_slot { unsigned components, numeric; };
 struct interface {
     struct interface_slot inputs[LOCATIONS], outputs[LOCATIONS];
+    /* Declared gl_ClipDistance/gl_CullDistance array lengths, in components.
+     * They start at zero and are set at most once per stage. */
+    unsigned clip_distances, cull_distances;
 };
 
-/* gl_PerVertex may declare unused builtin arrays. Actual clip/cull/streamout
- * usage is independently rejected by the native compiler metadata adapter. */
-static int builtin_block(const struct ps5vk_graphics_module_key *m,unsigned id,unsigned members)
+/* A declared float32 array of exactly `length` elements: the SPIR-V form of
+ * gl_ClipDistance/gl_CullDistance, whether the front end writes it as a block
+ * member or as a standalone variable. */
+static int declared_distance_array(const struct id_info *ids,unsigned bound,
+                                   unsigned type,unsigned *length)
 {
-    if(!members || members>8)return 0;
+    if(!type || type>=bound)return 0;
+    const struct id_info *array=&ids[type];
+    /* OpTypeArray: operand 1 is the element type, operand 2 the length. */
+    if(array->op!=28 || !array->type || array->type>=bound || !array->count ||
+       array->count>=bound)return 0;
+    const struct id_info *element=&ids[array->type];
+    const struct id_info *constant=&ids[array->count];
+    if(element->op!=22 || element->count!=32)return 0;
+    /* Only a literal 32-bit integer length is a declaration this profile can
+     * bound; a spec constant or a non-integer length is not. */
+    if(constant->op!=43 || !constant->type || constant->type>=bound)return 0;
+    const struct id_info *constant_type=&ids[constant->type];
+    if(constant_type->op!=21 || constant_type->count!=32)return 0;
+    if(!constant->count || constant->count>PS5VK_MAX_CLIP_DISTANCES)return 0;
+    *length=constant->count;
+    return 1;
+}
+
+/* gl_PerVertex may declare unused builtin arrays, so a declaration alone is
+ * not usage. What the block may NOT do is declare a member this profile cannot
+ * deliver: Position is a float32 vec4, PointSize a float32 scalar, and
+ * ClipDistance/CullDistance an array of float32 no wider than the exported
+ * distance registers. Effective clip/cull usage is independently gated by the
+ * native compiler metadata adapter, which is what the pipeline creation path
+ * consults before a device advertises either feature. */
+static int builtin_block(const struct ps5vk_graphics_module_key *m,
+                         const struct id_info *ids,unsigned bound,
+                         unsigned id,unsigned members,unsigned *clip,unsigned *cull)
+{
+    if(!members || members>BLOCK_MEMBERS)return 0;
     unsigned seen=0;
     for(size_t at=5;at<m->word_count;at+=m->words[at]>>16) {
         const uint32_t *w=m->words+at;unsigned n=w[0]>>16;
         if((w[0]&65535)==72 && n>=4 && w[1]==id) {
             if(n!=5 || w[3]!=11 || w[2]>=members || (seen&(1u<<w[2])))return 0;
-            if(w[4]!=0 && w[4]!=1 && w[4]!=3 && w[4]!=4)return 0;
+            unsigned type=ids[id].member_types[w[2]];
+            if(type>=bound)return 0;
+            if(w[4]==BUILTIN_POSITION) {
+                if(ids[type].op!=23 || ids[type].count!=4 || !ids[type].type ||
+                   ids[type].type>=bound)return 0;
+                const struct id_info *component=&ids[ids[type].type];
+                if(component->op!=22 || component->count!=32)return 0;
+            } else if(w[4]==BUILTIN_POINT_SIZE) {
+                if(ids[type].op!=22 || ids[type].count!=32)return 0;
+            } else if(w[4]==BUILTIN_CLIP_DISTANCE || w[4]==BUILTIN_CULL_DISTANCE) {
+                unsigned length=0;
+                if(!declared_distance_array(ids,bound,type,&length))return 0;
+                unsigned *total=w[4]==BUILTIN_CLIP_DISTANCE?clip:cull;
+                if(*total)return 0;
+                *total=length;
+            } else return 0;
             seen|=1u<<w[2];
         }
     }
@@ -67,7 +125,12 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                 d->flat=1;
             } else if(w[2]==13 || w[2]==16 || w[2]==17 ||
                       w[2]==31 || w[2]==32) d->forbidden=1;
-        } else if(op==21 || op==22 || op==23 || op==30 || op==32 || op==59) {
+        } else if(op==43) {
+            /* OpConstant: result id in operand 1, literal in operand 2. Only the
+             * declared distance array length consumes one. */
+            if(n<4 || !w[1] || w[1]>=bound || !w[2] || w[2]>=bound || ids[w[2]].op)goto done;
+            struct id_info *d=&ids[w[2]];d->op=op;d->type=w[1];d->count=w[3];
+        } else if(op==21 || op==22 || op==23 || op==28 || op==30 || op==32 || op==59) {
             unsigned id=op==59?(n>=3?w[2]:0):(n>=2?w[1]:0);
             if(!id || id>=bound || ids[id].op)goto done;
             struct id_info *d=&ids[id];d->op=op;
@@ -82,8 +145,15 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                 if(n!=4)goto done;
                 d->type=op==23?w[2]:w[3];
                 d->count=w[3];d->storage=w[2];
-            } else if(op==30) d->count=n-2;
-            else {
+            } else if(op==28) {
+                /* OpTypeArray: element type, then the length constant. */
+                if(n!=4)goto done;
+                d->type=w[2];d->count=w[3];
+            } else if(op==30) {
+                d->count=n-2;
+                for(unsigned member=0;member<d->count && member<BLOCK_MEMBERS;++member)
+                    d->member_types[member]=w[2+member];
+            } else {
                 if(n<4)goto done;
                 d->type=w[1];d->storage=w[3];
             }
@@ -103,6 +173,20 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
         if(ptr->op!=32 || ptr->storage!=d->storage || !ptr->type || ptr->type>=bound)goto done;
         struct id_info *type=&ids[ptr->type];
         if(d->builtin!=~0u) {
+            /* gl_ClipDistance (3) and gl_CullDistance (4): a float32 array the
+             * pre-raster stage writes and the rasterizer clips or culls
+             * against. The fragment stage may not declare either, and the
+             * declared width must fit the exported distance registers. */
+            if(d->builtin==BUILTIN_CLIP_DISTANCE || d->builtin==BUILTIN_CULL_DISTANCE) {
+                unsigned length=0;
+                if(model!=MODEL_VERTEX || d->storage!=3 || d->location!=~0u ||
+                   !declared_distance_array(ids,bound,ptr->type,&length))goto done;
+                unsigned *total=d->builtin==BUILTIN_CLIP_DISTANCE?
+                    &out->clip_distances:&out->cull_distances;
+                if(*total)goto done; /* one declaration per built-in per stage */
+                *total=length;
+                continue;
+            }
             /* Vertex-stage scalar built-ins the runtime ABI really delivers:
              * VertexIndex (42) and InstanceIndex (43) come from the geometry
              * path - the compiler lowers the latter as instance id plus the
@@ -120,8 +204,9 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                type->op!=21 || type->count!=32)goto done;
             continue;
         }
-        if(type->op==30 && model==0 && d->storage==3 && d->location==~0u &&
-           builtin_block(m,ptr->type,type->count))continue;
+        if(type->op==30 && model==MODEL_VERTEX && d->storage==3 && d->location==~0u &&
+           builtin_block(m,ids,bound,ptr->type,type->count,
+                         &out->clip_distances,&out->cull_distances))continue;
         unsigned components=1;
         if(type->op==23) {
             components=type->count;
@@ -143,15 +228,34 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
         if(locations[d->location].components)goto done;
         locations[d->location]=(struct interface_slot){components,numeric};
     }
+    /* Each feature has its own floor and the exported registers are shared, so
+     * a declaration that fits one bound may still not fit the stage. */
+    if(out->clip_distances>PS5VK_MAX_CLIP_DISTANCES ||
+       out->cull_distances>PS5VK_MAX_CULL_DISTANCES ||
+       out->clip_distances+out->cull_distances>PS5VK_MAX_COMBINED_CLIP_CULL_DISTANCES)goto done;
     valid=1;
 done:
     free(ids);return valid;
 }
 
+int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_key *module,
+                                            unsigned *clip_distances,
+                                            unsigned *cull_distances)
+{
+    struct interface stage={0};
+    if(clip_distances)*clip_distances=0;
+    if(cull_distances)*cull_distances=0;
+    if(!reflect(module,MODEL_VERTEX,&stage))return 0;
+    if(clip_distances)*clip_distances=stage.clip_distances;
+    if(cull_distances)*cull_distances=stage.cull_distances;
+    return 1;
+}
+
 int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
 {
     struct interface vs={0},fs={0};
-    if(!key || !reflect(&key->vertex,0,&vs) || !reflect(&key->fragment,4,&fs))return 0;
+    if(!key || !reflect(&key->vertex,MODEL_VERTEX,&vs) ||
+       !reflect(&key->fragment,MODEL_FRAGMENT,&fs))return 0;
     if(fs.outputs[0].components!=4 ||
        fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
     for(unsigned i=0;i<LOCATIONS;++i) {
