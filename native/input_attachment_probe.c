@@ -239,7 +239,9 @@ VkResult ps5vk_input_attachment_probe(VkDevice device,
     TRY(vkFlushMappedMemoryRanges(device, 1, &mapped));
 
     VkCommandPoolCreateInfo command_pool_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = 0};
     TRY(vkCreateCommandPool(device, &command_pool_info, NULL, &command_pool));
     VkCommandBufferAllocateInfo command_allocate = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,

@@ -110,6 +110,13 @@ class TestInputAttachmentProbeVerifier(unittest.TestCase):
         receipt_path.write_text(json.dumps(receipt))
         self.assertRaises(ValueError, self.fixture.validate)
 
+    def test_native_probe_uses_a_reset_capable_command_pool(self):
+        source = (ROOT / "native/input_attachment_probe.c").read_text()
+        pool = source[source.index("VkCommandPoolCreateInfo command_pool_info"):]
+        pool = pool[:pool.index("vkCreateCommandPool")]
+        self.assertIn("VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT", pool)
+        self.assertIn("vkResetCommandBuffer(command, 0)", source)
+
 
 if __name__ == "__main__":
     unittest.main()
