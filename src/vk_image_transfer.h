@@ -3,13 +3,12 @@
 #include "vk_command.h"
 #include <string.h>
 
-/* Vulkan 1.0 image copy / colour clear domain.
+/* Bounded image copy / colour clear domains.
  *
- * Only the role this profile can describe truthfully is implemented: an RGBA8
- * image whose usage is drawn from TRANSFER_SRC/TRANSFER_DST alone, which the
- * driver backs with the padded linear layout used by the upload path (256-byte
- * row pitch). The tiled colour-attachment layout has no linear addressing and
- * is refused here rather than faked with a linear memset.
+ * RGBA8 images whose usage is drawn from TRANSFER_SRC/TRANSFER_DST alone use
+ * the padded linear frontend layout (256-byte row pitch). Tiled array/input
+ * colour attachments never enter that executor: whole-array clears and
+ * in-render-pass colour rectangles use ordered native GPU DMA packets.
  *
  * vkCmdClearDepthStencilImage executes for the whole subresource of a one-
  * sample D32_SFLOAT target that also carries transfer-destination usage. A
@@ -17,13 +16,13 @@
  * DWORD fill the render pass already uses for its depth load-op clear writes
  * exactly the right image without the 64KB_Z_X pixel equations this codebase
  * still does not claim; partial ranges, rectangles, stencil aspects and
- * multisample images therefore remain fail-closed. vkCmdClearAttachments is
- * exposed and fully validated but fail closed: a mid-render-pass attachment
- * clear would need a DCB clear path that does not exist yet.
+ * multisample images therefore remain fail-closed for depth/stencil clears.
+ * vkCmdClearAttachments records bounded RGBA8/BGRA8 colour rectangles and the
+ * native backend orders prior colour writes, tiled fills and later rendering.
  *
- * Effects execute in start_submission when the frontend segment reaches the
- * head, never at record time; the destination allocation range is flushed
- * through the memory backend after each driver-originated write. */
+ * Frontend effects execute in start_submission when their segment reaches the
+ * head, never at record time; the memory backend flushes each frontend write.
+ * GPU effects commit resource state only after exact completion is observed. */
 VkBool32 ps5vk_image_transfer_operation(enum ps5vk_operation_type type);
 
 /* Which executor owns a recorded image operation: the pure transfer role's row
@@ -98,6 +97,39 @@ static inline VkBool32 ps5vk_array_color_clear(const struct ps5vk_operation *op)
              r->layerCount != VK_REMAINING_ARRAY_LAYERS)) return VK_FALSE;
     }
     return VK_TRUE;
+}
+
+static inline VkBool32 ps5vk_clear_attachment_valid(const struct ps5vk_operation *op)
+{
+    if(!op || op->type!=PS5VK_CLEAR_ATTACHMENT || !op->render_pass || !op->framebuffer ||
+       op->subpass>=op->render_pass->subpass_count ||
+       op->render_pass_contents!=VK_SUBPASS_CONTENTS_INLINE)return VK_FALSE;
+    const struct ps5vk_subpass *s=ps5vk_render_pass_subpass(op->render_pass,op->subpass);
+    if(!s || s->color.attachment>=op->framebuffer->attachment_count)return VK_FALSE;
+    VkImageView view=op->framebuffer->attachments[s->color.attachment];
+    if(!view || !view->image || view->image!=op->image_destination ||
+       view->range.baseMipLevel || view->range.levelCount!=1 ||
+       !view->range.layerCount || view->range.layerCount>32 ||
+       view->range.baseArrayLayer>=view->image->info.arrayLayers ||
+       view->range.layerCount>view->image->info.arrayLayers-view->range.baseArrayLayer)
+        return VK_FALSE;
+    const VkImageCreateInfo *image=&view->image->info;
+    if((image->format!=VK_FORMAT_R8G8B8A8_UNORM && image->format!=VK_FORMAT_B8G8R8A8_UNORM) ||
+       image->samples!=VK_SAMPLE_COUNT_1_BIT || image->mipLevels!=1 ||
+       image->imageType!=VK_IMAGE_TYPE_2D || image->tiling!=VK_IMAGE_TILING_OPTIMAL ||
+       !(image->usage&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))return VK_FALSE;
+    const VkClearRect *r=&op->clear_rect;
+    const VkRect2D *area=&op->render_area;
+    if(r->baseArrayLayer || r->layerCount!=1 || area->offset.x<0 || area->offset.y<0 ||
+       r->rect.offset.x<area->offset.x || r->rect.offset.y<area->offset.y ||
+       !r->rect.extent.width || !r->rect.extent.height)return VK_FALSE;
+    uint32_t x=(uint32_t)(r->rect.offset.x-area->offset.x);
+    uint32_t y=(uint32_t)(r->rect.offset.y-area->offset.y);
+    if(x>area->extent.width || r->rect.extent.width>area->extent.width-x ||
+       y>area->extent.height || r->rect.extent.height>area->extent.height-y)return VK_FALSE;
+    uint32_t mask=op->render_pass->multiview.present?
+        op->render_pass->multiview.view_masks[op->subpass]:0;
+    return view->range.layerCount==32 || !(mask>>view->range.layerCount);
 }
 
 /* The depth role vkCmdClearDepthStencilImage accepts: a one-sample D32_SFLOAT

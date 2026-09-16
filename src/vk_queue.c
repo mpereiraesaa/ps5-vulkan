@@ -284,6 +284,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             continue;
         }
         if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_DRAW ||
+            op->type == PS5VK_CLEAR_ATTACHMENT ||
             op->type == PS5VK_DRAW_INDEXED ||
             ps5vk_indirect_graphics_operation(op->type) ||
             op->type == PS5VK_NEXT_SUBPASS ||
@@ -312,7 +313,11 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             } else {
                 if (active != op->render_pass || framebuffer != op->framebuffer)
                     return 0;
-                if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED ||
+                if (op->type == PS5VK_CLEAR_ATTACHMENT) {
+                    if(contents!=VK_SUBPASS_CONTENTS_INLINE || op->subpass!=subpass ||
+                       !ps5vk_clear_attachment_valid(op))return 0;
+                    ++pass_work;
+                } else if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED ||
                     ps5vk_indirect_graphics_operation(op->type)) {
                     /* A pass begun for secondary contents carries no inline
                      * draws of its own. */
@@ -413,12 +418,14 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
         }
         if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE ||
            op->type==PS5VK_COPY_IMAGE_BUFFER ||
-           op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE) {
+           op->type==PS5VK_CLEAR_COLOR_IMAGE || op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE) {
             VkImage image=op->type==PS5VK_IMAGE_BARRIER?op->image_barrier.image:
-                op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE?op->image_destination:op->copy_image;
+                (op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE || op->type==PS5VK_CLEAR_COLOR_IMAGE)?
+                    op->image_destination:op->copy_image;
             void *address;VkDeviceSize bytes;
             if(!d->graphics_enabled || !d->graphics_submit_enabled || !image || image->display_busy ||
                 ps5vk_image_span(d,image,&address,&bytes)!=VK_SUCCESS)return 0;
+            if(op->type==PS5VK_CLEAR_COLOR_IMAGE && !ps5vk_array_color_clear(op))return 0;
             /* The recorded depth clear is re-checked against live device state:
              * the role, the owned range payload and the tracked layout. The
              * value itself is already a validated D32 word. */
@@ -530,6 +537,8 @@ static int frontend_operation(int type)
  * render-target readback and the sampled upload keep their GPU path. */
 static int frontend_record(const struct ps5vk_operation *op)
 {
+    if(op->type==PS5VK_CLEAR_COLOR_IMAGE && ps5vk_array_color_image(op->image_destination))
+        return 0;
     return frontend_operation(op->type) || ps5vk_image_linear_operation(op);
 }
 

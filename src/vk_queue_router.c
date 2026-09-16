@@ -41,6 +41,8 @@ static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **out
              * to the graphics backend like the other image transfers rather
              * than being executed on the host. */
             case PS5VK_CLEAR_DEPTH_STENCIL_IMAGE:
+            case PS5VK_CLEAR_COLOR_IMAGE:
+            case PS5VK_CLEAR_ATTACHMENT:
                 graphics=1; break;
             default: return VK_ERROR_FEATURE_NOT_PRESENT;
             }

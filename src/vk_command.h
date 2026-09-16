@@ -26,7 +26,8 @@ enum ps5vk_operation_type {
      * and the queue expands each name into its own submission segment, so a
      * child keeps its object identity, its pending ownership and its reuse
      * rules instead of a parallel mechanism inventing them. */
-    PS5VK_EXECUTE_COMMANDS
+    PS5VK_EXECUTE_COMMANDS,
+    PS5VK_CLEAR_ATTACHMENT
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -67,6 +68,7 @@ struct ps5vk_operation {
     VkImageLayout image_source_layout, image_destination_layout;
     uint32_t image_region_count;
     uint32_t clear_word;
+    VkClearRect clear_rect;
     VkImage copy_image;
     VkImageLayout copy_layout;
     VkBufferImageCopy copy_region;
