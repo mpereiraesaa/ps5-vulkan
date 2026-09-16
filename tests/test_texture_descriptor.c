@@ -235,6 +235,121 @@ int main(void)
     vkUpdateDescriptorSets(&d,0,NULL,1,&copy);
     assert(set->generation==3 && set->images[0].imageLayout==VK_IMAGE_LAYOUT_GENERAL && set->image_resources[0]==image);
     vkDestroyDescriptorPool(&d,pool,NULL);vkDestroyDescriptorSetLayout(&d,set_layout,NULL);
+    /* Resource-only input-attachment descriptor: the same GFX10 image fields,
+     * eight DWORDs and no sampler words at all. */
+    {
+        /* Six layers of a 64x64 RGBA8 attachment are 128 KiB each, so the
+         * fixture has to raise the device's per-allocation ceiling. */
+        d.max_allocation=1u<<21;
+        VkImageCreateInfo input_ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+            .extent={64,64,1},.mipLevels=1,.arrayLayers=6,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+        VkImage input_image;assert(vkCreateImage(&d,&input_ii,NULL,&input_image)==VK_SUCCESS);
+        VkDeviceMemory input_memory;
+        VkMemoryAllocateInfo input_ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize=input_image->requirements.size};
+        assert(vkAllocateMemory(&d,&input_ai,NULL,&input_memory)==VK_SUCCESS);
+        assert(vkBindImageMemory(&d,input_image,input_memory,0)==VK_SUCCESS);
+        VkImageViewCreateInfo input_vi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image=input_image,.viewType=VK_IMAGE_VIEW_TYPE_2D_ARRAY,.format=input_ii.format,
+            .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,1,4}};
+        VkImageView input_view;assert(vkCreateImageView(&d,&input_vi,NULL,&input_view)==VK_SUCCESS);
+
+        void *input_base;VkDeviceSize input_bytes;
+        assert(ps5vk_image_span(&d,input_image,&input_base,&input_bytes)==VK_SUCCESS);
+        uint32_t input_words[8];assert(ps5vk_image_resource_descriptor(&d,input_view,input_words)==VK_SUCCESS);
+        /* Word identity: address, format, dimensions, the 2D_ARRAY type word,
+         * the layer range of the view and the single-mip encoding. */
+        assert(input_words[0]==(uint32_t)((uintptr_t)input_base>>8));
+        assert(input_words[1]==((uint32_t)((uintptr_t)input_base>>40)|(56u<<20)|(((64u-1u)&3u)<<30)));
+        assert(input_words[2]==((63u>>2)|(63u<<14)|(1u<<31)));
+        assert(input_words[3]==(0x00000facu|(13u<<28)|(0u<<12)|((0u+1u-1u)<<16)));
+        assert(input_words[4]==((1u<<16)|4u));
+        assert(input_words[5]==0x400000);
+        /* The eight words are the whole record: nothing beyond them is written,
+         * and no sampler is read (the entry point has no sampler parameter). */
+        uint32_t guard[10];for(unsigned i=0;i<10;++i)guard[i]=0xa5a5a5a5u;
+        assert(ps5vk_image_resource_descriptor(&d,input_view,guard)==VK_SUCCESS);
+        assert(guard[8]==0xa5a5a5a5u && guard[9]==0xa5a5a5a5u &&
+            !memcmp(guard,input_words,8*sizeof(uint32_t)));
+
+        /* Fail-closed edges: each leaves the caller's words untouched. */
+        uint32_t before[8];memcpy(before,input_words,sizeof(before));
+        uint32_t sink[8];for(unsigned i=0;i<8;++i)sink[i]=0xcafecafeu;
+        uint32_t expected[8];memcpy(expected,sink,sizeof(sink));
+        /* 1. A sampled-only image is not an input-attachment resource, even
+         * though the same view shape over it encodes fine as a sampled one. */
+        VkImageViewCreateInfo sampled_vi=input_vi;sampled_vi.image=image;
+        sampled_vi.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+        VkImageView sampled_view;assert(vkCreateImageView(&d,&sampled_vi,NULL,&sampled_view)==VK_SUCCESS);
+        assert(ps5vk_image_resource_descriptor(&d,sampled_view,sink)==VK_ERROR_FEATURE_NOT_PRESENT &&
+            !memcmp(sink,expected,sizeof(sink)));
+        /* 2. A single-layer 2D view of the same image is accepted, and it
+         * emits the 2D type word with no layer range. */
+        VkImageViewCreateInfo single_vi=input_vi;
+        single_vi.viewType=VK_IMAGE_VIEW_TYPE_2D;
+        single_vi.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+        VkImageView single_view;assert(vkCreateImageView(&d,&single_vi,NULL,&single_view)==VK_SUCCESS);
+        assert(ps5vk_image_resource_descriptor(&d,single_view,sink)==VK_SUCCESS &&
+            sink[3]==0x90000facu && !sink[4] && !memcmp(sink,input_words,3*sizeof(uint32_t)));
+        memcpy(sink,expected,sizeof(sink));
+        /* 3. A 1D view type, a cube view type and a 3D view type are refused. */
+        VkImageViewCreateInfo plain=input_vi;plain.viewType=VK_IMAGE_VIEW_TYPE_2D;
+        plain.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+        VkImageView plain_view;assert(vkCreateImageView(&d,&plain,NULL,&plain_view)==VK_SUCCESS);
+        plain_view->view_type=VK_IMAGE_VIEW_TYPE_1D;
+        assert(ps5vk_image_resource_descriptor(&d,plain_view,sink)==VK_ERROR_FEATURE_NOT_PRESENT &&
+            !memcmp(sink,expected,sizeof(sink)));
+        plain_view->view_type=VK_IMAGE_VIEW_TYPE_CUBE;
+        assert(ps5vk_image_resource_descriptor(&d,plain_view,sink)==VK_ERROR_FEATURE_NOT_PRESENT &&
+            !memcmp(sink,expected,sizeof(sink)));
+        plain_view->view_type=VK_IMAGE_VIEW_TYPE_3D;
+        assert(ps5vk_image_resource_descriptor(&d,plain_view,sink)==VK_ERROR_FEATURE_NOT_PRESENT &&
+            !memcmp(sink,expected,sizeof(sink)));
+        plain_view->view_type=VK_IMAGE_VIEW_TYPE_2D;
+        /* 4. Another view format, another device and a missing view/image fail
+         * closed. The API refuses a mismatched view format outright, so the
+         * encoder's own check is probed directly. */
+        plain_view->format=VK_FORMAT_R8G8B8A8_SNORM;
+        assert(ps5vk_image_resource_descriptor(&d,plain_view,sink)==VK_ERROR_FEATURE_NOT_PRESENT &&
+            !memcmp(sink,expected,sizeof(sink)));
+        plain_view->format=input_ii.format;
+        struct VkDevice_T other={0};
+        assert(ps5vk_image_resource_descriptor(&other,input_view,sink)==VK_ERROR_UNKNOWN &&
+            !memcmp(sink,expected,sizeof(sink)));
+        assert(ps5vk_image_resource_descriptor(&d,NULL,sink)==VK_ERROR_UNKNOWN &&
+            !memcmp(sink,expected,sizeof(sink)));
+        VkImageView orphan=input_view;VkImage saved_image=orphan->image;orphan->image=NULL;
+        assert(ps5vk_image_resource_descriptor(&d,orphan,sink)==VK_ERROR_UNKNOWN &&
+            !memcmp(sink,expected,sizeof(sink)));
+        orphan->image=saved_image;
+        /* 5. An image over the witnessed six-layer ceiling, and an unbound one. */
+        struct VkImage_T seven={0};seven.device=&d;
+        seven.info=input_ii;seven.info.arrayLayers=7;
+        struct VkImageView_T seven_view={0};seven_view.device=&d;seven_view.image=&seven;
+        seven_view.view_type=VK_IMAGE_VIEW_TYPE_2D_ARRAY;seven_view.format=input_ii.format;
+        seven_view.range=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,7};
+        assert(ps5vk_image_resource_descriptor(&d,&seven_view,sink)==VK_ERROR_FEATURE_NOT_PRESENT &&
+            !memcmp(sink,expected,sizeof(sink)));
+        VkImage unbound;assert(vkCreateImage(&d,&input_ii,NULL,&unbound)==VK_SUCCESS);
+        struct VkImageView_T unbound_view={0};unbound_view.device=&d;unbound_view.image=unbound;
+        unbound_view.view_type=VK_IMAGE_VIEW_TYPE_2D_ARRAY;unbound_view.format=input_ii.format;
+        unbound_view.range=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6};
+        assert(ps5vk_image_resource_descriptor(&d,&unbound_view,sink)==VK_ERROR_UNKNOWN &&
+            !memcmp(sink,expected,sizeof(sink)));
+        vkDestroyImage(&d,unbound,NULL);
+        /* The accepted record is stable across repeated calls. */
+        assert(ps5vk_image_resource_descriptor(&d,input_view,input_words)==VK_SUCCESS &&
+            !memcmp(input_words,before,sizeof(before)));
+        vkDestroyImageView(&d,sampled_view,NULL);vkDestroyImageView(&d,single_view,NULL);
+        vkDestroyImageView(&d,plain_view,NULL);
+        vkDestroyImageView(&d,input_view,NULL);vkDestroyImage(&d,input_image,NULL);
+        vkFreeMemory(&d,input_memory,NULL);
+    }
+
     vkDestroySampler(&d,sampler,NULL);vkDestroyImageView(&d,view,NULL);
     vkDestroyImage(&d,image,NULL);vkFreeMemory(&d,memory,NULL);assert(!d.graphics_objects);
 }
