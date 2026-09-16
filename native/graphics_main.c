@@ -1479,6 +1479,7 @@ static int clip_cull_mode(unsigned witness_case,int *mode)
     case PS5VK_CLIP_CULL_CULL_HALF: *mode=3; return 1;
     case PS5VK_CLIP_CULL_CULL_NEGATIVE: *mode=4; return 1;
     case PS5VK_CLIP_CULL_MIXED: *mode=5; return 1;
+    case PS5VK_CLIP_CULL_CULL_INDEX: *mode=6; return 1;
     }
     return 0;
 }
@@ -1538,10 +1539,6 @@ static void clip_cull_probe(VkDevice d)
     VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .queueFamilyIndex=0};
     VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
-    VkCommandBuffer cb=VK_NULL_HANDLE;
-    VkCommandBufferAllocateInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
-    CHECK(vkAllocateCommandBuffers(d,&cbi,&cb));
     VkQueue queue; vkGetDeviceQueue(d,0,0,&queue);
     static uint8_t detiled[PS5VK_CLIP_CULL_EXTENT*PS5VK_CLIP_CULL_EXTENT*4];
     uint64_t digests[PS5VK_CLIP_CULL_CASES]={0};
@@ -1606,6 +1603,14 @@ static void clip_cull_probe(VkDevice d)
         }
         if(seen!=3u || seen_config!=expect_config || seen_pos_format!=expect_pos_format ||
            seen_out_cntl!=expect_out_cntl)fail("clip-cull-state",-1);
+        /* One command buffer per case: this profile refuses to record a second
+         * time into a submitted buffer, and a fresh one per case keeps each
+         * verdict attributable to its own recording. The pool owns them all and
+         * releases them when the last case is judged. */
+        VkCommandBuffer cb=VK_NULL_HANDLE;
+        VkCommandBufferAllocateInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+        CHECK(vkAllocateCommandBuffers(d,&cbi,&cb));
         VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         CHECK(vkBeginCommandBuffer(cb,&begin));
         VkClearValue clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
@@ -1639,28 +1644,50 @@ static void clip_cull_probe(VkDevice d)
                                           detiled+4*((size_t)y*extent+x));
         const int verified=ps5vk_clip_cull_witness_verify(&witness,witness_case,extent);
         digests[witness_case]=clip_cull_digest(detiled,sizeof(detiled));
+        /* The classification counters say a case failed; these say how. Every
+         * sampled pixel is part of the private evidence for this run. */
+        const uint8_t *corner=detiled;
+        const uint8_t *center=detiled+4*((size_t)(extent/2)*extent+extent/2);
+        /* Two samples whose x and y fractions differ, so a swapped or missing
+         * varying component is visible instead of hidden by the diagonal. */
+        const uint8_t *low_x=detiled+4*((size_t)(extent/4)*extent);
+        const uint8_t *high_x=detiled+4*((size_t)(extent*3/4));
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_CLIP_CULL_CASE case=%u mode=%d pixels=%llu expected=%llu covered=%llu "
-            "missing=%llu foreign=%llu wrong_color=%llu digest=%016llx verified=%d",
+            "missing=%llu foreign=%llu wrong_color=%llu digest=%016llx verified=%d "
+            "first_foreign=%02x%02x%02x%02x at=%u,%u first_wrong=%02x%02x%02x%02x at=%u,%u "
+            "corner00=%02x%02x%02x%02x center=%02x%02x%02x%02x "
+            "at_0_%u=%02x%02x%02x%02x at_%u_0=%02x%02x%02x%02x",
             witness_case,mode,(unsigned long long)witness.pixels,
             (unsigned long long)witness.expected_covered,
             (unsigned long long)witness.covered,(unsigned long long)witness.missing,
             (unsigned long long)witness.foreign,(unsigned long long)witness.wrong_color,
-            (unsigned long long)digests[witness_case],verified);
+            (unsigned long long)digests[witness_case],verified,
+            witness.first_foreign[0],witness.first_foreign[1],witness.first_foreign[2],
+            witness.first_foreign[3],witness.first_foreign_x,witness.first_foreign_y,
+            witness.first_wrong[0],witness.first_wrong[1],witness.first_wrong[2],
+            witness.first_wrong[3],witness.first_wrong_x,witness.first_wrong_y,
+            corner[0],corner[1],corner[2],corner[3],
+            center[0],center[1],center[2],center[3],
+            extent/4,low_x[0],low_x[1],low_x[2],low_x[3],
+            extent*3/4,high_x[0],high_x[1],high_x[2],high_x[3]);
         if(!verified)fail("clip-cull-verdict",-1);
         vkDestroyPipeline(d,pipeline,NULL);
         vkDestroyShaderModule(d,vertex,NULL);
     }
-    /* Two cases must agree pixel for pixel (the control against positive
-     * distances, and the quadrant clip against the same clip with both cull
-     * arrays exported) and the remaining images must all differ. A readback that
-     * collapsed to one image - or to a stale one - cannot satisfy this. */
+    /* Cases that must agree pixel for pixel: the control against positive
+     * distances, against a cull distance that is negative at one vertex only,
+     * against the quadrant clip with both cull arrays exported, and the two
+     * discarded cull cases against each other. The structurally different
+     * images must all differ, so a readback that collapsed to one image - or to
+     * a stale one - cannot satisfy this. */
     if(digests[PS5VK_CLIP_CULL_PLAIN]!=digests[PS5VK_CLIP_CULL_POSITIVE] ||
+       digests[PS5VK_CLIP_CULL_PLAIN]!=digests[PS5VK_CLIP_CULL_CULL_HALF] ||
        digests[PS5VK_CLIP_CULL_CLIP_QUADRANT]!=digests[PS5VK_CLIP_CULL_MIXED] ||
-       digests[PS5VK_CLIP_CULL_CULL_HALF]!=digests[PS5VK_CLIP_CULL_CULL_NEGATIVE])
+       digests[PS5VK_CLIP_CULL_CULL_NEGATIVE]!=digests[PS5VK_CLIP_CULL_CULL_INDEX])
         fail("clip-cull-digest-equality",-1);
     const unsigned distinct[4]={PS5VK_CLIP_CULL_PLAIN,PS5VK_CLIP_CULL_CLIP_HALF,
-        PS5VK_CLIP_CULL_CLIP_QUADRANT,PS5VK_CLIP_CULL_CULL_HALF};
+        PS5VK_CLIP_CULL_CLIP_QUADRANT,PS5VK_CLIP_CULL_CULL_NEGATIVE};
     for(unsigned i=0;i<4;++i)for(unsigned j=0;j<i;++j)
         if(digests[distinct[i]]==digests[distinct[j]])fail("clip-cull-digest-collision",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -1668,7 +1695,7 @@ static void clip_cull_probe(VkDevice d)
         "clip_mask=%02x cull_mask=%02x control_mask=000000 "
         "digest_plain=%016llx digest_positive=%016llx digest_clip_half=%016llx "
         "digest_clip_quadrant=%016llx digest_cull_half=%016llx digest_cull_negative=%016llx "
-        "digest_mixed=%016llx strict_verified=1",
+        "digest_mixed=%016llx digest_cull_index=%016llx strict_verified=1",
         PS5VK_CLIP_CULL_CASES,extent,ps5vk_clip_cull_clear[0],ps5vk_clip_cull_clear[1],
         ps5vk_clip_cull_clear[2],ps5vk_clip_cull_clear[3],0x03u,0x0cu,
         (unsigned long long)digests[PS5VK_CLIP_CULL_PLAIN],
@@ -1677,7 +1704,8 @@ static void clip_cull_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_CLIP_CULL_CLIP_QUADRANT],
         (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_HALF],
         (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_NEGATIVE],
-        (unsigned long long)digests[PS5VK_CLIP_CULL_MIXED]);
+        (unsigned long long)digests[PS5VK_CLIP_CULL_MIXED],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_INDEX]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,fragment,NULL);
     vkDestroyPipelineLayout(d,layout,NULL);

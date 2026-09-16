@@ -27,18 +27,22 @@ CASES = (
     (1, 0, PIXELS),
     (2, 1, PIXELS // 2),
     (3, 2, PIXELS // 4),
-    (4, 3, 0),
+    # A cull distance negative at one vertex is not a discard: the rule needs
+    # one half-space negative for every vertex of the primitive.
+    (4, 3, PIXELS),
     (5, 4, 0),
     (6, 5, PIXELS // 4),
+    (7, 6, 0),
 )
 POS_FORMAT = {-1: "00000004", 0: "00000044"}
 VS_OUT_CONFIG = {-1: "00000000", 0: "00000002"}
 VS_OUT_CNTL = {-1: "00000000", 0: "01400f03"}
-DIGEST_EQUAL = ((0, 1), (3, 6), (4, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4)
+DIGEST_EQUAL = ((0, 1), (0, 4), (3, 6), (5, 7))
+DIGEST_DISTINCT = (0, 2, 3, 5)
 DIGEST_NAMES = {0: "digest_plain", 1: "digest_positive", 2: "digest_clip_half",
                 3: "digest_clip_quadrant", 4: "digest_cull_half",
-                5: "digest_cull_negative", 6: "digest_mixed"}
+                5: "digest_cull_negative", 6: "digest_mixed",
+                7: "digest_cull_index"}
 
 
 def require(ok, label):

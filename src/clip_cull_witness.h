@@ -12,8 +12,10 @@
  *
  *  - a clip distance removes the fragments past its plane and keeps the rest,
  *    interpolated as if the primitive had been cut;
- *  - a cull distance is a primitive decision: one negative vertex discards the
- *    whole primitive, so a spanning triangle must leave the target untouched.
+ *  - a cull distance is a per-half-space primitive decision: a primitive is
+ *    discarded when one cull distance index is negative for every vertex, and
+ *    is not disturbed at all when the negativity is spread across the vertices
+ *    (the rule the pinned CTS states in its negative_and_non_negative case).
  *
  * The same oracle is driven by the host regression and by the native witness,
  * so the pixel rule is one implementation with two kinds of evidence.
@@ -31,13 +33,17 @@ enum {
     PS5VK_CLIP_CULL_CLIP_HALF = 2,
     /* Clip distances 0 and 1 are x and y: one quadrant survives. */
     PS5VK_CLIP_CULL_CLIP_QUADRANT = 3,
-    /* Cull distance 0 is the x coordinate: the primitive is discarded whole. */
+    /* Cull distance 0 is the x coordinate: negative at one vertex only, so the
+     * primitive must survive untouched - culling is not clipping. */
     PS5VK_CLIP_CULL_CULL_HALF = 4,
-    /* Every cull distance is negative: also discarded whole. */
+    /* Every cull distance is negative at every vertex: discarded whole. */
     PS5VK_CLIP_CULL_CULL_NEGATIVE = 5,
     /* The quadrant clip with both cull distances exported and positive. */
     PS5VK_CLIP_CULL_MIXED = 6,
-    PS5VK_CLIP_CULL_CASES = 7
+    /* Cull index 0 is mixed and index 1 is negative everywhere: still
+     * discarded, because the rule is per half-space rather than per vertex. */
+    PS5VK_CLIP_CULL_CULL_INDEX = 7,
+    PS5VK_CLIP_CULL_CASES = 8
 };
 
 struct ps5vk_clip_cull_witness {
