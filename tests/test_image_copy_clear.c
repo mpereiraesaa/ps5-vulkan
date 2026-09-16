@@ -528,6 +528,27 @@ int main(void)
                                        NULL);
     assert(!ps5vk_colour_transfer_image(transfer_only));
     assert(ps5vk_pure_transfer_image(transfer_only));
+    /* The linear readback path additionally admits only the promoted six-layer
+     * input-attachment backing.  It does not become a clear/upload colour role,
+     * and every neighbouring mutation stays outside the readback predicate. */
+    struct VkImage_T input_readback = {0};
+    input_readback.info = (VkImageCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {WIDTH, HEIGHT, 1}, .mipLevels = 1, .arrayLayers = 6,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                 VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    assert(ps5vk_input_attachment_readback_image(&input_readback));
+    assert(ps5vk_colour_readback_image(&input_readback));
+    assert(!ps5vk_colour_transfer_image(&input_readback));
+    input_readback.info.arrayLayers = 5;
+    assert(!ps5vk_input_attachment_readback_image(&input_readback));
+    input_readback.info.arrayLayers = 6;
+    input_readback.info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    assert(!ps5vk_input_attachment_readback_image(&input_readback));
     VkCommandBuffer colour_clear = begin();
     vkCmdClearColorImage(colour_clear, colour_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                          &clear, 1, &range);

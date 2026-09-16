@@ -90,4 +90,30 @@ static inline VkBool32 ps5vk_colour_transfer_image(VkImage image)
                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                VK_IMAGE_USAGE_TRANSFER_DST_BIT));
 }
+
+/* The only layered colour source the linear readback path accepts.  It is the
+ * promoted input-attachment backing itself, and a readback always addresses
+ * layer zero through a one-layer VkImageCopy.  Keeping this separate from the
+ * ordinary one-layer colour-transfer role prevents INPUT_ATTACHMENT (or six
+ * layers) from widening any clear/upload path by accident. */
+static inline VkBool32 ps5vk_input_attachment_readback_image(VkImage image)
+{
+    const VkImageUsageFlags exact = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (!image) return VK_FALSE;
+    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 6 &&
+        image->info.extent.depth == 1 &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.usage == exact && !image->info.flags;
+}
+
+static inline VkBool32 ps5vk_colour_readback_image(VkImage image)
+{
+    return ps5vk_colour_transfer_image(image) ||
+        ps5vk_input_attachment_readback_image(image);
+}
 #endif

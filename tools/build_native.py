@@ -76,6 +76,17 @@ def main():
     if multiview_view_probe == "1" and (scissor_probe != "0" or witnesses != "0" or continuous == "1" or
                                         observe_scene != "0" or scene_split == "1"):
         raise SystemExit("PS5VK_MULTIVIEW_VIEW_PROBE is a bounded standalone scene and cannot be combined with other probes, witnesses, observation or continuous mode")
+    input_attachment_probe = os.environ.get("PS5VK_INPUT_ATTACHMENT_PROBE", "0")
+    if input_attachment_probe not in ("0", "1"):
+        raise SystemExit("PS5VK_INPUT_ATTACHMENT_PROBE must be 0 or 1")
+    if input_attachment_probe == "1" and (not graphics_api or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_INPUT_ATTACHMENT_PROBE requires graphics API, runtime graphics and draw")
+    if input_attachment_probe == "1" and (multiview_view_probe == "1" or
+            scissor_probe != "0" or witnesses != "0" or continuous == "1" or
+            observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
+        raise SystemExit("PS5VK_INPUT_ATTACHMENT_PROBE is a bounded standalone scene")
     if scene_split == "1" and int(scissor_probe) >= 3:
         raise SystemExit("Planar triangle diagnostic cannot split the cube draw")
     shell_close = os.environ.get("PS5VK_SHELL_CLOSE") == "1"
@@ -271,6 +282,7 @@ def main():
             common += ["-DPS5VK_MULTIVIEW_DIAGNOSTIC=" + multiview_diagnostic]
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
+            common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]
@@ -290,6 +302,7 @@ def main():
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
                 ROOT / "native/input_attachment_gate.c",
                 ROOT / "native/input_attachment_oracle.c",
+                ROOT / "native/input_attachment_probe.c",
                 ROOT / "native/command_arena_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
                 ROOT / "src/triangle_readback.c", ROOT / "src/texture_descriptor.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_dma.c", ROOT / "src/image_layout_state.c",
@@ -457,6 +470,15 @@ def main():
                     "first_instance": "0x07ffffff", "instance_count": 1}
                 runtime_inputs = (("vertex", "runtime_view_index_instance.vert"),
                                   ("fragment", "runtime_triangle.frag"))
+        if input_attachment_probe == "1":
+            manifest["graphics_shader_source"] = "owned-runtime-input-attachment-oracle"
+            manifest["input_attachment_witness"] = {
+                "extent": [64, 64], "backing_layers": 6, "view_layer": 0,
+                "descriptor_set": 0, "binding": 0, "record_bytes": 32,
+                "subpasses": 2, "layout": "general", "strict_readback": True}
+            runtime_inputs = (("vertex", "runtime_input_attachment.vert"),
+                              ("pattern", "runtime_input_attachment_pattern.frag"),
+                              ("transform", "runtime_input_attachment_transform.frag"))
         if scissor_probe == "13":
             manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
             manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"
