@@ -3,8 +3,9 @@
 #include "vk_command.h"
 #include "image_layout_state.h"
 #include "color_detile.h"
+#include "vk_image_transfer.h"
 
-struct ps5vk_readback_plan { VkImage image; VkBuffer buffer; };
+struct ps5vk_readback_plan { VkImage image; VkBuffer buffer; VkDeviceSize layer_stride; };
 
 /* The same bounded full-color readback may follow a render pass or be a
  * separate submission. This only validates and stages the layout: the caller
@@ -22,7 +23,8 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
     const struct ps5vk_operation *copy=&ops[1],*host=&ops[2],*aggregate=&ops[3];
     VkImage image=b->image;
     if(!image || image->device!=d || (color && image!=color) ||
-       b->oldLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
+       (b->oldLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+        !(ps5vk_array_color_image(image) && b->oldLayout==VK_IMAGE_LAYOUT_GENERAL)) ||
        b->newLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
        b->srcAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
        b->dstAccessMask!=VK_ACCESS_TRANSFER_READ_BIT ||
@@ -40,14 +42,17 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
     const VkBufferImageCopy *r=&copy->copy_region;
     const VkImageCreateInfo *i=&image->info;
     const VkImageUsageFlags required=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    uint64_t pixels=(uint64_t)i->extent.width*i->extent.height;
+    uint64_t plane=(uint64_t)i->extent.width*i->extent.height;
+    if(!i->arrayLayers || plane>SIZE_MAX/4/i->arrayLayers)return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint64_t pixels=plane*i->arrayLayers;
     if(i->format!=VK_FORMAT_R8G8B8A8_UNORM || i->samples!=VK_SAMPLE_COUNT_1_BIT ||
-       i->mipLevels!=1 || i->arrayLayers!=1 || i->extent.depth!=1 ||
+       i->mipLevels!=1 || (i->arrayLayers!=1 && !ps5vk_array_color_image(image)) || i->extent.depth!=1 ||
        (i->usage&required)!=required || !pixels || pixels>SIZE_MAX/4 ||
-       r->bufferOffset || r->bufferRowLength || r->bufferImageHeight ||
+       r->bufferOffset || (r->bufferRowLength && r->bufferRowLength!=i->extent.width) ||
+       (r->bufferImageHeight && r->bufferImageHeight!=i->extent.height) ||
        r->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
        r->imageSubresource.mipLevel || r->imageSubresource.baseArrayLayer ||
-       r->imageSubresource.layerCount!=1 || r->imageOffset.x || r->imageOffset.y || r->imageOffset.z ||
+       r->imageSubresource.layerCount!=i->arrayLayers || r->imageOffset.x || r->imageOffset.y || r->imageOffset.z ||
        r->imageExtent.width!=i->extent.width || r->imageExtent.height!=i->extent.height ||
        r->imageExtent.depth!=1 || host->buffer_barrier.offset ||
        (host->buffer_barrier.size!=VK_WHOLE_SIZE && host->buffer_barrier.size<pixels*4))
@@ -59,9 +64,34 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
        ps5vk_buffer_span(d,copy->copy_destination,0,VK_WHOLE_SIZE,&destination,&destination_bytes)!=VK_SUCCESS ||
        source_bytes<tiled || destination_bytes<pixels*4)
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Native array allocations consist of equally-sized, 128 KiB-aligned
+     * layer footprints. Never infer a tight width*height stride for tiled data. */
+    VkDeviceSize stride=source_bytes/i->arrayLayers;
+    if(source_bytes%i->arrayLayers || stride<tiled ||
+       (i->arrayLayers>1 && stride%131072u))return VK_ERROR_FEATURE_NOT_PRESENT;
+    uintptr_t src=(uintptr_t)source,dst=(uintptr_t)destination;
+    if(src<dst ? source_bytes>dst-src : pixels*4>src-dst)return VK_ERROR_FEATURE_NOT_PRESENT;
     VkResult rc=ps5vk_layout_transition(layouts,image,b->oldLayout,b->newLayout);
     if(rc!=VK_SUCCESS)return rc;
-    *out=(struct ps5vk_readback_plan){image,copy->copy_destination};
+    *out=(struct ps5vk_readback_plan){image,copy->copy_destination,stride};
     return VK_SUCCESS;
+}
+
+/* Caller must have observed the exact GPU completion serial and invalidated
+ * source cache lines. This copies real GPU bytes, not a rendering oracle. */
+static inline int ps5vk_readback_detile(VkImage image, size_t stride,
+    void *destination,size_t destination_bytes,const void *source,size_t source_bytes)
+{
+    if(!image || !destination || !source || !image->info.arrayLayers || !stride ||
+       !image->info.extent.width || !image->info.extent.height ||
+       image->info.extent.width>SIZE_MAX/4/image->info.extent.height ||
+       stride>source_bytes/image->info.arrayLayers)return -1;
+    const size_t plane=(size_t)image->info.extent.width*image->info.extent.height*4;
+    if(!plane || plane>destination_bytes/image->info.arrayLayers)return -1;
+    for(uint32_t layer=0;layer<image->info.arrayLayers;++layer)
+        if(ps5vk_rgba8_64k_rx_detile((unsigned char *)destination+layer*plane,plane,
+            (const unsigned char *)source+layer*stride,stride,
+            image->info.extent.width,image->info.extent.height))return -1;
+    return 0;
 }
 #endif

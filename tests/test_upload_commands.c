@@ -271,4 +271,48 @@ int main(void)
     assert(ps5vk_upload_commands(&device,&to_attachment,1,NULL,&layouts,&cursor,
         words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT);
     assert(cursor==words && !layouts.count);
+
+    /* Array colour clear is real DMA work, not the legacy linear CPU clear.
+     * Preparation preserves bytes and commits no layout. */
+    image.info.arrayLayers=6;
+    image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    image.layout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    VkImageSubresourceRange all={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6};
+    struct ps5vk_operation array_clear={.type=PS5VK_CLEAR_COLOR_IMAGE,
+        .image_destination=&image,.image_destination_layout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .owned_payload=&all,.owned_payload_size=sizeof(all),.image_region_count=1,
+        .clear_word=0x12345678};
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&array_clear,1,NULL,&layouts,&cursor,
+        words+256,flush)==VK_SUCCESS);
+    assert(cursor-words==7 && words[0]==0xc0055000 && words[2]==0x12345678 &&
+        words[6]==sizeof(destination));
+    for(unsigned i=0;i<sizeof(destination);++i)assert(destination[i]==0xa5);
+    assert(image.layout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    for(unsigned bad=0;bad<3;++bad) {
+        all=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6};
+        if(bad==0)all.layerCount=5;
+        if(bad==1)all.baseArrayLayer=1;
+        if(bad==2)all.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;
+        cursor=words;
+        assert(ps5vk_upload_commands(&device,&array_clear,1,NULL,&layouts,&cursor,
+            words+256,flush)!=VK_SUCCESS && cursor==words);
+    }
+    struct ps5vk_operation color_transition={.type=PS5VK_IMAGE_BARRIER,
+        .image_barrier={.image=&image,.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT}};
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&color_transition,1,NULL,&layouts,&cursor,
+        words+256,flush)==VK_SUCCESS);
+    assert(ps5vk_layout_require(&layouts,&image,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)==VK_SUCCESS);
+    color_transition.image_barrier.oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_transition.image_barrier.newLayout=VK_IMAGE_LAYOUT_GENERAL;
+    color_transition.image_barrier.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    assert(ps5vk_upload_commands(&device,&color_transition,1,NULL,&layouts,&cursor,
+        words+256,flush)==VK_SUCCESS);
+    assert(ps5vk_layout_require(&layouts,&image,VK_IMAGE_LAYOUT_GENERAL)==VK_SUCCESS);
+    assert(image.layout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 }
