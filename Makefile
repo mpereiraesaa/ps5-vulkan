@@ -99,6 +99,8 @@ check-sanitize:
 	./build/tests/test_draw_prepare_ps5_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc native/input_attachment_gate.c tests/test_input_attachment_gate.c -o build/tests/test_input_attachment_gate_sanitized
 	./build/tests/test_input_attachment_gate_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Inative native/input_attachment_oracle.c tests/test_input_attachment_oracle.c -o build/tests/test_input_attachment_oracle_sanitized
+	./build/tests/test_input_attachment_oracle_sanitized
 	@if [ -d third_party/psbc-reference ]; then $(MAKE) test-runtime-header RUNTIME_HEADER_SANITIZERS=-fsanitize=address,undefined; fi
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_sanitized
@@ -233,6 +235,9 @@ check:
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc native/input_attachment_gate.c tests/test_input_attachment_gate.c -o build/tests/test_input_attachment_gate
 	./build/tests/test_input_attachment_gate
+	@mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror -Inative native/input_attachment_oracle.c tests/test_input_attachment_oracle.c -o build/tests/test_input_attachment_oracle
+	./build/tests/test_input_attachment_oracle
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_emit_ps5.c native/index_emit_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_agc_writer.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_gpu_span.c tests/test_draw_emit_ps5.c -o build/tests/test_draw_emit_ps5
 	./build/tests/test_draw_emit_ps5

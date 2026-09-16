@@ -47,6 +47,7 @@ def main():
                    ROOT / "native/draw_emit_ps5.c",
                    ROOT / "native/draw_prepare_ps5.c",
                    ROOT / "native/input_attachment_gate.c",
+                   ROOT / "native/input_attachment_oracle.c",
                    ROOT / "native/command_arena_ps5.c",
                    ROOT / "native/graphics_queue_ps5.c",
                    ROOT / "native/present_ps5.c",

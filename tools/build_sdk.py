@@ -135,6 +135,7 @@ def main():
             "src/depth_layout.c", "src/color_clear.c", "src/color_detile.c",
             "native/draw_prepare_ps5.c", "native/draw_emit_ps5.c", "native/index_emit_ps5.c",
             "native/input_attachment_gate.c",
+            "native/input_attachment_oracle.c",
             "src/graphics_sync.c", "src/vertex_descriptor.c", "src/vertex_fetch.c", "src/index_fetch.c",
             "src/texture_descriptor.c", "src/texture_dma.c", "src/image_layout_state.c",
             "native/graphics_queue_ps5.c", "native/draw_state_ps5.c", "native/viewport_ps5.c",
