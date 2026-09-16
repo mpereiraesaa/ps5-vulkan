@@ -379,6 +379,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     uint32_t enabled_features = 0;
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
     VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
+    VkBool32 saw_dynamic_rendering = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2) {
@@ -425,6 +426,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
              * memory remains unadvertised and requesting it fails closed. */
             if (!valid_bool(features->protectedMemory)) return INVALID;
             if (features->protectedMemory) return VK_ERROR_FEATURE_NOT_PRESENT;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES) {
+            /* The pinned CTS builds one device chain for every rendering type it
+             * exercises, so it always carries VkPhysicalDeviceDynamicRendering
+             * Features once Features2 is available, with the feature left at its
+             * default false value. Dynamic rendering is not implemented and not
+             * advertised, so accept the neutral value only: the structure
+             * enables nothing, and asking for the feature fails closed with the
+             * precise unsupported-feature result instead of being mistaken for
+             * an unrecognised structure. */
+            if (saw_dynamic_rendering) return INVALID;
+            saw_dynamic_rendering = VK_TRUE;
+            const VkPhysicalDeviceDynamicRenderingFeatures *features =
+                (const VkPhysicalDeviceDynamicRenderingFeatures *)next;
+            if (!valid_bool(features->dynamicRendering)) return INVALID;
+            if (features->dynamicRendering) return VK_ERROR_FEATURE_NOT_PRESENT;
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
             /* Enabling the extension does NOT oblige the caller to ask for the
