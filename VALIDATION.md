@@ -108,11 +108,12 @@ oracle's UNORM8 expectation for view 5 (green is `5/8*255 = 159.375`, which
 rounds to 159, not 160). Neither run says anything about GPU behaviour beyond
 what is written here, and the canonical run above supersedes both.
 
-What this does *not* claim: that multiview can be advertised. The public feature
-and query still report it as absent, `maxMultiviewViewCount` and
-`maxMultiviewInstanceIndex` are still unmeasured and unreported, and the CTS leaf
-set is untouched - each of those is a separate slice with its own evidence, and
-nothing here promotes the capability.
+What this does *not* claim: that multiview can be advertised. Both floors are now
+privately measured - the view count is at least 6 and the instance index at least
+134217727 (0x07ffffff) - but both remain PUBLICLY unreported and unadvertised: the
+public feature and query still report multiview as absent, the two Vulkan 1.1
+property values are not surfaced anywhere, and the CTS leaf set is untouched.
+Nothing here promotes the capability.
 
 ## DXVK 262 multiview instance floor
 
@@ -149,10 +150,12 @@ detiled colour and their own counted depth footprint, the trailing guard layer i
 untouched, `strict_verified=1`, and the lifecycle closed cleanly with Close Game
 verified and the console back at `running=none`.
 
-This is evidence for the private floor `0x07ffffff` only. It does **not** report
-`maxMultiviewInstanceIndex`, does not enable the multiview feature, and changes no
-public query, `apiVersion` or CTS selection: promoting the capability remains a
-separate, explicitly authorised step.
+This is evidence for the private floor `0x07ffffff` only: the measured instance
+index is at least 134217727, and the measured view count from the six-view run
+above is at least 6, but neither value is reported publicly. It does **not** report
+`maxMultiviewInstanceIndex` or `maxMultiviewViewCount`, does not enable the
+multiview feature, and changes no public query, `apiVersion` or CTS selection:
+promoting the capability remains a separate, explicitly authorised step.
 
 ## Shader draw parameters promotion (2026-09-15)
 
