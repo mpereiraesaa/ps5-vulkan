@@ -114,6 +114,46 @@ and query still report it as absent, `maxMultiviewViewCount` and
 set is untouched - each of those is a separate slice with its own evidence, and
 nothing here promotes the capability.
 
+## DXVK 262 multiview instance floor
+
+The same private scene then measured the other multiview built-in's floor:
+`firstInstance = 0x07ffffff` (2^27-1, the lowest value Vulkan 1.1 allows as
+`maxMultiviewInstanceIndex`), with exactly one instance. The canonical run is
+`20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6` (log SHA-256
+`b76940fa824c7a991e7b0d9077185002f8d2ff6e631410b1bc356e2d1ae655b2`), from
+artifact `eboot.bin` SHA-256
+`0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da`, built with
+`PS5VK_MULTIVIEW_VIEW_PROBE=1 PS5VK_MULTIVIEW_INSTANCE_PROBE=1
+PS5VK_MULTIVIEW_DIAGNOSTIC=1`, deployed with exact FTP readback and
+ShadowMountPlus refreshed and verified.
+
+```text
+PS5VK_MULTIVIEW_VIEW_GATE mask=0000003f views=6 view_index_slot=2 start_instance_slot=1 vertex_count=4 color_first=02000200 color_step=00000200 depth_first=02001000 depth_step=00000100
+PS5VK_MULTIVIEW_VIEW_DRAW vertices=3 instance_count=1 first_instance=07ffffff
+PS5VK_MULTIVIEW_VIEW_LAYER layer=0..5 view=0..5 pixels=4096 color_expected=4096 color_other_view=0 color_other=0 depth_expected=4096 depth_other=0 depth_remainder_clear=0 depth_remainder_unknown=12288 color_first_foreign=00000000 color_foreign_views=00 depth_foreign_views=00 instance_failed=0
+PS5VK_MULTIVIEW_VIEW_PROBE views=6 mask=0000003f framebuffer_layers=1 extent=64 layers_per_image=7 color=detiled depth=footprint_count load_op=dont_care depth_words_per_layer=16384 guard_layer=6 guard_words=49152 guard_mismatches=0 instance=07ffffff instance_count=1 instance_witness=1 strict_verified=1
+PS5VK_GRAPHICS_API_CLEANUP_COMPLETE
+PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1
+BYE seq=37 reason=graphics-api-end
+```
+
+The gate proves that the compiled vertex stage declared BOTH built-in slots
+(`view_index_slot=2`, `start_instance_slot=1` of four user-SGPRs) - the instance
+index is the compiler's instance id plus the start-instance slot, so a metadata
+regression dropping either one fails before anything is recorded. The vertex
+stage tests the instance value as an INTEGER, never through a float (2^27-1 is not
+representable and would round to 2^27): when the bit test fails it writes a fixed
+colour no view can produce, which the oracle counts as an instance failure rather
+than as a foreign view. All six layers report `instance_failed=0` with their own
+detiled colour and their own counted depth footprint, the trailing guard layer is
+untouched, `strict_verified=1`, and the lifecycle closed cleanly with Close Game
+verified and the console back at `running=none`.
+
+This is evidence for the private floor `0x07ffffff` only. It does **not** report
+`maxMultiviewInstanceIndex`, does not enable the multiview feature, and changes no
+public query, `apiVersion` or CTS selection: promoting the capability remains a
+separate, explicitly authorised step.
+
 ## Shader draw parameters promotion (2026-09-15)
 
 `VK_KHR_shader_draw_parameters` is advertised on the still-apiVersion-1.0

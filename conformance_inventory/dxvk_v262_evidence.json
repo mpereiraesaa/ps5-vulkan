@@ -24,17 +24,23 @@
   },
  "requirements": {
   "feature:VkPhysicalDeviceVulkan11Features:multiview": {
-   "_comment": "The T02 slices are implemented and measured natively: the mask/ViewIndex ABI, the layered attachment model, the view expansion and the six-view witness all have host gates and one strict hardware run. This says nothing about the public feature, the two Vulkan 1.1 multiview properties or the CTS leaf set, which stay unpromoted on purpose - there is no cts override here.",
+   "_comment": "The T02 slices are implemented and measured natively for TWO private floors - the six-view pass (mask 0x3f) and the maxMultiviewInstanceIndex floor firstInstance=0x07ffffff - each with host gates and one strict hardware run. This says nothing about the public feature, the two Vulkan 1.1 multiview properties or the CTS leaf set, which stay unpromoted on purpose: there is no cts override here, and the instance floor is NOT a claim about the reported maxMultiviewInstanceIndex.",
    "native": {
     "state": "native-evidence",
     "run_ids": [
-     "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
+     "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2",
+     "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
     ],
-    "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+    "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
     "refs": [
-     "VALIDATION.md#dxvk-262-multiview-six-view-witness"
+     "VALIDATION.md#dxvk-262-multiview-six-view-witness",
+     "VALIDATION.md#dxvk-262-multiview-instance-floor"
     ],
-    "note": "One strict six-view run: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard and strict_verified=1."
+    "artifact_sha256_refs": {
+     "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+     "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da"
+    },
+    "note": "Two strict private runs. Six-view: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard, strict_verified=1. Instance floor: the same scene with exactly one instance at firstInstance=0x07ffffff, both built-in slots present (view_index_slot and start_instance_slot), instance_witness=1, instance_failed=0 in all six layers, strict_verified=1."
    }
   },
   "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
