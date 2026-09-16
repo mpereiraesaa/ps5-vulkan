@@ -12,6 +12,7 @@ the check reports that it was skipped instead of failing.
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,10 @@ UPSTREAM = ROOT / "third_party/vk-gl-cts"
 # The integration supplies the package and its leading groups; upstream supplies
 # everything below them.
 INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
+# The capabilities a selection is allowed to rely on come from the device's own
+# sources, not from the selection itself.
+DEVICE_SOURCE = ROOT / "src/vk_device.c"
+INTERNAL_HEADER = ROOT / "src/vk_internal.h"
 
 
 def _source_function_at_line(text: str, line_number: int) -> str:
@@ -106,6 +111,159 @@ def _mapping_group_segment(text: str, segment: str) -> bool:
     # These focused cases intentionally use only decimal literals from the
     # pinned arrays; expressions such as 1 * 1024 * 1024 + 1 are not guessed.
     return int(value) in {int(token) for token in re.findall(r"\b\d+\b", match.group(1))}
+
+
+def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dict]:
+    """Derive every render-pass leaf of the pinned multiview module with its
+    complete upstream prerequisites.
+
+    The factory registers its leaves through createViewMasksName() over fixed
+    view-mask tables, two query names and a shader-family table whose order
+    matches the module's TestType enum, and it does that once per rendering type
+    (legacy, renderpass2, dynamic rendering). The four ViewIndex-in-stage
+    families hang under one extra "index" group; every other family sits
+    directly under the rendering-type group.
+
+    Each leaf carries the prerequisites its own upstream gate declares: the
+    "VK_KHR_multiview" functionality the factory always requires, the
+    rendering-type extension, the shader-multiview feature a geometry or
+    tessellation family needs, the core features two families need, and the
+    view extent, which the factory compares against the reported
+    maxMultiviewViewCount before it runs anything. Whole paths are returned, so
+    a real leaf hung under a family that does not own it cannot pass by naming
+    literals that exist elsewhere in the module, and any prerequisite that
+    cannot be derived returns nothing at all rather than a partial answer.
+    """
+    construction = (
+        '"renderpass2"' in text and
+        '"dynamic_rendering"' in text and
+        "createViewMasksName" in text and
+        '"max_multi_view_view_count"' in text and
+        '"get_query_pool_results"' in text and
+        '"cmd_copy_query_pool_results"' in text and
+        'new tcu::TestCaseGroup(testCtx, "index")' in text and
+        "const uint32_t minSupportedMultiviewViewCount" in text and
+        "groupViewIndex->addChild" in function_text and
+        "targetGroupPtr->addChild" in function_text and
+        "shaderName[testTypeNdx]" in function_text
+    )
+    if not construction:
+        return {}
+
+    enum_match = re.search(r"enum TestType\s*\{(.*?)\};", text, re.DOTALL)
+    families_match = re.search(
+        r"const string shaderName\[TEST_TYPE_LAST\]\s*=\s*\{(.*?)\n    \};",
+        function_text, re.DOTALL)
+    case_count = re.search(r"const uint32_t testCaseCount\s*=\s*(\d+)u;", function_text)
+    if not enum_match or not families_match or not case_count:
+        return {}
+    test_types = [name for name in re.findall(r"([A-Z][A-Z0-9_]+)", enum_match.group(1))
+                  if name != "TEST_TYPE_LAST"]
+    family_names = re.findall(r'"([a-z0-9_]+)"', families_match.group(1))
+    if len(test_types) != len(family_names):
+        return {}
+    # Every prerequisite below is derived from a named TestType arm. If upstream
+    # renames one, derive nothing rather than silently drop its requirement.
+    geometry_types = {"TEST_TYPE_VIEW_INDEX_IN_GEOMETRY",
+                      "TEST_TYPE_INPUT_ATTACHMENTS_GEOMETRY",
+                      "TEST_TYPE_SECONDARY_CMD_BUFFER_GEOMETRY"}
+    needed = geometry_types | {"TEST_TYPE_VIEW_INDEX_IN_TESELLATION", "TEST_TYPE_QUERIES",
+                               "TEST_TYPE_DEPTH_DIFFERENT_RANGES",
+                               "TEST_TYPE_NESTED_CMD_BUFFER"}
+    if not needed <= set(test_types):
+        return {}
+
+    # Which families the factory hangs under the "index" group: the cases whose
+    # switch arm calls groupViewIndex->addChild.
+    index_arm = re.search(
+        r"case (TEST_TYPE_VIEW_INDEX_IN_VERTEX):(.*?)default:", function_text, re.DOTALL)
+    if not index_arm or "groupViewIndex->addChild" not in index_arm.group(2):
+        return {}
+    index_types = {index_arm.group(1)} | set(
+        re.findall(r"case (TEST_TYPE_[A-Z0-9_]+):", index_arm.group(2)))
+    if not index_types:
+        return {}
+
+    # The view-mask leaves: the fixed tables, then the iteration table the
+    # factory fills one bit at a time up to its own supported view count.
+    mask_names: list[str] = []
+    tables = re.findall(r"viewMasks\[(\d+)\]\.push_back\((\d+)u\);", function_text)
+    by_index: dict[str, list[str]] = {}
+    for index, value in tables:
+        by_index.setdefault(index, []).append(value)
+    for index in sorted(by_index, key=int):
+        mask_names.append("_".join(by_index[index]))
+    supported = re.search(r"minSupportedMultiviewViewCount\s*=\s*(\d+)u", function_text)
+    if not supported:
+        return {}
+    mask_names.append("_".join(str(1 << bit) for bit in range(int(supported.group(1)))))
+    if len(mask_names) != int(case_count.group(1)):
+        return {}
+
+    # Each mask table is paired index by index with the extent its case renders.
+    extent_match = re.search(
+        r"const VkExtent3D extent3D\[testCaseCount\]\s*=\s*\{(.*?)\n    \};",
+        function_text, re.DOTALL)
+    incomplete_match = re.search(
+        r"const VkExtent3D incompleteExtent3D\s*=\s*\{\s*\d+u,\s*\d+u,\s*(\d+)u\s*\};",
+        function_text)
+    if not extent_match or not incomplete_match:
+        return {}
+    depths = [int(depth) for (_w, _h, depth) in re.findall(
+        r"\{\s*(\d+)u,\s*(\d+)u,\s*(\d+)u\s*\}", extent_match.group(1))]
+    if len(depths) != len(mask_names):
+        return {}
+    limit_leaf_depth = int(incomplete_match.group(1))
+
+    rendering_match = re.search(r"int numberOfRenderingTypes\s*=\s*(\d+);", function_text)
+    renderpass2_match = re.search(
+        r'new tcu::TestCaseGroup\(group->getTestContext\(\), "(renderpass2)"\)', function_text)
+    dynamic_match = re.search(
+        r'new tcu::TestCaseGroup\(group->getTestContext\(\), "(dynamic_rendering)"\)', function_text)
+    if not rendering_match or not renderpass2_match or not dynamic_match:
+        return {}
+    rendering_names = ["", renderpass2_match.group(1), dynamic_match.group(1)]
+    if int(rendering_match.group(1)) > len(rendering_names):
+        return {}
+
+    query_names = ("get_query_pool_results", "cmd_copy_query_pool_results")
+    if not all(f'"{query}"' in text for query in query_names):
+        return {}
+
+    def family_prerequisites(test_type: str) -> list[str]:
+        required = ["extension:VK_KHR_MULTIVIEW", "feature:multiview"]
+        if test_type in geometry_types:
+            required += ["core:geometryShader", "feature:multiviewGeometryShader"]
+        if test_type == "TEST_TYPE_VIEW_INDEX_IN_TESELLATION":
+            required.append("feature:multiviewTessellationShader")
+        if test_type == "TEST_TYPE_QUERIES":
+            required.append("core:occlusionQueryPrecise")
+        if test_type == "TEST_TYPE_DEPTH_DIFFERENT_RANGES":
+            required.append("extension:VK_EXT_DEPTH_RANGE_UNRESTRICTED")
+        if test_type == "TEST_TYPE_NESTED_CMD_BUFFER":
+            required.append("extension:VK_EXT_NESTED_COMMAND_BUFFER")
+        return required
+
+    leaves: dict[str, dict] = {}
+    for rendering_ndx, group_name in enumerate(rendering_names):
+        if rendering_ndx >= int(rendering_match.group(1)):
+            continue
+        prefix = "dEQP-VK.multiview." + (f"{group_name}." if group_name else "")
+        rendering_required: list[str] = []
+        if rendering_ndx == 1:
+            rendering_required = ["extension:VK_KHR_CREATE_RENDERPASS_2"]
+        elif rendering_ndx == 2:
+            rendering_required = ["extension:VK_KHR_DYNAMIC_RENDERING"]
+        for test_type, family in zip(test_types, family_names):
+            family_prefix = prefix + ("index." if test_type in index_types else "")
+            required = family_prerequisites(test_type) + rendering_required
+            for query in query_names:
+                for depth, mask in zip(depths, mask_names):
+                    leaves[f"{family_prefix}{family}.{query}.{mask}"] = {
+                        "required": list(required), "max_views": depth}
+                leaves[f"{family_prefix}{family}.{query}.max_multi_view_view_count"] = {
+                    "required": list(required), "max_views": limit_leaf_depth}
+    return leaves
 
 
 def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
@@ -265,6 +423,112 @@ def _duplicate_selection_failures(manifest: dict) -> list[str]:
     return failures
 
 
+def _cts_revision_failures(manifest: dict) -> list[str]:
+    """Reject a selection that is not validated against the compiled revision.
+
+    tools/build_upstream_cts.py compiles the package from third_party/vk-gl-cts
+    and already refuses a checkout that is not the revision cts_pin records. The
+    same rule belongs here, at selection time, so a manifest edit cannot be
+    accepted against one revision while the packaging build uses another: the
+    leaf names, group segments and source anchors all belong to one revision.
+    The checkout is ignored by the lab repository and some environments vendor
+    it without its own metadata; a directory that is not its own git work tree
+    cannot be compared here and stays the build's check.
+    """
+    commit = manifest.get("cts_pin", {}).get("commit")
+    if not commit or not UPSTREAM.is_dir():
+        return []
+    try:
+        top = subprocess.check_output(
+            ["git", "-C", str(UPSTREAM), "rev-parse", "--show-toplevel"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        actual = subprocess.check_output(
+            ["git", "-C", str(UPSTREAM), "rev-parse", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    if Path(top).resolve() != UPSTREAM.resolve():
+        return []
+    if actual != commit:
+        return [f"third_party/vk-gl-cts is at {actual}; the selection pins {commit}"]
+    return []
+
+
+def _advertised_capabilities() -> tuple[dict, list[str]]:
+    """Read the capabilities the device actually advertises from its sources.
+
+    Strict acceptance requires a leaf to pass, so an acceptance entry may only
+    rely on capabilities this device reports. The truth is taken from the
+    device's own code: the extension macros it enumerates, the multiview feature
+    flags it answers (including the ones it answers false) and the view-count
+    floor it publishes. A value that cannot be read is reported as a failure
+    rather than assumed, so a moved or renamed gate can never leave an
+    unsupported acceptance entry silently green.
+    """
+    failures: list[str] = []
+    device = DEVICE_SOURCE.read_text(encoding="utf-8", errors="replace")
+    header = INTERNAL_HEADER.read_text(encoding="utf-8", errors="replace")
+
+    enumeration = re.search(
+        r"vkEnumerateDeviceExtensionProperties\([^)]*\)\s*\n\{(.*?)\n\}",
+        device, re.DOTALL)
+    if not enumeration:
+        failures.append("cannot read the device extension list from src/vk_device.c")
+        extensions: set[str] = set()
+    else:
+        extensions = {f"VK_{macro}" for macro in re.findall(
+            r"\bVK_([A-Z0-9_]+)_EXTENSION_NAME\b", enumeration.group(1))}
+
+    features: dict[str, bool] = {}
+    for feature in ("multiview", "multiviewGeometryShader", "multiviewTessellationShader"):
+        literal = re.search(rf"features->{feature}\s*=\s*(VK_TRUE|VK_FALSE)\s*;", device)
+        if literal:
+            features[feature] = literal.group(1) == "VK_TRUE"
+        elif re.search(rf"features->{feature}\s*=\s*\(VkBool32\)\s*"
+                       r"ps5vk_platform_multiview_supported\(", device):
+            # The reported feature follows the platform capability that the
+            # measured hardware run establishes.
+            features[feature] = True
+        else:
+            failures.append(
+                f"cannot read the reported {feature} feature from src/vk_device.c")
+
+    core_body = re.search(r"static void get_core_features\(.*?\n\}", device, re.DOTALL)
+    if not core_body:
+        failures.append("cannot read the core feature table from src/vk_device.c")
+        core_features: set[str] = set()
+    else:
+        # get_core_features zeroes the structure first, so only the features it
+        # assigns are advertised.
+        core_features = set(re.findall(r"features->([A-Za-z0-9_]+)\s*=", core_body.group(0)))
+
+    floor = re.search(r"PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR\s*=\s*(\d+)", header)
+    if not floor:
+        failures.append("cannot read PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR from src/vk_internal.h")
+        max_views = 0
+    else:
+        max_views = int(floor.group(1))
+
+    return ({"extensions": extensions, "features": features, "core_features": core_features,
+             "max_multiview_view_count": max_views}, failures)
+
+
+def _unadvertised(required: list[str], capabilities: dict) -> list[str]:
+    """Return the prerequisites the device does not advertise."""
+    missing: list[str] = []
+    for token in required:
+        kind, _, name = token.partition(":")
+        if kind == "extension" and name not in capabilities["extensions"]:
+            missing.append(token)
+        elif kind == "feature" and not capabilities["features"].get(name):
+            missing.append(token)
+        elif kind == "core" and name not in capabilities["core_features"]:
+            missing.append(token)
+        elif kind not in ("extension", "feature", "core"):
+            missing.append(token)
+    return missing
+
+
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
     # Diagnostics are frozen upstream cases that are executed but are known not
@@ -273,17 +537,21 @@ def main() -> int:
     cases = manifest["cases"] + manifest.get("diagnostics", [])
 
     duplicate_failures = _duplicate_selection_failures(manifest)
+    revision_failures = _cts_revision_failures(manifest)
 
     if not UPSTREAM.is_dir():
-        if duplicate_failures:
+        if duplicate_failures or revision_failures:
             print("upstream selection check failed:", file=sys.stderr)
-            for failure in duplicate_failures:
+            for failure in duplicate_failures + revision_failures:
                 print(f"  {failure}", file=sys.stderr)
             return 1
         print("upstream vk-gl-cts checkout not present; selection check skipped")
         return 0
 
-    failures = list(duplicate_failures)
+    failures = list(duplicate_failures) + revision_failures
+    acceptance_paths = {case["path"] for case in manifest["cases"]}
+    capabilities, capability_failures = _advertised_capabilities()
+    failures.extend(capability_failures)
     integration_text = INTEGRATION_SOURCE.read_text(encoding="utf-8")
 
     for case in cases:
@@ -331,6 +599,37 @@ def main() -> int:
                     f"integration or {module_root}")
 
         function_text = _source_function_at_line(text, source_line)
+
+        # The multiview render factory composes every leaf from the
+        # shader-family table, the two query names, the rendering types and the
+        # fixed view-mask tables, so membership is checked against the whole
+        # derived path: a real leaf moved under a family or query group that does
+        # not own it would otherwise pass by naming literals that exist elsewhere
+        # in the module. Acceptance additionally has to be runnable on the device
+        # this repository builds, which the factory decides from the rendering
+        # type, the shader-multiview features, the core features it names and the
+        # case's own view extent - so an acceptance entry may not require
+        # anything the device sources do not advertise. Diagnostics describe
+        # known gaps and are exempt from that last rule.
+        if source_path.name == "vktMultiViewRenderTests.cpp":
+            derived_leaf = _multiview_leaf_requirements(text, function_text).get(path)
+            if derived_leaf is None:
+                failures.append(
+                    f"{path}: not produced by the pinned multiview factory "
+                    f"{source_ref}")
+            elif path in acceptance_paths:
+                missing = _unadvertised(derived_leaf["required"], capabilities)
+                if missing:
+                    failures.append(
+                        f"{path}: acceptance requires {', '.join(missing)}, which "
+                        f"this device does not advertise")
+                elif (capabilities["max_multiview_view_count"] and
+                      derived_leaf["max_views"] > capabilities["max_multiview_view_count"]):
+                    failures.append(
+                        f"{path}: acceptance needs maxMultiviewViewCount >= "
+                        f"{derived_leaf['max_views']}; the reported floor is "
+                        f"{capabilities['max_multiview_view_count']}")
+            continue
 
         # The leaf must be a literal name in the cited function/file, a bounded
         # table-derived name, or a number produced

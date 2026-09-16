@@ -918,6 +918,486 @@
       "category": "graphics-draw-parameters", "expected_status": "Pass",
       "features_required": ["shaderDrawParameters"],
       "rationale": "Original upstream single-draw indexed indirect command with a zero firstInstance field and a non-zero vertexOffset, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream clear-attachments body: vkCmdClearAttachments runs inside the legacy multiview render pass, one render pass per view set, and the upstream per-view oracle checks every layer through its occlusion and timestamp queries. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream view-mask body: the factory's fixed view-mask tables drive one legacy multiview render pass per view set and the upstream per-view oracle checks every layer. Its complete prerequisites are the VK_KHR_multiview functionality and the multiview feature this device reports."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the vertex stage: the shader reads the vertex-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
+    },
+    {
+      "path": "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+      "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
+      "category": "multiview-render-pass",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceMultiviewFeatures::multiview"
+      ],
+      "rationale": "Original upstream ViewIndex body in the fragment stage: the shader reads the fragment-stage view index built-in and the upstream per-view oracle checks every layer. It needs the VK_KHR_multiview functionality and the multiview feature only - not the geometry- or tessellation-shader multiview features, which this device reports false."
     }
   ],
   "diagnostics": [

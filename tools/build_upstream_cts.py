@@ -776,6 +776,15 @@ def main():
         # is compiled directly from the pinned checkout; no body or oracle is
         # copied into the integration.
         cts_root / "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp",
+        # Original multiview module. The package registers the module's own
+        # factory, the view-mask support gate and the per-view layer oracle are
+        # the upstream ones, and cases.txt selects only the 48 audited legacy
+        # render-pass leaves this device can run: clear_attachments, masks,
+        # index.vertex_shader and index.fragment_shader.
+        cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderPassUtil.cpp",
         # Original Vulkan 1.0 robustBufferAccess bodies and oracles, with only
         # registration pruned to compute/scalar_copy/R32_UINT.
         focused_sources / "vktRobustnessBufferAccessTests.cpp",

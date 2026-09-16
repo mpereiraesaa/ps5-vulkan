@@ -18,6 +18,7 @@
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
 #include "vktDrawShaderDrawParametersTests.hpp"
+#include "vktMultiViewTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -160,6 +161,14 @@ void FocusedVkTestPackage::init(void)
         drawGroup->addChild(renderPassGroup.release());
         addChild(drawGroup.release());
     }
+
+    // multiview group: the original upstream multiview module, registered
+    // whole under its own name; cases.txt remains the only leaf filter, so this
+    // selects the 48 legacy render-pass leaves this device can run - the
+    // clear_attachments, masks, index.vertex_shader and index.fragment_shader
+    // families - and nothing else. Its own support gate and per-view oracle are
+    // untouched.
+    addChild(vkt::MultiView::createTests(m_testCtx, "multiview"));
 
     // compute.basic group
     {
