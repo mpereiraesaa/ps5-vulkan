@@ -32,10 +32,13 @@ verify = load_tool("verify_clip_cull")
 class Fixture:
     def __init__(self):
         self.records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
+        # Exactly the relations the verifier requires: the fully drawn cases
+        # agree, the quadrant cases agree, the discarded cull cases agree, and
+        # the four structurally different images differ.
         digests = {0: "1111111111111111", 1: "1111111111111111",
                    2: "2222222222222222", 3: "3333333333333333",
-                   4: "4444444444444444", 5: "4444444444444444",
-                   6: "3333333333333333"}
+                   4: "1111111111111111", 5: "5555555555555555",
+                   6: "3333333333333333", 7: "5555555555555555"}
         for case, mode, expected in verify.CASES:
             state = verify.VS_OUT_CONFIG[-1 if mode < 0 else 0]
             pos = verify.POS_FORMAT[-1 if mode < 0 else 0]

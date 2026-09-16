@@ -36,6 +36,9 @@ void main()
     if (MODE == 3) { cull0 = p.x; }
     if (MODE == 4) { cull0 = -1.0 - 0.25 * p.x; cull1 = -1.0 - 0.25 * p.y; }
     if (MODE == 5) { clip0 = p.x; clip1 = p.y; }
+    /* One cull index negative everywhere and another mixed: the primitive is
+     * still discarded, because the rule is per half-space, not "any vertex". */
+    if (MODE == 6) { cull0 = p.x; cull1 = -1.0 - 0.25 * p.y; }
     gl_ClipDistance[0] = clip0;
     gl_ClipDistance[1] = clip1;
     gl_CullDistance[0] = cull0;

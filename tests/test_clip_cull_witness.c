@@ -58,6 +58,8 @@ int main(void)
         switch(witness_case) {
         case PS5VK_CLIP_CULL_PLAIN:
         case PS5VK_CLIP_CULL_POSITIVE:
+        /* A cull distance negative at one vertex only is not a discard. */
+        case PS5VK_CLIP_CULL_CULL_HALF:
             assert(witness.expected_covered==pixels);
             break;
         case PS5VK_CLIP_CULL_CLIP_HALF:
@@ -92,11 +94,15 @@ int main(void)
     assert(!classify(PS5VK_CLIP_CULL_CLIP_HALF,image,&witness));
     assert(witness.wrong_color==1 && witness.first_wrong_x==40 && witness.first_wrong_y==32);
 
-    /* The cull cases are the ones that distinguish culling from clipping: any
-     * coverage at all is a failure, while the clip cases pass on the same
-     * synthetic coverage. */
+    /* The cull cases are the ones that distinguish culling from clipping: the
+     * mixed one must accept the fully drawn image (it is not a discard), while
+     * the ones with a half-space negative at every vertex must refuse it. */
     image_for(PS5VK_CLIP_CULL_PLAIN,image);
-    assert(!classify(PS5VK_CLIP_CULL_CULL_HALF,image,&witness));
+    assert(classify(PS5VK_CLIP_CULL_CULL_HALF,image,&witness));
+    assert(witness.covered==pixels);
+    assert(!classify(PS5VK_CLIP_CULL_CULL_NEGATIVE,image,&witness));
+    assert(witness.foreign>0);
+    assert(!classify(PS5VK_CLIP_CULL_CULL_INDEX,image,&witness));
     assert(witness.foreign>0);
     assert(classify(PS5VK_CLIP_CULL_PLAIN,image,&witness));
     assert(witness.covered==pixels);

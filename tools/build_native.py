@@ -456,7 +456,7 @@ def main():
                 manifest.update(scene=None,
                                 geometry_fixture="clip-cull-distance-coverage",
                                 sample_count=1, clip_cull_probe=1,
-                                clip_cull_extent=64, clip_cull_cases=7)
+                                clip_cull_extent=64, clip_cull_cases=8)
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")
