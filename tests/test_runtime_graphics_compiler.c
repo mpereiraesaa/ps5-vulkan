@@ -432,6 +432,26 @@ static void check_flat_interfaces(void)
     ps5vk_runtime_graphics_free(NULL,compiled);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
+/* Every InputAttachmentIndex decoration (43) the module declares, with the
+ * variable it decorates. Two subpassInput variables are two different
+ * attachments only if their indices differ: the fragment input interface allows
+ * at most one input variable per index and image aspect, so the fixture has to
+ * declare distinct indices and this reads them out of the SPIR-V the test
+ * compiles rather than trusting the GLSL text. */
+static unsigned input_attachment_indices(const struct ps5vk_graphics_module_key *m,
+    uint32_t ids[4],uint32_t indices[4])
+{
+    const uint32_t *w=(const uint32_t *)m->words;
+    unsigned found=0;
+    for(size_t at=5;at<m->word_count;at+=w[at]>>16) {
+        if((w[at]&65535u)==71u && (w[at]>>16)==4u && w[at+2]==43u) {
+            assert(found<4);
+            ids[found]=w[at+1];indices[found]=w[at+3];++found;
+        }
+    }
+    return found;
+}
+
 /* An input attachment is resource-only image data read by a fragment shader:
  * subpassLoad() goes through the attachment's own eight DWORD image record and
  * never through a sampler. The profile therefore admits the role as
@@ -495,6 +515,16 @@ static void check_input_attachment_descriptors(void)
     /* The real SPIR-V fixture goes through PSBC/ACO: nonempty pixel code plus
      * the exact descriptor metadata, and the static use the stage really has. */
     struct ps5vk_graphics_module_key module=read_module("build/runtime-graphics/input_attachment.frag.spv");
+    /* The fixture reads two different attachments, so the SPIR-V carries two
+     * InputAttachmentIndex decorations on two variables and the indices really
+     * are 0 and 1 - not the same index twice, which the interface forbids per
+     * image aspect however well the shader compiles. */
+    uint32_t attachment_ids[4],attachment_indices[4];
+    unsigned attachment_count=input_attachment_indices(&module,attachment_ids,attachment_indices);
+    assert(attachment_count==2 && attachment_ids[0]!=attachment_ids[1]);
+    assert(attachment_indices[0]!=attachment_indices[1]);
+    assert((attachment_indices[0]==0 && attachment_indices[1]==1) ||
+           (attachment_indices[0]==1 && attachment_indices[1]==0));
     PsbcShaderOutput output={0};
     assert(psbc_compile_shader(module.words,module.word_count*4,&options,&output)==PSBC_RESULT_OK);
     assert(output.machine_code && output.machine_code_size &&
