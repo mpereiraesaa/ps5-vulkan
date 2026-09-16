@@ -1,11 +1,14 @@
 #version 450
 
+layout(location = 0) in vec2 pixel_position;
 layout(location = 0) out vec4 output_color;
 
 void main()
 {
-    uint x = uint(gl_FragCoord.x);
-    uint y = uint(gl_FragCoord.y);
+    /* The bounded graphics ABI intentionally exposes no fragment built-ins.
+     * Use the vertex-to-fragment interface the runtime already validates. */
+    uint x = uint(pixel_position.x);
+    uint y = uint(pixel_position.y);
     uint red = (x * 17u + y * 3u) & 255u;
     uint green = (y * 29u + 7u) & 255u;
     uint blue = ((x * 5u) ^ (y * 11u)) & 255u;
