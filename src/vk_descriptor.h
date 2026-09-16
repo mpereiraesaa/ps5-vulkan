@@ -54,6 +54,10 @@ struct VkDescriptorPool_T {
     uint64_t dynamic_uniform_capacity, dynamic_uniform_used;
     uint64_t texel_capacity, texel_used;
     uint64_t image_capacity, image_used;
+    /* Input attachments are image-view-only descriptors with their own pool
+     * accounting: a pool that sized itself for sampled images does not thereby
+     * hold input attachments, exactly as the other roles are kept apart. */
+    uint64_t input_capacity, input_used;
     VkDescriptorSet sets;
 };
 

@@ -11,25 +11,50 @@ static int layout(VkImageLayout value, int depth, int initial)
         (!depth && value == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
+/* The layouts a subpass may name for an input reference. VUID 06912 forbids
+ * the colour- and depth-attachment layouts outright for a real input reference
+ * (an input attachment is read, not attached), and Vulkan also forbids
+ * UNDEFINED, PREINITIALIZED and the transfer/present layouts. Of what remains,
+ * this profile models exactly the two read layouts it can describe, so an input
+ * reference can never name a layout the rest of the driver has no meaning
+ * for. */
+static int input_layout(VkImageLayout value)
+{
+    return value == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
+        value == VK_IMAGE_LAYOUT_GENERAL;
+}
+
 /* One subpass description against this profile: exactly one colour reference,
- * an optional D32 depth reference that may not alias it, and nothing this
- * driver cannot execute. Input and resolve attachments are refused because
- * they are unimplemented, not tolerated because the structure has fields for
- * them. Non-empty preserve lists are outside the bounded profile. */
+ * an optional D32 depth reference that may not alias it, and the input
+ * references this model can describe. Resolve attachments are still refused
+ * because they are unimplemented, and a non-empty preserve list is outside the
+ * bounded profile. */
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
-    VkAttachmentReference *color, VkAttachmentReference *depth)
+    VkAttachmentReference *color, VkAttachmentReference *depth, uint32_t *input_count)
 {
     if (s->flags || s->pipelineBindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS ||
         s->colorAttachmentCount != 1 || !s->pColorAttachments ||
         /* Vulkan IGNORES pInputAttachments when the count is zero, so the
-         * pointer says nothing; only a nonzero count asks for input
-         * attachments, which are unimplemented. pResolveAttachments is
-         * different: a non-null pointer IS the request. */
-        s->inputAttachmentCount || s->pResolveAttachments)
+         * pointer says nothing there; a nonzero count is a real request that
+         * has to name a valid array. pResolveAttachments is different: a
+         * non-null pointer IS the request. */
+        (s->inputAttachmentCount && !s->pInputAttachments) ||
+        s->inputAttachmentCount > PS5VK_MAX_INPUT_ATTACHMENTS ||
+        s->pResolveAttachments)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Every attachment of this profile is used by every subpass, so nothing
      * can be preserved-but-unused and a non-empty list has no legal form. */
     if (s->preserveAttachmentCount) return VK_ERROR_FEATURE_NOT_PRESENT;
+    for (uint32_t i = 0; i < s->inputAttachmentCount; ++i) {
+        const VkAttachmentReference *reference = &s->pInputAttachments[i];
+        /* VK_ATTACHMENT_UNUSED is a legal entry and Vulkan ignores its layout,
+         * so only a real reference is checked. A real one must name an
+         * attachment of this pass and a layout an input attachment may use. */
+        if (reference->attachment == VK_ATTACHMENT_UNUSED) continue;
+        if (reference->attachment >= attachments || !input_layout(reference->layout))
+            return VK_ERROR_UNKNOWN;
+    }
+    *input_count = s->inputAttachmentCount;
     *color = s->pColorAttachments[0];
     depth->attachment = VK_ATTACHMENT_UNUSED;
     depth->layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -46,20 +71,31 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
 }
 
 /* Byte size of the object and everything it owns, with every multiplication
- * and addition checked. The three arrays are suballocated from one block, so
- * there is no partially built object to roll back: either the single
- * allocation succeeds and the object is complete, or nothing was allocated. */
+ * and addition checked. The arrays are suballocated from one block, so there is
+ * no partially built object to roll back: either the single allocation succeeds
+ * and the object is complete, or nothing was allocated. */
 static VkResult owned_bytes(const VkRenderPassCreateInfo *info, size_t *total)
 {
     size_t bytes = sizeof(struct VkRenderPass_T);
+    /* Every subpass's input references are copied into the same block, so the
+     * total has to include each one; a subpass count that overflows this sum
+     * would otherwise leave the copy writing past the allocation. */
+    size_t inputs = 0;
+    for (uint32_t i = 0; i < info->subpassCount; ++i) {
+        const size_t count = info->pSubpasses[i].inputAttachmentCount;
+        if (count > (SIZE_MAX - inputs) / sizeof(VkAttachmentReference))
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        inputs += count * sizeof(VkAttachmentReference);
+    }
     /* Same order as the suballocation below, so the total cannot drift from
      * the layout it is supposed to cover. */
-    const size_t parts[3] = {
+    const size_t parts[4] = {
         (size_t)info->subpassCount * sizeof(struct ps5vk_subpass),
         (size_t)info->attachmentCount * sizeof(VkAttachmentDescription),
         (size_t)info->dependencyCount * sizeof(VkSubpassDependency),
+        inputs,
     };
-    for (unsigned i = 0; i < 3; ++i) {
+    for (unsigned i = 0; i < 4; ++i) {
         /* The counts are already bounded by the profile limits checked above,
          * so these cannot overflow; the checks are kept so a later limit
          * change cannot turn into a silent wrap. */
@@ -95,9 +131,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
         (info->dependencyCount && !info->pDependencies))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkAttachmentReference colors[PS5VK_MAX_SUBPASSES], depths[PS5VK_MAX_SUBPASSES];
+    uint32_t input_counts[PS5VK_MAX_SUBPASSES];
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
         VkResult rc = subpass_valid(&info->pSubpasses[i], info->attachmentCount,
-                                    &colors[i], &depths[i]);
+                                    &colors[i], &depths[i], &input_counts[i]);
         if (rc != VK_SUCCESS) return rc;
     }
     /* EVERY SUBPASS MUST NAME THE SAME ATTACHMENTS. A framebuffer in this
@@ -112,10 +149,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
             depths[i].attachment != depths[0].attachment)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Every attachment must be reachable through a subpass reference: an
-     * attachment this profile never uses has no role to play. */
-    for (uint32_t i = 0; i < info->attachmentCount; ++i)
-        if (colors[0].attachment != i && depths[0].attachment != i)
-            return VK_ERROR_FEATURE_NOT_PRESENT;
+     * attachment this profile never uses has no role to play. An input
+     * reference is a use, which is the whole point of the shape: a later
+     * subpass reading an earlier attachment names it there and nowhere else. */
+    for (uint32_t i = 0; i < info->attachmentCount; ++i) {
+        VkBool32 reachable = colors[0].attachment == i || depths[0].attachment == i;
+        for (uint32_t s = 0; s < info->subpassCount && !reachable; ++s)
+            for (uint32_t r = 0; r < input_counts[s]; ++r)
+                if (info->pSubpasses[s].pInputAttachments[r].attachment == i) {
+                    reachable = VK_TRUE;
+                    break;
+                }
+        if (!reachable) return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     for (uint32_t i = 0; i < info->attachmentCount; ++i) {
         const VkAttachmentDescription *a = &info->pAttachments[i];
         /* The roles are shared, so subpass 0 decides which attachment is the
@@ -198,18 +244,33 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     VkAttachmentDescription *attachments = (VkAttachmentDescription *)(void *)cursor;
     cursor += (size_t)info->attachmentCount * sizeof(*attachments);
     VkSubpassDependency *dependencies = (VkSubpassDependency *)(void *)cursor;
+    cursor += (size_t)info->dependencyCount * sizeof(*dependencies);
+    VkAttachmentReference *inputs = (VkAttachmentReference *)(void *)cursor;
     memcpy(attachments, info->pAttachments,
            (size_t)info->attachmentCount * sizeof(*attachments));
     if (info->dependencyCount)
         memcpy(dependencies, info->pDependencies,
                (size_t)info->dependencyCount * sizeof(*dependencies));
+    /* Each subpass's input references are copied into the pass's own block, in
+     * subpass order, so no caller array is retained and a caller that mutates
+     * its structs afterwards cannot change this pass. */
+    uint32_t input_total = 0;
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
         subpasses[i].color = colors[i];
         subpasses[i].depth = depths[i];
+        subpasses[i].input_first = input_total;
+        subpasses[i].input_count = input_counts[i];
+        if (input_counts[i]) {
+            memcpy(&inputs[input_total], info->pSubpasses[i].pInputAttachments,
+                   (size_t)input_counts[i] * sizeof(*inputs));
+            input_total += input_counts[i];
+        }
     }
     pass->attachments = attachments;
     pass->subpasses = subpasses;
     pass->dependencies = dependencies;
+    pass->inputs = inputs;
+    pass->input_count = input_total;
     pass->multiview = owned_multiview;
     ++d->graphics_objects; *out = pass; return VK_SUCCESS;
 }

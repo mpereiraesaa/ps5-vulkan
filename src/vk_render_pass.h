@@ -13,6 +13,7 @@ enum { PS5VK_MAX_SUBPASSES = 2 };
 enum { PS5VK_MAX_ATTACHMENTS = 2 };
 enum { PS5VK_MAX_DEPENDENCIES = 4 };
 enum { PS5VK_MAX_CORRELATION_MASKS = 4 };
+enum { PS5VK_MAX_INPUT_ATTACHMENTS = 4 };
 
 /* Owned multiview configuration of a render pass. The structure is parsed and
  * validated at creation and never retains caller pointers.
@@ -57,8 +58,23 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
  * subpass and no attachment can be preserved-but-unused. A non-empty
  * pPreserveAttachments therefore has no legal form here and is refused at
  * creation rather than stored where it could never mean anything. */
+/* One subpass: the roles this profile executes plus the input references it
+ * owns.
+ *
+ * The input references are parsed, validated and then copied into the pass's
+ * own allocation, exactly like the attachment descriptions: no create-info
+ * pointer survives the call. They are stored because a subpass that reads an
+ * earlier attachment is a real structure this model has to describe honestly,
+ * but nothing in this driver consumes them yet - the compiler metadata, the
+ * command stream and the reporting surface make no claim that an input
+ * attachment is read on the GPU. */
 struct ps5vk_subpass {
     VkAttachmentReference color, depth;
+    /* Where this subpass's input references start in the pass's one owned
+     * array, and how many of them there are. An index rather than a pointer
+     * keeps every element in the object's single allocation at 32-bit
+     * alignment, which is the rule the suballocation below depends on. */
+    uint32_t input_first, input_count;
 };
 
 struct VkRenderPass_T {
@@ -73,6 +89,10 @@ struct VkRenderPass_T {
     VkAttachmentDescription *attachments;
     struct ps5vk_subpass *subpasses;
     VkSubpassDependency *dependencies;
+    /* Every subpass's input references, concatenated in subpass order, in the
+     * same single allocation. Never a create-info pointer. */
+    VkAttachmentReference *inputs;
+    uint32_t input_count;
     struct ps5vk_render_pass_multiview multiview;
 };
 
@@ -84,5 +104,14 @@ static inline const struct ps5vk_subpass *ps5vk_render_pass_subpass(
     VkRenderPass pass, uint32_t index)
 {
     return &pass->subpasses[index];
+}
+
+/* The owned input references of one subpass. Nothing consumes them yet: they
+ * are stored so the model matches the pass it accepted, not to claim that a
+ * shader reads them. */
+static inline const VkAttachmentReference *ps5vk_render_pass_inputs(
+    VkRenderPass pass, uint32_t index)
+{
+    return &pass->inputs[pass->subpasses[index].input_first];
 }
 #endif
