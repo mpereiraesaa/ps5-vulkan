@@ -84,3 +84,19 @@ size_t ps5vk_graphics_release(uint32_t *out, size_t capacity, uint64_t address, 
         (uint32_t)address,(uint32_t)(address>>32),(uint32_t)serial,(uint32_t)(serial>>32),0};
     memcpy(out,words,sizeof(words)); return 8;
 }
+
+size_t ps5vk_graphics_release_wait(uint32_t *out,size_t capacity,uint64_t address,uint32_t token)
+{
+    uint32_t words[15];
+    if(!out || capacity<15 || !token)return 0;
+    uintptr_t start=(uintptr_t)out;
+    if(start>UINTPTR_MAX-sizeof(words) ||
+       (address<start+sizeof(words) && address+8>start))return 0;
+    if(!ps5vk_graphics_release(words,8,address,token))return 0;
+    /* Public gfx10 WAIT_REG_MEM: equality, memory space, ME engine.
+     * RELEASE_MEM alone is asynchronous: CP DMA could otherwise race earlier
+     * CB writes and a later cache writeback would overwrite the new clear. */
+    const uint32_t wait[7]={0xc0053c00,0x13,(uint32_t)address,
+        (uint32_t)(address>>32),token,0xffffffff,4};
+    memcpy(words+8,wait,sizeof(wait));memcpy(out,words,sizeof(words));return 15;
+}
