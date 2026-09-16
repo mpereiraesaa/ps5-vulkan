@@ -18,6 +18,19 @@ enum { PS5VK_MULTIVIEW_WITNESS_VIEWS = 6,
        /* One layer of the witness is 64x64 pixels. */
        PS5VK_MULTIVIEW_WITNESS_PIXELS = 64 * 64 };
 
+/* The instance index the maxMultiviewInstanceIndex witness pins: 2^27-1, the
+ * lowest value Vulkan 1.1 allows as maxMultiviewInstanceIndex. It is NOT
+ * representable in a 32-bit float (it rounds to 2^27), which is why the shader
+ * bit-tests the integer and this predicate exists in the same form: the host
+ * regressions prove the exactness rule the shader implements. */
+uint32_t ps5vk_multiview_witness_instance(void);
+int ps5vk_multiview_witness_instance_exact(uint32_t instance);
+
+/* The fixed colour the witness stage writes when the instance index is not
+ * exact: no view can produce it, so the oracle counts it as an instance failure
+ * and never as a foreign view. */
+void ps5vk_multiview_witness_instance_fail_color(uint8_t rgba[4]);
+
 /* The view a witness layer is expected to hold: 0..5, the bits of a six-view
  * mask in ascending order. */
 uint32_t ps5vk_multiview_witness_view(uint32_t layer);
@@ -49,6 +62,9 @@ uint32_t ps5vk_multiview_witness_clear_word(void);
  * coordinate is claimed anywhere. */
 struct ps5vk_multiview_layer_witness {
     uint64_t pixels, expected, other_view, other;
+    /* Pixels that carried the fixed instance-failure colour. A layer with any of
+     * them cannot pass, whatever else it holds. */
+    uint64_t instance_failed;
     uint64_t depth_expected, depth_other, depth_clear, depth_unknown;
     /* Fail-closed diagnosis, so a foreign colour is identifiable rather than
      * guessed at: the first detiled pixel that was not this layer's own, the set

@@ -6,6 +6,28 @@ uint32_t ps5vk_multiview_witness_view(uint32_t layer)
     return layer;
 }
 
+uint32_t ps5vk_multiview_witness_instance(void)
+{
+    return UINT32_C(0x07ffffff);
+}
+
+/* The exactness rule the witness shader implements, in the same integer form:
+ * the low 27 bits set and nothing above them. Written as a predicate so the host
+ * regressions can prove it for the pinned value and for near misses, and so
+ * nobody is tempted to compare through a float - 2^27-1 is not representable in
+ * one. */
+int ps5vk_multiview_witness_instance_exact(uint32_t instance)
+{
+    return (instance & UINT32_C(0x07ffffff)) == UINT32_C(0x07ffffff) &&
+        (instance >> 27) == 0;
+}
+
+void ps5vk_multiview_witness_instance_fail_color(uint8_t rgba[4])
+{
+    if (!rgba) return;
+    rgba[0] = 255u; rgba[1] = 0u; rgba[2] = 255u; rgba[3] = 255u;
+}
+
 /* float -> UNORM8 exactly as a target conversion does it: multiply by 255 and
  * round to nearest. This matters: view 5's green is 5/8 = 0.625 and
  * 0.625 * 255 = 159.375, which rounds to 159 and NOT to 160 - the first hardware
@@ -60,6 +82,11 @@ void ps5vk_multiview_witness_color_pixel(struct ps5vk_multiview_witness *w, uint
     if (!w || !rgba || view >= PS5VK_MULTIVIEW_WITNESS_VIEWS) return;
     struct ps5vk_multiview_layer_witness *layer = &w->layer[view];
     ++layer->pixels;
+    /* The instance-failure colour is a fixed byte no view can produce: it is
+     * reported as an instance failure, never as a foreign view. */
+    uint8_t failed[4];
+    ps5vk_multiview_witness_instance_fail_color(failed);
+    if (same_color(rgba, failed)) { ++layer->instance_failed; return; }
     uint8_t expected[4];
     ps5vk_multiview_witness_color(view, expected);
     if (same_color(rgba, expected)) ++layer->expected;
@@ -137,7 +164,7 @@ int ps5vk_multiview_witness_verify(struct ps5vk_multiview_witness *w, uint32_t v
          * foreign, nothing unexplained. */
         if (l->pixels != PS5VK_MULTIVIEW_WITNESS_PIXELS ||
             l->expected != PS5VK_MULTIVIEW_WITNESS_PIXELS ||
-            l->other_view || l->other)
+            l->other_view || l->other || l->instance_failed)
             verified = 0;
         /* The depth footprint: exactly the 4096 words this view wrote, no word
          * of another view, and the remainder accounted for - LOAD_OP_DONT_CARE

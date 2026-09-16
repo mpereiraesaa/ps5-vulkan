@@ -139,6 +139,38 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
 
+    def test_multiview_instance_probe_needs_the_view_witness(self):
+        """The instance witness is the six-view scene with one instance at the
+        pinned first instance, so it cannot be selected on its own."""
+        self.rejected({"PS5VK_MULTIVIEW_INSTANCE_PROBE": "1"},
+                      "requires PS5VK_MULTIVIEW_VIEW_PROBE=1")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_MULTIVIEW_VIEW_PROBE": "1",
+                       "PS5VK_MULTIVIEW_DIAGNOSTIC": "1",
+                       "PS5VK_MULTIVIEW_INSTANCE_PROBE": "2"},
+                      "must be 0 or 1")
+
+    def test_multiview_instance_witness_stays_private_and_pinned(self):
+        """The switch is private, and the artifact manifest pins the value this
+        slice is about together with the shader that carries it."""
+        for public in (ROOT / "include").rglob("*.h"):
+            text = public.read_text()
+            self.assertNotIn("PS5VK_MULTIVIEW_INSTANCE_PROBE", text,
+                             f"{public} must not expose the instance switch")
+            self.assertNotIn("maxMultiviewInstanceIndex", text,
+                             f"{public} must not report the property")
+        build = (ROOT / "tools/build_native.py").read_text()
+        self.assertIn("PS5VK_MULTIVIEW_INSTANCE_PROBE", build)
+        self.assertIn('"first_instance": "0x07ffffff"', build)
+        self.assertIn('"instance_count": 1', build)
+        self.assertIn("runtime_view_index_instance.vert", build)
+        generator = (ROOT / "tools/prepare_runtime_graphics.py").read_text()
+        self.assertIn("runtime_view_index_instance.vert", generator)
+        scene = (ROOT / "native/graphics_main.c").read_text()
+        self.assertIn('"PS5VK_MULTIVIEW_VIEW_GATE mask=%08x views=%u view_index_slot=%u start_instance_slot=%u "',
+                      scene)
+
     def test_multiview_diagnostic_stays_private(self):
         """The six-view gate is a private build switch, never a reported one."""
         for public in (ROOT / "include").rglob("*.h"):
