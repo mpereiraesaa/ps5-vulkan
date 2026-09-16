@@ -899,7 +899,8 @@ int main(void)
     assert(bad->state == PS5VK_INVALID && bad->operation_count == 0); /* no active render pass */
 
     /* Closest otherwise-valid boundary: an active one-subpass render pass. */
-    struct VkImageView_T active_view = {.device = device, .image = attachment};
+    struct VkImageView_T active_view = {.device = device, .image = attachment,
+        .range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
     VkAttachmentDescription active_attachments[1] = {
         {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
          .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE}};
@@ -921,7 +922,14 @@ int main(void)
     vkCmdBeginRenderPass(bad, &rp, VK_SUBPASS_CONTENTS_INLINE);
     assert(bad->state == PS5VK_RECORDING && bad->render_pass == &active_pass);
     vkCmdClearAttachments(bad, 1, &ca, 1, &cr);
-    assert(bad->state == PS5VK_INVALID);
+    assert(bad->state == PS5VK_RECORDING && bad->operation_count==2);
+    assert(ps5vk_clear_attachment_valid(&bad->operations[1]));
+    ca.clearValue.color.float32[0]=1.0f;
+    assert(bad->operations[1].clear_word==0); /* owned value */
+    VkClearRect rectangles[2]={cr,cr};
+    rectangles[1].rect.extent.width=WIDTH+1;
+    vkCmdClearAttachments(bad,1,&ca,2,rectangles);
+    assert(bad->state==PS5VK_INVALID && bad->operation_count==2); /* no valid prefix */
 
     /* --- the one linear-tiling role: the pinned host-readback staging image ---
      * Exactly one descriptor is accepted - RGBA8, 2D, one mip, one layer, one
@@ -1084,7 +1092,8 @@ int main(void)
             .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {WIDTH, HEIGHT, 1},
             .mipLevels = 1, .arrayLayers = 3, .samples = VK_SAMPLE_COUNT_1_BIT,
             .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
         VkImage array = VK_NULL_HANDLE;
         assert(vkCreateImage(device, &layered, NULL, &array) == VK_SUCCESS);
@@ -1101,6 +1110,34 @@ int main(void)
             &stride, &alignment, &bytes) == VK_SUCCESS);
         assert(layered_requirements.size == bytes &&
                layered_requirements.alignment == alignment);
+        VkImageSubresourceRange whole_array={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,3};
+        VkImageMemoryBarrier array_barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.image=array,
+            .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.subresourceRange=whole_array};
+        VkCommandBuffer array_commands=begin();
+        vkCmdPipelineBarrier(array_commands,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&array_barrier);
+        vkCmdClearColorImage(array_commands,array,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            &clear,1,&whole_array);
+        assert(array_commands->state==PS5VK_RECORDING && array_commands->operation_count==2);
+        assert(ps5vk_array_color_clear(&array_commands->operations[1]));
+        assert(ps5vk_image_domain(&array_commands->operations[1])==PS5VK_IMAGE_DOMAIN_NONE);
+        assert(ps5vk_image_transfer_execute(device,&array_commands->operations[1])!=VK_SUCCESS);
+        whole_array.layerCount=2; /* owned range, not borrowed */
+        assert(ps5vk_array_color_clear(&array_commands->operations[1]));
+        VkCommandBuffer partial_array=begin();
+        vkCmdClearColorImage(partial_array,array,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            &clear,1,&whole_array);
+        assert(partial_array->state==PS5VK_INVALID && !partial_array->operation_count);
+        array_barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        array_barrier.newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        array_barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+        array_barrier.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        vkCmdPipelineBarrier(array_commands,VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,0,0,NULL,0,NULL,1,&array_barrier);
+        assert(vkEndCommandBuffer(array_commands)==VK_SUCCESS);
         /* The whole array is addressable, and nothing beyond it is. */
         VkImageViewCreateInfo array_view = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = array,
