@@ -84,11 +84,16 @@ def validate(path, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
     abi = exactly(records, "PS5VK_INPUT_ATTACHMENT_ABI")
     boundary = exactly(records, "PS5VK_SUBPASS_BOUNDARY")
     draw = exactly(records, "PS5VK_INPUT_ATTACHMENT_DRAW")
+    copied = exactly(records, "PS5VK_INPUT_ATTACHMENT_COPY_COMPLETED")
     readback = exactly(records, "PS5VK_INPUT_ATTACHMENT_READBACK")
     close = exactly(records, "PS5VK_PLATFORM_CLOSE")
     cleanup = exactly(records, "PS5VK_GRAPHICS_API_CLEANUP_COMPLETE")
     completed = rows(records, "PS5VK_GRAPHICS_COMPLETED")
-    require(len(completed) == 2, "render and readback submissions must complete")
+    # The render submission is GPU graphics work and emits the graphics
+    # completion marker. The ordered tiled-colour -> linear-staging copy is a
+    # frontend transfer segment, so its post-fence marker is the honest witness
+    # instead of a fabricated second graphics completion.
+    require(len(completed) == 1, "render submission must complete exactly once")
 
     q = query[1]
     require(int(q["format"]) == 37 and int(q["usage"]) == 147 and
@@ -111,16 +116,22 @@ def validate(path, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
             d.get("boundary") == "required" and
             d.get("dependency") == "colour-write-to-fragment-input-read-by-region",
             "draw contract")
+    cp = copied[1]
+    require(cp.get("source") == "tiled-color" and
+            cp.get("destination") == "linear-staging" and
+            cp.get("extent") == "64x64" and int(cp["layers"]) == 1,
+            "ordered readback copy completion")
     rb = readback[1]
     require(rb.get("extent") == "64x64" and int(rb["layers"]) == 6 and
             int(rb["view_layer"]) == 0 and int(rb["matched"]) == 4096 and
             int(rb["total"]) == 4096 and rb.get("verdict") == "ok" and
+            rb.get("first_word") == rb.get("expected_first") and
             rb.get("actual_hash") == rb.get("expected_hash") and
             int(rb["guard_words"]) > 0 and int(rb["guard_mismatches"]) == 0 and
             int(rb["strict_verified"]) == 1, "deterministic GPU readback")
     require(close[1].get("rc") == "0" and
             close[1].get("allocations_bytes") == "0", "clean platform close")
-    require(query[0] < resource[0] < abi[0] < boundary[0] < draw[0] <
+    require(query[0] < resource[0] < abi[0] < boundary[0] < draw[0] < copied[0] <
             readback[0] < close[0] < cleanup[0], "lifecycle ordering")
     return {"ok": True, "artifact_eboot_sha256": digest,
             "pixels": int(rb["matched"]), "hash_fnv1a32": rb["actual_hash"],

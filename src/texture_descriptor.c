@@ -3,7 +3,8 @@
  * Copyright (C) 2026 BlackBearReloaded
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * GFX10.3 texture resource types and dimension fields adapted from
+ * GFX10.3 texture resource types, dimension fields and the SW_64K_R_X
+ * render-target sampling encoding adapted from
  * BlackBearReloaded's ps5-opengl, src/gallium/ps5/ps5_screen.c at commit
  * 7f9bfabdddb187a11e4401058eba8c9e55194d0a (GPL-3.0-or-later).
  */
@@ -137,5 +138,14 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
     uint32_t words[8];
     VkResult rc=image_resource_words(d,view,words);
     if(rc!=VK_SUCCESS)return rc;
+    /* This resource is also the live colour attachment. Its backing is the
+     * target builder's SW_64K_R_X surface, not the padded-linear sampled-image
+     * layout used by ordinary uploaded textures. The pinned GPL reference uses
+     * 0x91b.../0xd1b... for 2D/2D-array render targets; the 0x01b00000 part is
+     * the common tiled-layout encoding and the type, selectors and dimensions
+     * already present in words[] remain unchanged. Encoding the linear form
+     * here addresses valid memory with the wrong equation and collapses a
+     * subpassLoad to an unrelated constant texel on hardware. */
+    words[3]|=UINT32_C(0x01b00000);
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }

@@ -307,6 +307,9 @@ VkResult ps5vk_input_attachment_probe(VkDevice device,
     TRY(vkQueueSubmit(queue, 1, &submit, fence));
     TRY(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
     TRY(vkInvalidateMappedMemoryRanges(device, 1, &mapped));
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_INPUT_ATTACHMENT_COPY_COMPLETED source=tiled-color "
+        "destination=linear-staging extent=64x64 layers=1");
 
     VkImageSubresource subresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
     VkSubresourceLayout linear = {0};
@@ -347,10 +350,12 @@ VkResult ps5vk_input_attachment_probe(VkDevice device,
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_INPUT_ATTACHMENT_READBACK extent=%ux%u layers=6 view_layer=0 "
         "matched=%lu total=%lu verdict=%s first_x=%u first_y=%u "
+        "first_word=%08x expected_first=%08x "
         "actual_hash=%08x expected_hash=%08x guard_words=%lu guard_mismatches=%lu "
         "strict_verified=%d",
         PROBE_EDGE, PROBE_EDGE, result.matched, result.total,
         verdict_name(result.verdict), result.first_x, result.first_y,
+        pixels[0], expected[0],
         actual_hash, expected_hash, guard_words, guard_mismatches, verified);
     if (!verified) goto cleanup;
     rc = VK_SUCCESS;
