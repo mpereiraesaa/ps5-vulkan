@@ -82,6 +82,7 @@ def validate(path, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
     query = exactly(records, "PS5VK_INPUT_ATTACHMENT_QUERY")
     resource = exactly(records, "PS5VK_INPUT_ATTACHMENT_RESOURCE")
     abi = exactly(records, "PS5VK_INPUT_ATTACHMENT_ABI")
+    color_barrier = exactly(records, "PS5VK_COLOR_TO_TEXTURE_BARRIER")
     boundary = exactly(records, "PS5VK_SUBPASS_BOUNDARY")
     draw = exactly(records, "PS5VK_INPUT_ATTACHMENT_DRAW")
     copied = exactly(records, "PS5VK_INPUT_ATTACHMENT_COPY_COMPLETED")
@@ -109,6 +110,9 @@ def validate(path, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
             int(a["record_bytes"]) == 32 and int(a["vertex_table"]) == 0 and
             int(a["fragment_count"]) > int(a["fragment_slot"]) >= 0 and
             int(a["used_bindings"], 16) == 1, "native descriptor ABI")
+    cb = color_barrier[1]
+    require(int(cb["subpass"]) == 1 and int(cb["words"]) == 8,
+            "colour-to-texture barrier")
     require(int(boundary[1]["subpass"]) == 1 and int(boundary[1]["words"]) > 0,
             "real subpass boundary")
     d = draw[1]
@@ -131,7 +135,8 @@ def validate(path, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
             int(rb["strict_verified"]) == 1, "deterministic GPU readback")
     require(close[1].get("rc") == "0" and
             close[1].get("allocations_bytes") == "0", "clean platform close")
-    require(query[0] < resource[0] < abi[0] < boundary[0] < draw[0] < copied[0] <
+    require(query[0] < resource[0] < abi[0] < color_barrier[0] < boundary[0] <
+            draw[0] < copied[0] <
             readback[0] < close[0] < cleanup[0], "lifecycle ordering")
     return {"ok": True, "artifact_eboot_sha256": digest,
             "pixels": int(rb["matched"]), "hash_fnv1a32": rb["actual_hash"],

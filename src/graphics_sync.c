@@ -1,3 +1,10 @@
+/* Copyright (C) 2026 Manuel Pereira
+ * Copyright (C) 2026 BlackBearReloaded
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * The colour-to-texture release packet is adapted from ps5-opengl,
+ * src/platform/ps5_agc_runtime_backend.c at commit
+ * 7f9bfabdddb187a11e4401058eba8c9e55194d0a (GPL-3.0-or-later). */
 #include "graphics_sync.h"
 #include <string.h>
 const uint32_t ps5vk_graphics_probe_registers[PS5VK_GRAPHICS_PROBE_REGISTERS]={
@@ -44,6 +51,21 @@ size_t ps5vk_graphics_acquire(uint32_t *out, size_t capacity)
      * does not express that ordering. Retain the full-range cache operation. */
     const uint32_t words[10] = {0xc0004200,0,0xc0065800,0,0xffffffff,0xff,0,0,10,0x4381};
     memcpy(out,words,sizeof(words)); return PS5VK_GRAPHICS_ACQUIRE_WORDS;
+}
+size_t ps5vk_graphics_color_to_texture(uint32_t *out, size_t capacity)
+{
+    if (!out || capacity < PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WORDS) return 0;
+    /* BlackBearReloaded's GPL ps5-opengl runtime backend uses this exact
+     * GFX10 RELEASE_MEM packet for render-to-texture: event 0x2d flushes CB,
+     * then the GCR control performs GLM/GLV/GL1/GL2 writeback/invalidation.
+     * A generic acquire does not flush dirty colour-backend data and therefore
+     * left a following subpassLoad observing the earlier clear value. */
+    const uint32_t words[PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WORDS] = {
+        UINT32_C(0xc0064900), UINT32_C(0x0070f52d),
+        UINT32_C(0x00010000), 0, 0, 0, 0, 0,
+    };
+    memcpy(out, words, sizeof(words));
+    return PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WORDS;
 }
 size_t ps5vk_graphics_release(uint32_t *out, size_t capacity, uint64_t address, uint64_t serial)
 {
