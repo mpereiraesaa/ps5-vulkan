@@ -4,6 +4,20 @@
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
 
+/* Private diagnostic gate for the native six-view work (T02-D1a), OFF unless a
+ * build asks for it. It is deliberately NOT part of the public headers and it
+ * changes no query: the profile still advertises no multiview feature and still
+ * reports a zero maxMultiviewViewCount, and this switch only decides whether
+ * vkCreateRenderPass accepts a real view mask in a build that exists to measure
+ * one. Every other build keeps the answer the profile reports, so a non-zero
+ * mask stays refused there. */
+#ifndef PS5VK_MULTIVIEW_DIAGNOSTIC
+#define PS5VK_MULTIVIEW_DIAGNOSTIC 0
+#endif
+/* The widest mask the diagnostic build validates against, and therefore the most
+ * layers the framebuffer rule below has to be able to serve. */
+enum { PS5VK_MULTIVIEW_DIAGNOSTIC_VIEWS = 6 };
+
 /* Internal backend seam, not a Vulkan extension or public creation API.
  * Host tests supply instrumented storage; native code must supply direct memory.
  * No allocator is implicitly selected and no GPU execution is emulated here. */

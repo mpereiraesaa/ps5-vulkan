@@ -113,6 +113,8 @@ check-sanitize:
 	./build/tests/test_vk_image_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass_sanitized
 	./build/tests/test_vk_render_pass_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc -DPS5VK_MULTIVIEW_DIAGNOSTIC=1 $(VK_IMAGE_TEST_SOURCES) tests/test_framebuffer_multiview.c -o build/tests/test_framebuffer_multiview_diagnostic_sanitized
+	./build/tests/test_framebuffer_multiview_diagnostic_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(GRAPHICS_PAIR_TEST) -o build/tests/test_graphics_pair_sanitized
 	./build/tests/test_graphics_pair_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Isrc src/shader_relocate.c tests/test_shader_relocate.c -o build/tests/test_shader_relocate_sanitized
@@ -248,6 +250,10 @@ check:
 	./build/tests/test_vk_image
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass
 	./build/tests/test_vk_render_pass
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_framebuffer_multiview.c -o build/tests/test_framebuffer_multiview
+	./build/tests/test_framebuffer_multiview
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -DPS5VK_MULTIVIEW_DIAGNOSTIC=1 $(VK_IMAGE_TEST_SOURCES) tests/test_framebuffer_multiview.c -o build/tests/test_framebuffer_multiview_diagnostic
+	./build/tests/test_framebuffer_multiview_diagnostic
 	$(CC) -std=c11 -Wall -Wextra -Werror $(GRAPHICS_PAIR_TEST) -o build/tests/test_graphics_pair
 	./build/tests/test_graphics_pair
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/shader_relocate.c tests/test_shader_relocate.c -o build/tests/test_shader_relocate
