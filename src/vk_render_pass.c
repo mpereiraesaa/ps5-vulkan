@@ -206,6 +206,20 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
 {
     if (!info || !multiview || !out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
+    /* This helper is exported and directly exercised, so it validates its own
+     * inputs before it copies or dereferences anything rather than trusting
+     * that a caller already went through vkCreateRenderPass: the structure's
+     * implicit sType obligation (VUID-VkRenderPassMultiviewCreateInfo-sType-sType),
+     * the pass counts the fixed-size owned arrays can hold, and the pass
+     * dependency list the view-offset obligations below read. A direct call can
+     * therefore never overrun view_masks/view_offsets or dereference a missing
+     * pDependencies. */
+    if (multiview->sType != VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO)
+        return VK_ERROR_UNKNOWN;
+    if (info->subpassCount > PS5VK_MAX_SUBPASSES ||
+        info->dependencyCount > PS5VK_MAX_DEPENDENCIES ||
+        (info->dependencyCount && !info->pDependencies))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     /* A chained structure, a count that does not match the pass, or a missing
      * array where one is required cannot be interpreted at all. */
     if (multiview->pNext ||

@@ -138,6 +138,31 @@ static void multiview_model(struct VkDevice_T *d)
     assert(ps5vk_render_pass_multiview_validate(&info, &bad, VK_TRUE, 6u, &owned) ==
            VK_ERROR_FEATURE_NOT_PRESENT && !owned.present);
 
+    /* The helper is exported and directly exercised, so it refuses its own
+     * malformed inputs before it copies or dereferences anything: the implicit
+     * sType obligation, pass counts the fixed-size arrays cannot hold, and a
+     * non-zero dependency count with no dependency list. */
+    bad = multiview; bad.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    assert(ps5vk_render_pass_multiview_validate(&info, &bad, VK_TRUE, 6u, &owned) ==
+           VK_ERROR_UNKNOWN && !owned.present);
+    bad = multiview; bad.sType = VK_STRUCTURE_TYPE_MAX_ENUM;
+    assert(ps5vk_render_pass_multiview_validate(&info, &bad, VK_TRUE, 6u, &owned) ==
+           VK_ERROR_UNKNOWN && !owned.present);
+    {
+        VkRenderPassCreateInfo oversized = info;
+        oversized.subpassCount = PS5VK_MAX_SUBPASSES + 1;
+        bad = multiview; bad.subpassCount = oversized.subpassCount;
+        assert(ps5vk_render_pass_multiview_validate(&oversized, &bad, VK_TRUE, 6u,
+            &owned) == VK_ERROR_FEATURE_NOT_PRESENT && !owned.present);
+        oversized = info; oversized.dependencyCount = PS5VK_MAX_DEPENDENCIES + 1;
+        bad = multiview; bad.dependencyCount = oversized.dependencyCount;
+        assert(ps5vk_render_pass_multiview_validate(&oversized, &bad, VK_TRUE, 6u,
+            &owned) == VK_ERROR_FEATURE_NOT_PRESENT && !owned.present);
+        oversized = info; oversized.pDependencies = NULL;
+        assert(ps5vk_render_pass_multiview_validate(&oversized, &multiview, VK_TRUE, 6u,
+            &owned) == VK_ERROR_FEATURE_NOT_PRESENT && !owned.present);
+    }
+
     /* Through the device: this profile reports no multiview feature and no view
      * count, so the only shape vkCreateRenderPass may accept is the all-zero
      * one - which is exactly "multiview disabled" - and the pass owns a copy. */

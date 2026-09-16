@@ -39,7 +39,11 @@ struct ps5vk_render_pass_multiview {
  * rule (02513), the most-significant-bit limit (06697), the view-offset rules
  * (01930, 02512) and the all-zero consequences (02514, 02515) apply. Counts
  * must match the pass (01928, 01929), correlation masks must be disjoint
- * (00841), and a chained or duplicated structure stays fail-closed. */
+ * (00841), and a chained or duplicated structure stays fail-closed. The helper
+ * also enforces the structure's implicit sType obligation
+ * (VUID-VkRenderPassMultiviewCreateInfo-sType-sType) and bounds the pass counts
+ * and dependency list it is handed, so a direct caller cannot overrun the
+ * fixed-size arrays this model owns or dereference a missing pDependencies. */
 VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info,
     const VkRenderPassMultiviewCreateInfo *multiview, VkBool32 multiview_enabled,
     uint32_t max_multiview_view_count, struct ps5vk_render_pass_multiview *out);
