@@ -1039,7 +1039,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
       "implementation": {
-        "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); the stage-interface policy accepts a bounded fragment-stage read and the compiler describes the distance register on both ends, but the shipping profile refuses to run it until a native witness shows the value is delivered, so the feature is not advertised (native/runtime_graphics_compiler.c)",
+        "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); the fragment stage's read of the same distances is verified on hardware too (eleven-case witness, expected=4096 covered=4096 foreign=0 wrong_color=0, digest f50dd9368fee6cc9) and the shipping profile delivers it; the feature stays unreported until its distance limits and the applicable CTS acceptance are published (native/runtime_graphics_compiler.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
@@ -1080,7 +1080,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "implementation": {
-        "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); the stage-interface policy accepts a bounded fragment-stage read and the compiler describes the distance register on both ends, but the shipping profile refuses to run it until a native witness shows the value is delivered, so the feature is not advertised (native/runtime_graphics_compiler.c)",
+        "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); the fragment stage's read of the same distances is verified on hardware too (eleven-case witness, expected=4096 covered=4096 foreign=0 wrong_color=0, digest f50dd9368fee6cc9) and the shipping profile delivers it; the feature stays unreported until its distance limits and the applicable CTS acceptance are published (native/runtime_graphics_compiler.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],

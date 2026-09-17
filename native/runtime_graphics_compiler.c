@@ -443,16 +443,17 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
         if((declared_clip||declared_cull) &&
            !ps5vk_runtime_graphics_distance_reads_described(&p->vertex.metadata,
                &p->fragment.metadata,declared_clip,declared_cull))goto failed;
-        if(declared_clip||declared_cull) {
-#if !PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
-            /* Described and programmable, but this profile has no native
-             * evidence yet that the rasterizer delivers the interpolated
-             * distance to the pixel stage: the witness measures that under the
-             * diagnostic profile first, and the shipping build keeps refusing
-             * until the run exists. */
-            goto failed;
-#endif
-        }
+        /* A described read is delivered in every profile, including the shipping
+         * one: the rasterizer handing the interpolated distance to the pixel
+         * stage is measured, not assumed. Two runs of the eleven-case clip/cull
+         * witness, on two different builds, verify case 10 (the fragment stage
+         * reading gl_ClipDistance[0]) with expected=4096 covered=4096
+         * foreign=0 wrong_color=0 and digest f50dd9368fee6cc9, and the
+         * acceptance run is strict_verified with the pixel-read digest differing
+         * from the control's. What this does NOT do is advertise the feature:
+         * the device reports it false until its own obligations and the
+         * applicable CTS acceptance are complete, and a pair that uses a
+         * distance still needs the application to enable it (feature_use_ok). */
     }
     struct ps5vk_runtime_shader header;
     if(ps5vk_runtime_shader_build(&header,&p->vertex) ||

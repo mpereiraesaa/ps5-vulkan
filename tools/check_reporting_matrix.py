@@ -91,35 +91,37 @@ FEATURE_GATES = {
                           "anisotropyEnable is rejected"),
     "pipelineStatisticsQuery": ("src/vk_query_pool.c", "pipelineStatisticsQuery is reported false.",
                                 "pipeline statistics query pools are rejected"),
-    # The packed pre-raster distance export is implemented and hardware-witnessed,
-    # and the dynamically indexed write is measured on hardware. Neither distance
-    # feature is advertised: the interface policy accepts a bounded fragment-stage
-    # read and the pinned compiler now names the packed distance registers on both
-    # ends, but the shipping profile still refuses to RUN the read - the
-    # rasterizer's delivery of the interpolated distance to the pixel stage has no
-    # native witness yet, so the gate refuses a pair whose read is described but
-    # unmeasured. The pinned upstream clipping module gates the
-    # fragment-shader-read variant on these same two features
-    # (vktClippingTests.cpp requireFeatures()), so the feature's whole obligation
-    # is not covered yet.
+    # Both halves of the distance interface are implemented and hardware-
+    # witnessed: the pre-raster export (static and dynamically indexed), and now
+    # the pixel stage reading the interpolated distance - the eleven-case witness
+    # verifies case 10 with expected=4096 covered=4096 foreign=0 wrong_color=0 and
+    # digest f50dd9368fee6cc9, and a described read is delivered in the shipping
+    # profile as well. The features stay unreported because their remaining
+    # obligations are not complete: the advertised distance limits and the
+    # negotiation row, and the CTS leaves that exercise the pixel read inside an
+    # acceptance run (the pinned upstream clipping module gates the
+    # fragment-shader-read variant on these same two features,
+    # vktClippingTests.cpp requireFeatures()).
     "shaderClipDistance": ("native/runtime_graphics_compiler.c",
                            "!ps5vk_runtime_graphics_distance_reads_described(",
                            "the pre-raster export is implemented and hardware-witnessed for static "
                            "indices, and the dynamically indexed write is measured on hardware "
                            "(its image is byte-identical to the statically indexed quadrant); the "
-                           "stage-interface policy accepts a bounded fragment-stage read and the "
-                           "compiler describes the distance register on both ends, but the shipping "
-                           "profile refuses to run it until a native witness shows the value is "
-                           "delivered, so the feature is not advertised"),
+                           "fragment stage's read of the same distances is verified on hardware too "
+                           "(eleven-case witness, expected=4096 covered=4096 foreign=0 wrong_color=0, "
+                           "digest f50dd9368fee6cc9) and the shipping profile delivers it; the "
+                           "feature stays unreported until its distance limits and the applicable CTS "
+                           "acceptance are published"),
     "shaderCullDistance": ("native/runtime_graphics_compiler.c",
                            "!ps5vk_runtime_graphics_distance_reads_described(",
                            "the pre-raster export is implemented and hardware-witnessed for static "
                            "indices, and the dynamically indexed write is measured on hardware "
                            "(its image is byte-identical to the statically indexed quadrant); the "
-                           "stage-interface policy accepts a bounded fragment-stage read and the "
-                           "compiler describes the distance register on both ends, but the shipping "
-                           "profile refuses to run it until a native witness shows the value is "
-                           "delivered, so the feature is not advertised"),
+                           "fragment stage's read of the same distances is verified on hardware too "
+                           "(eleven-case witness, expected=4096 covered=4096 foreign=0 wrong_color=0, "
+                           "digest f50dd9368fee6cc9) and the shipping profile delivers it; the "
+                           "feature stays unreported until its distance limits and the applicable CTS "
+                           "acceptance are published"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
