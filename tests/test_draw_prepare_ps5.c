@@ -1,5 +1,6 @@
 #include "draw_prepare_ps5.h"
 #include "vertex_fetch.h"
+#include "graphics_pipeline_ps5.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,6 +170,31 @@ int main(void)
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=VK_SUCCESS &&
         allocations==allocated && !prepared.backing);
     set.signature.binding[1].first=1;
+    /* A binding the caller declared for the GEOMETRY stage. The pinned
+     * conformance module binds its uniform buffer and its sampled image to that
+     * stage alone, so the draw path has to carry it when - and only when - the
+     * pipeline's pre-raster program is the merged vertex+geometry pair. The flag
+     * is what the native create recorded from the compiled metadata; without it
+     * the same declaration stays refused, because the stage projection would
+     * have dropped the binding. */
+    {
+        struct ps5vk_graphics_pair pair={.ready=1,.geometry_preraster=1};
+        struct ps5vk_native_graphics_pipeline native={.pair=&pair};
+        VkShaderStageFlags saved=set.signature.binding[0].stages;
+        set.signature.binding[0].stages=VK_SHADER_STAGE_GEOMETRY_BIT;
+        p.sets[0]=set.signature;
+        p.graphics_state=&native;
+        assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)==VK_SUCCESS);
+        assert(prepared.texture_table==prepared.vertex_table+4);
+        ps5vk_native_release_draw(&prepared);
+        pair.geometry_preraster=0;
+        allocated=allocations;
+        assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==allocated && !prepared.backing);
+        p.graphics_state=NULL;
+        set.signature.binding[0].stages=saved;
+        p.sets[0]=set.signature;
+    }
     set.pool=NULL;
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=VK_SUCCESS);
     set.pool=&pool;

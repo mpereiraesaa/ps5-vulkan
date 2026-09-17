@@ -63,6 +63,10 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
     }
     pair->vertex_quantization=0x2d;pair->ready=1;
+    /* Recorded from the compiled pre-raster program rather than re-derived at
+     * draw time: the metadata is freed with the program, and the draw path needs
+     * the same fact the descriptor profile used to accept the binding. */
+    pair->geometry_preraster=input->vertex.metadata.source_stage==PSBC_STAGE_GEOMETRY;
     rc=p->memory.flush(p->memory.context,p->backing,0,p->allocation_bytes);
     if(rc!=VK_SUCCESS)goto failed;
     *out=p;return VK_SUCCESS;

@@ -2837,6 +2837,46 @@
         "core:geometryShader"
       ],
       "rationale": "Applicable and runnable, and now selected as acceptance: the pipeline gate that refused it is gone (the feature is advertised by the graphics build and the interface policy binds the stage's declared input arity to the pipeline's topology), so this run measures the leaf's own oracle. Prior state: the leaf ran and reported NotSupported only because geometryShader was unadvertised."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1105",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_texture",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1107",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1111",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_texture_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1113",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
     }
   ],
   "diagnostics": [
@@ -3315,46 +3355,6 @@
         "core:geometryShader"
       ],
       "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a one vertex output against two geometry outputs is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1105",
-      "category": "geometry-stage-descriptor-delivery",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "MEASURED on the advertised profile (run 20260917T193300Z-class, eboot 1ff7d96e3a25a5fcaed65448bf724244e722590b7a58e7120e7c359e4bc96dcf): the leaf RUNS, and its own oracle reports 'vk.queueSubmit(queue, 1u, &submitInfo, *fence): VK_ERROR_FEATURE_NOT_PRESENT'. That is the native draw path, not the pipeline: the descriptor plan in native/draw_prepare_ps5.c refuses a binding whose visibility does not name VERTEX or FRAGMENT, and the pinned module binds this leaf's uniform buffer / combined image sampler to the GEOMETRY stage alone. The pipeline-side rule was widened (native/runtime_graphics_compiler.c) with a host regression that shows the merged pre-raster metadata names the binding and the draw ABI carries the table for it, so what remains is that one native-path gate; the file is claimed by another worker (agent_t05) and the window request is open. Kept as a measured diagnostic, not a claim."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_texture",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1107",
-      "category": "geometry-stage-descriptor-delivery",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "MEASURED on the advertised profile (run 20260917T193300Z-class, eboot 1ff7d96e3a25a5fcaed65448bf724244e722590b7a58e7120e7c359e4bc96dcf): the leaf RUNS, and its own oracle reports 'vk.queueSubmit(queue, 1u, &submitInfo, *fence): VK_ERROR_FEATURE_NOT_PRESENT'. That is the native draw path, not the pipeline: the descriptor plan in native/draw_prepare_ps5.c refuses a binding whose visibility does not name VERTEX or FRAGMENT, and the pinned module binds this leaf's uniform buffer / combined image sampler to the GEOMETRY stage alone. The pipeline-side rule was widened (native/runtime_graphics_compiler.c) with a host regression that shows the merged pre-raster metadata names the binding and the draw ABI carries the table for it, so what remains is that one native-path gate; the file is claimed by another worker (agent_t05) and the window request is open. Kept as a measured diagnostic, not a claim."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1111",
-      "category": "geometry-stage-descriptor-delivery",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "MEASURED on the advertised profile (run 20260917T193300Z-class, eboot 1ff7d96e3a25a5fcaed65448bf724244e722590b7a58e7120e7c359e4bc96dcf): the leaf RUNS, and its own oracle reports 'vk.queueSubmit(queue, 1u, &submitInfo, *fence): VK_ERROR_FEATURE_NOT_PRESENT'. That is the native draw path, not the pipeline: the descriptor plan in native/draw_prepare_ps5.c refuses a binding whose visibility does not name VERTEX or FRAGMENT, and the pinned module binds this leaf's uniform buffer / combined image sampler to the GEOMETRY stage alone. The pipeline-side rule was widened (native/runtime_graphics_compiler.c) with a host regression that shows the merged pre-raster metadata names the binding and the draw ABI carries the table for it, so what remains is that one native-path gate; the file is claimed by another worker (agent_t05) and the window request is open. Kept as a measured diagnostic, not a claim."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_texture_instancing",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1113",
-      "category": "geometry-stage-descriptor-delivery",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "MEASURED on the advertised profile (run 20260917T193300Z-class, eboot 1ff7d96e3a25a5fcaed65448bf724244e722590b7a58e7120e7c359e4bc96dcf): the leaf RUNS, and its own oracle reports 'vk.queueSubmit(queue, 1u, &submitInfo, *fence): VK_ERROR_FEATURE_NOT_PRESENT'. That is the native draw path, not the pipeline: the descriptor plan in native/draw_prepare_ps5.c refuses a binding whose visibility does not name VERTEX or FRAGMENT, and the pinned module binds this leaf's uniform buffer / combined image sampler to the GEOMETRY stage alone. The pipeline-side rule was widened (native/runtime_graphics_compiler.c) with a host regression that shows the merged pre-raster metadata names the binding and the draw ABI carries the table for it, so what remains is that one native-path gate; the file is claimed by another worker (agent_t05) and the window request is open. Kept as a measured diagnostic, not a claim."
     }
   ]
 }

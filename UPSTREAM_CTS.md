@@ -886,26 +886,42 @@ measured every leaf the module produces:
 
 | family | leaves | measured |
 | --- | --- | --- |
-| `dEQP-VK.geometry.input.basic_primitive.triangles`, its two conversions, six `output_<n>`, `output_vary_by_attribute` and its instancing variant | 11 | **Pass** - now acceptance cases |
-| `output_vary_by_{uniform,texture}` and their instancing variants | 4 | **Fail** - the geometry stage's descriptor delivery |
-| `varying.vertex_{no_op,out_0,out_0,out_1}_geometry_out_{1,1,2,2}` | 4 | **Fail** - the varying crosses |
+| `dEQP-VK.geometry.input.basic_primitive.triangles`, its two conversions, six `output_<n>`, `output_vary_by_attribute` and its instancing variant | 11 | **Pass** - acceptance cases |
+| `output_vary_by_{uniform,texture}` and their instancing variants | 4 | **Pass** - acceptance cases once the geometry-stage descriptor binding is carried end to end (see below) |
+| `varying.vertex_{no_op,out_0,out_0,out_1}_geometry_out_{1,1,2,2}` | 4 | **Fail** - the varying crosses, still measured diagnostics |
 | the remaining input families, adjacency, `point_size`, `primitive_id` | 30 | still refused or unmeasured, kept as diagnostics |
 
-The eight failures are recorded as diagnostics with `expected_status: Fail` and
-the run that measured them, not smoothed into the acceptance set: the attribute
-variant of the same descriptor family passes in the same run, which is what
-separates a descriptor-delivery gap inside a geometry stage from the stage not
-running at all. The accepted set is therefore 286 leaves (211 + 64 clipping + 11
-geometry), and the frozen selection re-run passes **286/286** with zero `Fail`,
+**The geometry-stage descriptor path.** The pinned module binds its uniform
+buffer and its combined image sampler to the GEOMETRY stage alone, which two
+separate gates refused. The compiler profile now admits a binding whose
+visibility names that stage when - and only when - the key carries it (the
+merged pre-raster program is what executes it), and the draw path's descriptor
+plan carries the table for that program when the native create recorded the
+geometry pre-raster pair on it; without that flag the same declaration is still
+refused, because the stage projection would have dropped the binding. The run
+that measured it went from `vk.queueSubmit(...): VK_ERROR_FEATURE_NOT_PRESENT`
+on all four leaves to **Pass** on all four.
+
+The four varying-cross failures are recorded as diagnostics with
+`expected_status: Fail` and the run that measured them, not smoothed into the
+acceptance set: the exact pinned shape (a vertex shader with an unused
+attribute, a geometry stage with a varying output, `TRIANGLE_STRIP`) is accepted
+by the adapter and compiles host-side, so their console
+`createGraphicsPipelines` refusal is a question for a targeted diagnostic rather
+than a claim. The accepted set is therefore 290 leaves (211 + 64 clipping + 15
+geometry), and the frozen selection re-run passes **290/290** with zero `Fail`,
 zero `NotSupported`, no missing or unexpected cases, and the title confirmed
 stopped:
 
-- selection SHA-256 `9f3226efcdde219d6699462910b36fcfcb151410bb7db0dd89d8503b1510b5d7`;
-- eboot SHA-256 `73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef`.
+- selection SHA-256 `a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679`;
+- eboot SHA-256 `f1e4ef071fc8b1777b75e67ce858da91ebca32fc2e716608a60fb68045f36878`.
 
-The preceding promotion run (`selection`
-`a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324091`) is the one
-that measured the eight failures and is retained privately with its QPA.
+The preceding runs are retained privately with their QPA: the promotion run
+(selection
+`a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324091`) measured
+the eight failures, and the descriptor run
+(`a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679` before the
+fix) localized them to the submit.
 
 ### Why the tessellation family is not listed yet
 
