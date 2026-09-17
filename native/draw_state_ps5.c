@@ -87,14 +87,26 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         2u | (p->depth_write ? 4u : 0u) | ((uint32_t)p->depth_compare << 4) : 0u;
     result.cx[result.cx_count++] = (ps5_agc_register){0x200, depth_control};
     /* Public Mesa gfx10/RADV PA_SU_SC_MODE_CNTL: cull mode, front face,
-     * filled triangles (POLYMODE_FRONT/BACK_PTYPE = triangles), first
-     * provoking vertex, and the three POLY_OFFSET_*_ENABLE bits (11..13)
-     * exactly when the draw's depth bias is enabled. */
+     * first provoking vertex, the three POLY_OFFSET_*_ENABLE bits (11..13)
+     * exactly when the draw's depth bias is enabled, and the polygon mode:
+     * POLYMODE_FRONT/BACK_PTYPE (bits 5..7 / 8..10) name what a polygon
+     * rasterizes as - 0 points, 1 lines, 2 triangles in the gfx10 schema,
+     * the reverse of VkPolygonMode's FILL=0, LINE=1, POINT=2 - and POLY_MODE
+     * (bit 3, DUAL_MODE) plus KEEP_TOGETHER_ENABLE (bit 24, gfx10..gfx11:
+     * the SC must process the primitive group in PA order) are set for
+     * either non-solid mode. Culling and facing are decided on the polygon
+     * before the mode applies, so the cull bits stay as they are. */
+    uint32_t hardware_polygon_type = 2u, polygon_mode = 0u;
+    if (raster->polygon_mode == VK_POLYGON_MODE_LINE) hardware_polygon_type = 1u;
+    else if (raster->polygon_mode == VK_POLYGON_MODE_POINT) hardware_polygon_type = 0u;
+    else if (raster->polygon_mode != VK_POLYGON_MODE_FILL) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (hardware_polygon_type != 2u) polygon_mode = (1u << 3) | (1u << 24);
     const uint32_t polygon_offset_enable = raster->depth_bias_enable ?
         (1u << 11) | (1u << 12) | (1u << 13) : 0u;
     result.cx[result.cx_count++] = (ps5_agc_register){0x205,
-        (uint32_t)p->cull_mode | ((uint32_t)p->front_face << 2) | (2u << 5) | (2u << 8) |
-        polygon_offset_enable};
+        (uint32_t)p->cull_mode | ((uint32_t)p->front_face << 2) |
+        (hardware_polygon_type << 5) | (hardware_polygon_type << 8) |
+        polygon_mode | polygon_offset_enable};
     /* Shader exports homogeneous W, not reciprocal W. Mesa RADV and the
      * compiler's .pa_cl_vte_cntl.vtx_w0_fmt both require this bit. w=1 tests
      * cannot distinguish the two modes. */
@@ -124,6 +136,21 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     /* Depth bias: the polygon offset block, written on every draw. */
     polygon_offset(raster, depth != NULL, result.cx + result.cx_count);
     result.cx_count += 6;
+    /* Point and line rasterization state for the non-solid polygon modes,
+     * written on every draw so a FILL draw cannot inherit another value.
+     * Public Mesa RADV: PA_SU_POINT_SIZE holds the 12.4 fixed-point point
+     * width/height and PA_SU_POINT_MINMAX the clamp interval it programs in
+     * its preamble (min 0, max 8191.875/2 in 12.4 = 0xffff); PA_SU_LINE_CNTL
+     * WIDTH is the line width * 8 (1.0 px, wideLines is not advertised);
+     * PA_SC_LINE_CNTL is zero (Bresenham lines, no perpendicular end caps).
+     * In this 1.0 profile the point size of a POINT-mode polygon is 1.0
+     * unless the compiler enables the shader's PointSize export in
+     * PA_CL_VS_OUT_CNTL, which the spec allows either way (polygonModePointSize
+     * is a maintenance5 property this profile does not report). */
+    result.cx[result.cx_count++] = (ps5_agc_register){0x280, (8u << 16) | 8u};
+    result.cx[result.cx_count++] = (ps5_agc_register){0x281, 0xffffu << 16};
+    result.cx[result.cx_count++] = (ps5_agc_register){0x282, 8u};
+    result.cx[result.cx_count++] = (ps5_agc_register){0x2f7, 0u};
     memcpy(result.sh, base.sh, sizeof(base.sh)); memcpy(result.uc, base.uc, sizeof(base.uc));
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {

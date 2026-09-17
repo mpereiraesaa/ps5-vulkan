@@ -37,7 +37,12 @@ int main(void)
     VkRect2D area = {{0,0},{640,480}};
     struct ps5vk_draw_state out;
     assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, NULL, &area, 640, 480, &out) == VK_SUCCESS);
-    assert(out.cx_count == 98 && out.modifier == 5);
+    assert(out.cx_count == 102 && out.modifier == 5);
+    /* Point/line rasterization words follow the polygon offset block. */
+    assert(out.cx[98].offset==0x280 && out.cx[98].value==((8u<<16)|8u));
+    assert(out.cx[99].offset==0x281 && out.cx[99].value==(0xffffu<<16));
+    assert(out.cx[100].offset==0x282 && out.cx[100].value==8u);
+    assert(out.cx[101].offset==0x2f7 && out.cx[101].value==0u);
     assert(out.cx[91].offset==0x2f9 && out.cx[91].value==0x2d);
     assert(out.cx[90].offset==0x204 && out.cx[90].value==0x01080000);
     assert(out.cx[87].offset==0x292 && out.cx[87].value==0x22);
@@ -68,7 +73,7 @@ int main(void)
     p.depth_format = VK_FORMAT_D32_SFLOAT; p.depth_test = p.depth_write = VK_TRUE;
     p.depth_compare = VK_COMPARE_OP_LESS;
     assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
-    assert(out.cx_count == 120 && out.cx_count<=PS5VK_DRAW_CX_CAPACITY && out.cx[106].value == 0x16);
+    assert(out.cx_count == 124 && out.cx_count<=PS5VK_DRAW_CX_CAPACITY && out.cx[106].value == 0x16);
     assert(out.cx[112].offset==0x204 && out.cx[112].value==0x01080000);
     assert(out.cx[113].offset==0x2f9 && out.cx[113].value==0x2d);
     /* With a D32 attachment the format word describes the float depth even
@@ -102,6 +107,27 @@ int main(void)
     p.viewport=(VkViewport){0,0,640,480,0,1};
     assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
     assert(out.cx[112].value==0x01080000u);
+    /* Polygon modes in PA_SU_SC_MODE_CNTL: FILL keeps PTYPE = triangles with
+     * POLY_MODE clear; LINE and POINT set PTYPE for both faces, POLY_MODE
+     * (bit 3) and KEEP_TOGETHER_ENABLE (bit 24), and leave cull/face alone.
+     * A mode outside the three core values is refused, not mapped. */
+    raster.depth_bias_enable=VK_FALSE;
+    raster.polygon_mode=VK_POLYGON_MODE_LINE;
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
+    assert(out.cx[107].offset==0x205 && out.cx[107].value==0x0100012eu);
+    /* The offset enables and the polygon mode are independent bits. */
+    raster.depth_bias_enable=VK_TRUE;
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
+    assert(out.cx[107].value==(0x0100012eu | (7u << 11)));
+    raster.depth_bias_enable=VK_FALSE;
+    raster.polygon_mode=VK_POLYGON_MODE_POINT;
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
+    assert(out.cx[107].value==0x0100000eu);
+    raster.polygon_mode=VK_POLYGON_MODE_FILL_RECTANGLE_NV;
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) != VK_SUCCESS && !out.cx_count);
+    raster.polygon_mode=VK_POLYGON_MODE_FILL;
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
+    assert(out.cx[107].value==0x246u);
     raster=(struct ps5vk_raster_state){0};
     p.depth_test = VK_FALSE;
     assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
@@ -125,10 +151,11 @@ int main(void)
     pair.runtime_fragment.shader[3]=(ps5_agc_register){0xb,4};
     pair.runtime_vertex.specials.draw_modifier=7;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,&raster,&color,&depth,&area,640,480,&out)==VK_SUCCESS);
-    assert(out.cx_count==121 && out.cx[75].offset==0x2ab && out.cx[75].value==1);
+    assert(out.cx_count==125 && out.cx[75].offset==0x2ab && out.cx[75].value==1);
     assert(out.sh_count==10 && out.sh[5].offset==0x81 && out.sh[9].offset==0xb);
     assert(out.modifier==5 && out.runtime.enabled && out.runtime.base_vertex_slot==0);
     /* The runtime path appends the same polygon-offset block after 0x2f9. */
     assert(out.cx[114].offset==0x2f9 && out.cx[115].offset==0x2de && out.cx[120].offset==0x2e3);
+    assert(out.cx[121].offset==0x280 && out.cx[124].offset==0x2f7);
     assert(out.cx_count<=PS5VK_DRAW_CX_CAPACITY);
 }

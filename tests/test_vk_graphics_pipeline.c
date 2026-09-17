@@ -146,6 +146,37 @@ int main(void)
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
         assert(!biased->raster.depth_clamp);
         vkDestroyPipeline(&d,biased,NULL);
+        /* polygonMode: LINE and POINT need fillModeNonSolid enabled on the
+         * device, FILL_RECTANGLE_NV is refused with or without it, FILL is
+         * always accepted; the mode is carried as static raster state. */
+        r.polygonMode=VK_POLYGON_MODE_LINE;
+        const unsigned before_poly=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before_poly);
+        r.polygonMode=VK_POLYGON_MODE_POINT;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before_poly);
+        d.enabled_features|=PS5VK_FEATURE_FILL_MODE_NON_SOLID;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.polygon_mode==VK_POLYGON_MODE_POINT);
+        vkDestroyPipeline(&d,biased,NULL);
+        r.polygonMode=VK_POLYGON_MODE_LINE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.polygon_mode==VK_POLYGON_MODE_LINE);
+        vkDestroyPipeline(&d,biased,NULL);
+        r.polygonMode=VK_POLYGON_MODE_FILL_RECTANGLE_NV;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        /* wideLines is not advertised: a non-solid pipeline still needs 1.0. */
+        r.polygonMode=VK_POLYGON_MODE_LINE;r.lineWidth=2.0f;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        r.lineWidth=1.0f;
+        d.enabled_features&=~PS5VK_FEATURE_FILL_MODE_NON_SOLID;
+        r.polygonMode=VK_POLYGON_MODE_FILL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.polygon_mode==VK_POLYGON_MODE_FILL);
+        vkDestroyPipeline(&d,biased,NULL);
         /* Dynamic depth bias: the enable stays static, the factors are not
          * read from the create info (a non-zero clamp here is ignored too),
          * and VK_DYNAMIC_STATE_DEPTH_BIAS is accepted next to the other two. */

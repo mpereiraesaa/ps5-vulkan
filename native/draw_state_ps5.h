@@ -7,9 +7,11 @@
 #include "runtime_draw_abi.h"
 /* Registers the draw state writes after the pipeline's 84-register base: the
  * two runtime stage blocks (13), the optional depth target, the eight fixed
- * raster/clip/scissor words, and the six polygon-offset words
- * (PA_SU_POLY_OFFSET_DB_FMT_CNTL .. BACK_OFFSET, 0x2de..0x2e3). */
-enum { PS5VK_DRAW_RASTER_REGISTERS = 8 + 6 };
+ * raster/clip/scissor words, the six polygon-offset words
+ * (PA_SU_POLY_OFFSET_DB_FMT_CNTL .. BACK_OFFSET, 0x2de..0x2e3) and the four
+ * point/line words (PA_SU_POINT_SIZE, PA_SU_POINT_MINMAX, PA_SU_LINE_CNTL,
+ * PA_SC_LINE_CNTL) the non-solid polygon modes rasterize with. */
+enum { PS5VK_DRAW_RASTER_REGISTERS = 8 + 6 + 4 };
 enum { PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 13 + PS5_DEPTH_REGISTER_COUNT +
     PS5VK_DRAW_RASTER_REGISTERS };
 struct ps5vk_draw_state {
