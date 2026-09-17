@@ -58,21 +58,6 @@ FEATURE_GATES = {
                        "only 2D images are created"),
     "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount != 1",
                          "one color attachment per pipeline"),
-    # The geometry stage is no longer refused for a broken data path, and the
-    # per-primitive id every applicable upstream leaf declares is delivered and
-    # hardware-witnessed. The feature still is not advertised, and this citation
-    # is the reason: a device that advertises geometryShader is expected to run
-    # the pinned module's other input families as well (points and lines), and
-    # this profile still compiles triangles-only geometry stages even though the
-    # compiler already accepts points-in and lines-in ones (measured host-side).
-    "geometryShader": ("src/vk_graphics_pipeline.c",
-                       "else if (s->stage == VK_SHADER_STAGE_GEOMETRY_BIT && !gs) gs=s;",
-                       "the stage is described, compiled through the merged vertex+geometry pre-raster "
-                       "program, packaged by the adapter and hardware-witnessed (the ES->GS handoff "
-                       "delivers the bytes the ES wrote, and the five mandatory minima and the "
-                       "per-primitive id are measured), but a device that advertises this feature is "
-                       "expected to run the pinned module's points and lines input families too, and "
-                       "this profile still compiles triangles-only geometry stages"),
     "tessellationShader": ("src/vk_graphics_pipeline.c",
                            "else if (s->stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT && !tcs) tcs=s;",
                            "the control/evaluation pair is described, validated against the patch "
@@ -258,6 +243,45 @@ _CLIP_DISTANCE_CITATIONS = (
     ("native/platform_ps5.c", "PS5VK_FEATURE_SHADER_CLIP_DISTANCE |"),
     ("tests/test_clip_cull_witness.c", "PS5VK_CLIP_CULL_PIXEL_READ"),
 )
+def _geometry_cts_paths() -> tuple[str, ...]:
+    """The geometry leaves the frozen selection accepts.
+
+    Read from the manifest rather than listed twice: the matrix's
+    applicable-CTS column has to be the same selection the payload runs, and a
+    leaf that is demoted back to a diagnostic must disappear from the feature's
+    evidence at the same time.
+    """
+    manifest = json.loads(MANIFEST.read_text())
+    return tuple(sorted(case["path"] for case in manifest["cases"]
+                        if "geometryShader" in " ".join(case.get("features_required", []))))
+
+
+def _geometry_citations() -> tuple:
+    return (
+        ("src/vk_device.c", "PS5VK_FEATURE_GEOMETRY_SHADER"),
+        ("native/platform_ps5.c", "PS5VK_FEATURE_GEOMETRY_SHADER"),
+        ("src/graphics_program.h", "ps5vk_agc_primitive_needs_geometry"),
+        ("src/spirv_graphics_interface.c", "ps5vk_topology_input_vertices"),
+        ("src/graphics_limits.h", "limits->maxGeometryOutputVertices=256;"),
+        ("native/runtime_graphics_compiler.c", "ps5vk_graphics_has_geometry(key)"),
+        ("tests/test_geometry_witness.c", "PS5VK_GEOMETRY_LINES"),
+    )
+
+
+ADVERTISED_FEATURES["geometryShader"] = {
+    "profiles": ("graphics",),
+    "citations": _geometry_citations(),
+    "detail": ("the merged vertex+geometry pre-raster program is compiled, packaged and run "
+               "on the graphics path: the ES->GS input handoff it reads, the triangle, point "
+               "and line input families under their own input assemblies, gl_InvocationID, "
+               "gl_PrimitiveIDIn and the five mandatory minima are hardware-witnessed by the "
+               "nineteen-case geometry witness (shipping-mode run 20260917T183522678Z, "
+               "strict_verified, cases=19, gpu_readback, lifecycle_ok, including case 15 with "
+               "expected=1024 covered=1024 and the points/lines cases at 218/218 and 467/467), "
+               "and the profile reports the five geometry limits at the Vulkan floor this "
+               "profile exercised in src/graphics_limits.h"),
+    "cts": _geometry_cts_paths(),
+}
 ADVERTISED_FEATURES["shaderClipDistance"] = {
     "profiles": ("graphics",),
     "citations": _CLIP_DISTANCE_CITATIONS,

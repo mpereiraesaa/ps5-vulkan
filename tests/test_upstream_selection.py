@@ -59,16 +59,29 @@ class UpstreamSelectionTests(unittest.TestCase):
         manifest = self.current_manifest
         leaves = [c for c in manifest["cases"]
                   if c["path"].startswith(MULTIVIEW_FAMILIES)]
-        # 211 + the 64 promoted clipping leaves are acceptance. The diagnostics
-        # are the earlier 14 plus the 49 geometry leaves this slice records: 19 of
-        # them are applicable to the device but cannot run in this payload yet
-        # (the pinned module loads its own reference images from data assets the
-        # integration does not package) and 30 are refused by a gate this profile
-        # documents (a non-triangle input primitive, an undelivered built-in, or
-        # an adjacency input). The geometry feature therefore stays unadvertised.
-        self.assertEqual((275, 63, 48),
+        # 211 + the 64 promoted clipping leaves + the 11 geometry leaves whose own
+        # upstream oracles passed on hardware when the feature was advertised
+        # (promotion run 20260917T190009Z: 286 acceptance leaves, 286 Pass, zero
+        # Fail, title closed). The diagnostics are the earlier 14 plus the 49
+        # geometry leaves this slice started from, of which 11 are now acceptance:
+        # 30 are still refused by a gate this profile documents (a non-triangle
+        # input primitive the policy does not carry, an undelivered built-in, or
+        # an adjacency input) and 8 were MEASURED as Fail in the promotion run
+        # (the geometry stage's uniform/sampled descriptor variants and the
+        # varying crosses), so they stay diagnostics with expected_status Fail
+        # instead of being claimed as coverage.
+        geometry = [c for c in manifest["cases"]
+                    if "geometryShader" in " ".join(c.get("features_required", []))]
+        self.assertEqual((286, 52, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
+        self.assertEqual(11, len(geometry))
+        self.assertEqual(11, len({c["path"] for c in geometry}))
+        self.assertTrue(all(c["expected_status"] == "Pass" for c in geometry))
+        measured_fail = [d for d in manifest["diagnostics"]
+                         if d.get("category") == "geometry-stage-descriptor-or-varying-gap"]
+        self.assertEqual(8, len(measured_fail))
+        self.assertTrue(all(d["expected_status"] == "Fail" for d in measured_fail))
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
         broken = copy.deepcopy(manifest)
         contract = broken["resource_contracts"][MV_CONTRACT]
