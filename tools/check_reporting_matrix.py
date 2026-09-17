@@ -58,19 +58,21 @@ FEATURE_GATES = {
                        "only 2D images are created"),
     "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount != 1",
                          "one color attachment per pipeline"),
-    # The geometry stage is no longer refused for a broken data path: the ES->GS
-    # input handoff is fixed and the sixteen-case geometry witness verifies
-    # strictly on the console. The feature still is not advertised because the
-    # applicable upstream oracle cannot run in this payload yet: the pinned
-    # geometry module compares against its own reference image loaded from the
-    # data archive, and the integration does not package those assets.
+    # The geometry stage is no longer refused for a broken data path, and the
+    # per-primitive id every applicable upstream leaf declares is delivered and
+    # hardware-witnessed. The feature still is not advertised, and this citation
+    # is the reason: a device that advertises geometryShader is expected to run
+    # the pinned module's other input families as well (points and lines), and
+    # this profile still compiles triangles-only geometry stages even though the
+    # compiler already accepts points-in and lines-in ones (measured host-side).
     "geometryShader": ("src/vk_graphics_pipeline.c",
                        "else if (s->stage == VK_SHADER_STAGE_GEOMETRY_BIT && !gs) gs=s;",
                        "the stage is described, compiled through the merged vertex+geometry pre-raster "
                        "program, packaged by the adapter and hardware-witnessed (the ES->GS handoff "
-                       "delivers the bytes the ES wrote and the five mandatory minima are measured), but "
-                       "the applicable upstream geometry leaves cannot run yet: the pinned module loads "
-                       "its reference images from data assets this integration does not package"),
+                       "delivers the bytes the ES wrote, and the five mandatory minima and the "
+                       "per-primitive id are measured), but a device that advertises this feature is "
+                       "expected to run the pinned module's points and lines input families too, and "
+                       "this profile still compiles triangles-only geometry stages"),
     "tessellationShader": ("src/vk_graphics_pipeline.c",
                            "else if (s->stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT && !tcs) tcs=s;",
                            "the control/evaluation pair is described, validated against the patch "

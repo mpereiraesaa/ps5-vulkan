@@ -15,7 +15,7 @@ enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
 /* The tessellation built-ins the two stages exchange with the tessellator, and
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
-enum { BUILTIN_INVOCATION_ID=8, BUILTIN_TESS_LEVEL_OUTER=11,
+enum { BUILTIN_PRIMITIVE_ID=7, BUILTIN_INVOCATION_ID=8, BUILTIN_TESS_LEVEL_OUTER=11,
        BUILTIN_TESS_LEVEL_INNER=12, BUILTIN_TESS_COORD=13 };
 enum { DECORATION_PATCH=15 };
 enum { MODE_SPACING_EQUAL=1, MODE_SPACING_FRACTIONAL_EVEN=2,
@@ -101,6 +101,23 @@ static int declared_distance_array(const struct id_info *ids,unsigned bound,
  * distance registers. Effective clip/cull usage is independently gated by the
  * native compiler metadata adapter, which is what the pipeline creation path
  * consults before a device advertises either feature. */
+/* The number of vertices in one input primitive of a topology, or zero for a
+ * topology this profile does not feed a geometry stage from. The geometry
+ * stage's declared per-vertex input array must hold exactly one such primitive,
+ * which is what binds the shader's declaration to the pipeline's topology. */
+static unsigned ps5vk_topology_input_vertices(VkPrimitiveTopology topology)
+{
+    switch(topology) {
+    case VK_PRIMITIVE_TOPOLOGY_POINT_LIST:return 1u;
+    case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
+    case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:return 2u;
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:return 3u;
+    default:return 0u;
+    }
+}
+
 static int builtin_block(const struct ps5vk_graphics_module_key *m,
                          const struct id_info *ids,unsigned bound,
                          unsigned id,unsigned members,unsigned *clip,unsigned *cull)
@@ -301,6 +318,19 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
              * the same way it supplies the per-vertex offsets this profile
              * already reads. */
             if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_INVOCATION_ID) {
+                if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
+                   type->count!=32)goto done;
+                continue;
+            }
+            /* The geometry stage's per-primitive id: which primitive of the draw
+             * this invocation is processing. The hardware supplies it to the
+             * merged stage the same way it supplies the per-vertex offsets and
+             * the invocation id, and every applicable upstream geometry leaf
+             * declares it, so it is what the feature's conformance leaves need.
+             * It is a GEOMETRY input scalar with no location; the fragment
+             * stage's gl_PrimitiveID is a different interface and stays refused
+             * (the compiled pixel stage never receives it). */
+            if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_PRIMITIVE_ID) {
                 if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
                    type->count!=32)goto done;
                 continue;
@@ -538,9 +568,18 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
     }
     if(has_geometry) {
         if(!reflect(&key->geometry,MODEL_GEOMETRY,&gs))return 0;
-        /* The geometry stage this profile compiles takes triangles: the
-         * per-vertex input array is exactly the three vertices of one. */
-        if(gs.input_vertices!=3)return 0;
+        /* The geometry stage's per-vertex input array holds the vertices of ONE
+         * input primitive, and the pipeline's topology decides how many that is:
+         * one for a point, two for a line, three for a triangle. Requiring the
+         * declared length to agree with the topology is stronger than naming one
+         * topology, and it is what lets the pinned geometry module's points and
+         * lines families run: the compiler already accepts merged stages fed by
+         * those primitives (measured host-side: es_verts_per_subgroup 29 for
+         * points, 56 for lines). Adjacency topologies report zero here and stay
+         * refused until the front end is measured to accept their four- and
+         * six-vertex inputs. */
+        const unsigned input_vertices=ps5vk_topology_input_vertices(key->topology);
+        if(!input_vertices || gs.input_vertices!=input_vertices)return 0;
     }
     if(fs.outputs[0].components!=4 ||
        fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;

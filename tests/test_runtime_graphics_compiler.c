@@ -328,9 +328,62 @@ static void check_geometry_stage(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&invoked,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);
     free((void *)invoked.geometry.words);
+    /* The input-primitive families. A device that advertises geometryShader is
+     * expected to feed the stage points and lines as well as triangles, so the
+     * declared per-vertex input array is bound to the pipeline's topology rather
+     * than to one fixed length: each family declares its own arity (one vertex
+     * per input point, two per input line) and packages with the primitive value
+     * the linker will program. Patching the triangle module's array length is
+     * NOT how this is tested - the module's own body reads three vertices, and
+     * rewriting only the declaration produces SPIR-V the parser rejects (the
+     * compiler traps on an OpCompositeConstruct whose operand count no longer
+     * matches the rewritten array type) - so the families have their own
+     * modules, which are the same ones the native witness uses. */
+    const VkPrimitiveTopology families[3]={VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+        VK_PRIMITIVE_TOPOLOGY_LINE_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_STRIP};
+    const char *family_modules[3]={
+        "build/runtime-graphics/geometry_points.geom.spv",
+        "build/runtime-graphics/geometry_lines.geom.spv",
+        "build/runtime-graphics/geometry_lines.geom.spv"};
+    const uint32_t family_primitives[3]={PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST,
+        PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST,PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP};
+    for(unsigned f=0;f<3;++f) {
+        struct ps5vk_graphics_module_key family=read_module(family_modules[f]);
+        struct ps5vk_graphics_key family_key=key;
+        family_key.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER;
+        family_key.topology=families[f];
+        family_key.geometry=family;
+        assert(ps5vk_spirv_graphics_interface(&family_key));
+        out=(void *)1;
+        assert(ps5vk_runtime_graphics_compile(NULL,&family_key,&out)==VK_SUCCESS && out);
+        assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==
+            family_primitives[f]);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)family.words);
+    }
+    /* The binding is a real constraint in both directions: the point module is
+     * refused when the pipeline says triangles, and the line module when it says
+     * points, so neither family can ride on another's primitive. */
+    struct ps5vk_graphics_module_key point_module=
+        read_module("build/runtime-graphics/geometry_points.geom.spv");
+    struct ps5vk_graphics_key misbound=key;
+    misbound.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER;
+    misbound.geometry=point_module;
+    assert(!ps5vk_spirv_graphics_interface(&misbound));
+    assert(ps5vk_runtime_graphics_compile(NULL,&misbound,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)point_module.words);
+    struct ps5vk_graphics_module_key line_module=
+        read_module("build/runtime-graphics/geometry_lines.geom.spv");
+    misbound=key;
+    misbound.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER;
+    misbound.topology=VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    misbound.geometry=line_module;
+    assert(!ps5vk_spirv_graphics_interface(&misbound));
+    assert(ps5vk_runtime_graphics_compile(NULL,&misbound,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)line_module.words);
     free((void *)key.vertex.words);free((void *)key.geometry.words);
     free((void *)key.fragment.words);
-    puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged with the feature on");
+    puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged for the point, line and triangle families");
 }
 
 /* The tessellation pair: described and identified, refused by the adapter.
@@ -1346,23 +1399,54 @@ int main(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
     key.blend_enable=0;
     /* Topology selects the primitive the composite pipeline links, so the key
-     * carries it and the compiler is asked for the matching value. Both
-     * accepted topologies compile; everything else stays fail-closed, before
-     * the compiler is reached. */
+     * carries it and the compiler is asked for the matching value. Every
+     * accepted topology compiles; everything else stays fail-closed, before the
+     * compiler is reached. */
+    const VkPrimitiveTopology unsupported_topologies[]={
+        /* Point and line topologies resolve, but a pipeline WITHOUT a geometry
+         * stage has no witness for rasterizing them directly, so they are
+         * refused like the families the resolver does not carry at all. */
+        VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+        VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+        VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+        VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
     uint32_t primitive_type=0;
+    assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_POINT_LIST,&primitive_type)==0 &&
+           primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST);
+    assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_LINE_LIST,&primitive_type)==0 &&
+           primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST);
+    assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,&primitive_type)==0 &&
+           primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP);
     assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,&primitive_type)==0 &&
            primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST);
     assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,&primitive_type)==0 &&
            primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
+    /* The resolver carries points and lines (they feed a geometry stage), while
+     * the plain-pipeline list above is refused for a different reason: no
+     * geometry stage. The native link gate names the resolver's whole set, so a
+     * value the key resolves can never be refused by the linker's own check. */
+    for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
+        const int resolved=!ps5vk_agc_primitive_type(unsupported_topologies[i],&primitive_type);
+        assert(!resolved || ps5vk_agc_primitive_needs_geometry(primitive_type));
+        primitive_type=0;
+    }
+    assert(ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP) &&
+           !ps5vk_agc_primitive_linkable(0u) && !ps5vk_agc_primitive_linkable(5u) &&
+           !ps5vk_agc_primitive_linkable(9u) && !ps5vk_agc_primitive_linkable(12u));
     key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     assert(ps5vk_runtime_graphics_supported(&key) && ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==
         PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
     ps5vk_runtime_graphics_free(NULL,out);out=NULL;
-    const VkPrimitiveTopology unsupported_topologies[]={
-        VK_PRIMITIVE_TOPOLOGY_POINT_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
     for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
         key.topology=unsupported_topologies[i];
         assert(!ps5vk_runtime_graphics_supported(&key) &&
