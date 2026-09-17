@@ -19,10 +19,13 @@
  *     VGT_TF_PARAM derived from the control stage's own execution modes.
  *   - The result still carries PSBC_UNRESOLVED_TESS_PIPELINE: the hull state
  *     the driver owns (stage enables, LS_HS_CONFIG, TF ring, offchip param)
- *     and the loadable domain package do not exist yet.
- *   - A stand-alone evaluation stage compiles to machine code but publishes NO
- *     register writes at all and no hardware stage, so a driver cannot launch
- *     it from this metadata yet; the NGG option is refused for it.
+ *     and the loadable domain package do not exist yet. The DOMAIN half's
+ *     loadable package is the NGG form (measured): same shape as the vertex
+ *     NGG program, with the offchip system SGPRs the tessellation args
+ *     declare, and it drops the unresolved tessellation-pipeline bit.
+ *   - A stand-alone evaluation stage without the NGG option compiles to
+ *     machine code but publishes NO register writes at all, so a driver
+ *     cannot launch it from that metadata; the loadable form is the NGG one.
  *   - Until that changes, native/runtime_shader.c must refuse to package the
  *     hull or the domain half: the load gate is the contract, not a bug.
  */
@@ -132,8 +135,9 @@ int main(void)
     assert(ps5vk_runtime_shader_build(&arena,&hull)!=0);
     psbc_free_output(&hull);
 
-    /* The evaluation half compiles, but publishes nothing a driver could
-     * launch: no hardware stage, no registers, and the unresolved bit. */
+    /* The evaluation half compiles, but a plain evaluation compile publishes
+     * nothing a driver could launch: no hardware stage, no registers, and the
+     * unresolved bit. The loadable form is the NGG one below. */
     PsbcCompileOptions eval_options={
         .target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_TESS_EVAL,.entrypoint="main",
         .optimise=true,.address32_hi=2,.primitive_type=4,
@@ -150,13 +154,61 @@ int main(void)
     assert(ps5vk_runtime_shader_build(&arena,&eval)!=0);
     psbc_free_output(&eval);
 
-    /* The domain half cannot take the NGG path at this pin: the option is
-     * refused instead of silently producing an ES-shaped program. */
-    eval_options.ngg=true;
-    PsbcShaderOutput refused={0};
-    assert(psbc_compile_shader(es,en*4,&eval_options,&refused)!=PSBC_RESULT_OK);
-    assert(!refused.machine_code && !refused.data);
-    psbc_free_output(&refused);
+    /* The loadable domain package: with the NGG option the evaluation half
+     * compiles into the same shape the vertex NGG path publishes, because the
+     * pinned radv lowering runs both stages through ac_nir_lower_ngg_nogs.
+     * Measured at the pin this fixture compiles to: the ES-slot program
+     * registers with a combined RSRC pair, valid GE linkage, the offchip
+     * system SGPRs the tessellation args declare (the window base stays above
+     * them), the NGG LDS layout slot and real output semantics - and no
+     * unresolved tessellation-pipeline bit, because the hull state this
+     * package does not carry is the driver's, not the domain half's. */
+    PsbcCompileOptions package_options={
+        .target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_TESS_EVAL,.entrypoint="main",
+        .optimise=true,.ngg=true,.address32_hi=2,.primitive_type=4,
+        .rasterization_samples=1};
+    PsbcShaderOutput domain={0};
+    assert(psbc_compile_shader(es,en*4,&package_options,&domain)==PSBC_RESULT_OK);
+    const PsbcShaderMetadata *d=&domain.metadata;
+    assert(d->version==PSBC_SHADER_METADATA_VERSION);
+    assert(d->target==PSBC_TARGET_PS5);
+    assert(d->source_stage==PSBC_STAGE_TESS_EVAL);
+    assert(d->hardware_stage==PSBC_HW_STAGE_NGG);
+    assert(d->unresolved_fields==
+        (PSBC_UNRESOLVED_PROGRAM_CHECKSUM |
+         PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE));
+    assert(domain.machine_code && domain.machine_code_size%4==0);
+    const PsbcRegisterWrite *es_rsrc1=find_register(d,
+        d->shader_registers,d->shader_register_count,0x8a);
+    const PsbcRegisterWrite *es_rsrc2=find_register(d,
+        d->shader_registers,d->shader_register_count,0x8b);
+    const PsbcRegisterWrite *es_rsrc3=find_register(d,
+        d->shader_registers,d->shader_register_count,0x87);
+    const PsbcRegisterWrite *es_rsrc4=find_register(d,
+        d->shader_registers,d->shader_register_count,0x81);
+    assert(es_rsrc1 && es_rsrc1->value);
+    assert(es_rsrc2 && es_rsrc2->value);
+    assert(es_rsrc3 && es_rsrc4);
+    assert(find_register(d,d->shader_registers,d->shader_register_count,
+        0xc8) && find_register(d,d->shader_registers,d->shader_register_count,
+        0xc9));
+    assert(d->linkage_valid);
+    assert(d->linkage_ge_cntl.offset && d->linkage_stages_en.offset &&
+        d->linkage_user_vgpr_en.offset);
+    /* The offchip ring handoff: the domain half reads the hull's outputs
+     * through the offchip buffer the driver allocates, and the launch gating
+     * counts are published so the driver can prove the program's shape. */
+    assert(d->esgs_system_sgprs_valid);
+    assert(d->esgs_gs_tg_info_sgpr<d->user_data_window_base);
+    assert(d->esgs_merged_wave_info_sgpr<d->user_data_window_base);
+    assert(d->user_data_window_base==8);
+    assert(d->ngg_lds_layout_valid && d->ngg_lds_layout<=UINT16_MAX);
+    assert(d->output_semantic_count>=2);
+    /* The driver-side load gate keeps refusing the domain half until its own
+     * consumer learns the tessellation source stage: the package exists, the
+     * loader contract does not accept it yet. */
+    assert(ps5vk_runtime_shader_build(&arena,&domain)!=0);
+    psbc_free_output(&domain);
 
     /* The tessellation pipeline entry point is stage-checked: any other stage
      * option is refused before anything compiles. */

@@ -15,11 +15,14 @@ DEPS = [
         # The published T04 candidate, pinned by exact commit: it carries the
         # metadata this integration reads (the merged pair's system-SGPR indices
         # and launch counts, the driver user-data window base, the pixel stage's
-        # distance reads) under metadata version 17. It is an audited dependency
-        # candidate, not a merge of the dependency's main: the pin is the whole
-        # contract, so a different commit has to be pinned explicitly and the
-        # driver cache key moves with the metadata version.
-        "pin": "cce48c6cc49b5d4ad24de2bf587fa4f3b63a326a",
+        # distance reads) under metadata version 17, and now the tessellation
+        # evaluation half's loadable NGG package (opengnm-psbc PR #16). That
+        # dependency review is explicitly pending; this pin is the reproducible
+        # candidate the tessellation work builds against, not a claim that
+        # dependency main contains it. The pin is the whole contract, so a
+        # different commit has to be pinned explicitly and the driver cache key
+        # moves with the metadata version.
+        "pin": "d9fbdbacadfbea2d32b4ae2b344d5e22b6b9cf39",
     },
     {
         "name": "opengnm",
