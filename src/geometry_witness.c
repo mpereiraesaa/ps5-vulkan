@@ -23,6 +23,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_POSITIONS:return 6;
     case PS5VK_GEOMETRY_POSITION0:return 7;
     case PS5VK_GEOMETRY_POSITION12:return 8;
+    case PS5VK_GEOMETRY_LOOP_CONST:return 9;
     }
     return -2;
 }
@@ -147,6 +148,7 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
      * and the only other observable is whether the read faults the device. */
     case PS5VK_GEOMETRY_POSITION0:
     case PS5VK_GEOMETRY_POSITION12:
+    case PS5VK_GEOMETRY_LOOP_CONST:
         return witness->expected_covered==0u && witness->covered==0u;
     }
     return 0;

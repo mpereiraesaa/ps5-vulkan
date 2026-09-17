@@ -48,7 +48,9 @@ enum {
     PS5VK_GEOMETRY_POSITION0 = 8,
     /* S2: constant-index reads of gl_in[1] and gl_in[2], no loop. */
     PS5VK_GEOMETRY_POSITION12 = 9,
-    PS5VK_GEOMETRY_CASES = 10
+    /* S3: loop with a constant trip count over gl_in. */
+    PS5VK_GEOMETRY_LOOP_CONST = 10,
+    PS5VK_GEOMETRY_CASES = 11
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */

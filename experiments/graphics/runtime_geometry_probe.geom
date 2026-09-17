@@ -30,6 +30,22 @@ void main()
         EndPrimitive();
         return;
     }
+    if (MODE == 9) {
+        /* S3 characterisation: the same loop shape as POSITIONS but with a constant
+         * trip count, so a fault here is the compiler's indexed ring addressing and
+         * a pass points at the loop's dynamic bound (gl_in.length()). Degenerate
+         * triangle, empty image, as in S1 and S2. */
+        vec4 sum = vec4(0.0);
+        for (int i = 0; i < 3; ++i)
+            sum += gl_in[i].gl_Position;
+        for (int i = 0; i < 3; ++i) {
+            gl_Position = sum / 3.0;
+            out_color = vec3(0.5, 0.5, 0.5);
+            EmitVertex();
+        }
+        EndPrimitive();
+        return;
+    }
     if (MODE == 8) {
         /* S2 characterisation: constant-index reads of gl_in[1] and gl_in[2], no
          * loop. Degenerate triangle between them, so the image stays empty and the
