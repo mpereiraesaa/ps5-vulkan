@@ -63,6 +63,10 @@ struct VkPipeline_T {
     VkBool32 dynamic_viewport, dynamic_scissor;
     VkCullModeFlags cull_mode;
     VkFrontFace front_face;
+    /* Input-assembly state, not a shader capability: the fixed-function front
+     * end cuts a strip where an index matches the reset index. Accepted for the
+     * strip topologies this profile carries and refused everywhere else. */
+    VkBool32 primitive_restart;
     VkBool32 depth_test, depth_write;
     VkCompareOp depth_compare;
     VkFormat color_format, depth_format;

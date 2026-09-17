@@ -154,8 +154,18 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * they stay refused. */
     if (!gs && ps5vk_agc_primitive_needs_geometry(primitive_type))
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Primitive restart is input-assembly state: the front end compares each
+     * index against a reset index and starts a new primitive where it matches,
+     * so it can only act on a strip. The profile accepts it for the two strips
+     * it carries and keeps refusing it everywhere else, where a restart index
+     * could not do what the caller declared. The draw path programs the cut from
+     * the pipeline's flag and the draw's index width. */
+    if (ia->primitiveRestartEnable &&
+        ia->topology != VK_PRIMITIVE_TOPOLOGY_LINE_STRIP &&
+        ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (v->pNext || v->flags ||
-        ia->pNext || ia->flags || ia->primitiveRestartEnable ||
+        ia->pNext || ia->flags ||
         r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable ||
         /* Depth bias is accepted only in its no-op form: the pinned upstream
          * draw pipeline enables it with every factor and the clamp at zero,
@@ -257,6 +267,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     memcpy(p->push_constant_stages,in->layout->push_constant_stages,
            sizeof(p->push_constant_stages));
     p->cull_mode=r->cullMode; p->front_face=r->frontFace; p->color_format=key.color_format;
+    p->primitive_restart=ia->primitiveRestartEnable;
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
     if(key.vertex_binding_count)memcpy(p->vertex_bindings,key.vertex_bindings,
         key.vertex_binding_count*sizeof(*key.vertex_bindings));

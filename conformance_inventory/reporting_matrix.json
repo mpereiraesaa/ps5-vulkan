@@ -290,7 +290,11 @@
       "dEQP-VK.geometry.basic.output_vary_by_uniform",
       "dEQP-VK.geometry.basic.output_vary_by_texture",
       "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
-      "dEQP-VK.geometry.basic.output_vary_by_texture_instancing"
+      "dEQP-VK.geometry.basic.output_vary_by_texture_instancing",
+      "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
+      "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
+      "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
+      "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2"
     ],
     "diagnostics": [
       "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.update_buffer_second_part",
@@ -336,11 +340,7 @@
       "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_9",
       "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_10",
       "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_11",
-      "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_12",
-      "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
-      "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
-      "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
-      "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2"
+      "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_12"
     ],
     "manifest": "cts/upstream/manifest.json",
     "note": "Only original upstream cases whose prerequisites the reported profile satisfies belong here; anything else stays a diagnostic."
@@ -485,7 +485,11 @@
           "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
           "dEQP-VK.geometry.input.basic_primitive.triangles",
           "dEQP-VK.geometry.input.conversion.triangles_to_lines",
-          "dEQP-VK.geometry.input.conversion.triangles_to_points"
+          "dEQP-VK.geometry.input.conversion.triangles_to_points",
+          "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
+          "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
+          "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
+          "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2"
         ],
         "note": "selected original upstream reporting oracle",
         "status": "acceptance"
@@ -1358,7 +1362,11 @@
           "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
           "dEQP-VK.geometry.input.basic_primitive.triangles",
           "dEQP-VK.geometry.input.conversion.triangles_to_lines",
-          "dEQP-VK.geometry.input.conversion.triangles_to_points"
+          "dEQP-VK.geometry.input.conversion.triangles_to_points",
+          "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
+          "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
+          "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
+          "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2"
         ],
         "note": "selected original upstream reporting oracle",
         "status": "acceptance"
