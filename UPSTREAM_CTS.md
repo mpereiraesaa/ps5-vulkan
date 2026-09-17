@@ -808,3 +808,36 @@ manifest that names the same case twice is rejected outright, including an
 acceptance/diagnostic conflict, and regression tests fail if a promoted case is
 dropped, renamed, duplicated or replaced by a path the pinned sources do not
 produce.
+
+## User-defined clip and cull distance module (2026-09-17)
+
+The package now compiles and registers the original upstream clipping module
+(`external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp`) and the
+module's shared draw utility (`util/vktDrawUtil.cpp`). Registration adds the
+group; it does not add acceptance cases, so the strict acceptance selection is
+unchanged at 165 leaves and the packaged case list grows by nothing.
+
+The module is registered because its factory is the oracle the profile's
+measured clip/cull subset belongs to, and because the leaves are needed the
+moment the feature can be advertised. Twenty-five of them are recorded as
+diagnostics instead:
+
+* `dEQP-VK.clipping.user_defined.clip_distance.vert.1..8`
+* `dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7 .. 8`
+* `dEQP-VK.clipping.user_defined.complementarity.1..8`
+* `dEQP-VK.clipping.user_defined.misc.negative_and_non_negative_cull_distance`
+
+Each entry carries `expected_status: "NotSupported"` and the exact gate that
+makes it so: `testClipDistance` calls
+`requireFeatures(FEATURE_SHADER_CLIP_DISTANCE)` or
+`requireFeatures(FEATURE_SHADER_CULL_DISTANCE)`, the profile reports both
+features false, and the same two flags also gate the
+`*_fragmentshader_read` and `*_dynamic_index` variants the profile refuses. The
+diagnostic therefore documents a bounded, hardware-measured subset that cannot
+be selected for strict acceptance; see
+[clip-cull native acceptance](VALIDATION.md#clip-cull-native-acceptance).
+
+Diagnostics are not part of the packaged case list and do not affect the strict
+verdict. The selection gate derives the composed combined-group leaf names from
+the pinned factory construction, so a renamed or removed leaf fails the gate
+instead of silently disappearing.

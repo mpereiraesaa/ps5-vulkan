@@ -303,6 +303,54 @@ def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dic
     return leaves
 
 
+def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
+    """Derive the user-defined clip/cull leaf names of the pinned clipping module.
+
+    The factory registers one leaf per clip count, named from the count and - in
+    the combined group - from the widest cull count that still fits the combined
+    ceiling: `numClipPlanes` plus, when the group uses cull distances,
+    `"_" + min(MAX_CULL_DISTANCES, MAX_COMBINED - numClipPlanes)`. Accept a name
+    only when the module still contains that exact construction, the group and
+    shader segments name the static-index vertex-only variants, and the ceiling
+    constants are the ones the module declares.
+    """
+    construction = (
+        'const std::string caseName =' in text and
+        'de::toString(numClipPlanes) +' in text and
+        'de::toString(numCullPlanes)' in text and
+        '{"clip_distance", false},' in text and
+        '{"clip_cull_distance", true},' in text and
+        'const uint32_t flagTessellation = 1u << 0;' in text and
+        'const uint32_t flagGeometry     = 1u << 1;' in text
+    )
+    if not construction:
+        return set()
+    def constant(name: str) -> int:
+        match = re.search(rf"\b{name}\s*=\s*(\d+)", text)
+        return int(match.group(1)) if match else 0
+    max_clip = constant("MAX_CLIP_DISTANCES")
+    max_cull = constant("MAX_CULL_DISTANCES")
+    max_combined = constant("MAX_COMBINED_CLIP_AND_CULL_DISTANCES")
+    if not max_clip or not max_cull or not max_combined:
+        return set()
+    segments = path.split(".")
+    if len(segments) != 6 or segments[1] != "clipping" or segments[2] != "user_defined":
+        return set()
+    group = segments[3]
+    shader = segments[4]
+    if shader != "vert":
+        return set()
+    names: set[str] = set()
+    for clip in range(1, max_clip + 1):
+        # The combined group adds the widest cull count that still fits.
+        if group == "clip_cull_distance":
+            cull = min(max_cull, max_combined - clip)
+            names.add(f"{clip}_{cull}" if cull else str(clip))
+        elif group == "clip_distance":
+            names.add(str(clip))
+    return names
+
+
 def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
     """Derive the shader_draw_parameters leaf names of the pinned draw module.
 
@@ -1126,6 +1174,12 @@ def main() -> int:
         # construction and to the cited group block. Applied to this one module.
         if (source_path.name == "vktDrawShaderDrawParametersTests.cpp" and
                 leaf in _draw_shader_draw_parameters_leaf_names(text, function_text)):
+            continue
+        # The clip/cull distance factory composes its combined-group leaf names
+        # from the clip count and the widest cull count that fits the combined
+        # ceiling. Bounded to that factory's exact construction expressions.
+        if (source_path.name == "vktClippingTests.cpp" and
+                leaf in _clip_distance_leaf_names(path, text)):
             continue
         if leaf.isdigit():
             continue

@@ -19,6 +19,7 @@
 #include "vktRobustnessBufferAccessTests.hpp"
 #include "vktDrawShaderDrawParametersTests.hpp"
 #include "vktMultiViewTests.hpp"
+#include "vktClippingTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -169,6 +170,16 @@ void FocusedVkTestPackage::init(void)
     // families - and nothing else. Its own support gate and per-view oracle are
     // untouched.
     addChild(vkt::MultiView::createTests(m_testCtx, "multiview"));
+
+    // clipping group: the original upstream user-defined clip/cull distance
+    // module, registered whole under its own name. No leaf of it is in the
+    // acceptance list: the feature flag that gates the whole family (including
+    // the fragment-shader-read and dynamic-index variants this profile refuses)
+    // is not advertised, so the measured static-index vertex-only subset is
+    // recorded as diagnostics in cts/upstream/manifest.json until both refused
+    // modes are implemented. Registration makes the group available for that
+    // promotion without another packaging change.
+    addChild(vkt::clipping::createTests(m_testCtx, "clipping"));
 
     // compute.basic group
     {
