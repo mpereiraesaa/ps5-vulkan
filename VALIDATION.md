@@ -81,6 +81,21 @@ compile-time full-width mask the host measured is what the hardware executed,
 and the variant's whole content - writing the distances through a non-constant
 index and getting the static image back - holds on the console. None of the nine
 cases faulted.
+
+The same witness now also carries the **T03 cross-regression**: a tenth case
+draws the quadrant program through `vkCmdDrawIndirect`, and the run
+`20260917T083050864Z_PPSA99994_ps5vk_0x8ccc37d94b6` (eboot
+`27f43ae6ec047dad6823f0ce7ff68505f650034096c5ce590562867a283ebed4`) is
+`strict_verified` with `cases=10`. The evidence parser requires the split
+explicitly, so the run cannot earn the relation on the direct path: case 9 logs
+`indirect=1` and every other case logs `indirect=0`, and case 9's image is
+byte-identical to the direct quadrant's
+(`digest_indirect_quadrant = digest_clip_quadrant = 85679b0d4edbc725`,
+`expected=1024 covered=1024 missing=0 foreign=0 wrong_color=0 verified=1`). Every
+other case's digest is unchanged from the direct run, so the indirect path is the
+only variable. The packed distance export, the register state the adapter
+requires and the clipping result therefore hold through T03's indirect command
+path, not only through direct draws.
 The fragment read is refused, and it is worth stating which gate a pipeline
 actually hits: the stage-interface policy refuses a fragment-stage
 `gl_ClipDistance`/`gl_CullDistance` declaration outright, so pipeline creation

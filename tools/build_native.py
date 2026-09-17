@@ -485,7 +485,7 @@ def main():
                 manifest.update(scene=None,
                                 geometry_fixture="clip-cull-distance-coverage",
                                 sample_count=1, clip_cull_probe=1,
-                                clip_cull_extent=64, clip_cull_cases=9)
+                                clip_cull_extent=64, clip_cull_cases=10)
             if geometry_probe == "1":
                 # The sentinel is part of the drawn set: it is the one case whose
                 # oracle asserts a value the geometry stage read rather than only

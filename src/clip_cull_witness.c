@@ -33,6 +33,9 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
     case PS5VK_CLIP_CULL_MIXED:
     /* The dynamically indexed write must produce the quadrant's image. */
     case PS5VK_CLIP_CULL_DYNAMIC_INDEX:
+    /* The indirect draw runs the quadrant's program, so it must produce the
+     * quadrant's image as well. */
+    case PS5VK_CLIP_CULL_INDIRECT_QUADRANT:
         return ndc_x>=0.0 && ndc_y>=0.0;
     default:
         /* Both remaining cull cases have one distance index negative for every
@@ -118,6 +121,7 @@ int ps5vk_clip_cull_witness_verify(const struct ps5vk_clip_cull_witness *witness
     case PS5VK_CLIP_CULL_CLIP_QUADRANT:
     case PS5VK_CLIP_CULL_MIXED:
     case PS5VK_CLIP_CULL_DYNAMIC_INDEX:
+    case PS5VK_CLIP_CULL_INDIRECT_QUADRANT:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     }
     return 0;

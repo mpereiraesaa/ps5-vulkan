@@ -37,16 +37,22 @@ CASES = (
     # upstream family registers as `*_dynamic_index`, which must render the
     # statically indexed quadrant exactly.
     (8, 7, PIXELS // 4),
+    # The same quadrant program drawn through vkCmdDrawIndirect: the
+    # cross-regression against T03's indirect command path, which must render the
+    # direct quadrant's image exactly.
+    (9, 2, PIXELS // 4),
 )
 POS_FORMAT = {-1: "00000004", 0: "00000044"}
 VS_OUT_CONFIG = {-1: "00000000", 0: "00000002"}
 VS_OUT_CNTL = {-1: "00000000", 0: "01400f03"}
-DIGEST_EQUAL = ((0, 1), (0, 4), (3, 6), (5, 7), (3, 8))
+DIGEST_EQUAL = ((0, 1), (0, 4), (3, 6), (5, 7), (3, 8), (3, 9))
 DIGEST_DISTINCT = (0, 2, 3, 5)
 DIGEST_NAMES = {0: "digest_plain", 1: "digest_positive", 2: "digest_clip_half",
                 3: "digest_clip_quadrant", 4: "digest_cull_half",
                 5: "digest_cull_negative", 6: "digest_mixed",
-                7: "digest_cull_index", 8: "digest_dynamic_index"}
+                7: "digest_cull_index", 8: "digest_dynamic_index",
+                9: "digest_indirect_quadrant"}
+INDIRECT_CASE = 9
 
 
 def require(ok, label):
@@ -122,6 +128,11 @@ def validate(log, receipt, artifact):
                 f"case {case} mode")
         require(draw.get("vertices") == "6" and draw.get("instances") == "1",
                 f"case {case} draw")
+        # The command the case was recorded with is part of the case: the
+        # indirect cross-regression only means something if that case - and only
+        # that case - went through vkCmdDrawIndirect.
+        require(draw.get("indirect") == ("1" if case == INDIRECT_CASE else "0"),
+                f"case {case} draw path")
         control = -1 if mode < 0 else 0
         require(draw.get("vs_out_config") == VS_OUT_CONFIG[control] and
                 draw.get("pos_format") == POS_FORMAT[control] and

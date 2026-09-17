@@ -48,7 +48,12 @@ enum {
      * the quadrant's image: a dynamically indexed write of the same distances
      * must be indistinguishable from the statically indexed one. */
     PS5VK_CLIP_CULL_DYNAMIC_INDEX = 8,
-    PS5VK_CLIP_CULL_CASES = 9
+    /* The quadrant clip drawn through vkCmdDrawIndirect: the same program as the
+     * direct quadrant, so the cross-regression this branch owes T03 is "the
+     * indirect command path renders the identical image", not merely "a draw
+     * happened". */
+    PS5VK_CLIP_CULL_INDIRECT_QUADRANT = 9,
+    PS5VK_CLIP_CULL_CASES = 10
 };
 
 struct ps5vk_clip_cull_witness {
