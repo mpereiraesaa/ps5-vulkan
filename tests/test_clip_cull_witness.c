@@ -70,6 +70,9 @@ int main(void)
         /* The dynamically indexed write must produce the quadrant's image, so it
          * keeps the same fraction and the same colours. */
         case PS5VK_CLIP_CULL_DYNAMIC_INDEX:
+        /* The indirect draw runs the quadrant's program and must render the
+         * quadrant's image. */
+        case PS5VK_CLIP_CULL_INDIRECT_QUADRANT:
             assert(witness.expected_covered==pixels/4);
             break;
         default:

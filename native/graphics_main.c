@@ -1494,6 +1494,8 @@ static int clip_cull_mode(unsigned witness_case,int *mode)
     case PS5VK_CLIP_CULL_MIXED: *mode=5; return 1;
     case PS5VK_CLIP_CULL_CULL_INDEX: *mode=6; return 1;
     case PS5VK_CLIP_CULL_DYNAMIC_INDEX: *mode=7; return 1;
+    /* The same program as the direct quadrant: only the draw path differs. */
+    case PS5VK_CLIP_CULL_INDIRECT_QUADRANT: *mode=2; return 1;
     }
     return 0;
 }
@@ -1556,6 +1558,31 @@ static void clip_cull_probe(VkDevice d)
     VkQueue queue; vkGetDeviceQueue(d,0,0,&queue);
     static uint8_t detiled[PS5VK_CLIP_CULL_EXTENT*PS5VK_CLIP_CULL_EXTENT*4];
     uint64_t digests[PS5VK_CLIP_CULL_CASES]={0};
+    /* The cross-regression against T03's indirect command path: one recorded
+     * VkDrawIndirectCommand, read through the driver's own buffer object. The
+     * command says exactly what every other case issues directly, so the image
+     * must be the direct quadrant's image and nothing else may differ. */
+    VkBuffer indirect_buffer=VK_NULL_HANDLE;
+    VkDeviceMemory indirect_memory=VK_NULL_HANDLE;
+    {
+        VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size=sizeof(VkDrawIndirectCommand),.usage=VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT};
+        CHECK(vkCreateBuffer(d,&bi,NULL,&indirect_buffer));
+        VkMemoryRequirements req;vkGetBufferMemoryRequirements(d,indirect_buffer,&req);
+        VkMemoryAllocateInfo mi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize=req.size};
+        CHECK(vkAllocateMemory(d,&mi,NULL,&indirect_memory));
+        CHECK(vkBindBufferMemory(d,indirect_buffer,indirect_memory,0));
+        void *mapped=NULL;
+        CHECK(vkMapMemory(d,indirect_memory,0,VK_WHOLE_SIZE,0,&mapped));
+        const VkDrawIndirectCommand command={.vertexCount=6,.instanceCount=1,
+            .firstVertex=0,.firstInstance=0};
+        memcpy(mapped,&command,sizeof(command));
+        VkMappedMemoryRange flush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=indirect_memory,.size=VK_WHOLE_SIZE};
+        CHECK(vkFlushMappedMemoryRanges(d,1,&flush));
+        vkUnmapMemory(d,indirect_memory);
+    }
     for(unsigned witness_case=0;witness_case<PS5VK_CLIP_CULL_CASES;++witness_case) {
         int mode=0;
         if(!clip_cull_mode(witness_case,&mode))fail("clip-cull-case",-1);
@@ -1634,7 +1661,11 @@ static void clip_cull_probe(VkDevice d)
         vkCmdBeginRenderPass(cb,&rbi,VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
         /* One primitive: six vertices, one instance, no first-instance offset. */
-        vkCmdDraw(cb,6,1,0,0);
+        const int indirect=witness_case==PS5VK_CLIP_CULL_INDIRECT_QUADRANT;
+        if(indirect)
+            vkCmdDrawIndirect(cb,indirect_buffer,0,1,sizeof(VkDrawIndirectCommand));
+        else
+            vkCmdDraw(cb,6,1,0,0);
         vkCmdEndRenderPass(cb);
         CHECK(vkEndCommandBuffer(cb));
         VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -1643,8 +1674,8 @@ static void clip_cull_probe(VkDevice d)
         CHECK(vkQueueWaitIdle(queue));
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_CLIP_CULL_DRAW case=%u mode=%d vs_out_config=%08x pos_format=%08x "
-            "vs_out_cntl=%08x vertices=6 instances=1",
-            witness_case,mode,seen_config,seen_pos_format,seen_out_cntl);
+            "vs_out_cntl=%08x vertices=6 instances=1 indirect=%d",
+            witness_case,mode,seen_config,seen_pos_format,seen_out_cntl,indirect);
         /* Read back only after the queue is idle, then detile through the
          * driver's own arithmetic before any pixel is judged. */
         CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
@@ -1714,7 +1745,7 @@ static void clip_cull_probe(VkDevice d)
         "digest_plain=%016llx digest_positive=%016llx digest_clip_half=%016llx "
         "digest_clip_quadrant=%016llx digest_cull_half=%016llx digest_cull_negative=%016llx "
         "digest_mixed=%016llx digest_cull_index=%016llx "
-        "digest_dynamic_index=%016llx strict_verified=1",
+        "digest_dynamic_index=%016llx digest_indirect_quadrant=%016llx strict_verified=1",
         PS5VK_CLIP_CULL_CASES,extent,ps5vk_clip_cull_clear[0],ps5vk_clip_cull_clear[1],
         ps5vk_clip_cull_clear[2],ps5vk_clip_cull_clear[3],0x03u,0x0cu,
         (unsigned long long)digests[PS5VK_CLIP_CULL_PLAIN],
@@ -1725,7 +1756,10 @@ static void clip_cull_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_NEGATIVE],
         (unsigned long long)digests[PS5VK_CLIP_CULL_MIXED],
         (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_INDEX],
-        (unsigned long long)digests[PS5VK_CLIP_CULL_DYNAMIC_INDEX]);
+        (unsigned long long)digests[PS5VK_CLIP_CULL_DYNAMIC_INDEX],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_INDIRECT_QUADRANT]);
+    vkDestroyBuffer(d,indirect_buffer,NULL);
+    vkFreeMemory(d,indirect_memory,NULL);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,fragment,NULL);
     vkDestroyPipelineLayout(d,layout,NULL);

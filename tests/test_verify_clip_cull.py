@@ -40,14 +40,17 @@ class Fixture:
                    4: "1111111111111111", 5: "5555555555555555",
                    6: "3333333333333333", 7: "5555555555555555",
                    # The dynamically indexed write renders the quadrant image.
-                   8: "3333333333333333"}
+                   8: "3333333333333333",
+                   # The indirect draw renders the same quadrant image.
+                   9: "3333333333333333"}
         for case, mode, expected in verify.CASES:
             state = verify.VS_OUT_CONFIG[-1 if mode < 0 else 0]
             pos = verify.POS_FORMAT[-1 if mode < 0 else 0]
             cntl = verify.VS_OUT_CNTL[-1 if mode < 0 else 0]
             self.records.append(
                 f"PS5VK_CLIP_CULL_DRAW case={case} mode={mode} vs_out_config={state} "
-                f"pos_format={pos} vs_out_cntl={cntl} vertices=6 instances=1")
+                f"pos_format={pos} vs_out_cntl={cntl} vertices=6 instances=1 "
+                f"indirect={'1' if case == verify.INDIRECT_CASE else '0'}")
             self.records.append(
                 f"PS5VK_CLIP_CULL_CASE case={case} mode={mode} pixels={verify.PIXELS} "
                 f"expected={expected} covered={expected} missing=0 foreign=0 wrong_color=0 "
@@ -106,6 +109,15 @@ class ClipCullVerifierTests(unittest.TestCase):
     def test_missing_or_duplicated_case_is_rejected(self):
         fixture = Fixture()
         records = [r for r in fixture.records if "case=3 " not in r]
+        fixture.rebuild(records)
+        with self.assertRaises(ValueError):
+            fixture.validate()
+        # The indirect cross-regression only means something if that case really
+        # went through vkCmdDrawIndirect: the same image drawn directly is
+        # refused, so a run cannot earn the relation on the direct path.
+        fixture = Fixture()
+        records = [r if not (r.startswith("PS5VK_CLIP_CULL_DRAW") and "case=9 " in r)
+                   else r.replace("indirect=1", "indirect=0") for r in fixture.records]
         fixture.rebuild(records)
         with self.assertRaises(ValueError):
             fixture.validate()
