@@ -31,43 +31,53 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     return -2;
 }
 
-/* Which input vertex each readback case reads, and the x the witness vertex
- * stage gives that vertex. The draw is two triangles - (0,1,2) and (3,4,5) - so
- * gl_in[k] of the second primitive is vertex k+3. */
-struct read_bytes_case { unsigned vertex; double values[2]; unsigned count; };
-static const struct read_bytes_case read_bytes_cases[3]={
-    /* gl_in[0]: vertex 0 at x = -1.2 and vertex 3 at x = +1.2. */
-    {0,{-1.2,1.2},2},
-    /* gl_in[1]: vertex 1 and vertex 4, both at x = +1.2. */
-    {1,{1.2,1.2},1},
-    /* gl_in[2]: vertex 2 and vertex 5, both at x = -1.2. */
-    {2,{-1.2,-1.2},1},
-};
+/* The readback's own input: a diagnostic-only pre-raster half gives vertex i the
+ * position x = -0.6875 + 0.0625 * i. Both constants are exact in binary, so the
+ * value is exactly representable and unique per index, and the bytes the
+ * geometry half reads NAME the item they came from - which is what turns "the
+ * read returned something else" into "the read returned vertex 15". The draw is
+ * 21 vertices = 7 triangles, so item indices 0..20 exist, which is enough to
+ * name an item-unit, a dword-scaled and a byte-scaled read differently. */
+enum { READ_PRIMITIVES = 7 };
+enum { READ_CASES = 3 };
 
-static const struct read_bytes_case *read_bytes_case(unsigned witness_case)
+static float read_bytes_vertex_x(unsigned vertex)
+{ return -0.6875f + 0.0625f * (float)vertex; }
+
+/* Which of the three readback cases this is, or -1. */
+static int read_bytes_index(unsigned witness_case)
 {
-    if(witness_case<PS5VK_GEOMETRY_READ_V0)return 0;
-    const unsigned index=witness_case-PS5VK_GEOMETRY_READ_V0;
-    return index<3u?&read_bytes_cases[index]:0;
+    if(witness_case<PS5VK_GEOMETRY_READ_V0 ||
+       witness_case>PS5VK_GEOMETRY_READ_V2)return -1;
+    return (int)(witness_case-PS5VK_GEOMETRY_READ_V0);
 }
-/* The two quadrants each read is written into: the low three bytes below, the
- * top byte above. Both sit at the place the value's own sign bit puts them, so
- * a read that returned anything at all still lands in one of the two columns
- * the oracle knows - the bytes change, the layout does not. */
-static const double read_bytes_rows[2]={-0.5,0.5};
 
-/* The column a read value is written into: its sign bit, nothing else. A value
- * of any magnitude still lands on one of the two known columns, so an
- * unreadable-item image cannot hide in the interior of the target. */
+/* The value the readback of `index` must produce for primitive p: gl_in[index]
+ * of a triangle list is the vertex 3p+index. */
+static float read_bytes_expected(unsigned index,unsigned primitive)
+{ return read_bytes_vertex_x(3u*primitive+index); }
+/* The two quadrants each read is written into: the low three bytes below, the
+ * top byte above, both at the place the value read puts them. The quadrants are
+ * small because the readback's input gives every item its own value, and those
+ * places must not overlap each other. */
+static const double read_bytes_rows[2]={-0.5,0.5};
+/* Narrow in x so that neighbouring items' places cannot touch: the readback's
+ * values are 0.0625 apart and this is 0.03 either side. */
+static const double read_bytes_half_extent=0.03;
+
+/* Where a read value is written: the value itself, clamped into the target, so
+ * a read that returned another item lands at that item's own place carrying
+ * that item's own bytes and the image names which item was read. */
 static double read_bytes_column(double value)
-{ return value<0.0?-0.75:0.75; }
+{ return value<-0.75?-0.75:(value>0.75?0.75:value); }
 
 /* One readback quadrant: an axis-aligned square, so the oracle's per-pixel test
  * and the rasterizer's pixel-centre rule agree exactly. */
 static int read_bytes_covers(double value,double row,double ndc_x,double ndc_y)
 {
     const double cx=read_bytes_column(value);
-    return ndc_x>=cx-0.2 && ndc_x<=cx+0.2 && ndc_y>=row-0.2 && ndc_y<=row+0.2;
+    return ndc_x>=cx-read_bytes_half_extent && ndc_x<=cx+read_bytes_half_extent &&
+           ndc_y>=row-0.2 && ndc_y<=row+0.2;
 }
 
 /* The bytes of the value the way the geometry stage writes them: the low three
@@ -92,6 +102,16 @@ static void read_bytes_colour(double value,double row,uint8_t rgba[4])
     rgba[3]=255u;
 }
 
+unsigned ps5vk_geometry_witness_read_pixel(unsigned item,unsigned extent)
+{
+    if(!extent)return 0u;
+    const double cx=read_bytes_column(read_bytes_vertex_x(item));
+    double pixel=(cx+1.0)*0.5*(double)extent;
+    if(pixel<0.0)pixel=0.0;
+    if(pixel>(double)(extent-1u))pixel=(double)(extent-1u);
+    return (unsigned)pixel;
+}
+
 /* The indexed-marker diagnostic's geometry, mirrored from the witness geometry
  * stage's MODE 11 so the oracle and the shader cannot drift apart: the read
  * position is clamped into the target, a small triangle is emitted around it,
@@ -108,7 +128,10 @@ static void marker_centre(int marker,double *x,double *y)
 
 static void marker_colour(int marker,double *r,double *g)
 {
-    const double px=marker?1.2:-1.2;
+    /* The same vertex the place uses: the marker's colour is the value it read,
+     * so pairing marker 0's place (+1.2) with the other vertex's colour (-1.2)
+     * would demand the wrong image and refuse a correct one. */
+    const double px=marker?-1.2:1.2;
     const double py=-1.2;
     *r=px*0.5+0.5;
     *g=py*0.5+0.5;
@@ -165,9 +188,10 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
     case PS5VK_GEOMETRY_READ_V0:
     case PS5VK_GEOMETRY_READ_V1:
     case PS5VK_GEOMETRY_READ_V2: {
-        const struct read_bytes_case *rc=read_bytes_case(witness_case);
-        for(unsigned i=0;i<rc->count;++i)for(unsigned r=0;r<2u;++r)
-            if(read_bytes_covers(rc->values[i],read_bytes_rows[r],ndc_x,ndc_y))
+        const unsigned index=(unsigned)read_bytes_index(witness_case);
+        for(unsigned p=0;p<READ_PRIMITIVES;++p)for(unsigned r=0;r<2u;++r)
+            if(read_bytes_covers(read_bytes_expected(index,p),read_bytes_rows[r],
+                                 ndc_x,ndc_y))
                 return 1;
         return 0;
     }
@@ -236,20 +260,35 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
         rgba[3]=255u;
         return;
     }
-    const struct read_bytes_case *read=read_bytes_case(witness_case);
-    if(read) {
+    if(read_bytes_index(witness_case)>=0) {
         /* The pixel is inside one of the four quadrants a correct run covers;
          * its colour is the raw bytes of the value the stage read there. A read
          * that returned another value puts the quadrant somewhere else, which
          * the coverage half of the verdict reports as missing or foreign
          * pixels, and its colour is then reported verbatim in the log. */
-        for(unsigned i=0;i<read->count;++i)for(unsigned r=0;r<2u;++r) {
-            if(!read_bytes_covers(read->values[i],read_bytes_rows[r],2.0*u-1.0,2.0*v-1.0))
+        const unsigned index=(unsigned)read_bytes_index(witness_case);
+        for(unsigned p=0;p<READ_PRIMITIVES;++p)for(unsigned r=0;r<2u;++r) {
+            if(!read_bytes_covers(read_bytes_expected(index,p),read_bytes_rows[r],
+                                  2.0*u-1.0,2.0*v-1.0))
                 continue;
-            read_bytes_colour(read->values[i],read_bytes_rows[r],rgba);
+            read_bytes_colour(read_bytes_expected(index,p),read_bytes_rows[r],rgba);
             return;
         }
         rgba[0]=rgba[1]=rgba[2]=0u;
+        rgba[3]=255u;
+        return;
+    }
+    if(witness_case==PS5VK_GEOMETRY_SHRINK) {
+        /* The stage scales the POSITIONS and keeps the varying, so the varying
+         * interpolates over the scaled triangle, not over the pixel's own place
+         * in the target: the vertex at NDC p carries ((p+1)/2), which over the
+         * scaled triangle is (screen + 0.5), i.e. 2u-0.5 and 2v-0.5 here. The
+         * hardware interpolates exactly that (measured: the shrunk image's
+         * colours are 0 where this function is negative), so the oracle said the
+         * wrong thing about a correct image until now. */
+        rgba[0]=unorm8(2.0*u-0.5);
+        rgba[1]=unorm8(2.0*v-0.5);
+        rgba[2]=unorm8(0.5);
         rgba[3]=255u;
         return;
     }

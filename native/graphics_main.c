@@ -1825,6 +1825,14 @@ static void clip_cull_probe(VkDevice d)
 enum { PS5VK_GEOMETRY_EXTENT = 64 };
 #define PS5VK_GEOMETRY_GUARD UINT32_C(0x5a5a5a5a)
 enum { PS5VK_GEOMETRY_MODE_CONSTANT = 0 };
+/* The readback cases draw 21 vertices = 7 triangles instead of the witness's
+ * six: item indices 0..20 then exist, which is enough for the three plausible
+ * reads of gl_in[k] to be told apart - item 3p+k if the item index passed to the
+ * geometry half is an item index, item 5(3p+k) if it is in dwords and item
+ * 20(3p+k) if it is in bytes. They also use a pre-raster stage that gives every
+ * vertex a different x, so the value the geometry half reads back names the item
+ * it came from. */
+enum { PS5VK_GEOMETRY_READ_VERTICES = 21 };
 
 static uint64_t geometry_digest(const uint8_t *bytes,size_t size)
 {
@@ -1890,6 +1898,14 @@ static void geometry_probe(VkDevice d)
     VkShaderModule geometry_module;
     CHECK(vkCreateShaderModule(d,&gsi,NULL,&geometry_module));
     CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment_module));
+    /* The readback's own pre-raster half: a position whose x is unique per vertex
+     * index, so the bytes the geometry half reads identify the item they came
+     * from. Every other case keeps the witness's two-triangle vertex stage. */
+    VkShaderModule identity_vertex_module;
+    VkShaderModuleCreateInfo ivsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_identity_vertex),
+        .pCode=ps5vk_runtime_geometry_identity_vertex};
+    CHECK(vkCreateShaderModule(d,&ivsi,NULL,&identity_vertex_module));
     /* Synthetic suppress diagnostic: a fragment stage that reads no input, so
      * the geometry half's suppress case (which emits nothing) still forms a
      * legal pipeline under this profile's draw-ABI rule instead of being
@@ -1943,6 +1959,8 @@ static void geometry_probe(VkDevice d)
              .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=fragment_module,.pName="main"}};
         if(witness_case==PS5VK_GEOMETRY_SUPPRESS)
             stages[2].module=suppress_fragment_module;
+        if(witness_case>=PS5VK_GEOMETRY_READ_V0 && witness_case<=PS5VK_GEOMETRY_READ_V2)
+            stages[0].module=identity_vertex_module;
         VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
         VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1996,7 +2014,10 @@ static void geometry_probe(VkDevice d)
             .clearValueCount=1,.pClearValues=&clear};
         vkCmdBeginRenderPass(cb,&rbi,VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
-        vkCmdDraw(cb,6,1,0,0);
+        const uint32_t draw_vertices=
+            (witness_case>=PS5VK_GEOMETRY_READ_V0 && witness_case<=PS5VK_GEOMETRY_READ_V2)
+                ? (uint32_t)PS5VK_GEOMETRY_READ_VERTICES : 6u;
+        vkCmdDraw(cb,draw_vertices,1,0,0);
         vkCmdEndRenderPass(cb);
         CHECK(vkEndCommandBuffer(cb));
         VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -2005,8 +2026,8 @@ static void geometry_probe(VkDevice d)
         CHECK(vkQueueWaitIdle(queue));
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_GEOMETRY_DRAW case=%u mode=%d stages=%u out_prim_type=%u max_vertices=%u "
-            "vertices=6 instances=1",
-            witness_case,mode,mode<0?2u:3u,topology,max_vertices);
+            "vertices=%u instances=1",
+            witness_case,mode,mode<0?2u:3u,topology,max_vertices,draw_vertices);
         CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
             .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
             .offset=0,.size=VK_WHOLE_SIZE}));
@@ -2058,6 +2079,20 @@ static void geometry_probe(VkDevice d)
                 probe[3][0],probe[3][1],probe[3][2],probe[3][3],
                 probe[4][0],probe[4][1],probe[4][2],probe[4][3],
                 probe[5][0],probe[5][1],probe[5][2],probe[5][3]);
+            /* Every item's own write place, sampled in both rows: the value a
+             * read returned put its quadrants at that value's place, so these
+             * samples say which item each read came from instead of only how
+             * many pixels disagreed. */
+            for(unsigned item=0;item<PS5VK_GEOMETRY_READ_VERTICES;++item) {
+                const unsigned px=ps5vk_geometry_witness_read_pixel(item,extent);
+                const uint8_t *low=detiled+4*((size_t)16*extent+px);
+                const uint8_t *high=detiled+4*((size_t)48*extent+px);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_GEOMETRY_PLACE case=%u item=%u x=%u low=%02x%02x%02x%02x "
+                    "high=%02x%02x%02x%02x",
+                    witness_case,item,px,low[0],low[1],low[2],low[3],
+                    high[0],high[1],high[2],high[3]);
+            }
         }
 #if PS5VK_GEOMETRY_ORDER_PROBE
         if(!verified)++failed_cases;
@@ -2115,7 +2150,10 @@ static void geometry_probe(VkDevice d)
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_GEOMETRY_PROBE cases=%u extent=%u clear=%02x%02x%02x%02x out_prim_type=2 "
-        "max_vertices=3 digest_control=%016llx digest_passthrough=%016llx "
+        /* The stage's maximum vertex count, which is the state the per-case
+         * check above reads back from VGT_GS_MAX_VERT_OUT: the summary has to
+         * carry the same number the cases were judged with. */
+        "max_vertices=9 digest_control=%016llx digest_passthrough=%016llx "
         "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
         "digest_amplify=%016llx digest_constant=%016llx digest_positions=%016llx "
         "digest_sentinel=%016llx digest_indexed_marker=%016llx "
@@ -2141,6 +2179,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,geometry_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
     vkDestroyShaderModule(d,suppress_fragment_module,NULL);
+    vkDestroyShaderModule(d,identity_vertex_module,NULL);
     vkDestroyPipelineLayout(d,layout,NULL);
     vkDestroyFramebuffer(d,fb,NULL);
     vkDestroyRenderPass(d,pass,NULL);
