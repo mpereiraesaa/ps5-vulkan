@@ -29,6 +29,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_READ_V2:return 14;
     case PS5VK_GEOMETRY_ENVELOPE:return 15;
     case PS5VK_GEOMETRY_INVOCATIONS:return 16;
+    case PS5VK_GEOMETRY_COMPONENTS:return 17;
     }
     return -2;
 }
@@ -212,6 +213,10 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
                ndc_y>=-0.2 && ndc_y<=0.2)return 1;
         }
         return 0;
+    /* The components case draws the same centred quad the constant case does,
+     * with the colour its own inputs produce. */
+    case PS5VK_GEOMETRY_COMPONENTS:
+        return ndc_x>=-0.5 && ndc_x<=0.5 && ndc_y>=-0.5 && ndc_y<=0.5;
     default:
         /* The stage emits nothing at all. */
         return 0;
@@ -323,6 +328,16 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
         rgba[3]=255u;
         return;
     }
+    if(witness_case==PS5VK_GEOMETRY_COMPONENTS) {
+        /* The sixteen exported vec4s carry (k, k+1, k+2, k+3) for location k, so
+         * their 64 components sum to 576. The stage folds that sum into the
+         * colour, which is therefore an exact function of every one of them. */
+        rgba[0]=unorm8(576.0/4096.0);
+        rgba[1]=unorm8(0.5);
+        rgba[2]=unorm8(0.25);
+        rgba[3]=255u;
+        return;
+    }
     if(witness_case==PS5VK_GEOMETRY_SHRINK) {
         /* The stage scales the POSITIONS and keeps the varying, so the varying
          * interpolates over the scaled triangle, not over the pixel's own place
@@ -418,6 +433,9 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     /* The invocations case covers 32 real columns of a known shape, neither
      * empty nor the whole target. */
     case PS5VK_GEOMETRY_INVOCATIONS:
+    /* The components case draws a known quad, neither empty nor the whole
+     * target. */
+    case PS5VK_GEOMETRY_COMPONENTS:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
         return witness->expected_covered==0u && witness->covered==0u;

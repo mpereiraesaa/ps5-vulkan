@@ -65,6 +65,12 @@ def main():
         # coloured by its invocation id. invocations is module-level too.
         ("experiments/graphics/runtime_geometry_invocations.geom",
          "runtime_geometry_invocations.geom.spv", "geometry_invocations_stage"),
+        # Components-only pair: a pre-raster stage exporting 64 components and a
+        # geometry stage that declares, reads and writes that many.
+        ("experiments/graphics/runtime_geometry_components.vert",
+         "runtime_geometry_components.vert.spv", "geometry_components_vertex"),
+        ("experiments/graphics/runtime_geometry_components.geom",
+         "runtime_geometry_components.geom.spv", "geometry_components_stage"),
         # Synthetic suppress diagnostic only: an input-less fragment stage, so
         # the geometry half's suppress case (which emits nothing) still forms a
         # legal pipeline instead of being refused for an unmatched input.

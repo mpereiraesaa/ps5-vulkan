@@ -54,6 +54,7 @@ int main(void)
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_READ_V2)==14);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_ENVELOPE)==15);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_INVOCATIONS)==16);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_COMPONENTS)==17);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CASES)==-2);
     /* Every declared case must be registered: an unregistered one would be
      * skipped by the native matrix without any run logging that it was missing. */
@@ -95,6 +96,12 @@ int main(void)
              * moves its quadrant to that item's place and changes its colour. */
             assert(witness.expected_covered==336u);
             assert(witness.covered==336u);
+            break;
+        case PS5VK_GEOMETRY_COMPONENTS:
+            /* The centred quad, the same shape the constant case draws: 1024 px
+             * at 64x64 with the colour the 64 input components produce. */
+            assert(witness.expected_covered==1024u);
+            assert(witness.covered==1024u);
             break;
         case PS5VK_GEOMETRY_INVOCATIONS:
             /* 32 columns, one per invocation, each as wide as its marker: 480 px

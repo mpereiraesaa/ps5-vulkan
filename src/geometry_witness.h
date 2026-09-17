@@ -83,7 +83,14 @@ enum {
      * whether each saw the id it should. Its own module again, because
      * invocations is module-level. */
     PS5VK_GEOMETRY_INVOCATIONS = 14,
-    PS5VK_GEOMETRY_CASES = 15
+    /* The component envelope: a stage that declares, reads and writes 64
+     * components, the mandatory minimum maxGeometryInputComponents and
+     * maxGeometryOutputComponents name. Its own pre-raster half exports sixteen
+     * vec4s whose values the geometry half folds into the colour it draws, so the
+     * image asserts that the whole declaration arrived through the handoff rather
+     * than only that it compiled. */
+    PS5VK_GEOMETRY_COMPONENTS = 15,
+    PS5VK_GEOMETRY_CASES = 16
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */

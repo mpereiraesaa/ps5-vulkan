@@ -58,7 +58,10 @@ class Fixture:
                         13: "dddddddddddddddd",
                         # The invocations image is 32 columns coloured by id, so
                         # it is its own image too.
-                        14: "eeeeeeeeeeeeeeee"}
+                        14: "eeeeeeeeeeeeeeee",
+                        # The components image is the same quad with its own
+                        # colour, so it is its own image too.
+                        15: "ffffffffffffffff"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(
