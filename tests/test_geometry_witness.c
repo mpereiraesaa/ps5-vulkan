@@ -85,17 +85,14 @@ int main(void)
             assert(witness.expected_covered==288u);
             break;
         case PS5VK_GEOMETRY_READ_V0:
-            /* Four 12x12 squares: two quadrants for each of the two input
-             * primitives, whose first vertices sit at x = -1.2 and +1.2. */
-            assert(witness.expected_covered==576u);
-            assert(witness.covered==576u);
-            break;
         case PS5VK_GEOMETRY_READ_V1:
         case PS5VK_GEOMETRY_READ_V2:
-            /* gl_in[1] and gl_in[2] are +1.2 and -1.2 in BOTH primitives, so
-             * each covers one column: two 12x12 squares. */
-            assert(witness.expected_covered==288u);
-            assert(witness.covered==288u);
+            /* Seven primitives, each writing two quadrants at the place its own
+             * read value puts them: fourteen small squares from one value per
+             * item. The exact count matters - a read that returned another item
+             * moves its quadrant to that item's place and changes its colour. */
+            assert(witness.expected_covered==336u);
+            assert(witness.covered==336u);
             break;
         default:
             assert(witness.expected_covered==0);
@@ -157,7 +154,7 @@ int main(void)
      * for it either. */
     image_for(PS5VK_GEOMETRY_READ_V0,image);
     assert(classify(PS5VK_GEOMETRY_READ_V0,image,&witness));
-    assert(witness.covered==576u && !witness.foreign && !witness.wrong_color);
+    assert(witness.covered==336u && !witness.foreign && !witness.wrong_color);
     {
         static uint8_t other[EXTENT*EXTENT*4];
         memcpy(other,image,sizeof(other));
@@ -173,7 +170,7 @@ int main(void)
                 other[4*((size_t)y*EXTENT+x)+0]=(uint8_t)(candidate[0]^0x40u);
         }
         assert(!classify(PS5VK_GEOMETRY_READ_V0,other,&witness));
-        assert(witness.wrong_color==144u*2u && !witness.foreign);
+        assert(witness.wrong_color==24u*7u && !witness.foreign);
     }
     image_for(PS5VK_GEOMETRY_INDEXED_MARKER,image);
     assert(!classify(PS5VK_GEOMETRY_READ_V0,image,&witness));
@@ -184,12 +181,12 @@ int main(void)
      * clear must not pass for any of them. */
     image_for(PS5VK_GEOMETRY_READ_V1,image);
     assert(classify(PS5VK_GEOMETRY_READ_V1,image,&witness));
-    assert(witness.covered==288u);
+    assert(witness.covered==336u);
     assert(!classify(PS5VK_GEOMETRY_READ_V2,image,&witness));
     assert(!classify(PS5VK_GEOMETRY_READ_V0,image,&witness));
     image_for(PS5VK_GEOMETRY_READ_V2,image);
     assert(classify(PS5VK_GEOMETRY_READ_V2,image,&witness));
-    assert(witness.covered==288u);
+    assert(witness.covered==336u);
     assert(!classify(PS5VK_GEOMETRY_READ_V1,image,&witness));
     /* A covered pixel left at the clear colour, and a covered pixel whose
      * varying is wrong, are both failures. */

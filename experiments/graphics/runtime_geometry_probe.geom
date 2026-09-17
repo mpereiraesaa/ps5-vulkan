@@ -51,25 +51,24 @@ void main()
         /* The read-value readback, one mode per input vertex: ONE scalar read
          * with a fixed index, written back as its raw IEEE-754 bytes so the
          * oracle asserts the exact 32-bit pattern that was at the address the
-         * stage read, not a colour derived from it. The column comes from the
-         * value's SIGN BIT alone, so a read that returned anything at all still
-         * lands on a column the oracle knows: the lower quadrant carries the low
-         * three bytes in its colour, the upper one the high byte in red with
-         * fixed green/blue markers so a zero high byte is still visible ink. A
-         * byte-shifted read, an integer bit pattern and an item the ES never
-         * wrote are three different images that the log reports verbatim. */
+         * stage read, not a colour derived from it. The place IS the value read
+         * (clamped into the target), and the readback's own vertex stage gives
+         * every item a different value, so a read that returned another item
+         * lands at that item's own place carrying that item's own bytes - the
+         * image names the item that was read. The lower quadrant carries the low
+         * three bytes in its colour and the upper one the high byte in red with
+         * fixed green/blue markers, so a zero high byte is still visible ink, and
+         * the quadrants are small enough for the per-item places not to overlap. */
         const int index = MODE - 12;
         float value = index == 0 ? gl_in[0].gl_Position.x
                     : index == 1 ? gl_in[1].gl_Position.x
                                  : gl_in[2].gl_Position.x;
         uint bits = floatBitsToUint(value);
-        /* The column comes from the SIGN BIT alone, not from the magnitude: a
-         * value of any size lands on one of the two columns the oracle knows, so
-         * an unreadable item shows up as bytes in a known place instead of as a
-         * quadrant hiding somewhere in the middle of the target. */
-        float cx = ((bits >> 31) != 0u) ? -0.75 : 0.75;
-        const vec2 offsets[4] = vec2[4](vec2(-0.2, -0.2), vec2(0.2, -0.2),
-                                        vec2(-0.2, 0.2), vec2(0.2, 0.2));
+        float cx = clamp(value, -0.75, 0.75);
+        /* Narrow in x: the readback's own input values are 0.0625 apart, so a
+         * half extent above that would let neighbouring items overlap. */
+        const vec2 offsets[4] = vec2[4](vec2(-0.03, -0.2), vec2(0.03, -0.2),
+                                        vec2(-0.03, 0.2), vec2(0.03, 0.2));
         for (int row = 0; row < 2; ++row) {
             float cy = row == 0 ? -0.5 : 0.5;
             vec3 colour = row == 0
@@ -89,7 +88,11 @@ void main()
         /* Positions from the input, colour constant: this is the position half
          * of the ES->GS handoff on its own, so a wrong varying cannot hide a
          * correct position path or the other way round. */
-        for (int i = 0; i < gl_in.length(); i) {
+        /* `++i`: without it this loop never terminates, keeps emitting past the
+         * stage's maximum vertex count and loses the device - which is what this
+         * case did for several sessions, misread as a hardware or addressing
+         * fault. It is a witness bug: the shared loop below has always had it. */
+        for (int i = 0; i < gl_in.length(); ++i) {
             gl_Position = gl_in[i].gl_Position;
             out_color = vec3(1.0, 1.0, 1.0);
             EmitVertex();

@@ -106,4 +106,10 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
 void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y,
     unsigned extent,uint8_t rgba[4]);
 
+/* The readback's write place for one input item, in pixels: where a read of
+ * that item's value puts its quadrants. The native log samples exactly these
+ * places, so one run reports which item each read came from instead of a handful
+ * of guessed coordinates. */
+unsigned ps5vk_geometry_witness_read_pixel(unsigned item,unsigned extent);
+
 #endif

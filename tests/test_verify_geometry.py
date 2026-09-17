@@ -58,7 +58,8 @@ class Fixture:
             records.append(
                 f"PS5VK_GEOMETRY_DRAW case={case} mode={mode} stages="
                 f"{2 if mode < 0 else 3} out_prim_type={0 if mode < 0 else 2} "
-                f"max_vertices={0 if mode < 0 else 9} vertices=6 instances=1")
+                f"max_vertices={0 if mode < 0 else 9} "
+                f"vertices={verify.DRAW_VERTICES.get(case, 6)} instances=1")
             records.append(
                 f"PS5VK_GEOMETRY_CASE case={case} mode={mode} pixels={verify.PIXELS} "
                 f"expected={expected} covered={expected} missing=0 foreign=0 wrong_color=0 "
@@ -212,6 +213,14 @@ class GeometryVerifierTests(unittest.TestCase):
         # read, so it has to be in the certified matrix too.
         self.assertIn(10, {case for case, _, _ in verify.CASES})
         self.assertIn(10, verify.DIGEST_NAMES)
+        # The readback's full-wave draw is one number in two places: the parser
+        # certifies the vertex count the binary actually drew, and the native
+        # case table has to draw it.
+        native = (ROOT / "native/graphics_main.c").read_text()
+        declared = int(
+            re.search(r"PS5VK_GEOMETRY_READ_VERTICES = (\d+)", native).group(1))
+        self.assertEqual(declared, verify.READ_VERTICES)
+        self.assertEqual(set(verify.DRAW_VERTICES.values()), {declared})
 
     def test_receipt_and_artifact_identity_are_required(self):
         fixture = Fixture()
