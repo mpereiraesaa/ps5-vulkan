@@ -61,7 +61,10 @@ class Fixture:
                         14: "eeeeeeeeeeeeeeee",
                         # The components image is the same quad with its own
                         # colour, so it is its own image too.
-                        15: "ffffffffffffffff"}
+                        15: "ffffffffffffffff",
+                        # The per-primitive id image is two coloured columns, so
+                        # it is its own image too.
+                        16: "0101010101010101"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(

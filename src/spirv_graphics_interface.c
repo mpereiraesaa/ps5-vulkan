@@ -15,7 +15,7 @@ enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
 /* The tessellation built-ins the two stages exchange with the tessellator, and
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
-enum { BUILTIN_INVOCATION_ID=8, BUILTIN_TESS_LEVEL_OUTER=11,
+enum { BUILTIN_PRIMITIVE_ID=7, BUILTIN_INVOCATION_ID=8, BUILTIN_TESS_LEVEL_OUTER=11,
        BUILTIN_TESS_LEVEL_INNER=12, BUILTIN_TESS_COORD=13 };
 enum { DECORATION_PATCH=15 };
 enum { MODE_SPACING_EQUAL=1, MODE_SPACING_FRACTIONAL_EVEN=2,
@@ -301,6 +301,19 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
              * the same way it supplies the per-vertex offsets this profile
              * already reads. */
             if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_INVOCATION_ID) {
+                if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
+                   type->count!=32)goto done;
+                continue;
+            }
+            /* The geometry stage's per-primitive id: which primitive of the draw
+             * this invocation is processing. The hardware supplies it to the
+             * merged stage the same way it supplies the per-vertex offsets and
+             * the invocation id, and every applicable upstream geometry leaf
+             * declares it, so it is what the feature's conformance leaves need.
+             * It is a GEOMETRY input scalar with no location; the fragment
+             * stage's gl_PrimitiveID is a different interface and stays refused
+             * (the compiled pixel stage never receives it). */
+            if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_PRIMITIVE_ID) {
                 if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
                    type->count!=32)goto done;
                 continue;

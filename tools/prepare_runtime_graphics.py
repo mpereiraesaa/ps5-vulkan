@@ -67,6 +67,8 @@ def main():
          "runtime_geometry_invocations.geom.spv", "geometry_invocations_stage"),
         # Components-only pair: a pre-raster stage exporting 64 components and a
         # geometry stage that declares, reads and writes that many.
+        ("experiments/graphics/runtime_geometry_primitive_id.geom",
+         "runtime_geometry_primitive_id.geom.spv", "geometry_primitive_id_stage"),
         ("experiments/graphics/runtime_geometry_components.vert",
          "runtime_geometry_components.vert.spv", "geometry_components_vertex"),
         ("experiments/graphics/runtime_geometry_components.geom",

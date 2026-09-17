@@ -72,6 +72,11 @@ CASES = (
     # and a geometry stage that declares, reads and writes that many, folded into
     # a centred quad whose colour is an exact function of all of them (1024 px).
     (15, 17, 1024),
+    # The per-primitive id: every applicable upstream geometry leaf declares
+    # gl_PrimitiveIDIn, so this case is the gateway to the feature's conformance
+    # leaves. Two markers, one per primitive of the witness draw, whose place and
+    # colour both come from the id the stage read (36 px at 64x64).
+    (16, 18, 36),
     # The input positions with a constant colour; it runs last because it is the
     # case that has lost the device before.
     (7, 6, PIXELS),
@@ -79,14 +84,14 @@ CASES = (
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
                 6: "digest_constant", 7: "digest_positions",
                 8: "digest_sentinel", 9: "digest_indexed_marker",
                 10: "digest_read_v0", 11: "digest_read_v1", 12: "digest_read_v2",
                 13: "digest_envelope", 14: "digest_invocations",
-                15: "digest_components"}
+                15: "digest_components", 16: "digest_primitive_id"}
 # The readback cases draw 21 vertices (7 triangles) instead of the witness's six,
 # so item indices 0..20 exist and the three plausible readings of gl_in[k] - an
 # item index, a dword-scaled one and a byte-scaled one - land on written items

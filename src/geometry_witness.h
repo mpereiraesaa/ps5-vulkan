@@ -90,7 +90,13 @@ enum {
      * image asserts that the whole declaration arrived through the handoff rather
      * than only that it compiled. */
     PS5VK_GEOMETRY_COMPONENTS = 15,
-    PS5VK_GEOMETRY_CASES = 16
+    /* The per-primitive id: every applicable upstream geometry leaf declares
+     * gl_PrimitiveIDIn, so this is the gateway to the feature's conformance
+     * leaves. Each invocation emits one marker whose place and colour come from
+     * the id the hardware gave it, so a stale or constant id collapses the image
+     * onto one marker. */
+    PS5VK_GEOMETRY_PRIMITIVE_ID = 16,
+    PS5VK_GEOMETRY_CASES = 17
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */
