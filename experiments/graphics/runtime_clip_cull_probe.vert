@@ -39,6 +39,22 @@ void main()
     /* One cull index negative everywhere and another mixed: the primitive is
      * still discarded, because the rule is per half-space, not "any vertex". */
     if (MODE == 6) { cull0 = p.x; cull1 = -1.0 - 0.25 * p.y; }
+    if (MODE == 7) {
+        /* The quadrant clip, written through a NON-constant index: the upstream
+         * family registers this variant as `*_dynamic_index`, and the compiler
+         * has to keep the full-width mask for it. Both elements are written
+         * exactly once per vertex (the loop permutes the index by the vertex
+         * index, so the two iterations cover {0,1} for every vertex), and the
+         * expected image is the quadrant's. */
+        const float values[2] = float[2](p.x, p.y);
+        gl_CullDistance[0] = cull0;
+        gl_CullDistance[1] = cull1;
+        for (int i = 0; i < 2; ++i) {
+            int index = (i + gl_VertexIndex) & 1;
+            gl_ClipDistance[index] = values[index];
+        }
+        return;
+    }
     gl_ClipDistance[0] = clip0;
     gl_ClipDistance[1] = clip1;
     gl_CullDistance[0] = cull0;

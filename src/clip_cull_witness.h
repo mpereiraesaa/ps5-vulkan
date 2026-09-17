@@ -43,7 +43,12 @@ enum {
     /* Cull index 0 is mixed and index 1 is negative everywhere: still
      * discarded, because the rule is per half-space rather than per vertex. */
     PS5VK_CLIP_CULL_CULL_INDEX = 7,
-    PS5VK_CLIP_CULL_CASES = 8
+    /* The quadrant clip written through a non-constant index, which is the
+     * variant the upstream family registers as `*_dynamic_index`. Its verdict is
+     * the quadrant's image: a dynamically indexed write of the same distances
+     * must be indistinguishable from the statically indexed one. */
+    PS5VK_CLIP_CULL_DYNAMIC_INDEX = 8,
+    PS5VK_CLIP_CULL_CASES = 9
 };
 
 struct ps5vk_clip_cull_witness {

@@ -60,6 +60,17 @@ compiled by the pinned compiler with the full-width mask
 reports) and is accepted by the native header builder
 (`tools/inspect_graphics_compiler.c`, which now prints the masks:
 `distances clip_mask=00000003 cull_mask=00000000`, `native_header_result=0`).
+That variant now has its own witness case: the probe writes both clip distances
+through a loop whose index is not a literal (the loop permutes it by the vertex
+index, so each element is written exactly once per vertex), and the verdict is
+that the rendered image must be **byte-identical** to the statically indexed
+quadrant - both at the oracle, which judges every pixel, and at the native
+digest relation, which refuses a run where the two differ. Writing the
+distances dynamically and getting the static image back is the whole content of
+the variant; the witness's own module is accepted by the host compiler with the
+full-width masks (`clip_mask=00000003 cull_mask=0000000c`,
+`native_header_result=0`), so the case is not refused before it can run, and the
+native result still has to be taken.
 The fragment read is refused, and it is worth stating which gate a pipeline
 actually hits: the stage-interface policy refuses a fragment-stage
 `gl_ClipDistance`/`gl_CullDistance` declaration outright, so pipeline creation
@@ -95,8 +106,9 @@ refused and both features stay `false`.
 Because the feature flag is the only gate the upstream oracle applies,
 advertising either feature today would assert the whole family, including the
 fragment-read variants this profile cannot run, and it would also present the
-dynamic-index variants as measured when only their compile-and-package path has
-been checked. The honest report is therefore `false` for both features, the
+dynamic-index variants as measured when their compile-and-package path has been
+checked and their witness is prepared but not run. The honest report is
+therefore `false` for both features, the
 limits stay at the gated-off value, and the reporting matrix cites the
 fragment-stage refusal as the effective gate.
 
@@ -113,10 +125,11 @@ It establishes the vertex-stage clip/cull contract, the packed register state
 the pinned compiler emits for it, the per-half-space culling rule and the
 hardware clipping result for the measured shapes, plus the compiler and adapter
 behaviour of a dynamically indexed declaration (full-width mask, accepted
-package). It does not establish fragment-shader reads of the distances, any
-hardware result for a dynamically indexed write, any tessellation/geometry
-variant of the family, or the two core features themselves, and it is not a
-Vulkan conformance claim.
+package) and the witness case that renders a dynamically indexed write and
+requires it to reproduce the static image. It does not establish fragment-shader
+reads of the distances, a hardware result for the dynamically indexed write (the
+case exists, the run does not), any tessellation/geometry variant of the family,
+or the two core features themselves, and it is not a Vulkan conformance claim.
 
 ## Optional stage blockers: geometry and tessellation (2026-09-17)
 

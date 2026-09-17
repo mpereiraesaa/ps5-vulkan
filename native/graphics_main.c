@@ -1484,6 +1484,7 @@ static int clip_cull_mode(unsigned witness_case,int *mode)
     case PS5VK_CLIP_CULL_CULL_NEGATIVE: *mode=4; return 1;
     case PS5VK_CLIP_CULL_MIXED: *mode=5; return 1;
     case PS5VK_CLIP_CULL_CULL_INDEX: *mode=6; return 1;
+    case PS5VK_CLIP_CULL_DYNAMIC_INDEX: *mode=7; return 1;
     }
     return 0;
 }
@@ -1688,6 +1689,10 @@ static void clip_cull_probe(VkDevice d)
     if(digests[PS5VK_CLIP_CULL_PLAIN]!=digests[PS5VK_CLIP_CULL_POSITIVE] ||
        digests[PS5VK_CLIP_CULL_PLAIN]!=digests[PS5VK_CLIP_CULL_CULL_HALF] ||
        digests[PS5VK_CLIP_CULL_CLIP_QUADRANT]!=digests[PS5VK_CLIP_CULL_MIXED] ||
+       /* A dynamically indexed write of the same distances must be
+        * indistinguishable from the statically indexed one: that is the whole
+        * content of the variant the upstream family registers. */
+       digests[PS5VK_CLIP_CULL_CLIP_QUADRANT]!=digests[PS5VK_CLIP_CULL_DYNAMIC_INDEX] ||
        digests[PS5VK_CLIP_CULL_CULL_NEGATIVE]!=digests[PS5VK_CLIP_CULL_CULL_INDEX])
         fail("clip-cull-digest-equality",-1);
     const unsigned distinct[4]={PS5VK_CLIP_CULL_PLAIN,PS5VK_CLIP_CULL_CLIP_HALF,
@@ -1699,7 +1704,8 @@ static void clip_cull_probe(VkDevice d)
         "clip_mask=%02x cull_mask=%02x control_mask=000000 "
         "digest_plain=%016llx digest_positive=%016llx digest_clip_half=%016llx "
         "digest_clip_quadrant=%016llx digest_cull_half=%016llx digest_cull_negative=%016llx "
-        "digest_mixed=%016llx digest_cull_index=%016llx strict_verified=1",
+        "digest_mixed=%016llx digest_cull_index=%016llx "
+        "digest_dynamic_index=%016llx strict_verified=1",
         PS5VK_CLIP_CULL_CASES,extent,ps5vk_clip_cull_clear[0],ps5vk_clip_cull_clear[1],
         ps5vk_clip_cull_clear[2],ps5vk_clip_cull_clear[3],0x03u,0x0cu,
         (unsigned long long)digests[PS5VK_CLIP_CULL_PLAIN],
@@ -1709,7 +1715,8 @@ static void clip_cull_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_HALF],
         (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_NEGATIVE],
         (unsigned long long)digests[PS5VK_CLIP_CULL_MIXED],
-        (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_INDEX]);
+        (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_INDEX],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_DYNAMIC_INDEX]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,fragment,NULL);
     vkDestroyPipelineLayout(d,layout,NULL);

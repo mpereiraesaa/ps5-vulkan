@@ -470,10 +470,13 @@ def main():
                             exit_control=exit_control, keep_agc_module=keep_agc_module,
                             termination="os-close-during-render" if continuous == "1" else ("shell-close-after-cleanup" if shell_close else "return-main"))
             if clip_cull_probe == "1":
+                # The dynamic-index case is part of the drawn set: it is the
+                # variant the upstream family registers separately, and the
+                # parser checks the manifest's count against its own table.
                 manifest.update(scene=None,
                                 geometry_fixture="clip-cull-distance-coverage",
                                 sample_count=1, clip_cull_probe=1,
-                                clip_cull_extent=64, clip_cull_cases=8)
+                                clip_cull_extent=64, clip_cull_cases=9)
             if geometry_probe == "1":
                 # The sentinel is part of the drawn set: it is the one case whose
                 # oracle asserts a value the geometry stage read rather than only
