@@ -191,7 +191,19 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .vertex_buffer_valid=v->vertex_buffer_table_valid,
         .vertex_buffer_slot=v->vertex_buffer_table_user_data_dword,
         .vertex_buffer_usage_mask=v->vertex_buffer_usage_mask,
-        .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout,
+        .lds_slot=v->ngg_lds_layout_user_data_dword,
+        /* Bounded ABI experiment (not a shipping path): the merged program's
+         * producer and consumer both take their ring base from the same launch
+         * SGPR, and this profile passes the compiler's LDS-layout value in the
+         * second declared user slot. Under PS5VK_GEOMETRY_LDS_BASE_PROBE the
+         * witness build writes zero there instead, so the one question the
+         * experiment answers is whether that slot is the ring base the two
+         * halves share. Shipping builds keep the compiler's value. */
+#if PS5VK_GEOMETRY_LDS_BASE_PROBE
+        .lds_value=0,
+#else
+        .lds_value=v->ngg_lds_layout,
+#endif
         .vertex_push_slot=v->push_constants_valid?v->push_constants_user_data_dword:UINT32_MAX,
         .fragment_push_slot=f->push_constants_valid?f->push_constants_user_data_dword:UINT32_MAX,
         .push_constant_size=v->push_constant_size>f->push_constant_size?

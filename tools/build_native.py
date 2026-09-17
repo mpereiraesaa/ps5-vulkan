@@ -307,6 +307,14 @@ def main():
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
+            # Bounded ABI experiment for the merged geometry program: write zero
+            # into the user slot the compiler's LDS-layout value normally fills,
+            # so one run answers whether that slot is the ring base the vertex
+            # and geometry halves share. Off unless explicitly requested.
+            lds_base_probe = os.environ.get("PS5VK_LDS_BASE_PROBE", "0")
+            if lds_base_probe not in ("0", "1") or (lds_base_probe == "1" and geometry_probe != "1"):
+                raise SystemExit("PS5VK_LDS_BASE_PROBE is a bounded geometry-probe experiment")
+            common += ["-DPS5VK_GEOMETRY_LDS_BASE_PROBE=" + lds_base_probe]
             # Both optional-stage witnesses skip the feature-negotiation gate:
             # they exist to measure capabilities that are not advertised yet.
             common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + 
