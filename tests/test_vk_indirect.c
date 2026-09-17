@@ -192,8 +192,10 @@ int main(void)
     struct VkPipeline_T multi_graphics={.device=&m,.graphics=VK_TRUE,
         .graphics_state=(void *)1,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
         .depth_format=VK_FORMAT_UNDEFINED,
-        .viewport_count=1, .viewport={.width=16,.height=16,.maxDepth=1},
-        .scissor={.extent={16,16}}};
+        .viewport_count=2, .viewports={{.width=16,.height=16,.maxDepth=1},{.x=16,.width=8,.height=8,.maxDepth=1}},
+        .scissors={{.extent={16,16}},{.offset={16,0},.extent={8,8}}},
+        .raster={.depth_bias_enable=VK_TRUE,.depth_bias_constant=2.5f,.depth_bias_slope=-1.0f,
+                 .depth_clamp=VK_TRUE,.polygon_mode=VK_POLYGON_MODE_LINE}};
 #define MULTI_BEGIN() do { assert(vkResetCommandBuffer(mb,0)==VK_SUCCESS);begin(mb); \
     mb->render_pass=&multi_pass;mb->framebuffer=&multi_framebuffer; \
     mb->graphics_pipeline=&multi_graphics; } while(0)
@@ -225,6 +227,13 @@ int main(void)
             resolved.first_instance==expected_first_instance[k] &&
             !resolved.index_count && !resolved.first_index && !resolved.vertex_offset &&
             resolved.indirect_buffer==args && resolved.pipeline==&multi_graphics);
+        /* The rasterization snapshot and the viewport arrays recorded with the
+         * indirect operation are the ones every resolved command executes
+         * with; resolution changes only the command fields. */
+        assert(resolved.viewport_count==2 && resolved.viewports[1].x==16 &&
+            resolved.scissors[1].offset.x==16 && resolved.raster.depth_bias_enable &&
+            resolved.raster.depth_bias_constant==2.5f && resolved.raster.depth_bias_slope==-1.0f &&
+            resolved.raster.depth_clamp && resolved.raster.polygon_mode==VK_POLYGON_MODE_LINE);
         assert(seen.count==1 && seen.offset==64+32u*k && seen.size==16);
     }
     /* No fourth command exists; the single-snapshot entry point has nothing
