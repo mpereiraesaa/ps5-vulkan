@@ -47,6 +47,44 @@ void main()
         EndPrimitive();
         return;
     }
+    if (MODE >= 12 && MODE <= 14) {
+        /* The read-value readback, one mode per input vertex: ONE scalar read
+         * with a fixed index, written back as its raw IEEE-754 bytes so the
+         * oracle asserts the exact 32-bit pattern that was at the address the
+         * stage read, not a colour derived from it. The column comes from the
+         * value's SIGN BIT alone, so a read that returned anything at all still
+         * lands on a column the oracle knows: the lower quadrant carries the low
+         * three bytes in its colour, the upper one the high byte in red with
+         * fixed green/blue markers so a zero high byte is still visible ink. A
+         * byte-shifted read, an integer bit pattern and an item the ES never
+         * wrote are three different images that the log reports verbatim. */
+        const int index = MODE - 12;
+        float value = index == 0 ? gl_in[0].gl_Position.x
+                    : index == 1 ? gl_in[1].gl_Position.x
+                                 : gl_in[2].gl_Position.x;
+        uint bits = floatBitsToUint(value);
+        /* The column comes from the SIGN BIT alone, not from the magnitude: a
+         * value of any size lands on one of the two columns the oracle knows, so
+         * an unreadable item shows up as bytes in a known place instead of as a
+         * quadrant hiding somewhere in the middle of the target. */
+        float cx = ((bits >> 31) != 0u) ? -0.75 : 0.75;
+        const vec2 offsets[4] = vec2[4](vec2(-0.2, -0.2), vec2(0.2, -0.2),
+                                        vec2(-0.2, 0.2), vec2(0.2, 0.2));
+        for (int row = 0; row < 2; ++row) {
+            float cy = row == 0 ? -0.5 : 0.5;
+            vec3 colour = row == 0
+                ? vec3(float((bits >> 16) & 0xffu), float((bits >> 8) & 0xffu),
+                       float(bits & 0xffu)) / 255.0
+                : vec3(float((bits >> 24) & 0xffu) / 255.0, 128.0 / 255.0, 64.0 / 255.0);
+            for (int i = 0; i < 4; ++i) {
+                gl_Position = vec4(cx + offsets[i].x, cy + offsets[i].y, 0.5, 1.0);
+                out_color = colour;
+                EmitVertex();
+            }
+            EndPrimitive();
+        }
+        return;
+    }
     if (MODE == 6) {
         /* Positions from the input, colour constant: this is the position half
          * of the ES->GS handoff on its own, so a wrong varying cannot hide a

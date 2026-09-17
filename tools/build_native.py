@@ -487,14 +487,14 @@ def main():
                                 sample_count=1, clip_cull_probe=1,
                                 clip_cull_extent=64, clip_cull_cases=11)
             if geometry_probe == "1":
-                # The sentinel is part of the drawn set: it is the one case whose
-                # oracle asserts a value the geometry stage read rather than only
-                # coverage, and it has to be in the manifest the parser checks
-                # against.
+                # The sentinel and the raw readback are part of the drawn set:
+                # they are the cases whose oracle asserts a value the geometry
+                # stage read rather than only coverage, and they have to be in
+                # the manifest the parser checks against.
                 manifest.update(scene=None,
                                 geometry_fixture="geometry-stage-coverage",
                                 sample_count=1, geometry_probe=1,
-                                geometry_extent=64, geometry_cases=10)
+                                geometry_extent=64, geometry_cases=13)
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")

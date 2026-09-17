@@ -49,6 +49,9 @@ int main(void)
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_POSITIONS)==6);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_SENTINEL)==10);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_INDEXED_MARKER)==11);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_READ_V0)==12);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_READ_V1)==13);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_READ_V2)==14);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CASES)==-2);
     /* Every declared case must be registered: an unregistered one would be
      * skipped by the native matrix without any run logging that it was missing. */
@@ -80,6 +83,19 @@ int main(void)
              * the read position puts them. The exact count matters - a marker
              * that moved or went missing changes it. */
             assert(witness.expected_covered==288u);
+            break;
+        case PS5VK_GEOMETRY_READ_V0:
+            /* Four 12x12 squares: two quadrants for each of the two input
+             * primitives, whose first vertices sit at x = -1.2 and +1.2. */
+            assert(witness.expected_covered==576u);
+            assert(witness.covered==576u);
+            break;
+        case PS5VK_GEOMETRY_READ_V1:
+        case PS5VK_GEOMETRY_READ_V2:
+            /* gl_in[1] and gl_in[2] are +1.2 and -1.2 in BOTH primitives, so
+             * each covers one column: two 12x12 squares. */
+            assert(witness.expected_covered==288u);
+            assert(witness.covered==288u);
             break;
         default:
             assert(witness.expected_covered==0);
@@ -134,6 +150,47 @@ int main(void)
         assert(witness.expected_covered==288u && witness.covered==144u &&
                witness.wrong_color==144u && !witness.foreign);
     }
+    /* The readback is judged on the exact 32 bits of the value read, so a
+     * quadrant that carries the same shape with the bytes of a DIFFERENT value
+     * is a wrong-colour failure - that is the whole point of the case - and the
+     * marker's image (same kind of shape, other colours and places) cannot pass
+     * for it either. */
+    image_for(PS5VK_GEOMETRY_READ_V0,image);
+    assert(classify(PS5VK_GEOMETRY_READ_V0,image,&witness));
+    assert(witness.covered==576u && !witness.foreign && !witness.wrong_color);
+    {
+        static uint8_t other[EXTENT*EXTENT*4];
+        memcpy(other,image,sizeof(other));
+        /* Both high-byte quadrants carry a different value's top byte: a read
+         * that returned a float of the same magnitude but another sign or
+         * exponent makes exactly this image, and it must fail. */
+        for(unsigned y=0;y<EXTENT;++y)for(unsigned x=0;x<EXTENT;++x) {
+            struct ps5vk_geometry_witness probe={0};
+            uint8_t candidate[4];
+            ps5vk_geometry_witness_expected(PS5VK_GEOMETRY_READ_V0,x,y,EXTENT,candidate);
+            ps5vk_geometry_witness_pixel(&probe,PS5VK_GEOMETRY_READ_V0,x,y,EXTENT,candidate);
+            if(probe.expected_covered && candidate[1]==128u && candidate[2]==64u)
+                other[4*((size_t)y*EXTENT+x)+0]=(uint8_t)(candidate[0]^0x40u);
+        }
+        assert(!classify(PS5VK_GEOMETRY_READ_V0,other,&witness));
+        assert(witness.wrong_color==144u*2u && !witness.foreign);
+    }
+    image_for(PS5VK_GEOMETRY_INDEXED_MARKER,image);
+    assert(!classify(PS5VK_GEOMETRY_READ_V0,image,&witness));
+    assert(witness.foreign>0u);
+    /* The three readbacks read three different vertices, so the V1 and V2
+     * images (one column each, opposite signs) must refuse each other and the
+     * V0 image (both columns), and an image whose high-byte quadrant was left
+     * clear must not pass for any of them. */
+    image_for(PS5VK_GEOMETRY_READ_V1,image);
+    assert(classify(PS5VK_GEOMETRY_READ_V1,image,&witness));
+    assert(witness.covered==288u);
+    assert(!classify(PS5VK_GEOMETRY_READ_V2,image,&witness));
+    assert(!classify(PS5VK_GEOMETRY_READ_V0,image,&witness));
+    image_for(PS5VK_GEOMETRY_READ_V2,image);
+    assert(classify(PS5VK_GEOMETRY_READ_V2,image,&witness));
+    assert(witness.covered==288u);
+    assert(!classify(PS5VK_GEOMETRY_READ_V1,image,&witness));
     /* A covered pixel left at the clear colour, and a covered pixel whose
      * varying is wrong, are both failures. */
     image_for(PS5VK_GEOMETRY_PASSTHROUGH,image);
@@ -178,6 +235,7 @@ int main(void)
     assert(!ps5vk_geometry_witness_verify(&witness,PS5VK_GEOMETRY_CONTROL,EXTENT));
     assert(!ps5vk_geometry_witness_verify(&witness,PS5VK_GEOMETRY_CASES,EXTENT));
     assert(!ps5vk_geometry_witness_verify(NULL,PS5VK_GEOMETRY_CONTROL,EXTENT));
-    puts("Geometry witness: passthrough, shrink, suppression, varying rewrite and sentinel value hold");
+    puts("Geometry witness: passthrough, shrink, suppression, varying rewrite, sentinel value "
+         "and raw read bytes hold");
     return 0;
 }

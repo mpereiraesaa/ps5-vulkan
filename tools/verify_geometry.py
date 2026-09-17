@@ -47,6 +47,16 @@ CASES = (
     # marker carries the place and the colour of the value that read returned.
     # Two 12x12 markers at 64x64, one per input primitive.
     (9, 11, 288),
+    # The read-value readbacks, one case per input vertex: a fixed scalar read
+    # per input primitive whose raw bytes are written into two quadrants placed
+    # by the value's sign bit. gl_in[0] is +1.2 and -1.2 across the two
+    # primitives, so it covers four 12x12 squares; gl_in[1] and gl_in[2] are one
+    # sign each and cover two. The oracle asserts the exact bit pattern, so a
+    # byte-shifted, integer or unwritten read is a wrong-colour failure with
+    # those bytes recorded in the log.
+    (10, 12, 576),
+    (11, 13, 288),
+    (12, 14, 288),
     # The input positions with a constant colour; it runs last because it is the
     # case that has lost the device before.
     (7, 6, PIXELS),
@@ -54,11 +64,12 @@ CASES = (
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
                 6: "digest_constant", 7: "digest_positions",
-                8: "digest_sentinel", 9: "digest_indexed_marker"}
+                8: "digest_sentinel", 9: "digest_indexed_marker",
+                10: "digest_read_v0", 11: "digest_read_v1", 12: "digest_read_v2"}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 
