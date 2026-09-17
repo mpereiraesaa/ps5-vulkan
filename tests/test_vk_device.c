@@ -211,6 +211,14 @@ static void lifecycle(void)
         ps5vk_device_profile_init(&multi_profile, &multi_memory, VK_TRUE, VK_TRUE,
             PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE|PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32);
         assert(multi_profile.limits.maxDrawIndirectCount==1);
+        /* maxViewports follows multiViewport the same way: the Vulkan floor
+         * of 16 with the bit, exactly 1 without it, and the pipeline's array
+         * capacity is the same constant. */
+        assert(ps5vk_platform_max_viewports(0)==1 &&
+               ps5vk_platform_max_viewports(PS5VK_FEATURE_MULTI_VIEWPORT)==16 &&
+               ps5vk_platform_max_viewports(PS5VK_FEATURE_MULTI_VIEWPORT|PS5VK_FEATURE_DEPTH_CLAMP)==16 &&
+               ps5vk_platform_max_viewports(PS5VK_FEATURE_DEPTH_CLAMP)==1 &&
+               PS5VK_MULTI_VIEWPORT_COUNT==16);
         assert(compute_memory.memoryHeaps[0].size==PS5VK_PROFILE_COMPUTE_HEAP_BYTES);
         const VkDeviceSize max_allocation = PS5VK_PROFILE_GRAPHICS_HEAP_BYTES;
         const VkQueueFlags queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;

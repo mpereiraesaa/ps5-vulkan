@@ -3,6 +3,7 @@
 
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
+#include "graphics_limits.h"
 
 /* Legacy private diagnostic override, OFF unless a probe asks for it.
  * It changes no public query. Normal builds use the platform capability and
@@ -94,6 +95,16 @@ static inline uint32_t ps5vk_platform_max_draw_indirect_count(uint32_t supported
 {
     return (supported_features & PS5VK_FEATURE_MULTI_DRAW_INDIRECT) ?
         (uint32_t)PS5VK_MULTI_DRAW_INDIRECT_COUNT : 1u;
+}
+
+/* The maxViewports a platform mask commits to: the pinned core table requires
+ * 16 once multiViewport is supported and allows exactly 1 otherwise. One helper
+ * decides it so the physical limit, the pipeline's array capacity and the
+ * setters' range checks cannot disagree (DXVK262-T05). */
+static inline uint32_t ps5vk_platform_max_viewports(uint32_t supported_features)
+{
+    return (supported_features & PS5VK_FEATURE_MULTI_VIEWPORT) ?
+        (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT : 1u;
 }
 
 /* The measured multiview floors: six views rendered into six ordered array
