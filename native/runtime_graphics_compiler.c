@@ -117,6 +117,20 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
        key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
+    /* The tessellation pair now has an identity and an interface policy, but no
+     * loadable package and no programming path: the pinned compiler emits ISA
+     * for both stages while declaring the tessellation pipeline state missing.
+     * The pair is therefore refused here, before anything else could screen it
+     * as a vertex+fragment pipeline and silently drop the tessellator. The two
+     * modules still go through the same structural screening and the interface
+     * chain is still checked, so a caller can tell a malformed pair from a pair
+     * this profile simply cannot program yet. */
+    if(ps5vk_graphics_has_tessellation(key)) {
+        if(!ps5vk_graphics_tessellation_key_valid(key))return 0;
+        if(!module_supported(&key->tess_control,1) || !module_supported(&key->tess_eval,2))return 0;
+        if(!ps5vk_spirv_graphics_interface(key))return 0;
+        return 0;
+    }
     /* A geometry stage is compiled through the merged entry point, so its own
      * module passes the same structural screening as the other two. The merged
      * program is only accepted by the diagnostic build: its ES->GS input handoff

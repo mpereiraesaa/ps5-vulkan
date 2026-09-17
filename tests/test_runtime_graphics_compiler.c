@@ -228,6 +228,70 @@ static void check_geometry_stage(void)
     puts("Geometry stage: vertex/geometry/fragment link described, merged package refused");
 }
 
+/* The tessellation pair: described and identified, refused by the adapter.
+ *
+ * The interface policy now reads both stages, their execution modes and the
+ * per-patch interface, and the program key carries the pair and the patch
+ * control points the pipeline states. The compiler adapter must still refuse
+ * the pair, because the pinned compiler emits ISA for both stages while
+ * declaring the tessellation pipeline state missing - compiling the vertex and
+ * fragment modules alone and calling the result a tessellation pipeline is the
+ * silent substitution this profile refuses everywhere else. The same modules
+ * without the pair do compile, which is what makes the refusal specific. */
+static void check_tessellation_stage(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/tess.vert.spv"),
+        .tess_control=read_module("build/runtime-graphics/tess.tesc.spv"),
+        .tess_eval=read_module("build/runtime-graphics/tess.tese.spv"),
+        .fragment=read_module("build/runtime-graphics/tess.frag.spv"),
+        .patch_control_points=3,
+        .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_graphics_has_tessellation(&key));
+    assert(ps5vk_graphics_tessellation_key_valid(&key));
+    assert(ps5vk_spirv_graphics_interface(&key));
+    /* The pair is refused before any compile, with the descriptor untouched: a
+     * caller can never receive a partially compiled program for it. */
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+
+    /* The patch control points the pipeline states must be the control stage's
+     * output vertex count, so a state that disagrees is refused as a malformed
+     * pair rather than compiled against the wrong patch. */
+    struct ps5vk_graphics_key wrong=key;
+    wrong.patch_control_points=4;
+    assert(!ps5vk_spirv_graphics_interface(&wrong));
+    assert(!ps5vk_runtime_graphics_supported(&wrong));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&wrong,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+
+    /* Half a pair is refused even before the stages are read. */
+    struct ps5vk_graphics_key half=key;
+    half.tess_eval=(struct ps5vk_graphics_module_key){0};
+    assert(!ps5vk_graphics_tessellation_key_valid(&half));
+    assert(!ps5vk_runtime_graphics_supported(&half));
+
+    /* The same vertex and fragment modules without the pair are a supported
+     * pipeline: the refusal above is about the tessellation stages, not about
+     * the modules themselves. */
+    struct ps5vk_graphics_key plain=key;
+    plain.tess_control=(struct ps5vk_graphics_module_key){0};
+    plain.tess_eval=(struct ps5vk_graphics_module_key){0};
+    plain.patch_control_points=0;
+    plain.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    assert(!ps5vk_graphics_has_tessellation(&plain));
+    assert(ps5vk_spirv_graphics_interface(&plain));
+    out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&plain,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+
+    free((void *)key.vertex.words);free((void *)key.tess_control.words);
+    free((void *)key.tess_eval.words);free((void *)key.fragment.words);
+    puts("Tessellation stage: pair described, adapter refuses it, identity keeps every stage");
+}
+
 static void check_view_index_builtin(void)
 {
     struct ps5vk_graphics_key key={
@@ -862,6 +926,7 @@ int main(void)
     check_view_index_builtin();
     check_clip_cull_distances();
     check_geometry_stage();
+    check_tessellation_stage();
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
