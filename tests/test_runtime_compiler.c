@@ -222,6 +222,25 @@ int main(void)
             &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);
+        /* The four DXVK262-T05 rasterization/viewport bits are the same kind
+         * of graphics-only device state. The FULL combined mask a T05 device
+         * would carry is tested at once, not one bit at a time: the T04
+         * promotion showed that fixing one new bit and repeating the failure
+         * for the next is exactly the regression to avoid. */
+        const uint32_t t05_device_mask = graphics_device_mask |
+            PS5VK_FEATURE_DEPTH_BIAS_CLAMP | PS5VK_FEATURE_DEPTH_CLAMP |
+            PS5VK_FEATURE_FILL_MODE_NON_SOLID | PS5VK_FEATURE_MULTI_VIEWPORT;
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t05_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* A bit above every known feature still fails closed. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t05_device_mask | (1u << 16), &graphics_device_program,
+            &graphics_device_code) == VK_ERROR_FEATURE_NOT_PRESENT);
     }
 
     /* Corrupted SPIR-V header */

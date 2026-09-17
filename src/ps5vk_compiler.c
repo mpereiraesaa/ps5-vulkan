@@ -92,7 +92,20 @@ VkResult ps5vk_runtime_compile_compute_features(
                           * promotion showed exactly that. */
                          PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
                          PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
-                         PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32))
+                         PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 |
+                         /* The four DXVK262-T05 rasterization/viewport
+                          * features (depthBiasClamp, depthClamp,
+                          * fillModeNonSolid, multiViewport) are fixed-function
+                          * draw state programmed by native/draw_state_ps5.c;
+                          * a compute shader has no PSBC option for any of
+                          * them. Listed for the same reason as every graphics
+                          * bit above: the pinned CTS enables every reported
+                          * core feature on the device it creates, and a bit
+                          * unknown here fails every compute pipeline. */
+                         PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
+                         PS5VK_FEATURE_DEPTH_CLAMP |
+                         PS5VK_FEATURE_FILL_MODE_NON_SOLID |
+                         PS5VK_FEATURE_MULTI_VIEWPORT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
