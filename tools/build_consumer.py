@@ -410,6 +410,11 @@ def main():
             "api": "Vulkan 1.0 core features",
             "features": ["depthBiasClamp", "depthClamp", "fillModeNonSolid",
                          "multiViewport"],
+            # True when the staged SDK was built with PS5VK_RASTER_DIAGNOSTIC=1,
+            # i.e. the features were reported by the measurement gate rather
+            # than by the shipping platform mask. A receipt from such a build
+            # is measurement evidence, never a shipping-profile claim.
+            "diagnostic_features": os.environ.get("PS5VK_RASTER_DIAGNOSTIC", "0") == "1",
             "cases": list(RASTER_CASES),
             "extent": RASTER_EXTENT,
             "vertex_shader_sha256": hashlib.sha256(

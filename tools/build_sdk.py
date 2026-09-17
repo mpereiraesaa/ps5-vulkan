@@ -167,6 +167,16 @@ def main():
             "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
             "-DPS5VK_RUNTIME_GRAPHICS=1", "-DPS5VK_NO_OFFLINE_LIBRARY=1",
         ]
+        # Private measurement build (DXVK262-T05): report and enable the four
+        # rasterization/viewport features so the consumer witness can
+        # negotiate them before a shipping platform advertises them. Off by
+        # default; a staged SDK built with it is a diagnostic artifact and the
+        # consumer manifest records it as such.
+        raster_diagnostic = os.environ.get("PS5VK_RASTER_DIAGNOSTIC", "0")
+        if raster_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_RASTER_DIAGNOSTIC must be 0 or 1")
+        if raster_diagnostic == "1":
+            native_cflags.append("-DPS5VK_RASTER_DIAGNOSTIC=1")
 
         obj_dir = ROOT / "build/sdk-objs-native"
         obj_dir.mkdir(parents=True, exist_ok=True)
