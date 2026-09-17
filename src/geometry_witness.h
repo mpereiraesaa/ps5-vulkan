@@ -35,7 +35,11 @@ enum {
     /* One invocation emits three sub-triangles for every input primitive: the
      * union must be the original triangle, pixel for pixel. */
     PS5VK_GEOMETRY_AMPLIFY = 5,
-    PS5VK_GEOMETRY_CASES = 6
+    /* A fixed centred quad with a fixed colour, emitted without reading the
+     * input: it isolates "the stage ran" from "the stage received the vertex
+     * data", which is what a broken ES/GS handshake looks like. */
+    PS5VK_GEOMETRY_CONSTANT = 6,
+    PS5VK_GEOMETRY_CASES = 7
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */

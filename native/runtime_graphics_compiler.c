@@ -118,8 +118,18 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
        key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
     /* A geometry stage is compiled through the merged entry point, so its own
-     * module passes the same structural screening as the other two. */
-    if(ps5vk_graphics_has_geometry(key) && !module_supported(&key->geometry,3))return 0;
+     * module passes the same structural screening as the other two. The merged
+     * program is only accepted by the diagnostic build: its ES->GS input handoff
+     * needs the link-time ring item size, which the pinned compiler flags
+     * unresolved and the AGC linked state does not carry, so the shipping profile
+     * refuses a geometry pipeline instead of executing one with a guessed value
+     * (the witness measured what that looks like). */
+    if(ps5vk_graphics_has_geometry(key)) {
+        if(!module_supported(&key->geometry,3))return 0;
+#if !PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
+        return 0;
+#endif
+    }
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
     if(key->vertex_binding_count>16 || key->vertex_attribute_count>PSBC_MAX_VERTEX_ATTRIBUTES ||

@@ -18,6 +18,20 @@ void main()
      * the interface policy refuses built-ins the adapter cannot deliver, and
      * this stage's per-primitive delivery has not been established. */
     if (MODE == 2) { return; }
+    if (MODE == 5) {
+        /* Input-independent emission: a fixed centred quad with a fixed
+         * colour, so "the stage runs and its output reaches the pixel stage" is
+         * separable from "the stage receives the vertex data it was given". */
+        const vec2 corners[4] = vec2[4](vec2(-0.5, -0.5), vec2(0.5, -0.5),
+                                        vec2(-0.5, 0.5), vec2(0.5, 0.5));
+        for (int i = 0; i < 4; ++i) {
+            gl_Position = vec4(corners[i], 0.5, 1.0);
+            out_color = vec3(0.25, 0.5, 0.75);
+            EmitVertex();
+        }
+        EndPrimitive();
+        return;
+    }
     if (MODE == 4) {
         vec4 middle = (gl_in[0].gl_Position + gl_in[1].gl_Position +
                          gl_in[2].gl_Position) / 3.0;

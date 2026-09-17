@@ -24,8 +24,12 @@ PIXELS = EXTENT * EXTENT
 # case, geometry mode (-1 is the control with no geometry stage), and the pixels
 # the case's coverage predicate keeps
 SHRINK_PIXELS = int(EXTENT * 0.6) ** 2
+# In the order the probe logs them: the input-independent case runs second so a
+# stage that never emits is separable from a broken input path.
 CASES = (
     (0, -1, PIXELS),
+    # The fixed centred quad covers half of each axis.
+    (6, 5, (EXTENT // 2) ** 2),
     (1, 0, PIXELS),
     (2, 1, SHRINK_PIXELS),
     (3, 2, 0),
@@ -37,9 +41,10 @@ CASES = (
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
-                3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify"}
+                3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
+                6: "digest_constant"}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 
@@ -129,8 +134,8 @@ def validate(log, receipt, artifact):
                 fields.get("wrong_color") == "0" and fields.get("verified") == "1",
                 f"case {case} coverage")
         require(draw_sequence < case_sequence, f"case {case} ordering")
-        if index:
-            require(cases[index - 1][0] < draw_sequence, f"case {case} draw ordering")
+        require(case_sequence < draws[index + 1][0] if index + 1 < len(draws)
+                else case_sequence < summaries[0][0], f"case {case} sequence")
         digests[case] = fields.get("digest", "")
         require(len(digests[case]) == 16 and
                 all(c in "0123456789abcdef" for c in digests[case]),
