@@ -297,6 +297,7 @@ static void check_geometry_stage(void)
      * now programs it that way - so the adapter accepts the pair, and what gates
      * the feature is the conformance selection, not this path. */
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
     out=(void *)1;
     /* The same key without the feature is still refused: a geometry pipeline
      * needs the feature the logical device enabled, exactly like every other
