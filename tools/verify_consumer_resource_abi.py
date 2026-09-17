@@ -1187,6 +1187,11 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         "uniform_texel_formats_checked": len(TEXEL_FORMAT_CASES) if texel_formats else 0,
         "indirect_draw_cases": (len(INDIRECT_CASES) if indirect_present else 0),
         "raster_cases": (len(RASTER_CASES) if raster_present else 0),
+        # True when the staged SDK reported the four features through the
+        # PS5VK_RASTER_DIAGNOSTIC measurement gate rather than the shipping
+        # platform mask: such a run is measurement evidence, not a claim that
+        # the shipping profile advertises them.
+        "raster_diagnostic_features": bool(artifact.get("raster_state", {}).get("diagnostic_features")),
         "indirect_max_commands_arenas": (arenas_for_max if indirect_present else 0),
         "draw_parameter_cases": (len(DRAW_PARAMETER_CASES)
                                  if draw_parameters_present else 0),
