@@ -637,7 +637,7 @@ static void graphics_recording(void)
         bias_pipeline.raster.depth_bias_enable=VK_TRUE;
         struct VkPipeline_T static_pipeline=pipeline;
         static_pipeline.raster=(struct ps5vk_raster_state){.depth_bias_enable=VK_TRUE,
-            .depth_bias_constant=4.0f,.depth_bias_slope=0.5f};
+            .depth_bias_constant=4.0f,.depth_bias_slope=0.5f,.depth_clamp=VK_TRUE};
         assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
         vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&bias_pipeline);
         vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
@@ -660,6 +660,7 @@ static void graphics_recording(void)
         assert(r1->depth_bias_enable && r1->depth_bias_constant==-1.5f && r1->depth_bias_slope==2.25f);
         assert(r2->depth_bias_enable && r2->depth_bias_constant==7.0f && r2->depth_bias_slope==-3.0f);
         assert(r3->depth_bias_enable && r3->depth_bias_constant==4.0f && r3->depth_bias_slope==0.5f);
+        assert(r3->depth_clamp && !r2->depth_clamp && !r4->depth_clamp);
         assert(r4->depth_bias_enable && r4->depth_bias_constant==7.0f && r4->depth_bias_slope==-3.0f);
         vkCmdEndRenderPass(c);assert(vkEndCommandBuffer(c)==VK_SUCCESS);
         /* A dynamic-bias pipeline with the bias DISABLED needs no setter: the

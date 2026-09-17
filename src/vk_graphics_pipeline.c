@@ -114,7 +114,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if(ps5vk_agc_primitive_type(ia->topology,&primitive_type))return VK_ERROR_FEATURE_NOT_PRESENT;
     if (v->pNext || v->flags ||
         ia->pNext || ia->flags || ia->primitiveRestartEnable ||
-        r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable ||
+        r->pNext || r->flags || r->rasterizerDiscardEnable ||
+        /* depthClampEnable needs depthClamp ENABLED on this logical device;
+         * the state itself executes (native PA_CL_CLIP_CNTL ZCLIP_*_DISABLE
+         * with the viewport depth range as the clamp interval). */
+        (r->depthClampEnable && !(d->enabled_features & PS5VK_FEATURE_DEPTH_CLAMP)) ||
         /* Depth bias executes: the constant and slope factors are programmed
          * as the polygon offset the draw runs with. Vulkan ignores all three
          * factors while depthBiasEnable is false and while the state is
@@ -210,6 +214,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * only when VK_DYNAMIC_STATE_DEPTH_BIAS was not declared, and a disabled
      * bias keeps zero factors so a snapshot never carries ignored values. */
     p->dynamic_depth_bias=dynamic_depth_bias;
+    p->raster.depth_clamp=r->depthClampEnable?VK_TRUE:VK_FALSE;
     p->raster.depth_bias_enable=r->depthBiasEnable?VK_TRUE:VK_FALSE;
     if(r->depthBiasEnable && !dynamic_depth_bias) {
         p->raster.depth_bias_constant=r->depthBiasConstantFactor;

@@ -86,6 +86,22 @@ int main(void)
     raster.depth_bias_clamp=NAN;
     assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
     assert(out.cx[115].value==bits(raster.depth_bias_clamp));
+    /* depthClampEnable disables the near and far z clip planes in
+     * PA_CL_CLIP_CNTL and leaves everything else in the word alone; the clamp
+     * interval is the viewport's ordered depth range in ZMIN/ZMAX (0x0b4/0x0b5),
+     * which a reversed viewport keeps ordered. */
+    raster.depth_clamp=VK_TRUE;
+    p.viewport=(VkViewport){0,0,640,480,0.9f,0.1f};
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
+    assert(out.cx[112].offset==0x204 && out.cx[112].value==(0x01080000u | (1u<<26) | (1u<<27)));
+    assert(out.cx[22].offset==0x0b4 && out.cx[22].value==bits(0.1f));
+    assert(out.cx[23].offset==0x0b5 && out.cx[23].value==bits(0.9f));
+    assert(out.cx[20].offset==0x113 && out.cx[20].value==bits(0.1f-0.9f));
+    assert(out.cx[21].offset==0x114 && out.cx[21].value==bits(0.9f));
+    raster.depth_clamp=VK_FALSE;
+    p.viewport=(VkViewport){0,0,640,480,0,1};
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);
+    assert(out.cx[112].value==0x01080000u);
     raster=(struct ps5vk_raster_state){0};
     p.depth_test = VK_FALSE;
     assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, &raster, &color, &depth, &area, 640, 480, &out) == VK_SUCCESS);

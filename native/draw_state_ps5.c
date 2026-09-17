@@ -106,10 +106,17 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     result.cx[result.cx_count++] = (ps5_agc_register){0x292, 0x22};
     result.cx[result.cx_count++] = viewport[8];
     result.cx[result.cx_count++] = viewport[9];
-    /* Mesa gfx10 PA_CL_CLIP_CNTL: Vulkan's default 0 <= z <= w clip
-     * volume and linear attribute clipping. Depth clamp, negative-one-to-one
-     * depth and rasterizer discard are not supported by this profile. */
-    result.cx[result.cx_count++] = (ps5_agc_register){0x204, (1u << 19) | (1u << 24)};
+    /* Mesa gfx10 PA_CL_CLIP_CNTL: Vulkan's default 0 <= z <= w clip volume
+     * (DX_CLIP_SPACE_DEF) and linear attribute clipping. depthClampEnable
+     * disables the near and far z clip planes (ZCLIP_NEAR_DISABLE,
+     * ZCLIP_FAR_DISABLE), exactly as RADV's depth-clamp mode does; the clamp
+     * interval itself is PA_SC_VPORT_ZMIN/ZMAX, already programmed above from
+     * the viewport's ordered min/max depth, and DB_RENDER_OVERRIDE keeps the
+     * viewport clamp enabled. Lateral clipping and the W semantics are
+     * untouched. Negative-one-to-one depth and rasterizer discard are not
+     * supported by this profile. */
+    result.cx[result.cx_count++] = (ps5_agc_register){0x204, (1u << 19) | (1u << 24) |
+        (raster->depth_clamp ? (1u << 26) | (1u << 27) : 0u)};
     /* Compiler PAL PA_SU_VTX_CNTL, packed with the pinned Mesa schema:
      * pixel center 1, round-to-even 2, 1/256 quantization mode 5. Do not rely
      * on an inherited AGC initialization value for rasterization precision. */
