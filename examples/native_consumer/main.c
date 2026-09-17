@@ -42,6 +42,7 @@
 } while (0)
 
 #include "sampled_sets.h"
+#include "indirect_draws.h"
 
 static int parse_is_continuous(void)
 {
@@ -3217,6 +3218,16 @@ int main(void)
      * exposed through VK_KHR_shader_draw_parameters on this Vulkan 1.0 device. */
     REQUIRE(draw_parameters.shaderDrawParameters == VK_TRUE,
             "shader draw parameters feature report");
+    /* DXVK262-T03: the three core indirect/indexed features are reported and
+     * are enabled below through the same VkPhysicalDeviceFeatures2 chain, so
+     * the witness runs on a device that really negotiated them. */
+    REQUIRE(features2.features.multiDrawIndirect == VK_TRUE &&
+            features2.features.drawIndirectFirstInstance == VK_TRUE &&
+            features2.features.fullDrawIndexUint32 == VK_TRUE,
+            "indirect and 32-bit index core feature report");
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_CONSUMER_INDIRECT_NEGOTIATED multiDrawIndirect=1 drawIndirectFirstInstance=1 "
+        "fullDrawIndexUint32=1 enabled=core_features2");
     ps5log_line(PS5LOG_MARK,
         "PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED instance_ext=1 device_exts=4 "
         "storageBuffer8BitAccess=1 storageBuffer16BitAccess=1 narrow_arithmetic=0 "
@@ -3270,6 +3281,10 @@ int main(void)
 
     /* The promoted draw-parameter contract, witnessed through the public API. */
     run_draw_parameters(device, queue);
+
+    /* Indirect firstInstance, multi-draw DrawIndex, GPU-generated arguments,
+     * the 65535-command floor and the 32-bit index range (DXVK262-T03). */
+    run_indirect_draws(physical_device, device, queue);
 
     /* 7. Run runtime procedural graphics and presentation */
     run_consumer(physical_device, device, queue, is_continuous);

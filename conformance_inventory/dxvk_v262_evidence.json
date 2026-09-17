@@ -2,20 +2,23 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+    "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
     "device_api": "1.0.0",
     "device_extensions": 5,
     "requirements": 62,
     "satisfied_ids": [
+      "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+      "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+      "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
-      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
-      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
     ],
     "runs": [
       {
-        "id": "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93",
-        "log_sha256": "010b52a9464940324dcfd33c8fc48be242850680676c2f1ec9aa923a2c21afd2"
+        "id": "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369",
+        "log_sha256": "5f3e685c15a2e1613dd451e25a88fc1ddb9602342599d2e6938004bb24cb33d8"
       }
     ],
     "transport": "ps5log/1",
@@ -28,7 +31,7 @@
         "maxMultiviewInstanceIndex": "134217727"
       }
     ],
-    "source_matrix_sha256": "f7afeeb9c9ca6b6c8c53c2d5740f1086b0e9a5a67d72899842549cb5d17d888c"
+    "source_matrix_sha256": "16c2e0e70dd44fad58ab1798a96e0def50fee19eda73ab31f8d67be69c852a42"
   },
   "requirements": {
     "feature:VkPhysicalDeviceVulkan11Features:multiview": {
@@ -318,6 +321,184 @@
           "VALIDATION.md#executable-buffer-robustness",
           "UPSTREAM_CTS.md#executable-robust-buffer-expansion"
         ]
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance": {
+      "_comment": "Non-zero firstInstance in indirect and indexed indirect commands, delivered to the start-instance user SGPR; judged by the unchanged upstream image oracles and by the public-SDK per-cell readback.",
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip"
+        ],
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "22 original upstream leaves whose indirect commands carry firstInstance 1, 2 or 3 (single, multi-command and four-instance shapes, non-indexed and uint32-indexed with bind/allocation offsets) passed unchanged in the combined 211/211 strict run."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
+        ],
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
+        ],
+        "note": "Combined strict CTS run (211/211 Pass, exit 0, verified Close Game) plus the public-SDK indirect witness: indirect firstInstance 5 over three instances and indexed indirect firstInstance 200 over two instances landed in exactly their instance cells with the delivered gl_InstanceIndex encoded, no wrong or stray cell, strict_verified=1."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:multiDrawIndirect": {
+      "_comment": "Every command of a multi-command vkCmdDraw*Indirect call executes in order with DrawIndex = command index over the bounded arena chain; maxDrawIndirectCount reports the core floor 65535 and the floor itself was executed.",
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip"
+        ],
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "34 original upstream leaves issuing one vkCmdDraw*Indirect call with drawCount 2 or 3 (junk-strided and packed, non-indexed and indexed, single and four-instance, with and without firstInstance) passed unchanged in the combined 211/211 strict run; the four draw_index leaves judge DrawIndex 0..2 through the pinned DrawIndex shader."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
+        ],
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
+        ],
+        "note": "Combined strict CTS run plus the public-SDK indirect witness: strided and packed multi-draw with a zero-primitive command keeping DrawIndex 1 and 2, GPU-generated arguments consumed behind a compute -> indirect barrier, and 65535 packed commands rendering 65535 distinct pixels (commands=65535 drawing=65535 draws=65535) over a 66-arena chain, every cell matched, strict_verified=1."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32": {
+      "_comment": "uint32 index buffers are fetched at 32 bits with 64-bit host range arithmetic and a 32-bit BaseVertex add; maxDrawIndexedIndexValue reports 2^32-1 and the range was executed at bit 31 and at the 2^24 boundary.",
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced"
+        ],
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "35 original upstream leaves drawing through uint32 index buffers (indexed multi-command, firstInstance and instanced indirect shapes with bind and allocation offsets, and the uint32-indexed draw-parameter leaves) passed unchanged in the combined 211/211 strict run; upstream has no leaf that places an index above 2^24, so the range witness is the public-SDK one."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
+        ],
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
+        ],
+        "note": "Combined strict CTS run plus the public-SDK indirect witness: indices 0x80000000..0x8000000b with vertexOffset INT32_MIN (direct and indexed indirect), 0x01000000..0x0100000b with vertexOffset -16777216 and a uint16 control each landed in cells 0..3 by gl_VertexIndex/3 with no wrong or stray cell, so the fetched 32-bit index and the signed BaseVertex add are exact at bit 31 and at the 2^24 boundary; strict_verified=1."
       }
     }
   }

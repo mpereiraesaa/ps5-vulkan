@@ -126,8 +126,9 @@ static inline void ps5vk_physical_profile_init(
     limits->maxUniformBufferRange = 64u * 1024u;
     limits->maxTexelBufferElements = 64u * 1024u;
     limits->maxPushConstantsSize = PS5VK_MAX_PUSH_CONSTANT_BYTES;
-    /* multiDrawIndirect remains false; one indirect draw per command is the
-     * narrow executable contract. */
+    /* One indirect draw per command until a platform mask carries
+     * PS5VK_FEATURE_MULTI_DRAW_INDIRECT; ps5vk_device_profile_init raises this
+     * to the core floor from that mask (vk_internal.h). */
     limits->maxDrawIndirectCount = 1;
     limits->maxMemoryAllocationCount = info->allocation_granularity
         ? ps5vk_profile_u32(info->heap_size / info->allocation_granularity) : 0;

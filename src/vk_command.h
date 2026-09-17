@@ -91,6 +91,13 @@ struct ps5vk_operation {
     uint32_t vertex_count, instance_count, first_vertex, first_instance;
     uint32_t index_count, first_index;
     int32_t vertex_offset;
+    /* DrawIndex the vertex stage observes: zero for every recorded direct
+     * draw, and the index of the command inside a vkCmdDraw*Indirect call for
+     * the resolved snapshot of that command (vk_indirect.c). A recorded
+     * indirect operation itself always carries zero; the value is assigned
+     * per command at queue-head resolution and never accumulates across
+     * commands. */
+    uint32_t draw_index;
     struct ps5vk_index_binding indices;
     struct ps5vk_vertex_binding vertices[PS5VK_MAX_VERTEX_BINDINGS];
     VkPipeline pipeline;

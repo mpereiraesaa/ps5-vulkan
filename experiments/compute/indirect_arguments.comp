@@ -1,0 +1,27 @@
+#version 450
+/* GPU-generated indirect draw arguments (DXVK262-T03).
+ *
+ * Writes `count` VkDrawIndirectCommand structures at `stride_words` dwords
+ * each: `vertices` vertices, one instance, firstVertex 0 and firstInstance
+ * first_instance_base + k. The consumer fills the buffer with zero-vertex
+ * commands beforehand, so a draw that consumed CPU-written arguments instead
+ * of this dispatch's results draws nothing and the readback shows it.
+ */
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) buffer Arguments { uint words[]; } arguments;
+layout(push_constant) uniform Generate {
+    uint count;
+    uint vertices;
+    uint first_instance_base;
+    uint stride_words;
+} g;
+void main()
+{
+    uint k = gl_GlobalInvocationID.x;
+    if (k >= g.count) return;
+    uint base = k * g.stride_words;
+    arguments.words[base + 0u] = g.vertices;
+    arguments.words[base + 1u] = 1u;
+    arguments.words[base + 2u] = 0u;
+    arguments.words[base + 3u] = g.first_instance_base + k;
+}

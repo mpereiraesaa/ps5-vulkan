@@ -176,7 +176,7 @@ static void lifecycle(void)
     {
         VkPhysicalDeviceProperties profile;
         VkPhysicalDeviceMemoryProperties profile_memory;
-        ps5vk_device_profile_init(&profile, &profile_memory, VK_TRUE, VK_TRUE);
+        ps5vk_device_profile_init(&profile, &profile_memory, VK_TRUE, VK_TRUE, 0);
         const VkPhysicalDeviceLimits *pl = &profile.limits;
         assert(pl->subTexelPrecisionBits==PS5VK_REQUIRED_SUBTEXEL_BITS);
         assert(pl->mipmapPrecisionBits==PS5VK_REQUIRED_MIPMAP_PRECISION_BITS);
@@ -193,11 +193,24 @@ static void lifecycle(void)
         /* The compute-only profile shares the same floors. */
         VkPhysicalDeviceProperties compute_profile;
         VkPhysicalDeviceMemoryProperties compute_memory;
-        ps5vk_device_profile_init(&compute_profile, &compute_memory, VK_FALSE, VK_FALSE);
+        ps5vk_device_profile_init(&compute_profile, &compute_memory, VK_FALSE, VK_FALSE, 0);
         assert(compute_profile.limits.subTexelPrecisionBits==PS5VK_REQUIRED_SUBTEXEL_BITS);
         assert(compute_profile.limits.pointSizeRange[1]==PS5VK_REQUIRED_POINT_SIZE);
         assert(compute_profile.limits.sampledImageIntegerSampleCounts==VK_SAMPLE_COUNT_1_BIT);
         assert(strcmp(compute_profile.deviceName, PS5VK_PROFILE_COMPUTE_NAME)==0);
+        /* maxDrawIndirectCount follows the platform mask through the shared
+         * initializer: exactly 1 without multiDrawIndirect, the core floor
+         * 65535 with it, on either profile, so a platform cannot report the
+         * feature and the old limit or the limit without the feature. */
+        assert(pl->maxDrawIndirectCount==1 && compute_profile.limits.maxDrawIndirectCount==1);
+        VkPhysicalDeviceProperties multi_profile;
+        VkPhysicalDeviceMemoryProperties multi_memory;
+        ps5vk_device_profile_init(&multi_profile, &multi_memory, VK_TRUE, VK_TRUE,
+            PS5VK_FEATURE_MULTI_DRAW_INDIRECT|PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE);
+        assert(multi_profile.limits.maxDrawIndirectCount==65535);
+        ps5vk_device_profile_init(&multi_profile, &multi_memory, VK_TRUE, VK_TRUE,
+            PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE|PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32);
+        assert(multi_profile.limits.maxDrawIndirectCount==1);
         assert(compute_memory.memoryHeaps[0].size==PS5VK_PROFILE_COMPUTE_HEAP_BYTES);
         const VkDeviceSize max_allocation = PS5VK_PROFILE_GRAPHICS_HEAP_BYTES;
         const VkQueueFlags queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
@@ -1031,6 +1044,84 @@ static void negative(void)
     d=(VkDevice)(uintptr_t)1;
     assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
     p->platform.supported_features |= PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+    /* The three DXVK262-T03 core features: each is reported and enabled only
+     * behind its own platform bit, independently of the other two, through the
+     * same core-feature path; the enabled set records exactly the requested
+     * bits and an out-of-range VkBool32 is still refused. */
+    {
+        const struct { size_t offset; uint32_t bit; } t03[3] = {
+            {offsetof(VkPhysicalDeviceFeatures, drawIndirectFirstInstance),
+             PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE},
+            {offsetof(VkPhysicalDeviceFeatures, multiDrawIndirect),
+             PS5VK_FEATURE_MULTI_DRAW_INDIRECT},
+            {offsetof(VkPhysicalDeviceFeatures, fullDrawIndexUint32),
+             PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32},
+        };
+        const uint32_t saved = p->platform.supported_features;
+        for (unsigned n = 0; n < 3; ++n) {
+            p->platform.supported_features = saved | t03[n].bit;
+            VkPhysicalDeviceFeatures reported, expected = {0};
+            expected.robustBufferAccess = VK_TRUE;
+            const VkBool32 yes = VK_TRUE;
+            memcpy((unsigned char *)&expected + t03[n].offset, &yes, sizeof(yes));
+            vkGetPhysicalDeviceFeatures(p, &reported);
+            assert(!memcmp(&reported, &expected, sizeof(expected)));
+            /* Enabling the reported member alone records exactly its bit. */
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t03[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == t03[n].bit);
+            vkDestroyDevice(d, NULL);
+            /* Together with robustBufferAccess both bits are recorded. */
+            features.robustBufferAccess = VK_TRUE;
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == (PS5VK_FEATURE_ROBUST_BUFFER_ACCESS | t03[n].bit));
+            vkDestroyDevice(d, NULL);
+            /* The other two stay unreported and unenableable. */
+            for (unsigned other = 0; other < 3; ++other) {
+                if (other == n) continue;
+                memset(&features, 0, sizeof(features));
+                memcpy((unsigned char *)&features + t03[other].offset, &yes, sizeof(yes));
+                d=(VkDevice)(uintptr_t)1;
+                assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            }
+            /* A non-boolean request is invalid before the bit is consulted. */
+            memset(&features, 0, sizeof(features));
+            const VkBool32 bad = 2;
+            memcpy((unsigned char *)&features + t03[n].offset, &bad, sizeof(bad));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+            /* Without the bit the member is false again and refused. */
+            p->platform.supported_features = saved;
+            vkGetPhysicalDeviceFeatures(p, &reported);
+            memset(&expected, 0, sizeof(expected));
+            expected.robustBufferAccess = VK_TRUE;
+            assert(!memcmp(&reported, &expected, sizeof(expected)));
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t03[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        }
+        /* All three at once through VkPhysicalDeviceFeatures2, the chain the
+         * public consumer uses, record all three bits. */
+        p->platform.supported_features = saved | t03[0].bit | t03[1].bit | t03[2].bit;
+        VkPhysicalDeviceFeatures2 all = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        vkGetPhysicalDeviceFeatures2KHR(p, &all);
+        assert(all.features.robustBufferAccess && all.features.multiDrawIndirect &&
+               all.features.drawIndirectFirstInstance && all.features.fullDrawIndexUint32);
+        VkDeviceCreateInfo chained = info;
+        chained.pEnabledFeatures = NULL; chained.pNext = &all;
+        d=(VkDevice)(uintptr_t)1;
+        assert(vkCreateDevice(p,&chained,NULL,&d)==VK_SUCCESS && d);
+        assert(d->enabled_features == (PS5VK_FEATURE_ROBUST_BUFFER_ACCESS | t03[0].bit |
+                                       t03[1].bit | t03[2].bit));
+        vkDestroyDevice(d, NULL);
+        p->platform.supported_features = saved;
+        memset(&features, 0, sizeof(features));
+        features.robustBufferAccess = VK_TRUE;
+    }
     info.pEnabledFeatures = NULL; priority = NAN;
     assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
     priority = 0.0f;
@@ -1395,7 +1486,8 @@ static void consumer_physical_queries(void)
     VkInstance i = features2_instance();
     VkPhysicalDevice p = physical(i);
     ps5vk_device_profile_init(&p->platform.properties,
-                             &p->platform.memory_properties, 1, 1);
+                             &p->platform.memory_properties, 1, 1,
+                             p->platform.supported_features);
     p->platform.queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
     p->platform.max_allocation = UINT64_C(268435456);
     p->platform.format_properties = ps5vk_graphics_format_properties;

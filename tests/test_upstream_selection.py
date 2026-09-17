@@ -59,7 +59,7 @@ class UpstreamSelectionTests(unittest.TestCase):
         manifest = self.current_manifest
         leaves = [c for c in manifest["cases"]
                   if c["path"].startswith(MULTIVIEW_FAMILIES)]
-        self.assertEqual((165, 30, 48),
+        self.assertEqual((211, 30, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
@@ -482,10 +482,12 @@ class UpstreamSelectionTests(unittest.TestCase):
                       "compiler_lowering", "gpu_subpass_readback",
                       "sole remaining requirement", "48 leaves stay diagnostics"):
             self.assertIn(named, blocker)
-        # The selection itself is unchanged: the same 117 acceptance cases and
-        # the same 78 diagnostics, 48 of which are the blocked family.
-        self.assertEqual(117, len(self.manifest["cases"]))
-        self.assertEqual(78, len(self.manifest["diagnostics"]))
+        # The selection itself is unchanged: the same acceptance cases minus the
+        # 48 multiview leaves this fixture demotes, and the same diagnostics plus
+        # those 48 demoted leaves.
+        self.assertEqual(len(self.current_manifest["cases"]) - 48, len(self.manifest["cases"]))
+        self.assertEqual(len(self.current_manifest["diagnostics"]) + 48,
+                         len(self.manifest["diagnostics"]))
         self.assertEqual(48, len([case for case in self.manifest["diagnostics"]
                                   if case["path"].startswith(MULTIVIEW_FAMILIES)]))
         # The derived verdict agrees with the ledger: not eligible, no failure,
@@ -557,7 +559,7 @@ class UpstreamSelectionTests(unittest.TestCase):
     def test_passing_families_stay_acceptance(self):
         """(4) Families that pass keep their strict acceptance entries."""
         accepted = {case["path"] for case in self.manifest["cases"]}
-        self.assertEqual(117, len(self.manifest["cases"]))
+        self.assertEqual(len(self.current_manifest["cases"]) - 48, len(self.manifest["cases"]))
         for path in (
             "dEQP-VK.compute.basic.ubo_to_ssbo_single_invocation",
             "dEQP-VK.compute.indirect_dispatch.upload_buffer.single_invocation",

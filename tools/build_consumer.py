@@ -23,6 +23,22 @@ DRAW_PARAMETER_CASES = (
     "strip_indexed_indirect",
     "strip_direct",
 )
+# The indirect/indexed witness cases (DXVK262-T03), in the order the consumer
+# runs them; tools/verify_consumer_resource_abi.py pins the same list.
+INDIRECT_CASES = (
+    "indirect_first_instance",
+    "indexed_indirect_first_instance",
+    "multi_draw",
+    "multi_draw_indexed",
+    "compute_generated_arguments",
+    "max_draw_indirect_count",
+    "uint32_bit31_indices",
+    "uint32_2pow24_indices",
+    "uint16_control_indices",
+    "uint32_bit31_indexed_indirect",
+)
+INDIRECT_EXTENT = 256
+INDIRECT_MAX_COMMANDS = 65535
 sys.path.insert(0, str(ROOT / "tools"))
 from lab import lab_root  # noqa: E402
 
@@ -324,6 +340,26 @@ def main():
             "cases": list(DRAW_PARAMETER_CASES),
             "vertex_shader_sha256": hashlib.sha256(
                 draw_parameter_shader_header.with_suffix(".vert.spv").read_bytes()
+            ).hexdigest(),
+            "fragment_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_suffix(".frag.spv").read_bytes()
+            ).hexdigest(),
+        },
+        # DXVK262-T03 witness: indirect firstInstance, multi-draw DrawIndex,
+        # GPU-generated arguments, the 65535-command floor and the 32-bit index
+        # range, judged per grid cell from the linear staging readback.
+        "indirect_draws": {
+            "api": "Vulkan 1.0 core features",
+            "features": ["drawIndirectFirstInstance", "fullDrawIndexUint32",
+                         "multiDrawIndirect"],
+            "cases": list(INDIRECT_CASES),
+            "extent": INDIRECT_EXTENT,
+            "max_commands": INDIRECT_MAX_COMMANDS,
+            "vertex_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_name("indirect_witness.vert.spv").read_bytes()
+            ).hexdigest(),
+            "compute_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_name("indirect_arguments.comp.spv").read_bytes()
             ).hexdigest(),
             "fragment_shader_sha256": hashlib.sha256(
                 draw_parameter_shader_header.with_suffix(".frag.spv").read_bytes()

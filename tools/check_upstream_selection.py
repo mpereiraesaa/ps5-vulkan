@@ -450,6 +450,41 @@ def _dynamic_state_compute_generated_segments(text: str) -> set[str]:
     }
 
 
+def _indirect_draw_generated_segments(text: str) -> set[str]:
+    """Derive the draw-type group names of the pinned indirect-draw factory.
+
+    The factory composes one group per draw type from a literal base
+    ("sequential" or "indexed"), an optional compute-generated-arguments
+    suffix and, for indexed draws only, the two 16-byte index-buffer offsets it
+    iterates (bind offset sizeof(uint32_t) * 4, allocation offset
+    sizeof(tcu::Vec4)). Accept a name only when the module still contains that
+    exact construction, and generate exactly the combinations it does.
+    """
+    construction = (
+        'drawTypeStr = "sequential";' in text and
+        'drawTypeStr = "indexed";' in text and
+        'drawTypeStr += "_data_from_compute";' in text and
+        'drawTypeStr += "_bind_offset_" + std::to_string(bindIndexBufferOffset);' in text and
+        'drawTypeStr += "_alloc_offset_" + std::to_string(indexBufferAllocOffset);' in text and
+        'static_cast<vk::VkDeviceSize>(sizeof(uint32_t) * 4u)' in text and
+        'static_cast<vk::VkDeviceSize>(sizeof(tcu::Vec4))' in text and
+        'if (nonZeroBindIndexBufferOffset && drawTypeIdx != DRAW_TYPE_INDEXED)' in text and
+        'if (nonZeroAllocOffset && drawTypeIdx != DRAW_TYPE_INDEXED)' in text
+    )
+    if not construction:
+        return set()
+    segments: set[str] = set()
+    for base in ("sequential", "indexed"):
+        for compute in ("", "_data_from_compute"):
+            offsets = [""]
+            if base == "indexed":
+                offsets = ["", "_bind_offset_16", "_alloc_offset_16",
+                           "_bind_offset_16_alloc_offset_16"]
+            for offset in offsets:
+                segments.add(base + compute + offset)
+    return segments
+
+
 def _copy_and_blit_simple_image_leaf_names(function_text: str) -> set[str]:
     """Derive the image-to-image simple-test leaves of the pinned copy module.
 
@@ -579,13 +614,22 @@ def _advertised_capabilities() -> tuple[dict, list[str]]:
                 f"cannot read the reported {feature} feature from src/vk_device.c")
 
     core_body = re.search(r"static void get_core_features\(.*?\n\}", device, re.DOTALL)
+    # The core features are reported from a table of (member, platform bit)
+    # pairs: get_core_features zeroes the structure and assigns only the members
+    # the table names, each when the platform mask carries its bit. Both the
+    # table entries and any direct assignment inside the function count as
+    # advertisable; anything else in VkPhysicalDeviceFeatures is never reported.
+    core_table = re.search(r"core_feature_bits\[\]\s*=\s*\{(.*?)\n\};", device, re.DOTALL)
     if not core_body:
         failures.append("cannot read the core feature table from src/vk_device.c")
         core_features: set[str] = set()
     else:
-        # get_core_features zeroes the structure first, so only the features it
-        # assigns are advertised.
         core_features = set(re.findall(r"features->([A-Za-z0-9_]+)\s*=", core_body.group(0)))
+        if core_table:
+            core_features |= set(re.findall(
+                r"offsetof\(VkPhysicalDeviceFeatures,\s*([A-Za-z0-9_]+)\)", core_table.group(1)))
+        if not core_features:
+            failures.append("the core feature table in src/vk_device.c names no member")
 
     floor = re.search(r"PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR\s*=\s*(\d+)", header)
     if not floor:
@@ -1076,7 +1120,9 @@ def main() -> int:
         }
         generated_segments = (
             _dynamic_state_compute_generated_segments(text)
-            if source_path.name == "vktDynamicStateComputeTests.cpp" else set()
+            if source_path.name == "vktDynamicStateComputeTests.cpp" else
+            _indirect_draw_generated_segments(text)
+            if source_path.name == "vktDrawIndirectTest.cpp" else set()
         )
         for segment in segments[1:-1]:
             if (not re.search(r'"' + re.escape(segment) + r'"', searchable) and

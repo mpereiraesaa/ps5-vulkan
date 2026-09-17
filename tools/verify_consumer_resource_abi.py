@@ -39,6 +39,37 @@ DRAW_PARAMETER_DST_UPLOAD_WORD = 0xff1e140a
 DRAW_PARAMETER_EXTENT = 64
 DRAW_PARAMETER_UPLOAD_EDGE = 8
 
+# Indirect and indexed draw witness (DXVK262-T03). The target is a grid of
+# cells; every draw or instance places a triangle in the cell it selects and
+# encodes the delivered built-ins (or its 16-bit cell index) in the colour, so
+# each case pins how many cells must carry their exact word (matched), that no
+# expected cell is wrong and that no other cell holds any coverage (stray).
+# (name, cells per row, pinned cells)
+INDIRECT_CASES = (
+    ("indirect_first_instance", 4, 3),
+    ("indexed_indirect_first_instance", 4, 2),
+    ("multi_draw", 4, 3),
+    ("multi_draw_indexed", 4, 3),
+    ("compute_generated_arguments", 4, 4),
+    ("max_draw_indirect_count", 256, 65535),
+    ("uint32_bit31_indices", 4, 4),
+    ("uint32_2pow24_indices", 4, 4),
+    ("uint16_control_indices", 4, 4),
+    ("uint32_bit31_indexed_indirect", 4, 4),
+)
+INDIRECT_EXTENT = 256
+INDIRECT_CLEAR_WORD = 0xff404040
+INDIRECT_MAX_COMMANDS = 65535
+# The driver's own expansion records for the four multi-command cases, in
+# case order: (commands, commands that draw, emitted draws). The 65535-command
+# case must additionally have needed more than one command arena.
+INDIRECT_EXPANSIONS = (
+    ("multi_draw", 4, 3, 3),
+    ("multi_draw_indexed", 4, 3, 3),
+    ("compute_generated_arguments", 4, 4, 4),
+    ("max_draw_indirect_count", INDIRECT_MAX_COMMANDS, INDIRECT_MAX_COMMANDS, INDIRECT_MAX_COMMANDS),
+)
+
 # Exact hashes of the two 64-byte destination buffers of the executable
 # secondary scenario, established by two identical hardware runs of the same
 # deployed artifact. Only the first 32 bytes of the named buffer are filled;
@@ -410,6 +441,117 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
             f"cases={len(DRAW_PARAMETER_CASES)}",
             f"witnessed={len(DRAW_PARAMETER_CASES)}", "valid=1"],
             "staging readback result")
+    # Indirect and indexed draw witness. Presence-gated like the other
+    # scenarios; once START is present every case, the driver's own expansion
+    # records and the negotiation line are mandatory.
+    indirect_present = bool(matching("PS5VK_CONSUMER_INDIRECT_START "))
+    indirect_start = one("PS5VK_CONSUMER_INDIRECT_START ") if indirect_present else None
+    indirect_result = one("PS5VK_CONSUMER_INDIRECT_RESULT ") if indirect_present else None
+    indirect_retired = one("PS5VK_CONSUMER_INDIRECT_RETIRED ") if indirect_present else None
+    indirect_compute_dispatches = 0
+    if indirect_present:
+        indirect_negotiated = one("PS5VK_CONSUMER_INDIRECT_NEGOTIATED ")
+        require(indirect_negotiated[1].split()[1:] == [
+            "multiDrawIndirect=1", "drawIndirectFirstInstance=1",
+            "fullDrawIndexUint32=1", "enabled=core_features2"],
+            "indirect core feature negotiation")
+        indirect_features = one("PS5VK_CONSUMER_INDIRECT_FEATURES ")
+        require(indirect_features[1].split()[1:] == [
+            "multiDrawIndirect=1", "drawIndirectFirstInstance=1", "fullDrawIndexUint32=1",
+            f"maxDrawIndirectCount={INDIRECT_MAX_COMMANDS}",
+            "maxDrawIndexedIndexValue=4294967295"],
+            "indirect feature and limit report")
+        require(indirect_start[1].split()[1:] == [
+            f"cases={len(INDIRECT_CASES)}", f"extent={INDIRECT_EXTENT}",
+            f"clear_word={INDIRECT_CLEAR_WORD:08x}"], "indirect witness start")
+        require(one("PS5VK_CONSUMER_INDIRECT_PIPELINE ")[1].split()[1:] == [
+            "topology=triangle_list", "push_bytes=16", "created=1"], "indirect witness pipeline")
+        require(one("PS5VK_CONSUMER_INDIRECT_TARGET ")[1].split()[1:] == [
+            "layout=general", f"clear_word={INDIRECT_CLEAR_WORD:08x}", "prelude=1"],
+            "indirect witness target prelude")
+        require(one("PS5VK_CONSUMER_INDIRECT_ARGUMENTS_GENERATED ")[1].split()[1:] == [
+            "commands=4", "vertices=3", "first_instance_base=20",
+            "barrier=compute_shader_write_to_indirect_command_read"],
+            "compute-generated argument dispatch")
+        require(one("PS5VK_CONSUMER_INDIRECT_ARGUMENTS_READBACK ")[1].split()[1:] == [
+            "first=3,1,0,20", "last=3,1,0,23"], "compute-generated argument readback")
+        indirect_manifest = artifact.get("indirect_draws", {})
+        require(indirect_manifest.get("cases") == [case[0] for case in INDIRECT_CASES] and
+                indirect_manifest.get("extent") == INDIRECT_EXTENT and
+                indirect_manifest.get("max_commands") == INDIRECT_MAX_COMMANDS and
+                indirect_manifest.get("features") == [
+                    "drawIndirectFirstInstance", "fullDrawIndexUint32", "multiDrawIndirect"],
+                "artifact indirect witness manifest")
+        for field in ("vertex_shader_sha256", "compute_shader_sha256", "fragment_shader_sha256"):
+            digest = indirect_manifest.get(field, "")
+            require(len(digest) == 64 and
+                    all(char in "0123456789abcdef" for char in digest),
+                    f"artifact indirect {field}")
+        indirect_messages = matching("PS5VK_CONSUMER_INDIRECT case=")
+        require(len(indirect_messages) == len(INDIRECT_CASES), "indirect case count")
+        expected_cells = {case[0]: (case[1], case[2]) for case in INDIRECT_CASES}
+        observed_indirect = []
+        for _, message in indirect_messages:
+            fields = dict(field.split("=", 1) for field in message.split()[1:])
+            name = fields.get("case", "")
+            require(name in expected_cells, f"unexpected indirect case {name!r}")
+            require(name not in observed_indirect, f"repeated indirect case {name}")
+            cells, pinned = expected_cells[name]
+            require(fields.get("cells") == str(cells) and
+                    fields.get("expected") == str(pinned) and
+                    fields.get("matched") == str(pinned) and
+                    fields.get("wrong") == "0" and fields.get("stray") == "0" and
+                    fields.get("valid") == "1",
+                    f"indirect cells for {name}")
+            require(fields.get("covered", "").isdigit() and
+                    int(fields["covered"]) >= pinned,
+                    f"indirect coverage for {name}")
+            observed_indirect.append(name)
+        require(observed_indirect == [case[0] for case in INDIRECT_CASES],
+                "indirect case order")
+        # The driver's expansion records between START and RESULT, in case
+        # order: exactly the four multi-command cases, each with its command
+        # count, the commands that drew and the draws emitted; the 65535-command
+        # case needed a chain of arenas and reported it.
+        expansions = [(index, message) for index, message in
+                      matching("PS5VK_MULTI_DRAW_EXPANDED ")
+                      if indirect_start[0] < index < indirect_result[0]]
+        require(len(expansions) == len(INDIRECT_EXPANSIONS), "multi-draw expansion records")
+        arenas_for_max = 0
+        for (_, message), (name, commands, drawing, draws) in zip(expansions, INDIRECT_EXPANSIONS):
+            fields = dict(field.split("=", 1) for field in message.split()[1:])
+            require(fields.get("body") == "0" and fields.get("commands") == str(commands) and
+                    fields.get("drawing") == str(drawing) and fields.get("draws") == str(draws) and
+                    fields.get("arenas", "").isdigit() and int(fields["arenas"]) >= 1,
+                    f"multi-draw expansion for {name}")
+            if name == "max_draw_indirect_count":
+                arenas_for_max = int(fields["arenas"])
+        batches = [(index, message) for index, message in matching("PS5VK_GRAPHICS_BATCHES ")
+                   if indirect_start[0] < index < indirect_result[0]]
+        require(len(batches) == 1 and arenas_for_max > 1, "arena chain for the 65535-command case")
+        batch_fields = dict(field.split("=", 1) for field in batches[0][1].split()[1:])
+        require(batch_fields.get("arenas") == str(arenas_for_max) and
+                batch_fields.get("words", "").isdigit() and
+                int(batch_fields["words"]) > (arenas_for_max - 1) * 16384,
+                "arena chain record")
+        batch_submits = [(index, message) for index, message in matching("PS5VK_GRAPHICS_BATCH_SUBMIT ")
+                         if indirect_start[0] < index < indirect_result[0]]
+        batch_completions = [(index, message) for index, message in
+                             matching("PS5VK_GRAPHICS_BATCH_COMPLETED ")
+                             if indirect_start[0] < index < indirect_result[0]]
+        require(len(batch_submits) == arenas_for_max - 1 and
+                len(batch_completions) == arenas_for_max - 1 and
+                all(message.endswith("rc=0") for _, message in batch_submits),
+                "arena chain launches and completions")
+        require(indirect_result[1].split()[1:] == [
+            f"cases={len(INDIRECT_CASES)}", f"witnessed={len(INDIRECT_CASES)}", "valid=1"],
+            "indirect witness result")
+        require(indirect_retired[1].split()[1:] == [
+            f"cases={len(INDIRECT_CASES)}", f"witnessed={len(INDIRECT_CASES)}"],
+            "indirect witness retirement")
+        require(indirect_start[0] < indirect_messages[0][0] < indirect_result[0] < indirect_retired[0],
+                "indirect witness ordering")
+        indirect_compute_dispatches = 1
     two_subpass_present = bool(matching("PS5VK_CONSUMER_TWO_SUBPASS_START"))
     two_subpass_start = one("PS5VK_CONSUMER_TWO_SUBPASS_START") \
         if two_subpass_present else None
@@ -487,11 +629,22 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     # Four compute submissions, plus the draw-parameter witness's one
     # resource-less prelude submission when that scenario ran; its staging
     # readback is frontend work and adds none.
-    extra_witness_prelude = 1 if draw_parameters_present else 0
-    require(len(prepared) == 4 + extra_witness_prelude + (1 if texel_formats else 0) and
-            all(len(rows) == 6 + extra_texel_dispatches
+    extra_witness_prelude = (1 if draw_parameters_present else 0) + (1 if indirect_present else 0)
+    # The indirect witness adds its own transfer prelude (the GENERAL transition
+    # and clear of its target, prepared like the draw-parameter one) and
+    # generates one command set on the GPU: one compute submission with one
+    # dispatch, prepared, submitted and completed between its START and RESULT
+    # markers.
+    require(len(prepared) == 4 + extra_witness_prelude + (1 if texel_formats else 0) +
+            indirect_compute_dispatches and
+            all(len(rows) == 6 + extra_texel_dispatches + indirect_compute_dispatches
                 for rows in (submitted, suspended, completed)),
             "resource, narrow and synchronization submit records")
+    if indirect_present:
+        generated = [row for row in prepared if indirect_start[0] < row[0] < indirect_result[0]]
+        require(len(generated) == 2 and generated[0][1].endswith("dispatches=0") and
+                generated[1][1].endswith("dispatches=1"),
+                "indirect target prelude and compute-generated argument submissions")
     ordered = [boot, physical, physical_queries, negotiated,
                transfer_start, transfer_witness, transfer_retired,
                start]
@@ -696,11 +849,12 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     graphics_count = ((40 if sampled is not None else 36) +
                       (2 if inpass_present else 0) +
                       (5 if two_subpass_present else 0) +
-                      (len(DRAW_PARAMETER_CASES) if draw_parameters_present else 0))
+                      (len(DRAW_PARAMETER_CASES) if draw_parameters_present else 0) +
+                      (len(INDIRECT_CASES) if indirect_present else 0))
     # The draw-parameter witness also records one transfer prelude (its colour
     # transition), which submits and completes but is never prepared by the
     # graphics backend. Every other submission is a graphics one.
-    prelude_submissions = 1 if draw_parameters_present else 0
+    prelude_submissions = (1 if draw_parameters_present else 0) + (1 if indirect_present else 0)
     require(len(graphics_prepared) == graphics_count and
             all(len(rows) == graphics_count + prelude_submissions for rows in
                 (graphics_submitted, graphics_suspended, graphics_completed)),
@@ -905,6 +1059,8 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         "sampled_graphics_stage_profile": sampled_profile,
         "single_set_sampler_elements": (96 if sampled_profile == "single-set" else 0),
         "uniform_texel_formats_checked": len(TEXEL_FORMAT_CASES) if texel_formats else 0,
+        "indirect_draw_cases": (len(INDIRECT_CASES) if indirect_present else 0),
+        "indirect_max_commands_arenas": (arenas_for_max if indirect_present else 0),
         "draw_parameter_cases": (len(DRAW_PARAMETER_CASES)
                                  if draw_parameters_present else 0),
         "sampled_graphics_visibility_mask": (sampled.get("visibility_mask", 0x11)

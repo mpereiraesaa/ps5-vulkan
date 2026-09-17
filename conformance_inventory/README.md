@@ -329,8 +329,10 @@ four evidence axes:
 4. exact native evidence.
 
 A row is satisfied only when all four axes are positive. Unknown or absent
-evidence is a blocker. The checked matrix currently records 4/62 satisfied
-(`robustBufferAccess` and three multiview requirements) and 58 blockers.
+evidence is a blocker. The checked matrix currently records 7/62 satisfied
+(`robustBufferAccess`, three multiview requirements and the three indirect and
+indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
+`fullDrawIndexUint32`) and 55 blockers.
 Multiview values use the explicitly recorded equivalent KHR route; aggregate
 query structures and the API 1.3 floor remain unadvertised. This is not a
 DXVK compatibility or Vulkan conformance statement.

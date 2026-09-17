@@ -9,7 +9,7 @@
       "VK_KHR_storage_buffer_storage_class"
     ],
     "native_probe": {
-      "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+      "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
       "device_api": "1.0.0",
       "device_extensions": 5,
       "query_routes": [
@@ -23,17 +23,20 @@
       "requirements": 62,
       "runs": [
         {
-          "id": "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93",
-          "log_sha256": "010b52a9464940324dcfd33c8fc48be242850680676c2f1ec9aa923a2c21afd2"
+          "id": "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369",
+          "log_sha256": "5f3e685c15a2e1613dd451e25a88fc1ddb9602342599d2e6938004bb24cb33d8"
         }
       ],
       "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
         "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
         "feature:VkPhysicalDeviceVulkan11Features:multiview",
-        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
-        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
       ],
-      "source_matrix_sha256": "f7afeeb9c9ca6b6c8c53c2d5740f1086b0e9a5a67d72899842549cb5d17d888c",
+      "source_matrix_sha256": "16c2e0e70dd44fad58ab1798a96e0def50fee19eda73ab31f8d67be69c852a42",
       "transport": "ps5log/1",
       "verifier": "tools/verify_dxvk_probe.py"
     },
@@ -135,13 +138,13 @@
       "kind": "extension",
       "name": "VK_EXT_robustness2",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -177,13 +180,13 @@
       "kind": "extension",
       "name": "VK_EXT_transform_feedback",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -223,13 +226,13 @@
       "kind": "feature",
       "name": "depthBiasClamp",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -276,13 +279,13 @@
       "kind": "feature",
       "name": "depthClamp",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -291,53 +294,85 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_level11_0"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip"
+        ],
         "mapped_cases": [
           "dEQP-VK.compute.indirect_dispatch.gen_in_compute.single_invocation",
           "dEQP-VK.compute.indirect_dispatch.upload_buffer.single_invocation",
           "dEQP-VK.draw.renderpass.ahb.triangle_list",
           "dEQP-VK.info.device_mandatory_features"
         ],
-        "refs": [],
+        "note": "22 original upstream leaves whose indirect commands carry firstInstance 1, 2 or 3 (single, multi-command and four-instance shapes, non-indexed and uint32-indexed with bind/allocation offsets) passed unchanged in the combined 211/211 strict run.",
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
         "related_requirement_ids": [
           "VK14-COMMANDS-004",
           "VK14-COMMANDS-008",
           "VK14-CORE-005",
           "VK14-INSTANCE-008"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
       "implementation": {
-        "detail": "firstInstance must be zero (src/vk_indirect.c)",
+        "detail": "a non-zero firstInstance in a resolved indirect command is delivered to the start-instance user SGPR when the feature is enabled and refused otherwise",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "drawIndirectFirstInstance",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "note": "Combined strict CTS run (211/211 Pass, exit 0, verified Close Game) plus the public-SDK indirect witness: indirect firstInstance 5 over three instances and indexed indirect firstInstance 200 over two instances landed in exactly their instance cells with the delivered gl_InstanceIndex encoded, no wrong or stray cell, strict_verified=1.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -368,13 +403,13 @@
       "kind": "feature",
       "name": "dualSrcBlend",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -411,13 +446,13 @@
       "kind": "feature",
       "name": "fillModeNonSolid",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -457,13 +492,13 @@
       "kind": "feature",
       "name": "fragmentStoresAndAtomics",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -472,50 +507,95 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced"
+        ],
         "mapped_cases": [
           "dEQP-VK.draw.renderpass.ahb.triangle_list",
           "dEQP-VK.info.device_mandatory_features"
         ],
-        "refs": [],
+        "note": "35 original upstream leaves drawing through uint32 index buffers (indexed multi-command, firstInstance and instanced indirect shapes with bind and allocation offsets, and the uint32-indexed draw-parameter leaves) passed unchanged in the combined 211/211 strict run; upstream has no leaf that places an index above 2^24, so the range witness is the public-SDK one.",
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
         "related_requirement_ids": [
           "VK14-COMMANDS-004",
           "VK14-CORE-005",
           "VK14-INSTANCE-008"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
       "implementation": {
-        "detail": "the full 32-bit draw-index range is accepted (src/graphics_limits.h)",
+        "detail": "uint32 index buffers are fetched by the VGT at 32 bits with 64-bit host range arithmetic and a 32-bit BaseVertex add, so the full index range is executable and maxDrawIndexedIndexValue reports 2^32-1",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "fullDrawIndexUint32",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "note": "Combined strict CTS run plus the public-SDK indirect witness: indices 0x80000000..0x8000000b with vertexOffset INT32_MIN (direct and indexed indirect), 0x01000000..0x0100000b with vertexOffset -16777216 and a uint16 control each landed in cells 0..3 by gl_VertexIndex/3 with no wrong or stray cell, so the fetched 32-bit index and the signed BaseVertex add are exact at bit 31 and at the 2^24 boundary; strict_verified=1.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -548,13 +628,13 @@
       "kind": "feature",
       "name": "geometryShader",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -594,13 +674,13 @@
       "kind": "feature",
       "name": "imageCubeArray",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -642,13 +722,13 @@
       "kind": "feature",
       "name": "independentBlend",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -657,49 +737,93 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_level11_0"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip"
+        ],
         "mapped_cases": [
           "dEQP-VK.compute.indirect_dispatch.gen_in_compute.single_invocation",
           "dEQP-VK.compute.indirect_dispatch.upload_buffer.single_invocation",
           "dEQP-VK.draw.renderpass.ahb.triangle_list"
         ],
-        "refs": [],
+        "note": "34 original upstream leaves issuing one vkCmdDraw*Indirect call with drawCount 2 or 3 (junk-strided and packed, non-indexed and indexed, single and four-instance, with and without firstInstance) passed unchanged in the combined 211/211 strict run; the four draw_index leaves judge DrawIndex 0..2 through the pinned DrawIndex shader.",
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
         "related_requirement_ids": [
           "VK14-COMMANDS-008"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "implementation": {
-        "detail": "one indirect draw per command is accepted (src/vk_command.c)",
+        "detail": "every command of a vkCmdDraw*Indirect call is resolved at the queue head and emitted in order with its own DrawIndex over a bounded arena chain; maxDrawIndirectCount is the core floor derived from the platform mask",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "multiDrawIndirect",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "note": "Combined strict CTS run plus the public-SDK indirect witness: strided and packed multi-draw with a zero-primitive command keeping DrawIndex 1 and 2, GPU-generated arguments consumed behind a compute -> indirect barrier, and 65535 packed commands rendering 65535 distinct pixels (commands=65535 drawing=65535 draws=65535) over a 66-arena chain, every cell matched, strict_verified=1.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -730,13 +854,13 @@
       "kind": "feature",
       "name": "multiViewport",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -773,13 +897,13 @@
       "kind": "feature",
       "name": "occlusionQueryPrecise",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -878,13 +1002,13 @@
       "kind": "feature",
       "name": "sampleRateShading",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -924,13 +1048,13 @@
       "kind": "feature",
       "name": "shaderClipDistance",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -965,13 +1089,13 @@
       "kind": "feature",
       "name": "shaderCullDistance",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1011,13 +1135,13 @@
       "kind": "feature",
       "name": "shaderImageGatherExtended",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1055,13 +1179,13 @@
       "kind": "feature",
       "name": "tessellationShader",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1096,13 +1220,13 @@
       "kind": "feature",
       "name": "textureCompressionBC",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1141,13 +1265,13 @@
       "kind": "feature",
       "name": "nullDescriptor",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1186,13 +1310,13 @@
       "kind": "feature",
       "name": "robustBufferAccess2",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1228,13 +1352,13 @@
       "kind": "feature",
       "name": "geometryStreams",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1270,13 +1394,13 @@
       "kind": "feature",
       "name": "transformFeedback",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1480,13 +1604,13 @@
       "kind": "feature",
       "name": "bufferDeviceAddress",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1522,13 +1646,13 @@
       "kind": "feature",
       "name": "hostQueryReset",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1567,13 +1691,13 @@
       "kind": "feature",
       "name": "imagelessFramebuffer",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1615,13 +1739,13 @@
       "kind": "feature",
       "name": "samplerMirrorClampToEdge",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1657,13 +1781,13 @@
       "kind": "feature",
       "name": "separateDepthStencilLayouts",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1699,13 +1823,13 @@
       "kind": "feature",
       "name": "shaderSubgroupExtendedTypes",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1741,13 +1865,13 @@
       "kind": "feature",
       "name": "subgroupBroadcastDynamicId",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1786,13 +1910,13 @@
       "kind": "feature",
       "name": "timelineSemaphore",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1828,13 +1952,13 @@
       "kind": "feature",
       "name": "uniformBufferStandardLayout",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1870,13 +1994,13 @@
       "kind": "feature",
       "name": "vulkanMemoryModel",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1912,13 +2036,13 @@
       "kind": "feature",
       "name": "vulkanMemoryModelDeviceScope",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -1954,13 +2078,13 @@
       "kind": "feature",
       "name": "computeFullSubgroups",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2000,13 +2124,13 @@
       "kind": "feature",
       "name": "dynamicRendering",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2042,13 +2166,13 @@
       "kind": "feature",
       "name": "inlineUniformBlock",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2084,13 +2208,13 @@
       "kind": "feature",
       "name": "maintenance4",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2126,13 +2250,13 @@
       "kind": "feature",
       "name": "pipelineCreationCacheControl",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2171,13 +2295,13 @@
       "kind": "feature",
       "name": "robustImageAccess",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2213,13 +2337,13 @@
       "kind": "feature",
       "name": "shaderDemoteToHelperInvocation",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2255,13 +2379,13 @@
       "kind": "feature",
       "name": "shaderIntegerDotProduct",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2297,13 +2421,13 @@
       "kind": "feature",
       "name": "shaderTerminateInvocation",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2339,13 +2463,13 @@
       "kind": "feature",
       "name": "shaderZeroInitializeWorkgroupMemory",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2381,13 +2505,13 @@
       "kind": "feature",
       "name": "subgroupSizeControl",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2426,13 +2550,13 @@
       "kind": "feature",
       "name": "synchronization2",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2664,13 +2788,13 @@
       "kind": "property",
       "name": "maxTimelineSemaphoreValueDifference",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2708,13 +2832,13 @@
       "kind": "property",
       "name": "maxBufferSize",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2748,13 +2872,13 @@
       "kind": "property",
       "name": "maxDescriptorSetInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2788,13 +2912,13 @@
       "kind": "property",
       "name": "maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2828,13 +2952,13 @@
       "kind": "property",
       "name": "maxInlineUniformBlockSize",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2868,13 +2992,13 @@
       "kind": "property",
       "name": "maxInlineUniformTotalSize",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2908,13 +3032,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2948,13 +3072,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82",
+        "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93"
+          "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369"
         ],
         "state": "witnessed-blocker"
       },
@@ -2973,26 +3097,26 @@
     "tag_object": "e2373f9421f2c70583aea75c54219fbdcd67959c"
   },
   "summary": {
-    "blocker": 58,
+    "blocker": 55,
     "dimensions": {
       "api": {
-        "blocker": 58,
-        "satisfied": 4
+        "blocker": 55,
+        "satisfied": 7
       },
       "cts": {
-        "blocker": 57,
-        "satisfied": 5
+        "blocker": 54,
+        "satisfied": 8
       },
       "implementation": {
-        "blocker": 58,
-        "satisfied": 4
+        "blocker": 55,
+        "satisfied": 7
       },
       "native": {
-        "blocker": 57,
-        "satisfied": 5
+        "blocker": 54,
+        "satisfied": 8
       }
     },
     "requirements": 62,
-    "satisfied": 4
+    "satisfied": 7
   }
 }

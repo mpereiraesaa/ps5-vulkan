@@ -409,20 +409,43 @@ resolve remain fail-closed entry points.
   head. This preserves compute-write -> barrier -> indirect-consume ordering;
   the exact non-coherent argument range is invalidated before the CPU-side
   command snapshot is read and encoded.
-- Recorded operations remain immutable. Resolution produces a local direct-op
-  snapshot whose dimensions, counts and `firstInstance` are validated again
-  after visibility is established.
-- The profile reports `maxDrawIndirectCount = 1`,
-  `multiDrawIndirect = VK_FALSE` and
-  `drawIndirectFirstInstance = VK_FALSE`. A draw count of zero is a legal
-  no-op; multi-draw and indirect-count extension commands are unsupported.
+- Recorded operations remain immutable. Resolution produces one local direct-op
+  snapshot per command, read from exactly that command's bytes after
+  visibility is established, whose dimensions, counts and `firstInstance` are
+  validated again.
+- The graphics profile reports `multiDrawIndirect = VK_TRUE` with
+  `maxDrawIndirectCount = 65535`, `drawIndirectFirstInstance = VK_TRUE` and
+  `fullDrawIndexUint32 = VK_TRUE` with `maxDrawIndexedIndexValue = 2^32-1`.
+  Each is reported behind its own platform bit and honoured only on a logical
+  device that enabled it: without `multiDrawIndirect` a draw count above one
+  is refused at record time and at the queue head, and without
+  `drawIndirectFirstInstance` a non-zero `firstInstance` fails the resolved
+  command closed. A draw count of zero is a legal no-op. The stride rules apply
+  only above one command, and the whole argument span
+  (`stride * (drawCount - 1) + sizeof(command)`) is bounds-checked with checked
+  arithmetic.
+- A multi-command call expands on the CPU at the queue head, in recorded order:
+  one prepared draw per operation and one emission per command (and per view
+  under multiview), each carrying its own `DrawIndex` (the command index,
+  including commands that draw nothing), `firstInstance` and index range.
+  The emission spans a bounded chain of 128 KiB command arenas launched in
+  order, each retiring before the next begins, so attachment writes stay
+  ordered and load/store, binding, subpass and view state are unchanged
+  across the chain. This is a CPU-side expansion, not command-processor
+  indirect execution; `VK_KHR_draw_indirect_count` is not advertised.
 - Pending command-buffer ownership protects referenced indirect buffers from
   destruction until every segment retires. A deferred prepare failure marks
   the device lost and does not signal the submission fence.
 
-The original upstream compute upload and compute-generated indirect-dispatch
-oracles pass on hardware. Indirect graphics commands have native encoding and
-host-contract coverage, but no separate indirect-draw pixel oracle is claimed.
+Original upstream oracles pass on hardware for compute-generated indirect
+dispatch, for indirect draws with non-zero `firstInstance`, for multi-command
+draws with `DrawIndex` 0..2 and for uint32-indexed indirect draws, and the
+public-SDK witness executes 65535 commands in one call, GPU-generated draw
+arguments and 32-bit indices at bit 31; see
+[VALIDATION.md](VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16).
+Instance-rate vertex input and primitive restart remain unsupported, so
+`drawIndirectFirstInstance` is witnessed through `gl_InstanceIndex`, not
+through per-instance attributes.
 
 ## Programs and compilation
 
