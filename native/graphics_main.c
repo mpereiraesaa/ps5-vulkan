@@ -1836,8 +1836,19 @@ static void geometry_probe(VkDevice d)
         PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_POSITIONS};
 #endif
     unsigned failed_cases=0;
+#if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
+    /* Bounded diagnostic: run the whole case sequence twice in one process.
+     * If the device loss and the foreign-count variation reappear at the same
+     * points on the second pass it is a per-pipeline/AGC-object property; if
+     * they move, it is cumulative session wear. */
+    for(unsigned geometry_pass=0;geometry_pass<2;++geometry_pass)
+#endif
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
+#if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
+        ps5log_printf(PS5LOG_MARK,"PS5VK_GEOMETRY_PASS pass=%u case=%u",
+                     geometry_pass,witness_case);
+#endif
         const int mode=ps5vk_geometry_witness_mode(witness_case);
         if(mode==-2)fail("geometry-case",-1);
         const int32_t specialization=mode<0?0:mode;
