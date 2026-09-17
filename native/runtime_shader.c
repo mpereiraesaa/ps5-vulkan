@@ -168,6 +168,17 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
        !slot_pair_ok(f->start_instance_valid,f->start_instance_user_data_dword,f->user_sgpr_count) ||
        !slot_pair_ok(f->draw_id_valid,f->draw_id_user_data_dword,f->user_sgpr_count) ||
        !slot_pair_ok(f->view_index_valid,f->view_index_user_data_dword,f->user_sgpr_count) ||
+       /* The published window must hold the whole block, and the two system
+        * registers a merged pair gates on must lie below it: the driver cannot
+        * address the system block, so a pair that reports them inside the
+        * window is a contract violation, not something to write. */
+       v->user_data_window_base>16 ||
+       (v->user_data_window_base && v->user_data_window_base+v->user_sgpr_count>16) ||
+       (v->esgs_system_sgprs_valid &&
+        (!v->user_data_window_base ||
+         v->esgs_gs_tg_info_sgpr>=v->user_data_window_base ||
+         v->esgs_merged_wave_info_sgpr>=v->user_data_window_base ||
+         v->esgs_gs_tg_info_sgpr==v->esgs_merged_wave_info_sgpr)) ||
        (v->source_stage!=PSBC_STAGE_VERTEX && v->source_stage!=PSBC_STAGE_GEOMETRY) ||
        v->hardware_stage!=PSBC_HW_STAGE_NGG || f->source_stage!=PSBC_STAGE_FRAGMENT ||
        f->hardware_stage!=PSBC_HW_STAGE_PIXEL || !v->ngg_lds_layout_valid ||
@@ -192,6 +203,16 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .vertex_buffer_slot=v->vertex_buffer_table_user_data_dword,
         .vertex_buffer_usage_mask=v->vertex_buffer_usage_mask,
         .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout,
+        /* Where the compiler says the driver's block starts, and the two system
+         * registers a merged pair gates on. They are recorded, not written: the
+         * base was measured below the window on every compiled program, so the
+         * driver has no way to address them, and a pair that reports them inside
+         * the window is refused below instead of being written where the shader
+         * will never look. */
+        .window_base=v->user_data_window_base,
+        .esgs_described=v->esgs_system_sgprs_valid,
+        .esgs_gs_tg_info_sgpr=v->esgs_gs_tg_info_sgpr,
+        .esgs_merged_wave_info_sgpr=v->esgs_merged_wave_info_sgpr,
         .vertex_push_slot=v->push_constants_valid?v->push_constants_user_data_dword:UINT32_MAX,
         .fragment_push_slot=f->push_constants_valid?f->push_constants_user_data_dword:UINT32_MAX,
         .push_constant_size=v->push_constant_size>f->push_constant_size?

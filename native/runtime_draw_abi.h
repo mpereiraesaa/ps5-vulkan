@@ -29,6 +29,23 @@ struct ps5vk_runtime_draw_abi {
     uint32_t vertex_buffer_valid, vertex_buffer_slot;
     uint32_t vertex_buffer_usage_mask;
     uint32_t lds_slot, lds_value;
+    /* The SGPR index this stage's first user-data dword lands on, as published
+     * by the compiler (zero = not declared). The driver writes exactly
+     * vertex_count/fragment_count dwords starting there, so every slot below is
+     * window-relative and a slot at or beyond window_base+count would run past
+     * the block. */
+    uint32_t window_base;
+    /* A merged vertex+geometry program gates and sizes its halves from two
+     * SYSTEM SGPRs, which were measured below the driver's user-data window on
+     * three compiled programs: a merged pair and a clip/cull vertex program both
+     * carry gs_tg_info in SGPR 2 and merged_wave_info in SGPR 3 with the window
+     * starting in SGPR 8, and the hardware-verified draw-parameter program
+     * carries BaseVertex/BaseInstance/DrawIndex in the same window-relative
+     * slots (0/1 at SGPR 9/8, 2 at SGPR 10, 3 at SGPR 11). The driver cannot
+     * address the system block, so these two indices are recorded as a contract
+     * check - they must fall below window_base - and are never written. */
+    uint32_t esgs_described;
+    uint32_t esgs_gs_tg_info_sgpr, esgs_merged_wave_info_sgpr;
     uint32_t vertex_push_slot, fragment_push_slot, push_constant_size;
     uint32_t vertex_descriptor_valid[PS5VK_RUNTIME_DESCRIPTOR_SETS];
     uint32_t fragment_descriptor_valid[PS5VK_RUNTIME_DESCRIPTOR_SETS];
@@ -53,6 +70,17 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
     if (!a || !descriptor_low || !vertex_out || !pixel_out || a->enabled!=1 || !a->vertex_count || a->vertex_count>16 ||
         a->fragment_count>16 || a->lds_slot>=a->vertex_count || a->lds_value>UINT16_MAX)
         return -1;
+    /* The window base places the whole block: a block that cannot fit below
+     * SGPR 16 is unusable, and the two system registers a merged pair gates on
+     * must lie outside it. A pair that claims they are window-relative is
+     * refused rather than written into user data the shader never reads. */
+    if(a->window_base && (a->window_base>16 || a->window_base+a->vertex_count>16)) return -1;
+    if(a->esgs_described>1) return -1;
+    if(a->esgs_described) {
+        if(!a->window_base || a->esgs_gs_tg_info_sgpr>=a->window_base ||
+           a->esgs_merged_wave_info_sgpr>=a->window_base ||
+           a->esgs_gs_tg_info_sgpr==a->esgs_merged_wave_info_sgpr) return -1;
+    }
     if(a->vertex_buffer_valid>1)return -1;
     if(a->vertex_buffer_valid ? (!a->vertex_buffer_usage_mask || a->vertex_buffer_usage_mask>0xffffu) :
        a->vertex_buffer_usage_mask!=0)return -1;
