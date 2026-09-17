@@ -62,8 +62,9 @@ FEATURE_GATES = {
                        "else if (s->stage == VK_SHADER_STAGE_GEOMETRY_BIT && !gs) gs=s;",
                        "the stage is described, compiled through the merged vertex+geometry "
                        "pre-raster program and refused by the shipping profile: the ES->GS input "
-                       "handoff is not delivered (positions arrive, the varying reads zero, and an "
-                       "indexed gl_in read loses the device)"),
+                       "handoff is not delivered - the read is non-deterministic (identical runs "
+                       "give bit-identical images for the cases that do not read it and different "
+                       "images for every case that does), and an indexed gl_in read loses the device"),
     "tessellationShader": ("src/vk_graphics_pipeline.c",
                            "else if (s->stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT && !tcs) tcs=s;",
                            "the control/evaluation pair is described, validated against the patch "
