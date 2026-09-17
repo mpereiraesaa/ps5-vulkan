@@ -27,10 +27,17 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
          * pipeline that carries one must never reuse the pair compiled for the
          * vertex stage alone. */
         GEOMETRY_WORDS=1+1+16+1+64*4,
-        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS };
+        /* The optional tessellation pair is part of the identity for the same
+         * reason, and carries the two entry points, the two specialization maps
+         * and the patch control point count the control stage's output vertices
+         * and the evaluation stage's input arrays are derived from. */
+        TESS_WORDS=1+1+1+16+16+1+1+64*4*2+1+1,
+        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS+TESS_WORDS };
     const int has_geometry=ps5vk_graphics_has_geometry(key);
+    const int has_tessellation=ps5vk_graphics_tessellation_key_valid(key);
     size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count+
-        (has_geometry?key->geometry.word_count:0);
+        (has_geometry?key->geometry.word_count:0)+
+        (has_tessellation?key->tess_control.word_count+key->tess_eval.word_count:0);
     uint32_t *words=calloc(count,sizeof(*words));
     if(!words)return NULL;
     words[0]=5; /* optimized vertex-table usage in metadata v11 */
@@ -102,15 +109,53 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
         words[at++]=key->geometry.specializations[i].size;
         memcpy(words+at,key->geometry.specializations[i].data,8);at+=2;
     }
+    /* The tessellation pair, present or absent, with both entry points, both
+     * specialization maps and the patch control points. A pipeline that adds,
+     * removes or retargets the pair can never reuse another pipeline's pair. */
+    words[at++]=has_tessellation?1u:0u;
+    words[at++]=has_tessellation?(uint32_t)key->tess_control.word_count:0u;
+    words[at++]=has_tessellation?(uint32_t)key->tess_eval.word_count:0u;
+    if(has_tessellation) {
+        memcpy(words+at,key->tess_control.entry,strlen(key->tess_control.entry));at+=16;
+        memcpy(words+at,key->tess_eval.entry,strlen(key->tess_eval.entry));at+=16;
+    } else at+=32;
+    words[at++]=has_tessellation?key->tess_control.specialization_count:0u;
+    words[at++]=has_tessellation?key->tess_eval.specialization_count:0u;
+    const struct ps5vk_graphics_module_key *tess_modules[]={&key->tess_control,&key->tess_eval};
+    for(unsigned stage=0;stage<2;++stage)for(unsigned i=0;i<64;++i) {
+        words[at++]=has_tessellation?tess_modules[stage]->specializations[i].constant_id:0u;
+        words[at++]=has_tessellation?tess_modules[stage]->specializations[i].size:0u;
+        if(has_tessellation)
+            memcpy(words+at,tess_modules[stage]->specializations[i].data,8);
+        else
+            memset(words+at,0,8);
+        at+=2;
+    }
+    words[at++]=has_tessellation?key->patch_control_points:0u;
+    words[at++]=0u; /* reserved, so the region stays a fixed size */
     if(at!=HEADER_WORDS){free(words);return NULL;}
     memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
     memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
-    if(has_geometry)
+    size_t tail=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count;
+    if(has_geometry) {
         memcpy(words+HEADER_WORDS+key->vertex.word_count+key->fragment.word_count,
                key->geometry.words,key->geometry.word_count*4);
-    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v6",
+        tail+=key->geometry.word_count;
+    }
+    if(has_tessellation) {
+        memcpy(words+tail,key->tess_control.words,key->tess_control.word_count*4);
+        tail+=key->tess_control.word_count;
+        memcpy(words+tail,key->tess_eval.words,key->tess_eval.word_count*4);
+        tail+=key->tess_eval.word_count;
+    }
+    /* The key stream changed shape with the tessellation pair, so the name that
+     * identifies the layout moves with it: a cache populated by the earlier
+     * layout must never be read as if it had this one. */
+    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v7",
             VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|
-            (has_geometry?VK_SHADER_STAGE_GEOMETRY_BIT:0),0,cache_key)) {
+            (has_geometry?VK_SHADER_STAGE_GEOMETRY_BIT:0)|
+            (has_tessellation?(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
+                               VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT):0),0,cache_key)) {
         free(words);return NULL;
     }
     return words;

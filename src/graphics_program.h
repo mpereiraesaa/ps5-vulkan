@@ -26,6 +26,18 @@ struct ps5vk_graphics_key {
      * present the pre-raster stage is the merged vertex+geometry program the
      * compiler emits from this pair, not the vertex module alone. */
     struct ps5vk_graphics_module_key geometry;
+    /* Optional tessellation pair. A zero word_count in tess_control means the
+     * pipeline has no tessellation stages, which is how every earlier key is
+     * read; the control and evaluation stages always appear together (Vulkan
+     * requires it), so either module without the other is not a valid key and
+     * callers use ps5vk_graphics_tessellation_key_valid() before resolving. The
+     * patch control points are part of the identity rather than fixed state:
+     * the control stage's output vertex count, the evaluation stage's
+     * per-vertex input arrays and the tessellator's patch size are all derived
+     * from them, so two pipelines that differ only there are different
+     * programs and must never share a cache entry. */
+    struct ps5vk_graphics_module_key tess_control, tess_eval;
+    uint32_t patch_control_points;
     /* The graphics feature bits the logical device enabled, so the compiler
      * adapter can refuse a shader that consumes a capability the application
      * never enabled instead of silently delivering it. This is an acceptance
@@ -48,6 +60,18 @@ struct ps5vk_graphics_key {
 /* True when the pipeline carries a geometry stage. */
 static inline int ps5vk_graphics_has_geometry(const struct ps5vk_graphics_key *key)
 { return key && key->geometry.words && key->geometry.word_count; }
+/* True when the pipeline carries a tessellation control/evaluation pair. */
+static inline int ps5vk_graphics_has_tessellation(const struct ps5vk_graphics_key *key)
+{ return key && key->tess_control.words && key->tess_control.word_count; }
+/* Both halves present with a patch control point count the profile bounds:
+ * the shape every consumer of the tessellation key fields relies on. */
+static inline int ps5vk_graphics_tessellation_key_valid(const struct ps5vk_graphics_key *key)
+{
+    if(!ps5vk_graphics_has_tessellation(key))return 0;
+    if(!key->tess_eval.words || !key->tess_eval.word_count)return 0;
+    return key->patch_control_points>0 &&
+        key->patch_control_points<=PS5VK_MAX_PATCH_CONTROL_POINTS;
+}
 struct ps5vk_graphics_program {
     struct ps5vk_graphics_key key;
     const void *backend_data;

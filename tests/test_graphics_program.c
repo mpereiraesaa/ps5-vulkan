@@ -75,5 +75,29 @@ int main(void)
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT);
     key.descriptor_set_count=0;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT);
+    /* The tessellation pair belongs to the identity, together with the patch
+     * control points the pair was compiled for: a record without a pair must
+     * never satisfy a pipeline that asks for one, the pair's own modules are
+     * compared rather than merely present, and two runs that differ only in the
+     * patch count are different programs. */
+    library.count=1;
+    uint32_t tcs[5]={0x07230203,7,8,9,0}, tes[5]={0x07230203,10,11,12,0};
+    uint32_t other_tes[5]={0x07230203,10,11,13,0};
+    programs[0].key.tess_control=(struct ps5vk_graphics_module_key){
+        .words=tcs,.word_count=5,.entry="main"};
+    programs[0].key.tess_eval=(struct ps5vk_graphics_module_key){
+        .words=tes,.word_count=5,.entry="main"};
+    programs[0].key.patch_control_points=3;
+    key=programs[0].key;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS && out==programs);
+    key.patch_control_points=4;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    key=programs[0].key;key.tess_eval.words=other_tes;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    key=programs[0].key;
+    key.tess_control=(struct ps5vk_graphics_module_key){0};
+    key.tess_eval=(struct ps5vk_graphics_module_key){0};
+    key.patch_control_points=0;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     puts("Graphics library exact-pair resolution: structural host fixtures only");
 }
