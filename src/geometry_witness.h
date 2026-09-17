@@ -50,7 +50,10 @@ enum {
     PS5VK_GEOMETRY_POSITION12 = 9,
     /* S3: loop with a constant trip count over gl_in. */
     PS5VK_GEOMETRY_LOOP_CONST = 10,
-    PS5VK_GEOMETRY_CASES = 11
+    /* Sentinel: input triangle unchanged, colour driven by the read
+     * position, so a correct, zero or shifted read differ visibly. */
+    PS5VK_GEOMETRY_SENTINEL = 11,
+    PS5VK_GEOMETRY_CASES = 12
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */

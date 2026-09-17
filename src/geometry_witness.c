@@ -24,6 +24,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_POSITION0:return 7;
     case PS5VK_GEOMETRY_POSITION12:return 8;
     case PS5VK_GEOMETRY_LOOP_CONST:return 9;
+    case PS5VK_GEOMETRY_SENTINEL:return 10;
     }
     return -2;
 }
@@ -138,6 +139,11 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     case PS5VK_GEOMETRY_RECOLOR:
     case PS5VK_GEOMETRY_AMPLIFY:
     case PS5VK_GEOMETRY_POSITIONS:
+    /* Sentinel: the input triangle unchanged, so the coverage is the control's;
+     * the VALUE assertion lives in the expected-colour function, which still
+     * needs its branch for this case (the position-derived formula used by
+     * passthrough/positions is the template, with the sentinel mapping). */
+    case PS5VK_GEOMETRY_SENTINEL:
         return witness->expected_covered==pixels;
     case PS5VK_GEOMETRY_SHRINK:
     case PS5VK_GEOMETRY_CONSTANT:
