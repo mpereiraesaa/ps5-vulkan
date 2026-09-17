@@ -60,16 +60,18 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * names. A nonzero index is no longer refused outright: it identifies the
      * scope this pipeline may draw in. */
     /* Two stages are the vertex+fragment profile every earlier tranche used;
-     * three add the optional geometry stage between them. Nothing else is
-     * accepted, so a tessellation or mesh stage still fails here. */
+     * three or four add the optional tessellation control/evaluation pair and
+     * the optional geometry stage between them. Nothing else is accepted, so a
+     * mesh or task stage still fails here. */
     if (in->pNext || in->flags || in->subpass >= in->renderPass->subpass_count ||
-        (in->stageCount != 2 && in->stageCount != 3) || !in->pStages ||
+        (in->stageCount != 2 && in->stageCount != 3 && in->stageCount != 4) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkBool32 dynamic_viewport,dynamic_scissor;
     if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor))
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL, *gs=NULL;
+    const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL, *gs=NULL,
+        *tcs=NULL, *tes=NULL;
     for (unsigned i=0; i<in->stageCount; ++i) {
         const VkPipelineShaderStageCreateInfo *s=&in->pStages[i];
         if (s->sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO || !s->module ||
@@ -78,11 +80,17 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         uint32_t id;
         if (!ps5vk_shader_entry(s->module, s->stage, s->pName, &id)) return VK_ERROR_UNKNOWN;
         if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;
+        else if (s->stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT && !tcs) tcs=s;
+        else if (s->stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT && !tes) tes=s;
         else if (s->stage == VK_SHADER_STAGE_GEOMETRY_BIT && !gs) gs=s;
         else if (s->stage == VK_SHADER_STAGE_FRAGMENT_BIT && !fs) fs=s;
         else return VK_ERROR_FEATURE_NOT_PRESENT;
     }
-    if (!vs || !fs || (in->stageCount==3 && !gs)) return VK_ERROR_UNKNOWN;
+    /* Vulkan requires the control and evaluation stages to appear together, and
+     * the stage count to name exactly the stages that were provided. */
+    if (!vs || !fs || (!!tcs != !!tes) ||
+        in->stageCount != (unsigned)(2 + (tcs?2:0) + (gs?1:0)))
+        return VK_ERROR_UNKNOWN;
     /* A geometry pipeline needs the feature the logical device enabled. The
      * private witness build keeps its own gate, exactly as the multiview
      * diagnostic does, so shipping behaviour stays the negotiation. */
@@ -115,6 +123,28 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     for(uint32_t a=0;a<v->vertexAttributeDescriptionCount;++a)
         if(v->pVertexAttributeDescriptions[a].location>=32)return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Tessellation contract. Vulkan requires the control and evaluation stages
+     * together, PATCH_LIST as the input assembly when they are present, and a
+     * patchControlPoints in range; pTessellationState is ignored without them.
+     * The profile validates all of that and then refuses the pipeline: the
+     * pinned compiler emits ISA for both stages but no loadable package state
+     * (measured c96cb63b: source_stage 2/3, hardware_stage UNKNOWN, zero context
+     * registers, no linkage registers), so nothing here could program the
+     * hardware. Until that compiler gap closes, tessellationShader stays
+     * unadvertised and every tessellation pipeline fails closed instead of
+     * executing with whatever state the previous draw left behind. */
+    if (tcs) {
+        const VkPipelineTessellationStateCreateInfo *t=in->pTessellationState;
+        if (!t || t->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO ||
+            t->pNext || t->flags || !t->patchControlPoints ||
+            t->patchControlPoints > PS5VK_MAX_PATCH_CONTROL_POINTS ||
+            ia->topology != VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    if (in->pTessellationState &&
+       in->pTessellationState->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO)
+        return VK_ERROR_UNKNOWN;
     /* The topology decides the primitive the AGC linker programs, so the
      * accepted set and its values live in one place. */
     uint32_t primitive_type=0;

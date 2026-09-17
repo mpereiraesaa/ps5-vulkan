@@ -26,7 +26,11 @@
 enum {
     PS5VK_MAX_CLIP_DISTANCES = 8,
     PS5VK_MAX_CULL_DISTANCES = 8,
-    PS5VK_MAX_COMBINED_CLIP_CULL_DISTANCES = 8
+    PS5VK_MAX_COMBINED_CLIP_CULL_DISTANCES = 8,
+    /* Vulkan's mandatory floor for maxTessellationPatchSize. A tessellation
+     * pipeline's patch control points are validated against it even while the
+     * stage itself is refused for want of a loadable compiler package. */
+    PS5VK_MAX_PATCH_CONTROL_POINTS = 32
 };
 
 #endif
