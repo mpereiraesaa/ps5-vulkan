@@ -25,11 +25,17 @@ PIXELS = EXTENT * EXTENT
 # the case's coverage predicate keeps
 SHRINK_PIXELS = int(EXTENT * 0.6) ** 2
 # In the order the probe logs them: the input-independent case runs second so a
-# stage that never emits is separable from a broken input path.
+# stage that never emits is separable from a broken input path, and the sentinel
+# runs third so no later case can lose the device before its value oracle has
+# reported.
 CASES = (
     (0, -1, PIXELS),
     # The fixed centred quad covers half of each axis.
     (6, 5, (EXTENT // 2) ** 2),
+    # The input triangle unchanged with the colour computed from the position the
+    # geometry stage read: real coverage, and a value assertion that a zero read
+    # (collapsed triangle) or a shifted item (moved or reshaped triangle) fails.
+    (8, 10, PIXELS),
     (1, 0, PIXELS),
     (2, 1, SHRINK_PIXELS),
     (3, 2, 0),
@@ -43,10 +49,11 @@ CASES = (
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
-                6: "digest_constant", 7: "digest_positions"}
+                6: "digest_constant", 7: "digest_positions",
+                8: "digest_sentinel"}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 

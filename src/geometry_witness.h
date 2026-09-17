@@ -42,7 +42,13 @@ enum {
     /* Positions taken from the input, colour constant: the position half of the
      * ES->GS handoff on its own. */
     PS5VK_GEOMETRY_POSITIONS = 7,
-    PS5VK_GEOMETRY_CASES = 8
+    /* Sentinel: the input triangle is emitted unchanged and the colour is
+     * computed from the position the geometry half READ from gl_in, so the
+     * oracle can assert an exact per-pixel value instead of only coverage. It
+     * is the case that separates "the read returned the data" from "the read
+     * returned zeros", which a coverage-only case cannot. */
+    PS5VK_GEOMETRY_SENTINEL = 8,
+    PS5VK_GEOMETRY_CASES = 9
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */

@@ -47,7 +47,12 @@ int main(void)
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_AMPLIFY)==4);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CONSTANT)==5);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_POSITIONS)==6);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_SENTINEL)==10);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CASES)==-2);
+    /* Every declared case must be registered: an unregistered one would be
+     * skipped by the native matrix without any run logging that it was missing. */
+    for(unsigned witness_case=0;witness_case<PS5VK_GEOMETRY_CASES;++witness_case)
+        assert(ps5vk_geometry_witness_mode(witness_case)!=-2);
 
     for(unsigned witness_case=0;witness_case<PS5VK_GEOMETRY_CASES;++witness_case) {
         image_for(witness_case,image);
@@ -58,6 +63,7 @@ int main(void)
         case PS5VK_GEOMETRY_RECOLOR:
         case PS5VK_GEOMETRY_AMPLIFY:
         case PS5VK_GEOMETRY_POSITIONS:
+        case PS5VK_GEOMETRY_SENTINEL:
             assert(witness.expected_covered==pixels);
             break;
         case PS5VK_GEOMETRY_SHRINK:
@@ -110,12 +116,32 @@ int main(void)
     memcpy(image+4*((size_t)5*EXTENT+5),ps5vk_geometry_clear,4);
     assert(!classify(PS5VK_GEOMETRY_AMPLIFY,image,&witness));
     assert(witness.covered==witness.expected_covered-1);
+    /* The sentinel exists so that a geometry stage's read is judged by the value
+     * it produced, not only by the coverage: its mapping must be its own, and it
+     * must refuse both the control's colours and the empty image a zero read
+     * would leave behind. */
+    image_for(PS5VK_GEOMETRY_SENTINEL,image);
+    assert(classify(PS5VK_GEOMETRY_SENTINEL,image,&witness));
+    assert(witness.covered==pixels);
+    assert(!classify(PS5VK_GEOMETRY_CONTROL,image,&witness));
+    assert(witness.wrong_color==pixels);
+    image_for(PS5VK_GEOMETRY_CONTROL,image);
+    assert(!classify(PS5VK_GEOMETRY_SENTINEL,image,&witness));
+    assert(witness.wrong_color==pixels);
+    for(size_t i=0;i<sizeof(image);i+=4)memcpy(image+i,ps5vk_geometry_clear,4);
+    assert(!classify(PS5VK_GEOMETRY_SENTINEL,image,&witness));
+    assert(witness.wrong_color==pixels);
+    uint8_t sentinel_pixel[4],control_pixel[4];
+    ps5vk_geometry_witness_expected(PS5VK_GEOMETRY_SENTINEL,7,9,EXTENT,sentinel_pixel);
+    ps5vk_geometry_witness_expected(PS5VK_GEOMETRY_CONTROL,7,9,EXTENT,control_pixel);
+    assert(sentinel_pixel[0]==control_pixel[0] && sentinel_pixel[1]==control_pixel[1]);
+    assert(sentinel_pixel[2]!=control_pixel[2]);
     /* A target of the wrong size or an unknown case never verifies. */
     memset(&witness,0,sizeof(witness));
     ps5vk_geometry_witness_pixel(&witness,PS5VK_GEOMETRY_CONTROL,0,0,EXTENT,image);
     assert(!ps5vk_geometry_witness_verify(&witness,PS5VK_GEOMETRY_CONTROL,EXTENT));
     assert(!ps5vk_geometry_witness_verify(&witness,PS5VK_GEOMETRY_CASES,EXTENT));
     assert(!ps5vk_geometry_witness_verify(NULL,PS5VK_GEOMETRY_CONTROL,EXTENT));
-    puts("Geometry witness: passthrough, shrink, suppression and varying rewrite hold");
+    puts("Geometry witness: passthrough, shrink, suppression, varying rewrite and sentinel value hold");
     return 0;
 }
