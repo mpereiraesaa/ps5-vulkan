@@ -1,6 +1,7 @@
 #ifndef PS5VK_PIPELINE_H
 #define PS5VK_PIPELINE_H
 #include "vk_descriptor.h"
+#include "graphics_limits.h"
 
 struct ps5vk_program_descriptor {
     uint32_t set, binding, element, table_dword;
@@ -45,7 +46,7 @@ VkBool32 ps5vk_shader_entry(VkShaderModule, VkShaderStageFlagBits, const char *,
  * register bank per index (PA_CL_VPORT_*, PA_SC_VPORT_ZMIN/ZMAX,
  * PA_SC_VPORT_SCISSOR) for exactly this many; the reported limit stays at one
  * until the feature is promoted. */
-enum { PS5VK_MAX_VIEWPORTS = 16 };
+enum { PS5VK_MAX_VIEWPORTS = PS5VK_MULTI_VIEWPORT_COUNT };
 /* Rasterization state a draw executes with. A pipeline holds its static values;
  * a recorded draw holds a BY-VALUE copy resolved at record time (the pipeline's
  * value, or the command buffer's current dynamic value where the pipeline
