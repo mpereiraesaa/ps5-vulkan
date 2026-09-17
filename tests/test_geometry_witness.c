@@ -44,6 +44,7 @@ int main(void)
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CONTROL)==-1);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_PASSTHROUGH)==0);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_RECOLOR)==3);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_AMPLIFY)==4);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CASES)==-2);
 
     for(unsigned witness_case=0;witness_case<PS5VK_GEOMETRY_CASES;++witness_case) {
@@ -53,6 +54,7 @@ int main(void)
         case PS5VK_GEOMETRY_CONTROL:
         case PS5VK_GEOMETRY_PASSTHROUGH:
         case PS5VK_GEOMETRY_RECOLOR:
+        case PS5VK_GEOMETRY_AMPLIFY:
             assert(witness.expected_covered==pixels);
             break;
         case PS5VK_GEOMETRY_SHRINK:
@@ -93,6 +95,14 @@ int main(void)
     image[4*((size_t)10*EXTENT+10)]=(uint8_t)(image[4*((size_t)10*EXTENT+10)]^0x40u);
     assert(!classify(PS5VK_GEOMETRY_PASSTHROUGH,image,&witness));
     assert(witness.wrong_color==1 && witness.first_wrong_x==10 && witness.first_wrong_y==10);
+    /* The amplified image must be the passthrough image: a sub-triangle that
+     * left a gap shows up as a missing pixel. */
+    image_for(PS5VK_GEOMETRY_AMPLIFY,image);
+    assert(classify(PS5VK_GEOMETRY_AMPLIFY,image,&witness));
+    assert(witness.covered==pixels);
+    memcpy(image+4*((size_t)5*EXTENT+5),ps5vk_geometry_clear,4);
+    assert(!classify(PS5VK_GEOMETRY_AMPLIFY,image,&witness));
+    assert(witness.covered==witness.expected_covered-1);
     /* A target of the wrong size or an unknown case never verifies. */
     memset(&witness,0,sizeof(witness));
     ps5vk_geometry_witness_pixel(&witness,PS5VK_GEOMETRY_CONTROL,0,0,EXTENT,image);

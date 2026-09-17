@@ -32,7 +32,10 @@ enum {
     PS5VK_GEOMETRY_SHRINK = 2,
     PS5VK_GEOMETRY_SUPPRESS = 3,
     PS5VK_GEOMETRY_RECOLOR = 4,
-    PS5VK_GEOMETRY_CASES = 5
+    /* One invocation emits three sub-triangles for every input primitive: the
+     * union must be the original triangle, pixel for pixel. */
+    PS5VK_GEOMETRY_AMPLIFY = 5,
+    PS5VK_GEOMETRY_CASES = 6
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */

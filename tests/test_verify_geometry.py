@@ -37,13 +37,13 @@ class Fixture:
         # control image and the other three cases all differ from it.
         self.digests = {0: "1111111111111111", 1: "1111111111111111",
                         2: "2222222222222222", 3: "3333333333333333",
-                        4: "4444444444444444"}
+                        4: "4444444444444444", 5: "1111111111111111"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(
                 f"PS5VK_GEOMETRY_DRAW case={case} mode={mode} stages="
                 f"{2 if mode < 0 else 3} out_prim_type={0 if mode < 0 else 2} "
-                f"max_vertices={0 if mode < 0 else 3} vertices=6 instances=1")
+                f"max_vertices={0 if mode < 0 else 9} vertices=6 instances=1")
             records.append(
                 f"PS5VK_GEOMETRY_CASE case={case} mode={mode} pixels={verify.PIXELS} "
                 f"expected={expected} covered={expected} missing=0 foreign=0 wrong_color=0 "
@@ -65,7 +65,7 @@ class Fixture:
 
     def summary(self):
         fields = [f"cases={len(verify.CASES)}", f"extent={verify.EXTENT}",
-                  "clear=000000ff", "out_prim_type=2", "max_vertices=3"]
+                  "clear=000000ff", "out_prim_type=2", "max_vertices=9"]
         fields += [f"{name}={self.digests[case]}"
                    for case, name in verify.DIGEST_NAMES.items()]
         fields.append("strict_verified=1")
@@ -123,7 +123,7 @@ class GeometryVerifierTests(unittest.TestCase):
 
     def test_geometry_case_needs_its_pipeline_state(self):
         for key, value in (("stages", "2"), ("out_prim_type", "1"),
-                           ("max_vertices", "6")):
+                           ("max_vertices", "3")):
             fixture = Fixture()
             fixture.rebuild([
                 re.sub(rf"\b{key}=\S+", f"{key}={value}", record)
@@ -133,6 +133,13 @@ class GeometryVerifierTests(unittest.TestCase):
                 fixture.validate()
 
     def test_digest_relations_are_required(self):
+        # The amplified image must reproduce the control image too.
+        fixture = Fixture()
+        fixture.rebuild([r.replace("digest=1111111111111111", "digest=9999999999999999")
+                         if r.startswith("PS5VK_GEOMETRY_CASE") and "case=5 " in r
+                         else r for r in fixture.records])
+        with self.assertRaises(ValueError):
+            fixture.validate()
         # Passthrough must reproduce the control image.
         fixture = Fixture()
         fixture.rebuild([r.replace("digest=1111111111111111", "digest=9999999999999999")
@@ -163,7 +170,7 @@ class GeometryVerifierTests(unittest.TestCase):
             verify.validate(fixture.log, dict(fixture.receipt, clean=False), fixture.artifact)
         for field, value in (("geometry_probe", 0),
                              ("graphics_shader_source", "owned-runtime-triangle"),
-                             ("geometry_cases", 4)):
+                             ("geometry_cases", 5)):
             artifact = copy.deepcopy(fixture.artifact)
             artifact[field] = value
             with self.assertRaises(ValueError, msg=field):

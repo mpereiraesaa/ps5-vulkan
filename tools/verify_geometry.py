@@ -30,11 +30,16 @@ CASES = (
     (2, 1, SHRINK_PIXELS),
     (3, 2, 0),
     (4, 3, PIXELS),
+    # Three sub-triangles tile the input triangle, so the amplified image must
+    # be the control image again.
+    (5, 4, PIXELS),
 )
-DIGEST_EQUAL = ((0, 1),)
+# The amplified image must hash equal to the control, and the four structurally
+# different images must all differ.
+DIGEST_EQUAL = ((0, 1), (0, 5))
 DIGEST_DISTINCT = (0, 2, 3, 4)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
-                3: "digest_suppress", 4: "digest_recolor"}
+                3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify"}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 
@@ -116,7 +121,7 @@ def validate(log, receipt, artifact):
         else:
             require(draw.get("stages") == "3" and
                     draw.get("out_prim_type") == "2" and
-                    draw.get("max_vertices") == "3", f"case {case} geometry state")
+                    draw.get("max_vertices") == "9", f"case {case} geometry state")
         require(fields.get("pixels") == str(PIXELS) and
                 fields.get("expected") == str(expected) and
                 fields.get("covered") == str(expected) and
@@ -141,7 +146,7 @@ def validate(log, receipt, artifact):
             summary.get("extent") == str(EXTENT) and
             summary.get("clear") == "000000ff" and
             summary.get("out_prim_type") == "2" and
-            summary.get("max_vertices") == "3" and
+            summary.get("max_vertices") == "9" and
             summary.get("strict_verified") == "1", "summary")
     for case, name in DIGEST_NAMES.items():
         require(summary.get(name) == digests[case], f"summary digest {name}")
