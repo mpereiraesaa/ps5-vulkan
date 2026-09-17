@@ -91,10 +91,10 @@ FEATURE_GATES = {
     # same two features (vktClippingTests.cpp requireFeatures()), and the pixel
     # stage of this profile refuses a distance mask, so the feature's whole
     # obligation is not covered yet.
-    "shaderClipDistance": ("native/runtime_shader.c", "clip_distance_mask || m->cull_distance_mask) return -2",
-                           "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised"),
-    "shaderCullDistance": ("native/runtime_shader.c", "clip_distance_mask || m->cull_distance_mask) return -2",
-                           "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised"),
+    "shaderClipDistance": ("native/runtime_shader.c", "m->ps_clip_distance_reads || m->ps_cull_distance_reads) return -2",
+                           "the fragment stage refuses both a distance mask and a reported distance read, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised"),
+    "shaderCullDistance": ("native/runtime_shader.c", "m->ps_clip_distance_reads || m->ps_cull_distance_reads) return -2",
+                           "the fragment stage refuses both a distance mask and a reported distance read, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",

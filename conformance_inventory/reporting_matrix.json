@@ -553,7 +553,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
+      "detail": "the fragment stage refuses both a distance mask and a reported distance read, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
       "feature": "shaderClipDistance",
       "kind": "feature",
       "profile": "graphics",
@@ -566,7 +566,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
+      "detail": "the fragment stage refuses both a distance mask and a reported distance read, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
       "feature": "shaderCullDistance",
       "kind": "feature",
       "profile": "graphics",
@@ -1280,7 +1280,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
+      "detail": "the fragment stage refuses both a distance mask and a reported distance read, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
       "feature": "shaderClipDistance",
       "kind": "feature",
       "profile": "compute",
@@ -1293,7 +1293,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
+      "detail": "the fragment stage refuses both a distance mask and a reported distance read, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
       "feature": "shaderCullDistance",
       "kind": "feature",
       "profile": "compute",
