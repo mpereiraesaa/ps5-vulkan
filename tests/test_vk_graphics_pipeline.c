@@ -96,25 +96,64 @@ int main(void)
     }
     VkDynamicState dynamic_values[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
     {
-        /* The pinned upstream draw pipeline enables depth bias with every
-         * factor and the clamp at zero; that no-op form is accepted, and a
-         * non-zero bias stays refused rather than being dropped silently. */
+        /* Depth bias is real state: the enable and both factors are carried
+         * on the pipeline. A non-zero clamp needs depthBiasClamp ENABLED on
+         * the logical device; the factors are never subject to a finiteness
+         * rule, and a disabled bias stores zero factors whatever was passed. */
         const unsigned saved_created=created,saved_released=released;
         const unsigned saved_acquired=acquired,saved_compiled=compiled_released;
         VkPipeline biased=NULL;
         r.depthBiasEnable=VK_TRUE;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.depth_bias_enable && !biased->dynamic_depth_bias &&
+            biased->raster.depth_bias_constant==0.0f && biased->raster.depth_bias_slope==0.0f &&
+            biased->raster.depth_bias_clamp==0.0f);
         vkDestroyPipeline(&d,biased,NULL);
-        r.depthBiasConstantFactor=0.25f;
+        r.depthBiasConstantFactor=0.25f;r.depthBiasSlopeFactor=-1.0f;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.depth_bias_enable && biased->raster.depth_bias_constant==0.25f &&
+            biased->raster.depth_bias_slope==-1.0f && biased->raster.depth_bias_clamp==0.0f);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* Clamp without the feature: refused, no backend object created. */
+        r.depthBiasClamp=0.5f;
+        const unsigned before=created;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
-            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
-        r.depthBiasConstantFactor=0.0f;r.depthBiasSlopeFactor=1.0f;
-        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
-            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
-        r.depthBiasSlopeFactor=0.0f;r.depthBiasClamp=0.5f;
-        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
-            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
-        r.depthBiasClamp=0.0f;r.depthBiasEnable=VK_FALSE;
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before);
+        /* Clamp with the feature enabled on the device: carried as given. */
+        d.enabled_features|=PS5VK_FEATURE_DEPTH_BIAS_CLAMP;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.depth_bias_clamp==0.5f && biased->raster.depth_bias_constant==0.25f);
+        vkDestroyPipeline(&d,biased,NULL);
+        d.enabled_features&=~PS5VK_FEATURE_DEPTH_BIAS_CLAMP;
+        /* Disabled bias ignores every factor, the clamp included. */
+        r.depthBiasEnable=VK_FALSE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(!biased->raster.depth_bias_enable && biased->raster.depth_bias_constant==0.0f &&
+            biased->raster.depth_bias_slope==0.0f && biased->raster.depth_bias_clamp==0.0f);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* Dynamic depth bias: the enable stays static, the factors are not
+         * read from the create info (a non-zero clamp here is ignored too),
+         * and VK_DYNAMIC_STATE_DEPTH_BIAS is accepted next to the other two. */
+        VkDynamicState bias_dynamic[]={VK_DYNAMIC_STATE_DEPTH_BIAS,VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR};
+        VkPipelineDynamicStateCreateInfo bias_state={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount=1,.pDynamicStates=bias_dynamic};
+        info.pDynamicState=&bias_state;r.depthBiasEnable=VK_TRUE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->dynamic_depth_bias && biased->raster.depth_bias_enable &&
+            biased->raster.depth_bias_clamp==0.0f && biased->raster.depth_bias_constant==0.0f &&
+            !biased->dynamic_viewport && !biased->dynamic_scissor);
+        vkDestroyPipeline(&d,biased,NULL);
+        bias_state.dynamicStateCount=3;vp.pViewports=NULL;vp.pScissors=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->dynamic_depth_bias && biased->dynamic_viewport && biased->dynamic_scissor);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* A repeated dynamic state is still refused. */
+        bias_dynamic[2]=VK_DYNAMIC_STATE_DEPTH_BIAS;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        vp.pViewports=&viewport;vp.pScissors=&scissor;info.pDynamicState=NULL;
+        r.depthBiasClamp=0.0f;r.depthBiasConstantFactor=0.0f;r.depthBiasSlopeFactor=0.0f;
+        r.depthBiasEnable=VK_FALSE;
         created=saved_created;released=saved_released;
         acquired=saved_acquired;compiled_released=saved_compiled;
     }
@@ -126,7 +165,7 @@ int main(void)
     assert(dynamic_pipeline->dynamic_viewport && dynamic_pipeline->dynamic_scissor);
     vkDestroyPipeline(&d,dynamic_pipeline,NULL);
     const VkDynamicState unsupported_dynamic[]={
-        VK_DYNAMIC_STATE_LINE_WIDTH,VK_DYNAMIC_STATE_DEPTH_BIAS,
+        VK_DYNAMIC_STATE_LINE_WIDTH,
         VK_DYNAMIC_STATE_BLEND_CONSTANTS,VK_DYNAMIC_STATE_DEPTH_BOUNDS,
         VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
         VK_DYNAMIC_STATE_STENCIL_REFERENCE};

@@ -623,7 +623,64 @@ static void graphics_recording(void)
         c->operations[1].scissor.offset.x==12 && c->operations[1].scissor.extent.height==32);
     dynamic_viewport.x=99;dynamic_scissor.offset.x=99;
     assert(c->operations[1].viewport.x==10 && c->operations[1].scissor.offset.x==12);
+    /* A static-bias pipeline's draw carries the pipeline's snapshot by value. */
+    assert(!c->operations[1].raster.depth_bias_enable &&
+        c->operations[1].raster.depth_bias_constant==0.0f);
     vkCmdEndRenderPass(c);assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+    {
+        /* Dynamic depth bias. The factors are required only when the bias is
+         * enabled; each draw snapshots the CURRENT factors, a later setter
+         * does not reach an earlier draw, and a static-bias pipeline bound in
+         * between keeps its own values. Reset drops the dynamic state. */
+        struct VkPipeline_T bias_pipeline=pipeline;
+        bias_pipeline.dynamic_depth_bias=VK_TRUE;
+        bias_pipeline.raster.depth_bias_enable=VK_TRUE;
+        struct VkPipeline_T static_pipeline=pipeline;
+        static_pipeline.raster=(struct ps5vk_raster_state){.depth_bias_enable=VK_TRUE,
+            .depth_bias_constant=4.0f,.depth_bias_slope=0.5f};
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&bias_pipeline);
+        vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdDraw(c,3,1,0,0);
+        assert(c->state==PS5VK_INVALID); /* enabled dynamic bias never set */
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&bias_pipeline);
+        vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetDepthBias(c,-1.5f,0.0f,2.25f);
+        vkCmdDraw(c,3,1,0,0);
+        vkCmdSetDepthBias(c,7.0f,0.0f,-3.0f);
+        vkCmdDraw(c,3,1,0,0);
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&static_pipeline);
+        vkCmdDraw(c,3,1,0,0);
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&bias_pipeline);
+        vkCmdDraw(c,3,1,0,0);
+        assert(c->state==PS5VK_RECORDING && c->operation_count==5);
+        const struct ps5vk_raster_state *r1=&c->operations[1].raster,*r2=&c->operations[2].raster,
+            *r3=&c->operations[3].raster,*r4=&c->operations[4].raster;
+        assert(r1->depth_bias_enable && r1->depth_bias_constant==-1.5f && r1->depth_bias_slope==2.25f);
+        assert(r2->depth_bias_enable && r2->depth_bias_constant==7.0f && r2->depth_bias_slope==-3.0f);
+        assert(r3->depth_bias_enable && r3->depth_bias_constant==4.0f && r3->depth_bias_slope==0.5f);
+        assert(r4->depth_bias_enable && r4->depth_bias_constant==7.0f && r4->depth_bias_slope==-3.0f);
+        vkCmdEndRenderPass(c);assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+        /* A dynamic-bias pipeline with the bias DISABLED needs no setter: the
+         * factors are ignored, so the draw records with them at zero. */
+        bias_pipeline.raster.depth_bias_enable=VK_FALSE;
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&bias_pipeline);
+        vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdDraw(c,3,1,0,0);
+        assert(c->state==PS5VK_RECORDING && !c->operations[1].raster.depth_bias_enable &&
+            c->operations[1].raster.depth_bias_constant==0.0f);
+        vkCmdEndRenderPass(c);assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+        /* Reset clears the dynamic factors: the next enabled draw needs them again. */
+        bias_pipeline.raster.depth_bias_enable=VK_TRUE;
+        assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && !(c->dynamic_state_valid&2u));
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&bias_pipeline);
+        vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdDraw(c,3,1,0,0);
+        assert(c->state==PS5VK_INVALID);
+    }
     assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
     dynamic_viewport=(VkViewport){0,0,NAN,1,0,1};
     vkCmdSetViewport(c,0,1,&dynamic_viewport);assert(c->state==PS5VK_INVALID);
@@ -981,6 +1038,16 @@ static void core_dynamic_state_recording(void)
     vkCmdSetLineWidth(c,2.0f);assert(c->state==PS5VK_INVALID);
     assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
     vkCmdSetDepthBias(c,0.0f,1.0f,0.0f);assert(c->state==PS5VK_INVALID);
+    /* The same clamp is legal once depthBiasClamp is enabled on the device;
+     * negative and NaN clamps are values, not errors. */
+    d.enabled_features|=PS5VK_FEATURE_DEPTH_BIAS_CLAMP;
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdSetDepthBias(c,0.0f,1.0f,0.0f);assert(c->state==PS5VK_RECORDING && c->depth_bias_clamp==1.0f);
+    vkCmdSetDepthBias(c,2.0f,-0.25f,NAN);
+    assert(c->state==PS5VK_RECORDING && c->depth_bias_clamp==-0.25f &&
+        c->depth_bias_constant==2.0f && isnan(c->depth_bias_slope));
+    assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+    d.enabled_features&=~PS5VK_FEATURE_DEPTH_BIAS_CLAMP;
     assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
     vkCmdSetBlendConstants(c,NULL);assert(c->state==PS5VK_INVALID);
     assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);

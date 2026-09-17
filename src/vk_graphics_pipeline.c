@@ -5,18 +5,22 @@
 #include <float.h>
 #include <string.h>
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
+/* The core dynamic states this profile executes: viewport, scissor and depth
+ * bias. Every other VkDynamicState stays refused, so a pipeline can never be
+ * created with a dynamic state that no draw would honour. */
 static int dynamic_states(const VkPipelineDynamicStateCreateInfo *info,
-                          VkBool32 *viewport, VkBool32 *scissor)
+                          VkBool32 *viewport, VkBool32 *scissor, VkBool32 *depth_bias)
 {
-    *viewport=*scissor=VK_FALSE;
+    *viewport=*scissor=*depth_bias=VK_FALSE;
     if(!info)return 1;
     if(info->sType!=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO ||
-       info->pNext || info->flags || info->dynamicStateCount>2 ||
+       info->pNext || info->flags || info->dynamicStateCount>3 ||
        (info->dynamicStateCount && !info->pDynamicStates))return 0;
     for(uint32_t i=0;i<info->dynamicStateCount;++i) {
         VkBool32 *flag;
         if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_VIEWPORT)flag=viewport;
         else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_SCISSOR)flag=scissor;
+        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_DEPTH_BIAS)flag=depth_bias;
         else return 0;
         if(*flag)return 0;
         *flag=VK_TRUE;
@@ -63,8 +67,8 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         in->stageCount != 2 || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    VkBool32 dynamic_viewport,dynamic_scissor;
-    if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor))
+    VkBool32 dynamic_viewport,dynamic_scissor,dynamic_depth_bias;
+    if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor,&dynamic_depth_bias))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL;
     for (unsigned i=0; i<2; ++i) {
@@ -111,15 +115,15 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (v->pNext || v->flags ||
         ia->pNext || ia->flags || ia->primitiveRestartEnable ||
         r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable ||
-        /* Depth bias is accepted only in its no-op form: the pinned upstream
-         * draw pipeline enables it with every factor and the clamp at zero,
-         * where the enable bit cannot change a fragment's depth. A non-zero
-         * bias stays refused rather than being silently dropped. Vulkan
-         * ignores the factors when the enable bit is clear, so only the
-         * enabled form is checked. */
-        (r->depthBiasEnable && (r->depthBiasConstantFactor != 0.0f ||
-                                r->depthBiasSlopeFactor != 0.0f ||
-                                r->depthBiasClamp != 0.0f)) ||
+        /* Depth bias executes: the constant and slope factors are programmed
+         * as the polygon offset the draw runs with. Vulkan ignores all three
+         * factors while depthBiasEnable is false and while the state is
+         * dynamic, so they are checked only in the static enabled form, and
+         * the only check is the feature rule: a non-zero clamp needs
+         * depthBiasClamp ENABLED on this logical device. No finiteness rule
+         * is invented; the factors keep their float bit patterns. */
+        (r->depthBiasEnable && !dynamic_depth_bias && r->depthBiasClamp != 0.0f &&
+         !(d->enabled_features & PS5VK_FEATURE_DEPTH_BIAS_CLAMP)) ||
         r->polygonMode != VK_POLYGON_MODE_FILL || r->lineWidth != 1.0f ||
         m->pNext || m->flags || m->rasterizationSamples != VK_SAMPLE_COUNT_1_BIT ||
         m->sampleShadingEnable || m->alphaToCoverageEnable || m->alphaToOneEnable ||
@@ -202,6 +206,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     p->dynamic_viewport=dynamic_viewport;p->dynamic_scissor=dynamic_scissor;
     if(!dynamic_viewport)p->viewport=*viewport;
     if(!dynamic_scissor)p->scissor=*scissor;
+    /* The enable is always static in this profile; the factors are static
+     * only when VK_DYNAMIC_STATE_DEPTH_BIAS was not declared, and a disabled
+     * bias keeps zero factors so a snapshot never carries ignored values. */
+    p->dynamic_depth_bias=dynamic_depth_bias;
+    p->raster.depth_bias_enable=r->depthBiasEnable?VK_TRUE:VK_FALSE;
+    if(r->depthBiasEnable && !dynamic_depth_bias) {
+        p->raster.depth_bias_constant=r->depthBiasConstantFactor;
+        p->raster.depth_bias_clamp=r->depthBiasClamp;
+        p->raster.depth_bias_slope=r->depthBiasSlopeFactor;
+    }
     p->push_constant_size=in->layout->push_constant_size;
     memcpy(p->push_constant_stages,in->layout->push_constant_stages,
            sizeof(p->push_constant_stages));
