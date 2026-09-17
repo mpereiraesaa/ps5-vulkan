@@ -92,7 +92,17 @@ VkResult ps5vk_runtime_compile_compute_features(
                           * promotion showed exactly that. */
                          PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
                          PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
-                         PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32))
+                         PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 |
+                         /* User-defined distances are a pre-raster export and a
+                          * pixel input: the compute adapter has no PSBC option
+                          * for either bit, and a compute-only device that
+                          * enabled them (the pinned CTS enables every reported
+                          * core feature on the device it creates) would
+                          * otherwise fail every vkCreateComputePipelines call
+                          * with VK_ERROR_FEATURE_NOT_PRESENT - the baseline run
+                          * of the clip/cull promotion showed exactly that. */
+                         PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
+                         PS5VK_FEATURE_SHADER_CULL_DISTANCE))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);

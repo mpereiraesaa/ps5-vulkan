@@ -67,6 +67,17 @@ static inline int ps5vk_profile_power_of_two(VkDeviceSize value)
  * features. */
 #define PS5VK_REQUIRED_POINT_SIZE 1.0f
 #define PS5VK_REQUIRED_LINE_WIDTH 1.0f
+/* User-defined clip and cull distances. The two packed position registers after
+ * POS0 carry eight float components: clip components first, cull continuing
+ * immediately after them, so the combined budget is eight and either feature may
+ * use all eight on its own. Vulkan 1.0 requires each of the three limits to be
+ * at least eight, and eight is what this frontend can execute: the stage
+ * interface refuses a declaration whose combined width exceeds those two
+ * registers (src/spirv_graphics_interface.c), and the native export packs clip
+ * then cull contiguously into them. */
+#define PS5VK_REQUIRED_CLIP_DISTANCES 8u
+#define PS5VK_REQUIRED_CULL_DISTANCES 8u
+#define PS5VK_REQUIRED_COMBINED_CLIP_CULL_DISTANCES 8u
 
 static inline void ps5vk_profile_mix(uint64_t *h, uint32_t value)
 {
@@ -148,6 +159,13 @@ static inline void ps5vk_physical_profile_init(
     limits->lineWidthRange[1] = PS5VK_REQUIRED_LINE_WIDTH;
     limits->maxSampleMaskWords = PS5VK_REQUIRED_SAMPLE_MASK_WORDS;
     limits->discreteQueuePriorities = PS5VK_REQUIRED_QUEUE_PRIORITIES;
+    /* Reported unconditionally: the three floors are mandatory limits, and the
+     * executable width is the same eight components whether or not the logical
+     * device enables a distance feature (the feature decides whether a shader
+     * may declare them, not how wide the registers are). */
+    limits->maxClipDistances = PS5VK_REQUIRED_CLIP_DISTANCES;
+    limits->maxCullDistances = PS5VK_REQUIRED_CULL_DISTANCES;
+    limits->maxCombinedClipAndCullDistances = PS5VK_REQUIRED_COMBINED_CLIP_CULL_DISTANCES;
 
     limits->maxBoundDescriptorSets = PS5VK_MAX_SETS;
     limits->maxPerStageDescriptorStorageBuffers = PS5VK_MAX_DESCRIPTORS;
@@ -215,6 +233,10 @@ static inline int ps5vk_physical_profile_valid(
         limits->mipmapPrecisionBits < PS5VK_REQUIRED_MIPMAP_PRECISION_BITS ||
         limits->maxVertexOutputComponents < PS5VK_REQUIRED_INTERFACE_COMPONENTS ||
         limits->maxFragmentInputComponents < PS5VK_REQUIRED_INTERFACE_COMPONENTS ||
+        limits->maxClipDistances < PS5VK_REQUIRED_CLIP_DISTANCES ||
+        limits->maxCullDistances < PS5VK_REQUIRED_CULL_DISTANCES ||
+        limits->maxCombinedClipAndCullDistances <
+            PS5VK_REQUIRED_COMBINED_CLIP_CULL_DISTANCES ||
         limits->pointSizeRange[0] < PS5VK_REQUIRED_POINT_SIZE ||
         limits->pointSizeRange[1] < PS5VK_REQUIRED_POINT_SIZE ||
         limits->lineWidthRange[0] < PS5VK_REQUIRED_LINE_WIDTH ||

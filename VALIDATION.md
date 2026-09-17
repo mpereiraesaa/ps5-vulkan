@@ -96,66 +96,95 @@ other case's digest is unchanged from the direct run, so the indirect path is th
 only variable. The packed distance export, the register state the adapter
 requires and the clipping result therefore hold through T03's indirect command
 path, not only through direct draws.
-The fragment read is refused, and it is worth stating which gate a pipeline
-actually hits: the stage-interface policy refuses a fragment-stage
-`gl_ClipDistance`/`gl_CullDistance` declaration outright, so pipeline creation
-fails before any compile, and the native metadata adapter (`native/runtime_shader.c`)
-independently refuses a pixel stage whose compiled metadata reports a clip or
-cull mask, because this profile does not deliver the distances to the pixel
-stage.
+### What promoted the two features (2026-09-17)
 
-What the missing half consists of is now measured rather than assumed. For a
-pixel stage that reads `gl_ClipDistance[0]` and `gl_CullDistance[1]`, the
-isolated compiler candidate compiles the reads into ordinary interpolated
-inputs - the ISA interpolates the two distances and the varying through the same
-`v_interp` pairs - but reports **no input semantics at all**
-(`input_semantic_count=0` together with `PSBC_UNRESOLVED_AGC_LINKAGE`). The
-reason is in the compiler's own information pass: it requires every
-pixel-stage attribute slot to be described by a user-varying, while the built-in
-distance slots are skipped by design, so one distance input leaves the whole
-description unresolved. The pinned compiler runs the same pass (source-verified
-at `c96cb63b`) and does not report the read widths at all; the candidate adds
-`ps_clip_distance_reads`/`ps_cull_distance_reads`, which is how the adapter names
-the same condition.
+The fragment read that used to be refused is now implemented, measured and part
+of the canonical acceptance selection, so `shaderClipDistance` and
+`shaderCullDistance` are reported true by the graphics build.
 
-Delivering the read therefore needs two things this profile does not have: a
-compiler-side description of the distance attribute, and a pixel-input mapping
-the AGC linker accepts. The linker builds all 32 `SPI_PS_INPUT_CNTL` registers
-itself from the shader headers' semantics (the host-side linked-state contract
-the native path already programs through), so the open question is which
-semantic key maps a pixel input to the distance attribute - console evidence (a
-scoped dump of the linked state for a shader that reads them) would settle it,
-and it cannot be inferred or guessed here. Until then the declaration stays
-refused and both features stay `false`.
+**The compiler describes both ends of the interface.** The merged pre-raster
+stage publishes one semantic word per packed distance register it exports (low
+byte `PSBC_SEMANTIC_DISTANCE_REGISTER + register`, parameter index above it,
+emitted after the described varyings), and the pixel stage publishes the same
+key for the register it reads. The register a read lands in comes from the
+read's position in the packed builtin space - the linker already places a
+`gl_ClipDistance[4]` read in the second slot with component 0, and a cull array
+that starts after a one-component clip array in the second slot as well - so the
+compiler derives it from that slot and component, not from the attribute index,
+which the linker numbers densely. Measured on the pinned fixtures: the vertex
+exporting two clip components and one varying reports output semantics
+`[15 param0, 48 param1]`, the fragment reading `clip[0]` reports `[48 attr0,
+15 attr1]`, a fragment reading only `clip[4]` reports `[49]`, and a combined
+1-clip/7-cull pair reports `[48, 49]` - with `PSBC_UNRESOLVED_AGC_LINKAGE` gone
+in every case.
 
-Because the feature flag is the only gate the upstream oracle applies,
-advertising either feature today would assert the whole family, including the
-fragment-read variants this profile cannot run, and it would also present the
-dynamic-index variants as measured when their compile-and-package path has been
-checked and their witness is prepared but not run. The honest report is
-therefore `false` for both features, the
-limits stay at the gated-off value, and the reporting matrix cites the
-fragment-stage refusal as the effective gate.
+**The driver delivers a described read.** `distances_valid` now requires one
+described word per exported register and counts the parameter exports from that
+description; `ps5vk_runtime_graphics_distance_reads_described()` checks the
+pixel stage's read report against the producer's packed masks (clip low bits,
+cull immediately after) and requires every register the pixel stage names to
+exist once on the export side; and the pipeline gate refuses a pair whose read
+is not described end to end. The profile delivers such a pair in the shipping
+build, not only in the diagnostic one.
 
-The 25 leaves this profile's measured subset would cover are recorded in
-`cts/upstream/manifest.json` as diagnostics with `expected_status`
-`NotSupported`, next to the reason above, so a later slice that implements the
-fragment-stage read - the one genuinely missing mode - can promote them by
-changing the acceptance list and the device report together. The canonical
-acceptance selection is unchanged at 211 leaves (165 before the T03 tranche).
+**The limits are reported at the Vulkan floor.** `maxClipDistances` and
+`maxCullDistances` are 8 and `maxCombinedClipAndCullDistances` is 8: the two
+packed position registers after POS0 hold eight float components, clip
+components first and cull continuing immediately after them, so either feature
+may use all eight and the combined budget is eight. The stage-interface policy
+bounds a declaration against exactly that width (a 4-clip/4-cull module is
+accepted, an 8-clip/8-cull module is refused), which is what makes the reported
+numbers executable rather than merely the floor.
+
+**Acceptance, frozen and run.** The canonical selection is now 275 acceptance
+leaves (211 + 64 clipping leaves: clip counts 1..8 for the combined family with
+one cull count each, both indexing modes and the fragment-stage read) with 14
+diagnostics. One strict run of
+`build/upstream-cts` passed **275/275** (selection hash
+`3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d`, eboot sha256
+`b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7`, run
+`20260917T114927552Z_PPSA99994_upstream-cts_0x13a34bfa824d`, Close Game verified and the title
+stopped). The clipping family is what validates the reported limits: the leaves
+step through every clip count up to eight and the combined clip+cull budget.
+
+**Two honest gaps remain inside the family.** The `complementarity.{1..8}` and
+`misc.negative_and_non_negative_cull_distance` leaves stay diagnostics
+(`expected_status` `NotSupported`): the pinned binary does not report them when
+they are filtered by the name the module's construction implies - they are
+absent from both the `ps5log/1` transcript and the QPA in two full runs, while
+every other clipping leaf reports - so they are not claimed as covered. The
+tessellation and geometry variants of the family are outside this profile's
+advertised features and stay unselected.
+
+The native witness behind the fragment read is the eleven-case clip/cull
+package: case 10 (the pixel stage reading `gl_ClipDistance[0]`) verifies with
+`expected=4096 covered=4096 missing=0 foreign=0 wrong_color=0`, digest
+`f50dd9368fee6cc9`, in the acceptance run
+`20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65` (eboot
+`e1cc2681…`), and the read digest differs from the control's as the verifier
+requires; an earlier run on a pre-promotion build measured the same digests,
+which is what makes the result reproducible rather than a single sample. The
+witness package is the diagnostic profile; the shipping profile is covered by
+the upstream run above, whose 16 fragment-read leaves execute the read through
+the ordinary pipeline gate.
 
 ### What this does and does not establish
 
 It establishes the vertex-stage clip/cull contract, the packed register state
 the pinned compiler emits for it, the per-half-space culling rule and the
-hardware clipping result for the measured shapes, plus the compiler and adapter
-behaviour of a dynamically indexed declaration (full-width mask, accepted
-package) and the witness case that renders a dynamically indexed write and
-requires it to reproduce the static image. It does not establish fragment-shader
-reads of the distances (the one mode still missing), any tessellation or geometry
-variant of the family, or the two core features themselves, and it is not a
-Vulkan conformance claim. The dynamically indexed write is now *established* by
-the run above, including its byte-identical static image.
+hardware clipping result for the measured shapes, the compiler and adapter
+behaviour of a dynamically indexed declaration and the witness case that
+requires it to reproduce the static image, and - since the promotion above - the
+fragment stage's read of the interpolated distances, which is what the
+promotion section records: the compiler describes the distance registers on both
+sides, the driver requires that description before it delivers, and the 64
+selected upstream clipping leaves pass inside a 275/275 acceptance run on the
+shipping profile. It does not establish the tessellation or geometry variants of
+the family (their features are not advertised), the two `complementarity`/`misc`
+leaves the pinned binary does not enumerate under their implied names, any
+distance width beyond the reported eight components, or Vulkan conformance; it is
+not a conformance claim, and the features are advertised only for the graphics
+execution path this repository builds.
 
 ## Optional stage blockers: geometry and tessellation (2026-09-17)
 

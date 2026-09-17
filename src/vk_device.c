@@ -39,6 +39,18 @@ static const struct core_feature_bit {
      PS5VK_FEATURE_MULTI_DRAW_INDIRECT},
     {offsetof(VkPhysicalDeviceFeatures, drawIndirectFirstInstance),
      PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE},
+    /* User-defined distances: the pre-raster stage exports them through the
+     * packed position registers and the fragment stage reads them back. Both
+     * halves run on the graphics path and both are native-witnessed (the
+     * eleven-case clip/cull witness verifies the export, the dynamically
+     * indexed write and the pixel read), so the two members carry the platform
+     * bits the graphics build sets - see src/device_profile_report.h for the
+     * three distance limits, which the profile reports at the Vulkan floor of
+     * eight because that is the width the two registers hold. */
+    {offsetof(VkPhysicalDeviceFeatures, shaderClipDistance),
+     PS5VK_FEATURE_SHADER_CLIP_DISTANCE},
+    {offsetof(VkPhysicalDeviceFeatures, shaderCullDistance),
+     PS5VK_FEATURE_SHADER_CULL_DISTANCE},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,

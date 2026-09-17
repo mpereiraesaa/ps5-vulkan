@@ -65,27 +65,36 @@ int ps5vk_runtime_graphics_distance_reads_described(const PsbcShaderMetadata *pr
     /* The pixel stage's own report must agree with what the module declares. */
     if(fragment->ps_clip_distance_reads!=declared_clip ||
        fragment->ps_cull_distance_reads!=declared_cull)return 0;
-    /* The pre-raster stage must export every component the pixel stage reads... */
+    /* The pre-raster stage must export every component the pixel stage reads.
+     * The masks are packed: the clip components occupy the low bits and the cull
+     * components continue immediately after them, so the cull field starts at
+     * the clip count. */
     if((pre_raster->clip_distance_mask&((1u<<declared_clip)-1u))!=
            ((1u<<declared_clip)-1u) ||
-       (pre_raster->cull_distance_mask&((1u<<declared_cull)-1u))!=
-           ((1u<<declared_cull)-1u))return 0;
-    /* ... and both halves must name the same packed registers: the producer
-     * word carries the register's parameter index, the consumer word names the
-     * register it reads, and the AGC linker pairs them on that private key. */
+       (pre_raster->cull_distance_mask&(((1u<<declared_cull)-1u)<<declared_clip))!=
+           (((1u<<declared_cull)-1u)<<declared_clip))return 0;
+    /* ... and every register the pixel stage NAMES must exist on the export
+     * side, exactly once: the producer word carries the register's parameter
+     * index, the consumer word names the register it reads, and the AGC linker
+     * pairs them on that private key. The pixel stage only names the registers
+     * it actually reads - a shader that reads gl_ClipDistance[4] and nothing
+     * else names the second register and not the first - so the producer may
+     * describe registers the consumer does not mention, and the other way round
+     * is what would be wrong. */
     const unsigned registers=(declared_clip+declared_cull+3u)/4u;
     if(!registers || registers>2u)return 0;
-    for(unsigned r=0;r<registers;++r) {
-        unsigned described_in=0,described_out=0;
-        for(uint32_t i=0;i<fragment->input_semantic_count;++i)
-            described_in+=(fragment->input_semantics[i]&255u)==
-                (PSBC_SEMANTIC_DISTANCE_REGISTER+r);
-        for(uint32_t i=0;i<pre_raster->output_semantic_count;++i)
-            described_out+=(pre_raster->output_semantics[i]&255u)==
-                (PSBC_SEMANTIC_DISTANCE_REGISTER+r);
-        if(described_in!=1 || described_out!=1)return 0;
+    unsigned named=0;
+    for(uint32_t i=0;i<fragment->input_semantic_count;++i) {
+        const uint32_t key=fragment->input_semantics[i]&255u;
+        if(key<PSBC_SEMANTIC_DISTANCE_REGISTER ||
+           key>=PSBC_SEMANTIC_DISTANCE_REGISTER+registers)continue;
+        unsigned described_out=0;
+        for(uint32_t j=0;j<pre_raster->output_semantic_count;++j)
+            described_out+=(pre_raster->output_semantics[j]&255u)==key;
+        if(described_out!=1)return 0;
+        ++named;
     }
-    return 1;
+    return named!=0;
 }
 
 int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
