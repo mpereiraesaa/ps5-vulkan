@@ -114,6 +114,7 @@ def main():
             (ROOT / "native/queue_ps5.c", []),
             (ROOT / "native/present_ps5.c", []),
             (ROOT / "native/command_arena_ps5.c", []),
+            (ROOT / "native/draw_batch_ps5.c", []),
             (ROOT / "src/ps5vk_present.c", []),
             (ROOT / "src/compute_commands.c", []),
             (ROOT / "src/dispatch_encode.c", []),

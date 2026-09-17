@@ -178,7 +178,7 @@ class TestReportingMatrix(unittest.TestCase):
         false_rows = [row for row in data["features"] if row["reported"] is False]
         self.assertTrue(false_rows)
         for row in false_rows:
-            verdict, detail = matrix.evaluate_feature(row["feature"], False)
+            verdict, detail = matrix.evaluate_feature(row["feature"], False, row["profile"])
             self.assertEqual(verdict, "satisfied", row["feature"])
             self.assertTrue(detail)
         self.assertFalse([row for row in data["features"]

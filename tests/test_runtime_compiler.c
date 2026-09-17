@@ -204,6 +204,25 @@ int main(void)
     uint32_t *bad_code = NULL;
     assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
         NULL, UINT32_C(0x80000000), &bad_prog, &bad_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+    /* Every graphics-only device feature the console platform reports and the
+     * pinned CTS enables on the device it creates must be transparent to the
+     * compute adapter: the mask of a real T03 device compiles a compute shader
+     * exactly like the bare mask does. A promotion candidate that forgot one
+     * of these bits failed every compute pipeline on hardware. */
+    {
+        struct ps5vk_compiled_program graphics_device_program;
+        uint32_t *graphics_device_code = NULL;
+        const uint32_t graphics_device_mask = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+            PS5VK_FEATURE_STORAGE_BUFFER_8BIT | PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+            PS5VK_FEATURE_SHADER_DRAW_PARAMETERS | PS5VK_FEATURE_MULTIVIEW |
+            PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE | PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
+            PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, graphics_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+    }
 
     /* Corrupted SPIR-V header */
     uint32_t bad_spv[16] = {0x12345678, 0, 0, 0};

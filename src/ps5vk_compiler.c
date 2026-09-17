@@ -79,7 +79,20 @@ VkResult ps5vk_runtime_compile_compute_features(
                           * VK_ERROR_UNKNOWN from vkCreateComputePipelines.
                           * Every bit this adapter does not know still fails
                           * closed below. */
-                         PS5VK_FEATURE_MULTIVIEW))
+                         PS5VK_FEATURE_MULTIVIEW |
+                         /* The three DXVK262-T03 draw features are likewise
+                          * graphics-only: indirect firstInstance, multi-draw
+                          * DrawIndex and the 32-bit index range live in the
+                          * indirect frontend and the graphics queue, and a
+                          * compute shader has no PSBC option for any of them.
+                          * The pinned CTS enables every reported core feature
+                          * on the device it creates, so leaving them out here
+                          * would once more fail every compute pipeline with
+                          * VK_ERROR_UNKNOWN - the first candidate run of this
+                          * promotion showed exactly that. */
+                         PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
+                         PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
+                         PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);

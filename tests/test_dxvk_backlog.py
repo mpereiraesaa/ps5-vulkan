@@ -29,9 +29,9 @@ class DxvkBacklogTests(unittest.TestCase):
         summary = backlog.validate(self.document, self.matrix)
         self.assertEqual(15, summary["tranches"])
         self.assertEqual(61, summary["requirements"])
-        self.assertEqual(3, summary["implementation_ready"])
-        self.assertEqual(3, summary["profile_satisfied"])
-        self.assertEqual(58, summary["remaining_profile_blockers"])
+        self.assertEqual(6, summary["implementation_ready"])
+        self.assertEqual(6, summary["profile_satisfied"])
+        self.assertEqual(55, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,

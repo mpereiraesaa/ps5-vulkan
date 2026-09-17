@@ -74,9 +74,9 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertNotEqual(
             rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"]["native"],
             rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"]["native"])
-        # Three multiview rows advance; API 1.3 remains a separate blocker.
-        self.assertEqual(4, document["summary"]["satisfied"])
-        self.assertEqual(58, document["summary"]["blocker"])
+        # Three multiview rows and the three T03 draw rows advance; API 1.3 remains a separate blocker.
+        self.assertEqual(7, document["summary"]["satisfied"])
+        self.assertEqual(55, document["summary"]["blocker"])
 
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
@@ -85,13 +85,18 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(4, document["summary"]["satisfied"])
-        self.assertEqual(58, document["summary"]["blocker"])
+        self.assertEqual(7, document["summary"]["satisfied"])
+        self.assertEqual(55, document["summary"]["blocker"])
         self.assertEqual(
-            ["feature:VkPhysicalDeviceFeatures:robustBufferAccess",
-             "feature:VkPhysicalDeviceVulkan11Features:multiview",
-             "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
-             "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"],
+            [
+                         "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+                         "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+                         "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+                         "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+                         "feature:VkPhysicalDeviceVulkan11Features:multiview",
+                         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+                         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+            ],
             [row["id"] for row in document["requirements"]
              if row["verdict"] == "satisfied"])
         self.assertNotIn("not-run",
@@ -134,8 +139,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(4, document["summary"]["satisfied"])
-                self.assertEqual(58, document["summary"]["blocker"])
+                self.assertEqual(7, document["summary"]["satisfied"])
+                self.assertEqual(55, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 

@@ -9,6 +9,8 @@ from tools.verify_consumer_resource_abi import (
     APP, INPASS_CHANGED, INPASS_HASH, SECONDARY_CONTROL_HASH,
     SECONDARY_EXECUTED_HASH, TEXEL_FORMAT_CASES, TITLE,
     DRAW_PARAMETER_CASES, DRAW_PARAMETER_COVERED_MINIMUM,
+    INDIRECT_CASES, INDIRECT_CLEAR_WORD, INDIRECT_EXPANSIONS, INDIRECT_EXTENT,
+    INDIRECT_MAX_COMMANDS,
     DRAW_PARAMETER_DST_CLEAR_WORD, DRAW_PARAMETER_DST_UPLOAD_WORD,
     DRAW_PARAMETER_EXTENT, DRAW_PARAMETER_UPLOAD_EDGE,
     TWO_SUBPASS_CHANGED, TWO_SUBPASS_FIRST_HASH, TWO_SUBPASS_HASH,
@@ -17,6 +19,77 @@ from tools.verify_consumer_resource_abi import (
 
 DRAW_PARAMETER_VERT_SHA256 = "1" * 64
 DRAW_PARAMETER_FRAG_SHA256 = "2" * 64
+INDIRECT_VERT_SHA256 = "3" * 64
+INDIRECT_COMP_SHA256 = "4" * 64
+# The arena chain the 65535-command case reports in the synthetic run.
+INDIRECT_MAX_ARENAS = 61
+
+
+def indirect_messages(first_serial=19):
+    """The indirect/indexed witness rows as the hardware emits them.
+
+    Ten graphics frames, each prepared with one draw and followed by its
+    host-side staging readback; the compute-generated case adds one compute
+    submission before its frame; the four multi-command cases carry the
+    driver's own expansion record, and the 65535-command case its arena chain.
+    """
+    rows = [
+        f"PS5VK_CONSUMER_INDIRECT_FEATURES multiDrawIndirect=1 drawIndirectFirstInstance=1 "
+        f"fullDrawIndexUint32=1 maxDrawIndirectCount={INDIRECT_MAX_COMMANDS} "
+        f"maxDrawIndexedIndexValue=4294967295",
+        f"PS5VK_CONSUMER_INDIRECT_START cases={len(INDIRECT_CASES)} extent={INDIRECT_EXTENT} "
+        f"clear_word={INDIRECT_CLEAR_WORD:08x}",
+        "PS5VK_CONSUMER_INDIRECT_PIPELINE topology=triangle_list push_bytes=16 created=1",
+        # The target's GENERAL transition and clear: a transfer prelude that the
+        # router prepares with no dispatch and that submits and completes
+        # without a graphics prepare record. Its serial sits outside every
+        # graphics range the fixture can produce.
+        "PS5VK_QUEUE_PREPARED serial=201 dispatches=0",
+        "PS5VK_GRAPHICS_SUBMIT serial=201 rc=0",
+        "PS5VK_GRAPHICS_SUSPEND_POINT serial=201 rc=0",
+        "PS5VK_GRAPHICS_COMPLETED serial=201 image_bytes=0",
+        f"PS5VK_CONSUMER_INDIRECT_TARGET layout=general clear_word={INDIRECT_CLEAR_WORD:08x} prelude=1",
+    ]
+    expansions = {name: (commands, drawing, draws)
+                  for name, commands, drawing, draws in INDIRECT_EXPANSIONS}
+    serial = first_serial
+    for name, cells, pinned in INDIRECT_CASES:
+        if name == "compute_generated_arguments":
+            rows.extend([
+                f"PS5VK_QUEUE_PREPARED serial={serial} dispatches=1",
+                f"PS5VK_QUEUE_SUBMIT serial={serial} index=0 rc=0",
+                f"PS5VK_QUEUE_SUSPEND_POINT serial={serial} index=0 rc=0",
+                f"PS5VK_QUEUE_COMPLETED serial={serial} index=0 token={serial}00000001 gcr=0070f528",
+                "PS5VK_CONSUMER_INDIRECT_ARGUMENTS_GENERATED commands=4 vertices=3 "
+                "first_instance_base=20 barrier=compute_shader_write_to_indirect_command_read",
+            ])
+            serial += 1
+        arenas = INDIRECT_MAX_ARENAS if name == "max_draw_indirect_count" else 1
+        if name in expansions:
+            commands, drawing, draws = expansions[name]
+            rows.append(f"PS5VK_MULTI_DRAW_EXPANDED serial={serial} body=0 commands={commands} "
+                        f"drawing={drawing} draws={draws} arenas={arenas}")
+        rows.append(f"PS5VK_GRAPHICS_PREPARED serial={serial} draws=1 words={arenas * 30000}")
+        if arenas > 1:
+            rows.append(f"PS5VK_GRAPHICS_BATCHES serial={serial} arenas={arenas} words={arenas * 30000}")
+        rows.append(f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0")
+        rows.append(f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0")
+        for arena in range(1, arenas):
+            rows.append(f"PS5VK_GRAPHICS_BATCH_COMPLETED serial={serial} arena={arena - 1} arenas={arenas}")
+            rows.append(f"PS5VK_GRAPHICS_BATCH_SUBMIT serial={serial} arena={arena} arenas={arenas} "
+                        f"words=30000 rc=0")
+            rows.append(f"PS5VK_GRAPHICS_BATCH_SUSPEND_POINT serial={serial} arena={arena} rc=0")
+        rows.append(f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=262144")
+        rows.append(f"PS5VK_CONSUMER_INDIRECT case={name} cells={cells} expected={pinned} "
+                    f"matched={pinned} wrong=0 stray=0 covered={pinned * 3} valid=1")
+        if name == "compute_generated_arguments":
+            rows.append("PS5VK_CONSUMER_INDIRECT_ARGUMENTS_READBACK first=3,1,0,20 last=3,1,0,23")
+        serial += 1
+    rows.append(f"PS5VK_CONSUMER_INDIRECT_RESULT cases={len(INDIRECT_CASES)} "
+                f"witnessed={len(INDIRECT_CASES)} valid=1")
+    rows.append(f"PS5VK_CONSUMER_INDIRECT_RETIRED cases={len(INDIRECT_CASES)} "
+                f"witnessed={len(INDIRECT_CASES)}")
+    return rows
 
 
 def draw_parameter_messages(first_serial=13,
@@ -27,11 +100,12 @@ def draw_parameter_messages(first_serial=13,
         # The destination witness also records the pinned resource-less barrier
         # that orders its transfer write against the colour-attachment stages;
         # the router prepares that one submission with no dispatches, so it
-        # submits and completes without a graphics prepare record.
-        "PS5VK_QUEUE_PREPARED serial=60 dispatches=0",
-        "PS5VK_GRAPHICS_SUBMIT serial=60 rc=0",
-        "PS5VK_GRAPHICS_SUSPEND_POINT serial=60 rc=0",
-        "PS5VK_GRAPHICS_COMPLETED serial=60 image_bytes=0",
+        # submits and completes without a graphics prepare record. Its serial
+        # sits outside every graphics range the fixture can produce.
+        "PS5VK_QUEUE_PREPARED serial=200 dispatches=0",
+        "PS5VK_GRAPHICS_SUBMIT serial=200 rc=0",
+        "PS5VK_GRAPHICS_SUSPEND_POINT serial=200 rc=0",
+        "PS5VK_GRAPHICS_COMPLETED serial=200 image_bytes=0",
         f"PS5VK_CONSUMER_DRAW_PARAMETERS_DST "
         f"clear_word={DRAW_PARAMETER_DST_CLEAR_WORD:08x} "
         f"clear_matched={DRAW_PARAMETER_EXTENT * DRAW_PARAMETER_EXTENT - DRAW_PARAMETER_UPLOAD_EDGE * DRAW_PARAMETER_UPLOAD_EDGE} "
@@ -200,7 +274,8 @@ MESSAGES[-3:-3] = FIXED_FUNCTION_MESSAGES
 class ConsumerResourceAbiTests(unittest.TestCase):
     def fixture(self, edit=None, sampled=False, shared=False, visibility=None,
                 single=False, mixed=False, secondary=False, inpass=False,
-                texel_formats=False, two_subpass=False, draw_parameters=False):
+                texel_formats=False, two_subpass=False, draw_parameters=False,
+                indirect=False):
         sampled = sampled or shared or single or mixed
         messages = list(MESSAGES)
         if draw_parameters:
@@ -217,6 +292,27 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                                        f"{tail}")
             at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
             messages[at:at] = draw_parameter_messages()
+        if indirect:
+            # The indirect witness runs after the draw-parameter witness and
+            # before the presentation block: ten graphics frames plus one
+            # compute submission take eleven serials there, so only the rows
+            # from the presentation block onwards shift by eleven (after the
+            # draw-parameter shift above).
+            at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
+            for index in range(at, len(messages)):
+                message = messages[index]
+                if message.startswith("PS5VK_GRAPHICS_") and " serial=" in message:
+                    prefix, rest = message.split(" serial=")
+                    serial, tail = rest.split(" ", 1)
+                    messages[index] = f"{prefix} serial={int(serial) + 11} {tail}"
+            messages[at:at] = indirect_messages(
+                first_serial=13 + (len(DRAW_PARAMETER_CASES) if draw_parameters else 0))
+            negotiated = messages.index(next(
+                message for message in messages
+                if message.startswith("PS5VK_CONSUMER_STORAGE_WIDTH_NEGOTIATED ")))
+            messages.insert(negotiated + 1,
+                            "PS5VK_CONSUMER_INDIRECT_NEGOTIATED multiDrawIndirect=1 "
+                            "drawIndirectFirstInstance=1 fullDrawIndexUint32=1 enabled=core_features2")
         if inpass:
             # The scenario runs after the last finite frame and before the
             # surface is destroyed, and costs exactly two extra graphics
@@ -348,6 +444,16 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             "draw_parameters": {
                 "cases": [case[0] for case in DRAW_PARAMETER_CASES],
                 "vertex_shader_sha256": DRAW_PARAMETER_VERT_SHA256,
+                "fragment_shader_sha256": DRAW_PARAMETER_FRAG_SHA256,
+            },
+            "indirect_draws": {
+                "features": ["drawIndirectFirstInstance", "fullDrawIndexUint32",
+                             "multiDrawIndirect"],
+                "cases": [case[0] for case in INDIRECT_CASES],
+                "extent": INDIRECT_EXTENT,
+                "max_commands": INDIRECT_MAX_COMMANDS,
+                "vertex_shader_sha256": INDIRECT_VERT_SHA256,
+                "compute_shader_sha256": INDIRECT_COMP_SHA256,
                 "fragment_shader_sha256": DRAW_PARAMETER_FRAG_SHA256,
             },
             "buffer_transfer": {
@@ -740,6 +846,92 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         self.assertEqual(fnv1a32(executed), SECONDARY_EXECUTED_HASH)
         self.assertEqual(fnv1a32(guard), SECONDARY_CONTROL_HASH)
         self.assertNotEqual(SECONDARY_EXECUTED_HASH, SECONDARY_CONTROL_HASH)
+
+    def test_indirect_witness_is_accepted_and_reported(self):
+        for draw_parameters in (False, True):
+            with self.subTest(draw_parameters=draw_parameters):
+                result = validate(*self.fixture(indirect=True, draw_parameters=draw_parameters))
+                self.assertEqual(result["indirect_draw_cases"], len(INDIRECT_CASES))
+                self.assertEqual(result["indirect_max_commands_arenas"], INDIRECT_MAX_ARENAS)
+        self.assertEqual(validate(*self.fixture())["indirect_draw_cases"], 0)
+
+    def test_indirect_witness_pins_every_cell_count_and_driver_record(self):
+        rows = indirect_messages()
+
+        def rewrite(row, field, value):
+            def edit(messages):
+                index = messages.index(row)
+                messages[index] = " ".join(
+                    f"{field}={value}" if part.startswith(f"{field}=") else part
+                    for part in messages[index].split())
+            return edit
+
+        case_rows = [row for row in rows if row.startswith("PS5VK_CONSUMER_INDIRECT case=")]
+        self.assertEqual(len(case_rows), len(INDIRECT_CASES))
+        mutations = []
+        for row in case_rows:
+            pinned = dict(part.split("=", 1) for part in row.split()[1:])["expected"]
+            mutations += [(row, "matched", str(int(pinned) - 1)), (row, "wrong", "1"),
+                          (row, "stray", "1"), (row, "valid", "0"),
+                          (row, "covered", str(int(pinned) - 1)), (row, "cells", "8")]
+        expansion_rows = [row for row in rows if row.startswith("PS5VK_MULTI_DRAW_EXPANDED ")]
+        self.assertEqual(len(expansion_rows), len(INDIRECT_EXPANSIONS))
+        for row in expansion_rows:
+            mutations += [(row, "drawing", "1"), (row, "draws", "1"), (row, "commands", "2")]
+        features_row = next(row for row in rows if row.startswith("PS5VK_CONSUMER_INDIRECT_FEATURES "))
+        mutations += [(features_row, "maxDrawIndirectCount", "1"),
+                      (features_row, "fullDrawIndexUint32", "0"),
+                      (features_row, "maxDrawIndexedIndexValue", "16777215")]
+        readback_row = next(row for row in rows
+                            if row.startswith("PS5VK_CONSUMER_INDIRECT_ARGUMENTS_READBACK "))
+        mutations += [(readback_row, "last", "3,1,0,22"), (readback_row, "first", "0,1,0,20")]
+        batches_row = next(row for row in rows if row.startswith("PS5VK_GRAPHICS_BATCHES "))
+        mutations += [(batches_row, "arenas", "1")]
+        result_row = rows[-2]
+        mutations += [(result_row, "witnessed", "9"), (result_row, "valid", "0")]
+        for row, field, value in mutations:
+            with self.subTest(row=row.split()[0] + " " + row.split()[1], field=field, value=value), \
+                    self.assertRaises(ValueError):
+                validate(*self.fixture(indirect=True, edit=rewrite(row, field, value)))
+
+    def test_indirect_witness_requires_every_row_and_the_manifest(self):
+        rows = indirect_messages()
+        # Every witness row is load-bearing: dropping any one of them is a failure.
+        for row in rows:
+            def drop(messages, row=row):
+                messages.remove(row)
+            with self.subTest(row=row[:60]), self.assertRaises(ValueError):
+                validate(*self.fixture(indirect=True, edit=drop))
+        # A single-arena report for the 65535-command case is not the chain the
+        # driver must have used, and a stray extra expansion is not accepted.
+        def single_arena(messages):
+            index = messages.index(next(m for m in messages if m.startswith("PS5VK_GRAPHICS_BATCHES ")))
+            del messages[index]
+            for i, message in enumerate(messages):
+                if message.startswith("PS5VK_MULTI_DRAW_EXPANDED ") and "commands=65535" in message:
+                    messages[i] = message.rsplit(" arenas=", 1)[0] + " arenas=1"
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(indirect=True, edit=single_arena))
+        def extra_expansion(messages):
+            index = messages.index(next(m for m in messages if m.startswith("PS5VK_MULTI_DRAW_EXPANDED ")))
+            messages.insert(index, messages[index])
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(indirect=True, edit=extra_expansion))
+        for mutate in (
+                lambda a: a.__delitem__("indirect_draws"),
+                lambda a: a["indirect_draws"].update(max_commands=1),
+                lambda a: a["indirect_draws"].update(cases=a["indirect_draws"]["cases"][:-1]),
+                lambda a: a["indirect_draws"].update(compute_shader_sha256="z" * 64),
+                lambda a: a["indirect_draws"].update(features=["multiDrawIndirect"])):
+            log, receipt, artifact = self.fixture(indirect=True)
+            mutate(artifact)
+            with self.assertRaises(ValueError):
+                validate(log, receipt, artifact)
+        # The negotiation line is required too.
+        def drop_negotiated(messages):
+            messages.remove(next(m for m in messages if m.startswith("PS5VK_CONSUMER_INDIRECT_NEGOTIATED ")))
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(indirect=True, edit=drop_negotiated))
 
     def test_draw_parameter_witness_is_accepted_and_reported(self):
         result = validate(*self.fixture(draw_parameters=True))

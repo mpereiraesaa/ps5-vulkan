@@ -114,11 +114,90 @@ and Close Game both passed. The historical six-view and instance-floor
 execution witnesses below remain intact and supply the dedicated boundary
 evidence; the selected CTS leaves alone do not test the maximum instance index.
 
-The three corresponding profile rows are now satisfied; the matrix is **4/62
-ready, 58 blockers**. This does not advertise the Vulkan 1.2 aggregate query
+The three corresponding profile rows were satisfied by that run; the matrix
+was **4/62 ready, 58 blockers** at the time (see the indirect and indexed draw
+acceptance below for the current 7/62). This does not advertise the Vulkan 1.2 aggregate query
 structures or raise `apiVersion` above 1.0. The equivalent KHR fields and the
 separate unmet API-1.3 requirement remain explicit. Raw QPA and transport logs
 remain private; sanitized identities are recorded here and in the manifest.
+
+## Indirect and indexed draw native acceptance (2026-09-16)
+
+DXVK262-T03 promotes the three Vulkan 1.0 core features
+`drawIndirectFirstInstance`, `multiDrawIndirect` and `fullDrawIndexUint32`,
+with `maxDrawIndirectCount = 65535` and `maxDrawIndexedIndexValue = 2^32-1`
+reported through the public `VkPhysicalDeviceFeatures` / limits queries. The
+executable contract is described in [API.md](API.md#indirect-commands); the
+evidence below is one candidate build, strict at every step, and the promotion
+carries no `apiVersion` change, no conformance statement and no
+`VK_KHR_draw_indirect_count`.
+
+**Upstream CTS 211/211 Pass**, run
+`20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458`:
+
+- SELF SHA-256: `fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6`.
+- Selection SHA-256: `266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`
+  (the previous 165 acceptance leaves plus 46 original indirect leaves: the six
+  `shader_draw_parameters` first-instance and `draw_index` leaves, and forty
+  `indirect_draw` sequential/indexed leaves with multi-command, first-instance
+  and four-instance shapes, including the 16-byte index bind and allocation
+  offsets).
+- QPA SHA-256: `de55e1c79828b06a9e50ccff5628c546c61e3daf16c518b57576548411c98b17`
+  (28,417,868 bytes; 74,005 reassembled chunks); process exit 0; no
+  NotSupported, Fail, missing, duplicate or unexpected case; verified Close
+  Game. Five unrelated diagnostics remain outside acceptance.
+
+A first candidate run (`20260916T234945696Z_PPSA99994_upstream-cts_0x1504ef9d20ea0`)
+had every graphics leaf, the 46 new ones included, pass, while all 57 compute
+leaves failed at `vkCreateComputePipelines`: the compute compiler adapter fails
+closed on any enabled device feature it does not list and the CTS enables the
+three newly reported core features. The adapter now lists the three
+graphics-only bits, a real-compiler regression test pins a full graphics
+device mask, and the run above is the clean repeat.
+
+**Public-SDK indirect witness**, run
+`20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a`, SELF
+`779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a`, log
+SHA-256 `932f2237de1887e7e2b1157f5a68cbd03c5109280d8e4c542c7ffb80a5880b47`,
+`strict_verified=1`, verified Close Game. A 256x256 grid target receives one
+triangle per draw or instance in the cell it selects, coloured with the
+delivered built-ins or its 16-bit cell index, and every cell is judged from
+the linear staging readback (no wrong cell, no stray coverage):
+
+- indirect `firstInstance = 5` over three instances and indexed indirect
+  `firstInstance = 200` over two instances (BaseVertex 0xff from
+  `vertexOffset = -1`): instance cells 0..2 / 0..1 carry `gl_InstanceIndex`
+  5..7 / 200..201;
+- strided (32-byte, junk between) and packed multi-draw of four commands with
+  one zero-primitive command: cells 0, 2, 3 carry DrawIndex 0, 2, 3 and their
+  own `firstInstance`; cell 1 stays clear
+  (`PS5VK_MULTI_DRAW_EXPANDED commands=4 drawing=3 draws=3`);
+- GPU-generated arguments: host-written zero-vertex commands overwritten by a
+  compute dispatch behind a compute -> indirect barrier, consumed by the next
+  submission (`firstInstance` 20..23 observed);
+- **65535 packed commands in one call**: 65535 distinct pixels, each carrying
+  its own 16-bit DrawIndex, pixel 65535 clear
+  (`commands=65535 drawing=65535 draws=65535 arenas=66`,
+  `PS5VK_GRAPHICS_BATCHES arenas=66 words=2098325`, 65 chained launches);
+- 32-bit indices: `0x80000000..0x8000000b` with `vertexOffset = INT32_MIN`
+  (direct and through an indexed indirect command), `0x01000000..0x0100000b`
+  with `vertexOffset = -16777216`, and a uint16 control, each landing in cells
+  0..3 by `gl_VertexIndex / 3`. This is a bounded legal witness of the fetched
+  32-bit index and the signed BaseVertex add at bit 31 and at the 2^24
+  boundary; it does not touch out-of-range vertices and does not by itself
+  cover primitive restart, which the pipeline path still refuses.
+
+**Public-ABI capability probe**, run
+`20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369`, SELF
+`da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9`, log
+SHA-256 `5f3e685c15a2e1613dd451e25a88fc1ddb9602342599d2e6938004bb24cb33d8`:
+strict verification derived 7 satisfied / 55 blockers from the pinned profile,
+device API 1.0.0, five device extensions, the three core features reported
+true and the multiview KHR route unchanged; verified Close Game.
+
+All three runs came from the same source state (t03 promotion candidate; the
+committed executable sources equal the tested ones). Raw QPA, transport logs
+and receipts stay private under `private-captures/t03/`.
 
 ## Layer-addressed target measurement (2026-09-15, DXVK262-T02 slice A)
 
@@ -1475,8 +1554,11 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is 4/62 satisfied and 58 blockers. Core
-`robustBufferAccess` and the three multiview requirements have all four axes.
+The current checked result is 7/62 satisfied and 55 blockers. Core
+`robustBufferAccess`, the three multiview requirements and the three indirect
+and indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
+`fullDrawIndexUint32`, see [their acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16))
+have all four axes.
 The multiview probe uses explicitly tagged equivalent KHR queries, not the
 unimplemented Vulkan 1.2 aggregate structs. The API 1.3.204 floor remains
 blocked. See [multiview native acceptance](#multiview-native-acceptance) for the

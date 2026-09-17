@@ -31,15 +31,16 @@
  * user-data slot for it (psbc_compile.h, metadata version 13), the runtime ABI
  * mirrors that slot, and ps5vk_draw_index_value() supplies the value the shader
  * must observe: the pinned specification defines DrawIndex as zero for every
- * direct draw and as beginning at zero for indirect draws, and ps5vk refuses
- * more than one draw per command (multiDrawIndirect is false), so every draw
- * it executes is that first draw and the value is zero.
+ * direct draw and as the index of the command within a vkCmdDraw*Indirect
+ * call, beginning at zero for each call. The recorded operation carries zero;
+ * vk_indirect.c assigns the command index to each resolved snapshot at the
+ * queue head (ps5vk_indirect_resolve_command), including commands that draw
+ * no primitive, so the sequence is never compacted or renumbered and never
+ * accumulates across calls.
  *
- * The direct/single-indirect contract is now independently witnessed and
- * advertised through the device platform mask. Multi-draw remains a separate
- * expansion: this helper still supplies zero for a single draw and does not
- * claim non-zero DrawIndex support. The legacy diagnostic supported() helper
- * below is not consulted by public feature queries.
+ * The direct/single-indirect contract is independently witnessed and
+ * advertised through the device platform mask. The legacy diagnostic
+ * supported() helper below is not consulted by public feature queries.
  */
 #ifndef PS5VK_DRAW_PARAMETERS_H
 #define PS5VK_DRAW_PARAMETERS_H
@@ -58,14 +59,12 @@ static inline uint32_t ps5vk_draw_base_instance(const struct ps5vk_operation *op
     return op ? op->first_instance : 0;
 }
 
-/* The DrawIndex a shader must observe for one recorded draw. ps5vk executes at
- * most one draw per command, so this is the first draw of the command and the
- * specification makes that zero. A future multi-draw path (T03) must pass its
- * sequence index here instead of a constant. */
+/* The DrawIndex a shader must observe for one draw: the command index the
+ * queue-head resolution stored in the snapshot, zero for a recorded direct
+ * draw and for the first command of any indirect call. */
 static inline uint32_t ps5vk_draw_index_value(const struct ps5vk_operation *op)
 {
-    (void)op;
-    return 0u;
+    return op ? op->draw_index : 0u;
 }
 
 /* Default ViewIndex for the single-view path. Multiview replay supplies the
