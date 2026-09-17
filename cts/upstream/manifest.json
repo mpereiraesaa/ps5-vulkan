@@ -3167,36 +3167,6 @@
       "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
     },
     {
-      "path": "dEQP-VK.geometry.input.basic_primitive.triangles",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:271",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.triangles_to_points",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:296",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.triangles_to_lines",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:299",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
-    },
-    {
       "path": "dEQP-VK.geometry.basic.output_10",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1093",
       "category": "geometry-stage-builtin-gap",
@@ -3355,6 +3325,36 @@
         "core:geometryShader"
       ],
       "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangles",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:271",
+      "category": "geometry-stage-awaiting-advertisement",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable AND now runnable: the device compiles this leaf's shape, the per-primitive id it declares is delivered and hardware-witnessed (the seventeen-case geometry witness asserts a case whose markers carry the id the hardware gave), and the pinned pipeline plus the module's reference images run in this payload. Measured on the frozen acceptance: with the feature unadvertised the pinned CTS reports this leaf NotSupported (run 20260917T1731..., 278/278 reported, zero Fail), so it becomes ACCEPTANCE the moment the feature is advertised. That advertisement is not yet honest - the pinned module's other input families (points and lines) are also expected of a device that advertises geometryShader, and this profile still compiles triangles-only geometry stages even though the compiler already accepts points-in and lines-in ones (measured host-side: result=success, es_verts 29 and 56). Next slice: bound the geometry stage's input array by the pipeline topology and witness the points/lines families, then advertise and take this leaf as acceptance."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.triangles_to_points",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:296",
+      "category": "geometry-stage-awaiting-advertisement",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable AND now runnable: the device compiles this leaf's shape, the per-primitive id it declares is delivered and hardware-witnessed (the seventeen-case geometry witness asserts a case whose markers carry the id the hardware gave), and the pinned pipeline plus the module's reference images run in this payload. Measured on the frozen acceptance: with the feature unadvertised the pinned CTS reports this leaf NotSupported (run 20260917T1731..., 278/278 reported, zero Fail), so it becomes ACCEPTANCE the moment the feature is advertised. That advertisement is not yet honest - the pinned module's other input families (points and lines) are also expected of a device that advertises geometryShader, and this profile still compiles triangles-only geometry stages even though the compiler already accepts points-in and lines-in ones (measured host-side: result=success, es_verts 29 and 56). Next slice: bound the geometry stage's input array by the pipeline topology and witness the points/lines families, then advertise and take this leaf as acceptance."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.triangles_to_lines",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:299",
+      "category": "geometry-stage-awaiting-advertisement",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable AND now runnable: the device compiles this leaf's shape, the per-primitive id it declares is delivered and hardware-witnessed (the seventeen-case geometry witness asserts a case whose markers carry the id the hardware gave), and the pinned pipeline plus the module's reference images run in this payload. Measured on the frozen acceptance: with the feature unadvertised the pinned CTS reports this leaf NotSupported (run 20260917T1731..., 278/278 reported, zero Fail), so it becomes ACCEPTANCE the moment the feature is advertised. That advertisement is not yet honest - the pinned module's other input families (points and lines) are also expected of a device that advertises geometryShader, and this profile still compiles triangles-only geometry stages even though the compiler already accepts points-in and lines-in ones (measured host-side: result=success, es_verts 29 and 56). Next slice: bound the geometry stage's input array by the pipeline topology and witness the points/lines families, then advertise and take this leaf as acceptance."
     }
   ]
 }

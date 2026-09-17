@@ -30,6 +30,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_ENVELOPE:return 15;
     case PS5VK_GEOMETRY_INVOCATIONS:return 16;
     case PS5VK_GEOMETRY_COMPONENTS:return 17;
+    case PS5VK_GEOMETRY_PRIMITIVE_ID:return 18;
     }
     return -2;
 }
@@ -45,6 +46,8 @@ enum { READ_PRIMITIVES = 7 };
 enum { READ_CASES = 3 };
 /* The invocations the pipeline declares: the feature's mandatory minimum. */
 enum { INVOCATION_COUNT = 32 };
+/* The witness draw is two triangles, so the primitive ids are zero and one. */
+enum { PRIMITIVE_COUNT = 2 };
 
 static float read_bytes_vertex_x(unsigned vertex)
 { return -0.6875f + 0.0625f * (float)vertex; }
@@ -217,6 +220,15 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
      * with the colour its own inputs produce. */
     case PS5VK_GEOMETRY_COMPONENTS:
         return ndc_x>=-0.5 && ndc_x<=0.5 && ndc_y>=-0.5 && ndc_y<=0.5;
+    /* The per-primitive id: one column per primitive of the witness draw, placed
+     * by the id the stage read. */
+    case PS5VK_GEOMETRY_PRIMITIVE_ID:
+        for(unsigned id=0;id<PRIMITIVE_COUNT;++id) {
+            const double column=-0.6+0.6*(double)id;
+            if(ndc_x>=column-0.02 && ndc_x<=column+0.02 &&
+               ndc_y>=-0.2 && ndc_y<=0.2)return 1;
+        }
+        return 0;
     default:
         /* The stage emits nothing at all. */
         return 0;
@@ -319,6 +331,23 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
             if(2.0*u-1.0<column-0.02 || 2.0*u-1.0>column+0.02)continue;
             if(2.0*v-1.0<-0.2 || 2.0*v-1.0>0.2)continue;
             rgba[0]=unorm8((double)k/31.0);
+            rgba[1]=unorm8(0.5);
+            rgba[2]=unorm8(0.25);
+            rgba[3]=255u;
+            return;
+        }
+        rgba[0]=rgba[1]=rgba[2]=0u;
+        rgba[3]=255u;
+        return;
+    }
+    if(witness_case==PS5VK_GEOMETRY_PRIMITIVE_ID) {
+        /* The marker carries the id it read, so a constant or stale id is a
+         * different image rather than a missing one. */
+        for(unsigned id=0;id<PRIMITIVE_COUNT;++id) {
+            const double column=-0.6+0.6*(double)id;
+            if(2.0*u-1.0<column-0.02 || 2.0*u-1.0>column+0.02)continue;
+            if(2.0*v-1.0<-0.2 || 2.0*v-1.0>0.2)continue;
+            rgba[0]=unorm8((double)id);
             rgba[1]=unorm8(0.5);
             rgba[2]=unorm8(0.25);
             rgba[3]=255u;
@@ -436,6 +465,9 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     /* The components case draws a known quad, neither empty nor the whole
      * target. */
     case PS5VK_GEOMETRY_COMPONENTS:
+    /* The per-primitive id case draws two known columns, neither empty nor the
+     * whole target. */
+    case PS5VK_GEOMETRY_PRIMITIVE_ID:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
         return witness->expected_covered==0u && witness->covered==0u;

@@ -1916,6 +1916,11 @@ static void geometry_probe(VkDevice d)
         .pCode=ps5vk_runtime_geometry_components_stage};
     CHECK(vkCreateShaderModule(d,&components_vertex_info,NULL,&components_vertex_module));
     CHECK(vkCreateShaderModule(d,&components_info,NULL,&components_module));
+    VkShaderModule primitive_id_module;
+    VkShaderModuleCreateInfo pgi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_primitive_id_stage),
+        .pCode=ps5vk_runtime_geometry_primitive_id_stage};
+    CHECK(vkCreateShaderModule(d,&pgi,NULL,&primitive_id_module));
     VkShaderModule invocations_module;
     VkShaderModuleCreateInfo igi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize=sizeof(ps5vk_runtime_geometry_invocations_stage),
@@ -1964,7 +1969,7 @@ static void geometry_probe(VkDevice d)
         PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_INDEXED_MARKER,
         PS5VK_GEOMETRY_READ_V0,PS5VK_GEOMETRY_READ_V1,PS5VK_GEOMETRY_READ_V2,
         PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_INVOCATIONS,PS5VK_GEOMETRY_COMPONENTS,
-        PS5VK_GEOMETRY_POSITIONS};
+        PS5VK_GEOMETRY_PRIMITIVE_ID,PS5VK_GEOMETRY_POSITIONS};
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
@@ -1990,6 +1995,8 @@ static void geometry_probe(VkDevice d)
             stages[1].module=envelope_module;
         if(witness_case==PS5VK_GEOMETRY_INVOCATIONS)
             stages[1].module=invocations_module;
+        if(witness_case==PS5VK_GEOMETRY_PRIMITIVE_ID)
+            stages[1].module=primitive_id_module;
         if(witness_case==PS5VK_GEOMETRY_COMPONENTS) {
             stages[0].module=components_vertex_module;
             stages[1].module=components_module;
@@ -2210,6 +2217,10 @@ static void geometry_probe(VkDevice d)
         * so equal to either would mean its inputs did not reach the stage. */
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_COMPONENTS] ||
        digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_COMPONENTS] ||
+       /* The per-primitive id image is two coloured columns: equal to a
+        * full-coverage case would mean the markers were not placed. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_PRIMITIVE_ID] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_PRIMITIVE_ID] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -2225,6 +2236,7 @@ static void geometry_probe(VkDevice d)
         "digest_read_v0=%016llx digest_read_v1=%016llx digest_read_v2=%016llx "
         "digest_envelope=%016llx "
         "digest_invocations=%016llx digest_components=%016llx "
+        "digest_primitive_id=%016llx "
         "strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
@@ -2243,12 +2255,14 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_READ_V2],
         (unsigned long long)digests[PS5VK_GEOMETRY_ENVELOPE],
         (unsigned long long)digests[PS5VK_GEOMETRY_INVOCATIONS],
-        (unsigned long long)digests[PS5VK_GEOMETRY_COMPONENTS]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_COMPONENTS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_PRIMITIVE_ID]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
     vkDestroyShaderModule(d,envelope_module,NULL);
     vkDestroyShaderModule(d,invocations_module,NULL);
+    vkDestroyShaderModule(d,primitive_id_module,NULL);
     vkDestroyShaderModule(d,components_vertex_module,NULL);
     vkDestroyShaderModule(d,components_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
