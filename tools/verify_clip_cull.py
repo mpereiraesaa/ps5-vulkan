@@ -41,17 +41,23 @@ CASES = (
     # cross-regression against T03's indirect command path, which must render the
     # direct quadrant's image exactly.
     (9, 2, PIXELS // 4),
+    # The pixel end of the distance interface: the fragment stage reads
+    # gl_ClipDistance[0] and multiplies its varying by it, with the vertex
+    # stage's all-positive set, so the coverage is the control's and the colours
+    # are a different function of the position. A pipeline that delivered the
+    # varying instead of the interpolated distance would equal case 1.
+    (10, 0, PIXELS),
 )
 POS_FORMAT = {-1: "00000004", 0: "00000044"}
 VS_OUT_CONFIG = {-1: "00000000", 0: "00000002"}
 VS_OUT_CNTL = {-1: "00000000", 0: "01400f03"}
 DIGEST_EQUAL = ((0, 1), (0, 4), (3, 6), (5, 7), (3, 8), (3, 9))
-DIGEST_DISTINCT = (0, 2, 3, 5)
+DIGEST_DISTINCT = (0, 2, 3, 5, 10)
 DIGEST_NAMES = {0: "digest_plain", 1: "digest_positive", 2: "digest_clip_half",
                 3: "digest_clip_quadrant", 4: "digest_cull_half",
                 5: "digest_cull_negative", 6: "digest_mixed",
                 7: "digest_cull_index", 8: "digest_dynamic_index",
-                9: "digest_indirect_quadrant"}
+                9: "digest_indirect_quadrant", 10: "digest_pixel_read"}
 INDIRECT_CASE = 9
 
 

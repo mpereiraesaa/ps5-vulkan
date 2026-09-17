@@ -44,6 +44,11 @@ def main():
         ("experiments/graphics/runtime_input_attachment_transform.frag", "runtime_input_attachment_transform.frag.spv", "input_attachment_transform"),
         ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_probe.vert.spv", "clip_cull_probe"),
         ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_control.vert.spv", "clip_cull_control"),
+        # The pixel end of the clip/cull interface: a fragment stage that reads
+        # gl_ClipDistance[0], so the witness measures whether the rasterizer
+        # delivers the interpolated distance the pre-raster stage exported.
+        ("experiments/graphics/runtime_clip_distance_read.frag",
+         "runtime_clip_distance_read.frag.spv", "clip_distance_read_fragment"),
         ("experiments/graphics/runtime_geometry_probe.vert", "runtime_geometry_probe.vert.spv", "geometry_vertex"),
         ("experiments/graphics/runtime_geometry_probe.geom", "runtime_geometry_probe.geom.spv", "geometry_stage"),
         # Synthetic suppress diagnostic only: an input-less fragment stage, so

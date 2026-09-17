@@ -42,7 +42,10 @@ class Fixture:
                    # The dynamically indexed write renders the quadrant image.
                    8: "3333333333333333",
                    # The indirect draw renders the same quadrant image.
-                   9: "3333333333333333"}
+                   9: "3333333333333333",
+                   # The pixel read keeps the coverage and changes the colour,
+                   # so it differs from the control and the positive case.
+                   10: "aaaaaaaaaaaaaaaa"}
         for case, mode, expected in verify.CASES:
             state = verify.VS_OUT_CONFIG[-1 if mode < 0 else 0]
             pos = verify.POS_FORMAT[-1 if mode < 0 else 0]
