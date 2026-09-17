@@ -38,7 +38,9 @@ class Fixture:
         digests = {0: "1111111111111111", 1: "1111111111111111",
                    2: "2222222222222222", 3: "3333333333333333",
                    4: "1111111111111111", 5: "5555555555555555",
-                   6: "3333333333333333", 7: "5555555555555555"}
+                   6: "3333333333333333", 7: "5555555555555555",
+                   # The dynamically indexed write renders the quadrant image.
+                   8: "3333333333333333"}
         for case, mode, expected in verify.CASES:
             state = verify.VS_OUT_CONFIG[-1 if mode < 0 else 0]
             pos = verify.POS_FORMAT[-1 if mode < 0 else 0]
@@ -159,6 +161,22 @@ class ClipCullVerifierTests(unittest.TestCase):
         records = [r.replace("digest_plain=1111111111111111",
                              "digest_plain=0000000000000000")
                    for r in fixture.records]
+        fixture.rebuild(records)
+        with self.assertRaises(ValueError):
+            fixture.validate()
+        # The dynamically indexed case must reproduce the statically indexed
+        # quadrant, so a run where the two differ is refused: that difference is
+        # exactly what the variant exists to test.
+        fixture = Fixture()
+        records = []
+        for record in fixture.records:
+            if record.startswith("PS5VK_CLIP_CULL_CASE") and "case=8 " in record:
+                record = record.replace("digest=3333333333333333",
+                                        "digest=8888888888888888")
+            if record.startswith("PS5VK_CLIP_CULL_PROBE"):
+                record = record.replace("digest_dynamic_index=3333333333333333",
+                                        "digest_dynamic_index=8888888888888888")
+            records.append(record)
         fixture.rebuild(records)
         with self.assertRaises(ValueError):
             fixture.validate()

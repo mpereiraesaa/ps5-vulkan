@@ -67,6 +67,9 @@ int main(void)
             break;
         case PS5VK_CLIP_CULL_CLIP_QUADRANT:
         case PS5VK_CLIP_CULL_MIXED:
+        /* The dynamically indexed write must produce the quadrant's image, so it
+         * keeps the same fraction and the same colours. */
+        case PS5VK_CLIP_CULL_DYNAMIC_INDEX:
             assert(witness.expected_covered==pixels/4);
             break;
         default:
@@ -109,6 +112,21 @@ int main(void)
 
     /* A target of the wrong size never verifies, and an unknown case is refused
      * instead of being treated as "nothing expected". */
+    /* The dynamically indexed case is judged against the statically indexed
+     * quadrant: the two images must be identical pixel for pixel, and the
+     * dynamic case must refuse the quadrant's own image when the distances it
+     * writes are not the ones the case names (the half-clipped image has the
+     * right colours on half the target). */
+    {
+        static uint8_t quadrant_image[EXTENT*EXTENT*4];
+        image_for(PS5VK_CLIP_CULL_CLIP_QUADRANT,quadrant_image);
+        image_for(PS5VK_CLIP_CULL_DYNAMIC_INDEX,image);
+        assert(!memcmp(quadrant_image,image,sizeof(image)));
+        assert(classify(PS5VK_CLIP_CULL_DYNAMIC_INDEX,image,&witness));
+        image_for(PS5VK_CLIP_CULL_CLIP_HALF,image);
+        assert(!classify(PS5VK_CLIP_CULL_DYNAMIC_INDEX,image,&witness));
+        assert(witness.foreign>0);
+    }
     image_for(PS5VK_CLIP_CULL_PLAIN,image);
     memset(&witness,0,sizeof(witness));
     ps5vk_clip_cull_witness_pixel(&witness,PS5VK_CLIP_CULL_PLAIN,0,0,EXTENT,image);
