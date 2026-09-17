@@ -90,7 +90,27 @@ enum {
      * image asserts that the whole declaration arrived through the handoff rather
      * than only that it compiled. */
     PS5VK_GEOMETRY_COMPONENTS = 15,
-    PS5VK_GEOMETRY_CASES = 16
+    /* The per-primitive id: every applicable upstream geometry leaf declares
+     * gl_PrimitiveIDIn, so this is the gateway to the feature's conformance
+     * leaves. Each invocation emits one marker whose place and colour come from
+     * the id the hardware gave it, so a stale or constant id collapses the image
+     * onto one marker. */
+    PS5VK_GEOMETRY_PRIMITIVE_ID = 16,
+    /* The point list input family: a device that advertises geometryShader is
+     * expected to feed a stage points as well as triangles. The stage declares
+     * ONE input vertex per primitive (gl_in[0] is the whole input, not a third
+     * of it) and emits one axis-aligned marker per input point whose place and
+     * colour both come from that point, so a stage that read a fixed item, a
+     * shifted one or a triangle-sized slice produces an image the oracle
+     * refuses. */
+    PS5VK_GEOMETRY_POINTS = 17,
+    /* The line list input family, same reasoning with two vertices per input
+     * primitive: the stage reads BOTH endpoints and emits a marker whose size
+     * comes from the segment it read and whose colour is the mean of the two
+     * endpoint colours, so reading only gl_in[0] changes both the extent and the
+     * colour of every marker. */
+    PS5VK_GEOMETRY_LINES = 18,
+    PS5VK_GEOMETRY_CASES = 19
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */
@@ -130,5 +150,15 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
  * places, so one run reports which item each read came from instead of a handful
  * of guessed coordinates. */
 unsigned ps5vk_geometry_witness_read_pixel(unsigned item,unsigned extent);
+
+/* The point/line family witness's own input, mirrored bit for bit by the
+ * pre-raster module the native harness binds to those cases: vertex index i
+ * carries the position below and the colour (i/5, 0.5, 0.25). The point case
+ * draws the first four vertices as a point list, the line case all six as a line
+ * list (three segments), and both the shader and the oracle read the same table
+ * so a divergence between them cannot pass as a measurement. */
+enum { PS5VK_GEOMETRY_FAMILY_VERTICES = 6 };
+void ps5vk_geometry_witness_family_vertex(unsigned index,double position[2],
+    double colour[3]);
 
 #endif

@@ -623,7 +623,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:geometryShader",
       "implementation": {
-        "detail": "the stage is described, compiled through the merged vertex+geometry pre-raster program, packaged by the adapter and hardware-witnessed (the ES->GS handoff delivers the bytes the ES wrote and the five mandatory minima are measured), but the applicable upstream geometry leaves cannot run yet: the pinned module loads its reference images from data assets this integration does not package (src/vk_graphics_pipeline.c)",
+        "detail": "the stage is described, compiled through the merged vertex+geometry pre-raster program, packaged by the adapter and hardware-witnessed (the ES->GS handoff delivers the bytes the ES wrote, and the five mandatory minima and the per-primitive id are measured), but a device that advertises this feature is expected to run the pinned module's points and lines input families too, and this profile still compiles triangles-only geometry stages (src/vk_graphics_pipeline.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],

@@ -82,17 +82,36 @@ struct ps5vk_graphics_library {
 };
 /* Topologies this profile accepts, and the GFX1013 primitive-type value the AGC
  * linker programs for each of them. The pinned compiler's primitive enum
- * (third_party/psbc-reference libpsbc/psbc_compile.c ps5_last_provoking_vertex)
- * and the pinned register header (amdgfxregs.h V_030908_DI_PT_TRILIST = 4,
- * V_030908_DI_PT_TRISTRIP = 6) agree on both values, so the shader compile and
+ * (third_party/psbc-reference libpsbc/psbc_compile.c ps5_last_provoking_vertex,
+ * which already maps point list 1, line list 2 and line strip 3 to their own
+ * provoking vertices) and the pinned register header (amdgfxregs.h
+ * V_030908_DI_PT_POINTLIST = 1, V_030908_DI_PT_LINELIST = 2,
+ * V_030908_DI_PT_LINESTRIP = 3, V_030908_DI_PT_TRILIST = 4,
+ * V_030908_DI_PT_TRISTRIP = 6) agree on every value, so the shader compile and
  * the linked pipeline cannot disagree about the primitive they were built for.
- * Every other topology stays fail-closed. */
+ * The point and line families are resolved because they are what a device
+ * advertising geometryShader is expected to feed a geometry stage with, but a
+ * topology this profile has not measured as a rasterized output on its own does
+ * not become accepted just because it resolves: see
+ * ps5vk_agc_primitive_needs_geometry below. Triangle fan, adjacency and every
+ * other topology stay fail-closed at the resolver. */
+#define PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST 1u
+#define PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST 2u
+#define PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP 3u
 #define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST 4u
 #define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP 6u
 static inline int ps5vk_agc_primitive_type(VkPrimitiveTopology topology,uint32_t *out)
 {
     if(!out)return -1;
     switch(topology) {
+    /* Points and lines are resolved for a geometry pipeline's INPUT; a plain
+     * pipeline stands or falls on ps5vk_agc_primitive_needs_geometry. */
+    case VK_PRIMITIVE_TOPOLOGY_POINT_LIST:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP;return 0;
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
         *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;return 0;
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
@@ -100,6 +119,28 @@ static inline int ps5vk_agc_primitive_type(VkPrimitiveTopology topology,uint32_t
     default:
         return -1;
     }
+}
+/* True for the primitive families this profile accepts only as the input of a
+ * geometry stage. The geometry witness measures exactly that shape - the
+ * merged program's link value, with the stage reading one vertex per point and
+ * two per line - while a plain point or line pipeline has no witness behind it,
+ * so it stays refused instead of riding on the geometry families' acceptance. */
+static inline int ps5vk_agc_primitive_needs_geometry(uint32_t primitive_type)
+{
+    return primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP;
+}
+/* The primitive values the native create path will hand to the AGC linker. It is
+ * the same set ps5vk_agc_primitive_type resolves, named separately because the
+ * native path receives the resolved value rather than the topology. */
+static inline int ps5vk_agc_primitive_linkable(uint32_t primitive_type)
+{
+    return primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;
 }
 VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *,
     const struct ps5vk_graphics_key *, const struct ps5vk_graphics_program **);

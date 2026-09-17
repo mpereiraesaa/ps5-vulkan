@@ -55,6 +55,9 @@ int main(void)
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_ENVELOPE)==15);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_INVOCATIONS)==16);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_COMPONENTS)==17);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_PRIMITIVE_ID)==18);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_POINTS)==19);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_LINES)==20);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CASES)==-2);
     /* Every declared case must be registered: an unregistered one would be
      * skipped by the native matrix without any run logging that it was missing. */
@@ -97,6 +100,12 @@ int main(void)
             assert(witness.expected_covered==336u);
             assert(witness.covered==336u);
             break;
+        case PS5VK_GEOMETRY_PRIMITIVE_ID:
+            /* Two columns, one per primitive of the witness draw, each as wide as
+             * its marker: 36 px at 64x64. A constant id collapses them to one. */
+            assert(witness.expected_covered==36u);
+            assert(witness.covered==36u);
+            break;
         case PS5VK_GEOMETRY_COMPONENTS:
             /* The centred quad, the same shape the constant case draws: 1024 px
              * at 64x64 with the colour the 64 input components produce. */
@@ -115,6 +124,20 @@ int main(void)
              * so the exact count is the measurement. */
             assert(witness.expected_covered==768u);
             assert(witness.covered==768u);
+            break;
+        case PS5VK_GEOMETRY_POINTS:
+            /* Four markers, one per input point, each 0.24 NDC on a side: 218 px
+             * at 64x64. A stage that read one fixed item would put every marker
+             * at that item's place, which changes the count and the colours. */
+            assert(witness.expected_covered==218u);
+            assert(witness.covered==218u);
+            break;
+        case PS5VK_GEOMETRY_LINES:
+            /* Three markers, one per input segment, each as wide as the segment
+             * it was built from plus a fixed margin: 467 px at 64x64. A stage
+             * that read only gl_in[0] would emit half-length markers. */
+            assert(witness.expected_covered==467u);
+            assert(witness.covered==467u);
             break;
         default:
             assert(witness.expected_covered==0);
@@ -248,6 +271,49 @@ int main(void)
     ps5vk_geometry_witness_expected(PS5VK_GEOMETRY_CONTROL,7,9,EXTENT,control_pixel);
     assert(sentinel_pixel[0]==control_pixel[0] && sentinel_pixel[1]==control_pixel[1]);
     assert(sentinel_pixel[2]!=control_pixel[2]);
+    /* The input families are judged on place AND colour per item, so each one
+     * refuses the other family's image and the full-coverage images, and an
+     * image where one marker carries a different item's colour can never pass -
+     * that is the whole point of giving every input item its own colour. */
+    image_for(PS5VK_GEOMETRY_POINTS,image);
+    assert(classify(PS5VK_GEOMETRY_POINTS,image,&witness));
+    assert(witness.covered==218u && !witness.foreign && !witness.wrong_color);
+    assert(!classify(PS5VK_GEOMETRY_LINES,image,&witness));
+    assert(witness.foreign>0u || witness.wrong_color>0u);
+    image_for(PS5VK_GEOMETRY_LINES,image);
+    assert(classify(PS5VK_GEOMETRY_LINES,image,&witness));
+    assert(witness.covered==467u && !witness.foreign && !witness.wrong_color);
+    assert(!classify(PS5VK_GEOMETRY_POINTS,image,&witness));
+    assert(witness.foreign>0u || witness.wrong_color>0u);
+    /* A point marker that carries another point's colour is refused: the read
+     * returned an item, just not this one. */
+    image_for(PS5VK_GEOMETRY_POINTS,image);
+    {
+        for(unsigned y=0;y<EXTENT;++y)for(unsigned x=0;x<EXTENT;++x) {
+            /* A FRESH probe per pixel: the counters are cumulative, so reusing
+             * one would turn "this pixel is covered" into "some pixel was". */
+            struct ps5vk_geometry_witness probe={0};
+            uint8_t candidate[4];
+            ps5vk_geometry_witness_expected(PS5VK_GEOMETRY_POINTS,x,y,EXTENT,candidate);
+            ps5vk_geometry_witness_pixel(&probe,PS5VK_GEOMETRY_POINTS,x,y,EXTENT,candidate);
+            /* Repaint every covered pixel with the LAST point's colour: the
+             * marker places are right, the colours name the wrong item. */
+            if(probe.expected_covered)
+                memset(image+4*((size_t)y*EXTENT+x),255,4);
+        }
+        assert(!classify(PS5VK_GEOMETRY_POINTS,image,&witness));
+        assert(witness.wrong_color>0u && !witness.foreign);
+    }
+    /* A missing line marker is a failure even though the other two are intact,
+     * and a marker of the wrong size (a stage that read only gl_in[0]) lands
+     * outside the oracle's rectangle, which the foreign count reports. */
+    image_for(PS5VK_GEOMETRY_LINES,image);
+    for(size_t i=0;i<sizeof(image);i+=4) {
+        const size_t pixel=i/4;
+        if(pixel%EXTENT==30u)memcpy(image+i,ps5vk_geometry_clear,4);
+    }
+    assert(!classify(PS5VK_GEOMETRY_LINES,image,&witness));
+    assert(witness.wrong_color>0u);
     /* A target of the wrong size or an unknown case never verifies. */
     memset(&witness,0,sizeof(witness));
     ps5vk_geometry_witness_pixel(&witness,PS5VK_GEOMETRY_CONTROL,0,0,EXTENT,image);

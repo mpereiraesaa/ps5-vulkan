@@ -30,9 +30,39 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_ENVELOPE:return 15;
     case PS5VK_GEOMETRY_INVOCATIONS:return 16;
     case PS5VK_GEOMETRY_COMPONENTS:return 17;
+    case PS5VK_GEOMETRY_PRIMITIVE_ID:return 18;
+    case PS5VK_GEOMETRY_POINTS:return 19;
+    case PS5VK_GEOMETRY_LINES:return 20;
     }
     return -2;
 }
+
+/* The point/line families' shared input, mirroring the pre-raster module
+ * experiments/graphics/runtime_geometry_family.vert exactly: vertex index i
+ * carries this position and the colour (i/5, 0.5, 0.25). The point case draws
+ * the first four as a point list, the line case all six as three segments, so
+ * the markers of one case never touch each other and every marker's place and
+ * colour is a function of the item the stage read. */
+static const double family_positions[PS5VK_GEOMETRY_FAMILY_VERTICES][2]={
+    {-0.6,-0.5},{-0.2,-0.5},{0.2,0.3},{0.7,0.3},{-0.7,0.6},{0.1,0.6}};
+void ps5vk_geometry_witness_family_vertex(unsigned index,double position[2],
+    double colour[3])
+{
+    if(index>=PS5VK_GEOMETRY_FAMILY_VERTICES)index=0u;
+    position[0]=family_positions[index][0];
+    position[1]=family_positions[index][1];
+    colour[0]=(double)index/5.0;
+    colour[1]=0.5;
+    colour[2]=0.25;
+}
+/* The point counts of the two input families, and the marker geometry the
+ * stages emit. Both are module constants: the point module declares a
+ * triangle_strip of four vertices per input point, the line module the same per
+ * input segment. */
+enum { FAMILY_POINTS = 4 };
+enum { FAMILY_SEGMENTS = 3 };
+/* The point module's half extent, both axes (runtime_geometry_points.geom). */
+static const double family_point_extent=0.12;
 
 /* The readback's own input: a diagnostic-only pre-raster half gives vertex i the
  * position x = -0.6875 + 0.0625 * i. Both constants are exact in binary, so the
@@ -45,6 +75,8 @@ enum { READ_PRIMITIVES = 7 };
 enum { READ_CASES = 3 };
 /* The invocations the pipeline declares: the feature's mandatory minimum. */
 enum { INVOCATION_COUNT = 32 };
+/* The witness draw is two triangles, so the primitive ids are zero and one. */
+enum { PRIMITIVE_COUNT = 2 };
 
 static float read_bytes_vertex_x(unsigned vertex)
 { return -0.6875f + 0.0625f * (float)vertex; }
@@ -151,6 +183,46 @@ static int marker_covers(int marker,double ndc_x,double ndc_y)
     return ndc_x>=cx-0.2 && ndc_x<=cx+0.2 && ndc_y>=cy-0.2 && ndc_y<=cy+0.2;
 }
 
+/* The point family's marker for one input point: the axis-aligned quad
+ * runtime_geometry_points.geom emits around the position it read. */
+static int family_point_covers(unsigned point,double ndc_x,double ndc_y)
+{
+    if(point>=FAMILY_POINTS)return 0;
+    double position[2],colour[3];
+    ps5vk_geometry_witness_family_vertex(point,position,colour);
+    return ndc_x>=position[0]-family_point_extent &&
+           ndc_x<=position[0]+family_point_extent &&
+           ndc_y>=position[1]-family_point_extent &&
+           ndc_y<=position[1]+family_point_extent;
+}
+
+/* The line family's marker for one input segment, mirrored from
+ * runtime_geometry_lines.geom: centred on the segment, half extent equal to
+ * half the segment plus a fixed margin, so a stage that read only its first
+ * vertex produces a marker of the wrong size at the wrong place. */
+static void family_line_marker(unsigned segment,double centre[2],double extent[2],
+    double colour[3])
+{
+    double a[2],b[2],ac[3],bc[3];
+    ps5vk_geometry_witness_family_vertex(2u*segment,a,ac);
+    ps5vk_geometry_witness_family_vertex(2u*segment+1u,b,bc);
+    centre[0]=(a[0]+b[0])*0.5;
+    centre[1]=(a[1]+b[1])*0.5;
+    /* abs(b-a)*0.5 + 0.1, the shader's expression. */
+    extent[0]=((b[0]>a[0]?b[0]-a[0]:a[0]-b[0])*0.5)+0.1;
+    extent[1]=((b[1]>a[1]?b[1]-a[1]:a[1]-b[1])*0.5)+0.1;
+    for(unsigned i=0;i<3;++i)colour[i]=(ac[i]+bc[i])*0.5;
+}
+
+static int family_line_covers(unsigned segment,double ndc_x,double ndc_y)
+{
+    if(segment>=FAMILY_SEGMENTS)return 0;
+    double centre[2],extent[2],colour[3];
+    family_line_marker(segment,centre,extent,colour);
+    return ndc_x>=centre[0]-extent[0] && ndc_x<=centre[0]+extent[0] &&
+           ndc_y>=centre[1]-extent[1] && ndc_y<=centre[1]+extent[1];
+}
+
 static uint8_t unorm8(double value)
 {
     if(value<=0.0)return 0u;
@@ -217,6 +289,26 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
      * with the colour its own inputs produce. */
     case PS5VK_GEOMETRY_COMPONENTS:
         return ndc_x>=-0.5 && ndc_x<=0.5 && ndc_y>=-0.5 && ndc_y<=0.5;
+    /* The per-primitive id: one column per primitive of the witness draw, placed
+     * by the id the stage read. */
+    case PS5VK_GEOMETRY_PRIMITIVE_ID:
+        for(unsigned id=0;id<PRIMITIVE_COUNT;++id) {
+            const double column=-0.6+0.6*(double)id;
+            if(ndc_x>=column-0.02 && ndc_x<=column+0.02 &&
+               ndc_y>=-0.2 && ndc_y<=0.2)return 1;
+        }
+        return 0;
+    /* The input families: real markers at the places the items the stage read
+     * put them, so a read of the wrong item moves the ink instead of leaving
+     * the target empty. */
+    case PS5VK_GEOMETRY_POINTS:
+        for(unsigned point=0;point<FAMILY_POINTS;++point)
+            if(family_point_covers(point,ndc_x,ndc_y))return 1;
+        return 0;
+    case PS5VK_GEOMETRY_LINES:
+        for(unsigned segment=0;segment<FAMILY_SEGMENTS;++segment)
+            if(family_line_covers(segment,ndc_x,ndc_y))return 1;
+        return 0;
     default:
         /* The stage emits nothing at all. */
         return 0;
@@ -328,6 +420,23 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
         rgba[3]=255u;
         return;
     }
+    if(witness_case==PS5VK_GEOMETRY_PRIMITIVE_ID) {
+        /* The marker carries the id it read, so a constant or stale id is a
+         * different image rather than a missing one. */
+        for(unsigned id=0;id<PRIMITIVE_COUNT;++id) {
+            const double column=-0.6+0.6*(double)id;
+            if(2.0*u-1.0<column-0.02 || 2.0*u-1.0>column+0.02)continue;
+            if(2.0*v-1.0<-0.2 || 2.0*v-1.0>0.2)continue;
+            rgba[0]=unorm8((double)id);
+            rgba[1]=unorm8(0.5);
+            rgba[2]=unorm8(0.25);
+            rgba[3]=255u;
+            return;
+        }
+        rgba[0]=rgba[1]=rgba[2]=0u;
+        rgba[3]=255u;
+        return;
+    }
     if(witness_case==PS5VK_GEOMETRY_COMPONENTS) {
         /* The sixteen exported vec4s carry (k, k+1, k+2, k+3) for location k, so
          * their 64 components sum to 576. The stage folds that sum into the
@@ -335,6 +444,39 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
         rgba[0]=unorm8(576.0/4096.0);
         rgba[1]=unorm8(0.5);
         rgba[2]=unorm8(0.25);
+        rgba[3]=255u;
+        return;
+    }
+    if(witness_case==PS5VK_GEOMETRY_POINTS) {
+        /* The marker carries the colour of the point it was built from, so a
+         * read that returned another item shows up as that item's colour at
+         * this place, not as a missing pixel. */
+        for(unsigned point=0;point<FAMILY_POINTS;++point) {
+            double position[2],colour[3];
+            if(!family_point_covers(point,2.0*u-1.0,2.0*v-1.0))continue;
+            ps5vk_geometry_witness_family_vertex(point,position,colour);
+            rgba[0]=unorm8(colour[0]);
+            rgba[1]=unorm8(colour[1]);
+            rgba[2]=unorm8(colour[2]);
+            rgba[3]=255u;
+            return;
+        }
+        rgba[0]=rgba[1]=rgba[2]=0u;
+        rgba[3]=255u;
+        return;
+    }
+    if(witness_case==PS5VK_GEOMETRY_LINES) {
+        for(unsigned segment=0;segment<FAMILY_SEGMENTS;++segment) {
+            double centre[2],extent[2],colour[3];
+            if(!family_line_covers(segment,2.0*u-1.0,2.0*v-1.0))continue;
+            family_line_marker(segment,centre,extent,colour);
+            rgba[0]=unorm8(colour[0]);
+            rgba[1]=unorm8(colour[1]);
+            rgba[2]=unorm8(colour[2]);
+            rgba[3]=255u;
+            return;
+        }
+        rgba[0]=rgba[1]=rgba[2]=0u;
         rgba[3]=255u;
         return;
     }
@@ -436,6 +578,14 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     /* The components case draws a known quad, neither empty nor the whole
      * target. */
     case PS5VK_GEOMETRY_COMPONENTS:
+    /* The per-primitive id case draws two known columns, neither empty nor the
+     * whole target. */
+    case PS5VK_GEOMETRY_PRIMITIVE_ID:
+    /* The point family draws four markers and the line family three, each a
+     * known shape at a place the item it read puts it: real coverage, neither
+     * empty (the stage did not run, or read nothing) nor the whole target. */
+    case PS5VK_GEOMETRY_POINTS:
+    case PS5VK_GEOMETRY_LINES:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
         return witness->expected_covered==0u && witness->covered==0u;

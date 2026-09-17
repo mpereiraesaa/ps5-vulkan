@@ -802,6 +802,23 @@ def main():
         # The shared draw utility the clipping module renders and reads back
         # through (vkt::drawutil::VulkanDrawContext and its pipeline state).
         cts_root / "external/vulkancts/modules/vulkan/util/vktDrawUtil.cpp",
+        # Original geometry shader module, registered whole under its own name.
+        # The module's own factory builds the leaves and its shaders go through
+        # its runtime glslang path; the reference images it compares against are
+        # embedded at build time (see tools/embed_cts_reference_images.py) and
+        # served by cts/upstream/image_io_ps5.cpp. cases.txt selects only the
+        # leaves whose input primitive, built-ins and envelope this profile
+        # compiles and has measured; the rest stay diagnostics in
+        # cts/upstream/manifest.json with the gate that refuses them.
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicClass.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryEmitGeometryShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryInstancedRenderingTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryLayeredRenderingTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryTestsUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp",
         # Original Vulkan 1.0 robustBufferAccess bodies and oracles, with only
         # registration pruned to compute/scalar_copy/R32_UINT.
         focused_sources / "vktRobustnessBufferAccessTests.cpp",
@@ -846,6 +863,14 @@ def main():
         compile_tasks.append((cxx_flags + [str(src), "-o", str(obj)], src, obj, env))
 
     # 9. PS5 custom files
+    # The reference images the packaged modules compare against are decoded from
+    # the pinned upstream assets at build time, because this integration carries
+    # no PNG decoder; cts/upstream/image_io_ps5.cpp serves the bytes back through
+    # the same tcu::ImageIO::loadPNG the modules call.
+    reference_images = obj_dir.parent / "geometry_reference_images.cpp"
+    subprocess.run([sys.executable, str(ROOT / "tools/embed_cts_reference_images.py"),
+                    "--source", str(cts_root / "external/vulkancts/data/vulkan/data/geometry"),
+                    "--out", str(reference_images)], check=True, cwd=ROOT)
     ps5_custom = [
         ROOT / "cts/upstream/thread_atexit_ps5.cpp",
         ROOT / "cts/upstream/dladdr_ps5.cpp",
@@ -853,6 +878,8 @@ def main():
         ROOT / "cts/upstream/log_sink_ps5.cpp",
         ROOT / "cts/upstream/package_ps5.cpp",
         ROOT / "cts/upstream/main_ps5.cpp",
+        ROOT / "cts/upstream/image_io_ps5.cpp",
+        reference_images,
     ]
     for src in ps5_custom:
         obj = obj_dir / "ps5" / (src.stem + ".o")

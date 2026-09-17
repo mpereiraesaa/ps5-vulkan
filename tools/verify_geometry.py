@@ -72,6 +72,22 @@ CASES = (
     # and a geometry stage that declares, reads and writes that many, folded into
     # a centred quad whose colour is an exact function of all of them (1024 px).
     (15, 17, 1024),
+    # The per-primitive id: every applicable upstream geometry leaf declares
+    # gl_PrimitiveIDIn, so this case is the gateway to the feature's conformance
+    # leaves. Two markers, one per primitive of the witness draw, whose place and
+    # colour both come from the id the stage read (36 px at 64x64).
+    (16, 18, 36),
+    # The point list input family: four input points, each with its own position
+    # and colour, and a marker per point whose place AND colour come from the
+    # item the stage read (218 px at 64x64). The pipeline's input assembly is
+    # POINT_LIST, which is the shape the stage's one-vertex input array is bound
+    # to; a stage that read a fixed or shifted item moves the markers.
+    (17, 19, 218),
+    # The line list input family: three segments, two vertices each, and a marker
+    # per segment whose size comes from the segment and whose colour is the mean
+    # of its endpoints (467 px at 64x64). A stage that read only gl_in[0] emits
+    # shorter markers with the wrong colour at the wrong place.
+    (18, 20, 467),
     # The input positions with a constant colour; it runs last because it is the
     # case that has lost the device before.
     (7, 6, PIXELS),
@@ -79,26 +95,36 @@ CASES = (
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
                 6: "digest_constant", 7: "digest_positions",
                 8: "digest_sentinel", 9: "digest_indexed_marker",
                 10: "digest_read_v0", 11: "digest_read_v1", 12: "digest_read_v2",
                 13: "digest_envelope", 14: "digest_invocations",
-                15: "digest_components"}
+                15: "digest_components", 16: "digest_primitive_id",
+                17: "digest_points", 18: "digest_lines"}
 # The readback cases draw 21 vertices (7 triangles) instead of the witness's six,
 # so item indices 0..20 exist and the three plausible readings of gl_in[k] - an
 # item index, a dword-scaled one and a byte-scaled one - land on written items
 # that identify themselves. Every other case keeps the two-triangle draw.
 READ_VERTICES = 21
 # The envelope case declares 256 output vertices (the feature's mandatory minimum);
-# every other geometry case declares the witness's nine.
-MAX_VERTICES = {13: 256}
+# the two input families emit a four-vertex marker per input primitive, and every
+# other geometry case declares the witness's nine.
+MAX_VERTICES = {13: 256, 17: 4, 18: 4}
 # The invocations case declares 32 invocations per primitive; the run has to show
 # the GE was told that count, so the check is on the launch state, not the name.
 GS_INVOCATIONS = {14: 32}
-DRAW_VERTICES = {10: READ_VERTICES, 11: READ_VERTICES, 12: READ_VERTICES}
+# The point case draws the family's first four vertices as points; the line case
+# draws all six as three segments. Both numbers are the count the input assembly
+# consumes for that family, not a witness constant.
+DRAW_VERTICES = {10: READ_VERTICES, 11: READ_VERTICES, 12: READ_VERTICES,
+                 17: 4, 18: 6}
+# VkPrimitiveTopology: POINT_LIST 0, LINE_LIST 1, TRIANGLE_LIST 3. The family
+# cases must have run with their own input assembly - that is what binds the
+# stage's declared input arity - and every other case keeps the triangle list.
+IN_PRIMITIVE = {17: 0, 18: 1}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 
@@ -176,6 +202,8 @@ def validate(log, receipt, artifact):
         require(draw.get("vertices") == str(DRAW_VERTICES.get(case, 6)) and
                 draw.get("instances") == "1",
                 f"case {case} draw")
+        require(draw.get("in_prim") == str(IN_PRIMITIVE.get(case, 3)),
+                f"case {case} input primitive")
         require(draw.get("gs_invocations") == str(GS_INVOCATIONS.get(case, 0)),
                 f"case {case} invocation count")
         if mode < 0:
