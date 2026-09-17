@@ -1803,6 +1803,14 @@ static void geometry_probe(VkDevice d)
     VkShaderModule geometry_module;
     CHECK(vkCreateShaderModule(d,&gsi,NULL,&geometry_module));
     CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment_module));
+    /* Synthetic suppress diagnostic: a fragment stage that reads no input, so
+     * the geometry half's suppress case (no output) still forms a legal pipeline
+     * under this profile's draw-ABI rule. Every other case keeps fragment_module. */
+    VkShaderModule suppress_fragment_module;
+    VkShaderModuleCreateInfo sfsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_suppress_fragment),
+        .pCode=ps5vk_runtime_geometry_suppress_fragment};
+    CHECK(vkCreateShaderModule(d,&sfsi,NULL,&suppress_fragment_module));
     VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .queueFamilyIndex=0};
     VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
@@ -1842,6 +1850,8 @@ static void geometry_probe(VkDevice d)
              .pSpecializationInfo=&spec},
             {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
              .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=fragment_module,.pName="main"}};
+        if(witness_case==PS5VK_GEOMETRY_SUPPRESS)
+            stages[2].module=suppress_fragment_module;
         VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
         VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1981,6 +1991,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
+    vkDestroyShaderModule(d,suppress_fragment_module,NULL);
     vkDestroyPipelineLayout(d,layout,NULL);
     vkDestroyFramebuffer(d,fb,NULL);
     vkDestroyRenderPass(d,pass,NULL);
