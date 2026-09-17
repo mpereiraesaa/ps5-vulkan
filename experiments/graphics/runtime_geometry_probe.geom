@@ -18,6 +18,35 @@ void main()
      * the interface policy refuses built-ins the adapter cannot deliver, and
      * this stage's per-primitive delivery has not been established. */
     if (MODE == 2) { return; }
+    if (MODE == 11) {
+        /* The discriminating read diagnostic: ONE fixed index, and the emitted
+         * marker carries both the place and the colour of the value that read
+         * returned. The oracle expects both markers (one per input primitive)
+         * at their computable places with those exact colours, so the outcome
+         * names which way it failed instead of only "an unstable image":
+         * correct read - both markers exactly right; read of another item - a
+         * marker at a computable other place with that item's colour; a clean
+         * target - the geometry half did not run for this shape; one marker -
+         * an input primitive was not processed at all. The position is clamped
+         * into the target so the marker cannot fall off the edge the way the
+         * extended input triangle does, while the colour uses the UNCLAMPED
+         * value so a different read is still visible. */
+        vec2 p = gl_in[0].gl_Position.xy;
+        vec2 q = vec2(clamp(p.x, -0.75, 0.75), clamp(p.y, -0.75, 0.75));
+        /* An axis-aligned QUAD, not a triangle: its edges are parallel to the
+         * target's axes, so the oracle's per-pixel test and the rasterizer's
+         * pixel-centre rule agree exactly and a correct image cannot fail on a
+         * fill rule. The two markers are 12x12 pixels at 64x64 by construction. */
+        const vec2 offsets[4] = vec2[4](vec2(-0.2, -0.2), vec2(0.2, -0.2),
+                                        vec2(-0.2, 0.2), vec2(0.2, 0.2));
+        for (int i = 0; i < 4; ++i) {
+            gl_Position = vec4(q + offsets[i], 0.5, 1.0);
+            out_color = vec3(p.x * 0.5 + 0.5, p.y * 0.5 + 0.5, 0.25);
+            EmitVertex();
+        }
+        EndPrimitive();
+        return;
+    }
     if (MODE == 6) {
         /* Positions from the input, colour constant: this is the position half
          * of the ES->GS handoff on its own, so a wrong varying cannot hide a

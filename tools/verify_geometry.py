@@ -43,17 +43,22 @@ CASES = (
     # Three sub-triangles tile the input triangle, so the amplified image must
     # be the control image again.
     (5, 4, PIXELS),
-    # The input positions with a constant colour.
+    # The discriminating read diagnostic: one fixed index, and the emitted
+    # marker carries the place and the colour of the value that read returned.
+    # Two 12x12 markers at 64x64, one per input primitive.
+    (9, 11, 288),
+    # The input positions with a constant colour; it runs last because it is the
+    # case that has lost the device before.
     (7, 6, PIXELS),
 )
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
                 6: "digest_constant", 7: "digest_positions",
-                8: "digest_sentinel"}
+                8: "digest_sentinel", 9: "digest_indexed_marker"}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 

@@ -1921,7 +1921,8 @@ static void geometry_probe(VkDevice d)
     static const unsigned order[PS5VK_GEOMETRY_CASES]={
         PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_SENTINEL,
         PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
-        PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_POSITIONS};
+        PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_INDEXED_MARKER,
+        PS5VK_GEOMETRY_POSITIONS};
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
@@ -2063,6 +2064,12 @@ static void geometry_probe(VkDevice d)
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SENTINEL] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_SENTINEL] ||
        digests[PS5VK_GEOMETRY_POSITIONS]==digests[PS5VK_GEOMETRY_SENTINEL] ||
+       /* The marker diagnostic draws two small quads, so an image equal to any
+        * full-coverage case means it did not run (or the read returned
+        * something that made it degenerate). */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -2070,7 +2077,7 @@ static void geometry_probe(VkDevice d)
         "max_vertices=3 digest_control=%016llx digest_passthrough=%016llx "
         "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
         "digest_amplify=%016llx digest_constant=%016llx digest_positions=%016llx "
-        "digest_sentinel=%016llx "
+        "digest_sentinel=%016llx digest_indexed_marker=%016llx "
         "strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
@@ -2082,7 +2089,8 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_AMPLIFY],
         (unsigned long long)digests[PS5VK_GEOMETRY_CONSTANT],
         (unsigned long long)digests[PS5VK_GEOMETRY_POSITIONS],
-        (unsigned long long)digests[PS5VK_GEOMETRY_SENTINEL]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_SENTINEL],
+        (unsigned long long)digests[PS5VK_GEOMETRY_INDEXED_MARKER]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);

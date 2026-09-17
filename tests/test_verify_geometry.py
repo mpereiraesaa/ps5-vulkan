@@ -41,7 +41,10 @@ class Fixture:
                         6: "6666666666666666", 7: "7777777777777777",
                         # The sentinel shares the control's coverage and differs
                         # from it in the colour its own mapping computes.
-                        8: "8888888888888888"}
+                        8: "8888888888888888",
+                        # The indexed marker draws two small quads, so it differs
+                        # from every full-coverage case by construction.
+                        9: "9999999999999999"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(
