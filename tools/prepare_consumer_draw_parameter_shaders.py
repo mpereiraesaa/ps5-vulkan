@@ -47,18 +47,25 @@ def main():
     raster_source = ROOT / "experiments/graphics/runtime_raster_witness.vert"
     raster = compile_shader(compiler, raster_source,
                             args.out.with_name("raster_witness.vert.spv"))
+    # The ViewportIndex routing witness: a geometry stage that sends primitive
+    # i to viewport i (multiViewport end to end, core rule).
+    routing_source = ROOT / "experiments/graphics/runtime_raster_viewport_index.geom"
+    routing = compile_shader(compiler, routing_source,
+                             args.out.with_name("raster_viewport_index.geom.spv"))
 
     header = ("/* Generated from experiments/graphics/runtime_draw_parameters.vert,\n"
               " * experiments/graphics/runtime_vertex_format.frag,\n"
               " * experiments/graphics/runtime_indirect_witness.vert,\n"
               " * experiments/compute/indirect_arguments.comp and\n"
-              " * experiments/graphics/runtime_raster_witness.vert. */\n"
+              " * experiments/graphics/runtime_raster_witness.vert and\n"
+              " * experiments/graphics/runtime_raster_viewport_index.geom. */\n"
               "#include <stdint.h>\n")
     header += emit_array("consumer_draw_parameters_vert_spirv", vertex)
     header += emit_array("consumer_draw_parameters_frag_spirv", fragment)
     header += emit_array("consumer_indirect_witness_vert_spirv", witness)
     header += emit_array("consumer_indirect_arguments_comp_spirv", arguments)
     header += emit_array("consumer_raster_witness_vert_spirv", raster)
+    header += emit_array("consumer_raster_viewport_index_geom_spirv", routing)
     header += ('#define CONSUMER_DRAW_PARAMETERS_VERT_SPIRV_SHA256 "'
                + hashlib.sha256(vertex).hexdigest() + '"\n')
     header += ('#define CONSUMER_DRAW_PARAMETERS_FRAG_SPIRV_SHA256 "'
@@ -69,6 +76,8 @@ def main():
                + hashlib.sha256(arguments).hexdigest() + '"\n')
     header += ('#define CONSUMER_RASTER_WITNESS_VERT_SPIRV_SHA256 "'
                + hashlib.sha256(raster).hexdigest() + '"\n')
+    header += ('#define CONSUMER_RASTER_VIEWPORT_INDEX_GEOM_SPIRV_SHA256 "'
+               + hashlib.sha256(routing).hexdigest() + '"\n')
     args.out.write_text(header)
 
 

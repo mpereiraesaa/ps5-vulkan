@@ -54,6 +54,11 @@ struct raster_frame {
     VkDeviceSize staging_bytes;
     const unsigned char *staging_rows;
     VkDeviceSize staging_pitch;
+    /* Owned by raster_frame_open/close. */
+    VkDeviceMemory image_memory, depth_memory;
+    VkImage depth_image;
+    VkImageView views[2];
+    VkCommandPool pool;
 };
 
 /* Pipeline shape one case draws with. Static viewport arrays come from
@@ -71,6 +76,8 @@ struct raster_pipeline_desc {
     VkBool32 dynamic_viewport_scissor;
     const VkViewport *viewports;
     const VkRect2D *scissors;
+    /* Optional geometry stage between the frame's vertex and fragment stages. */
+    VkShaderModule geometry_module;
 };
 
 static void raster_color(float out[4], uint32_t word)
@@ -144,11 +151,14 @@ static void raster_flush_vertices(struct raster_frame *f)
 
 static VkPipeline raster_pipeline(struct raster_frame *f, const struct raster_pipeline_desc *d)
 {
-    VkPipelineShaderStageCreateInfo stages[2] = {
+    VkPipelineShaderStageCreateInfo stages[3] = {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
          .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = f->vertex_module, .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = f->fragment_module, .pName = "main"}};
+         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = f->fragment_module, .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage = VK_SHADER_STAGE_GEOMETRY_BIT, .module = d->geometry_module, .pName = "main"}};
+    const uint32_t stage_count = d->geometry_module ? 3u : 2u;
     VkVertexInputBindingDescription binding = {
         .binding = 0, .stride = sizeof(struct raster_vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX};
@@ -199,7 +209,7 @@ static VkPipeline raster_pipeline(struct raster_frame *f, const struct raster_pi
         .dynamicStateCount = dynamic_count, .pDynamicStates = dynamic_values};
     VkGraphicsPipelineCreateInfo pipeline_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .stageCount = 2, .pStages = stages,
+        .stageCount = stage_count, .pStages = stages,
         .pVertexInputState = &vertex_input, .pInputAssemblyState = &input_assembly,
         .pRasterizationState = &raster, .pMultisampleState = &multisample,
         .pViewportState = &viewport_state, .pDepthStencilState = &depth,
@@ -331,6 +341,205 @@ static int raster_report(const char *name, const struct raster_count *c, int val
     return valid;
 }
 
+/* Colour and D32 targets, render pass, framebuffer, linear staging image,
+ * shaders, empty pipeline layout, vertex storage, command pool/buffer, fence,
+ * and the GENERAL prelude on the colour target. `target_marker` names the
+ * scenario's prelude line. */
+static void raster_frame_open(struct raster_frame *f, VkDevice device, VkQueue queue,
+                              const char *target_marker)
+{
+    memset(f, 0, sizeof(*f));
+    f->device = device; f->queue = queue;
+
+    /* Colour target and D32 depth target, both attachment-sized. */
+    VkImageCreateInfo image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {RASTER_EXTENT, RASTER_EXTENT, 1},
+        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    CHECK(vkCreateImage(device, &image_info, NULL, &f->image));
+    VkMemoryRequirements image_requirements;
+    vkGetImageMemoryRequirements(device, f->image, &image_requirements);
+    VkMemoryAllocateInfo image_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = image_requirements.size, .memoryTypeIndex = 0};
+        CHECK(vkAllocateMemory(device, &image_allocation, NULL, &f->image_memory));
+    CHECK(vkBindImageMemory(device, f->image, f->image_memory, 0));
+    VkImageCreateInfo depth_info = image_info;
+    depth_info.format = VK_FORMAT_D32_SFLOAT;
+    depth_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        CHECK(vkCreateImage(device, &depth_info, NULL, &f->depth_image));
+    VkMemoryRequirements depth_requirements;
+    vkGetImageMemoryRequirements(device, f->depth_image, &depth_requirements);
+    VkMemoryAllocateInfo depth_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = depth_requirements.size, .memoryTypeIndex = 0};
+        CHECK(vkAllocateMemory(device, &depth_allocation, NULL, &f->depth_memory));
+    CHECK(vkBindImageMemory(device, f->depth_image, f->depth_memory, 0));
+    VkImageViewCreateInfo view_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = f->image, .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        CHECK(vkCreateImageView(device, &view_info, NULL, &f->views[0]));
+    VkImageViewCreateInfo depth_view_info = view_info;
+    depth_view_info.image = f->depth_image;
+    depth_view_info.format = VK_FORMAT_D32_SFLOAT;
+    depth_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    CHECK(vkCreateImageView(device, &depth_view_info, NULL, &f->views[1]));
+    VkAttachmentDescription attachments[2] = {
+        {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout = VK_IMAGE_LAYOUT_GENERAL, .finalLayout = VK_IMAGE_LAYOUT_GENERAL},
+        {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
+    VkAttachmentReference color_reference = {0, VK_IMAGE_LAYOUT_GENERAL};
+    VkAttachmentReference depth_reference = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1, .pColorAttachments = &color_reference,
+        .pDepthStencilAttachment = &depth_reference};
+    VkRenderPassCreateInfo pass_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 2, .pAttachments = attachments,
+        .subpassCount = 1, .pSubpasses = &subpass};
+    CHECK(vkCreateRenderPass(device, &pass_info, NULL, &f->pass));
+    VkFramebufferCreateInfo framebuffer_info = {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = f->pass, .attachmentCount = 2, .pAttachments = f->views,
+        .width = RASTER_EXTENT, .height = RASTER_EXTENT, .layers = 1};
+    CHECK(vkCreateFramebuffer(device, &framebuffer_info, NULL, &f->framebuffer));
+
+    /* Linear staging image for the readback. */
+    VkImageCreateInfo staging_info = image_info;
+    staging_info.tiling = VK_IMAGE_TILING_LINEAR;
+    staging_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    CHECK(vkCreateImage(device, &staging_info, NULL, &f->staging_image));
+    VkMemoryRequirements staging_requirements;
+    vkGetImageMemoryRequirements(device, f->staging_image, &staging_requirements);
+    VkMemoryAllocateInfo staging_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = staging_requirements.size, .memoryTypeIndex = 0};
+    CHECK(vkAllocateMemory(device, &staging_allocation, NULL, &f->staging_memory));
+    CHECK(vkBindImageMemory(device, f->staging_image, f->staging_memory, 0));
+    f->staging_bytes = staging_requirements.size;
+    unsigned char *staging_bytes = NULL;
+    CHECK(vkMapMemory(device, f->staging_memory, 0, f->staging_bytes, 0, (void **)&staging_bytes));
+    REQUIRE(staging_bytes != NULL, "raster witness staging map");
+    f->staging_rows = staging_bytes;
+    VkSubresourceLayout staging_layout = {0};
+    const VkImageSubresource staging_subresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    vkGetImageSubresourceLayout(device, f->staging_image, &staging_subresource, &staging_layout);
+    f->staging_rows += staging_layout.offset;
+    f->staging_pitch = staging_layout.rowPitch;
+    REQUIRE(staging_layout.rowPitch >= RASTER_EXTENT * 4u &&
+            staging_layout.offset + staging_layout.rowPitch * RASTER_EXTENT <= f->staging_bytes,
+            "raster witness staging layout");
+
+    /* Shaders and the empty pipeline layout. */
+    VkShaderModuleCreateInfo vertex_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(consumer_raster_witness_vert_spirv),
+        .pCode = consumer_raster_witness_vert_spirv};
+    CHECK(vkCreateShaderModule(device, &vertex_info, NULL, &f->vertex_module));
+    VkShaderModuleCreateInfo fragment_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(consumer_draw_parameters_frag_spirv),
+        .pCode = consumer_draw_parameters_frag_spirv};
+    CHECK(vkCreateShaderModule(device, &fragment_info, NULL, &f->fragment_module));
+    VkPipelineLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    CHECK(vkCreatePipelineLayout(device, &layout_info, NULL, &f->layout));
+
+    /* Host-written vertex storage. */
+    VkBufferCreateInfo vertex_buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = RASTER_VERTEX_BYTES,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    CHECK(vkCreateBuffer(device, &vertex_buffer_info, NULL, &f->vertex_buffer));
+    VkMemoryRequirements vertex_requirements;
+    vkGetBufferMemoryRequirements(device, f->vertex_buffer, &vertex_requirements);
+    VkMemoryAllocateInfo vertex_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = vertex_requirements.size, .memoryTypeIndex = 0};
+    CHECK(vkAllocateMemory(device, &vertex_allocation, NULL, &f->vertex_memory));
+    CHECK(vkBindBufferMemory(device, f->vertex_buffer, f->vertex_memory, 0));
+    CHECK(vkMapMemory(device, f->vertex_memory, 0, vertex_requirements.size, 0,
+                      (void **)&f->vertices));
+    memset(f->vertices, 0, (size_t)vertex_requirements.size);
+
+    VkCommandPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = 0};
+        CHECK(vkCreateCommandPool(device, &pool_info, NULL, &f->pool));
+    VkCommandBufferAllocateInfo command_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = f->pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+    CHECK(vkAllocateCommandBuffers(device, &command_info, &f->command));
+    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    CHECK(vkCreateFence(device, &fence_info, NULL, &f->fence));
+    /* The colour target enters GENERAL the way the pinned upstream draw cases
+     * and the other consumer witnesses do: an UNDEFINED -> GENERAL transfer
+     * transition, a clear in GENERAL and the resource-less transfer ->
+     * colour-attachment barrier, in one prelude submission, so the tracked
+     * layout really is GENERAL before the first frame loads it. */
+    {
+        CHECK(vkResetCommandBuffer(f->command, 0));
+        VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(f->command, &begin));
+        VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkImageMemoryBarrier to_general = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = f->image, .subresourceRange = range};
+        vkCmdPipelineBarrier(f->command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_general);
+        VkClearColorValue prelude_clear = {0};
+        prelude_clear.float32[3] = 1.0f;
+        vkCmdClearColorImage(f->command, f->image, VK_IMAGE_LAYOUT_GENERAL, &prelude_clear, 1, &range);
+        VkMemoryBarrier to_color = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT};
+        vkCmdPipelineBarrier(f->command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 1, &to_color, 0, NULL, 0, NULL);
+        raster_submit_and_wait(f);
+        ps5log_printf(PS5LOG_MARK, "%s layout=general clear_word=%08x prelude=1", target_marker,
+                      RASTER_CLEAR_WORD);
+    }
+
+}
+
+static void raster_frame_close(struct raster_frame *f)
+{
+    VkDevice device = f->device;
+    vkDestroyFence(device, f->fence, NULL);
+    vkDestroyCommandPool(device, f->pool, NULL);
+    vkUnmapMemory(device, f->vertex_memory);
+    vkDestroyBuffer(device, f->vertex_buffer, NULL);
+    vkFreeMemory(device, f->vertex_memory, NULL);
+    vkDestroyPipelineLayout(device, f->layout, NULL);
+    vkDestroyShaderModule(device, f->fragment_module, NULL);
+    vkDestroyShaderModule(device, f->vertex_module, NULL);
+    vkDestroyFramebuffer(device, f->framebuffer, NULL);
+    vkDestroyRenderPass(device, f->pass, NULL);
+    vkDestroyImageView(device, f->views[1], NULL);
+    vkDestroyImageView(device, f->views[0], NULL);
+    vkDestroyImage(device, f->depth_image, NULL);
+    vkFreeMemory(device, f->depth_memory, NULL);
+    vkDestroyImage(device, f->image, NULL);
+    vkFreeMemory(device, f->image_memory, NULL);
+    vkUnmapMemory(device, f->staging_memory);
+    vkDestroyImage(device, f->staging_image, NULL);
+    vkFreeMemory(device, f->staging_memory, NULL);
+}
+
 static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue queue)
 {
     VkPhysicalDeviceFeatures features;
@@ -360,175 +569,8 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
         "test_word=%08x probe_word=%08x",
         (unsigned)CASE_COUNT, (unsigned)RASTER_EXTENT, RASTER_CLEAR_WORD, RASTER_FLOOR_WORD,
         RASTER_TEST_WORD, RASTER_PROBE_WORD);
-    struct raster_frame f = {.device = device, .queue = queue};
-
-    /* Colour target and D32 depth target, both attachment-sized. */
-    VkImageCreateInfo image_info = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
-        .extent = {RASTER_EXTENT, RASTER_EXTENT, 1},
-        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
-        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                 VK_IMAGE_USAGE_TRANSFER_DST_BIT};
-    CHECK(vkCreateImage(device, &image_info, NULL, &f.image));
-    VkMemoryRequirements image_requirements;
-    vkGetImageMemoryRequirements(device, f.image, &image_requirements);
-    VkMemoryAllocateInfo image_allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = image_requirements.size, .memoryTypeIndex = 0};
-    VkDeviceMemory image_memory = VK_NULL_HANDLE;
-    CHECK(vkAllocateMemory(device, &image_allocation, NULL, &image_memory));
-    CHECK(vkBindImageMemory(device, f.image, image_memory, 0));
-    VkImageCreateInfo depth_info = image_info;
-    depth_info.format = VK_FORMAT_D32_SFLOAT;
-    depth_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    VkImage depth_image = VK_NULL_HANDLE;
-    CHECK(vkCreateImage(device, &depth_info, NULL, &depth_image));
-    VkMemoryRequirements depth_requirements;
-    vkGetImageMemoryRequirements(device, depth_image, &depth_requirements);
-    VkMemoryAllocateInfo depth_allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = depth_requirements.size, .memoryTypeIndex = 0};
-    VkDeviceMemory depth_memory = VK_NULL_HANDLE;
-    CHECK(vkAllocateMemory(device, &depth_allocation, NULL, &depth_memory));
-    CHECK(vkBindImageMemory(device, depth_image, depth_memory, 0));
-    VkImageViewCreateInfo view_info = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = f.image, .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = VK_FORMAT_R8G8B8A8_UNORM,
-        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-    VkImageView views[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    CHECK(vkCreateImageView(device, &view_info, NULL, &views[0]));
-    VkImageViewCreateInfo depth_view_info = view_info;
-    depth_view_info.image = depth_image;
-    depth_view_info.format = VK_FORMAT_D32_SFLOAT;
-    depth_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    CHECK(vkCreateImageView(device, &depth_view_info, NULL, &views[1]));
-    VkAttachmentDescription attachments[2] = {
-        {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
-         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-         .initialLayout = VK_IMAGE_LAYOUT_GENERAL, .finalLayout = VK_IMAGE_LAYOUT_GENERAL},
-        {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT,
-         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
-    VkAttachmentReference color_reference = {0, VK_IMAGE_LAYOUT_GENERAL};
-    VkAttachmentReference depth_reference = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-    VkSubpassDescription subpass = {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1, .pColorAttachments = &color_reference,
-        .pDepthStencilAttachment = &depth_reference};
-    VkRenderPassCreateInfo pass_info = {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 2, .pAttachments = attachments,
-        .subpassCount = 1, .pSubpasses = &subpass};
-    CHECK(vkCreateRenderPass(device, &pass_info, NULL, &f.pass));
-    VkFramebufferCreateInfo framebuffer_info = {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = f.pass, .attachmentCount = 2, .pAttachments = views,
-        .width = RASTER_EXTENT, .height = RASTER_EXTENT, .layers = 1};
-    CHECK(vkCreateFramebuffer(device, &framebuffer_info, NULL, &f.framebuffer));
-
-    /* Linear staging image for the readback. */
-    VkImageCreateInfo staging_info = image_info;
-    staging_info.tiling = VK_IMAGE_TILING_LINEAR;
-    staging_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    CHECK(vkCreateImage(device, &staging_info, NULL, &f.staging_image));
-    VkMemoryRequirements staging_requirements;
-    vkGetImageMemoryRequirements(device, f.staging_image, &staging_requirements);
-    VkMemoryAllocateInfo staging_allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = staging_requirements.size, .memoryTypeIndex = 0};
-    CHECK(vkAllocateMemory(device, &staging_allocation, NULL, &f.staging_memory));
-    CHECK(vkBindImageMemory(device, f.staging_image, f.staging_memory, 0));
-    f.staging_bytes = staging_requirements.size;
-    unsigned char *staging_bytes = NULL;
-    CHECK(vkMapMemory(device, f.staging_memory, 0, f.staging_bytes, 0, (void **)&staging_bytes));
-    REQUIRE(staging_bytes != NULL, "raster witness staging map");
-    f.staging_rows = staging_bytes;
-    VkSubresourceLayout staging_layout = {0};
-    const VkImageSubresource staging_subresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
-    vkGetImageSubresourceLayout(device, f.staging_image, &staging_subresource, &staging_layout);
-    f.staging_rows += staging_layout.offset;
-    f.staging_pitch = staging_layout.rowPitch;
-    REQUIRE(staging_layout.rowPitch >= RASTER_EXTENT * 4u &&
-            staging_layout.offset + staging_layout.rowPitch * RASTER_EXTENT <= f.staging_bytes,
-            "raster witness staging layout");
-
-    /* Shaders and the empty pipeline layout. */
-    VkShaderModuleCreateInfo vertex_info = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = sizeof(consumer_raster_witness_vert_spirv),
-        .pCode = consumer_raster_witness_vert_spirv};
-    CHECK(vkCreateShaderModule(device, &vertex_info, NULL, &f.vertex_module));
-    VkShaderModuleCreateInfo fragment_info = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = sizeof(consumer_draw_parameters_frag_spirv),
-        .pCode = consumer_draw_parameters_frag_spirv};
-    CHECK(vkCreateShaderModule(device, &fragment_info, NULL, &f.fragment_module));
-    VkPipelineLayoutCreateInfo layout_info = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    CHECK(vkCreatePipelineLayout(device, &layout_info, NULL, &f.layout));
-
-    /* Host-written vertex storage. */
-    VkBufferCreateInfo vertex_buffer_info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = RASTER_VERTEX_BYTES,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-    CHECK(vkCreateBuffer(device, &vertex_buffer_info, NULL, &f.vertex_buffer));
-    VkMemoryRequirements vertex_requirements;
-    vkGetBufferMemoryRequirements(device, f.vertex_buffer, &vertex_requirements);
-    VkMemoryAllocateInfo vertex_allocation = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = vertex_requirements.size, .memoryTypeIndex = 0};
-    CHECK(vkAllocateMemory(device, &vertex_allocation, NULL, &f.vertex_memory));
-    CHECK(vkBindBufferMemory(device, f.vertex_buffer, f.vertex_memory, 0));
-    CHECK(vkMapMemory(device, f.vertex_memory, 0, vertex_requirements.size, 0,
-                      (void **)&f.vertices));
-    memset(f.vertices, 0, (size_t)vertex_requirements.size);
-
-    VkCommandPoolCreateInfo pool_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = 0};
-    VkCommandPool pool = VK_NULL_HANDLE;
-    CHECK(vkCreateCommandPool(device, &pool_info, NULL, &pool));
-    VkCommandBufferAllocateInfo command_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-    CHECK(vkAllocateCommandBuffers(device, &command_info, &f.command));
-    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    CHECK(vkCreateFence(device, &fence_info, NULL, &f.fence));
-    /* The colour target enters GENERAL the way the pinned upstream draw cases
-     * and the other consumer witnesses do: an UNDEFINED -> GENERAL transfer
-     * transition, a clear in GENERAL and the resource-less transfer ->
-     * colour-attachment barrier, in one prelude submission, so the tracked
-     * layout really is GENERAL before the first frame loads it. */
-    {
-        CHECK(vkResetCommandBuffer(f.command, 0));
-        VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-        CHECK(vkBeginCommandBuffer(f.command, &begin));
-        VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        VkImageMemoryBarrier to_general = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = f.image, .subresourceRange = range};
-        vkCmdPipelineBarrier(f.command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_general);
-        VkClearColorValue prelude_clear = {0};
-        prelude_clear.float32[3] = 1.0f;
-        vkCmdClearColorImage(f.command, f.image, VK_IMAGE_LAYOUT_GENERAL, &prelude_clear, 1, &range);
-        VkMemoryBarrier to_color = {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT};
-        vkCmdPipelineBarrier(f.command, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 1, &to_color, 0, NULL, 0, NULL);
-        raster_submit_and_wait(&f);
-        ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_TARGET layout=general clear_word=%08x prelude=1",
-                      RASTER_CLEAR_WORD);
-    }
+    struct raster_frame f;
+    raster_frame_open(&f, device, queue, "PS5VK_CONSUMER_RASTER_TARGET");
 
     /* Geometry shared by the cases, written once. */
     const unsigned floor_first = raster_quad(&f, 0.5f, 0.5f, 1.0f, RASTER_FLOOR_WORD);
@@ -900,25 +942,102 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
     ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_RESULT cases=%u witnessed=%u valid=%d",
                   (unsigned)CASE_COUNT, witnessed, witnessed == CASE_COUNT);
     vkDestroyPipeline(device, floor_pipeline, NULL);
-    vkDestroyFence(device, f.fence, NULL);
-    vkDestroyCommandPool(device, pool, NULL);
-    vkUnmapMemory(device, f.vertex_memory);
-    vkDestroyBuffer(device, f.vertex_buffer, NULL);
-    vkFreeMemory(device, f.vertex_memory, NULL);
-    vkDestroyPipelineLayout(device, f.layout, NULL);
-    vkDestroyShaderModule(device, f.fragment_module, NULL);
-    vkDestroyShaderModule(device, f.vertex_module, NULL);
-    vkDestroyFramebuffer(device, f.framebuffer, NULL);
-    vkDestroyRenderPass(device, f.pass, NULL);
-    vkDestroyImageView(device, views[1], NULL);
-    vkDestroyImageView(device, views[0], NULL);
-    vkDestroyImage(device, depth_image, NULL);
-    vkFreeMemory(device, depth_memory, NULL);
-    vkDestroyImage(device, f.image, NULL);
-    vkFreeMemory(device, image_memory, NULL);
-    vkUnmapMemory(device, f.staging_memory);
-    vkDestroyImage(device, f.staging_image, NULL);
-    vkFreeMemory(device, f.staging_memory, NULL);
+    raster_frame_close(&f);
     ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_RETIRED cases=%u witnessed=%u",
                   (unsigned)CASE_COUNT, witnessed);
+}
+
+/* multiViewport end to end: sixteen viewports laid out as a 4 x 4 grid of
+ * 16 x 16 tiles, one draw of sixteen triangles, and a geometry stage that turns
+ * primitive i into a full-viewport quad routed to viewport i. Tile i must hold
+ * exactly the colour of input triangle i and every tile must differ: a draw
+ * that ignored the index paints only tile 0 with the last colour, a broadcast
+ * paints every tile with the last colour, a wrong bank permutes the tiles, and
+ * a wrong scissor bank leaks colour outside a tile. Core Vulkan lets only a
+ * geometry stage write ViewportIndex, so the scenario runs only where the
+ * device reports geometryShader and multiViewport; it logs SKIPPED otherwise. */
+static uint32_t raster_tile_word(unsigned tile)
+{
+    /* Exact UNORM8 channels: R = 16 t + 8, G = 247 - 16 t, B = 0x80. */
+    return 0xff800000u | ((247u - 16u * tile) << 8) | (16u * tile + 8u);
+}
+
+static void run_raster_viewport_index(VkPhysicalDevice physical, VkDevice device, VkQueue queue)
+{
+    enum { TILES = 16, TILE = RASTER_EXTENT / 4 };
+    VkPhysicalDeviceFeatures features;
+    vkGetPhysicalDeviceFeatures(physical, &features);
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(physical, &properties);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_RASTER_GS_FEATURES geometryShader=%u multiViewport=%u maxViewports=%u",
+        (unsigned)features.geometryShader, (unsigned)features.multiViewport,
+        properties.limits.maxViewports);
+    if (!features.geometryShader || !features.multiViewport ||
+        properties.limits.maxViewports < TILES) {
+        ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_GS_SKIPPED reason=features_not_reported");
+        return;
+    }
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_RASTER_GS_START cases=1 extent=%u tiles=%u clear_word=%08x",
+        (unsigned)RASTER_EXTENT, (unsigned)TILES, RASTER_CLEAR_WORD);
+    struct raster_frame f;
+    raster_frame_open(&f, device, queue, "PS5VK_CONSUMER_RASTER_GS_TARGET");
+    VkShaderModuleCreateInfo geometry_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(consumer_raster_viewport_index_geom_spirv),
+        .pCode = consumer_raster_viewport_index_geom_spirv};
+    VkShaderModule geometry_module = VK_NULL_HANDLE;
+    CHECK(vkCreateShaderModule(device, &geometry_info, NULL, &geometry_module));
+    /* Sixteen small triangles, one per primitive, each carrying its tile's
+     * colour; the geometry stage ignores their positions. */
+    for (unsigned t = 0; t < TILES; ++t) {
+        const uint32_t word = raster_tile_word(t);
+        raster_vertex(&f, -0.5f, -0.5f, 0.5f, 1.0f, word);
+        raster_vertex(&f, 0.5f, -0.5f, 0.5f, 1.0f, word);
+        raster_vertex(&f, -0.5f, 0.5f, 0.5f, 1.0f, word);
+    }
+    raster_flush_vertices(&f);
+    VkViewport viewports[TILES]; VkRect2D scissors[TILES];
+    for (unsigned t = 0; t < TILES; ++t) {
+        viewports[t] = (VkViewport){(float)((t % 4) * TILE), (float)((t / 4) * TILE), TILE, TILE, 0.0f, 1.0f};
+        scissors[t] = (VkRect2D){{(int32_t)((t % 4) * TILE), (int32_t)((t / 4) * TILE)}, {TILE, TILE}};
+    }
+    struct raster_pipeline_desc desc = {
+        .polygon_mode = VK_POLYGON_MODE_FILL, .cull_mode = VK_CULL_MODE_NONE,
+        .depth_compare = VK_COMPARE_OP_LESS,
+        .viewport_count = TILES, .viewports = viewports, .scissors = scissors,
+        .geometry_module = geometry_module};
+    VkPipeline pipeline = raster_pipeline(&f, &desc);
+    ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_GS_PIPELINE stages=3 viewports=%u created=1",
+                  (unsigned)TILES);
+    raster_begin_frame(&f);
+    vkCmdBindPipeline(f.command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    vkCmdDraw(f.command, 3 * TILES, 1, 0, 0);
+    raster_end_frame(&f);
+    unsigned matched = 0, foreign = 0, clear = 0, other = 0;
+    for (unsigned y = 0; y < RASTER_EXTENT; ++y)
+        for (unsigned x = 0; x < RASTER_EXTENT; ++x) {
+            const unsigned tile = (y / TILE) * 4 + x / TILE;
+            const uint32_t word = raster_pixel(&f, x, y);
+            if (word == raster_tile_word(tile)) ++matched;
+            else if (word == RASTER_CLEAR_WORD) ++clear;
+            else {
+                int known = 0;
+                for (unsigned t = 0; t < TILES; ++t) known |= word == raster_tile_word(t);
+                if (known) ++foreign; else ++other;
+            }
+        }
+    const int valid = matched == RASTER_PIXELS && !foreign && !clear && !other;
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_RASTER_GS case=viewport_index_routing tiles=%u matched=%u foreign=%u "
+        "clear=%u other=%u valid=%d",
+        (unsigned)TILES, matched, foreign, clear, other, valid);
+    ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_GS_RESULT cases=1 witnessed=%u valid=%d",
+                  (unsigned)valid, valid);
+    vkDestroyPipeline(device, pipeline, NULL);
+    vkDestroyShaderModule(device, geometry_module, NULL);
+    raster_frame_close(&f);
+    ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_GS_RETIRED cases=1 witnessed=%u",
+                  (unsigned)valid);
 }
