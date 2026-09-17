@@ -7,6 +7,7 @@
 /* Host doubles for the arena syscalls, counting live reservations, physical
  * allocations and mappings so a chain failure can be shown to leak nothing. */
 static unsigned reservations, physicals, mappings, fail_reserve_at, creates;
+static unsigned fail_map_at, fail_allocate_at, fail_unmap;
 int sceKernelReserveVirtualRange(void **address, size_t bytes, int flags, size_t alignment)
 {
     assert(!flags && bytes == PS5VK_COMMAND_ARENA_BYTES);
@@ -17,6 +18,7 @@ int sceKernelReserveVirtualRange(void **address, size_t bytes, int flags, size_t
 int sceKernelAllocateMainDirectMemory(size_t bytes, size_t alignment, int type, int64_t *offset)
 {
     assert(bytes == PS5VK_COMMAND_ARENA_BYTES && alignment == 65536 && type == 0x0c);
+    if (fail_allocate_at && creates == fail_allocate_at) return -1;
     *offset = 65536 * (int64_t)(physicals + 1); ++physicals; return 0;
 }
 int sceKernelBatchMap(void *entries, int count, int *processed)
@@ -25,10 +27,14 @@ int sceKernelBatchMap(void *entries, int count, int *processed)
     assert(count == 1 && e->length == PS5VK_COMMAND_ARENA_BYTES);
     if (e->operation == 0) ++mappings;
     else { assert(e->operation == 1 && mappings); --mappings; }
-    *processed = 1; return 0;
+    *processed = 1;
+    /* Mapping took effect but its syscall outcome is uncertain. */
+    return e->operation == 0 && fail_map_at == creates ? -1 : 0;
 }
 int sceKernelMunmap(void *address, size_t bytes)
-{ assert(bytes == PS5VK_COMMAND_ARENA_BYTES && reservations); --reservations; free(address); return 0; }
+{ assert(bytes == PS5VK_COMMAND_ARENA_BYTES && reservations);
+  if (fail_unmap) return -1;
+  --reservations; free(address); return 0; }
 int sceKernelReleaseDirectMemory(int64_t offset, size_t bytes)
 { (void)offset; assert(bytes == PS5VK_COMMAND_ARENA_BYTES && physicals); --physicals; return 0; }
 
@@ -132,6 +138,54 @@ int main(void)
     assert(c.count == 2 && c.sealed == 2 && reservations == 2);
     assert(ps5vk_draw_batch_release(&c) == VK_SUCCESS && !reservations && !physicals && !mappings);
     fail_reserve_at = 0;
+
+    /* A failed map or rollback must remain owned even though creation failed.
+     * Release frees the earlier safe arena, but returns DEVICE_LOST and keeps
+     * the uncertain slot intact. Only the test double can resolve uncertainty. */
+    for (unsigned rollback = 0; rollback < 2; ++rollback) {
+        creates = 0;
+        assert(ps5vk_draw_batch_open(&c, 10 + rollback) == VK_SUCCESS);
+        c.cursor = c.end - PS5VK_GRAPHICS_RELEASE_WORDS;
+        if (rollback) { fail_allocate_at = 2; fail_unmap = 1; }
+        else fail_map_at = 2;
+        assert(ps5vk_draw_batch_reserve(&c, 1) == VK_ERROR_DEVICE_LOST);
+        assert(c.count == 2 && c.sealed == 1 && c.arenas[1].uncertain);
+        void *owned = c.arenas[1].address;
+        fail_unmap = 0; /* permit release of the earlier safe arena */
+        assert(ps5vk_draw_batch_release(&c) == VK_ERROR_DEVICE_LOST);
+        assert(c.count == 2 && c.arenas[1].address == owned && c.arenas[1].uncertain);
+        assert(reservations == 1 && mappings == !rollback && physicals == !rollback);
+        assert(ps5vk_draw_batch_release(&c) == VK_ERROR_DEVICE_LOST);
+        /* Test-only recovery: no native code may clear this flag by guessing. */
+        c.arenas[1].uncertain = 0;
+        if (!rollback) c.arenas[1].mapped = 1;
+        fail_map_at = fail_allocate_at = 0;
+        assert(ps5vk_draw_batch_release(&c) == VK_SUCCESS);
+        assert(!reservations && !physicals && !mappings && !c.count);
+    }
+
+    /* Simulate an emission larger than the initial estimate: it cannot fit
+     * the remaining 600 words and leaves its cursor unchanged. Retry moves
+     * both cursor and origin, so measuring the successful 700 words is local
+     * to arena 1 (never a subtraction between two allocations). */
+    assert(ps5vk_draw_batch_open(&c, 12) == VK_SUCCESS);
+    uint32_t *origin = c.cursor;
+    assert(ps5vk_draw_batch_retry(&c, &origin) == VK_ERROR_UNKNOWN && c.count == 1);
+    c.cursor = c.end - 600;
+    assert(ps5vk_draw_batch_reserve(&c, c.reserve) == VK_SUCCESS && c.count == 1);
+    origin = c.cursor;
+    uint32_t *old_origin = origin;
+    assert(ps5vk_draw_batch_retry(&c, &origin) == VK_SUCCESS);
+    assert(c.count == 2 && c.sealed == 1 && origin != old_origin && origin == c.cursor);
+    assert(origin == (uint32_t *)c.arenas[1].address + PS5VK_GRAPHICS_ACQUIRE_WORDS);
+    for (unsigned i = 0; i < 700; ++i) *c.cursor++ = i;
+    ps5vk_draw_batch_measured(&c, (uint32_t)(c.cursor - origin));
+    assert(c.reserve == 700);
+    assert(ps5vk_draw_batch_reserve(&c, c.reserve) == VK_SUCCESS && c.count == 2);
+    assert(ps5vk_draw_batch_close(&c) == VK_SUCCESS);
+    assert_release_tail(&c, 0); assert_release_tail(&c, 1);
+    assert(ps5vk_draw_batch_release(&c) == VK_SUCCESS);
+    assert(!reservations && !physicals && !mappings);
     puts("Draw batch chain: pass (host doubles)");
     return 0;
 }

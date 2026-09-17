@@ -675,7 +675,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                  * seen so far; a shortfall seals the open arena behind the
                  * previous emission and continues in the next one. */
                 BATCH_RESERVE(j->chain.reserve);
-                uint32_t *const emission=cursor;
+                uint32_t *emission=cursor;
                 unsigned attempt=0;
                 for(;;) {
                     if(p->pair->runtime_arguments.enabled) {
@@ -706,8 +706,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                      * emitter's own refusal and fails the job. */
                     if(attempt++ || cursor!=emission ||
                        emission==(uint32_t *)j->chain.arenas[j->chain.count-1].address+PS5VK_GRAPHICS_ACQUIRE_WORDS)goto fail;
-                    BATCH_RESERVE(PS5VK_COMMAND_ARENA_WORDS-PS5VK_GRAPHICS_ACQUIRE_WORDS-PS5VK_GRAPHICS_RELEASE_WORDS);
-                    if(cursor==emission)goto fail;
+                    j->chain.cursor=cursor;
+                    VkResult retry_rc=ps5vk_draw_batch_retry(&j->chain,&emission);
+                    if(retry_rc!=VK_SUCCESS){rc=retry_rc;goto fail;}
+                    cursor=j->chain.cursor;end=j->chain.end;
                 }
                 if(cursor!=emission) {
                     ps5vk_draw_batch_measured(&j->chain,(uint32_t)(cursor-emission));
