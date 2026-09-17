@@ -623,7 +623,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:geometryShader",
       "implementation": {
-        "detail": "the stage is described, compiled through the merged vertex+geometry pre-raster program, packaged by the adapter and hardware-witnessed (the ES->GS handoff delivers the bytes the ES wrote and the five mandatory minima are measured), but the applicable upstream geometry leaves cannot run yet: the pinned module loads its reference images from data assets this integration does not package (src/vk_graphics_pipeline.c)",
+        "detail": "the stage is described, compiled through the merged vertex+geometry pre-raster program, packaged by the adapter and hardware-witnessed (the ES->GS handoff delivers the bytes the ES wrote and the five mandatory minima are measured), but every applicable upstream geometry leaf declares gl_PrimitiveIDIn, which this profile does not deliver, so those pipelines are refused before creation (src/vk_graphics_pipeline.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],

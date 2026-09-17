@@ -2867,196 +2867,6 @@
       "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
     },
     {
-      "path": "dEQP-VK.geometry.input.basic_primitive.triangles",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:271",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.triangles_to_points",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:296",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.triangles_to_lines",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:299",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_10",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1093",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_128",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1094",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_10_and_100",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1096",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_100_and_10",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1097",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_0_and_128",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1098",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_128_and_0",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1099",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1103",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1105",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_texture",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1107",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute_instancing",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1108",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1111",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_texture_instancing",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1113",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
-    },
-    {
-      "path": "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:280",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
-    },
-    {
-      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:281",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
-    },
-    {
-      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:282",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
-    },
-    {
-      "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:284",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable to the device - its input primitive, built-ins and envelope are compiled through the merged pre-raster program and measured by the geometry witness - but the pinned module compares against its own reference image loaded from the data archive (vulkan/data/geometry/<leaf>.png through tcu::ImageIO::loadPNG), and this integration does not package those assets yet, so the leaf cannot run in this payload. A harness gap, not a device failure; the feature stays unadvertised until it is closed. Why it is applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
-    },
-    {
       "path": "dEQP-VK.geometry.input.basic_primitive.points",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:268",
       "category": "geometry-stage-not-runnable",
@@ -3355,6 +3165,196 @@
         "core:geometryShader"
       ],
       "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangles",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:271",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.triangles_to_points",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:296",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.triangles_to_lines",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:299",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the geometry stage this profile compiles takes triangles, so this is the leaf of the family it can run."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_10",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1093",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_128",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1094",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_10_and_100",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1096",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_100_and_10",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1097",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_0_and_128",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1098",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_128_and_0",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1099",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1103",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1105",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_texture",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1107",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1108",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1111",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_texture_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1113",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:280",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:281",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:282",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:284",
+      "category": "geometry-stage-builtin-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
     }
   ]
 }
