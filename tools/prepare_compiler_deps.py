@@ -19,7 +19,7 @@ DEPS = [
         # candidate, not a merge of the dependency's main: the pin is the whole
         # contract, so a different commit has to be pinned explicitly and the
         # driver cache key moves with the metadata version.
-        "pin": "6b38a03980092b9658a10bfb98006317538ea4c8",
+        "pin": "cce48c6cc49b5d4ad24de2bf587fa4f3b63a326a",
     },
     {
         "name": "opengnm",

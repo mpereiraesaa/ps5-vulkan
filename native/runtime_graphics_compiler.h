@@ -28,6 +28,15 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
  * compiler really exports does. */
 int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
     const PsbcShaderMetadata *fragment,uint32_t feature_mask);
+/* True when both halves describe the fragment stage's clip/cull distance reads
+ * end to end: the pre-raster stage names each packed distance register it
+ * exports (with the parameter index above the private key), the pixel stage
+ * names the same registers as inputs, and the exports cover the declared reads.
+ * The shipping profile still refuses to RUN one until a native witness exists;
+ * this is the description half, which is what a host test can check against the
+ * real compiled metadata. */
+int ps5vk_runtime_graphics_distance_reads_described(const PsbcShaderMetadata *pre_raster,
+    const PsbcShaderMetadata *fragment,unsigned declared_clip,unsigned declared_cull);
 /* Context is an existing ps5vk_compilation_cache. Lease data has the same
  * program view as the uncached adapter, but must use cached_release. */
 VkResult ps5vk_runtime_graphics_cached_acquire(void *,const struct ps5vk_graphics_key *,const void **);

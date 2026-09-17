@@ -73,11 +73,23 @@ static void check_clip_cull_distances(void)
     const struct ps5vk_runtime_graphics_program *p=out;
     assert(p->vertex.metadata.clip_distance_mask==0x03u);
     assert(!p->vertex.metadata.cull_distance_mask);
-    /* The compiler's standalone information pass reserves a parameter slot for
-     * the distances, which is the one unresolved field these shaders carry. */
+    /* The standalone information pass used to leave the whole linkage
+     * unresolved because the packed distance register was not described; the
+     * description now names it (key PSBC_SEMANTIC_DISTANCE_REGISTER + register,
+     * parameter index above it), so the only unresolved fields left are the
+     * program checksum and the link-time ring item size. */
     assert(p->vertex.metadata.unresolved_fields==
-           (PSBC_UNRESOLVED_PROGRAM_CHECKSUM|PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE|
-            PSBC_UNRESOLVED_AGC_LINKAGE));
+           (PSBC_UNRESOLVED_PROGRAM_CHECKSUM|PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE));
+    {
+        unsigned described=0;
+        for(uint32_t i=0;i<p->vertex.metadata.output_semantic_count;++i) {
+            if((p->vertex.metadata.output_semantics[i]&255u)!=PSBC_SEMANTIC_DISTANCE_REGISTER)
+                continue;
+            assert(((p->vertex.metadata.output_semantics[i]>>8)&255u)==1u);
+            ++described;
+        }
+        assert(described==1);
+    }
     struct ps5vk_runtime_shader header;
     assert(!ps5vk_runtime_shader_build(&header,&p->vertex));
     /* State that contradicts the mask is refused: a non-contiguous clip mask,
@@ -182,13 +194,14 @@ static int patch_array_length(struct ps5vk_graphics_module_key *m,uint32_t from,
 
 /* The pixel end of the clip-distance interface. A fragment stage that READS
  * gl_ClipDistance is legal SPIR-V, and the description policy accepts it when
- * the pre-raster stage exports at least that many components - but this profile
- * cannot hand the values to the pixel stage yet: the distances travel in the
- * packed position registers the pre-raster stage exports, and the compiler
- * leaves the whole pixel-input list unresolved when an attribute is a built-in
- * distance, so the AGC linker has no attribute mapping to program. The gate
- * must therefore refuse the *pipeline* (not the interface) until that
- * description exists, and it must accept the same pair once the read is gone.
+ * the pre-raster stage exports at least that many components. Delivery is a
+ * separate fact about the compiled metadata: the distances travel in the packed
+ * position registers the pre-raster stage exports, the compiler names those
+ * registers on both sides (the producer's word carries the parameter index to
+ * interpolate from), and the profile still refuses to RUN the pair until a
+ * native witness shows the rasterizer delivers the interpolated value. This
+ * checks the description against the real compiled metadata, the refusal in the
+ * shipping profile, and the description predicate's own negatives.
  */
 static void check_fragment_distance_read(void)
 {
@@ -199,19 +212,25 @@ static void check_fragment_distance_read(void)
         .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
         .feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE};
     unsigned clip=~0u,cull=~0u;
-    /* The declaration is accepted and reported as a read, and the interface
-     * chain accepts it because the vertex stage exports the same width. */
     assert(ps5vk_spirv_stage_distance_reads(&key.fragment,&clip,&cull));
     assert(clip==2 && cull==0);
     assert(ps5vk_spirv_graphics_interface(&key));
-    /* The same pair without the read is a pipeline this profile supports, so
-     * the refusal below is the read and not a side effect of the fixture. */
+    /* The interface decision is independent of delivery, so the profile keeps
+     * accepting the shape; the run is what is refused. */
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *refused=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&refused)==VK_ERROR_FEATURE_NOT_PRESENT &&
+           !refused);
+    /* The same pair without the read compiles, so the refusal above is the read
+     * and not a side effect of the fixture. */
     struct ps5vk_graphics_module_key reads=key.fragment;
     key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
-    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *plain=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&plain)==VK_SUCCESS && plain);
+    ps5vk_runtime_graphics_free(NULL,plain);
     free((void *)key.fragment.words);
     key.fragment=reads;
-    assert(!ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
     /* A read wider than the producer exports never reaches the pipeline gate:
      * the interface chain refuses it first, which is the bounded-declaration
      * half of the same contract. */
@@ -220,6 +239,31 @@ static void check_fragment_distance_read(void)
     too_wide.vertex=narrow;
     assert(!ps5vk_spirv_graphics_interface(&too_wide));
     free((void *)narrow.words);
+    /* The description predicate over the compiled pair: the producer names the
+     * packed distance register (key 48, parameter index above it) and the pixel
+     * stage names the same register as an input. Each negative changes exactly
+     * one field of a consistent pair. */
+    PsbcShaderMetadata pre={0},ps={0};
+    pre.clip_distance_mask=0x3u;
+    pre.output_semantic_count=2;
+    pre.output_semantics[0]=0x0000000fu;                        /* colour varying, param 0 */
+    pre.output_semantics[1]=PSBC_SEMANTIC_DISTANCE_REGISTER|(1u<<8);
+    ps.ps_clip_distance_reads=2;
+    ps.input_semantic_count=2;
+    ps.input_semantics[0]=PSBC_SEMANTIC_DISTANCE_REGISTER;      /* distance register, attr 0 */
+    ps.input_semantics[1]=0x0000000fu;                          /* colour varying, attr 1 */
+    assert(ps5vk_runtime_graphics_distance_reads_described(&pre,&ps,2,0));
+    assert(ps5vk_runtime_graphics_distance_reads_described(&pre,&ps,0,0));
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&pre,&ps,3,0)); /* reads > exports */
+    PsbcShaderMetadata mutated=pre;
+    mutated.output_semantics[1]=0x0000010fu;                    /* producer stopped naming it */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&mutated,&ps,2,0));
+    mutated=pre;mutated.clip_distance_mask=0x1u;                /* one component exported */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&mutated,&ps,2,0));
+    mutated=ps;mutated.ps_clip_distance_reads=1;                /* pixel report disagrees */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&pre,&mutated,2,0));
+    mutated=ps;mutated.input_semantics[0]=0x0000000fu;          /* pixel stopped naming it */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&pre,&mutated,2,0));
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
