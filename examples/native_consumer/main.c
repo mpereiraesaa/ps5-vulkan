@@ -3291,6 +3291,9 @@ int main(void)
      * depth clamp, polygon modes and viewport arrays, where the device
      * reports the four features (the run is skipped otherwise). */
     run_raster_state(physical_device, device, queue);
+    /* multiViewport end to end: a geometry stage routes primitive i to
+     * viewport i (skipped where geometryShader is not reported). */
+    run_raster_viewport_index(physical_device, device, queue);
 
     /* 7. Run runtime procedural graphics and presentation */
     run_consumer(physical_device, device, queue, is_continuous);

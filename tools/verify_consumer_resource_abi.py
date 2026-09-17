@@ -666,6 +666,51 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
             "raster witness retirement")
         require(raster_start[0] < raster_messages[0][0] < raster_result[0] < raster_retired[0],
                 "raster witness ordering")
+    # multiViewport end to end through a geometry stage (DXVK262-T05). Gated on
+    # its own START marker: a device without geometryShader logs the feature
+    # line and SKIPPED; once present the single routing case must be valid.
+    raster_gs_features = matching("PS5VK_CONSUMER_RASTER_GS_FEATURES ")
+    raster_gs_present = bool(matching("PS5VK_CONSUMER_RASTER_GS_START "))
+    raster_gs_start = one("PS5VK_CONSUMER_RASTER_GS_START ") if raster_gs_present else None
+    raster_gs_result = one("PS5VK_CONSUMER_RASTER_GS_RESULT ") if raster_gs_present else None
+    raster_gs_retired = one("PS5VK_CONSUMER_RASTER_GS_RETIRED ") if raster_gs_present else None
+    if raster_gs_features and not raster_gs_present:
+        require(len(raster_gs_features) == 1 and
+                one("PS5VK_CONSUMER_RASTER_GS_SKIPPED ")[1].endswith("reason=features_not_reported"),
+                "viewport-index witness skipped only when the features are not reported")
+    if raster_gs_present:
+        require(len(raster_gs_features) == 1, "viewport-index feature report")
+        gs_fields = dict(item.split("=", 1) for item in raster_gs_features[0][1].split()[1:])
+        require(gs_fields.get("geometryShader") == "1" and gs_fields.get("multiViewport") == "1" and
+                gs_fields.get("maxViewports", "").isdigit() and int(gs_fields["maxViewports"]) >= 16,
+                "viewport-index feature and floor report")
+        require(raster_gs_start[1].split()[1:] == [
+            "cases=1", f"extent={RASTER_EXTENT}", "tiles=16", f"clear_word={RASTER_CLEAR_WORD:08x}"],
+            "viewport-index witness start")
+        require(one("PS5VK_CONSUMER_RASTER_GS_TARGET ")[1].split()[1:] == [
+            "layout=general", f"clear_word={RASTER_CLEAR_WORD:08x}", "prelude=1"],
+            "viewport-index witness target prelude")
+        require(one("PS5VK_CONSUMER_RASTER_GS_PIPELINE ")[1].split()[1:] == [
+            "stages=3", "viewports=16", "created=1"], "viewport-index witness pipeline")
+        gs_case = one("PS5VK_CONSUMER_RASTER_GS case=")
+        require(gs_case[1].split()[1:] == [
+            "case=viewport_index_routing", "tiles=16", f"matched={RASTER_EXTENT * RASTER_EXTENT}",
+            "foreign=0", "clear=0", "other=0", "valid=1"], "viewport-index routing oracle")
+        require(raster_gs_result[1].split()[1:] == ["cases=1", "witnessed=1", "valid=1"],
+                "viewport-index witness result")
+        require(raster_gs_retired[1].split()[1:] == ["cases=1", "witnessed=1"],
+                "viewport-index witness retirement")
+        require(raster_gs_start[0] < gs_case[0] < raster_gs_result[0] < raster_gs_retired[0],
+                "viewport-index witness ordering")
+        gs_manifest = artifact.get("raster_viewport_index", {})
+        require(gs_manifest.get("cases") == ["viewport_index_routing"] and
+                gs_manifest.get("extent") == RASTER_EXTENT and gs_manifest.get("tiles") == 16 and
+                gs_manifest.get("features") == ["geometryShader", "multiViewport"],
+                "artifact viewport-index witness manifest")
+        for field in ("vertex_shader_sha256", "geometry_shader_sha256", "fragment_shader_sha256"):
+            digest = gs_manifest.get(field, "")
+            require(len(digest) == 64 and all(char in "0123456789abcdef" for char in digest),
+                    f"artifact viewport-index {field}")
     two_subpass_present = bool(matching("PS5VK_CONSUMER_TWO_SUBPASS_START"))
     two_subpass_start = one("PS5VK_CONSUMER_TWO_SUBPASS_START") \
         if two_subpass_present else None
@@ -744,7 +789,7 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     # resource-less prelude submission when that scenario ran; its staging
     # readback is frontend work and adds none.
     extra_witness_prelude = ((1 if draw_parameters_present else 0) + (1 if indirect_present else 0) +
-                             (1 if raster_present else 0))
+                             (1 if raster_present else 0) + (1 if raster_gs_present else 0))
     # The indirect witness adds its own transfer prelude (the GENERAL transition
     # and clear of its target, prepared like the draw-parameter one) and
     # generates one command set on the GPU: one compute submission with one
@@ -966,12 +1011,13 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
                       (5 if two_subpass_present else 0) +
                       (len(DRAW_PARAMETER_CASES) if draw_parameters_present else 0) +
                       (len(INDIRECT_CASES) if indirect_present else 0) +
-                      (len(RASTER_CASES) if raster_present else 0))
+                      (len(RASTER_CASES) if raster_present else 0) +
+                      (1 if raster_gs_present else 0))
     # The draw-parameter witness also records one transfer prelude (its colour
     # transition), which submits and completes but is never prepared by the
     # graphics backend. Every other submission is a graphics one.
     prelude_submissions = ((1 if draw_parameters_present else 0) + (1 if indirect_present else 0) +
-                           (1 if raster_present else 0))
+                           (1 if raster_present else 0) + (1 if raster_gs_present else 0))
     require(len(graphics_prepared) == graphics_count and
             all(len(rows) == graphics_count + prelude_submissions for rows in
                 (graphics_submitted, graphics_suspended, graphics_completed)),
@@ -1187,6 +1233,7 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         "uniform_texel_formats_checked": len(TEXEL_FORMAT_CASES) if texel_formats else 0,
         "indirect_draw_cases": (len(INDIRECT_CASES) if indirect_present else 0),
         "raster_cases": (len(RASTER_CASES) if raster_present else 0),
+        "raster_viewport_index_cases": (1 if raster_gs_present else 0),
         # True when the staged SDK reported the four features through the
         # PS5VK_RASTER_DIAGNOSTIC measurement gate rather than the shipping
         # platform mask: such a run is measurement evidence, not a claim that

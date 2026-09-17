@@ -424,6 +424,26 @@ def main():
                 draw_parameter_shader_header.with_suffix(".frag.spv").read_bytes()
             ).hexdigest(),
         },
+        # DXVK262-T05 end-to-end multiViewport witness: a geometry stage routes
+        # primitive i to viewport i across a 4 x 4 tile grid of sixteen
+        # viewports. Runs only where geometryShader and multiViewport are both
+        # reported (core Vulkan lets only a geometry stage select a viewport).
+        "raster_viewport_index": {
+            "api": "Vulkan 1.0 core features",
+            "features": ["geometryShader", "multiViewport"],
+            "cases": ["viewport_index_routing"],
+            "extent": RASTER_EXTENT,
+            "tiles": 16,
+            "vertex_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_name("raster_witness.vert.spv").read_bytes()
+            ).hexdigest(),
+            "geometry_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_name("raster_viewport_index.geom.spv").read_bytes()
+            ).hexdigest(),
+            "fragment_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_suffix(".frag.spv").read_bytes()
+            ).hexdigest(),
+        },
         "synchronization": {
             "api": "Vulkan 1.0",
             "local_size": 128,
