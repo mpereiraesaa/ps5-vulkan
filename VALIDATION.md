@@ -90,6 +90,46 @@ hardware result for a dynamically indexed write, any tessellation/geometry
 variant of the family, or the two core features themselves, and it is not a
 Vulkan conformance claim.
 
+## Optional stage blockers: geometry and tessellation (2026-09-17)
+
+Both remaining T04 stages stay unadvertised, and the reason is now measured
+rather than inferred. These measurements were taken with the driver built
+against an isolated PSBC candidate (the merged-geometry identification plus the
+hull-packaging entry point, delivered as dependency pull requests that are
+**not** merged), so they are provisional in that sense; only derived facts and
+identities are published here, and the raw captures stay private.
+
+**Geometry.** The compiler emits a self-consistent merged program for the
+witness's vertex+geometry pair: one ACO program
+(`SW (VS+GS+), HW (NEXT_GEN_GEOMETRY_SHADER)`) whose geometry half writes one
+ES/GS ring item per emitted vertex and advances the ring base by exactly one
+9-dword item (36 bytes) each time - the same stride and the same intra-item
+offsets the read side uses, and the same size the package publishes as the ES
+item size and as `VGT_ESGS_RING_ITEMSIZE`. The driver accepts that package: with
+the witness's own pipeline key and the optional-stage diagnostic build, the host
+build reports the profile as supported and the compile as successful, and the
+adapter checks the merged identification and the GE allocation slot. On hardware
+the stage executes and reaches the pixel stage - the input-independent cases are
+pixel-exact - while every case that reads `gl_in` is wrong on every pixel, and
+that outcome is identical with the pinned compiler and with the candidate. The
+bases the geometry half reads its ring items through are the per-invocation
+offsets the hardware hands it at launch, and nothing in the pinned AGC linkage
+shape this driver builds (the GS resource registers, `ge_cntl`, the stage
+enables, the CX counts and the user-data range) expresses an ES/GS ring base, an
+LDS allocation for the ring, or a scratch allocation; the compiler reports
+scratch as zero and the adapter requires that. `geometryShader` therefore stays
+false.
+
+**Tessellation.** The isolated compiler candidate does produce a two-program
+hull buffer for a real vertex+control pair - the control half and the vertex half
+in one buffer, with the vertex half's program and resource registers published -
+but the same metadata declares the package unresolved because the hull/domain
+pipeline state is not part of it. The driver has no tessellation path at all
+today: pipeline creation validates the contract and refuses it before any
+compile. `tessellationShader` therefore stays false, and the remaining work is
+driver-side assembly plus the hull pipeline state - the same class of
+vendor-side question as geometry.
+
 ## Multiview native acceptance
 
 On 2026-09-16 the original 48 multiview leaves (masks, rectangular clears,
