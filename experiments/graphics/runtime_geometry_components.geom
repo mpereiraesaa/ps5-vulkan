@@ -5,8 +5,12 @@
  * vec4s) and folds them into the colour it draws, so the image asserts that the
  * whole declaration arrived through the ES->GS handoff rather than only that it
  * compiled. It also WRITES more than 64 output components of its own (sixteen
- * vec4s plus the three-component varying the fragment stage reads, the position
- * counted with them), which is the output side of the same minimum.
+ * vec4s plus the three-component varying), which is the output side of the same
+ * minimum, and every one of those components carries the same 1.0 so that the
+ * pixel half - which declares an input for all sixteen locations - can fold the
+ * whole output into the image: the output envelope is only observable if
+ * something reads it, and runtime_geometry_output_components.frag is that
+ * reader.
  */
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 9) out;
@@ -61,7 +65,7 @@ void main()
         gl_Position = vec4(corners[i], 0.5, 1.0);
         out_v = vec3(acc / 4096.0, 0.5, 0.25);
         o1 = o2 = o3 = o4 = o5 = o6 = o7 = o8 = vec4(1.0);
-        o9 = o10 = o11 = o12 = o13 = o14 = o15 = o16 = vec4(2.0);
+        o9 = o10 = o11 = o12 = o13 = o14 = o15 = o16 = vec4(1.0);
         EmitVertex();
     }
     EndPrimitive();

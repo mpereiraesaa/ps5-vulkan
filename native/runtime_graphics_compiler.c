@@ -135,6 +135,20 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
     if (ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
             key->descriptor_sets,&tables)!=VK_SUCCESS) return 0;
     if(tables.binding_count>PSBC_MAX_DESCRIPTOR_BINDINGS)return 0;
+    /* The visibility a binding may name: the two standalone stages, the
+     * geometry stage, which exists only as the second half of the merged
+     * pre-raster program, and the tessellation pair's two stages, which exist
+     * only when the pipeline carries it. A layout that declares a resource for
+     * a stage the pipeline does not carry would have that binding dropped by
+     * the stage projection, so it is refused here instead of being silently
+     * discarded - the same rule the input attachment follows from the other
+     * side. */
+    const VkShaderStageFlags visible=VK_SHADER_STAGE_VERTEX_BIT|
+        VK_SHADER_STAGE_FRAGMENT_BIT|
+        (ps5vk_graphics_has_geometry(key)?VK_SHADER_STAGE_GEOMETRY_BIT:0)|
+        (ps5vk_graphics_has_tessellation(key)?
+            (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
+             VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT):0);
     for(unsigned s=0;s<key->descriptor_set_count;++s)
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_set_signature *set=&key->descriptor_sets[s];
@@ -145,15 +159,10 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
              * is admitted as fragment-only resource-only image data: it is read
              * by subpassLoad in a fragment shader, so a layout that exposes it
              * to the vertex stage is refused rather than projected onto a stage
-             * that cannot read it. The tessellation stages join the vertex
-             * stage's visibility when the pipeline carries the pair. Every
-             * other descriptor type stays outside the profile instead of being
-             * half-delivered. */
+             * that cannot read it. Every other descriptor type stays outside
+             * the profile instead of being half-delivered. */
             if(set->binding[b].count &&
-                (!(set->binding[b].stages&(VK_SHADER_STAGE_VERTEX_BIT|
-                     VK_SHADER_STAGE_FRAGMENT_BIT|
-                     VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
-                     VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)) ||
+                (!(set->binding[b].stages&visible) ||
                 (set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
@@ -177,10 +186,42 @@ static int ps5vk_tess_patch_primitive_type(uint32_t *out)
     return 1;
 }
 
+/* Diagnostic rejection codes. When PS5VK_GEOMETRY_KEY_DIAG is defined (the SDK
+ * build of a diagnostic CTS payload) a refused key is logged field by field, so
+ * a console run names the condition and the shape instead of only reporting
+ * VK_ERROR_FEATURE_NOT_PRESENT. The shipping build defines nothing and never
+ * reads the code. */
+unsigned ps5vk_runtime_graphics_diag_site;
+int ps5vk_runtime_graphics_diag_result;
+#if defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG
+#include "ps5log.h"
+#endif
+static int ps5vk_reject(const struct ps5vk_graphics_key *key,unsigned site){
+    ps5vk_runtime_graphics_diag_site=site;
+#if defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GEOMETRY_KEY site=%u topology=%u bindings=%u attributes=%u "
+        "format0=%u location0=%u format1=%u location1=%u colour=%u samples=%u "
+        "mask=%u blend=%u sets=%u push=%u geometry=%u tessellation=%u features=0x%x",
+        site,(unsigned)key->topology,key->vertex_binding_count,key->vertex_attribute_count,
+        key->vertex_attribute_count>0u?(unsigned)key->vertex_attributes[0].format:0u,
+        key->vertex_attribute_count>0u?key->vertex_attributes[0].location:0u,
+        key->vertex_attribute_count>1u?(unsigned)key->vertex_attributes[1].format:0u,
+        key->vertex_attribute_count>1u?key->vertex_attributes[1].location:0u,
+        (unsigned)key->color_format,(unsigned)key->samples,(unsigned)key->color_write_mask,
+        (unsigned)key->blend_enable,key->descriptor_set_count,key->push_constant_size,
+        (unsigned)ps5vk_graphics_has_geometry(key),
+        (unsigned)ps5vk_graphics_has_tessellation(key),key->feature_mask);
+#else
+    (void)key;
+#endif
+    return 0;
+}
+
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
-       key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
+       key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return ps5vk_reject(key,1);
     /* The tessellation pair is compiled through the hull and domain programs:
      * the pinned compiler links the vertex half as the LS program behind the
      * control half's machine code and publishes the loadable evaluation package
@@ -192,9 +233,10 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * factor buffer) is not written yet. The pair therefore compiles and is
      * validated, but nothing can submit it. */
     if(ps5vk_graphics_has_tessellation(key)) {
-        if(!ps5vk_graphics_tessellation_key_valid(key))return 0;
-        if(!module_supported(&key->tess_control,1) || !module_supported(&key->tess_eval,2))return 0;
-        if(!ps5vk_spirv_graphics_interface(key))return 0;
+        if(!ps5vk_graphics_tessellation_key_valid(key))return ps5vk_reject(key,2);
+        if(!module_supported(&key->tess_control,1) ||
+           !module_supported(&key->tess_eval,2))return ps5vk_reject(key,3);
+        if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,4);
         uint32_t patch_type=0;
         return key->topology==VK_PRIMITIVE_TOPOLOGY_PATCH_LIST &&
             ps5vk_tess_patch_primitive_type(&patch_type) &&
@@ -216,26 +258,26 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * path. What remains before the FEATURE can be advertised is the applicable
      * conformance selection, not this adapter. */
     if(ps5vk_graphics_has_geometry(key)) {
-        if(!module_supported(&key->geometry,3))return 0;
+        if(!module_supported(&key->geometry,3))return ps5vk_reject(key,6);
     }
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
-        if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
+        if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return ps5vk_reject(key,7);
     if(key->vertex_binding_count>16 || key->vertex_attribute_count>PSBC_MAX_VERTEX_ATTRIBUTES ||
        (key->vertex_binding_count && !key->vertex_bindings) ||
-       (key->vertex_attribute_count && !key->vertex_attributes))return 0;
+       (key->vertex_attribute_count && !key->vertex_attributes))return ps5vk_reject(key,8);
     for(uint32_t i=0;i<key->vertex_binding_count;++i) {
         const VkVertexInputBindingDescription *b=&key->vertex_bindings[i];
         if(b->binding>=16 || b->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
-           !b->stride || b->stride>0x3fff)return 0;
-        for(uint32_t j=0;j<i;++j)if(key->vertex_bindings[j].binding==b->binding)return 0;
+           !b->stride || b->stride>0x3fff)return ps5vk_reject(key,9);
+        for(uint32_t j=0;j<i;++j)if(key->vertex_bindings[j].binding==b->binding)return ps5vk_reject(key,10);
     }
     for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
         const VkVertexInputAttributeDescription *a=&key->vertex_attributes[i];
-        if(a->binding>=16 || a->location>=PSBC_MAX_VERTEX_ATTRIBUTES)return 0;
+        if(a->binding>=16 || a->location>=PSBC_MAX_VERTEX_ATTRIBUTES)return ps5vk_reject(key,11);
         unsigned found=0;
         for(uint32_t j=0;j<key->vertex_binding_count;++j)found|=key->vertex_bindings[j].binding==a->binding;
-        if(!found)return 0;
-        for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return 0;
+        if(!found)return ps5vk_reject(key,12);
+        for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return ps5vk_reject(key,13);
     }
     uint32_t primitive_type=0;
     /* A fragment stage that READS gl_ClipDistance/gl_CullDistance is not
@@ -581,6 +623,7 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     *out=p;
     return VK_SUCCESS;
 failed:
+    ps5vk_runtime_graphics_diag_result=(int)result;
     if(result==PSBC_RESULT_OUT_OF_MEMORY)failure=VK_ERROR_OUT_OF_HOST_MEMORY;
     ps5vk_runtime_graphics_free(NULL,p);
     return failure;

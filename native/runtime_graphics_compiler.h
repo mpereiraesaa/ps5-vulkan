@@ -27,6 +27,12 @@ struct ps5vk_runtime_graphics_program {
 VkResult ps5vk_runtime_graphics_compile(void *,const struct ps5vk_graphics_key *,const void **);
 void ps5vk_runtime_graphics_free(void *,const void *);
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *);
+/* Diagnostic-only: the condition the adapter refused a key on, and the PSBC
+ * result of the last failed compile. The SDk diagnostic build logs the key
+ * fields when PS5VK_GEOMETRY_KEY_DIAG is defined; nothing read here decides
+ * anything in a shipping build. */
+extern unsigned ps5vk_runtime_graphics_diag_site;
+extern int ps5vk_runtime_graphics_diag_result;
 /* Shared descriptor-table lowering, independent of the currently enabled
  * draw ABI. Success proves compiler options only, not native submission. */
 VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_key *,

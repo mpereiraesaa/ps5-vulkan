@@ -2,13 +2,14 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "cbffe0a8a4904a945001114947fb70074ac62cf78d731599de24974c25f92823",
+    "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
     "device_api": "1.0.0",
     "device_extensions": 5,
     "requirements": 62,
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
       "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+      "feature:VkPhysicalDeviceFeatures:geometryShader",
       "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
       "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
@@ -19,8 +20,8 @@
     ],
     "runs": [
       {
-        "id": "20260917T115122497Z_PPSA99994_ps5vk_0x13be0f22a9a8",
-        "log_sha256": "0d73c0a9dbfb0f306ecde197ea213fd48df332722d1ad7f1fdde8e34f2deda47"
+        "id": "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305",
+        "log_sha256": "944e1d9e5d712c20228748e537ea50453abac933dc0ca5dd540ca2fa6463e18e"
       }
     ],
     "transport": "ps5log/1",
@@ -33,9 +34,9 @@
         "maxMultiviewInstanceIndex": "134217727"
       }
     ],
-    "source_matrix_sha256": "16c2e0e70dd44fad58ab1798a96e0def50fee19eda73ab31f8d67be69c852a42",
-    "satisfied": 9,
-    "blockers": 53
+    "source_matrix_sha256": "10da3d8a500250bd6197d4502dfa26419b45f6fcf8ab612bd10ed5b6e780ce4b",
+    "satisfied": 10,
+    "blockers": 52
   },
   "requirements": {
     "feature:VkPhysicalDeviceVulkan11Features:multiview": {
@@ -679,6 +680,40 @@
           "UPSTREAM_CTS.md"
         ],
         "note": "All 64 selected clipping leaves passed in the 275/275 acceptance run (selection hash 3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d, eboot b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7, title closed). The family exercises clip counts 1..8 (the reported maxClipDistances floor), the combined clip+cull budget, the non-constant write and the fragment-stage read. The complementarity and misc leaves stay diagnostics: the pinned binary does not report them when filtered by the name the module's construction implies, measured twice, so they are not claimed here."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:geometryShader": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.geometry.basic.output_0_and_128",
+          "dEQP-VK.geometry.basic.output_10",
+          "dEQP-VK.geometry.basic.output_100_and_10",
+          "dEQP-VK.geometry.basic.output_10_and_100",
+          "dEQP-VK.geometry.basic.output_128",
+          "dEQP-VK.geometry.basic.output_128_and_0",
+          "dEQP-VK.geometry.basic.output_vary_by_attribute",
+          "dEQP-VK.geometry.basic.output_vary_by_attribute_instancing",
+          "dEQP-VK.geometry.input.basic_primitive.triangles",
+          "dEQP-VK.geometry.input.conversion.triangles_to_lines",
+          "dEQP-VK.geometry.input.conversion.triangles_to_points"
+        ],
+        "refs": [
+          "cts/upstream/manifest.json",
+          "private-captures/t04/cts-geometry-acceptance.json"
+        ],
+        "note": "The promoted geometry leaves run in the frozen selection and pass their own upstream oracles in the strict acceptance run 20260917T190009Z-class run of the advertised profile (286/286 Pass, zero Fail, title closed); the leaves whose shapes the merged pre-raster program does not deliver yet - the uniform/sampled descriptor variants and the varying crosses - were measured as Fail in the preceding promotion run and are kept as diagnostics instead of being claimed here."
+      },
+      "native": {
+        "state": "reported-not-executed",
+        "run_ids": [
+          "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305"
+        ],
+        "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
+        "refs": [
+          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+        ],
+        "note": "The probe reports geometryShader=1; it executes capability queries, not geometry draws."
       }
     }
   }
