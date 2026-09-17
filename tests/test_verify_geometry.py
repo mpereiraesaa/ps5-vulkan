@@ -38,7 +38,7 @@ class Fixture:
         self.digests = {0: "1111111111111111", 1: "1111111111111111",
                         2: "2222222222222222", 3: "3333333333333333",
                         4: "4444444444444444", 5: "1111111111111111",
-                        6: "6666666666666666"}
+                        6: "6666666666666666", 7: "7777777777777777"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(

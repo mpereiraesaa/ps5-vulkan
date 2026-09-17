@@ -20,6 +20,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_RECOLOR:return 3;
     case PS5VK_GEOMETRY_AMPLIFY:return 4;
     case PS5VK_GEOMETRY_CONSTANT:return 5;
+    case PS5VK_GEOMETRY_POSITIONS:return 6;
     }
     return -2;
 }
@@ -41,6 +42,8 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
      * amplified image is the control's coverage: an amplification that left a
      * gap or an overlap would show up as a missing or foreign pixel. */
     case PS5VK_GEOMETRY_AMPLIFY:
+    /* The input positions must trace the same triangles the vertex stage drew. */
+    case PS5VK_GEOMETRY_POSITIONS:
         return 1;
     case PS5VK_GEOMETRY_SHRINK:
         return ndc_x>=-shrink_extent && ndc_x<=shrink_extent &&
@@ -62,6 +65,11 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
      * clip/cull witness measured on this path. */
     const double u=((double)x+0.5)/(double)extent;
     const double v=((double)y+0.5)/(double)extent;
+    if(witness_case==PS5VK_GEOMETRY_POSITIONS) {
+        rgba[0]=rgba[1]=rgba[2]=255u;
+        rgba[3]=255u;
+        return;
+    }
     if(witness_case==PS5VK_GEOMETRY_CONSTANT) {
         rgba[0]=unorm8(0.25);
         rgba[1]=unorm8(0.5);
@@ -126,6 +134,7 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     case PS5VK_GEOMETRY_PASSTHROUGH:
     case PS5VK_GEOMETRY_RECOLOR:
     case PS5VK_GEOMETRY_AMPLIFY:
+    case PS5VK_GEOMETRY_POSITIONS:
         return witness->expected_covered==pixels;
     case PS5VK_GEOMETRY_SHRINK:
     case PS5VK_GEOMETRY_CONSTANT:
