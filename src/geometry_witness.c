@@ -18,6 +18,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_SHRINK:return 1;
     case PS5VK_GEOMETRY_SUPPRESS:return 2;
     case PS5VK_GEOMETRY_RECOLOR:return 3;
+    case PS5VK_GEOMETRY_AMPLIFY:return 4;
     }
     return -2;
 }
@@ -35,6 +36,10 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
     case PS5VK_GEOMETRY_CONTROL:
     case PS5VK_GEOMETRY_PASSTHROUGH:
     case PS5VK_GEOMETRY_RECOLOR:
+    /* The three sub-triangles tile the input triangle, so the coverage of the
+     * amplified image is the control's coverage: an amplification that left a
+     * gap or an overlap would show up as a missing or foreign pixel. */
+    case PS5VK_GEOMETRY_AMPLIFY:
         return 1;
     case PS5VK_GEOMETRY_SHRINK:
         return ndc_x>=-shrink_extent && ndc_x<=shrink_extent &&
@@ -109,6 +114,7 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     case PS5VK_GEOMETRY_CONTROL:
     case PS5VK_GEOMETRY_PASSTHROUGH:
     case PS5VK_GEOMETRY_RECOLOR:
+    case PS5VK_GEOMETRY_AMPLIFY:
         return witness->expected_covered==pixels;
     case PS5VK_GEOMETRY_SHRINK:
         return witness->expected_covered>0u && witness->expected_covered<pixels;

@@ -1863,7 +1863,7 @@ static void geometry_probe(VkDevice d)
                 if(offset==0x29bu)topology=stage->context[i].value;
                 if(offset==0x2ceu)max_vertices=stage->context[i].value;
             }
-            if(seen!=sizeof(required)/sizeof(required[0]) || topology!=2u || max_vertices!=3u)
+            if(seen!=sizeof(required)/sizeof(required[0]) || topology!=2u || max_vertices!=9u)
                 fail("geometry-state",-1);
         }
         VkCommandBuffer cb=VK_NULL_HANDLE;
@@ -1921,11 +1921,13 @@ static void geometry_probe(VkDevice d)
         if(!verified)fail("geometry-verdict",-1);
         vkDestroyPipeline(d,pipeline,NULL);
     }
-    /* Passthrough must reproduce the control image exactly, the shrunk and
+    /* Passthrough and the amplified image must both reproduce the control image
+     * exactly (the three sub-triangles tile the input triangle), the shrunk and
      * suppressed images must differ from it, and the varying rewrite must differ
      * from the passthrough image it shares coverage with. A stale or collapsed
      * readback cannot satisfy this. */
     if(digests[PS5VK_GEOMETRY_CONTROL]!=digests[PS5VK_GEOMETRY_PASSTHROUGH] ||
+       digests[PS5VK_GEOMETRY_CONTROL]!=digests[PS5VK_GEOMETRY_AMPLIFY] ||
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SHRINK] ||
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SUPPRESS] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
@@ -1934,14 +1936,15 @@ static void geometry_probe(VkDevice d)
         "PS5VK_GEOMETRY_PROBE cases=%u extent=%u clear=%02x%02x%02x%02x out_prim_type=2 "
         "max_vertices=3 digest_control=%016llx digest_passthrough=%016llx "
         "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
-        "strict_verified=1",
+        "digest_amplify=%016llx strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
         (unsigned long long)digests[PS5VK_GEOMETRY_CONTROL],
         (unsigned long long)digests[PS5VK_GEOMETRY_PASSTHROUGH],
         (unsigned long long)digests[PS5VK_GEOMETRY_SHRINK],
         (unsigned long long)digests[PS5VK_GEOMETRY_SUPPRESS],
-        (unsigned long long)digests[PS5VK_GEOMETRY_RECOLOR]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_RECOLOR],
+        (unsigned long long)digests[PS5VK_GEOMETRY_AMPLIFY]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
