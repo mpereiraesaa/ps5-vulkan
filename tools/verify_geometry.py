@@ -58,6 +58,11 @@ CASES = (
     (10, 12, 336),
     (11, 13, 336),
     (12, 14, 336),
+    # The envelope: a stage that emits 256 vertices, the mandatory minimum the
+    # feature's maxGeometryOutputVertices names, drawn as one ribbon that tiles a
+    # band (768 px at 64x64). A stage that stopped early covers a shorter band,
+    # so the case measures the capability rather than restating it.
+    (13, 15, 768),
     # The input positions with a constant colour; it runs last because it is the
     # case that has lost the device before.
     (7, 6, PIXELS),
@@ -65,17 +70,21 @@ CASES = (
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
                 6: "digest_constant", 7: "digest_positions",
                 8: "digest_sentinel", 9: "digest_indexed_marker",
-                10: "digest_read_v0", 11: "digest_read_v1", 12: "digest_read_v2"}
+                10: "digest_read_v0", 11: "digest_read_v1", 12: "digest_read_v2",
+                13: "digest_envelope"}
 # The readback cases draw 21 vertices (7 triangles) instead of the witness's six,
 # so item indices 0..20 exist and the three plausible readings of gl_in[k] - an
 # item index, a dword-scaled one and a byte-scaled one - land on written items
 # that identify themselves. Every other case keeps the two-triangle draw.
 READ_VERTICES = 21
+# The envelope case declares 256 output vertices (the feature's mandatory minimum);
+# every other geometry case declares the witness's nine.
+MAX_VERTICES = {13: 256}
 DRAW_VERTICES = {10: READ_VERTICES, 11: READ_VERTICES, 12: READ_VERTICES}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
@@ -159,7 +168,8 @@ def validate(log, receipt, artifact):
         else:
             require(draw.get("stages") == "3" and
                     draw.get("out_prim_type") == "2" and
-                    draw.get("max_vertices") == "9", f"case {case} geometry state")
+                    draw.get("max_vertices") == str(MAX_VERTICES.get(case, 9)),
+                    f"case {case} geometry state")
         require(fields.get("pixels") == str(PIXELS) and
                 fields.get("expected") == str(expected) and
                 fields.get("covered") == str(expected) and
