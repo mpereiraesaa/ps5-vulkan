@@ -2087,6 +2087,936 @@
       ],
       "resource_contract": "multiview-attachment-image",
       "rationale": "Original upstream multiview oracle passes on PS5: layered attachment clears/readback, ordered subpasses and vertex/fragment ViewIndex. See VALIDATION.md#multiview-native-acceptance."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.1",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.2",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.3",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.4",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.5",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.6",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.7",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.8",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask)."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.1_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.2_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.3_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.4_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.5_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.6_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.7_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.8_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8_fragmentshader_read",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1898",
+      "category": "clip-cull-distance-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_10",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1093",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_128",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1094",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_10_and_100",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1096",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_100_and_10",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1097",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_0_and_128",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1098",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_128_and_0",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1099",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1103",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1108",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangles",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:271",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the pipeline gate that refused it is gone (the feature is advertised by the graphics build and the interface policy binds the stage's declared input arity to the pipeline's topology), so this run measures the leaf's own oracle. Prior state: the leaf ran and reported NotSupported only because geometryShader was unadvertised."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.triangles_to_points",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:296",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the pipeline gate that refused it is gone (the feature is advertised by the graphics build and the interface policy binds the stage's declared input arity to the pipeline's topology), so this run measures the leaf's own oracle. Prior state: the leaf ran and reported NotSupported only because geometryShader was unadvertised."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.triangles_to_lines",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:299",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the pipeline gate that refused it is gone (the feature is advertised by the graphics build and the interface policy binds the stage's declared input arity to the pipeline's topology), so this run measures the leaf's own oracle. Prior state: the leaf ran and reported NotSupported only because geometryShader was unadvertised."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1105",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_texture",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1107",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1111",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_texture_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1113",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:280",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:281",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:282",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:284",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.points",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:268",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.lines",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:269",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.line_strip",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:270",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:272",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.lines_to_points",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:297",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.points_to_lines",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:298",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.points_to_triangles",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:300",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.lines_to_triangles",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:301",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.primitive_id_in",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1118",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.primitive_id_in_restarted",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1121",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
     }
   ],
   "diagnostics": [
@@ -2135,6 +3065,296 @@
         "storageBuffer8BitAccess"
       ],
       "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.1",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.2",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.3",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.4",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.5",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.6",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.7",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.8",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.misc.negative_and_non_negative_cull_distance",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1950",
+      "category": "cull-distance-not-enumerated",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangle_fan",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:273",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.lines_adjacency",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:274",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.line_strip_adjacency",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:275",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangles_adjacency",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:276",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.point_size",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1116",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "This leaf needs a per-vertex or per-primitive built-in the interface policy does not deliver (gl_PointSize, gl_PrimitiveIDIn), so the module is refused before a pipeline exists."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.primitive_id",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1123",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "The fragment stage reading gl_PrimitiveID is refused by the compiler adapter, which rejects a pixel stage that names the primitive-id semantic instead of executing it with a value the merged pre-raster stage never produced."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_0",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:283",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "A geometry stage that drops what the stage before it exported is refused: the policy requires its per-vertex inputs to be exactly that stage's outputs, component for component."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_0",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_1",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_2",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_3",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_4",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_5",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_6",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_7",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_8",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_9",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_10",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_11",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_12",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288",
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
     }
   ]
 }

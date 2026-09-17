@@ -97,6 +97,22 @@ VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
             memcmp(p->push_constant_stages,key->push_constant_stages,
                    sizeof(p->push_constant_stages)) ||
             !equal_module(&p->vertex, &key->vertex) || !equal_module(&p->fragment, &key->fragment)) continue;
+        /* A record with a geometry stage matches only a key with the same
+         * geometry module: a two-stage program must never satisfy a three-stage
+         * pipeline by accident, and vice versa. */
+        if ((p->geometry.words!=NULL) != (key->geometry.words!=NULL)) continue;
+        if (key->geometry.words && !equal_module(&p->geometry, &key->geometry)) continue;
+        /* The tessellation pair is part of the identity for the same reason,
+         * and it carries one extra input: the patch control points the control
+         * stage's output vertex count and the evaluation stage's input arrays
+         * are derived from. A record whose patches were compiled for a
+         * different count is a different program. */
+        const int p_tess=p->tess_control.words!=NULL, key_tess=key->tess_control.words!=NULL;
+        if (p_tess!=key_tess || p->patch_control_points!=key->patch_control_points) continue;
+        if (key_tess) {
+            if (!equal_module(&p->tess_control, &key->tess_control) ||
+                !equal_module(&p->tess_eval, &key->tess_eval)) continue;
+        } else if (p->tess_eval.words || key->tess_eval.words) continue;
         /* Multiple matching records are an ambiguous compiler library, not
          * permission to choose the first potentially different backend object. */
         if (*out) { *out = NULL; return VK_ERROR_UNKNOWN; }

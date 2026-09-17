@@ -12,6 +12,11 @@
 #include "input_attachment_probe.h"
 #include "input_attachment_gate.h"
 #include "multiview_witness.h"
+#include "clip_cull_witness.h"
+#include "geometry_witness.h"
+/* The private semantic keys the profile pairs producer and consumer words on
+ * (the clip/cull distance registers among them). */
+#include "libpsbc/psbc_compile.h"
 #include "vk_render_pass.h"
 #include "color_detile.h"
 
@@ -48,6 +53,21 @@
 #endif
 #ifndef PS5VK_INPUT_ATTACHMENT_PROBE
 #define PS5VK_INPUT_ATTACHMENT_PROBE 0
+#endif
+#ifndef PS5VK_CLIP_CULL_PROBE
+#define PS5VK_CLIP_CULL_PROBE 0
+#endif
+#ifndef PS5VK_GEOMETRY_PROBE
+#define PS5VK_GEOMETRY_PROBE 0
+#endif
+/* Bounded diagnostic mode for the geometry witness: report every case's outcome
+ * in one run instead of stopping at the first failing verdict. The shipping
+ * profile keeps the fail-fast behaviour, because a witness that stops at the
+ * first failure is the one a promotion gate should judge; this exists so a
+ * single diagnostic run can show the whole table - including the case that has
+ * lost the device before - without the first failure hiding the rest. */
+#ifndef PS5VK_GEOMETRY_ORDER_PROBE
+#define PS5VK_GEOMETRY_ORDER_PROBE 0
 #endif
 #if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
 /* Slice A measurement: the pattern seeded into the allocation slot no
@@ -1433,6 +1453,1066 @@ static void multiview_view_probe(VkDevice d)
     vkFreeMemory(d,color_memory,NULL); vkFreeMemory(d,depth_memory,NULL);
 }
 #endif
+#if defined(PS5VK_CLIP_CULL_PROBE) && PS5VK_CLIP_CULL_PROBE
+/* T04-D1: the packed clip/cull distance witness.
+ *
+ * One triangle pair covers the target with a varying affine in the position, and
+ * the pre-raster stage's clip/cull distances are built from the same position,
+ * so every pixel has one predicted answer: the clip cases keep exactly the half
+ * or quadrant their planes leave (interpolated as if the primitive had been
+ * cut), and the cull cases must leave the target at its clear colour because one
+ * negative vertex discards the whole primitive. The seven cases share one vertex
+ * module and differ only in the specialization constant that selects the
+ * distances, so the exported masks and linked state are identical across them.
+ *
+ * The readback is judged by src/clip_cull_witness.c - the same oracle the host
+ * regression drives - and the run fails closed when a case does not verify. */
+enum { PS5VK_CLIP_CULL_EXTENT = 64 };
+#define PS5VK_CLIP_CULL_GUARD UINT32_C(0x5a5a5a5a)
+
+/* The specialization constant the witness vertex stage reads. */
+enum { PS5VK_CLIP_CULL_MODE_CONSTANT = 0 };
+
+static uint64_t clip_cull_digest(const uint8_t *bytes,size_t size)
+{
+    uint64_t hash=UINT64_C(0xcbf29ce484222325);
+    for(size_t i=0;i<size;++i) {
+        hash^=bytes[i];
+        hash*=UINT64_C(0x100000001b3);
+    }
+    return hash;
+}
+
+/* The vertex module one case renders with: the control declares no distance at
+ * all, every other case selects its distances with the specialization. */
+static int clip_cull_mode(unsigned witness_case,int *mode)
+{
+    switch(witness_case) {
+    case PS5VK_CLIP_CULL_PLAIN: *mode=-1; return 1;   /* control module */
+    case PS5VK_CLIP_CULL_POSITIVE: *mode=0; return 1;
+    case PS5VK_CLIP_CULL_CLIP_HALF: *mode=1; return 1;
+    case PS5VK_CLIP_CULL_CLIP_QUADRANT: *mode=2; return 1;
+    case PS5VK_CLIP_CULL_CULL_HALF: *mode=3; return 1;
+    case PS5VK_CLIP_CULL_CULL_NEGATIVE: *mode=4; return 1;
+    case PS5VK_CLIP_CULL_MIXED: *mode=5; return 1;
+    case PS5VK_CLIP_CULL_CULL_INDEX: *mode=6; return 1;
+    case PS5VK_CLIP_CULL_DYNAMIC_INDEX: *mode=7; return 1;
+    /* The same program as the direct quadrant: only the draw path differs. */
+    case PS5VK_CLIP_CULL_INDIRECT_QUADRANT: *mode=2; return 1;
+    /* The pixel read runs the all-positive distance set: coverage stays the
+     * control's and the fragment stage multiplies its varying by clip
+     * distance 0, so the image is a different function of the position. */
+    case PS5VK_CLIP_CULL_PIXEL_READ: *mode=0; return 1;
+    }
+    return 0;
+}
+
+static void clip_cull_probe(VkDevice d)
+{
+    const uint32_t extent=PS5VK_CLIP_CULL_EXTENT;
+    VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .extent={extent,extent,1},.mipLevels=1,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .tiling=VK_IMAGE_TILING_OPTIMAL};
+    VkImage image; CHECK(vkCreateImage(d,&ii,NULL,&image));
+    VkMemoryRequirements req; vkGetImageMemoryRequirements(d,image,&req);
+    VkMemoryAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=req.size};
+    VkDeviceMemory memory; CHECK(vkAllocateMemory(d,&ai,NULL,&memory));
+    CHECK(vkBindImageMemory(d,image,memory,0));
+    void *map=NULL; CHECK(vkMapMemory(d,memory,0,VK_WHOLE_SIZE,0,&map));
+    /* Every word outside the published surface stride stays a sentinel, so a
+     * readback that walked past the target would be visible instead of reading
+     * whatever the allocator returned. */
+    for(VkDeviceSize i=0;i<req.size/4;++i)((uint32_t *)map)[i]=PS5VK_CLIP_CULL_GUARD;
+    CHECK(vkFlushMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+        .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,.offset=0,.size=req.size}));
+    VkDeviceSize stride=0,alignment=0,bytes=0;
+    if(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM,extent,extent,1,
+        &stride,&alignment,&bytes)!=VK_SUCCESS)fail("clip-cull-storage",-1);
+    if(!stride || bytes!=stride || stride>req.size)fail("clip-cull-stride",-1);
+    VkImageSubresourceRange range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+    VkImageViewCreateInfo cvi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=image,.viewType=VK_IMAGE_VIEW_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .subresourceRange=range};
+    VkImageView view; CHECK(vkCreateImageView(d,&cvi,NULL,&view));
+    /* CLEAR, not DONT_CARE: the clear colour is the oracle's "no fragment was
+     * written here" value, and the witness reads it back as evidence. */
+    VkAttachmentDescription attachment={.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp=VK_ATTACHMENT_STORE_OP_STORE,.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference colorref={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpass={.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount=1,.pColorAttachments=&colorref};
+    VkRenderPassCreateInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount=1,.pAttachments=&attachment,.subpassCount=1,.pSubpasses=&subpass};
+    VkRenderPass pass; CHECK(vkCreateRenderPass(d,&ri,NULL,&pass));
+    VkFramebufferCreateInfo fi={.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass=pass,.attachmentCount=1,.pAttachments=&view,
+        .width=extent,.height=extent,.layers=1};
+    VkFramebuffer fb; CHECK(vkCreateFramebuffer(d,&fi,NULL,&fb));
+    VkPipelineLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPipelineLayout layout; CHECK(vkCreatePipelineLayout(d,&li,NULL,&layout));
+    VkShaderModule fragment;
+    VkShaderModuleCreateInfo fsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_fragment),.pCode=ps5vk_runtime_fragment};
+    CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment));
+    /* The pixel end of the interface: a fragment stage that reads
+     * gl_ClipDistance[0] instead of only a varying. */
+    VkShaderModule pixel_read_fragment;
+    VkShaderModuleCreateInfo prfsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_clip_distance_read_fragment),
+        .pCode=ps5vk_runtime_clip_distance_read_fragment};
+    CHECK(vkCreateShaderModule(d,&prfsi,NULL,&pixel_read_fragment));
+    VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex=0};
+    VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
+    VkQueue queue; vkGetDeviceQueue(d,0,0,&queue);
+    static uint8_t detiled[PS5VK_CLIP_CULL_EXTENT*PS5VK_CLIP_CULL_EXTENT*4];
+    uint64_t digests[PS5VK_CLIP_CULL_CASES]={0};
+    /* The cross-regression against T03's indirect command path: one recorded
+     * VkDrawIndirectCommand, read through the driver's own buffer object. The
+     * command says exactly what every other case issues directly, so the image
+     * must be the direct quadrant's image and nothing else may differ. */
+    VkBuffer indirect_buffer=VK_NULL_HANDLE;
+    VkDeviceMemory indirect_memory=VK_NULL_HANDLE;
+    {
+        VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size=sizeof(VkDrawIndirectCommand),.usage=VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT};
+        CHECK(vkCreateBuffer(d,&bi,NULL,&indirect_buffer));
+        VkMemoryRequirements req;vkGetBufferMemoryRequirements(d,indirect_buffer,&req);
+        VkMemoryAllocateInfo mi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize=req.size};
+        CHECK(vkAllocateMemory(d,&mi,NULL,&indirect_memory));
+        CHECK(vkBindBufferMemory(d,indirect_buffer,indirect_memory,0));
+        void *mapped=NULL;
+        CHECK(vkMapMemory(d,indirect_memory,0,VK_WHOLE_SIZE,0,&mapped));
+        const VkDrawIndirectCommand command={.vertexCount=6,.instanceCount=1,
+            .firstVertex=0,.firstInstance=0};
+        memcpy(mapped,&command,sizeof(command));
+        VkMappedMemoryRange flush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=indirect_memory,.size=VK_WHOLE_SIZE};
+        CHECK(vkFlushMappedMemoryRanges(d,1,&flush));
+        vkUnmapMemory(d,indirect_memory);
+    }
+    for(unsigned witness_case=0;witness_case<PS5VK_CLIP_CULL_CASES;++witness_case) {
+        int mode=0;
+        if(!clip_cull_mode(witness_case,&mode))fail("clip-cull-case",-1);
+        const int32_t specialization=mode<0?0:mode;
+        VkSpecializationMapEntry entry={.constantID=PS5VK_CLIP_CULL_MODE_CONSTANT,
+            .offset=0,.size=sizeof(specialization)};
+        VkSpecializationInfo spec={.mapEntryCount=1,.pMapEntries=&entry,
+            .dataSize=sizeof(specialization),.pData=&specialization};
+        const uint32_t *words=mode<0?ps5vk_runtime_clip_cull_control:
+                                    ps5vk_runtime_clip_cull_probe;
+        const size_t word_count=mode<0?sizeof(ps5vk_runtime_clip_cull_control)/4:
+                                       sizeof(ps5vk_runtime_clip_cull_probe)/4;
+        VkShaderModule vertex;
+        VkShaderModuleCreateInfo vsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=word_count*4,.pCode=words};
+        CHECK(vkCreateShaderModule(d,&vsi,NULL,&vertex));
+        VkPipelineShaderStageCreateInfo stages[2]={
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=vertex,.pName="main",
+             .pSpecializationInfo=mode<0?NULL:&spec},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=fragment,.pName="main"}};
+        if(witness_case==PS5VK_CLIP_CULL_PIXEL_READ)stages[1].module=pixel_read_fragment;
+        VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        VkPipelineRasterizationStateCreateInfo raster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
+        VkPipelineMultisampleStateCreateInfo ms={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+        VkViewport viewport={0,0,(float)extent,(float)extent,0,1};
+        VkRect2D scissor={{0,0},{extent,extent}};
+        VkPipelineViewportStateCreateInfo vp={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount=1,.pViewports=&viewport,.scissorCount=1,.pScissors=&scissor};
+        VkPipelineColorBlendAttachmentState blend_attachment={.colorWriteMask=15};
+        VkPipelineColorBlendStateCreateInfo blend={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount=1,.pAttachments=&blend_attachment};
+        VkGraphicsPipelineCreateInfo pi={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .layout=layout,.renderPass=pass,.stageCount=2,.pStages=stages,
+            .pVertexInputState=&vi,.pInputAssemblyState=&ia,.pRasterizationState=&raster,
+            .pMultisampleState=&ms,.pViewportState=&vp,.pColorBlendState=&blend};
+        VkPipeline pipeline; CHECK(vkCreateGraphicsPipelines(d,0,1,&pi,NULL,&pipeline));
+        /* PRE-SUBMIT GATE. The context state the runtime will program must be
+         * exactly the distance state this case is about: SPI_VS_OUT_CONFIG's
+         * export count, SPI_SHADER_POS_FORMAT's packed position registers and
+         * PA_CL_VS_OUT_CNTL's clip/cull enables. A pipeline that quietly
+         * dropped the export cannot reach the GPU and still look right. */
+        const struct ps5vk_native_graphics_pipeline *native=pipeline->graphics_state;
+        if(!native || !native->pair || !native->pair->ready)fail("clip-cull-pipeline",-1);
+        const struct ps5vk_runtime_shader *stage=&native->pair->runtime_vertex;
+        const uint32_t expect_config=mode<0?0u:0x00000002u;
+        const uint32_t expect_pos_format=mode<0?0x00000004u:0x00000044u;
+        const uint32_t expect_out_cntl=mode<0?0u:0x01400f03u;
+        uint32_t seen_config=0,seen_pos_format=0,seen_out_cntl=0,seen=0;
+        for(unsigned i=0;i<stage->header.num_cx_registers;++i) {
+            switch(stage->context[i].offset) {
+            case 0x1b1u:seen_config=stage->context[i].value;++seen;break;
+            case 0x1c3u:seen_pos_format=stage->context[i].value;++seen;break;
+            case 0x207u:seen_out_cntl=stage->context[i].value;++seen;break;
+            }
+        }
+        if(seen!=3u || seen_config!=expect_config || seen_pos_format!=expect_pos_format ||
+           seen_out_cntl!=expect_out_cntl)fail("clip-cull-state",-1);
+        /* The pixel-read case is about the pixel-input description, so the
+         * fragment stage that will run must name the packed distance register
+         * it reads. A pipeline that quietly dropped the description would
+         * interpolate an attribute nothing mapped, and the image could still
+         * look plausible. */
+        if(witness_case==PS5VK_CLIP_CULL_PIXEL_READ) {
+            const struct ps5vk_runtime_shader *pixel=&native->pair->runtime_fragment;
+            unsigned described=0;
+            for(unsigned i=0;i<pixel->header.num_input_semantics;++i)
+                described+=(pixel->inputs[i]&255u)==PSBC_SEMANTIC_DISTANCE_REGISTER;
+            if(described!=1u)fail("clip-cull-pixel-read",-1);
+        }
+        /* One command buffer per case: this profile refuses to record a second
+         * time into a submitted buffer, and a fresh one per case keeps each
+         * verdict attributable to its own recording. The pool owns them all and
+         * releases them when the last case is judged. */
+        VkCommandBuffer cb=VK_NULL_HANDLE;
+        VkCommandBufferAllocateInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+        CHECK(vkAllocateCommandBuffers(d,&cbi,&cb));
+        VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(cb,&begin));
+        VkClearValue clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
+        VkRenderPassBeginInfo rbi={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass=pass,.framebuffer=fb,.renderArea={{0,0},{extent,extent}},
+            .clearValueCount=1,.pClearValues=&clear};
+        vkCmdBeginRenderPass(cb,&rbi,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+        /* One primitive: six vertices, one instance, no first-instance offset. */
+        const int indirect=witness_case==PS5VK_CLIP_CULL_INDIRECT_QUADRANT;
+        if(indirect)
+            vkCmdDrawIndirect(cb,indirect_buffer,0,1,sizeof(VkDrawIndirectCommand));
+        else
+            vkCmdDraw(cb,6,1,0,0);
+        vkCmdEndRenderPass(cb);
+        CHECK(vkEndCommandBuffer(cb));
+        VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount=1,.pCommandBuffers=&cb};
+        CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
+        CHECK(vkQueueWaitIdle(queue));
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CLIP_CULL_DRAW case=%u mode=%d vs_out_config=%08x pos_format=%08x "
+            "vs_out_cntl=%08x vertices=6 instances=1 indirect=%d",
+            witness_case,mode,seen_config,seen_pos_format,seen_out_cntl,indirect);
+        /* Read back only after the queue is idle, then detile through the
+         * driver's own arithmetic before any pixel is judged. */
+        CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+            .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
+            .offset=0,.size=VK_WHOLE_SIZE}));
+        if(ps5vk_rgba8_64k_rx_detile(detiled,sizeof(detiled),map,(size_t)stride,
+            extent,extent))fail("clip-cull-detile",-1);
+        struct ps5vk_clip_cull_witness witness={0};
+        for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x)
+            ps5vk_clip_cull_witness_pixel(&witness,witness_case,x,y,extent,
+                                          detiled+4*((size_t)y*extent+x));
+        const int verified=ps5vk_clip_cull_witness_verify(&witness,witness_case,extent);
+        digests[witness_case]=clip_cull_digest(detiled,sizeof(detiled));
+        /* The classification counters say a case failed; these say how. Every
+         * sampled pixel is part of the private evidence for this run. */
+        const uint8_t *corner=detiled;
+        const uint8_t *center=detiled+4*((size_t)(extent/2)*extent+extent/2);
+        /* Two samples whose x and y fractions differ, so a swapped or missing
+         * varying component is visible instead of hidden by the diagonal. */
+        const uint8_t *low_x=detiled+4*((size_t)(extent/4)*extent);
+        const uint8_t *high_x=detiled+4*((size_t)(extent*3/4));
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CLIP_CULL_CASE case=%u mode=%d pixels=%llu expected=%llu covered=%llu "
+            "missing=%llu foreign=%llu wrong_color=%llu digest=%016llx verified=%d "
+            "first_foreign=%02x%02x%02x%02x at=%u,%u first_wrong=%02x%02x%02x%02x at=%u,%u "
+            "corner00=%02x%02x%02x%02x center=%02x%02x%02x%02x "
+            "at_0_%u=%02x%02x%02x%02x at_%u_0=%02x%02x%02x%02x",
+            witness_case,mode,(unsigned long long)witness.pixels,
+            (unsigned long long)witness.expected_covered,
+            (unsigned long long)witness.covered,(unsigned long long)witness.missing,
+            (unsigned long long)witness.foreign,(unsigned long long)witness.wrong_color,
+            (unsigned long long)digests[witness_case],verified,
+            witness.first_foreign[0],witness.first_foreign[1],witness.first_foreign[2],
+            witness.first_foreign[3],witness.first_foreign_x,witness.first_foreign_y,
+            witness.first_wrong[0],witness.first_wrong[1],witness.first_wrong[2],
+            witness.first_wrong[3],witness.first_wrong_x,witness.first_wrong_y,
+            corner[0],corner[1],corner[2],corner[3],
+            center[0],center[1],center[2],center[3],
+            extent/4,low_x[0],low_x[1],low_x[2],low_x[3],
+            extent*3/4,high_x[0],high_x[1],high_x[2],high_x[3]);
+        if(!verified)fail("clip-cull-verdict",-1);
+        vkDestroyPipeline(d,pipeline,NULL);
+        vkDestroyShaderModule(d,vertex,NULL);
+    }
+    /* Cases that must agree pixel for pixel: the control against positive
+     * distances, against a cull distance that is negative at one vertex only,
+     * against the quadrant clip with both cull arrays exported, and the two
+     * discarded cull cases against each other. The structurally different
+     * images must all differ, so a readback that collapsed to one image - or to
+     * a stale one - cannot satisfy this. */
+    if(digests[PS5VK_CLIP_CULL_PLAIN]!=digests[PS5VK_CLIP_CULL_POSITIVE] ||
+       digests[PS5VK_CLIP_CULL_PLAIN]!=digests[PS5VK_CLIP_CULL_CULL_HALF] ||
+       digests[PS5VK_CLIP_CULL_CLIP_QUADRANT]!=digests[PS5VK_CLIP_CULL_MIXED] ||
+       /* A dynamically indexed write of the same distances must be
+        * indistinguishable from the statically indexed one: that is the whole
+        * content of the variant the upstream family registers. */
+       digests[PS5VK_CLIP_CULL_CLIP_QUADRANT]!=digests[PS5VK_CLIP_CULL_DYNAMIC_INDEX] ||
+       digests[PS5VK_CLIP_CULL_CULL_NEGATIVE]!=digests[PS5VK_CLIP_CULL_CULL_INDEX])
+        fail("clip-cull-digest-equality",-1);
+    /* The pixel read keeps the control's coverage but not its colours: an image
+     * that delivered the varying (or any other attribute) would equal the
+     * positive case, so requiring the three to differ is what makes the case
+     * evidence about the distance and not about coverage. */
+    if(digests[PS5VK_CLIP_CULL_PIXEL_READ]==digests[PS5VK_CLIP_CULL_PLAIN] ||
+       digests[PS5VK_CLIP_CULL_PIXEL_READ]==digests[PS5VK_CLIP_CULL_POSITIVE])
+        fail("clip-cull-pixel-read-digest",-1);
+    const unsigned distinct[4]={PS5VK_CLIP_CULL_PLAIN,PS5VK_CLIP_CULL_CLIP_HALF,
+        PS5VK_CLIP_CULL_CLIP_QUADRANT,PS5VK_CLIP_CULL_CULL_NEGATIVE};
+    for(unsigned i=0;i<4;++i)for(unsigned j=0;j<i;++j)
+        if(digests[distinct[i]]==digests[distinct[j]])fail("clip-cull-digest-collision",-1);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CLIP_CULL_PROBE cases=%u extent=%u clear=%02x%02x%02x%02x "
+        "clip_mask=%02x cull_mask=%02x control_mask=000000 "
+        "digest_plain=%016llx digest_positive=%016llx digest_clip_half=%016llx "
+        "digest_clip_quadrant=%016llx digest_cull_half=%016llx digest_cull_negative=%016llx "
+        "digest_mixed=%016llx digest_cull_index=%016llx "
+        "digest_dynamic_index=%016llx digest_indirect_quadrant=%016llx "
+        "digest_pixel_read=%016llx strict_verified=1",
+        PS5VK_CLIP_CULL_CASES,extent,ps5vk_clip_cull_clear[0],ps5vk_clip_cull_clear[1],
+        ps5vk_clip_cull_clear[2],ps5vk_clip_cull_clear[3],0x03u,0x0cu,
+        (unsigned long long)digests[PS5VK_CLIP_CULL_PLAIN],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_POSITIVE],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_CLIP_HALF],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_CLIP_QUADRANT],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_HALF],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_NEGATIVE],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_MIXED],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_INDEX],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_DYNAMIC_INDEX],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_INDIRECT_QUADRANT],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_PIXEL_READ]);
+    vkDestroyBuffer(d,indirect_buffer,NULL);
+    vkFreeMemory(d,indirect_memory,NULL);
+    vkDestroyCommandPool(d,pool,NULL);
+    vkDestroyShaderModule(d,fragment,NULL);
+    vkDestroyShaderModule(d,pixel_read_fragment,NULL);
+    vkDestroyPipelineLayout(d,layout,NULL);
+    vkDestroyFramebuffer(d,fb,NULL);
+    vkDestroyRenderPass(d,pass,NULL);
+    vkDestroyImageView(d,view,NULL);
+    vkUnmapMemory(d,memory);
+    vkDestroyImage(d,image,NULL);
+    vkFreeMemory(d,memory,NULL);
+}
+#endif
+#if defined(PS5VK_GEOMETRY_PROBE) && PS5VK_GEOMETRY_PROBE
+/* T04-G1: the geometry coverage witness.
+ *
+ * One vertex module emits the two triangles that tile the target and one
+ * fragment module writes what it reads, so the only thing that can change the
+ * image is the geometry stage in between: passthrough must reproduce the
+ * two-stage control pixel for pixel, shrink must cover exactly the centred
+ * square its scaled triangles tile, suppression must leave the target clear -
+ * which no vertex stage can do - and the varying rewrite must keep the coverage
+ * while changing every colour, proving the fragment stage reads what the
+ * geometry stage wrote.
+ *
+ * The readback is judged by src/geometry_witness.c, the same oracle the host
+ * regression drives, and the run fails closed when a case does not verify. */
+enum { PS5VK_GEOMETRY_EXTENT = 64 };
+#define PS5VK_GEOMETRY_GUARD UINT32_C(0x5a5a5a5a)
+enum { PS5VK_GEOMETRY_MODE_CONSTANT = 0 };
+/* The readback cases draw 21 vertices = 7 triangles instead of the witness's
+ * six: item indices 0..20 then exist, which is enough for the three plausible
+ * reads of gl_in[k] to be told apart - item 3p+k if the item index passed to the
+ * geometry half is an item index, item 5(3p+k) if it is in dwords and item
+ * 20(3p+k) if it is in bytes. They also use a pre-raster stage that gives every
+ * vertex a different x, so the value the geometry half reads back names the item
+ * it came from. */
+enum { PS5VK_GEOMETRY_READ_VERTICES = 21 };
+
+static uint64_t geometry_digest(const uint8_t *bytes,size_t size)
+{
+    uint64_t hash=UINT64_C(0xcbf29ce484222325);
+    for(size_t i=0;i<size;++i) {
+        hash^=bytes[i];
+        hash*=UINT64_C(0x100000001b3);
+    }
+    return hash;
+}
+
+static void geometry_probe(VkDevice d)
+{
+    const uint32_t extent=PS5VK_GEOMETRY_EXTENT;
+    VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .extent={extent,extent,1},.mipLevels=1,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .tiling=VK_IMAGE_TILING_OPTIMAL};
+    VkImage image; CHECK(vkCreateImage(d,&ii,NULL,&image));
+    VkMemoryRequirements req; vkGetImageMemoryRequirements(d,image,&req);
+    VkMemoryAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=req.size};
+    VkDeviceMemory memory; CHECK(vkAllocateMemory(d,&ai,NULL,&memory));
+    CHECK(vkBindImageMemory(d,image,memory,0));
+    void *map=NULL; CHECK(vkMapMemory(d,memory,0,VK_WHOLE_SIZE,0,&map));
+    for(VkDeviceSize i=0;i<req.size/4;++i)((uint32_t *)map)[i]=PS5VK_GEOMETRY_GUARD;
+    CHECK(vkFlushMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+        .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,.offset=0,.size=req.size}));
+    VkDeviceSize stride=0,alignment=0,bytes=0;
+    if(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM,extent,extent,1,
+        &stride,&alignment,&bytes)!=VK_SUCCESS)fail("geometry-storage",-1);
+    if(!stride || bytes!=stride || stride>req.size)fail("geometry-stride",-1);
+    VkImageSubresourceRange range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+    VkImageViewCreateInfo cvi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=image,.viewType=VK_IMAGE_VIEW_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .subresourceRange=range};
+    VkImageView view; CHECK(vkCreateImageView(d,&cvi,NULL,&view));
+    VkAttachmentDescription attachment={.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp=VK_ATTACHMENT_STORE_OP_STORE,.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference colorref={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpass={.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount=1,.pColorAttachments=&colorref};
+    VkRenderPassCreateInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount=1,.pAttachments=&attachment,.subpassCount=1,.pSubpasses=&subpass};
+    VkRenderPass pass; CHECK(vkCreateRenderPass(d,&ri,NULL,&pass));
+    VkFramebufferCreateInfo fi={.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass=pass,.attachmentCount=1,.pAttachments=&view,
+        .width=extent,.height=extent,.layers=1};
+    VkFramebuffer fb; CHECK(vkCreateFramebuffer(d,&fi,NULL,&fb));
+    VkPipelineLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPipelineLayout layout; CHECK(vkCreatePipelineLayout(d,&li,NULL,&layout));
+    VkShaderModule vertex_module,fragment_module;
+    VkShaderModuleCreateInfo vsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_vertex),.pCode=ps5vk_runtime_geometry_vertex};
+    VkShaderModuleCreateInfo gsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_stage),.pCode=ps5vk_runtime_geometry_stage};
+    VkShaderModuleCreateInfo fsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_fragment),.pCode=ps5vk_runtime_fragment};
+    CHECK(vkCreateShaderModule(d,&vsi,NULL,&vertex_module));
+    VkShaderModule geometry_module;
+    CHECK(vkCreateShaderModule(d,&gsi,NULL,&geometry_module));
+    /* The envelope's own pre-raster half: `max_vertices` is a module-level
+     * declaration, so the 256-vertex emission the feature's mandatory minimum
+     * names needs a module of its own. Every other case keeps the witness stage. */
+    VkShaderModule envelope_module;
+    VkShaderModuleCreateInfo egi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_envelope_stage),
+        .pCode=ps5vk_runtime_geometry_envelope_stage};
+    CHECK(vkCreateShaderModule(d,&egi,NULL,&envelope_module));
+    /* The invocations case's own pre-raster half, for the same reason: the
+     * invocations count is a module-level declaration too. */
+    VkShaderModule components_vertex_module,components_module;
+    VkShaderModuleCreateInfo components_vertex_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_components_vertex),
+        .pCode=ps5vk_runtime_geometry_components_vertex};
+    VkShaderModuleCreateInfo components_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_components_stage),
+        .pCode=ps5vk_runtime_geometry_components_stage};
+    CHECK(vkCreateShaderModule(d,&components_vertex_info,NULL,&components_vertex_module));
+    CHECK(vkCreateShaderModule(d,&components_info,NULL,&components_module));
+    VkShaderModule primitive_id_module;
+    VkShaderModuleCreateInfo pgi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_primitive_id_stage),
+        .pCode=ps5vk_runtime_geometry_primitive_id_stage};
+    CHECK(vkCreateShaderModule(d,&pgi,NULL,&primitive_id_module));
+    /* The component envelope's pixel half: it declares an input for every one of
+     * the sixteen vec4s the geometry stage writes and folds all sixty-four into
+     * the colour, so the OUTPUT side of the envelope is observable. */
+    VkShaderModule components_output_fragment_module;
+    VkShaderModuleCreateInfo cofi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_output_components_fragment),
+        .pCode=ps5vk_runtime_geometry_output_components_fragment};
+    CHECK(vkCreateShaderModule(d,&cofi,NULL,&components_output_fragment_module));
+    /* The input families: their own pre-raster half, whose positions and colours
+     * identify the vertex, plus the point-list and line-list geometry stages that
+     * read their input primitive's own arity. The pipeline's input assembly is
+     * the family's topology, which is what the interface policy binds the
+     * stage's declared input array to. */
+    VkShaderModule family_vertex_module,points_module,lines_module;
+    VkShaderModuleCreateInfo fvi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_family_vertex),
+        .pCode=ps5vk_runtime_geometry_family_vertex};
+    VkShaderModuleCreateInfo poi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_points_stage),
+        .pCode=ps5vk_runtime_geometry_points_stage};
+    VkShaderModuleCreateInfo loi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_lines_stage),
+        .pCode=ps5vk_runtime_geometry_lines_stage};
+    CHECK(vkCreateShaderModule(d,&fvi,NULL,&family_vertex_module));
+    CHECK(vkCreateShaderModule(d,&poi,NULL,&points_module));
+    CHECK(vkCreateShaderModule(d,&loi,NULL,&lines_module));
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    /* Primitive-restart witness (report-only, order-probe payloads only). The
+     * pinned CTS geometry builder enables primitive restart for strip
+     * topologies; this pair draws two quads with a gap as one indexed strip
+     * whose index list carries a restart index between them, so a cut draws two
+     * quads and a missing cut threads a bridging primitive across the gap. The
+     * control below is the same draw with restart disabled. */
+    VkShaderModule restart_vertex_module,restart_fragment_module;
+    VkShaderModuleCreateInfo rvi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_primitive_restart_vertex),
+        .pCode=ps5vk_runtime_primitive_restart_vertex};
+    VkShaderModuleCreateInfo rfi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_primitive_restart_fragment),
+        .pCode=ps5vk_runtime_primitive_restart_fragment};
+    CHECK(vkCreateShaderModule(d,&rvi,NULL,&restart_vertex_module));
+    CHECK(vkCreateShaderModule(d,&rfi,NULL,&restart_fragment_module));
+    VkBuffer restart_vertex_buffer=VK_NULL_HANDLE,restart_index_buffer=VK_NULL_HANDLE;
+    VkDeviceMemory restart_vertex_memory=VK_NULL_HANDLE,restart_index_memory=VK_NULL_HANDLE;
+    {
+        VkBufferCreateInfo vbi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=64,
+            .usage=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
+        CHECK(vkCreateBuffer(d,&vbi,NULL,&restart_vertex_buffer));
+        VkMemoryRequirements vr;vkGetBufferMemoryRequirements(d,restart_vertex_buffer,&vr);
+        VkMemoryAllocateInfo va={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=vr.size+vr.alignment};
+        CHECK(vkAllocateMemory(d,&va,NULL,&restart_vertex_memory));
+        CHECK(vkBindBufferMemory(d,restart_vertex_buffer,restart_vertex_memory,vr.alignment));
+        void *vertices;CHECK(vkMapMemory(d,restart_vertex_memory,0,VK_WHOLE_SIZE,0,&vertices));
+        memset(vertices,0,(size_t)va.allocationSize);
+        const float quads[8][2]={{-0.9f,-0.5f},{-0.2f,-0.5f},{-0.9f,0.5f},{-0.2f,0.5f},
+                                 { 0.2f,-0.5f},{ 0.9f,-0.5f},{ 0.2f,0.5f},{ 0.9f,0.5f}};
+        memcpy((unsigned char *)vertices+vr.alignment,quads,sizeof(quads));
+        VkMappedMemoryRange vflush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=restart_vertex_memory,.size=VK_WHOLE_SIZE};
+        vkFlushMappedMemoryRanges(d,1,&vflush);
+        vkUnmapMemory(d,restart_vertex_memory);
+        VkBufferCreateInfo ibi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=32,
+            .usage=VK_BUFFER_USAGE_INDEX_BUFFER_BIT};
+        CHECK(vkCreateBuffer(d,&ibi,NULL,&restart_index_buffer));
+        VkMemoryRequirements ir;vkGetBufferMemoryRequirements(d,restart_index_buffer,&ir);
+        VkMemoryAllocateInfo ia={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=ir.size+ir.alignment};
+        CHECK(vkAllocateMemory(d,&ia,NULL,&restart_index_memory));
+        CHECK(vkBindBufferMemory(d,restart_index_buffer,restart_index_memory,ir.alignment));
+        void *indices;CHECK(vkMapMemory(d,restart_index_memory,0,VK_WHOLE_SIZE,0,&indices));
+        memset(indices,0,(size_t)ia.allocationSize);
+        const uint16_t list[9]={0,1,2,3,0xffff,4,5,6,7};
+        memcpy((unsigned char *)indices+ir.alignment,list,sizeof(list));
+        VkMappedMemoryRange iflush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=restart_index_memory,.size=VK_WHOLE_SIZE};
+        vkFlushMappedMemoryRanges(d,1,&iflush);
+        vkUnmapMemory(d,restart_index_memory);
+    }
+#endif
+    VkShaderModule invocations_module;
+    VkShaderModuleCreateInfo igi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_invocations_stage),
+        .pCode=ps5vk_runtime_geometry_invocations_stage};
+    CHECK(vkCreateShaderModule(d,&igi,NULL,&invocations_module));
+    CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment_module));
+    /* The readback's own pre-raster half: a position whose x is unique per vertex
+     * index, so the bytes the geometry half reads identify the item they came
+     * from. Every other case keeps the witness's two-triangle vertex stage. */
+    VkShaderModule identity_vertex_module;
+    VkShaderModuleCreateInfo ivsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_identity_vertex),
+        .pCode=ps5vk_runtime_geometry_identity_vertex};
+    CHECK(vkCreateShaderModule(d,&ivsi,NULL,&identity_vertex_module));
+    /* Synthetic suppress diagnostic: a fragment stage that reads no input, so
+     * the geometry half's suppress case (which emits nothing) still forms a
+     * legal pipeline under this profile's draw-ABI rule instead of being
+     * refused for an input the pre-raster stage never exports. Every other case
+     * keeps fragment_module. */
+    VkShaderModule suppress_fragment_module;
+    VkShaderModuleCreateInfo sfsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_suppress_fragment),
+        .pCode=ps5vk_runtime_geometry_suppress_fragment};
+    CHECK(vkCreateShaderModule(d,&sfsi,NULL,&suppress_fragment_module));
+    VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex=0};
+    VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
+    VkQueue queue; vkGetDeviceQueue(d,0,0,&queue);
+    static uint8_t detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
+    uint64_t digests[PS5VK_GEOMETRY_CASES]={0};
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    /* Only the diagnostic table mode keeps going after a failing verdict, so
+     * only it counts failures; the shipping run fails at the first one. */
+    unsigned failed_cases=0;
+#endif
+    /* The input-independent case runs second: if the stage never emits, the log
+     * separates that from a broken ES/GS handshake before the other cases. Every
+     * case appears exactly once - a short initialiser would leave the remaining
+     * slots zero, i.e. extra control runs, and would silently drop the cases it
+     * omitted. The sentinel runs third, before any case that can lose the
+     * device, so the value oracle reports its own outcome instead of being
+     * preempted. */
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    /* Primitive-restart witness. Two quads with a gap, one indexed triangle
+     * strip whose index list carries a restart index between them: a cut draws
+     * exactly the two quads (nothing in the gap), a missing cut threads a
+     * bridging primitive across it. The control is the same draw with restart
+     * disabled, which is the state this profile accepts today, so the pair also
+     * proves the witness discriminates rather than restating the state. */
+    for (unsigned restart = 1; restart <= 2; ++restart) {
+        const VkBool32 enable = restart == 1 ? VK_TRUE : VK_FALSE;
+        VkVertexInputBindingDescription rb={.binding=0,.stride=8,
+            .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+        VkVertexInputAttributeDescription ra={.location=0,.binding=0,
+            .format=VK_FORMAT_R32G32_SFLOAT,.offset=0};
+        VkPipelineVertexInputStateCreateInfo rvi_state={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexBindingDescriptionCount=1,.pVertexBindingDescriptions=&rb,
+            .vertexAttributeDescriptionCount=1,.pVertexAttributeDescriptions=&ra};
+        VkPipelineShaderStageCreateInfo rvs[2]={
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=restart_vertex_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=restart_fragment_module,.pName="main"}};
+        VkPipelineInputAssemblyStateCreateInfo ria={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,.primitiveRestartEnable=enable};
+        VkPipelineRasterizationStateCreateInfo rraster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
+        VkPipelineMultisampleStateCreateInfo rms={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+        VkViewport rvp={0,0,(float)extent,(float)extent,0,1};
+        VkRect2D rsc={{0,0},{extent,extent}};
+        VkPipelineViewportStateCreateInfo rvps={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount=1,.pViewports=&rvp,.scissorCount=1,.pScissors=&rsc};
+        VkPipelineColorBlendAttachmentState rba={.colorWriteMask=15};
+        VkPipelineColorBlendStateCreateInfo rbs={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount=1,.pAttachments=&rba};
+        VkGraphicsPipelineCreateInfo rpi={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .layout=layout,.renderPass=pass,.stageCount=2,.pStages=rvs,
+            .pVertexInputState=&rvi_state,.pInputAssemblyState=&ria,
+            .pRasterizationState=&rraster,.pMultisampleState=&rms,
+            .pViewportState=&rvps,.pColorBlendState=&rbs};
+        VkPipeline rpipeline=VK_NULL_HANDLE;
+        VkResult rrc=vkCreateGraphicsPipelines(d,0,1,&rpi,NULL,&rpipeline);
+        if(rrc!=VK_SUCCESS || !rpipeline) {
+            ps5log_printf(PS5LOG_MARK,"PS5VK_RESTART_PROBE restart=%u rc=%d created=0",
+                (unsigned)enable,(int)rrc);
+            continue;
+        }
+        VkCommandBuffer rcb=VK_NULL_HANDLE;
+        VkCommandBufferAllocateInfo rcbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+        CHECK(vkAllocateCommandBuffers(d,&rcbi,&rcb));
+        VkCommandBufferBeginInfo rbegin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(rcb,&rbegin));
+        VkClearValue rclear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
+        VkRenderPassBeginInfo rrbi={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass=pass,.framebuffer=fb,.renderArea={{0,0},{extent,extent}},
+            .clearValueCount=1,.pClearValues=&rclear};
+        vkCmdBeginRenderPass(rcb,&rrbi,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(rcb,VK_PIPELINE_BIND_POINT_GRAPHICS,rpipeline);
+        /* Bound at buffer offset zero: the memory alignment above is where the
+         * data was written, not an offset inside the buffer. */
+        VkDeviceSize restart_zero=0;
+        vkCmdBindVertexBuffers(rcb,0,1,&restart_vertex_buffer,&restart_zero);
+        vkCmdBindIndexBuffer(rcb,restart_index_buffer,restart_zero,VK_INDEX_TYPE_UINT16);
+        vkCmdDrawIndexed(rcb,9,1,0,0,0);
+        vkCmdEndRenderPass(rcb);
+        CHECK(vkEndCommandBuffer(rcb));
+        VkSubmitInfo rsubmit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.commandBufferCount=1,.pCommandBuffers=&rcb};
+        VkResult src_rc=vkQueueSubmit(queue,1,&rsubmit,VK_NULL_HANDLE);
+        if(src_rc==VK_SUCCESS)src_rc=vkQueueWaitIdle(queue);
+        if(src_rc!=VK_SUCCESS) {
+            ps5log_printf(PS5LOG_MARK,"PS5VK_RESTART_PROBE restart=%u rc=%d created=1 submit_rc=%d",
+                (unsigned)enable,(int)rrc,(int)src_rc);
+            vkDestroyPipeline(d,rpipeline,NULL);
+            continue;
+        }
+        CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+            .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
+            .offset=0,.size=VK_WHOLE_SIZE}));
+        CHECK(ps5vk_rgba8_64k_rx_detile(detiled,sizeof(detiled),map,(size_t)stride,
+            extent,extent));
+        /* The oracle: the two axis-aligned quads are the coverage; any ink
+         * outside them - most visibly in the gap between them - is the bridging
+         * primitive a missing cut produces. */
+        uint64_t expected=0,ink=0,foreign=0;
+        for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x) {
+            const double nx=2.0*((double)x+0.5)/(double)extent-1.0;
+            const double ny=2.0*((double)y+0.5)/(double)extent-1.0;
+            const int covered=(nx>=-0.9 && nx<=-0.2 && ny>=-0.5 && ny<=0.5) ||
+                              (nx>= 0.2 && nx<= 0.9 && ny>=-0.5 && ny<=0.5);
+            const uint8_t *px=detiled+4*((size_t)y*extent+x);
+            const int is_ink=px[0]||px[1]||px[2];
+            if(covered)++expected;
+            if(is_ink)++ink;
+            if(is_ink && !covered)++foreign;
+        }
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_RESTART_PROBE restart=%u rc=%d created=1 expected=%llu ink=%llu foreign=%llu "
+            "digest=%016llx gap_left=%02x%02x%02x%02x gap_right=%02x%02x%02x%02x",
+            (unsigned)enable,(int)rrc,(unsigned long long)expected,(unsigned long long)ink,
+            (unsigned long long)foreign,
+            (unsigned long long)geometry_digest(detiled,sizeof(detiled)),
+            detiled[4*((size_t)32*extent+(extent/2-4))],detiled[4*((size_t)32*extent+(extent/2-4))+1],
+            detiled[4*((size_t)32*extent+(extent/2-4))+2],detiled[4*((size_t)32*extent+(extent/2-4))+3],
+            detiled[4*((size_t)32*extent+(extent/2+4))],detiled[4*((size_t)32*extent+(extent/2+4))+1],
+            detiled[4*((size_t)32*extent+(extent/2+4))+2],detiled[4*((size_t)32*extent+(extent/2+4))+3]);
+        vkDestroyPipeline(d,rpipeline,NULL);
+    }
+#endif
+    static const unsigned order[PS5VK_GEOMETRY_CASES]={
+        PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_SENTINEL,
+        PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
+        PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_INDEXED_MARKER,
+        PS5VK_GEOMETRY_READ_V0,PS5VK_GEOMETRY_READ_V1,PS5VK_GEOMETRY_READ_V2,
+        PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_INVOCATIONS,PS5VK_GEOMETRY_COMPONENTS,
+        PS5VK_GEOMETRY_PRIMITIVE_ID,PS5VK_GEOMETRY_POINTS,PS5VK_GEOMETRY_LINES,
+        PS5VK_GEOMETRY_POSITIONS};
+    for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
+        const unsigned witness_case=order[case_index];
+        const int mode=ps5vk_geometry_witness_mode(witness_case);
+        if(mode==-2)fail("geometry-case",-1);
+        const int32_t specialization=mode<0?0:mode;
+        VkSpecializationMapEntry entry={.constantID=PS5VK_GEOMETRY_MODE_CONSTANT,
+            .offset=0,.size=sizeof(specialization)};
+        VkSpecializationInfo spec={.mapEntryCount=1,.pMapEntries=&entry,
+            .dataSize=sizeof(specialization),.pData=&specialization};
+        VkPipelineShaderStageCreateInfo stages[3]={
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=vertex_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=geometry_module,.pName="main",
+             .pSpecializationInfo=&spec},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=fragment_module,.pName="main"}};
+        if(witness_case==PS5VK_GEOMETRY_SUPPRESS)
+            stages[2].module=suppress_fragment_module;
+        if(witness_case>=PS5VK_GEOMETRY_READ_V0 && witness_case<=PS5VK_GEOMETRY_READ_V2)
+            stages[0].module=identity_vertex_module;
+        if(witness_case==PS5VK_GEOMETRY_ENVELOPE)
+            stages[1].module=envelope_module;
+        if(witness_case==PS5VK_GEOMETRY_INVOCATIONS)
+            stages[1].module=invocations_module;
+        if(witness_case==PS5VK_GEOMETRY_PRIMITIVE_ID)
+            stages[1].module=primitive_id_module;
+        if(witness_case==PS5VK_GEOMETRY_COMPONENTS) {
+            stages[0].module=components_vertex_module;
+            stages[1].module=components_module;
+            /* The pixel half reads all sixteen output locations the geometry
+             * stage writes, so the declared output envelope is also consumed. */
+            stages[2].module=components_output_fragment_module;
+        }
+        /* The input families: their own pre-raster half identifies each input
+         * item by position and colour, and the pipeline's input assembly carries
+         * the family's topology, so the stage's declared input arity and the
+         * primitive the linker programs are the same claim. */
+        if(witness_case==PS5VK_GEOMETRY_POINTS || witness_case==PS5VK_GEOMETRY_LINES) {
+            stages[0].module=family_vertex_module;
+            stages[1].module=witness_case==PS5VK_GEOMETRY_POINTS?points_module:lines_module;
+        }
+        VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
+        VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        if(witness_case==PS5VK_GEOMETRY_POINTS)
+            ia.topology=VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+        else if(witness_case==PS5VK_GEOMETRY_LINES)
+            ia.topology=VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+        VkPipelineRasterizationStateCreateInfo raster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
+        VkPipelineMultisampleStateCreateInfo ms={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+        VkViewport viewport={0,0,(float)extent,(float)extent,0,1};
+        VkRect2D scissor={{0,0},{extent,extent}};
+        VkPipelineViewportStateCreateInfo vp={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount=1,.pViewports=&viewport,.scissorCount=1,.pScissors=&scissor};
+        VkPipelineColorBlendAttachmentState blend_attachment={.colorWriteMask=15};
+        VkPipelineColorBlendStateCreateInfo blend={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount=1,.pAttachments=&blend_attachment};
+        VkGraphicsPipelineCreateInfo pi={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .layout=layout,.renderPass=pass,.stageCount=mode<0?2:3,
+            .pStages=mode<0?two_stage:stages,
+            .pVertexInputState=&vi,.pInputAssemblyState=&ia,.pRasterizationState=&raster,
+            .pMultisampleState=&ms,.pViewportState=&vp,.pColorBlendState=&blend};
+        VkPipeline pipeline; CHECK(vkCreateGraphicsPipelines(d,0,1,&pi,NULL,&pipeline));
+        /* PRE-SUBMIT GATE. A geometry case must carry the merged pre-raster
+         * program's pipeline state: the output topology it strips, the maximum
+         * vertices it may emit, and the subgroup, on-chip, ring and max-output
+         * registers the GE reads. A pipeline that lost one of them would run
+         * with whatever the previous pipeline left behind. */
+        const struct ps5vk_native_graphics_pipeline *native=pipeline->graphics_state;
+        if(!native || !native->pair || !native->pair->ready)fail("geometry-pipeline",-1);
+        const struct ps5vk_runtime_shader *stage=&native->pair->runtime_vertex;
+        uint32_t topology=0,max_vertices=0,seen=0,gs_instances=0;
+        if(mode>=0) {
+            static const unsigned required[]={0x1ffu,0x291u,0x2abu,0x2ceu,0x2d3u};
+            for(unsigned i=0;i<stage->header.num_cx_registers;++i) {
+                const uint32_t offset=stage->context[i].offset;
+                for(unsigned r=0;r<sizeof(required)/sizeof(required[0]);++r)
+                    if(offset==required[r])++seen;
+                /* VGT_GS_INSTANCE_CNT: the invocation count the GE is told to run.
+                 * The invocations case is only measuring what it claims if this
+                 * says 32 (enabled, count in bits 8:2). */
+                if(offset==0x2e4u)
+                    gs_instances=(stage->context[i].value&1u)?
+                        ((stage->context[i].value>>2)&0x7fu):0u;
+                if(offset==0x29bu)topology=stage->context[i].value;
+                if(offset==0x2ceu)max_vertices=stage->context[i].value;
+            }
+            /* The envelope case declares 256 output vertices - the mandatory
+             * minimum the feature names - and every other geometry case declares
+             * the witness's nine, except the two input families, whose stage
+             * emits a four-vertex marker per input primitive. The state the GE
+             * reads must be that number, or the case would not be measuring what
+             * it claims. */
+            const uint32_t expect_vertices=
+                witness_case==PS5VK_GEOMETRY_ENVELOPE?256u:
+                ((witness_case==PS5VK_GEOMETRY_POINTS ||
+                  witness_case==PS5VK_GEOMETRY_LINES)?4u:9u);
+            if(seen!=sizeof(required)/sizeof(required[0]) || topology!=2u ||
+               max_vertices!=expect_vertices)
+                fail("geometry-state",-1);
+            if(witness_case==PS5VK_GEOMETRY_INVOCATIONS && gs_instances!=32u)
+                fail("geometry-invocations",-1);
+        }
+        VkCommandBuffer cb=VK_NULL_HANDLE;
+        VkCommandBufferAllocateInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+        CHECK(vkAllocateCommandBuffers(d,&cbi,&cb));
+        VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(cb,&begin));
+        VkClearValue clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
+        VkRenderPassBeginInfo rbi={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass=pass,.framebuffer=fb,.renderArea={{0,0},{extent,extent}},
+            .clearValueCount=1,.pClearValues=&clear};
+        vkCmdBeginRenderPass(cb,&rbi,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+        const uint32_t draw_vertices=
+            (witness_case>=PS5VK_GEOMETRY_READ_V0 && witness_case<=PS5VK_GEOMETRY_READ_V2)
+                ? (uint32_t)PS5VK_GEOMETRY_READ_VERTICES
+                : ((witness_case==PS5VK_GEOMETRY_POINTS) ? 4u :
+                   (witness_case==PS5VK_GEOMETRY_LINES) ? (uint32_t)PS5VK_GEOMETRY_FAMILY_VERTICES : 6u);
+        vkCmdDraw(cb,draw_vertices,1,0,0);
+        vkCmdEndRenderPass(cb);
+        CHECK(vkEndCommandBuffer(cb));
+        VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount=1,.pCommandBuffers=&cb};
+        CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
+        CHECK(vkQueueWaitIdle(queue));
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_GEOMETRY_DRAW case=%u mode=%d stages=%u out_prim_type=%u max_vertices=%u "
+            "vertices=%u instances=1 gs_invocations=%u in_prim=%u",
+            witness_case,mode,mode<0?2u:3u,topology,max_vertices,draw_vertices,
+            mode<0?0u:gs_instances,(uint32_t)ia.topology);
+        CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+            .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
+            .offset=0,.size=VK_WHOLE_SIZE}));
+        if(ps5vk_rgba8_64k_rx_detile(detiled,sizeof(detiled),map,(size_t)stride,
+            extent,extent))fail("geometry-detile",-1);
+        struct ps5vk_geometry_witness witness={0};
+        for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x)
+            ps5vk_geometry_witness_pixel(&witness,witness_case,x,y,extent,
+                                         detiled+4*((size_t)y*extent+x));
+        const int verified=ps5vk_geometry_witness_verify(&witness,witness_case,extent);
+        digests[witness_case]=geometry_digest(detiled,sizeof(detiled));
+        const uint8_t *corner=detiled;
+        const uint8_t *center=detiled+4*((size_t)(extent/2)*extent+extent/2);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_GEOMETRY_CASE case=%u mode=%d pixels=%llu expected=%llu covered=%llu "
+            "missing=%llu foreign=%llu wrong_color=%llu digest=%016llx verified=%d "
+            "first_foreign=%02x%02x%02x%02x at=%u,%u first_wrong=%02x%02x%02x%02x at=%u,%u "
+            "corner00=%02x%02x%02x%02x center=%02x%02x%02x%02x",
+            witness_case,mode,(unsigned long long)witness.pixels,
+            (unsigned long long)witness.expected_covered,
+            (unsigned long long)witness.covered,(unsigned long long)witness.missing,
+            (unsigned long long)witness.foreign,(unsigned long long)witness.wrong_color,
+            (unsigned long long)digests[witness_case],verified,
+            witness.first_foreign[0],witness.first_foreign[1],witness.first_foreign[2],
+            witness.first_foreign[3],witness.first_foreign_x,witness.first_foreign_y,
+            witness.first_wrong[0],witness.first_wrong[1],witness.first_wrong[2],
+            witness.first_wrong[3],witness.first_wrong_x,witness.first_wrong_y,
+            corner[0],corner[1],corner[2],corner[3],
+            center[0],center[1],center[2],center[3]);
+        if(witness_case>=PS5VK_GEOMETRY_READ_V0 && witness_case<=PS5VK_GEOMETRY_READ_V2) {
+            /* The readback's own probes: the centre of each quadrant the oracle
+             * expects (left/right column, low/high row) plus the middle column,
+             * so the log carries the bytes the stage wrote at each of them - and
+             * the clear colour where the read put its quadrant elsewhere. Without
+             * this the case line only says HOW MANY pixels disagreed, not which
+             * bytes the geometry half actually read. */
+            const uint8_t *probe[6]={detiled+4*((size_t)16*extent+8),
+                detiled+4*((size_t)16*extent+32),detiled+4*((size_t)16*extent+56),
+                detiled+4*((size_t)48*extent+8),detiled+4*((size_t)48*extent+32),
+                detiled+4*((size_t)48*extent+56)};
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_GEOMETRY_SAMPLE case=%u left_low=%02x%02x%02x%02x "
+                "middle_low=%02x%02x%02x%02x right_low=%02x%02x%02x%02x "
+                "left_high=%02x%02x%02x%02x middle_high=%02x%02x%02x%02x "
+                "right_high=%02x%02x%02x%02x",
+                witness_case,probe[0][0],probe[0][1],probe[0][2],probe[0][3],
+                probe[1][0],probe[1][1],probe[1][2],probe[1][3],
+                probe[2][0],probe[2][1],probe[2][2],probe[2][3],
+                probe[3][0],probe[3][1],probe[3][2],probe[3][3],
+                probe[4][0],probe[4][1],probe[4][2],probe[4][3],
+                probe[5][0],probe[5][1],probe[5][2],probe[5][3]);
+            /* Every item's own write place, sampled in both rows: the value a
+             * read returned put its quadrants at that value's place, so these
+             * samples say which item each read came from instead of only how
+             * many pixels disagreed. */
+            for(unsigned item=0;item<PS5VK_GEOMETRY_READ_VERTICES;++item) {
+                const unsigned px=ps5vk_geometry_witness_read_pixel(item,extent);
+                const uint8_t *low=detiled+4*((size_t)16*extent+px);
+                const uint8_t *high=detiled+4*((size_t)48*extent+px);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_GEOMETRY_PLACE case=%u item=%u x=%u low=%02x%02x%02x%02x "
+                    "high=%02x%02x%02x%02x",
+                    witness_case,item,px,low[0],low[1],low[2],low[3],
+                    high[0],high[1],high[2],high[3]);
+            }
+        }
+#if PS5VK_GEOMETRY_ORDER_PROBE
+        if(!verified)++failed_cases;
+#else
+        if(!verified)fail("geometry-verdict",-1);
+#endif
+        vkDestroyPipeline(d,pipeline,NULL);
+    }
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    /* The diagnostic table mode reported every case; the run still fails, so a
+     * diagnostic log can never read as an acceptance pass. */
+    if(failed_cases)fail("geometry-verdict",-(int)failed_cases);
+#endif
+    /* Passthrough and the amplified image must both reproduce the control image
+     * exactly (the three sub-triangles tile the input triangle), the shrunk and
+     * suppressed images must differ from it, and the varying rewrite must differ
+     * from the passthrough image it shares coverage with. A stale or collapsed
+     * readback cannot satisfy this. */
+    if(digests[PS5VK_GEOMETRY_CONTROL]!=digests[PS5VK_GEOMETRY_PASSTHROUGH] ||
+       digests[PS5VK_GEOMETRY_CONTROL]!=digests[PS5VK_GEOMETRY_AMPLIFY] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SHRINK] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SUPPRESS] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_CONSTANT] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_POSITIONS] ||
+       /* The sentinel carries the control's coverage with the colour its own
+        * mapping computes, so an image equal to any of these three means the
+        * value it drew did not come from the read. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SENTINEL] ||
+       digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_SENTINEL] ||
+       digests[PS5VK_GEOMETRY_POSITIONS]==digests[PS5VK_GEOMETRY_SENTINEL] ||
+       /* The marker diagnostic draws two small quads, so an image equal to any
+        * full-coverage case means it did not run (or the read returned
+        * something that made it degenerate). */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
+       /* The readbacks draw four small squares, so they too cannot coincide with
+        * a full-coverage image, and the three of them read three different
+        * vertices: identical images would mean the index is not applied. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_READ_V0] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_READ_V0] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_READ_V0] ||
+       digests[PS5VK_GEOMETRY_INDEXED_MARKER]==digests[PS5VK_GEOMETRY_READ_V0] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_READ_V1] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_READ_V1] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_READ_V1] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_READ_V2] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_READ_V2] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_READ_V2] ||
+       /* gl_in[0] of the two primitives is +1.2 and -1.2, so that readback
+        * cannot look like the two that read a single sign. */
+       digests[PS5VK_GEOMETRY_READ_V0]==digests[PS5VK_GEOMETRY_READ_V1] ||
+       digests[PS5VK_GEOMETRY_READ_V0]==digests[PS5VK_GEOMETRY_READ_V2] ||
+       /* The envelope's band is its own shape: an image equal to the control,
+        * the constant quad or the shrunk square would mean the 256 vertices did
+        * not produce the band this case is named after. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
+       digests[PS5VK_GEOMETRY_SHRINK]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
+       /* The invocations image is 32 coloured columns: equal to any of these
+        * would mean the invocations did not place them. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
+       digests[PS5VK_GEOMETRY_ENVELOPE]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
+       /* The components image is the constant quad's shape with its own colour,
+        * so equal to either would mean its inputs did not reach the stage. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_COMPONENTS] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_COMPONENTS] ||
+       /* The per-primitive id image is two coloured columns: equal to a
+        * full-coverage case would mean the markers were not placed. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_PRIMITIVE_ID] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_PRIMITIVE_ID] ||
+       /* The input families draw their own markers under their own topology, so
+        * an image equal to a full-coverage case would mean the stage never ran
+        * for that shape - the exact failure the old triangle-only profile could
+        * not observe, because it refused the pipeline before it could draw. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_POINTS] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_POINTS] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_POINTS] ||
+       digests[PS5VK_GEOMETRY_INDEXED_MARKER]==digests[PS5VK_GEOMETRY_POINTS] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_LINES] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_LINES] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_LINES] ||
+       /* The two families draw a different number of markers of different sizes
+        * from different items: identical images would mean the line stage read
+        * only one vertex per primitive and produced the point case's shape. */
+       digests[PS5VK_GEOMETRY_POINTS]==digests[PS5VK_GEOMETRY_LINES] ||
+       digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
+        fail("geometry-digest",-1);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GEOMETRY_PROBE cases=%u extent=%u clear=%02x%02x%02x%02x out_prim_type=2 "
+        /* The WITNESS stage's maximum vertex count, the state the per-case check
+         * reads back from VGT_GS_MAX_VERT_OUT. The envelope case declares 256 and
+         * carries that number in its own DRAW record, which the parser checks
+         * case by case; this one is the stage every other case uses. */
+        "max_vertices=9 digest_control=%016llx digest_passthrough=%016llx "
+        "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
+        "digest_amplify=%016llx digest_constant=%016llx digest_positions=%016llx "
+        "digest_sentinel=%016llx digest_indexed_marker=%016llx "
+        "digest_read_v0=%016llx digest_read_v1=%016llx digest_read_v2=%016llx "
+        "digest_envelope=%016llx "
+        "digest_invocations=%016llx digest_components=%016llx "
+        "digest_primitive_id=%016llx digest_points=%016llx digest_lines=%016llx "
+        "strict_verified=1",
+        PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
+        ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
+        (unsigned long long)digests[PS5VK_GEOMETRY_CONTROL],
+        (unsigned long long)digests[PS5VK_GEOMETRY_PASSTHROUGH],
+        (unsigned long long)digests[PS5VK_GEOMETRY_SHRINK],
+        (unsigned long long)digests[PS5VK_GEOMETRY_SUPPRESS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_RECOLOR],
+        (unsigned long long)digests[PS5VK_GEOMETRY_AMPLIFY],
+        (unsigned long long)digests[PS5VK_GEOMETRY_CONSTANT],
+        (unsigned long long)digests[PS5VK_GEOMETRY_POSITIONS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_SENTINEL],
+        (unsigned long long)digests[PS5VK_GEOMETRY_INDEXED_MARKER],
+        (unsigned long long)digests[PS5VK_GEOMETRY_READ_V0],
+        (unsigned long long)digests[PS5VK_GEOMETRY_READ_V1],
+        (unsigned long long)digests[PS5VK_GEOMETRY_READ_V2],
+        (unsigned long long)digests[PS5VK_GEOMETRY_ENVELOPE],
+        (unsigned long long)digests[PS5VK_GEOMETRY_INVOCATIONS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_COMPONENTS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_PRIMITIVE_ID],
+        (unsigned long long)digests[PS5VK_GEOMETRY_POINTS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_LINES]);
+    vkDestroyCommandPool(d,pool,NULL);
+    vkDestroyShaderModule(d,vertex_module,NULL);
+    vkDestroyShaderModule(d,geometry_module,NULL);
+    vkDestroyShaderModule(d,envelope_module,NULL);
+    vkDestroyShaderModule(d,invocations_module,NULL);
+    vkDestroyShaderModule(d,primitive_id_module,NULL);
+    vkDestroyShaderModule(d,family_vertex_module,NULL);
+    vkDestroyShaderModule(d,points_module,NULL);
+    vkDestroyShaderModule(d,lines_module,NULL);
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    if(restart_vertex_buffer)vkDestroyBuffer(d,restart_vertex_buffer,NULL);
+    if(restart_index_buffer)vkDestroyBuffer(d,restart_index_buffer,NULL);
+    if(restart_vertex_memory)vkFreeMemory(d,restart_vertex_memory,NULL);
+    if(restart_index_memory)vkFreeMemory(d,restart_index_memory,NULL);
+    vkDestroyShaderModule(d,restart_vertex_module,NULL);
+    vkDestroyShaderModule(d,restart_fragment_module,NULL);
+#endif
+    vkDestroyShaderModule(d,components_vertex_module,NULL);
+    vkDestroyShaderModule(d,components_module,NULL);
+    vkDestroyShaderModule(d,components_output_fragment_module,NULL);
+    vkDestroyShaderModule(d,fragment_module,NULL);
+    vkDestroyShaderModule(d,suppress_fragment_module,NULL);
+    vkDestroyShaderModule(d,identity_vertex_module,NULL);
+    vkDestroyPipelineLayout(d,layout,NULL);
+    vkDestroyFramebuffer(d,fb,NULL);
+    vkDestroyRenderPass(d,pass,NULL);
+    vkDestroyImageView(d,view,NULL);
+    vkUnmapMemory(d,memory);
+    vkDestroyImage(d,image,NULL);
+    vkFreeMemory(d,memory,NULL);
+}
+#endif
 int main(void)
 {
     struct timespec ts = {0}; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1592,6 +2672,33 @@ int main(void)
     vkDestroyInstance(instance,NULL);
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
     ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_CLIP_CULL_PROBE
+    /* The witness is the whole run: seven distance cases, no other diagnostic
+     * and no presentation. Every case is judged on the GPU's own readback
+     * before the next one is recorded. */
+    clip_cull_probe(device);
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    if (PS5VK_SHELL_CLOSE)
+        ps5log_line(PS5LOG_MARK,"PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
+    ps5log_close("graphics-api-end");
+    if (PS5VK_SHELL_CLOSE) for (;;) sleep(1);
+    return 0;
+#endif
+#if PS5VK_GEOMETRY_PROBE
+    /* The geometry witness is the whole run: five coverage cases, no other
+     * diagnostic and no presentation. */
+    geometry_probe(device);
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    if (PS5VK_SHELL_CLOSE)
+        ps5log_line(PS5LOG_MARK,"PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
+    ps5log_close("graphics-api-end");
+    if (PS5VK_SHELL_CLOSE) for (;;) sleep(1);
     return 0;
 #endif
     VkAttachmentDescription attachment = {.format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,

@@ -10,6 +10,14 @@
 #ifndef PS5VK_MULTIVIEW_DIAGNOSTIC
 #define PS5VK_MULTIVIEW_DIAGNOSTIC 0
 #endif
+/* Private diagnostic gate for the optional-stage witnesses (geometry,
+ * tessellation and the clip/cull distances they export). The shipping path
+ * requires the logical device to have enabled the feature; only a build that
+ * exists to measure the hardware skips that negotiation, exactly as the
+ * multiview witness build does. */
+#ifndef PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
+#define PS5VK_OPTIONAL_STAGE_DIAGNOSTIC 0
+#endif
 /* The widest mask the diagnostic build validates against, and therefore the most
  * layers the framebuffer rule below has to be able to serve. */
 enum { PS5VK_MULTIVIEW_DIAGNOSTIC_VIEWS = 6 };
@@ -68,6 +76,24 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_MULTI_DRAW_INDIRECT = 1u << 6,
     /* The full 32-bit range of VK_INDEX_TYPE_UINT32 indices. */
     PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 = 1u << 7,
+    /* Optional graphics stages (DXVK262-T04), which start after the indirect
+     * draw tranche. Each bit means "this device can and does deliver the
+     * capability", and the shipping gates refuse a shader that uses a feature
+     * whose bit the logical device did not enable. */
+    PS5VK_FEATURE_SHADER_CLIP_DISTANCE = 1u << 8,
+    PS5VK_FEATURE_SHADER_CULL_DISTANCE = 1u << 9,
+    PS5VK_FEATURE_GEOMETRY_SHADER = 1u << 10,
+    PS5VK_FEATURE_TESSELLATION_SHADER = 1u << 11,
+    /* Rasterization and viewport state (DXVK262-T05), which start after the
+     * optional-stage tranche so the two integrations union without renumbering.
+     * The bits are declared here because the platform mask that may set them
+     * lives in this repository's native platform; no shipping profile sets any
+     * of them yet, and the private diagnostic guard below is what lets the T05
+     * witness negotiate them before anything is advertised. */
+    PS5VK_FEATURE_DEPTH_BIAS_CLAMP = 1u << 12,
+    PS5VK_FEATURE_DEPTH_CLAMP = 1u << 13,
+    PS5VK_FEATURE_FILL_MODE_NON_SOLID = 1u << 14,
+    PS5VK_FEATURE_MULTI_VIEWPORT = 1u << 15,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

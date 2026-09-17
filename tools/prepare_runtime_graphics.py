@@ -23,7 +23,10 @@ def main():
     # regression is (opengnm-psbc Makefile's view-index rule). Every other
     # module keeps the default Vulkan 1.0 target this driver has always used.
     module_flags = {"view_index": ("--target-env", "vulkan1.1"),
-                    "view_index_instance": ("--target-env", "vulkan1.1")}
+                    "view_index_instance": ("--target-env", "vulkan1.1"),
+                    # The coverage witness declares the distance arrays; the
+                    # control is the same source with neither declared.
+                    "clip_cull_probe": ("-DWITH_DISTANCES=1",)}
     modules = (
         ("experiments/graphics/runtime_vertex_bindings_probe.vert", "runtime_vertex_bindings_probe.vert.spv", "vertex_bindings"),
         ("experiments/graphics/runtime_triangle.vert", "runtime_triangle.vert.spv", "vertex"),
@@ -39,6 +42,66 @@ def main():
         ("experiments/graphics/runtime_input_attachment.vert", "runtime_input_attachment.vert.spv", "input_attachment_vertex"),
         ("experiments/graphics/runtime_input_attachment_pattern.frag", "runtime_input_attachment_pattern.frag.spv", "input_attachment_pattern"),
         ("experiments/graphics/runtime_input_attachment_transform.frag", "runtime_input_attachment_transform.frag.spv", "input_attachment_transform"),
+        ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_probe.vert.spv", "clip_cull_probe"),
+        ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_control.vert.spv", "clip_cull_control"),
+        # The pixel end of the clip/cull interface: a fragment stage that reads
+        # gl_ClipDistance[0], so the witness measures whether the rasterizer
+        # delivers the interpolated distance the pre-raster stage exported.
+        ("experiments/graphics/runtime_clip_distance_read.frag",
+         "runtime_clip_distance_read.frag.spv", "clip_distance_read_fragment"),
+        ("experiments/graphics/runtime_geometry_probe.vert", "runtime_geometry_probe.vert.spv", "geometry_vertex"),
+        # Readback-only pre-raster half: a position whose x is unique per vertex
+        # index, so the bytes the geometry half reads name the ES item they came
+        # from instead of only their sign.
+        ("experiments/graphics/runtime_geometry_identity.vert",
+         "runtime_geometry_identity.vert.spv", "geometry_identity_vertex"),
+        ("experiments/graphics/runtime_geometry_probe.geom", "runtime_geometry_probe.geom.spv", "geometry_stage"),
+        # Envelope-only pre-raster half: a 256-vertex emission, the mandatory
+        # minimum maxGeometryOutputVertices names. max_vertices is module-level,
+        # so the envelope case needs a module of its own.
+        ("experiments/graphics/runtime_geometry_envelope.geom",
+         "runtime_geometry_envelope.geom.spv", "geometry_envelope_stage"),
+        # Invocations-only pre-raster half: 32 invocations, each placing a marker
+        # coloured by its invocation id. invocations is module-level too.
+        ("experiments/graphics/runtime_geometry_invocations.geom",
+         "runtime_geometry_invocations.geom.spv", "geometry_invocations_stage"),
+        # Components-only pair: a pre-raster stage exporting 64 components and a
+        # geometry stage that declares, reads and writes that many.
+        ("experiments/graphics/runtime_geometry_primitive_id.geom",
+         "runtime_geometry_primitive_id.geom.spv", "geometry_primitive_id_stage"),
+        ("experiments/graphics/runtime_geometry_components.vert",
+         "runtime_geometry_components.vert.spv", "geometry_components_vertex"),
+        ("experiments/graphics/runtime_geometry_components.geom",
+         "runtime_geometry_components.geom.spv", "geometry_components_stage"),
+        # Synthetic suppress diagnostic only: an input-less fragment stage, so
+        # the geometry half's suppress case (which emits nothing) still forms a
+        # legal pipeline instead of being refused for an unmatched input.
+        ("experiments/graphics/runtime_geometry_suppress.frag",
+         "runtime_geometry_suppress.frag.spv", "geometry_suppress_fragment"),
+        # The input families a geometryShader device is expected to accept: a
+        # pre-raster half whose positions and colours identify the vertex, plus
+        # the point-list and line-list geometry stages that read their input
+        # primitive's own arity (one vertex per point, two per line).
+        ("experiments/graphics/runtime_geometry_family.vert",
+         "runtime_geometry_family.vert.spv", "geometry_family_vertex"),
+        ("experiments/graphics/runtime_geometry_points.geom",
+         "runtime_geometry_points.geom.spv", "geometry_points_stage"),
+        ("experiments/graphics/runtime_geometry_lines.geom",
+         "runtime_geometry_lines.geom.spv", "geometry_lines_stage"),
+        # Diagnostic-only pair for the primitive-restart witness (order-probe
+        # payloads): two quads with a gap, an indexed strip whose index list
+        # carries a restart index between them, and a vertex stage that colours
+        # each quad by its index value.
+        ("experiments/graphics/runtime_primitive_restart.vert",
+         "runtime_primitive_restart.vert.spv", "primitive_restart_vertex"),
+        ("experiments/graphics/runtime_primitive_restart.frag",
+         "runtime_primitive_restart.frag.spv", "primitive_restart_fragment"),
+        # The component envelope's pixel half: it declares an input for all
+        # sixteen vec4 outputs the geometry half writes, so the OUTPUT side of
+        # the component minimum is consumed rather than only declared.
+        ("experiments/graphics/runtime_geometry_output_components.frag",
+         "runtime_geometry_output_components.frag.spv",
+         "geometry_output_components_fragment"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

@@ -4,6 +4,7 @@
 #include "texture_descriptor.h"
 #include "descriptor_table_layout.h"
 #include "descriptor_encode.h"
+#include "graphics_pipeline_ps5.h"
 #include <string.h>
 
 /* The runtime graphics profile delivers combined image samplers, resource-only
@@ -31,6 +32,20 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
     VkPipeline p=op->pipeline;
     VkResult rc=ps5vk_descriptor_table_layout_build(p->set_count,p->sets,tables);
     if(rc!=VK_SUCCESS)return rc;
+    /* The visibility a binding may name, exactly as the compiler profile decides
+     * it: the two standalone stages, plus the geometry stage when the pipeline's
+     * pre-raster program is the merged vertex+geometry pair (the pinned
+     * conformance module binds its uniform buffer and its sampled image to that
+     * stage alone). A binding the pipeline would not execute is still refused,
+     * and the flag comes from the built pair rather than from a second reading
+     * of the compiler metadata, which no longer exists at draw time. */
+    VkShaderStageFlags visible=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+    {
+        const struct ps5vk_native_graphics_pipeline *native=
+            p->graphics_state?(const struct ps5vk_native_graphics_pipeline *)p->graphics_state:NULL;
+        if(native && native->pair && native->pair->ready && native->pair->geometry_preraster)
+            visible|=VK_SHADER_STAGE_GEOMETRY_BIT;
+    }
     *mask=0;
     if(runtime->enabled) {
         for(unsigned s=0;s<PS5VK_MAX_SETS;++s) {
@@ -51,7 +66,7 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
             const struct ps5vk_binding *binding=&set->signature.binding[b];
             if(!binding->count)continue;
             if(!graphics_descriptor_type(set->signature.type[b]) ||
-               !(binding->stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
+               !(binding->stages&visible))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             /* An input attachment is fragment-visible resource-only image data.
              * vkCreateDescriptorSetLayout admits only the fragment stage for
@@ -118,9 +133,16 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         if (rc != VK_SUCCESS) return rc;
     }
     struct ps5vk_draw_state plan;
+    /* The index width the draw's bound index buffer declares, or zero for a
+     * non-indexed draw. The direct and indirect indexed ops both carry the
+     * binding vkCmdBindIndexBuffer recorded, and the hardware needs the width to
+     * compare the right reset value. */
+    const unsigned index_width =
+        (op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_DRAW_INDEXED_INDIRECT) ?
+        (op->indices.type == VK_INDEX_TYPE_UINT16 ? 2u : 4u) : 0u;
     rc = ps5vk_native_draw_state(op->pipeline, &op->viewport, &op->scissor,
         &color, has_depth ? &depth : NULL, area,
-        fb->width, fb->height, &plan);
+        fb->width, fb->height, index_width, &plan);
     if (rc != VK_SUCCESS) return rc;
     struct ps5vk_descriptor_table_layout tables;
     uint32_t set_mask=0;
