@@ -79,7 +79,7 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual(15, len({c["path"] for c in geometry}))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in geometry))
         measured_fail = [d for d in manifest["diagnostics"]
-                         if d.get("category") == "geometry-stage-descriptor-or-varying-gap"]
+                         if d.get("category") == "primitive-restart-unsupported"]
         self.assertEqual(4, len(measured_fail))
         self.assertTrue(all(d["expected_status"] == "Fail" for d in measured_fail))
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
