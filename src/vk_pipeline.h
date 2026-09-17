@@ -50,6 +50,9 @@ VkBool32 ps5vk_shader_entry(VkShaderModule, VkShaderStageFlagBits, const char *,
 struct ps5vk_raster_state {
     VkBool32 depth_bias_enable;
     float depth_bias_constant, depth_bias_clamp, depth_bias_slope;
+    /* depthClampEnable: near/far clipping is replaced by clamping z_f to the
+     * viewport's [min(n,f), max(n,f)]. Static in this profile. */
+    VkBool32 depth_clamp;
 };
 struct VkPipeline_T {
     VkDevice device;

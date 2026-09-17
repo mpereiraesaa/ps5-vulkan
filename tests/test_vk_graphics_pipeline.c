@@ -131,6 +131,21 @@ int main(void)
         assert(!biased->raster.depth_bias_enable && biased->raster.depth_bias_constant==0.0f &&
             biased->raster.depth_bias_slope==0.0f && biased->raster.depth_bias_clamp==0.0f);
         vkDestroyPipeline(&d,biased,NULL);
+        /* depthClampEnable: refused without depthClamp enabled on the device
+         * (no backend object), carried as static raster state with it. */
+        r.depthClampEnable=VK_TRUE;
+        const unsigned before_clamp=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before_clamp);
+        d.enabled_features|=PS5VK_FEATURE_DEPTH_CLAMP;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.depth_clamp && !biased->raster.depth_bias_enable);
+        vkDestroyPipeline(&d,biased,NULL);
+        d.enabled_features&=~PS5VK_FEATURE_DEPTH_CLAMP;
+        r.depthClampEnable=VK_FALSE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(!biased->raster.depth_clamp);
+        vkDestroyPipeline(&d,biased,NULL);
         /* Dynamic depth bias: the enable stays static, the factors are not
          * read from the create info (a non-zero clamp here is ignored too),
          * and VK_DYNAMIC_STATE_DEPTH_BIAS is accepted next to the other two. */
