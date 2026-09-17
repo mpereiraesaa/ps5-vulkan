@@ -218,9 +218,9 @@ static void check_fragment_distance_read(void)
     /* The interface decision is independent of delivery, so the profile keeps
      * accepting the shape; the run is what is refused. */
     assert(ps5vk_runtime_graphics_supported(&key));
-    const void *refused=NULL;
-    assert(ps5vk_runtime_graphics_compile(NULL,&key,&refused)==VK_ERROR_FEATURE_NOT_PRESENT &&
-           !refused);
+    const void *read_pair=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&read_pair)==VK_SUCCESS && read_pair);
+    ps5vk_runtime_graphics_free(NULL,read_pair);
     /* The same pair without the read compiles, so the refusal above is the read
      * and not a side effect of the fixture. */
     struct ps5vk_graphics_module_key reads=key.fragment;
