@@ -25,6 +25,8 @@ VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
     uint32_t model;
     switch (stage) {
     case VK_SHADER_STAGE_VERTEX_BIT: model = 0; break;
+    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT: model = 1; break;
+    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT: model = 2; break;
     case VK_SHADER_STAGE_GEOMETRY_BIT: model = 3; break;
     case VK_SHADER_STAGE_FRAGMENT_BIT: model = 4; break;
     case VK_SHADER_STAGE_COMPUTE_BIT: model = 5; break;

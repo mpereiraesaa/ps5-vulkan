@@ -266,6 +266,70 @@ int main(void)
         d.enabled_features&=~PS5VK_FEATURE_GEOMETRY_SHADER;
         vkDestroyShaderModule(&d,geometry_module,NULL);
     }
+    /* The tessellation contract: the control and evaluation stages are
+     * described and validated, and the pipeline is then refused because the
+     * pinned compiler emits no loadable package for them. PATCH_LIST without
+     * them, a missing or out-of-range patchControlPoints, and the stages
+     * without PATCH_LIST are all refused. */
+    {
+        uint32_t tcs_words[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,1,1,0x6e69616d,0};
+        uint32_t tes_words[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,2,1,0x6e69616d,0};
+        VkShaderModule tcs_module,tes_module;
+        VkShaderModuleCreateInfo tcs_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(tcs_words),.pCode=tcs_words};
+        VkShaderModuleCreateInfo tes_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(tes_words),.pCode=tes_words};
+        assert(vkCreateShaderModule(&d,&tcs_info,NULL,&tcs_module)==VK_SUCCESS);
+        assert(vkCreateShaderModule(&d,&tes_info,NULL,&tes_module)==VK_SUCCESS);
+        VkPipelineShaderStageCreateInfo tess_stages[4]={
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=modules[0],.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,.module=tcs_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,.module=tes_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=modules[1],.pName="main"}};
+        VkPipelineTessellationStateCreateInfo tessellation={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+            .patchControlPoints=3};
+        VkGraphicsPipelineCreateInfo tess_info=info;
+        tess_info.stageCount=4;tess_info.pStages=tess_stages;
+        tess_info.pTessellationState=&tessellation;
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+        tess_info.pInputAssemblyState=&ia;
+        VkPipeline tess_pipeline;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        /* The evaluation stage alone, and a patch list without them, are not a
+         * tessellation pipeline either. */
+        tess_info.stageCount=3;
+        tess_info.pStages=&tess_stages[1];
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)!=
+               VK_SUCCESS);
+        tess_info.stageCount=4;tess_info.pStages=tess_stages;
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+        VkPipelineTessellationStateCreateInfo bad=tessellation;
+        bad.patchControlPoints=0;
+        tess_info.pTessellationState=&bad;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        bad.patchControlPoints=PS5VK_MAX_PATCH_CONTROL_POINTS+1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        tess_info.pTessellationState=&tessellation;
+        tess_info.pTessellationState=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&tess_pipeline)==VK_SUCCESS);
+        vkDestroyPipeline(&d,tess_pipeline,NULL);
+        vkDestroyShaderModule(&d,tcs_module,NULL);
+        vkDestroyShaderModule(&d,tes_module,NULL);
+    }
     created=1;released=0;
     vkDestroyShaderModule(&d,modules[0],NULL); vkDestroyShaderModule(&d,modules[1],NULL);
     p->pending=1; vkDestroyPipeline(&d,p,NULL); assert(!released);

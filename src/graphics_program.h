@@ -3,6 +3,7 @@
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
 #include "vk_descriptor.h"
+#include "graphics_stages.h"
 struct ps5vk_graphics_specialization {
     uint32_t constant_id, size;
     uint8_t data[8];
