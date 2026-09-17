@@ -59,11 +59,16 @@ FEATURE_GATES = {
     "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount != 1",
                          "one color attachment per pipeline"),
     "geometryShader": ("src/vk_graphics_pipeline.c",
-                       "if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;",
-                       "only vertex and fragment stages are accepted"),
+                       "else if (s->stage == VK_SHADER_STAGE_GEOMETRY_BIT && !gs) gs=s;",
+                       "the stage is described, compiled through the merged vertex+geometry "
+                       "pre-raster program and refused by the shipping profile: the ES->GS input "
+                       "handoff is not delivered (positions arrive, the varying reads zero, and an "
+                       "indexed gl_in read loses the device)"),
     "tessellationShader": ("src/vk_graphics_pipeline.c",
-                           "if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;",
-                           "only vertex and fragment stages are accepted"),
+                           "else if (s->stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT && !tcs) tcs=s;",
+                           "the control/evaluation pair is described, validated against the patch "
+                           "state and refused: the pinned compiler produces no loadable hull package "
+                           "and the hull/domain pipeline state is not programmed"),
     "sampleRateShading": ("src/vk_graphics_pipeline.c", "m->sampleShadingEnable",
                           "sample shading state is rejected"),
     "logicOp": ("src/vk_graphics_pipeline.c", "b->logicOpEnable",
@@ -86,15 +91,23 @@ FEATURE_GATES = {
     "pipelineStatisticsQuery": ("src/vk_query_pool.c", "pipelineStatisticsQuery is reported false.",
                                 "pipeline statistics query pools are rejected"),
     # The packed pre-raster distance export is implemented and hardware-witnessed,
-    # but neither distance feature is advertised: the pinned upstream clipping
-    # module gates the fragment-shader-read and dynamic-index variants on these
-    # same two features (vktClippingTests.cpp requireFeatures()), and the pixel
-    # stage of this profile refuses a distance mask, so the feature's whole
-    # obligation is not covered yet.
-    "shaderClipDistance": ("native/runtime_shader.c", "clip_distance_mask || m->cull_distance_mask) return -2",
-                           "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised"),
-    "shaderCullDistance": ("native/runtime_shader.c", "clip_distance_mask || m->cull_distance_mask) return -2",
-                           "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised"),
+    # and the dynamically indexed write has a witness case whose native result is
+    # still to be taken. Neither distance feature is advertised: the pinned
+    # upstream clipping module gates the fragment-shader-read variant on these
+    # same two features (vktClippingTests.cpp requireFeatures()), and a
+    # fragment-stage distance declaration is refused by the stage-interface
+    # policy - with the metadata adapter refusing a pixel-stage mask behind it -
+    # so the feature's whole obligation is not covered yet.
+    "shaderClipDistance": ("src/spirv_graphics_interface.c", "if(!preraster || d->patch",
+                           "the pre-raster export is implemented and hardware-witnessed for static "
+                           "indices, and the dynamically indexed write is rendered by the witness "
+                           "(no native result yet); a fragment-stage distance declaration is refused "
+                           "by the stage-interface policy, so the feature is not advertised"),
+    "shaderCullDistance": ("src/spirv_graphics_interface.c", "if(!preraster || d->patch",
+                           "the pre-raster export is implemented and hardware-witnessed for static "
+                           "indices, and the dynamically indexed write is rendered by the witness "
+                           "(no native result yet); a fragment-stage distance declaration is refused "
+                           "by the stage-interface policy, so the feature is not advertised"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",

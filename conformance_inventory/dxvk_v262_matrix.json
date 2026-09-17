@@ -619,7 +619,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:geometryShader",
       "implementation": {
-        "detail": "only vertex and fragment stages are accepted (src/vk_graphics_pipeline.c)",
+        "detail": "the stage is described, compiled through the merged vertex+geometry pre-raster program and refused by the shipping profile: the ES->GS input handoff is not delivered (positions arrive, the varying reads zero, and an indexed gl_in read loses the device) (src/vk_graphics_pipeline.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
@@ -1039,7 +1039,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
       "implementation": {
-        "detail": "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
+        "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is rendered by the witness (no native result yet); a fragment-stage distance declaration is refused by the stage-interface policy, so the feature is not advertised (src/spirv_graphics_interface.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
@@ -1080,7 +1080,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "implementation": {
-        "detail": "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
+        "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is rendered by the witness (no native result yet); a fragment-stage distance declaration is refused by the stage-interface policy, so the feature is not advertised (src/spirv_graphics_interface.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
@@ -1170,7 +1170,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:tessellationShader",
       "implementation": {
-        "detail": "only vertex and fragment stages are accepted (src/vk_graphics_pipeline.c)",
+        "detail": "the control/evaluation pair is described, validated against the patch state and refused: the pinned compiler produces no loadable hull package and the hull/domain pipeline state is not programmed (src/vk_graphics_pipeline.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
