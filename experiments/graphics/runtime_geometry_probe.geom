@@ -35,7 +35,13 @@ void main()
          * position drives the colour (position in [-1,1] mapped to [0,1]), so a
          * correct read, a zero read and a shifted read produce three different
          * images; the oracle asserts the exact per-pixel colour derived from the
-         * same mapping, which is the coverage-plus-value split S1-S3 lacked. */
+         * same mapping, which is the coverage-plus-value split S1-S3 lacked.
+         * LIMIT: the colour is affine in the read position and the input is two
+         * structurally identical triangles, so exchanging the two primitives'
+         * items wholesale maps the image onto itself; the sentinel separates a
+         * correct read from zero, garbage and shifted items, not from that
+         * exchange. Pair it with the passthrough case (which reads the varying
+         * and fails) to separate the position path from the varying path. */
         for (int i = 0; i < 3; ++i) {
             gl_Position = gl_in[i].gl_Position;
             out_color = vec3(gl_in[i].gl_Position.x * 0.5 + 0.5,

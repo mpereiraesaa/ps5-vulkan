@@ -48,6 +48,11 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
     case PS5VK_GEOMETRY_AMPLIFY:
     /* The input positions must trace the same triangles the vertex stage drew. */
     case PS5VK_GEOMETRY_POSITIONS:
+    /* Sentinel: the input triangle is emitted unchanged, so the coverage is the
+     * control's and the VALUE assertion comes from the expected-colour branch
+     * below. Without this case the oracle would expect an empty image and a
+     * correct draw would read as foreign pixels. */
+    case PS5VK_GEOMETRY_SENTINEL:
         return 1;
     case PS5VK_GEOMETRY_SHRINK:
         return ndc_x>=-shrink_extent && ndc_x<=shrink_extent &&
@@ -78,6 +83,31 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
         rgba[0]=unorm8(0.25);
         rgba[1]=unorm8(0.5);
         rgba[2]=unorm8(0.75);
+        rgba[3]=255u;
+        return;
+    }
+    if(witness_case==PS5VK_GEOMETRY_SENTINEL) {
+        /* The geometry stage builds this colour from the position it READ from
+         * gl_in, not from the varying: the vertex stage's own affine mapping
+         * ((p+1)*0.5) with a distinct blue. Barycentric interpolation of an
+         * affine varying reproduces that function at the pixel centre, so a
+         * correct read must put exactly (u,v) here with blue 0.25 - different
+         * from the control's 0.5, so this branch cannot be satisfied by the
+         * control image. A read that returned zeros collapses the triangle (no
+         * coverage; the expected_covered==pixels verdict fails) and a read that
+         * returned another item's data moves or reshapes it (foreign pixels).
+         * That observation is what the empty-image S1-S3 oracle could not make.
+         *
+         * Limit, stated rather than hidden: because the colour is affine in the
+         * read position and the input is two structurally identical triangles
+         * (B==D and C==F) each processed with gl_in.length()==3, exchanging the
+         * two primitives' items wholesale maps the image onto itself. The
+         * sentinel separates a correct read from a zero read, a garbage read and
+         * a shifted item; it does not separate a full exchange of the two
+         * triangles, which carries no observable difference on this input. */
+        rgba[0]=unorm8(u);
+        rgba[1]=unorm8(v);
+        rgba[2]=unorm8(0.25);
         rgba[3]=255u;
         return;
     }
@@ -139,10 +169,10 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     case PS5VK_GEOMETRY_RECOLOR:
     case PS5VK_GEOMETRY_AMPLIFY:
     case PS5VK_GEOMETRY_POSITIONS:
-    /* Sentinel: the input triangle unchanged, so the coverage is the control's;
-     * the VALUE assertion lives in the expected-colour function, which still
-     * needs its branch for this case (the position-derived formula used by
-     * passthrough/positions is the template, with the sentinel mapping). */
+    /* Sentinel: the input triangle unchanged, so the coverage is the control's,
+     * and the colour assertion is the expected-colour branch for this case. Both
+     * halves of the verdict are real: a pass means the value the geometry stage
+     * read produced the exact per-pixel colour the oracle predicted. */
     case PS5VK_GEOMETRY_SENTINEL:
         return witness->expected_covered==pixels;
     case PS5VK_GEOMETRY_SHRINK:

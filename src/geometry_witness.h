@@ -53,7 +53,15 @@ enum {
     /* Sentinel: input triangle unchanged, colour driven by the read
      * position, so a correct, zero or shifted read differ visibly. */
     PS5VK_GEOMETRY_SENTINEL = 11,
-    PS5VK_GEOMETRY_CASES = 12
+    PS5VK_GEOMETRY_CASES = 12,
+    /* The value-oracle matrix: the cases whose verdict asserts the exact expected
+     * image, coverage and colour. This is what the default geometry build draws
+     * and what tools/verify_geometry.py certifies. The S1/S2/S3 characterisation
+     * probes sit deliberately outside it: their oracle is an empty image, which
+     * cannot separate a correct read from a zero read, so they run only in the
+     * bounded diagnostic ordering and their evidence stays per-run rather than
+     * promoted as proof of the data path. */
+    PS5VK_GEOMETRY_VALUE_CASES = 9
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */
