@@ -253,7 +253,12 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
      * the state the same compiler emitted for them. */
     if(vs) {
         if(!distances_valid(m,m->context_registers,m->context_register_count))return -2;
-    } else if(m->clip_distance_mask || m->cull_distance_mask) return -2;
+    } else if(m->clip_distance_mask || m->cull_distance_mask ||
+              /* Candidate metadata reports what a pixel stage *reads* of the
+               * distance built-ins. This profile does not deliver them to the
+               * pixel stage yet, so a read is refused explicitly here instead
+               * of being inferred from the declaration. */
+              m->ps_clip_distance_reads || m->ps_cull_distance_reads) return -2;
     if (m->vertex_buffer_table_valid ?
         (!vs || m->vertex_buffer_table_user_data_dword>=m->user_sgpr_count ||
          !m->vertex_buffer_usage_mask || m->vertex_buffer_usage_mask>0xffffu || m->vertex_buffer_per_attribute) :

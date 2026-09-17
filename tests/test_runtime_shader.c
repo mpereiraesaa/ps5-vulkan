@@ -23,6 +23,7 @@ int main(void)
     m->output_semantic_count=1;m->output_semantics[0]=15;
     struct ps5vk_runtime_shader arena,before;
     assert(!ps5vk_runtime_shader_build(&arena,&c));
+
     assert(arena.header.num_cx_registers==11 && arena.context[10].value==1);
     assert(arena.header.num_output_semantics==1 && arena.outputs[0]==15);
     assert((uintptr_t)&arena.header.output_semantics+(uintptr_t)arena.header.output_semantics==(uintptr_t)arena.outputs);
@@ -308,6 +309,37 @@ int main(void)
         assert(ps5vk_runtime_draw_values_sets(&collided, 1, 0, 0, 0, 0, 0,
             tables_zero, vertex, pixel));
         *m = base_vertex; fragment = base_fragment;
+    }
+    /* A fragment stage that reads the distance built-ins is refused explicitly:
+     * the compiler reports the widths (candidate metadata), and this profile
+     * does not deliver distances to the pixel stage yet. */
+    {
+        PsbcShaderMetadata reading = {
+            .version = PSBC_SHADER_METADATA_VERSION,
+            .target = PSBC_TARGET_PS5,
+            .source_stage = PSBC_STAGE_FRAGMENT,
+            .hardware_stage = PSBC_HW_STAGE_PIXEL,
+            .address32_hi = 2,
+            .user_sgpr_count = 2,
+            .input_semantic_count = 1,
+            .input_semantics = {15},
+            .context_register_count = 2,
+            .shader_register_count = 4,
+        };
+        reading.context_registers[0] = (PsbcRegisterWrite){.offset = 0x1c4};
+        reading.context_registers[1] = (PsbcRegisterWrite){.offset = 0x8f, .value = 15};
+        for (unsigned i = 0; i < 4; ++i)
+            reading.shader_registers[i] = (PsbcRegisterWrite){.offset = (uint16_t)(8 + i)};
+        PsbcShaderOutput fragment_output = {.machine_code = &code, .machine_code_size = 4,
+                                            .metadata = reading};
+        assert(!ps5vk_runtime_shader_build(&arena, &fragment_output));
+        fragment_output.metadata.ps_clip_distance_reads = 1;
+        assert(ps5vk_runtime_shader_build(&arena, &fragment_output));
+        fragment_output.metadata.ps_clip_distance_reads = 0;
+        fragment_output.metadata.ps_cull_distance_reads = 2;
+        assert(ps5vk_runtime_shader_build(&arena, &fragment_output));
+        fragment_output.metadata.ps_cull_distance_reads = 0;
+        assert(!ps5vk_runtime_shader_build(&arena, &fragment_output));
     }
     puts("Runtime shader header: pass (11 registers, relative semantics, rejection without mutation)");
     return 0;
