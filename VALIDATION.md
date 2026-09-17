@@ -60,9 +60,37 @@ compiled by the pinned compiler with the full-width mask
 reports) and is accepted by the native header builder
 (`tools/inspect_graphics_compiler.c`, which now prints the masks:
 `distances clip_mask=00000003 cull_mask=00000000`, `native_header_result=0`).
-The fragment read is refused: `native/runtime_shader.c` returns `-2` for any
-pixel-stage clip or cull mask, because this profile does not deliver the
-distances to the pixel stage.
+The fragment read is refused, and it is worth stating which gate a pipeline
+actually hits: the stage-interface policy refuses a fragment-stage
+`gl_ClipDistance`/`gl_CullDistance` declaration outright, so pipeline creation
+fails before any compile, and the native metadata adapter (`native/runtime_shader.c`)
+independently refuses a pixel stage whose compiled metadata reports a clip or
+cull mask, because this profile does not deliver the distances to the pixel
+stage.
+
+What the missing half consists of is now measured rather than assumed. For a
+pixel stage that reads `gl_ClipDistance[0]` and `gl_CullDistance[1]`, the
+isolated compiler candidate compiles the reads into ordinary interpolated
+inputs - the ISA interpolates the two distances and the varying through the same
+`v_interp` pairs - but reports **no input semantics at all**
+(`input_semantic_count=0` together with `PSBC_UNRESOLVED_AGC_LINKAGE`). The
+reason is in the compiler's own information pass: it requires every
+pixel-stage attribute slot to be described by a user-varying, while the built-in
+distance slots are skipped by design, so one distance input leaves the whole
+description unresolved. The pinned compiler runs the same pass (source-verified
+at `c96cb63b`) and does not report the read widths at all; the candidate adds
+`ps_clip_distance_reads`/`ps_cull_distance_reads`, which is how the adapter names
+the same condition.
+
+Delivering the read therefore needs two things this profile does not have: a
+compiler-side description of the distance attribute, and a pixel-input mapping
+the AGC linker accepts. The linker builds all 32 `SPI_PS_INPUT_CNTL` registers
+itself from the shader headers' semantics (the host-side linked-state contract
+the native path already programs through), so the open question is which
+semantic key maps a pixel input to the distance attribute - console evidence (a
+scoped dump of the linked state for a shader that reads them) would settle it,
+and it cannot be inferred or guessed here. Until then the declaration stays
+refused and both features stay `false`.
 
 Because the feature flag is the only gate the upstream oracle applies,
 advertising either feature today would assert the whole family, including the
