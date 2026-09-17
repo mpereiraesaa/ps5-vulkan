@@ -48,10 +48,11 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 165 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 211 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
-  image-copy, binding-model combined-sampler and multiview cases). Only these
+  image-copy, binding-model combined-sampler, multiview and indirect/indexed
+  draw cases). Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -76,7 +77,8 @@ one mip/sample, optimal tiling and usage
 The historical main `720ae713` rejected that image usage; resource creation,
 descriptor delivery, compiler lowering and actual GPU subpass readback have
 since been implemented and measured separately. The manifest records both
-stages and their hardware identities; the combined regression passed 165/165.
+stages and their hardware identities; the combined regression passed 165/165,
+and the later indirect and indexed draw expansion below raised it to 211/211.
 See [native acceptance](VALIDATION.md#multiview-native-acceptance).
 Five other diagnostic leaves remain outside acceptance. Within the same module, `renderpass2` needs
 `VK_KHR_create_renderpass2`, `dynamic_rendering` needs
@@ -808,3 +810,63 @@ manifest that names the same case twice is rejected outright, including an
 acceptance/diagnostic conflict, and regression tests fail if a promoted case is
 dropped, renamed, duplicated or replaced by a path the pinned sources do not
 produce.
+
+## Indirect and indexed draw expansion (2026-09-16)
+
+DXVK262-T03 adds 46 original upstream leaves from two draw modules, both
+built with unchanged bodies, shaders and reference-rasterizer image oracles:
+
+* the six `shader_draw_parameters` leaves that were excluded while
+  `drawIndirectFirstInstance` and `multiDrawIndirect` were false:
+  `base_instance.draw_indirect_first_instance`,
+  `base_instance.draw_indexed_indirect_first_instance` (indirect commands with
+  `firstInstance` 2, 1 and 3 over three instances) and the four `draw_index`
+  leaves (`draw`, `draw_instanced`, `draw_indexed`, `draw_indexed_instanced`:
+  one `vkCmdDraw*Indirect` call with drawCount 3 whose pinned DrawIndex shader
+  offsets and colours each command by `gl_DrawIDARB`); the upstream factory
+  names these leaves from the flags passed to `addDrawCase`, so the group's
+  preset INDIRECT|MULTIDRAW flags do not appear in the `draw_index` names;
+* forty `indirect_draw` leaves of the newly registered `vktDrawIndirectTest`
+  module: for the `sequential`, `indexed`, `indexed_bind_offset_16`,
+  `indexed_alloc_offset_16` and `indexed_bind_offset_16_alloc_offset_16` draw
+  types, the `indirect_draw` (drawCount 2 at a two-structure stride with junk
+  between, from a non-zero offset), `indirect_draw_first_instance`
+  (`firstInstance` 1), `indirect_draw_instanced.no_first_instance` and
+  `indirect_draw_instanced.first_instance` (four instances per command,
+  `firstInstance` 2) groups, each with `triangle_list` and `triangle_strip`.
+  Indexed variants bind uint32 index buffers, with 16-byte bind and memory
+  allocation offsets where named.
+
+Preflight looked at the resources the factories build rather than at the
+names: both modules derive from `DrawTestsBaseClass` and create the same
+`R8G8B8A8_UNORM` colour target (`COLOR_ATTACHMENT | TRANSFER_SRC |
+TRANSFER_DST`), host-visible vertex, index and indirect buffers, and no depth,
+descriptor or instance-rate input, i.e. the exact shape the eight draw-parameter
+leaves already exercised. The selection checker gained a bounded recognizer for
+the indirect module's composed draw-type group names.
+
+Registered but deliberately unselected variants, with the reason:
+
+* `*_data_from_compute*`: the module negates the argument buffer with a
+  compute dispatch inside the same command buffer as the render pass; this
+  driver refuses a submission that mixes dispatch and rendering
+  (`src/vk_queue_router.c`), so these leaves would fail for a reason unrelated
+  to indirect execution. GPU-generated arguments are covered by the public-SDK
+  witness across two submissions instead;
+* `indirect_draw_count*`, `indirect_draw_param_count*` and
+  `indirect_draw_multiview`: they require `VK_KHR_draw_indirect_count`, which
+  is not implemented or advertised;
+* the `instanced` and `vertex_attrib_divisor` draw modules and
+  `basic_draw`/`indexed_draw`: not registered; the first two need
+  instance-rate vertex input, which this profile does not accept, and the
+  latter two were not preflighted in this tranche.
+
+The combined selection passed **211/211** on hardware in the run recorded in
+[VALIDATION.md](VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16)
+(SELF `fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6`,
+selection `266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`,
+QPA `de55e1c79828b06a9e50ccff5628c546c61e3daf16c518b57576548411c98b17`,
+28,417,868 bytes, exit 0, verified Close Game). The earlier diagnostic run of
+the same selection is also recorded there: every draw leaf passed while the
+compute leaves failed at pipeline creation because the compute compiler adapter
+did not yet accept the three newly reported graphics-only feature bits.

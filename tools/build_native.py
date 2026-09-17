@@ -303,7 +303,7 @@ def main():
                 ROOT / "native/input_attachment_gate.c",
                 ROOT / "native/input_attachment_oracle.c",
                 ROOT / "native/input_attachment_probe.c",
-                ROOT / "native/command_arena_ps5.c", ROOT / "src/graphics_sync.c",
+                ROOT / "native/command_arena_ps5.c", ROOT / "native/draw_batch_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
                 ROOT / "src/triangle_readback.c", ROOT / "src/texture_descriptor.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_dma.c", ROOT / "src/image_layout_state.c",
                 ROOT / "native/graphics_queue_ps5.c",

@@ -216,6 +216,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * report itself multiview-capable - it cannot execute a render pass or a
      * draw at all. The public KHR query exposes this bit only on that path. */
     platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;
+    /* DXVK262-T03: indirect firstInstance, multi-draw expansion with the
+     * command index as DrawIndex, and the full 32-bit index range execute on
+     * exactly this graphics/runtime-compiler path (vk_indirect.c,
+     * graphics_queue_ps5.c, index_fetch.c); the public consumer witness and
+     * the upstream draw leaves that measure them ran through this build. */
+    platform->supported_features |= PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
+                                    PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
+                                    PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
@@ -237,6 +245,6 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     const int graphics_submit = VK_FALSE;
 #endif
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
-        graphics_objects, graphics_submit);
+        graphics_objects, graphics_submit, platform->supported_features);
     return VK_SUCCESS;
 }

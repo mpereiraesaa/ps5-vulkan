@@ -3,6 +3,8 @@
 #include "draw_prepare_ps5.h"
 #include "input_attachment_gate.h"
 #include "command_arena_ps5.h"
+#include "draw_batch_ps5.h"
+#include "vertex_fetch.h"
 #include "graphics_sync.h"
 #include "image_layout_state.h"
 #include "texture_copy.h"
@@ -36,10 +38,14 @@ enum { PS5VK_OCCLUSION_PROBE_PAIRS = 64,
        PS5VK_OCCLUSION_PROBE_BYTES = PS5VK_OCCLUSION_PROBE_PAIRS * 16 };
 #endif
 struct graphics_job {
-    struct ps5vk_command_arena commands;
+    /* The ordered arena chain that holds this submission (draw_batch_ps5.h):
+     * one arena for the ordinary pass, more when a multi-draw expansion or a
+     * long pass outgrows one. `launched` counts the arenas already handed to
+     * the GPU; poll() launches the next only after the previous label retired. */
+    struct ps5vk_draw_batch_chain chain;
     struct ps5vk_command_arena slot;
     struct ps5vk_prepared_draw draws[PS5VK_MAX_OPERATIONS];
-    unsigned count, words, attempted, complete, slot_active;
+    unsigned count, words, attempted, complete, slot_active, launched;
     uint64_t serial, start;
     VkImage color;
     VkImage readback_image;
@@ -66,9 +72,15 @@ static void release(VkDevice d,void *opaque)
     if(j->slot_active && ps5vk_command_arena_release(&j->slot)!=VK_SUCCESS)
         retain("occlusion-slot-release");
 #endif
-    if(ps5vk_command_arena_release(&j->commands)!=VK_SUCCESS)retain("command-release");
+    if(ps5vk_draw_batch_release(&j->chain)!=VK_SUCCESS)retain("command-release");
     for(unsigned i=0;i<j->count;++i)ps5vk_native_release_draw(&j->draws[i]);
     free(j);
+}
+/* A draw that rasterizes nothing: Vulkan gives a zero vertex, index or
+ * instance count no side effect, and the emitters write no packet for it. */
+static int draw_has_work(const struct ps5vk_operation *op)
+{
+    return (op->type==PS5VK_DRAW_INDEXED?op->index_count:op->vertex_count) && op->instance_count;
 }
 /* Uploads, layout transitions and readback need not share a submission with a
  * draw. Reuse the render prelude/postlude and exact GPU completion protocol. */
@@ -79,12 +91,11 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
     struct graphics_job *j=calloc(1,sizeof(*j));
     if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial;
-    VkResult rc=ps5vk_command_arena_create(&j->commands);
+    /* The chain opens its first arena with the acquire already emitted. */
+    VkResult rc=ps5vk_draw_batch_open(&j->chain,j->serial);
     if(rc==VK_ERROR_DEVICE_LOST)retain("upload-command-create");
     if(rc!=VK_SUCCESS)goto fail;
-    uint32_t *start=j->commands.address,*cursor=start,*end=start+PS5VK_COMMAND_ARENA_WORDS;
-    size_t n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-    if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+    uint32_t *cursor=j->chain.cursor,*end=j->chain.end;
     unsigned readback=0;
     for(unsigned i=0;i<count;++i)
         readback|=cb->operations[first+i].type==PS5VK_COPY_IMAGE_BUFFER;
@@ -97,10 +108,10 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
         }
     } else rc=ps5vk_upload_commands(d,cb->operations+first,count,NULL,&j->layouts,&cursor,end,cache);
     if(rc!=VK_SUCCESS)goto fail;
-    n=ps5vk_graphics_release(cursor,(size_t)(end-cursor),
-        (uintptr_t)ps5vk_command_arena_label(&j->commands),j->serial);
-    if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
-    j->words=(unsigned)(cursor-start);*out=j;
+    j->chain.cursor=cursor;
+    rc=ps5vk_draw_batch_close(&j->chain);
+    if(rc!=VK_SUCCESS)goto fail;
+    j->words=j->chain.words[0];*out=j;
     ps5log_printf(PS5LOG_MARK,"PS5VK_UPLOAD_PREPARED serial=%llu operations=%u words=%u readback=%u",
         (unsigned long long)j->serial,count,j->words,readback);
     return VK_SUCCESS;
@@ -286,9 +297,16 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     struct graphics_job *j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial; j->color=begin->framebuffer->attachments[0]->image;
     phase="command-arena";
-    VkResult rc=ps5vk_command_arena_create(&j->commands);
+    VkResult rc=ps5vk_draw_batch_open(&j->chain,j->serial);
     if(rc==VK_ERROR_DEVICE_LOST)retain("command-create");
     if(rc!=VK_SUCCESS)goto fail;
+    /* Every emission below writes through this cursor pair and asks the chain
+     * for room first; the chain seals the open arena and opens the next one
+     * when a whole emission would not fit. */
+    uint32_t *cursor=j->chain.cursor,*end=j->chain.end;
+#define BATCH_RESERVE(need) do { j->chain.cursor=cursor; \
+        rc=ps5vk_draw_batch_reserve(&j->chain,(need)); if(rc!=VK_SUCCESS)goto fail; \
+        cursor=j->chain.cursor;end=j->chain.end; } while(0)
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     /* Owned, cache-line-aligned, zeroed GPU-visible slot. Creation zeroes it,
      * which is what makes an unwritten pair read as unavailable. */
@@ -303,8 +321,6 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     cache(j->slot.address,(size_t)PS5VK_OCCLUSION_PROBE_BYTES);
     j->slot_active=1;
 #endif
-    uint32_t *start=j->commands.address,*cursor=start,*end=start+PS5VK_COMMAND_ARENA_WORDS;
-    cursor+=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
     /* Prelude transitions/clears precede attachment load operations in both
      * the command stream and the tentative layout transaction. */
     phase="prelude";
@@ -374,10 +390,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(rc!=VK_SUCCESS || !stride || stride>bytes/view->image->info.arrayLayers) {
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
             }
-            /* The final reserved tail word is a private intra-submission
-             * token, never the label that poll() treats as GPU completion. */
+            /* The final reserved tail word of the arena that EXECUTES this
+             * clear is a private intra-submission token, never the label that
+             * poll() treats as GPU completion. The whole clear sequence is
+             * kept inside one arena so the wait and the token it names cannot
+             * straddle a chain boundary. */
+            BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u);
             size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
-                (uintptr_t)(ps5vk_command_arena_label(&j->commands)+7),i+1u);
+                (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),i+1u);
             if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
             n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
             if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
@@ -404,6 +424,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
             }
             subpass_index=recorded->subpass;
+            BATCH_RESERVE(PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WORDS+PS5VK_GRAPHICS_ACQUIRE_WORDS);
             const struct ps5vk_subpass *next_subpass=
                 ps5vk_render_pass_subpass(pass,subpass_index);
             if(next_subpass->input_count || pass->dependency_count) {
@@ -423,10 +444,31 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 (unsigned long long)j->serial,recorded->subpass,boundary);
             continue;
         }
+        /* An indirect operation expands into indirect_count commands in the
+         * recorded order. Pass one resolves and validates every command at
+         * the queue head (bounds, feature gates, the exact argument bytes) and
+         * finds the first command that draws anything: the prepared draw -
+         * pipeline, viewport, descriptor tables, the full vertex-buffer span -
+         * is shaped by that command and shared by all of them, and it is the
+         * only per-operation allocation, whatever the count. Pass two, below,
+         * re-resolves each command in order and emits it with its own
+         * DrawIndex, index range and vertex-range check. A command that draws
+         * nothing still consumes its index. */
         struct ps5vk_operation resolved;
         const struct ps5vk_operation *op=recorded;
-        if(ps5vk_indirect_graphics_operation(recorded->type)) {
-            rc=ps5vk_indirect_resolve(d,recorded,&resolved);if(rc!=VK_SUCCESS)goto fail;
+        const int indirect=ps5vk_indirect_graphics_operation(recorded->type);
+        uint32_t command_count=1u;
+        if(indirect) {
+            command_count=recorded->indirect_count;
+            uint32_t shape=0u;int shaped=0;
+            for(uint32_t k=0;k<command_count;++k) {
+                rc=ps5vk_indirect_resolve_command(d,recorded,k,&resolved);
+                if(rc!=VK_SUCCESS)goto fail;
+                if(!shaped && draw_has_work(&resolved)){shape=k;shaped=1;}
+            }
+            if(command_count)rc=ps5vk_indirect_resolve_command(d,recorded,shape,&resolved);
+            else rc=ps5vk_indirect_resolve(d,recorded,&resolved);
+            if(rc!=VK_SUCCESS)goto fail;
             op=&resolved;
         }
         struct ps5vk_prepared_draw *draw=&j->draws[j->count];
@@ -516,10 +558,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         const uint32_t vertex_usage=p->pair->runtime_arguments.enabled?
             p->pair->runtime_arguments.vertex_buffer_usage_mask:
             (op->pipeline->vertex_binding_count?1u:0u);
+        const struct ps5vk_graphics_key key={.vertex_binding_count=op->pipeline->vertex_binding_count,
+            .vertex_attribute_count=op->pipeline->vertex_attribute_count,
+            .vertex_bindings=op->pipeline->vertex_bindings,.vertex_attributes=op->pipeline->vertex_attributes};
         if(vertex_usage) {
-            const struct ps5vk_graphics_key key={.vertex_binding_count=op->pipeline->vertex_binding_count,
-                .vertex_attribute_count=op->pipeline->vertex_attribute_count,
-                .vertex_bindings=op->pipeline->vertex_bindings,.vertex_attributes=op->pipeline->vertex_attributes};
             rc=ps5vk_native_prepare_vertex_draw_masked(d,op,&begin->render_area,defaults,&key,
                 (uintptr_t)p->pair,vertex_usage,draw);
         } else rc=ps5vk_native_prepare_resource_draw(d,op,&begin->render_area,defaults,(uintptr_t)p->pair,draw);
@@ -604,32 +646,82 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 "PS5VK_VIEW_EXPANSION serial=%llu subpass=%u mask=%08x views=%u",
                 (unsigned long long)j->serial,subpass_index,view_mask,view_count);
         }
-        if(p->pair->runtime_arguments.enabled) {
-            uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+        uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+        if(p->pair->runtime_arguments.enabled)
             for(unsigned s=0;s<PS5VK_RUNTIME_DESCRIPTOR_SETS;++s)
                 tables[s]=(uint32_t)(uintptr_t)draw->descriptor_tables[s];
-            for(uint32_t v=0;v<view_batch;++v) {
-                rc=ps5vk_native_emit_runtime_draw(&cursor,(uint32_t)(end-cursor),draw->state,
-                    draw->state,draw->bytes,op,(uint32_t)(uintptr_t)draw->vertex_table,tables,
-                    view_mask?&view_emit[v]:NULL,
-                    op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
+        uint32_t emitted_commands=0,emitted_draws=0;
+        for(uint32_t k=0;k<(command_count?command_count:1u);++k) {
+            if(indirect && command_count) {
+                rc=ps5vk_indirect_resolve_command(d,recorded,k,&resolved);
                 if(rc!=VK_SUCCESS)goto fail;
+                op=&resolved;
+                /* DrawIndex k is consumed whether or not the command draws. */
+                if(!draw_has_work(op))continue;
+                if(op->type==PS5VK_DRAW_INDEXED) {
+                    rc=ps5vk_index_fetch_prepare(d,op,&indices);if(rc!=VK_SUCCESS)goto fail;
+                }
+                /* The shared vertex table spans the whole bound buffers; this
+                 * command's own firstVertex+vertexCount must still lie inside
+                 * them, judged by the same code that judged the shaping one. */
+                if(vertex_usage) {
+                    struct ps5vk_vertex_fetch_table check;
+                    rc=ps5vk_vertex_fetch_used_spans(d,&key,op,vertex_usage,&check);
+                    if(rc!=VK_SUCCESS)goto fail;
+                }
             }
-        } else if(vertex_usage) {
-            if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;goto fail;}
-            if(op->pipeline->set_count) {
-                if(!draw->texture_table){rc=VK_ERROR_UNKNOWN;goto fail;}
-                rc=ps5vk_native_emit_textured_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
-                    (uint32_t)(uintptr_t)p->global_table,(uint32_t)(uintptr_t)draw->vertex_table,
-                    (uint32_t)(uintptr_t)draw->texture_table,op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
-            } else if(op->type==PS5VK_DRAW_INDEXED)
-                rc=ps5vk_native_emit_indexed_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
-                    (uint32_t)(uintptr_t)p->global_table,(uint32_t)(uintptr_t)draw->vertex_table,&indices,sceAgcDcbDrawIndex);
-            else rc=ps5vk_native_emit_vertex_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
-                (uint32_t)(uintptr_t)p->global_table,(uint32_t)(uintptr_t)draw->vertex_table);
-        } else rc=ps5vk_native_emit_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
-                (uint32_t)(uintptr_t)p->global_table);
-        if(rc!=VK_SUCCESS)goto fail;
+            for(uint32_t v=0;v<view_batch;++v) {
+                /* Room for one whole emission, measured from the largest one
+                 * seen so far; a shortfall seals the open arena behind the
+                 * previous emission and continues in the next one. */
+                BATCH_RESERVE(j->chain.reserve);
+                uint32_t *emission=cursor;
+                unsigned attempt=0;
+                for(;;) {
+                    if(p->pair->runtime_arguments.enabled) {
+                        rc=ps5vk_native_emit_runtime_draw(&cursor,(uint32_t)(end-cursor),draw->state,
+                            draw->state,draw->bytes,op,(uint32_t)(uintptr_t)draw->vertex_table,tables,
+                            view_mask?&view_emit[v]:NULL,
+                            op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
+                    } else if(vertex_usage) {
+                        if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+                        if(op->pipeline->set_count) {
+                            if(!draw->texture_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+                            rc=ps5vk_native_emit_textured_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
+                                (uint32_t)(uintptr_t)p->global_table,(uint32_t)(uintptr_t)draw->vertex_table,
+                                (uint32_t)(uintptr_t)draw->texture_table,op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
+                        } else if(op->type==PS5VK_DRAW_INDEXED)
+                            rc=ps5vk_native_emit_indexed_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
+                                (uint32_t)(uintptr_t)p->global_table,(uint32_t)(uintptr_t)draw->vertex_table,&indices,sceAgcDcbDrawIndex);
+                        else rc=ps5vk_native_emit_vertex_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
+                            (uint32_t)(uintptr_t)p->global_table,(uint32_t)(uintptr_t)draw->vertex_table);
+                    } else rc=ps5vk_native_emit_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
+                            (uint32_t)(uintptr_t)p->global_table);
+                    if(rc==VK_SUCCESS)break;
+                    /* The emitters advance the cursor only on full success.
+                     * A first emission larger than any measured one can still
+                     * run out of arena; the open arena then holds only
+                     * complete emissions, so it is sealed and this one is
+                     * retried once in a fresh arena. A second failure is the
+                     * emitter's own refusal and fails the job. */
+                    if(attempt++ || cursor!=emission ||
+                       emission==(uint32_t *)j->chain.arenas[j->chain.count-1].address+PS5VK_GRAPHICS_ACQUIRE_WORDS)goto fail;
+                    j->chain.cursor=cursor;
+                    VkResult retry_rc=ps5vk_draw_batch_retry(&j->chain,&emission);
+                    if(retry_rc!=VK_SUCCESS){rc=retry_rc;goto fail;}
+                    cursor=j->chain.cursor;end=j->chain.end;
+                }
+                if(cursor!=emission) {
+                    ps5vk_draw_batch_measured(&j->chain,(uint32_t)(cursor-emission));
+                    ++emitted_draws;
+                }
+            }
+            ++emitted_commands;
+        }
+        if(indirect && command_count>1u)
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_MULTI_DRAW_EXPANDED serial=%llu body=%u commands=%u drawing=%u draws=%u arenas=%u",
+                (unsigned long long)j->serial,i,command_count,emitted_commands,emitted_draws,j->chain.count);
     }
     /* A pass must have reached its last subpass: recording refuses to end one
      * early and the submission layer refuses it independently, so a body that
@@ -646,6 +738,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
 #endif
     phase="postlude";
+    BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u);
     if(last+1<range_end) {
         unsigned readback=0;
         for(unsigned k=last+1;k<range_end;++k)
@@ -664,43 +757,73 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
     _Static_assert(8+PS5VK_GRAPHICS_PROBE_REGISTERS*4<=64,"probe must not overlap command words or leave reserved tail");
-    uint32_t *probe=(uint32_t *)(ps5vk_command_arena_label(&j->commands)+1);
+    BATCH_RESERVE(PS5VK_GRAPHICS_PROBE_WORDS+16u);
+    uint32_t *probe=(uint32_t *)(ps5vk_draw_batch_open_label(&j->chain)+1);
     for(unsigned i=0;i<PS5VK_GRAPHICS_PROBE_REGISTERS;++i)probe[i]=0xd15ea5e0u+i;
     size_t probe_words=ps5vk_graphics_register_probe(cursor,(size_t)(end-cursor),(uintptr_t)probe);
     if(!probe_words){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=probe_words;
 #endif
     phase="release-packet";
-    size_t n=ps5vk_graphics_release(cursor,(size_t)(end-cursor),(uintptr_t)ps5vk_command_arena_label(&j->commands),j->serial);
-    if(!n){rc=VK_ERROR_UNKNOWN;goto fail;} cursor+=n; j->words=(unsigned)(cursor-start);
+    j->chain.cursor=cursor;
+    rc=ps5vk_draw_batch_close(&j->chain);
+    if(rc!=VK_SUCCESS)goto fail;
+#undef BATCH_RESERVE
+    j->words=0;
+    for(unsigned b=0;b<j->chain.count;++b)j->words+=j->chain.words[b];
     *out=j;
     ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_PREPARED serial=%llu draws=%u words=%u",(unsigned long long)j->serial,j->count,j->words);
+    if(j->chain.count>1u)
+        ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_BATCHES serial=%llu arenas=%u words=%u",
+            (unsigned long long)j->serial,j->chain.count,j->words);
     return VK_SUCCESS;
 fail:
     ps5log_printf(PS5LOG_ERR,"PS5VK_GRAPHICS_PREPARE_FAILED serial=%llu phase=%s rc=%d",
         (unsigned long long)j->serial,phase,rc);
     release(d,j);return rc;
 }
-static VkResult launch(VkDevice d,void *opaque)
+/* Submit arena `index` of the chain. The first arena keeps the historic
+ * PS5VK_GRAPHICS_SUBMIT / SUSPEND_POINT lines, exactly one pair per job, so
+ * every verifier that pairs a submit with a completion still sees one of each;
+ * later arenas report under their own names. */
+static VkResult launch_batch(struct graphics_job *j,unsigned index)
 {
-    (void)d;struct graphics_job *j=opaque;
-    cache(j->commands.address,PS5VK_COMMAND_ARENA_BYTES);
-    struct ps5_agc_submit packet={j->commands.address,j->words,0,{0,0,0}};
+    if(index>=j->chain.count || index!=j->launched)return VK_ERROR_DEVICE_LOST;
+    struct ps5vk_command_arena *a=&j->chain.arenas[index];
+    cache(a->address,PS5VK_COMMAND_ARENA_BYTES);
+    struct ps5_agc_submit packet={a->address,j->chain.words[index],0,{0,0,0}};
     j->start=now(NULL); if(!j->start)return VK_ERROR_DEVICE_LOST;
     j->attempted=1;
     struct ps5vk_submit_result result=ps5vk_submit_suspend(&packet);
     int rc=result.submit_rc;
-    ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_SUBMIT serial=%llu rc=%d",(unsigned long long)j->serial,rc);
+    if(!index)ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_SUBMIT serial=%llu rc=%d",(unsigned long long)j->serial,rc);
+    else ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_BATCH_SUBMIT serial=%llu arena=%u arenas=%u words=%u rc=%d",
+        (unsigned long long)j->serial,index,j->chain.count,j->chain.words[index],rc);
     if (result.suspend_attempted) {
         rc=result.suspend_rc;
-        ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_SUSPEND_POINT serial=%llu rc=%d",(unsigned long long)j->serial,rc);
+        if(!index)ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_SUSPEND_POINT serial=%llu rc=%d",(unsigned long long)j->serial,rc);
+        else ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_BATCH_SUSPEND_POINT serial=%llu arena=%u rc=%d",
+            (unsigned long long)j->serial,index,rc);
     }
-    return rc ? VK_ERROR_DEVICE_LOST : VK_SUCCESS;
+    if(rc)return VK_ERROR_DEVICE_LOST;
+    j->launched=index+1u;
+    return VK_SUCCESS;
 }
+static VkResult launch(VkDevice d,void *opaque)
+{ (void)d; return launch_batch(opaque,0); }
 static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
 {
     struct graphics_job *j=opaque;*completed=0;
-    volatile uint64_t *label=ps5vk_command_arena_label(&j->commands);
+    if(!j->launched || j->launched>j->chain.count)return VK_ERROR_DEVICE_LOST;
+    volatile uint64_t *label=ps5vk_command_arena_label(&j->chain.arenas[j->launched-1]);
+    if(!label)return VK_ERROR_DEVICE_LOST;
     cache((const void *)label,8);uint64_t value=__atomic_load_n(label,__ATOMIC_ACQUIRE);
+    if(value==j->serial && j->launched<j->chain.count) {
+        /* This arena's draws retired and its CB/DB writes were flushed by its
+         * release; the next arena of the same pass may now begin. */
+        ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_BATCH_COMPLETED serial=%llu arena=%u arenas=%u",
+            (unsigned long long)j->serial,j->launched-1u,j->chain.count);
+        return launch_batch(j,j->launched);
+    }
     if(value==j->serial) {
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
         volatile uint32_t *probe=(volatile uint32_t *)(label+1);

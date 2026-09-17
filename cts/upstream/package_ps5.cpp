@@ -18,6 +18,7 @@
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
 #include "vktDrawShaderDrawParametersTests.hpp"
+#include "vktDrawIndirectTest.hpp"
 #include "vktMultiViewTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
@@ -151,6 +152,20 @@ void FocusedVkTestPackage::init(void)
         de::MovePtr<tcu::TestCaseGroup> renderPassGroup(
             new tcu::TestCaseGroup(m_testCtx, "renderpass"));
         renderPassGroup->addChild(new vkt::Draw::ShaderDrawParametersTests(
+            m_testCtx,
+            vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
+                false, // useDynamicRendering
+                false, // useSecondaryCmdBuffer
+                false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
+                false, // nestedSecondaryCmdBuffer
+            })));
+        // draw.renderpass.indirect_draw: the original upstream indirect-draw
+        // module under the same render-pass group parameters. The module
+        // registers every variant (compute-generated arguments, draw-count
+        // extension, multiview); cases.txt remains the leaf filter, so only the
+        // selected sequential/indexed, first-instance and instanced leaves run
+        // and every unselected variant stays out without a modified oracle.
+        renderPassGroup->addChild(new vkt::Draw::IndirectDrawTests(
             m_testCtx,
             vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
                 false, // useDynamicRendering

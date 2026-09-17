@@ -1085,6 +1085,482 @@
       "rationale": "Original upstream single-draw indexed indirect command with a zero firstInstance field and a non-zero vertexOffset, judged by the upstream reference rasterizer."
     },
     {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced indirect command whose firstInstance field is 2 with three instances: the pinned shader derives gl_InstanceIndex - gl_BaseInstanceARB and gl_DrawIDARB == 0, so the upstream image oracle judges the non-zero indirect firstInstance the drawIndirectFirstInstance feature admits."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:515",
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced indexed indirect command with firstInstance = 2, firstIndex = 11 and vertexOffset = 1, judged by the upstream reference rasterizer through the same shader; the indexed argument path carries the non-zero firstInstance."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:524",
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters",
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream multi-draw (non-indexed): one vkCmdDraw*Indirect call with drawCount 3 whose pinned VertexFetchShaderDrawParametersDrawIndex.vert offsets and colours each command by gl_DrawIDARB, so the upstream image oracle judges that DrawIndex 0, 1 and 2 reached the three commands in order."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:524",
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters",
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream multi-draw (non-indexed, three instances): one vkCmdDraw*Indirect call with drawCount 3 whose pinned VertexFetchShaderDrawParametersDrawIndex.vert offsets and colours each command by gl_DrawIDARB, so the upstream image oracle judges that DrawIndex 0, 1 and 2 reached the three commands in order."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:524",
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters",
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream multi-draw (indexed with vertexOffset 1 and 4): one vkCmdDraw*Indirect call with drawCount 3 whose pinned VertexFetchShaderDrawParametersDrawIndex.vert offsets and colours each command by gl_DrawIDARB, so the upstream image oracle judges that DrawIndex 0, 1 and 2 reached the three commands in order."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp:524",
+      "category": "graphics-draw-parameters",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderDrawParameters",
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream multi-draw (indexed, three instances): one vkCmdDraw*Indirect call with drawCount 3 whose pinned VertexFetchShaderDrawParametersDrawIndex.vert offsets and colours each command by gl_DrawIDARB, so the upstream image oracle judges that DrawIndex 0, 1 and 2 reached the three commands in order."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndirect: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndirect with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndirect: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndirect with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndirect: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndirect with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndirect: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndirect with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index memory bind offset: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index memory bind offset with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index memory bind offset: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index memory bind offset with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index memory bind offset: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index memory bind offset with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index memory bind offset: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index memory bind offset with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset and a 16-byte index memory bind offset: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset and a 16-byte index memory bind offset with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset and a 16-byte index memory bind offset: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset and a 16-byte index memory bind offset with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset and a 16-byte index memory bind offset: drawCount 2 at a stride of two structures with junk in between, from a non-zero buffer offset, judged by the upstream reference rasterizer; with multiDrawIndirect reported the module issues the single multi-command call rather than two single ones."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset and a 16-byte index memory bind offset with firstInstance 1 in a single command; the pinned VertexFetchInstanceIndex shader selects the reference vertex data by gl_InstanceIndex, so a firstInstance that did not reach the shader breaks the upstream image oracle."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset and a 16-byte index memory bind offset: two commands of four instances each in one multi-command call, instance offsets from gl_InstanceIndex, judged by the upstream reference rasterizer."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp:1507",
+      "category": "graphics-indirect-draw",
+      "expected_status": "Pass",
+      "features_required": [
+        "multiDrawIndirect",
+        "drawIndirectFirstInstance"
+      ],
+      "rationale": "Original upstream instanced vkCmdDrawIndexedIndirect over uint32 indices with a 16-byte index-buffer bind offset and a 16-byte index memory bind offset with firstInstance 2 and four instances per command in one multi-command call, judged by the upstream reference rasterizer through VertexFetchInstancedFirstInstance.vert."
+    },
+    {
       "path": "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
       "source": "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp:4908",
       "category": "multiview-render-pass",
