@@ -68,11 +68,6 @@ FEATURE_GATES = {
                           "sample shading state is rejected"),
     "logicOp": ("src/vk_graphics_pipeline.c", "b->logicOpEnable",
                 "logicOpEnable is rejected"),
-    "multiDrawIndirect": ("src/vk_command.c", "count>1",
-                          "one indirect draw per command is accepted"),
-    "drawIndirectFirstInstance": ("src/vk_indirect.c",
-                                  "if (command.firstInstance && !first_instance_enabled) return INVALID",
-                                  "firstInstance must be zero unless the feature is enabled on the device"),
     "depthClamp": ("src/vk_graphics_pipeline.c", "r->depthClampEnable",
                    "depthClampEnable is rejected"),
     "fillModeNonSolid": ("src/vk_graphics_pipeline.c", "r->polygonMode != VK_POLYGON_MODE_FILL",
@@ -123,8 +118,6 @@ FEATURE_GATES = {
     "inheritedQueries": ("src/vk_command.c",
                          "i->occlusionQueryEnable || i->queryFlags || i->pipelineStatistics",
                          "a secondary cannot inherit a query"),
-    "fullDrawIndexUint32": ("src/graphics_limits.h", "maxDrawIndexedIndexValue=UINT32_MAX",
-                            "the full 32-bit draw-index range is accepted"),
     "multiViewport": ("src/graphics_limits.h", "maxViewports=1",
                       "one viewport is accepted"),
 }
@@ -140,6 +133,49 @@ ADVERTISED_FEATURES = {
         ),
         "detail": ("raw storage/uniform descriptors carry the byte span and "
                    "vertex descriptors carry the bounded record count"),
+        "cts": ("dEQP-VK.info.device_mandatory_features",),
+    },
+    # DXVK262-T03. Each feature is reported behind its platform bit and its
+    # execution path is cited; the applicable upstream leaves are the ones the
+    # frozen selection accepts for it.
+    "drawIndirectFirstInstance": {
+        "profiles": ("graphics",),
+        "citations": (
+            ("src/vk_indirect.c",
+             "if (command.firstInstance && !first_instance_enabled) return INVALID"),
+            ("native/draw_emit_ps5.c", "ps5vk_draw_base_instance(op)"),
+            ("native/platform_ps5.c", "PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |"),
+        ),
+        "detail": ("a non-zero firstInstance in a resolved indirect command is delivered to "
+                   "the start-instance user SGPR when the feature is enabled and refused otherwise"),
+        "cts": ("dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
+                "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance"),
+    },
+    "multiDrawIndirect": {
+        "profiles": ("graphics",),
+        "citations": (
+            ("src/vk_indirect.c", "VkResult ps5vk_indirect_resolve_command("),
+            ("native/graphics_queue_ps5.c", "PS5VK_MULTI_DRAW_EXPANDED"),
+            ("src/vk_internal.h", "PS5VK_MULTI_DRAW_INDIRECT_COUNT = 65535"),
+        ),
+        "detail": ("every command of a vkCmdDraw*Indirect call is resolved at the queue head and "
+                   "emitted in order with its own DrawIndex over a bounded arena chain; "
+                   "maxDrawIndirectCount is the core floor derived from the platform mask"),
+        "cts": ("dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
+                "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
+                "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+                "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced"),
+    },
+    "fullDrawIndexUint32": {
+        "profiles": ("graphics",),
+        "citations": (
+            ("src/index_fetch.c", "case VK_INDEX_TYPE_UINT32:size=4;break;"),
+            ("native/index_emit_ps5.c", "start[2]=fetch->element_bytes==4?1:0;"),
+            ("src/graphics_limits.h", "maxDrawIndexedIndexValue=UINT32_MAX"),
+        ),
+        "detail": ("uint32 index buffers are fetched by the VGT at 32 bits with 64-bit host range "
+                   "arithmetic and a 32-bit BaseVertex add, so the full index range is executable "
+                   "and maxDrawIndexedIndexValue reports 2^32-1"),
         "cts": ("dEQP-VK.info.device_mandatory_features",),
     },
 }
@@ -158,8 +194,15 @@ FALSE_CORE_FEATURE_GATE = (
 )
 
 
-def evaluate_feature(name: str, value: bool) -> tuple[str, str]:
+def evaluate_feature(name: str, value: bool, profile: str = "graphics") -> tuple[str, str]:
     advertised = ADVERTISED_FEATURES.get(name)
+    # A feature reviewed for the graphics execution path is reported false by
+    # the compute-only build, which has no render pass or draw at all; that
+    # false report is the honest one for that profile, not a lost advertisement.
+    if (advertised and not value and "profiles" in advertised and
+            profile not in advertised["profiles"]):
+        return ("satisfied", f"{profile}-only build: the graphics execution path this feature "
+                "needs is not built into this profile")
     if value:
         if not advertised:
             return "violation", "advertised true without a reviewed implementation contract"
@@ -331,6 +374,12 @@ def evaluate_limit(row: dict, reported, features: dict) -> tuple[str, str]:
     if isinstance(value, str):
         value = _decode_requirement(value)
     gated = CTS_GATED_OFF_REQUIREMENT.get(row["limit"])
+    # A gated-off floor applies only while the gating feature is reported
+    # false; once the feature is advertised the limit must meet the core table's
+    # own requirement below, so a platform cannot keep the feature's relaxed
+    # floor after promoting the feature.
+    if gated and features.get(gated[0]) is True:
+        gated = None
     if gated:
         gate, floor = gated
         source = f"cts-gated-off:{gate}"
@@ -644,7 +693,7 @@ def main() -> int:
     features = []
     for profile, dump in dumps.items():
         for name, value in sorted(dump["features"].items()):
-            verdict, detail = evaluate_feature(name, value)
+            verdict, detail = evaluate_feature(name, value, profile)
             features.append({"kind": "feature", "feature": name, "profile": profile,
                              "reported": value, "verdict": verdict, "detail": detail})
 

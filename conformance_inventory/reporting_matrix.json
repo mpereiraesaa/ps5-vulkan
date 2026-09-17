@@ -118,6 +118,52 @@
       "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
       "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
       "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+      "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced",
+      "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+      "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
       "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
       "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
       "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
@@ -232,15 +278,18 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "firstInstance must be zero unless the feature is enabled on the device (src/vk_indirect.c)",
+      "detail": "a non-zero firstInstance in a resolved indirect command is delivered to the start-instance user SGPR when the feature is enabled and refused otherwise",
       "feature": "drawIndirectFirstInstance",
       "kind": "feature",
       "profile": "graphics",
-      "reported": false,
+      "reported": true,
       "verdict": "satisfied"
     },
     {
@@ -284,15 +333,17 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.info.device_mandatory_features"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "the full 32-bit draw-index range is accepted (src/graphics_limits.h)",
+      "detail": "uint32 index buffers are fetched by the VGT at 32 bits with 64-bit host range arithmetic and a 32-bit BaseVertex add, so the full index range is executable and maxDrawIndexedIndexValue reports 2^32-1",
       "feature": "fullDrawIndexUint32",
       "kind": "feature",
       "profile": "graphics",
-      "reported": false,
+      "reported": true,
       "verdict": "satisfied"
     },
     {
@@ -375,15 +426,20 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "one indirect draw per command is accepted (src/vk_command.c)",
+      "detail": "every command of a vkCmdDraw*Indirect call is resolved at the queue head and emitted in order with its own DrawIndex over a bounded arena chain; maxDrawIndirectCount is the core floor derived from the platform mask",
       "feature": "multiDrawIndirect",
       "kind": "feature",
       "profile": "graphics",
-      "reported": false,
+      "reported": true,
       "verdict": "satisfied"
     },
     {
@@ -949,11 +1005,14 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "firstInstance must be zero unless the feature is enabled on the device (src/vk_indirect.c)",
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "drawIndirectFirstInstance",
       "kind": "feature",
       "profile": "compute",
@@ -1001,11 +1060,13 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.info.device_mandatory_features"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "the full 32-bit draw-index range is accepted (src/graphics_limits.h)",
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "fullDrawIndexUint32",
       "kind": "feature",
       "profile": "compute",
@@ -1092,11 +1153,16 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "one indirect draw per command is accepted (src/vk_command.c)",
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "multiDrawIndirect",
       "kind": "feature",
       "profile": "compute",
@@ -16858,7 +16924,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:fullDrawIndexUint32: reported 4294967295 must be >= 16777215",
+      "detail": "untagged-core: reported 4294967295 must be >= 4294967295",
       "kind": "limit",
       "limit": "maxDrawIndexedIndexValue",
       "profile": "graphics",
@@ -16888,11 +16954,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:multiDrawIndirect: reported 1 must be >= 1",
+      "detail": "untagged-core: reported 65535 must be >= 65535",
       "kind": "limit",
       "limit": "maxDrawIndirectCount",
       "profile": "graphics",
-      "reported": 1,
+      "reported": 65535,
       "verdict": "satisfied"
     },
     {
