@@ -52,13 +52,16 @@ class Fixture:
                         # The other two readbacks read the other two input
                         # vertices, so they are three different images.
                         11: "bbbbbbbbbbbbbbbb",
-                        12: "cccccccccccccccc"}
+                        12: "cccccccccccccccc",
+                        # The envelope is its own shape (a band its 256 emitted
+                        # vertices tile), so it differs from every other case.
+                        13: "dddddddddddddddd"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(
                 f"PS5VK_GEOMETRY_DRAW case={case} mode={mode} stages="
                 f"{2 if mode < 0 else 3} out_prim_type={0 if mode < 0 else 2} "
-                f"max_vertices={0 if mode < 0 else 9} "
+                f"max_vertices={0 if mode < 0 else verify.MAX_VERTICES.get(case, 9)} "
                 f"vertices={verify.DRAW_VERTICES.get(case, 6)} instances=1")
             records.append(
                 f"PS5VK_GEOMETRY_CASE case={case} mode={mode} pixels={verify.PIXELS} "

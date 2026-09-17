@@ -94,6 +94,13 @@ int main(void)
             assert(witness.expected_covered==336u);
             assert(witness.covered==336u);
             break;
+        case PS5VK_GEOMETRY_ENVELOPE:
+            /* The 256-vertex ribbon tiles a band 1.5 wide and 0.5 tall: 48x16
+             * pixels at 64x64. A stage that emitted fewer vertices covers less,
+             * so the exact count is the measurement. */
+            assert(witness.expected_covered==768u);
+            assert(witness.covered==768u);
+            break;
         default:
             assert(witness.expected_covered==0);
             break;
@@ -233,6 +240,6 @@ int main(void)
     assert(!ps5vk_geometry_witness_verify(&witness,PS5VK_GEOMETRY_CASES,EXTENT));
     assert(!ps5vk_geometry_witness_verify(NULL,PS5VK_GEOMETRY_CONTROL,EXTENT));
     puts("Geometry witness: passthrough, shrink, suppression, varying rewrite, sentinel value "
-         "and raw read bytes hold");
+         "and raw read bytes hold, and the 256-vertex envelope band verifies");
     return 0;
 }

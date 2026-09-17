@@ -71,7 +71,13 @@ enum {
     PS5VK_GEOMETRY_READ_V0 = 10,
     PS5VK_GEOMETRY_READ_V1 = 11,
     PS5VK_GEOMETRY_READ_V2 = 12,
-    PS5VK_GEOMETRY_CASES = 13
+    /* The envelope: a stage that emits 256 vertices, the mandatory minimum the
+     * feature's maxGeometryOutputVertices names. It uses its own pre-raster
+     * module because max_vertices is module-level, and its image is a single
+     * triangle-strip ribbon tiling a band, so a stage that stopped early would
+     * cover a shorter band and fail. */
+    PS5VK_GEOMETRY_ENVELOPE = 13,
+    PS5VK_GEOMETRY_CASES = 14
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */
