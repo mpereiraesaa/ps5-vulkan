@@ -58,6 +58,41 @@ int main(void)
     uint32_t vertex[16],pixel[16];
     assert(!ps5vk_runtime_draw_values(&abi,31,17,0,0,0,0,vertex,pixel));
     assert(vertex[0]==31 && vertex[1]==0 && pixel[0]==0);
+    /* A merged vertex+geometry pair gates and sizes its halves from two SYSTEM
+     * SGPRs, below the driver's user-data window: measured on a merged pair
+     * (gs_tg_info 2, merged_wave_info 3, window base 8) and, with the window
+     * shifted by one, on the hardware-verified draw-parameter program whose
+     * BaseVertex window dword 1 is SGPR 9. The driver records the two indices as
+     * a contract check and never writes them, and a metadata that reports them
+     * inside the window is refused instead of being written where the shader
+     * does not look. */
+    m->esgs_system_sgprs_valid=true;
+    m->esgs_gs_tg_info_sgpr=2;m->esgs_merged_wave_info_sgpr=3;
+    m->user_data_window_base=8;
+    assert(!ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    assert(abi.window_base==8 && abi.esgs_described==1);
+    assert(abi.esgs_gs_tg_info_sgpr==2 && abi.esgs_merged_wave_info_sgpr==3);
+    assert(!ps5vk_runtime_draw_values(&abi,31,17,0,0,0,0,vertex,pixel));
+    assert(vertex[0]==31 && vertex[1]==0); /* only the two window dwords */
+    m->esgs_merged_wave_info_sgpr=8; /* inside the window: refused */
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    m->esgs_merged_wave_info_sgpr=2; /* both registers in one slot: refused */
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    m->esgs_merged_wave_info_sgpr=3;
+    /* The draw path repeats the check and refuses before writing either bank. */
+    struct ps5vk_runtime_draw_abi window_relative=abi;
+    window_relative.esgs_merged_wave_info_sgpr=window_relative.window_base;
+    uint32_t kept_vertex[16],kept_pixel[16];
+    memcpy(kept_vertex,vertex,sizeof(vertex));memcpy(kept_pixel,pixel,sizeof(pixel));
+    assert(ps5vk_runtime_draw_values(&window_relative,31,17,0,0,0,0,vertex,pixel));
+    assert(!memcmp(kept_vertex,vertex,sizeof(vertex)) &&
+           !memcmp(kept_pixel,pixel,sizeof(pixel)));
+    m->user_data_window_base=0; /* no base declared for a merged pair: refused */
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    m->user_data_window_base=16; /* a window past SGPR 16 is unaddressable */
+    assert(ps5vk_runtime_draw_abi_build(m,&fragment,&abi));
+    m->user_data_window_base=8;
+    m->esgs_system_sgprs_valid=false;m->user_data_window_base=0;
     /* DrawIndex (metadata v13): the ABI mirrors the compiler's slot, the value
      * written into the block is the sequence index the caller supplies, and a
      * slot that collides with another value or falls outside the declared block
