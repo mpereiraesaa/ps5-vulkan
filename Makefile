@@ -188,6 +188,8 @@ check-sanitize:
 	./build/tests/test_graphics_stages_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -Isrc src/clip_cull_witness.c tests/test_clip_cull_witness.c -o build/tests/test_clip_cull_witness_sanitized
 	./build/tests/test_clip_cull_witness_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -Isrc src/geometry_witness.c tests/test_geometry_witness.c -o build/tests/test_geometry_witness_sanitized
+	./build/tests/test_geometry_witness_sanitized
 check:
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc tests/test_descriptor_table_layout.c -o build/tests/test_descriptor_table_layout
@@ -363,6 +365,8 @@ check:
 	./build/tests/test_compilation_cache
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/clip_cull_witness.c tests/test_clip_cull_witness.c -o build/tests/test_clip_cull_witness
 	./build/tests/test_clip_cull_witness
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/geometry_witness.c tests/test_geometry_witness.c -o build/tests/test_geometry_witness
+	./build/tests/test_geometry_witness
 	$(PYTHON) tools/build_sdk.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host

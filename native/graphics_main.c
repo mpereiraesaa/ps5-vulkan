@@ -13,6 +13,7 @@
 #include "input_attachment_gate.h"
 #include "multiview_witness.h"
 #include "clip_cull_witness.h"
+#include "geometry_witness.h"
 #include "vk_render_pass.h"
 #include "color_detile.h"
 
@@ -52,6 +53,9 @@
 #endif
 #ifndef PS5VK_CLIP_CULL_PROBE
 #define PS5VK_CLIP_CULL_PROBE 0
+#endif
+#ifndef PS5VK_GEOMETRY_PROBE
+#define PS5VK_GEOMETRY_PROBE 0
 #endif
 #if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
 /* Slice A measurement: the pattern seeded into the allocation slot no
@@ -1717,6 +1721,240 @@ static void clip_cull_probe(VkDevice d)
     vkFreeMemory(d,memory,NULL);
 }
 #endif
+#if defined(PS5VK_GEOMETRY_PROBE) && PS5VK_GEOMETRY_PROBE
+/* T04-G1: the geometry coverage witness.
+ *
+ * One vertex module emits the two triangles that tile the target and one
+ * fragment module writes what it reads, so the only thing that can change the
+ * image is the geometry stage in between: passthrough must reproduce the
+ * two-stage control pixel for pixel, shrink must cover exactly the centred
+ * square its scaled triangles tile, suppression must leave the target clear -
+ * which no vertex stage can do - and the varying rewrite must keep the coverage
+ * while changing every colour, proving the fragment stage reads what the
+ * geometry stage wrote.
+ *
+ * The readback is judged by src/geometry_witness.c, the same oracle the host
+ * regression drives, and the run fails closed when a case does not verify. */
+enum { PS5VK_GEOMETRY_EXTENT = 64 };
+#define PS5VK_GEOMETRY_GUARD UINT32_C(0x5a5a5a5a)
+enum { PS5VK_GEOMETRY_MODE_CONSTANT = 0 };
+
+static uint64_t geometry_digest(const uint8_t *bytes,size_t size)
+{
+    uint64_t hash=UINT64_C(0xcbf29ce484222325);
+    for(size_t i=0;i<size;++i) {
+        hash^=bytes[i];
+        hash*=UINT64_C(0x100000001b3);
+    }
+    return hash;
+}
+
+static void geometry_probe(VkDevice d)
+{
+    const uint32_t extent=PS5VK_GEOMETRY_EXTENT;
+    VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .extent={extent,extent,1},.mipLevels=1,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .tiling=VK_IMAGE_TILING_OPTIMAL};
+    VkImage image; CHECK(vkCreateImage(d,&ii,NULL,&image));
+    VkMemoryRequirements req; vkGetImageMemoryRequirements(d,image,&req);
+    VkMemoryAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=req.size};
+    VkDeviceMemory memory; CHECK(vkAllocateMemory(d,&ai,NULL,&memory));
+    CHECK(vkBindImageMemory(d,image,memory,0));
+    void *map=NULL; CHECK(vkMapMemory(d,memory,0,VK_WHOLE_SIZE,0,&map));
+    for(VkDeviceSize i=0;i<req.size/4;++i)((uint32_t *)map)[i]=PS5VK_GEOMETRY_GUARD;
+    CHECK(vkFlushMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+        .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,.offset=0,.size=req.size}));
+    VkDeviceSize stride=0,alignment=0,bytes=0;
+    if(ps5vk_native_layered_storage(VK_FORMAT_R8G8B8A8_UNORM,extent,extent,1,
+        &stride,&alignment,&bytes)!=VK_SUCCESS)fail("geometry-storage",-1);
+    if(!stride || bytes!=stride || stride>req.size)fail("geometry-stride",-1);
+    VkImageSubresourceRange range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+    VkImageViewCreateInfo cvi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=image,.viewType=VK_IMAGE_VIEW_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .subresourceRange=range};
+    VkImageView view; CHECK(vkCreateImageView(d,&cvi,NULL,&view));
+    VkAttachmentDescription attachment={.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp=VK_ATTACHMENT_STORE_OP_STORE,.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference colorref={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpass={.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount=1,.pColorAttachments=&colorref};
+    VkRenderPassCreateInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount=1,.pAttachments=&attachment,.subpassCount=1,.pSubpasses=&subpass};
+    VkRenderPass pass; CHECK(vkCreateRenderPass(d,&ri,NULL,&pass));
+    VkFramebufferCreateInfo fi={.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass=pass,.attachmentCount=1,.pAttachments=&view,
+        .width=extent,.height=extent,.layers=1};
+    VkFramebuffer fb; CHECK(vkCreateFramebuffer(d,&fi,NULL,&fb));
+    VkPipelineLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPipelineLayout layout; CHECK(vkCreatePipelineLayout(d,&li,NULL,&layout));
+    VkShaderModule vertex_module,fragment_module;
+    VkShaderModuleCreateInfo vsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_vertex),.pCode=ps5vk_runtime_geometry_vertex};
+    VkShaderModuleCreateInfo gsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_stage),.pCode=ps5vk_runtime_geometry_stage};
+    VkShaderModuleCreateInfo fsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_fragment),.pCode=ps5vk_runtime_fragment};
+    CHECK(vkCreateShaderModule(d,&vsi,NULL,&vertex_module));
+    VkShaderModule geometry_module;
+    CHECK(vkCreateShaderModule(d,&gsi,NULL,&geometry_module));
+    CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment_module));
+    VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex=0};
+    VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
+    VkQueue queue; vkGetDeviceQueue(d,0,0,&queue);
+    static uint8_t detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
+    uint64_t digests[PS5VK_GEOMETRY_CASES]={0};
+    for(unsigned witness_case=0;witness_case<PS5VK_GEOMETRY_CASES;++witness_case) {
+        const int mode=ps5vk_geometry_witness_mode(witness_case);
+        if(mode==-2)fail("geometry-case",-1);
+        const int32_t specialization=mode<0?0:mode;
+        VkSpecializationMapEntry entry={.constantID=PS5VK_GEOMETRY_MODE_CONSTANT,
+            .offset=0,.size=sizeof(specialization)};
+        VkSpecializationInfo spec={.mapEntryCount=1,.pMapEntries=&entry,
+            .dataSize=sizeof(specialization),.pData=&specialization};
+        VkPipelineShaderStageCreateInfo stages[3]={
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=vertex_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=geometry_module,.pName="main",
+             .pSpecializationInfo=&spec},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=fragment_module,.pName="main"}};
+        VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
+        VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        VkPipelineRasterizationStateCreateInfo raster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
+        VkPipelineMultisampleStateCreateInfo ms={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+        VkViewport viewport={0,0,(float)extent,(float)extent,0,1};
+        VkRect2D scissor={{0,0},{extent,extent}};
+        VkPipelineViewportStateCreateInfo vp={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount=1,.pViewports=&viewport,.scissorCount=1,.pScissors=&scissor};
+        VkPipelineColorBlendAttachmentState blend_attachment={.colorWriteMask=15};
+        VkPipelineColorBlendStateCreateInfo blend={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount=1,.pAttachments=&blend_attachment};
+        VkGraphicsPipelineCreateInfo pi={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .layout=layout,.renderPass=pass,.stageCount=mode<0?2:3,
+            .pStages=mode<0?two_stage:stages,
+            .pVertexInputState=&vi,.pInputAssemblyState=&ia,.pRasterizationState=&raster,
+            .pMultisampleState=&ms,.pViewportState=&vp,.pColorBlendState=&blend};
+        VkPipeline pipeline; CHECK(vkCreateGraphicsPipelines(d,0,1,&pi,NULL,&pipeline));
+        /* PRE-SUBMIT GATE. A geometry case must carry the merged pre-raster
+         * program's pipeline state: the output topology it strips, the maximum
+         * vertices it may emit, and the subgroup, on-chip, ring and max-output
+         * registers the GE reads. A pipeline that lost one of them would run
+         * with whatever the previous pipeline left behind. */
+        const struct ps5vk_native_graphics_pipeline *native=pipeline->graphics_state;
+        if(!native || !native->pair || !native->pair->ready)fail("geometry-pipeline",-1);
+        const struct ps5vk_runtime_shader *stage=&native->pair->runtime_vertex;
+        uint32_t topology=0,max_vertices=0,seen=0;
+        if(mode>=0) {
+            static const unsigned required[]={0x1ffu,0x291u,0x2abu,0x2ceu,0x2d3u};
+            for(unsigned i=0;i<stage->header.num_cx_registers;++i) {
+                const uint32_t offset=stage->context[i].offset;
+                for(unsigned r=0;r<sizeof(required)/sizeof(required[0]);++r)
+                    if(offset==required[r])++seen;
+                if(offset==0x29bu)topology=stage->context[i].value;
+                if(offset==0x2ceu)max_vertices=stage->context[i].value;
+            }
+            if(seen!=sizeof(required)/sizeof(required[0]) || topology!=2u || max_vertices!=3u)
+                fail("geometry-state",-1);
+        }
+        VkCommandBuffer cb=VK_NULL_HANDLE;
+        VkCommandBufferAllocateInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+        CHECK(vkAllocateCommandBuffers(d,&cbi,&cb));
+        VkCommandBufferBeginInfo begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(cb,&begin));
+        VkClearValue clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
+        VkRenderPassBeginInfo rbi={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass=pass,.framebuffer=fb,.renderArea={{0,0},{extent,extent}},
+            .clearValueCount=1,.pClearValues=&clear};
+        vkCmdBeginRenderPass(cb,&rbi,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+        vkCmdDraw(cb,6,1,0,0);
+        vkCmdEndRenderPass(cb);
+        CHECK(vkEndCommandBuffer(cb));
+        VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount=1,.pCommandBuffers=&cb};
+        CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
+        CHECK(vkQueueWaitIdle(queue));
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_GEOMETRY_DRAW case=%u mode=%d stages=%u out_prim_type=%u max_vertices=%u "
+            "vertices=6 instances=1",
+            witness_case,mode,mode<0?2u:3u,topology,max_vertices);
+        CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+            .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
+            .offset=0,.size=VK_WHOLE_SIZE}));
+        if(ps5vk_rgba8_64k_rx_detile(detiled,sizeof(detiled),map,(size_t)stride,
+            extent,extent))fail("geometry-detile",-1);
+        struct ps5vk_geometry_witness witness={0};
+        for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x)
+            ps5vk_geometry_witness_pixel(&witness,witness_case,x,y,extent,
+                                         detiled+4*((size_t)y*extent+x));
+        const int verified=ps5vk_geometry_witness_verify(&witness,witness_case,extent);
+        digests[witness_case]=geometry_digest(detiled,sizeof(detiled));
+        const uint8_t *corner=detiled;
+        const uint8_t *center=detiled+4*((size_t)(extent/2)*extent+extent/2);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_GEOMETRY_CASE case=%u mode=%d pixels=%llu expected=%llu covered=%llu "
+            "missing=%llu foreign=%llu wrong_color=%llu digest=%016llx verified=%d "
+            "first_foreign=%02x%02x%02x%02x at=%u,%u first_wrong=%02x%02x%02x%02x at=%u,%u "
+            "corner00=%02x%02x%02x%02x center=%02x%02x%02x%02x",
+            witness_case,mode,(unsigned long long)witness.pixels,
+            (unsigned long long)witness.expected_covered,
+            (unsigned long long)witness.covered,(unsigned long long)witness.missing,
+            (unsigned long long)witness.foreign,(unsigned long long)witness.wrong_color,
+            (unsigned long long)digests[witness_case],verified,
+            witness.first_foreign[0],witness.first_foreign[1],witness.first_foreign[2],
+            witness.first_foreign[3],witness.first_foreign_x,witness.first_foreign_y,
+            witness.first_wrong[0],witness.first_wrong[1],witness.first_wrong[2],
+            witness.first_wrong[3],witness.first_wrong_x,witness.first_wrong_y,
+            corner[0],corner[1],corner[2],corner[3],
+            center[0],center[1],center[2],center[3]);
+        if(!verified)fail("geometry-verdict",-1);
+        vkDestroyPipeline(d,pipeline,NULL);
+    }
+    /* Passthrough must reproduce the control image exactly, the shrunk and
+     * suppressed images must differ from it, and the varying rewrite must differ
+     * from the passthrough image it shares coverage with. A stale or collapsed
+     * readback cannot satisfy this. */
+    if(digests[PS5VK_GEOMETRY_CONTROL]!=digests[PS5VK_GEOMETRY_PASSTHROUGH] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SHRINK] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SUPPRESS] ||
+       digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
+        fail("geometry-digest",-1);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GEOMETRY_PROBE cases=%u extent=%u clear=%02x%02x%02x%02x out_prim_type=2 "
+        "max_vertices=3 digest_control=%016llx digest_passthrough=%016llx "
+        "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
+        "strict_verified=1",
+        PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
+        ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
+        (unsigned long long)digests[PS5VK_GEOMETRY_CONTROL],
+        (unsigned long long)digests[PS5VK_GEOMETRY_PASSTHROUGH],
+        (unsigned long long)digests[PS5VK_GEOMETRY_SHRINK],
+        (unsigned long long)digests[PS5VK_GEOMETRY_SUPPRESS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_RECOLOR]);
+    vkDestroyCommandPool(d,pool,NULL);
+    vkDestroyShaderModule(d,vertex_module,NULL);
+    vkDestroyShaderModule(d,geometry_module,NULL);
+    vkDestroyShaderModule(d,fragment_module,NULL);
+    vkDestroyPipelineLayout(d,layout,NULL);
+    vkDestroyFramebuffer(d,fb,NULL);
+    vkDestroyRenderPass(d,pass,NULL);
+    vkDestroyImageView(d,view,NULL);
+    vkUnmapMemory(d,memory);
+    vkDestroyImage(d,image,NULL);
+    vkFreeMemory(d,memory,NULL);
+}
+#endif
 int main(void)
 {
     struct timespec ts = {0}; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1883,6 +2121,19 @@ int main(void)
      * and no presentation. Every case is judged on the GPU's own readback
      * before the next one is recorded. */
     clip_cull_probe(device);
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    if (PS5VK_SHELL_CLOSE)
+        ps5log_line(PS5LOG_MARK,"PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
+    ps5log_close("graphics-api-end");
+    if (PS5VK_SHELL_CLOSE) for (;;) sleep(1);
+    return 0;
+#endif
+#if PS5VK_GEOMETRY_PROBE
+    /* The geometry witness is the whole run: five coverage cases, no other
+     * diagnostic and no presentation. */
+    geometry_probe(device);
     vkDestroyDevice(device,NULL);
     vkDestroyInstance(instance,NULL);
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
