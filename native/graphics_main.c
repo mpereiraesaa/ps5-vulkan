@@ -1810,11 +1810,16 @@ static void geometry_probe(VkDevice d)
     static uint8_t detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
     uint64_t digests[PS5VK_GEOMETRY_CASES]={0};
     /* The input-independent case runs second: if the stage never emits, the log
-     * separates that from a broken ES/GS handshake before the other cases. */
+     * separates that from a broken ES/GS handshake before the other cases. Every
+     * case appears exactly once - a short initialiser would leave the remaining
+     * slots zero, i.e. extra control runs, and would silently drop the cases it
+     * omitted. The sentinel runs third, before any case that can lose the
+     * device, so the value oracle reports its own outcome instead of being
+     * preempted. */
     static const unsigned order[PS5VK_GEOMETRY_CASES]={
-        PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_PASSTHROUGH,
-        PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,
-        PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_POSITIONS};
+        PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_SENTINEL,
+        PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
+        PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_POSITIONS};
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
@@ -1939,6 +1944,12 @@ static void geometry_probe(VkDevice d)
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SUPPRESS] ||
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_CONSTANT] ||
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_POSITIONS] ||
+       /* The sentinel carries the control's coverage with the colour its own
+        * mapping computes, so an image equal to any of these three means the
+        * value it drew did not come from the read. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SENTINEL] ||
+       digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_SENTINEL] ||
+       digests[PS5VK_GEOMETRY_POSITIONS]==digests[PS5VK_GEOMETRY_SENTINEL] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -1946,6 +1957,7 @@ static void geometry_probe(VkDevice d)
         "max_vertices=3 digest_control=%016llx digest_passthrough=%016llx "
         "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
         "digest_amplify=%016llx digest_constant=%016llx digest_positions=%016llx "
+        "digest_sentinel=%016llx "
         "strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
@@ -1956,7 +1968,8 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_RECOLOR],
         (unsigned long long)digests[PS5VK_GEOMETRY_AMPLIFY],
         (unsigned long long)digests[PS5VK_GEOMETRY_CONSTANT],
-        (unsigned long long)digests[PS5VK_GEOMETRY_POSITIONS]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_POSITIONS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_SENTINEL]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
