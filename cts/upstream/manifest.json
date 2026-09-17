@@ -2917,6 +2917,106 @@
         "core:geometryShader"
       ],
       "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.points",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:268",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.lines",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:269",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.line_strip",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:270",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:272",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.lines_to_points",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:297",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.points_to_lines",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:298",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.points_to_triangles",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:300",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.lines_to_triangles",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:301",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.primitive_id_in",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1118",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.primitive_id_in_restarted",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1121",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and selected as acceptance for this measurement: the profile binds the geometry stage's declared input primitive (points, lines, triangles) to the pipeline topology, executes the merged program for every one of those families on hardware (the witness measures them end to end), delivers gl_PrimitiveIDIn, and carries primitive restart for strips. This run measures the leaf's own oracle."
     }
   ],
   "diagnostics": [
@@ -3057,46 +3157,6 @@
       "rationale": "Not selected: the pinned binary does not report this leaf when it is filtered by the name the module's construction implies. Two runs of the full selection (284 names in the packaged case list, the leaf present in the deployed cases.txt) reported every other clipping leaf and this one not at all - it is absent from both the ps5log transcript and the QPA - so the leaf is kept as a diagnostic until the enumeration is understood, instead of being claimed as covered. The family leaves that do report are the acceptance set for these features."
     },
     {
-      "path": "dEQP-VK.geometry.input.basic_primitive.points",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:268",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.basic_primitive.lines",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:269",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.basic_primitive.line_strip",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:270",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.basic_primitive.triangle_strip",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:272",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
-    },
-    {
       "path": "dEQP-VK.geometry.input.basic_primitive.triangle_fan",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:273",
       "category": "geometry-stage-not-runnable",
@@ -3137,68 +3197,8 @@
       "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3)."
     },
     {
-      "path": "dEQP-VK.geometry.input.conversion.lines_to_points",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:297",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Point and line inputs need a geometry stage whose per-vertex input array is not the three vertices of a triangle, which this profile does not compile."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.points_to_lines",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:298",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Point and line inputs need a geometry stage whose per-vertex input array is not the three vertices of a triangle, which this profile does not compile."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.points_to_triangles",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:300",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Point and line inputs need a geometry stage whose per-vertex input array is not the three vertices of a triangle, which this profile does not compile."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.lines_to_triangles",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:301",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Point and line inputs need a geometry stage whose per-vertex input array is not the three vertices of a triangle, which this profile does not compile."
-    },
-    {
       "path": "dEQP-VK.geometry.basic.point_size",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1116",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "This leaf needs a per-vertex or per-primitive built-in the interface policy does not deliver (gl_PointSize, gl_PrimitiveIDIn), so the module is refused before a pipeline exists."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.primitive_id_in",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1118",
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "This leaf needs a per-vertex or per-primitive built-in the interface policy does not deliver (gl_PointSize, gl_PrimitiveIDIn), so the module is refused before a pipeline exists."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.primitive_id_in_restarted",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1121",
       "category": "geometry-stage-not-runnable",
       "expected_status": "NotSupported",
       "features_required": [

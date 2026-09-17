@@ -594,8 +594,11 @@ static void check_view_index_builtin(void)
     /* Every refusal below leaves the output untouched (null), so the caller can
      * never mistake a failed compilation for a program to free. */
     const void *out=NULL;
-    /* ViewIndex is a vertex input built-in, never an attribute: a key that
-     * declared an attribute for it could not be matched to the module. */
+    /* ViewIndex is a vertex input built-in, never an attribute. A key that ALSO
+     * declares an attribute at a location no shader input reads is legal Vulkan
+     * - the attribute is dropped rather than matched, and the fetch path prepares
+     * only the spans the compiled input reads - so the interface accepts it. The
+     * pinned geometry module's primitive_id_in leaf is exactly that shape. */
     VkVertexInputBindingDescription binding={.binding=0,.stride=4,
         .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
     VkVertexInputAttributeDescription attribute={.location=0,.binding=0,
@@ -603,8 +606,20 @@ static void check_view_index_builtin(void)
     struct ps5vk_graphics_key attributed=key;
     attributed.vertex_binding_count=1;attributed.vertex_attribute_count=1;
     attributed.vertex_bindings=&binding;attributed.vertex_attributes=&attribute;
-    assert(!ps5vk_spirv_graphics_interface(&attributed));
-    assert(ps5vk_runtime_graphics_compile(NULL,&attributed,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_spirv_graphics_interface(&attributed));
+    const void *attributed_out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&attributed,&attributed_out)==VK_SUCCESS &&
+        attributed_out);
+    ps5vk_runtime_graphics_free(NULL,attributed_out);
+    /* The reverse stays refused: a shader input with no attribute to feed it. */
+    struct ps5vk_graphics_key unfed=key;
+    unfed.vertex=read_module("build/runtime-graphics/vertex_input.vert.spv");
+    unfed.vertex_binding_count=0;unfed.vertex_attribute_count=0;
+    unfed.vertex_bindings=NULL;unfed.vertex_attributes=NULL;
+    assert(!ps5vk_spirv_graphics_interface(&unfed));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&unfed,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)unfed.vertex.words);
 
     /* Changing only the execution model does not turn this vertex module into
      * a legal fragment module: it still has VertexIndex and a position block. */

@@ -72,11 +72,11 @@ class UpstreamSelectionTests(unittest.TestCase):
         # instead of being claimed as coverage.
         geometry = [c for c in manifest["cases"]
                     if "geometryShader" in " ".join(c.get("features_required", []))]
-        self.assertEqual((294, 44, 48),
+        self.assertEqual((304, 34, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
-        self.assertEqual(19, len(geometry))
-        self.assertEqual(19, len({c["path"] for c in geometry}))
+        self.assertEqual(29, len(geometry))
+        self.assertEqual(29, len({c["path"] for c in geometry}))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in geometry))
         # The four strip-topology leaves that were blocked on primitive restart
         # are acceptance now: the profile carries the state and programs the cut.
