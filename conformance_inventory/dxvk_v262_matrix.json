@@ -1039,7 +1039,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
       "implementation": {
-        "detail": "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
+        "detail": "the fragment stage refuses both a distance mask and a reported distance read, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
@@ -1080,7 +1080,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "implementation": {
-        "detail": "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
+        "detail": "the fragment stage refuses both a distance mask and a reported distance read, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised (native/runtime_shader.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
