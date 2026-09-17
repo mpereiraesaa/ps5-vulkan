@@ -953,4 +953,30 @@ records - the 25 user-defined clip/cull distance leaves are among those
 diagnostics because the two distance features are not advertised. This run is
 evidence for the selected leaves only: no clipping, geometry or tessellation
 pipeline executes in it, none of those features is advertised, and it is not a
+
+### Re-run on the synced tree (2026-09-17, after main carried T03)
+
+The same selection was run again on the integration after `main` (with T03 and
+its two review fixes) was merged into `t04-final` - i.e. the tree the final pull
+request proposes. It passed unchanged: **211/211 `Pass`**, `fail_count` 0,
+`not_supported_count` 0, no missing, unexpected or duplicate cases, exit status
+0, and the title closed and confirmed stopped after the run.
+
+- selection SHA-256
+  `266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`
+- deployed SELF SHA-256
+  `8c3a4a5614703cb4f9bb0abda6cbc923ef797edad227e876b15aead972701983`,
+  read back exactly through FTP before launch
+- run `20260917T073014110Z_PPSA99994_upstream-cts_0x57e06d347b9`, reassembled
+  report 28,417,865 bytes, SHA-256
+  `24af364c39c204f97bd3f5e1a6dd77b044c0be00d2a940c92d9f83153ed80a6f`,
+  `strict_verified` and `lifecycle_ok` both true
+
+This is the T02 + T03 regression on the integrated tree: the 48 multiview leaves
+and the 46 indirect/indexed draw leaves are both inside the 211 and both pass.
+The clip/cull witness run recorded in
+[VALIDATION.md#clip-cull-native-acceptance](VALIDATION.md#clip-cull-native-acceptance)
+was taken in the same console window, on its own payload; the geometry witness
+was taken there too. None of those optional-stage runs is part of this selection,
+and no feature is advertised by them.
 Vulkan conformance claim.
