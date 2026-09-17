@@ -44,27 +44,29 @@ int main(void)
     REJECT(source_stage,PSBC_STAGE_GEOMETRY);
     /* Candidate metadata contract (psbc PR #12, metadata 15): a geometry
      * pipeline must be identified as a merged pair, and only a geometry
-     * pipeline may be, with the ES half's ring item size published. */
+     * pipeline may be. The candidate's own ES-half size fields are information
+     * for the caller: the quantity the driver programs is the context register,
+     * so their value is not required to match (a hardware A/B showed that
+     * requirement refuses a program the clean baseline runs). */
     REJECT(merged_geometry,true);
     {
         PsbcShaderMetadata saved=*m;
         m->source_stage=PSBC_STAGE_GEOMETRY;
         assert(ps5vk_runtime_shader_build(&arena,&c)!=0); /* not identified as merged */
         m->merged_geometry=true;
-        assert(ps5vk_runtime_shader_build(&arena,&c)!=0); /* ring item size missing */
-        m->merged_esgs_ring_itemsize=9;
         assert(ps5vk_runtime_shader_build(&arena,&c)!=0); /* geometry state missing */
         static const unsigned geometry_registers[]={0x1ffu,0x291u,0x29bu,0x2abu,0x2ceu,0x2d3u};
         m->context_register_count=sizeof(geometry_registers)/sizeof(geometry_registers[0]);
         for(unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
             m->context_registers[i].offset=geometry_registers[i];
-        /* The published ring item size and the context register the driver
-         * programs must agree, and a GE allocation write must be its own slot. */
-        assert(ps5vk_runtime_shader_build(&arena,&c)!=0);
-        for(unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
-            if(m->context_registers[i].offset==0x2abu)
-                m->context_registers[i].value=m->merged_esgs_ring_itemsize;
+        /* Accepted whatever the informational field says... */
         assert(!ps5vk_runtime_shader_build(&arena,&c));
+        m->merged_esgs_ring_itemsize=9;
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        /* ...and accepted even when it disagrees with the register. */
+        m->merged_esgs_ring_itemsize=0xdead;
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        /* A GE allocation write must still be its own slot. */
         m->linkage_ge_pc_alloc_valid=true;m->linkage_ge_pc_alloc.offset=0x261;
         assert(ps5vk_runtime_shader_build(&arena,&c)!=0);
         m->linkage_ge_pc_alloc.offset=0x260;

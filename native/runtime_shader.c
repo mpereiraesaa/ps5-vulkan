@@ -234,10 +234,12 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
      * merged program (or the reverse) is a compiler/driver contract mismatch,
      * refused before any register is programmed. */
     if (has_geometry != m->merged_geometry) return -2;
-    /* A merged pair must also publish the ES half's ring item size: the driver
-     * programs the pair from the compiler's numbers, never from a leftover
-     * context register. */
-    if (m->merged_geometry && !m->merged_esgs_ring_itemsize) return -2;
+    /* The candidate also publishes the ES half's export item size, but the
+     * quantity the driver programs is the ring item size carried by the context
+     * register below; requiring the two to be equal (or the field to be
+     * non-zero) over-constrained the contract: a hardware A/B showed the merged
+     * pipeline refused at creation for a program the clean baseline creates and
+     * runs. The field is therefore recorded, not required. */
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
         m->address32_hi!=2 || m->user_sgpr_count>16 || m->scratch_valid ||
         m->scratch_bytes_per_wave || m->scratch_size_per_thread || m->streamout_valid ||
@@ -289,14 +291,10 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
         for (unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
             if(!find(m->context_registers,m->context_register_count,geometry_registers[i]))
                 return -3;
-        /* Candidate metadata publishes the pair's ES/GS ring item size as its
-         * own field and the same compiler emits it as the context register the
-         * driver programs (VGT_ESGS_RING_ITEMSIZE, CX 0x2ab). A merged package
-         * whose two numbers disagree cannot be programmed from either one, so
-         * it is refused instead of picking a source of truth. */
-        const PsbcRegisterWrite *esgs=
-            find(m->context_registers,m->context_register_count,0x2abu);
-        if (!esgs || esgs->value!=m->merged_esgs_ring_itemsize) return -3;
+        /* The programmed ring item size is the context register above. The
+         * candidate's own field is information for the caller, not a second
+         * source of truth: requiring equality refused a working program on
+         * hardware (A/B against the clean baseline), so it is not required. */
         /* The GE PC-line allocation is a UC register (0x260) the candidate
          * emits only when the caller supplied the device facts; a write to any
          * other slot is not the allocation this profile knows how to program. */
