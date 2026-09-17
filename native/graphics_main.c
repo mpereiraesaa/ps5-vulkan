@@ -1828,8 +1828,11 @@ static void geometry_probe(VkDevice d)
         /* Amplify first: if the device still dies, the loss is inherent to that
          * program; if it does not, the loss depends on state left by the cases
          * that used to precede it. */
-        PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
-        PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_POSITIONS,PS5VK_GEOMETRY_PASSTHROUGH};
+        /* Positions first: if the POSITIONS program loses the device on its own
+         * the fault is that program; if it survives first but dies later, it
+         * depends on the cases that used to precede it. */
+        PS5VK_GEOMETRY_POSITIONS,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_SHRINK,
+        PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_PASSTHROUGH};
 #else
         PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_PASSTHROUGH,
         PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,
