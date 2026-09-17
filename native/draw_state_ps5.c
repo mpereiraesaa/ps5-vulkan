@@ -24,13 +24,15 @@ static void polygon_offset(const struct ps5vk_raster_state *raster, int depth_d3
     out[5] = (ps5_agc_register){0x2e3, offset};
 }
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
-    const VkRect2D *scissor_state, const struct ps5vk_raster_state *raster,
+    const VkRect2D *scissor_state, uint32_t viewport_count,
+    const struct ps5vk_raster_state *raster,
     const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
     uint32_t width, uint32_t height, struct ps5vk_draw_state *out)
 {
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
+    if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) return VK_ERROR_UNKNOWN;
     if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state || !color || color->count != 16 ||
         !width || !height || width > 16384 || height > 16384 ||
         (p->color_format != VK_FORMAT_B8G8R8A8_UNORM &&
@@ -151,6 +153,17 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     result.cx[result.cx_count++] = (ps5_agc_register){0x281, 0xffffu << 16};
     result.cx[result.cx_count++] = (ps5_agc_register){0x282, 8u};
     result.cx[result.cx_count++] = (ps5_agc_register){0x2f7, 0u};
+    /* Viewport banks 1..count-1: their own PA_CL_VPORT, ZMIN/ZMAX and
+     * VPORT_SCISSOR words, each scissor intersected with the render area like
+     * bank zero's. Only the indices this draw was recorded with are written;
+     * a ViewportIndex outside 0..count-1 is undefined in Vulkan and selects
+     * whatever the context holds, never another draw's promise. */
+    for (uint32_t i = 1; i < viewport_count; ++i) {
+        rc = ps5vk_native_viewport_bank(i, &viewport_state[i], &scissor_state[i], area,
+            result.cx + result.cx_count);
+        if (rc != VK_SUCCESS) return rc;
+        result.cx_count += PS5VK_VIEWPORT_REGISTERS;
+    }
     memcpy(result.sh, base.sh, sizeof(base.sh)); memcpy(result.uc, base.uc, sizeof(base.uc));
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {

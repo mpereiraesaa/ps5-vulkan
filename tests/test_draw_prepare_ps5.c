@@ -71,14 +71,15 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView v, const ps5_agc_register d
     struct ps5vk_target_registers *out)
 { (void)defaults; assert(v->device == d); ++targets; out->count = 16; return target_rc; }
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport,
-    const VkRect2D *scissor, const struct ps5vk_raster_state *raster,
+    const VkRect2D *scissor, uint32_t viewport_count, const struct ps5vk_raster_state *raster,
     const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
     uint32_t width, uint32_t height, struct ps5vk_draw_state *out)
 {
-    /* The prepared draw hands the operation's OWN raster snapshot to the state
-     * builder, never the pipeline's static copy. */
-    assert(p && viewport->width == 4 && scissor->extent.width == 4 && raster &&
+    /* The prepared draw hands the operation's OWN viewport arrays and raster
+     * snapshot to the state builder, never the pipeline's static copies. */
+    assert(p && viewport_count == 2 && viewport[0].width == 4 && viewport[1].width == 2 &&
+        scissor[0].extent.width == 4 && scissor[1].extent.width == 2 && raster &&
         raster->depth_bias_enable && raster->depth_bias_slope == 2.0f &&
         color->count == 16 && !depth && area->extent.width == 4 && width == 4 && height == 4);
     *out = (struct ps5vk_draw_state){.cx_count = 87, .modifier = 5,.runtime=runtime}; return VK_SUCCESS;
@@ -97,7 +98,8 @@ int main(void)
         .subpasses = pass_subpasses};
     struct VkPipeline_T p = {.device = &d};
     struct ps5vk_operation op = {.type = PS5VK_DRAW, .pipeline = &p, .framebuffer = &fb,
-        .render_pass = &pass, .viewport = {0,0,4,4,0,1}, .scissor = {{0,0},{4,4}},
+        .render_pass = &pass, .viewport_count = 2,
+        .viewports = {{0,0,4,4,0,1},{0,0,2,2,0,1}}, .scissors = {{{0,0},{4,4}},{{0,0},{2,2}}},
         .raster = {.depth_bias_enable = VK_TRUE, .depth_bias_slope = 2.0f}};
     VkRect2D area = {{0,0},{4,4}};
     struct ps5vk_prepared_draw prepared = {0};

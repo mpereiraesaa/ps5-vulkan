@@ -11,11 +11,12 @@ static int rect(const VkRect2D *r, uint32_t *right, uint32_t *bottom)
     *bottom = (uint32_t)r->offset.y + r->extent.height;
     return 1;
 }
-VkResult ps5vk_native_viewport(const VkViewport *v, const VkRect2D *s,
+VkResult ps5vk_native_viewport_bank(uint32_t index, const VkViewport *v, const VkRect2D *s,
     const VkRect2D *area, ps5_agc_register out[PS5VK_VIEWPORT_REGISTERS])
 {
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out) * PS5VK_VIEWPORT_REGISTERS);
+    if (index >= PS5VK_VIEWPORT_BANKS) return VK_ERROR_UNKNOWN;
     uint32_t sr, sb, ar, ab;
     /* Ordered comparisons also reject NaNs. Negative-height extensions are not
      * advertised. Vulkan minDepth > maxDepth is valid and must stay reversed. */
@@ -29,14 +30,23 @@ VkResult ps5vk_native_viewport(const VkViewport *v, const VkRect2D *s,
     uint32_t right = sr < ar ? sr : ar, bottom = sb < ab ? sb : ab;
     if (right < x) right = x;
     if (bottom < y) bottom = y;
+    /* Bank strides from the pinned gfx10 schema: six PA_CL_VPORT words, two
+     * ZMIN/ZMAX words and two scissor words per viewport index. */
+    const uint32_t vport = 0x10f + 6u * index, zrange = 0x0b4 + 2u * index,
+        scissor = 0x094 + 2u * index;
     const ps5_agc_register values[PS5VK_VIEWPORT_REGISTERS] = {
-        {0x10f, bits(v->width * 0.5f)}, {0x110, bits(v->x + v->width * 0.5f)},
-        {0x111, bits(v->height * 0.5f)}, {0x112, bits(v->y + v->height * 0.5f)},
-        {0x113, bits(v->maxDepth - v->minDepth)}, {0x114, bits(v->minDepth)},
-        {0x0b4, bits(v->minDepth < v->maxDepth ? v->minDepth : v->maxDepth)},
-        {0x0b5, bits(v->minDepth > v->maxDepth ? v->minDepth : v->maxDepth)},
-        /* RADV gfx10 uses PA_SC_VPORT_SCISSOR_0, not GENERIC_SCISSOR. */
-        {0x094, 0x80000000u | x | (y << 16)}, {0x095, right | (bottom << 16)},
+        {vport, bits(v->width * 0.5f)}, {vport + 1, bits(v->x + v->width * 0.5f)},
+        {vport + 2, bits(v->height * 0.5f)}, {vport + 3, bits(v->y + v->height * 0.5f)},
+        {vport + 4, bits(v->maxDepth - v->minDepth)}, {vport + 5, bits(v->minDepth)},
+        {zrange, bits(v->minDepth < v->maxDepth ? v->minDepth : v->maxDepth)},
+        {zrange + 1, bits(v->minDepth > v->maxDepth ? v->minDepth : v->maxDepth)},
+        /* RADV gfx10 uses PA_SC_VPORT_SCISSOR_n, not GENERIC_SCISSOR. */
+        {scissor, 0x80000000u | x | (y << 16)}, {scissor + 1, right | (bottom << 16)},
     };
     memcpy(out, values, sizeof(values)); return VK_SUCCESS;
+}
+VkResult ps5vk_native_viewport(const VkViewport *v, const VkRect2D *s,
+    const VkRect2D *area, ps5_agc_register out[PS5VK_VIEWPORT_REGISTERS])
+{
+    return ps5vk_native_viewport_bank(0, v, s, area, out);
 }

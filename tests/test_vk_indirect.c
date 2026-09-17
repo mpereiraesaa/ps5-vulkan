@@ -88,7 +88,7 @@ int main(void)
     struct VkPipeline_T graphics={.device=&d,.graphics=VK_TRUE,
         .graphics_state=(void *)1,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
         .depth_format=VK_FORMAT_UNDEFINED,
-        .viewport={.width=16,.height=16,.maxDepth=1},
+        .viewport_count=1, .viewport={.width=16,.height=16,.maxDepth=1},
         .scissor={.extent={16,16}}};
     assert(vkResetCommandBuffer(cb,0)==VK_SUCCESS);begin(cb);
     cb->render_pass=&pass;cb->framebuffer=&framebuffer;cb->graphics_pipeline=&graphics;
@@ -192,7 +192,7 @@ int main(void)
     struct VkPipeline_T multi_graphics={.device=&m,.graphics=VK_TRUE,
         .graphics_state=(void *)1,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
         .depth_format=VK_FORMAT_UNDEFINED,
-        .viewport={.width=16,.height=16,.maxDepth=1},
+        .viewport_count=1, .viewport={.width=16,.height=16,.maxDepth=1},
         .scissor={.extent={16,16}}};
 #define MULTI_BEGIN() do { assert(vkResetCommandBuffer(mb,0)==VK_SUCCESS);begin(mb); \
     mb->render_pass=&multi_pass;mb->framebuffer=&multi_framebuffer; \

@@ -29,4 +29,26 @@ int main(void)
     assert(value(r[2])==540 && value(r[3])==540);
     assert(r[8].offset==0x094 && r[8].value==(0x80000000u|768u|(384u<<16)));
     assert(r[9].offset==0x095 && r[9].value==(896u|(512u<<16)));
+    /* Banks: the same ten words at the gfx10 per-index strides (6, 2, 2),
+     * with bank zero identical to ps5vk_native_viewport and the last bank at
+     * PA_CL_VPORT_XSCALE_15 / PA_SC_VPORT_ZMIN_15 / PA_SC_VPORT_SCISSOR_15. */
+    ps5_agc_register bank[PS5VK_VIEWPORT_REGISTERS];
+    assert(ps5vk_native_viewport_bank(0,&v,&s,&area,bank)==VK_SUCCESS && !memcmp(bank,r,sizeof(bank)));
+    v=(VkViewport){100,50,200,100,0.25f,0.75f};s=(VkRect2D){{120,60},{50,40}};
+    assert(ps5vk_native_viewport_bank(1,&v,&s,&area,bank)==VK_SUCCESS);
+    assert(bank[0].offset==0x115 && value(bank[0])==100 && bank[1].offset==0x116 && value(bank[1])==200);
+    assert(bank[2].offset==0x117 && value(bank[2])==50 && bank[3].offset==0x118 && value(bank[3])==100);
+    assert(bank[4].offset==0x119 && value(bank[4])==0.5f && bank[5].offset==0x11a && value(bank[5])==0.25f);
+    assert(bank[6].offset==0x0b6 && value(bank[6])==0.25f && bank[7].offset==0x0b7 && value(bank[7])==0.75f);
+    assert(bank[8].offset==0x096 && bank[8].value==(0x80000000u|120u|(60u<<16)));
+    assert(bank[9].offset==0x097 && bank[9].value==(170u|(100u<<16)));
+    assert(ps5vk_native_viewport_bank(15,&v,&s,&area,bank)==VK_SUCCESS);
+    assert(bank[0].offset==0x169 && bank[5].offset==0x16e && bank[6].offset==0x0d2 &&
+        bank[7].offset==0x0d3 && bank[8].offset==0x0b2 && bank[9].offset==0x0b3);
+    /* A bank outside the hardware's sixteen is a caller bug, not a wrap. */
+    assert(ps5vk_native_viewport_bank(16,&v,&s,&area,bank)!=VK_SUCCESS && !bank[0].offset && !bank[0].value);
+    /* Each bank keeps the render-area intersection and the empty-scissor rule. */
+    s=(VkRect2D){{3000,10},{10,10}};
+    assert(ps5vk_native_viewport_bank(7,&v,&s,&area,bank)==VK_SUCCESS);
+    assert(bank[8].offset==0x0a2 && (bank[8].value&0x7fff)==3000u && (bank[9].value&0x7fff)==3000u);
 }

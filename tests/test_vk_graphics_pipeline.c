@@ -177,6 +177,55 @@ int main(void)
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
         assert(biased->raster.polygon_mode==VK_POLYGON_MODE_FILL);
         vkDestroyPipeline(&d,biased,NULL);
+        /* Viewport arrays: counts must match and stay in 1..16; more than
+         * one needs multiViewport enabled; every static element is validated
+         * and all of them are stored, in order. */
+        VkViewport many_viewports[PS5VK_MAX_VIEWPORTS+1]; VkRect2D many_scissors[PS5VK_MAX_VIEWPORTS+1];
+        for(unsigned i=0;i<=PS5VK_MAX_VIEWPORTS;++i) {
+            many_viewports[i]=(VkViewport){(float)i,0,64,32,0,1};
+            many_scissors[i]=(VkRect2D){{(int32_t)i,0},{64,32}};
+        }
+        vp.pViewports=many_viewports;vp.pScissors=many_scissors;
+        vp.viewportCount=2;vp.scissorCount=2;
+        const unsigned before_vp=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before_vp);
+        d.enabled_features|=PS5VK_FEATURE_MULTI_VIEWPORT;
+        vp.scissorCount=3;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        vp.viewportCount=vp.scissorCount=0;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        vp.viewportCount=vp.scissorCount=PS5VK_MAX_VIEWPORTS+1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        vp.viewportCount=vp.scissorCount=PS5VK_MAX_VIEWPORTS;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->viewport_count==PS5VK_MAX_VIEWPORTS && biased->viewport.x==0 &&
+            biased->viewports[15].x==15 && biased->scissors[15].offset.x==15 &&
+            biased->viewports[7].width==64 && biased->scissors[7].extent.height==32);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* A bad element in the LAST slot fails creation before anything is kept. */
+        many_viewports[15].width=0;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_ERROR_UNKNOWN && !biased);
+        many_viewports[15].width=64;many_scissors[15].offset.y=-1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_ERROR_UNKNOWN && !biased);
+        many_scissors[15].offset.y=0;
+        /* Dynamic arrays keep the count static and skip element validation. */
+        VkDynamicState array_dynamic[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
+        VkPipelineDynamicStateCreateInfo array_state={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount=2,.pDynamicStates=array_dynamic};
+        info.pDynamicState=&array_state;vp.pViewports=NULL;vp.pScissors=NULL;vp.viewportCount=vp.scissorCount=4;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->viewport_count==4 && biased->dynamic_viewport && biased->dynamic_scissor);
+        vkDestroyPipeline(&d,biased,NULL);
+        info.pDynamicState=NULL;
+        d.enabled_features&=~PS5VK_FEATURE_MULTI_VIEWPORT;
+        vp.pViewports=&viewport;vp.pScissors=&scissor;vp.viewportCount=vp.scissorCount=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->viewport_count==1);
+        vkDestroyPipeline(&d,biased,NULL);
         /* Dynamic depth bias: the enable stays static, the factors are not
          * read from the create info (a non-zero clamp here is ignored too),
          * and VK_DYNAMIC_STATE_DEPTH_BIAS is accepted next to the other two. */
