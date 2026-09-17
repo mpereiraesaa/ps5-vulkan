@@ -1659,6 +1659,264 @@
         "storageBuffer8BitAccess"
       ],
       "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.1",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.2",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.3",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.4",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.5",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.6",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.7",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_distance.vert.8",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance",
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE|FEATURE_SHADER_CULL_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so the two distance features are not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance",
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE|FEATURE_SHADER_CULL_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so the two distance features are not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance",
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE|FEATURE_SHADER_CULL_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so the two distance features are not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance",
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE|FEATURE_SHADER_CULL_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so the two distance features are not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance",
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE|FEATURE_SHADER_CULL_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so the two distance features are not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance",
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE|FEATURE_SHADER_CULL_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so the two distance features are not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance",
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE|FEATURE_SHADER_CULL_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so the two distance features are not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1919",
+      "category": "clip-cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance",
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE|FEATURE_SHADER_CULL_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so the two distance features are not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.1",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.2",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.3",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.4",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.5",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.6",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.7",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.complementarity.8",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1939",
+      "category": "clip-distance-complementarity-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderClipDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured clipping, culling and the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CLIP_DISTANCE) in testClipDistance (vktClippingTests.cpp), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of this family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderClipDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
+    },
+    {
+      "path": "dEQP-VK.clipping.user_defined.misc.negative_and_non_negative_cull_distance",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1950",
+      "category": "cull-distance-render-not-advertised",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "VkPhysicalDeviceFeatures::shaderCullDistance"
+      ],
+      "rationale": "Coverage: this profile implements the packed pre-raster distance export with static indices only; the private coverage witness measured the per-half-space cull rule on hardware (VALIDATION.md#clip-cull-native-acceptance). Blocker: the pinned upstream support gate for this leaf is requireFeatures(FEATURE_SHADER_CULL_DISTANCE) (vktClippingTests.cpp testCullDistance), and the same feature flag also gates the fragment-shader-read (fragmentShaderReads) and dynamic-index (indexingMode) variants of the clip/cull family, which the profile refuses (native/runtime_shader.c rejects a pixel-stage distance mask), so shaderCullDistance is not advertised and this leaf reports NotSupported. It is diagnostic until the refused mandatory modes are implemented."
     }
   ]
 }

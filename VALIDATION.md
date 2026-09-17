@@ -3,6 +3,80 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Clip-cull native acceptance
+
+The packed pre-raster distance export is implemented and measured, and
+`shaderClipDistance` and `shaderCullDistance` are deliberately **not
+advertised**. This section records what the profile does, what was measured on
+hardware, and the normative reason the two features stay false.
+
+### Implemented coverage
+
+The pre-raster stage may declare `gl_ClipDistance` and `gl_CullDistance` with
+static constant indices inside the ceilings of `src/graphics_stages.h`
+(8 clip, 8 cull, 8 combined), and `src/spirv_graphics_interface.c` validates the
+`gl_PerVertex` members, the array sizes and the combined ceiling before the
+program is compiled. The runtime adapter (`native/runtime_shader.c`) packages a
+distance export only when the compiled masks agree with the register state the
+pinned compiler emitted (`PA_CL_VS_OUT_CNTL`, `SPI_SHADER_POS_FORMAT`,
+`SPI_VS_OUT_CONFIG`), and the resulting unresolved `AGC_LINKAGE` slot is accepted
+only for that verified shape. A single-word mutation of any of those registers
+is refused.
+
+The private coverage witness (`src/clip_cull_witness.c`, enabled by
+`PS5VK_CLIP_CULL_PROBE`, judged by `tools/verify_clip_cull.py`) draws one
+bounded scene per case and reads the colour and depth footprint back. Two
+deployments of the exact package were run on the console and both verified
+strictly, with a clean `ps5log/1` receipt and a confirmed Close Game:
+
+* a single clip half-space produced exactly one cleared 2048-pixel half;
+* a two-distance quadrant case produced exactly 1024 cleared pixels;
+* a partially clipped primitive left the untouched half unchanged;
+* a primitive whose cull half-space was negative at every vertex was discarded,
+  and a mixed negative/non-negative primitive was not.
+
+Pulling the distances out of the shader, or corrupting the packed masks,
+fails the witness: the pixels are the oracle, so the measured result is the
+rasterizer, not the metadata.
+
+### Why the feature is not advertised
+
+The upstream module that owns these built-ins, `vktClippingTests.cpp`, gates
+**all** of its user-defined distance leaves on the same two features through
+`requireFeatures(FEATURE_SHADER_CLIP_DISTANCE)` and
+`requireFeatures(FEATURE_SHADER_CULL_DISTANCE)` in `testClipDistance`, and its
+factory registers two variants of every leaf that this profile refuses:
+
+* `*_fragmentshader_read` declares the distance arrays as fragment-shader
+  inputs and reads them (`fragmentShaderReads`), and
+* `*_dynamic_index` writes them through a loop with a non-constant index
+  (`indexingMode`).
+
+The profile's fragment stage refuses a distance mask
+(`native/runtime_shader.c` returns `-2` for any pixel-stage clip or cull mask),
+and dynamic indexing of the arrays is refused by the interface policy. Because
+the feature flag is the only gate the upstream oracle applies, advertising it
+would assert the whole family: it would present the fragment-read and
+dynamic-index variants as supported when they are not. The honest report is
+therefore `false` for both features, the limits stay at the gated-off value,
+and the reporting matrix cites the fragment-stage refusal as the effective gate.
+
+The 25 leaves this profile's measured subset would cover are recorded in
+`cts/upstream/manifest.json` as diagnostics with `expected_status`
+`NotSupported`, next to the reason above, so a later slice that implements the
+two refused modes can promote them by changing the acceptance list and the
+device report together. The canonical acceptance selection is unchanged at 165
+leaves.
+
+### What this does and does not establish
+
+It establishes the vertex-stage clip/cull contract, the packed register state
+the pinned compiler emits for it, the per-half-space culling rule and the
+hardware clipping result for the measured shapes. It does not establish
+fragment-shader reads of the distances, dynamic indexing, any
+tessellation/geometry variant of the family, or the two core features
+themselves, and it is not a Vulkan conformance claim.
+
 ## Multiview native acceptance
 
 On 2026-09-16 the original 48 multiview leaves (masks, rectangular clears,

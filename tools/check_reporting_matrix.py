@@ -89,10 +89,16 @@ FEATURE_GATES = {
                           "anisotropyEnable is rejected"),
     "pipelineStatisticsQuery": ("src/vk_query_pool.c", "pipelineStatisticsQuery is reported false.",
                                 "pipeline statistics query pools are rejected"),
-    "shaderClipDistance": ("src/spirv_graphics_interface.c", "d->builtin!=42",
-                           "only the FragCoord builtin is accepted"),
-    "shaderCullDistance": ("src/spirv_graphics_interface.c", "d->builtin!=42",
-                           "only the FragCoord builtin is accepted"),
+    # The packed pre-raster distance export is implemented and hardware-witnessed,
+    # but neither distance feature is advertised: the pinned upstream clipping
+    # module gates the fragment-shader-read and dynamic-index variants on these
+    # same two features (vktClippingTests.cpp requireFeatures()), and the pixel
+    # stage of this profile refuses a distance mask, so the feature's whole
+    # obligation is not covered yet.
+    "shaderClipDistance": ("native/runtime_shader.c", "clip_distance_mask || m->cull_distance_mask) return -2",
+                           "the fragment stage refuses a distance mask, so only the pre-raster export is measured and the feature is not advertised"),
+    "shaderCullDistance": ("native/runtime_shader.c", "clip_distance_mask || m->cull_distance_mask) return -2",
+                           "the fragment stage refuses a distance mask, so only the pre-raster export is measured and the feature is not advertised"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
@@ -151,7 +157,7 @@ ADVERTISED_FEATURES = {
 # than inventing an object-level rejection branch for compiler-side features.
 FALSE_CORE_FEATURE_GATE = (
     "src/vk_device.c",
-    "if (offset != robust_offset ||",
+    "if (!entry || !(supported & entry->bit)) return VK_ERROR_FEATURE_NOT_PRESENT;",
     "tests/test_vk_device.c",
     "for(size_t offset=0;offset<sizeof(features);offset+=sizeof(VkBool32))",
 )

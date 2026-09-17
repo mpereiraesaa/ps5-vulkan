@@ -785,6 +785,17 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderPassUtil.cpp",
+        # Original user-defined clip/cull distance module. The package registers
+        # the module's own factory; none of its leaves is selected for strict
+        # acceptance, because the feature flag that gates the whole family also
+        # gates the fragment-shader-read and dynamic-index variants this profile
+        # refuses. The measured static-index vertex-only subset stays diagnostic
+        # in cts/upstream/manifest.json. The module compiles its shaders through
+        # its own runtime glslang path, so no dataset binary is added.
+        cts_root / "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp",
+        # The shared draw utility the clipping module renders and reads back
+        # through (vkt::drawutil::VulkanDrawContext and its pipeline state).
+        cts_root / "external/vulkancts/modules/vulkan/util/vktDrawUtil.cpp",
         # Original Vulkan 1.0 robustBufferAccess bodies and oracles, with only
         # registration pruned to compute/scalar_copy/R32_UINT.
         focused_sources / "vktRobustnessBufferAccessTests.cpp",

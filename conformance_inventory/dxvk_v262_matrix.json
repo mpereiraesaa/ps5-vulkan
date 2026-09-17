@@ -915,7 +915,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
       "implementation": {
-        "detail": "only the FragCoord builtin is accepted (src/spirv_graphics_interface.c)",
+        "detail": "the fragment stage refuses a distance mask, so only the pre-raster export is measured and the feature is not advertised (native/runtime_shader.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
@@ -956,7 +956,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "implementation": {
-        "detail": "only the FragCoord builtin is accepted (src/spirv_graphics_interface.c)",
+        "detail": "the fragment stage refuses a distance mask, so only the pre-raster export is measured and the feature is not advertised (native/runtime_shader.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
