@@ -128,6 +128,16 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
     if (ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
             key->descriptor_sets,&tables)!=VK_SUCCESS) return 0;
     if(tables.binding_count>PSBC_MAX_DESCRIPTOR_BINDINGS)return 0;
+    /* The visibility a binding may name: the two standalone stages plus the
+     * geometry stage, which exists only as the second half of the merged
+     * pre-raster program. A layout that declares a resource for the geometry
+     * stage on a pipeline without one would have that binding dropped by the
+     * stage projection, so it is refused here instead of being silently
+     * discarded - the same rule the input attachment follows from the other
+     * side. */
+    const VkShaderStageFlags visible=VK_SHADER_STAGE_VERTEX_BIT|
+        VK_SHADER_STAGE_FRAGMENT_BIT|
+        (ps5vk_graphics_has_geometry(key)?VK_SHADER_STAGE_GEOMETRY_BIT:0);
     for(unsigned s=0;s<key->descriptor_set_count;++s)
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_set_signature *set=&key->descriptor_sets[s];
@@ -141,7 +151,7 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
              * that cannot read it. Every other descriptor type stays outside the
              * profile instead of being half-delivered. */
             if(set->binding[b].count &&
-                (!(set->binding[b].stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)) ||
+                (!(set->binding[b].stages&visible) ||
                 (set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
