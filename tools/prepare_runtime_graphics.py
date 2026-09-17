@@ -61,6 +61,10 @@ def main():
         # so the envelope case needs a module of its own.
         ("experiments/graphics/runtime_geometry_envelope.geom",
          "runtime_geometry_envelope.geom.spv", "geometry_envelope_stage"),
+        # Invocations-only pre-raster half: 32 invocations, each placing a marker
+        # coloured by its invocation id. invocations is module-level too.
+        ("experiments/graphics/runtime_geometry_invocations.geom",
+         "runtime_geometry_invocations.geom.spv", "geometry_invocations_stage"),
         # Synthetic suppress diagnostic only: an input-less fragment stage, so
         # the geometry half's suppress case (which emits nothing) still forms a
         # legal pipeline instead of being refused for an unmatched input.

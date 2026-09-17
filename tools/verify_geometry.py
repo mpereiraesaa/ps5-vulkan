@@ -63,6 +63,11 @@ CASES = (
     # band (768 px at 64x64). A stage that stopped early covers a shorter band,
     # so the case measures the capability rather than restating it.
     (13, 15, 768),
+    # The invocations: 32 invocations - the mandatory minimum
+    # maxGeometryShaderInvocations names - each placing its own marker coloured by
+    # its invocation id, so the image reports both that all 32 ran and that each
+    # saw the id it should (480 px at 64x64).
+    (14, 16, 480),
     # The input positions with a constant colour; it runs last because it is the
     # case that has lost the device before.
     (7, 6, PIXELS),
@@ -70,13 +75,13 @@ CASES = (
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
                 6: "digest_constant", 7: "digest_positions",
                 8: "digest_sentinel", 9: "digest_indexed_marker",
                 10: "digest_read_v0", 11: "digest_read_v1", 12: "digest_read_v2",
-                13: "digest_envelope"}
+                13: "digest_envelope", 14: "digest_invocations"}
 # The readback cases draw 21 vertices (7 triangles) instead of the witness's six,
 # so item indices 0..20 exist and the three plausible readings of gl_in[k] - an
 # item index, a dword-scaled one and a byte-scaled one - land on written items
@@ -85,6 +90,9 @@ READ_VERTICES = 21
 # The envelope case declares 256 output vertices (the feature's mandatory minimum);
 # every other geometry case declares the witness's nine.
 MAX_VERTICES = {13: 256}
+# The invocations case declares 32 invocations per primitive; the run has to show
+# the GE was told that count, so the check is on the launch state, not the name.
+GS_INVOCATIONS = {14: 32}
 DRAW_VERTICES = {10: READ_VERTICES, 11: READ_VERTICES, 12: READ_VERTICES}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
@@ -163,6 +171,8 @@ def validate(log, receipt, artifact):
         require(draw.get("vertices") == str(DRAW_VERTICES.get(case, 6)) and
                 draw.get("instances") == "1",
                 f"case {case} draw")
+        require(draw.get("gs_invocations") == str(GS_INVOCATIONS.get(case, 0)),
+                f"case {case} invocation count")
         if mode < 0:
             require(draw.get("stages") == "2", f"case {case} control stages")
         else:

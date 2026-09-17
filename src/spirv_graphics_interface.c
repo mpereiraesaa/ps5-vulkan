@@ -292,6 +292,19 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                    type->count!=32)goto done;
                 continue;
             }
+            /* The geometry stage's invocation id. A pipeline with more than one
+             * invocation per primitive is meaningless without it - an invocation
+             * that cannot tell which one it is can only repeat the same work - so
+             * this is what the feature's mandatory maxGeometryShaderInvocations
+             * minimum needs. It is an input scalar with no location, like the
+             * control stage's, and the hardware supplies it to the merged stage
+             * the same way it supplies the per-vertex offsets this profile
+             * already reads. */
+            if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_INVOCATION_ID) {
+                if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
+                   type->count!=32)goto done;
+                continue;
+            }
             if(model==MODEL_TESS_CTRL &&
                (d->builtin==BUILTIN_TESS_LEVEL_OUTER || d->builtin==BUILTIN_TESS_LEVEL_INNER)) {
                 unsigned length=0,element=0;

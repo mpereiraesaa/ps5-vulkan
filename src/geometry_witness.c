@@ -28,6 +28,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_READ_V1:return 13;
     case PS5VK_GEOMETRY_READ_V2:return 14;
     case PS5VK_GEOMETRY_ENVELOPE:return 15;
+    case PS5VK_GEOMETRY_INVOCATIONS:return 16;
     }
     return -2;
 }
@@ -41,6 +42,8 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
  * name an item-unit, a dword-scaled and a byte-scaled read differently. */
 enum { READ_PRIMITIVES = 7 };
 enum { READ_CASES = 3 };
+/* The invocations the pipeline declares: the feature's mandatory minimum. */
+enum { INVOCATION_COUNT = 32 };
 
 static float read_bytes_vertex_x(unsigned vertex)
 { return -0.6875f + 0.0625f * (float)vertex; }
@@ -200,6 +203,15 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
      * vertices span, y between the two edges they alternate between. */
     case PS5VK_GEOMETRY_ENVELOPE:
         return ndc_x>=-0.75 && ndc_x<=0.75 && ndc_y>=-0.25 && ndc_y<=0.25;
+    /* The invocations case covers one column per invocation, each as wide as the
+     * marker that invocation emits. */
+    case PS5VK_GEOMETRY_INVOCATIONS:
+        for(unsigned k=0;k<INVOCATION_COUNT;++k) {
+            const double column=-0.72+0.045*(double)k;
+            if(ndc_x>=column-0.02 && ndc_x<=column+0.02 &&
+               ndc_y>=-0.2 && ndc_y<=0.2)return 1;
+        }
+        return 0;
     default:
         /* The stage emits nothing at all. */
         return 0;
@@ -290,6 +302,24 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
         rgba[0]=unorm8(0.25);
         rgba[1]=unorm8(0.5);
         rgba[2]=unorm8(0.75);
+        rgba[3]=255u;
+        return;
+    }
+    if(witness_case==PS5VK_GEOMETRY_INVOCATIONS) {
+        /* Each column carries the colour of the invocation id that placed it, so
+         * a wrong id, a missing invocation and a stage that ran once are three
+         * different images rather than one missing marker. */
+        for(unsigned k=0;k<INVOCATION_COUNT;++k) {
+            const double column=-0.72+0.045*(double)k;
+            if(2.0*u-1.0<column-0.02 || 2.0*u-1.0>column+0.02)continue;
+            if(2.0*v-1.0<-0.2 || 2.0*v-1.0>0.2)continue;
+            rgba[0]=unorm8((double)k/31.0);
+            rgba[1]=unorm8(0.5);
+            rgba[2]=unorm8(0.25);
+            rgba[3]=255u;
+            return;
+        }
+        rgba[0]=rgba[1]=rgba[2]=0u;
         rgba[3]=255u;
         return;
     }
@@ -385,6 +415,9 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     /* The envelope's band is real coverage of a known shape, neither empty nor
      * the whole target. */
     case PS5VK_GEOMETRY_ENVELOPE:
+    /* The invocations case covers 32 real columns of a known shape, neither
+     * empty nor the whole target. */
+    case PS5VK_GEOMETRY_INVOCATIONS:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
         return witness->expected_covered==0u && witness->covered==0u;

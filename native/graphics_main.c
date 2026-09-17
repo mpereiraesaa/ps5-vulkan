@@ -1905,6 +1905,13 @@ static void geometry_probe(VkDevice d)
         .codeSize=sizeof(ps5vk_runtime_geometry_envelope_stage),
         .pCode=ps5vk_runtime_geometry_envelope_stage};
     CHECK(vkCreateShaderModule(d,&egi,NULL,&envelope_module));
+    /* The invocations case's own pre-raster half, for the same reason: the
+     * invocations count is a module-level declaration too. */
+    VkShaderModule invocations_module;
+    VkShaderModuleCreateInfo igi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_invocations_stage),
+        .pCode=ps5vk_runtime_geometry_invocations_stage};
+    CHECK(vkCreateShaderModule(d,&igi,NULL,&invocations_module));
     CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment_module));
     /* The readback's own pre-raster half: a position whose x is unique per vertex
      * index, so the bytes the geometry half reads identify the item they came
@@ -1947,7 +1954,7 @@ static void geometry_probe(VkDevice d)
         PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
         PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_INDEXED_MARKER,
         PS5VK_GEOMETRY_READ_V0,PS5VK_GEOMETRY_READ_V1,PS5VK_GEOMETRY_READ_V2,
-        PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_POSITIONS};
+        PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_INVOCATIONS,PS5VK_GEOMETRY_POSITIONS};
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
@@ -1971,6 +1978,8 @@ static void geometry_probe(VkDevice d)
             stages[0].module=identity_vertex_module;
         if(witness_case==PS5VK_GEOMETRY_ENVELOPE)
             stages[1].module=envelope_module;
+        if(witness_case==PS5VK_GEOMETRY_INVOCATIONS)
+            stages[1].module=invocations_module;
         VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
         VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1999,13 +2008,19 @@ static void geometry_probe(VkDevice d)
         const struct ps5vk_native_graphics_pipeline *native=pipeline->graphics_state;
         if(!native || !native->pair || !native->pair->ready)fail("geometry-pipeline",-1);
         const struct ps5vk_runtime_shader *stage=&native->pair->runtime_vertex;
-        uint32_t topology=0,max_vertices=0,seen=0;
+        uint32_t topology=0,max_vertices=0,seen=0,gs_instances=0;
         if(mode>=0) {
             static const unsigned required[]={0x1ffu,0x291u,0x2abu,0x2ceu,0x2d3u};
             for(unsigned i=0;i<stage->header.num_cx_registers;++i) {
                 const uint32_t offset=stage->context[i].offset;
                 for(unsigned r=0;r<sizeof(required)/sizeof(required[0]);++r)
                     if(offset==required[r])++seen;
+                /* VGT_GS_INSTANCE_CNT: the invocation count the GE is told to run.
+                 * The invocations case is only measuring what it claims if this
+                 * says 32 (enabled, count in bits 8:2). */
+                if(offset==0x2e4u)
+                    gs_instances=(stage->context[i].value&1u)?
+                        ((stage->context[i].value>>2)&0x7fu):0u;
                 if(offset==0x29bu)topology=stage->context[i].value;
                 if(offset==0x2ceu)max_vertices=stage->context[i].value;
             }
@@ -2018,6 +2033,8 @@ static void geometry_probe(VkDevice d)
             if(seen!=sizeof(required)/sizeof(required[0]) || topology!=2u ||
                max_vertices!=expect_vertices)
                 fail("geometry-state",-1);
+            if(witness_case==PS5VK_GEOMETRY_INVOCATIONS && gs_instances!=32u)
+                fail("geometry-invocations",-1);
         }
         VkCommandBuffer cb=VK_NULL_HANDLE;
         VkCommandBufferAllocateInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -2043,8 +2060,9 @@ static void geometry_probe(VkDevice d)
         CHECK(vkQueueWaitIdle(queue));
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_GEOMETRY_DRAW case=%u mode=%d stages=%u out_prim_type=%u max_vertices=%u "
-            "vertices=%u instances=1",
-            witness_case,mode,mode<0?2u:3u,topology,max_vertices,draw_vertices);
+            "vertices=%u instances=1 gs_invocations=%u",
+            witness_case,mode,mode<0?2u:3u,topology,max_vertices,draw_vertices,
+            mode<0?0u:gs_instances);
         CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
             .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
             .offset=0,.size=VK_WHOLE_SIZE}));
@@ -2169,6 +2187,11 @@ static void geometry_probe(VkDevice d)
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
        digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
        digests[PS5VK_GEOMETRY_SHRINK]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
+       /* The invocations image is 32 coloured columns: equal to any of these
+        * would mean the invocations did not place them. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
+       digests[PS5VK_GEOMETRY_ENVELOPE]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -2183,6 +2206,7 @@ static void geometry_probe(VkDevice d)
         "digest_sentinel=%016llx digest_indexed_marker=%016llx "
         "digest_read_v0=%016llx digest_read_v1=%016llx digest_read_v2=%016llx "
         "digest_envelope=%016llx "
+        "digest_invocations=%016llx "
         "strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
@@ -2199,11 +2223,13 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_READ_V0],
         (unsigned long long)digests[PS5VK_GEOMETRY_READ_V1],
         (unsigned long long)digests[PS5VK_GEOMETRY_READ_V2],
-        (unsigned long long)digests[PS5VK_GEOMETRY_ENVELOPE]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_ENVELOPE],
+        (unsigned long long)digests[PS5VK_GEOMETRY_INVOCATIONS]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
     vkDestroyShaderModule(d,envelope_module,NULL);
+    vkDestroyShaderModule(d,invocations_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
     vkDestroyShaderModule(d,suppress_fragment_module,NULL);
     vkDestroyShaderModule(d,identity_vertex_module,NULL);
