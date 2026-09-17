@@ -141,7 +141,8 @@ def main():
             "native/graphics_queue_ps5.c", "native/draw_state_ps5.c", "native/viewport_ps5.c",
             "native/targets_ps5.c", "native/runtime_shader.c", "native/runtime_graphics_compiler.c",
             "native/runtime_graphics_cache.c", "native/runtime_graphics_ps5.c",
-            "src/spirv_graphics_interface.c", "src/clip_cull_witness.c")
+            "src/spirv_graphics_interface.c", "src/clip_cull_witness.c",
+            "src/geometry_witness.c")
         native_sources += [(ROOT / source, []) for source in graphics_sources]
         native_sources += [(gears / "src" / source, []) for source in (
             "ps5_shader_header.c", "ps5_pipeline.c", "ps5_color_target.c", "ps5_depth_target.c")]
