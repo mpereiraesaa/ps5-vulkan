@@ -16,7 +16,12 @@ static VkResult start_arena(struct ps5vk_draw_batch_chain *c)
     if (c->count >= PS5VK_DRAW_BATCH_MAX) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     struct ps5vk_command_arena *a = &c->arenas[c->count];
     VkResult rc = ps5vk_command_arena_create(a);
-    if (rc != VK_SUCCESS) return rc;
+    if (rc != VK_SUCCESS) {
+        /* A failed map/rollback may still own resources. Include that slot in
+         * release so uncertainty is retained, never erased as a clean chain. */
+        if (a->uncertain || a->reserved || a->allocated || a->mapped) ++c->count;
+        return rc;
+    }
     ++c->count;
     uint32_t *start = a->address;
     c->cursor = start;
@@ -68,6 +73,20 @@ VkResult ps5vk_draw_batch_reserve(struct ps5vk_draw_batch_chain *c, uint32_t nee
     if (rc != VK_SUCCESS) return rc;
     return (uint32_t)(c->end - c->cursor) >= need + TAIL_WORDS ?
         VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+VkResult ps5vk_draw_batch_retry(struct ps5vk_draw_batch_chain *c, uint32_t **origin)
+{
+    struct ps5vk_command_arena *a = c ? open_arena(c) : NULL;
+    if (!a || !origin || !*origin || *origin != c->cursor ||
+        c->cursor == (uint32_t *)a->address + PS5VK_GRAPHICS_ACQUIRE_WORDS)
+        return VK_ERROR_UNKNOWN;
+    VkResult rc = ps5vk_draw_batch_reserve(c,
+        PS5VK_COMMAND_ARENA_WORDS - PS5VK_GRAPHICS_ACQUIRE_WORDS - TAIL_WORDS);
+    if (rc != VK_SUCCESS) return rc;
+    /* Both the retry and its measurement must use the new allocation. */
+    *origin = c->cursor;
+    return VK_SUCCESS;
 }
 
 void ps5vk_draw_batch_measured(struct ps5vk_draw_batch_chain *c, uint32_t words)

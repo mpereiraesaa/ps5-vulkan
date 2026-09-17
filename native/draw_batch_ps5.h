@@ -21,7 +21,8 @@
  *
  * Memory is bounded by PS5VK_DRAW_BATCH_MAX arenas; a pass that would need
  * more is refused before any submission (VK_ERROR_OUT_OF_DEVICE_MEMORY), and
- * a chain whose arenas were never launched releases them all on failure.
+ * a chain whose arenas were never launched releases them all on failure,
+ * except uncertain mappings/rollbacks, which remain owned for retention.
  * Arenas are created lazily, so the ordinary single-arena pass allocates
  * exactly what it did before.
  *
@@ -37,7 +38,7 @@ enum { PS5VK_DRAW_BATCH_INITIAL_RESERVE = 512 };
 struct ps5vk_draw_batch_chain {
     struct ps5vk_command_arena arenas[PS5VK_DRAW_BATCH_MAX];
     uint32_t words[PS5VK_DRAW_BATCH_MAX];
-    unsigned count;      /* arenas created; the last one is open until sealed */
+    unsigned count;      /* owned slots, including an uncertain failed creation */
     unsigned sealed;     /* arenas that carry their release packet */
     uint64_t serial;
     uint32_t *cursor, *end;
@@ -53,6 +54,10 @@ VkResult ps5vk_draw_batch_open(struct ps5vk_draw_batch_chain *, uint64_t serial)
  * chain is VK_ERROR_OUT_OF_DEVICE_MEMORY. Sealing never happens on an arena
  * that carries nothing but its acquire. */
 VkResult ps5vk_draw_batch_reserve(struct ps5vk_draw_batch_chain *, uint32_t need);
+/* Retry an emission that left the cursor unchanged, in a fresh arena. Updates
+ * its origin for same-allocation size measurement. An empty arena cannot retry.
+ * The caller bounds retries and synchronizes its local cursor/end afterwards. */
+VkResult ps5vk_draw_batch_retry(struct ps5vk_draw_batch_chain *, uint32_t **origin);
 /* Record that an emission of `words` dwords completed, so later reserves are
  * at least that large. */
 void ps5vk_draw_batch_measured(struct ps5vk_draw_batch_chain *, uint32_t words);
