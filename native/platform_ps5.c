@@ -224,6 +224,15 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features |= PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
                                     PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
                                     PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
+    /* User-defined clip and cull distances: the pre-raster export (static and
+     * dynamically indexed) and the fragment stage's read of the interpolated
+     * value are native-witnessed on exactly this build - the eleven-case
+     * clip/cull witness, private-captures/t04/clip-cull-pixel-read-acceptance -
+     * and the profile reports the three distance limits at the Vulkan floor of
+     * eight, which is the width of the two packed position registers the
+     * interface policy bounds a declaration against. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
+                                    PS5VK_FEATURE_SHADER_CULL_DISTANCE;
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

@@ -59,7 +59,9 @@ class UpstreamSelectionTests(unittest.TestCase):
         manifest = self.current_manifest
         leaves = [c for c in manifest["cases"]
                   if c["path"].startswith(MULTIVIEW_FAMILIES)]
-        self.assertEqual((211, 30, 48),
+        # 211 + the 64 promoted clipping leaves are acceptance; the clipping
+        # complementarity/misc leaves and the earlier diagnostics make up the 14.
+        self.assertEqual((275, 14, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))

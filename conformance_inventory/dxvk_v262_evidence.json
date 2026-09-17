@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9",
+    "artifact_sha256": "cbffe0a8a4904a945001114947fb70074ac62cf78d731599de24974c25f92823",
     "device_api": "1.0.0",
     "device_extensions": 5,
     "requirements": 62,
@@ -11,14 +11,16 @@
       "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
       "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+      "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+      "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
     ],
     "runs": [
       {
-        "id": "20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369",
-        "log_sha256": "5f3e685c15a2e1613dd451e25a88fc1ddb9602342599d2e6938004bb24cb33d8"
+        "id": "20260917T115122497Z_PPSA99994_ps5vk_0x13be0f22a9a8",
+        "log_sha256": "0d73c0a9dbfb0f306ecde197ea213fd48df332722d1ad7f1fdde8e34f2deda47"
       }
     ],
     "transport": "ps5log/1",
@@ -31,7 +33,9 @@
         "maxMultiviewInstanceIndex": "134217727"
       }
     ],
-    "source_matrix_sha256": "16c2e0e70dd44fad58ab1798a96e0def50fee19eda73ab31f8d67be69c852a42"
+    "source_matrix_sha256": "16c2e0e70dd44fad58ab1798a96e0def50fee19eda73ab31f8d67be69c852a42",
+    "satisfied": 9,
+    "blockers": 53
   },
   "requirements": {
     "feature:VkPhysicalDeviceVulkan11Features:multiview": {
@@ -499,6 +503,182 @@
           "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
         ],
         "note": "Combined strict CTS run plus the public-SDK indirect witness: indices 0x80000000..0x8000000b with vertexOffset INT32_MIN (direct and indexed indirect), 0x01000000..0x0100000b with vertexOffset -16777216 and a uint16 control each landed in cells 0..3 by gl_VertexIndex/3 with no wrong or stray cell, so the fetched 32-bit index and the signed BaseVertex add are exact at bit 31 and at the 2^24 boundary; strict_verified=1."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:shaderClipDistance": {
+      "_comment": "Pre-raster export, dynamically indexed write and fragment-stage read of gl_ClipDistance. The device advertises the feature and reports maxClipDistances, maxCullDistances and maxCombinedClipAndCullDistances at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65"
+        ],
+        "artifact_sha256": "e1cc26816aec34eed6e8f83e76cab5d695e748957a1765eb72e4aeb022ce9412",
+        "refs": [
+          "VALIDATION.md#clip-cull-native-acceptance"
+        ],
+        "note": "Eleven-case clip/cull witness: the packed export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance all verify on hardware - case 10 with expected=4096 covered=4096 foreign=0 wrong_color=0 and digest f50dd9368fee6cc9, the acceptance run strict_verified with the pixel-read digest differing from the control's."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.1",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.2",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.3",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.4",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.5",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.6",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.7",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8_fragmentshader_read"
+        ],
+        "refs": [
+          "VALIDATION.md#clip-cull-native-acceptance",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "All 64 selected clipping leaves passed in the 275/275 acceptance run (selection hash 3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d, eboot b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7, title closed). The family exercises clip counts 1..8 (the reported maxClipDistances floor), the combined clip+cull budget, the non-constant write and the fragment-stage read. The complementarity and misc leaves stay diagnostics: the pinned binary does not report them when filtered by the name the module's construction implies, measured twice, so they are not claimed here."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:shaderCullDistance": {
+      "_comment": "The same path for gl_CullDistance; the cull rule is per half-space, not per vertex. The device advertises the feature and reports maxClipDistances, maxCullDistances and maxCombinedClipAndCullDistances at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65"
+        ],
+        "artifact_sha256": "e1cc26816aec34eed6e8f83e76cab5d695e748957a1765eb72e4aeb022ce9412",
+        "refs": [
+          "VALIDATION.md#clip-cull-native-acceptance"
+        ],
+        "note": "Eleven-case clip/cull witness: the packed export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance all verify on hardware - case 10 with expected=4096 covered=4096 foreign=0 wrong_color=0 and digest f50dd9368fee6cc9, the acceptance run strict_verified with the pixel-read digest differing from the control's."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.1",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.2",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.3",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.4",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.5",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.6",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.7",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8_fragmentshader_read"
+        ],
+        "refs": [
+          "VALIDATION.md#clip-cull-native-acceptance",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "All 64 selected clipping leaves passed in the 275/275 acceptance run (selection hash 3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d, eboot b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7, title closed). The family exercises clip counts 1..8 (the reported maxClipDistances floor), the combined clip+cull budget, the non-constant write and the fragment-stage read. The complementarity and misc leaves stay diagnostics: the pinned binary does not report them when filtered by the name the module's construction implies, measured twice, so they are not claimed here."
       }
     }
   }

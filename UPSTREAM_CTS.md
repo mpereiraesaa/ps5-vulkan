@@ -48,11 +48,12 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 211 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 275 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
   image-copy, binding-model combined-sampler, multiview and indirect/indexed
-  draw cases). Only these
+  draw cases, plus the 64 user-defined clip/cull distance leaves promoted below).
+  Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -825,10 +826,36 @@ measured clip/cull subset belongs to, and because the leaves are needed the
 moment the feature can be advertised. Twenty-five of them are recorded as
 diagnostics instead:
 
+**Updated 2026-09-17: the family is promoted.** The fragment-stage read and the
+dynamically indexed write are implemented and hardware-witnessed, the device
+reports `shaderClipDistance` and `shaderCullDistance` true with the three
+distance limits at the Vulkan floor of eight, and 64 of the family's leaves are
+now *acceptance* cases: `clip_distance` and `clip_cull_distance`, each with and
+without `_dynamic_index`, for the vertex-only shader group, clip counts 1..8
+(the combined group adds the widest cull count that fits the eight-component
+budget) and both read variants. They passed **275/275** in selection
+`3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d` (eboot
+`b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7`, run
+`20260917T114927552Z_PPSA99994_upstream-cts_0x13a34bfa824d`); see
+[clip-cull native acceptance](VALIDATION.md#clip-cull-native-acceptance) for the
+native witness behind the read and the two gaps left inside the family.
+
+The remaining nine leaves are recorded as diagnostics:
+
 * `dEQP-VK.clipping.user_defined.clip_distance.vert.1..8`
 * `dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7 .. 8`
 * `dEQP-VK.clipping.user_defined.complementarity.1..8`
 * `dEQP-VK.clipping.user_defined.misc.negative_and_non_negative_cull_distance`
+
+These nine are the leaves the pinned binary does not report when they are
+filtered by the name the module's construction implies: two full runs (284 and
+275 packaged names, both with the leaf present in the deployed `cases.txt`)
+reported every other clipping leaf and none of these - they are absent from both
+the `ps5log/1` transcript and the QPA - so they stay diagnostics rather than
+being claimed as covered. The other sixteen entries that used to be diagnostics
+(`clip_distance.vert.1..8` and `clip_cull_distance.vert.1_7 .. 8`) are now
+acceptance cases together with their `_dynamic_index` and
+`_fragmentshader_read` variants.
 
 Each entry carries `expected_status: "NotSupported"` and the exact gate that
 makes it so: `testClipDistance` calls

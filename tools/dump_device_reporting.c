@@ -65,7 +65,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         platform->supported_features |= PS5VK_FEATURE_MULTIVIEW |
                                         PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
                                         PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
-                                        PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
+                                        PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 |
+                                        /* Mirrors native/platform_ps5.c: the
+                                         * distance features belong to the
+                                         * graphics path, which is the only one
+                                         * that can export or read them. */
+                                        PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
+                                        PS5VK_FEATURE_SHADER_CULL_DISTANCE;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

@@ -303,6 +303,24 @@ def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dic
     return leaves
 
 
+def _clip_distance_generated_segments(text: str) -> set[str]:
+    """Group segments the pinned clipping factory composes at run time.
+
+    The user-defined distance factory registers each case group twice: under its
+    literal name and under that name with `_dynamic_index` appended for the
+    non-constant write. The suffixed names therefore never appear as literals in
+    the module, and accepting them requires the exact composition expression to
+    be present together with both literal group names.
+    """
+    if not ('const std::string mainGroupName =' in text and
+            'de::toString(caseGroups[groupNdx].groupName) + (dynamicIndexing ? "_dynamic_index" : "")'
+            in text and
+            '{"clip_distance", false},' in text and
+            '{"clip_cull_distance", true},' in text):
+        return set()
+    return {"clip_distance_dynamic_index", "clip_cull_distance_dynamic_index"}
+
+
 def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
     """Derive the user-defined clip/cull leaf names of the pinned clipping module.
 
@@ -333,13 +351,40 @@ def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
     max_combined = constant("MAX_COMBINED_CLIP_AND_CULL_DISTANCES")
     if not max_clip or not max_cull or not max_combined:
         return set()
+    # The same factory registers the leaves a second time under a
+    # `_dynamic_index` main group (the non-constant write) and appends
+    # `_fragmentshader_read` to the case name for the variant the fragment stage
+    # reads. Both constructions have to be present in the pinned module, exactly
+    # like the static one above, or neither suffix is accepted.
+    construction_reads = (
+        '{"", false}, {"_fragmentshader_read", true}};' in text and
+        'fragmentShaderReads[fragmentShaderReadNdx].name' in text and
+        'readInFragmentShader' in text
+    )
+    construction_dynamic = (
+        'const std::string mainGroupName =' in text and
+        'de::toString(caseGroups[groupNdx].groupName) + (dynamicIndexing ? "_dynamic_index" : "")' in text
+    )
     segments = path.split(".")
     if len(segments) != 6 or segments[1] != "clipping" or segments[2] != "user_defined":
         return set()
     group = segments[3]
     shader = segments[4]
+    leaf = segments[5]
     if shader != "vert":
         return set()
+    read_suffix = ""
+    if leaf.endswith("_fragmentshader_read"):
+        if not construction_reads:
+            return set()
+        read_suffix = "_fragmentshader_read"
+        leaf = leaf[: -len(read_suffix)]
+    dynamic = False
+    if group.endswith("_dynamic_index"):
+        if not construction_dynamic:
+            return set()
+        dynamic = True
+        group = group[: -len("_dynamic_index")]
     names: set[str] = set()
     for clip in range(1, max_clip + 1):
         # The combined group adds the widest cull count that still fits.
@@ -348,7 +393,11 @@ def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
             names.add(f"{clip}_{cull}" if cull else str(clip))
         elif group == "clip_distance":
             names.add(str(clip))
-    return names
+    # `dynamic` selects which main group the leaf belongs to; the name set is
+    # the same because the factory builds both groups from the same loop, and the
+    # read suffix is already reflected in `leaf`.
+    assert dynamic in (False, True)
+    return {name + read_suffix for name in names}
 
 
 def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
@@ -1122,7 +1171,9 @@ def main() -> int:
             _dynamic_state_compute_generated_segments(text)
             if source_path.name == "vktDynamicStateComputeTests.cpp" else
             _indirect_draw_generated_segments(text)
-            if source_path.name == "vktDrawIndirectTest.cpp" else set()
+            if source_path.name == "vktDrawIndirectTest.cpp" else
+            _clip_distance_generated_segments(text)
+            if source_path.name == "vktClippingTests.cpp" else set()
         )
         for segment in segments[1:-1]:
             if (not re.search(r'"' + re.escape(segment) + r'"', searchable) and

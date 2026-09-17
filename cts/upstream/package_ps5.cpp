@@ -187,13 +187,14 @@ void FocusedVkTestPackage::init(void)
     addChild(vkt::MultiView::createTests(m_testCtx, "multiview"));
 
     // clipping group: the original upstream user-defined clip/cull distance
-    // module, registered whole under its own name. No leaf of it is in the
-    // acceptance list: the feature flag that gates the whole family (including
-    // the fragment-shader-read and dynamic-index variants this profile refuses)
-    // is not advertised, so the measured static-index vertex-only subset is
-    // recorded as diagnostics in cts/upstream/manifest.json until both refused
-    // modes are implemented. Registration makes the group available for that
-    // promotion without another packaging change.
+    // module, registered whole under its own name. Both features are advertised
+    // (the export, the dynamically indexed write and the fragment-stage read are
+    // implemented and hardware-witnessed), so the family's vertex-only,
+    // static-index and dynamic-index leaves, with and without the fragment read,
+    // are acceptance cases in cts/upstream/manifest.json. Only the
+    // complementarity and misc leaves stay diagnostics: the pinned binary does
+    // not report them when they are filtered by the name the module's
+    // construction implies.
     addChild(vkt::clipping::createTests(m_testCtx, "clipping"));
 
     // compute.basic group

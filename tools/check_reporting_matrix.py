@@ -213,6 +213,66 @@ ADVERTISED_FEATURES = {
     },
 }
 
+# DXVK262-T04. The applicable upstream oracle for both distance features is the
+# pinned clipping module's user-defined family, which the frozen selection lists
+# in full for the shapes this device can run: vertex-only, the two indexing modes
+# and the fragment-stage read, with the clip counts reaching the reported
+# maxClipDistances of eight. These names are generated the same way the factory
+# composes them, so the matrix and cts/upstream/manifest.json cannot drift.
+def _clip_distance_cts_paths() -> tuple[str, ...]:
+    paths: list[str] = []
+    for group in ("clip_distance", "clip_cull_distance"):
+        for suffix in ("", "_dynamic_index"):
+            for clip in range(1, 9):
+                if group == "clip_cull_distance":
+                    cull = min(8, 8 - clip)
+                    leaf = f"{clip}_{cull}" if cull else str(clip)
+                else:
+                    leaf = str(clip)
+                for read in ("", "_fragmentshader_read"):
+                    paths.append(f"dEQP-VK.clipping.user_defined.{group}{suffix}.vert."
+                                 f"{leaf}{read}")
+    # The complementarity and misc leaves are NOT listed: the pinned binary does
+    # not report them when they are filtered by the name the module's
+    # construction implies (measured twice - absent from both the ps5log
+    # transcript and the QPA), so they stay diagnostics in the selection and are
+    # not claimed as evidence for the feature.
+    return tuple(sorted(paths))
+
+
+_CLIP_DISTANCE_CTS = _clip_distance_cts_paths()
+_CLIP_DISTANCE_CITATIONS = (
+    ("native/runtime_graphics_compiler.c",
+     "ps5vk_runtime_graphics_distance_reads_described(&p->vertex.metadata,"),
+    ("src/spirv_graphics_interface.c", "fs.clip_distance_reads>previous->clip_distances"),
+    ("src/physical_device_profile.h",
+     "limits->maxClipDistances = PS5VK_REQUIRED_CLIP_DISTANCES;"),
+    ("native/platform_ps5.c", "PS5VK_FEATURE_SHADER_CLIP_DISTANCE |"),
+    ("tests/test_clip_cull_witness.c", "PS5VK_CLIP_CULL_PIXEL_READ"),
+)
+ADVERTISED_FEATURES["shaderClipDistance"] = {
+    "profiles": ("graphics",),
+    "citations": _CLIP_DISTANCE_CITATIONS,
+    "detail": ("the pre-raster stage exports its clip distances through the packed position "
+               "registers and the fragment stage reads the interpolated value; both halves are "
+               "implemented, bounded by the two registers (maxClipDistances, maxCullDistances and "
+               "maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight) and "
+               "measured on hardware by the eleven-case clip/cull witness, whose pixel-read case "
+               "verifies expected=4096 covered=4096 foreign=0 wrong_color=0 with digest "
+               "f50dd9368fee6cc9"),
+    "cts": _CLIP_DISTANCE_CTS,
+}
+ADVERTISED_FEATURES["shaderCullDistance"] = {
+    "profiles": ("graphics",),
+    "citations": _CLIP_DISTANCE_CITATIONS,
+    "detail": ("the same export and pixel-read path carries the cull distances, and the cull rule "
+               "is per half-space rather than per vertex - the witness's cull cases prove a "
+               "primitive is discarded only when a half-space is negative at every vertex, and "
+               "the combined budget (maxCombinedClipAndCullDistances) is the same eight "
+               "components"),
+    "cts": _CLIP_DISTANCE_CTS,
+}
+
 # Every non-advertised VkPhysicalDeviceFeatures member shares one fail-closed
 # device-negotiation gate.  Vulkan valid usage prevents an application from
 # relying on a false feature without requesting it; the driver's obligation is
