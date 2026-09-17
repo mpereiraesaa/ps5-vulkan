@@ -344,16 +344,20 @@ with the feature advertised: 294 selected leaves, **286 Pass and 8 Fail**. The
 eleven leaves whose own upstream oracles passed are now acceptance cases
 (`dEQP-VK.geometry.input.basic_primitive.triangles` and its two conversions, the
 six `output_<n>` leaves, `output_vary_by_attribute`, and its instancing variant).
-The eight that failed are recorded as measured diagnostics with
-`expected_status: Fail`: the geometry stage's uniform-buffer, sampled-image and
-instancing descriptor variants, and the four varying crosses. They are a real
-remaining gap in this profile - the attribute variant of the same family passes
-in the same run, which separates a descriptor-delivery gap from the stage not
-running - and they are not claimed as coverage. The re-run of the frozen
-selection is **286/286 Pass, zero Fail, no NotSupported, title closed**
+Four of the eight failures were the geometry stage's uniform-buffer, sampled-image
+and instancing descriptor variants, and they are now acceptance too: the pinned
+module binds those resources to the GEOMETRY stage alone, which the compiler
+profile now admits when - and only when - the pipeline carries that stage, and
+which the draw path's descriptor plan now carries for the merged pre-raster
+program once the native create records the geometry pair on it (a host regression
+checks both directions). The four varying crosses are recorded as measured
+diagnostics with `expected_status: Fail`; their exact pinned shape is accepted by
+the adapter and compiles host-side, so their console `createGraphicsPipelines`
+refusal is a question for a targeted diagnostic rather than a claim. The frozen
+selection re-run is **290/290 Pass, zero Fail, no NotSupported, title closed**
 (selection
-`9f3226efcdde219d6699462910b36fcfcb151410bb7db0dd89d8503b1510b5d7`, eboot
-`73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef`).
+`a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679`, eboot
+`f1e4ef071fc8b1777b75e67ce858da91ebca32fc2e716608a60fb68045f36878`).
 
 **Probe.** The DXVK 2.6.2 capability probe was re-measured against the advertised
 profile and verifies strictly: `geometryShader` observed **1**, 10 of 62

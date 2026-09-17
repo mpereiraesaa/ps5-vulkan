@@ -72,16 +72,15 @@ class UpstreamSelectionTests(unittest.TestCase):
         # instead of being claimed as coverage.
         geometry = [c for c in manifest["cases"]
                     if "geometryShader" in " ".join(c.get("features_required", []))]
-        self.assertEqual((286, 52, 48),
+        self.assertEqual((290, 48, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
-        self.assertEqual(11, len(geometry))
-        self.assertEqual(11, len({c["path"] for c in geometry}))
+        self.assertEqual(15, len(geometry))
+        self.assertEqual(15, len({c["path"] for c in geometry}))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in geometry))
         measured_fail = [d for d in manifest["diagnostics"]
-                         if d.get("category") in ("geometry-stage-descriptor-or-varying-gap",
-                                                  "geometry-stage-descriptor-delivery")]
-        self.assertEqual(8, len(measured_fail))
+                         if d.get("category") == "geometry-stage-descriptor-or-varying-gap"]
+        self.assertEqual(4, len(measured_fail))
         self.assertTrue(all(d["expected_status"] == "Fail" for d in measured_fail))
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
         broken = copy.deepcopy(manifest)

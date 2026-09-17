@@ -84,6 +84,16 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_SHADER_CULL_DISTANCE = 1u << 9,
     PS5VK_FEATURE_GEOMETRY_SHADER = 1u << 10,
     PS5VK_FEATURE_TESSELLATION_SHADER = 1u << 11,
+    /* Rasterization and viewport state (DXVK262-T05), which start after the
+     * optional-stage tranche so the two integrations union without renumbering.
+     * The bits are declared here because the platform mask that may set them
+     * lives in this repository's native platform; no shipping profile sets any
+     * of them yet, and the private diagnostic guard below is what lets the T05
+     * witness negotiate them before anything is advertised. */
+    PS5VK_FEATURE_DEPTH_BIAS_CLAMP = 1u << 12,
+    PS5VK_FEATURE_DEPTH_CLAMP = 1u << 13,
+    PS5VK_FEATURE_FILL_MODE_NON_SOLID = 1u << 14,
+    PS5VK_FEATURE_MULTI_VIEWPORT = 1u << 15,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table
