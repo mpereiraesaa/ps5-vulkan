@@ -872,29 +872,74 @@ verdict. The selection gate derives the composed combined-group leaf names from
 the pinned factory construction, so a renamed or removed leaf fails the gate
 instead of silently disappearing.
 
-### Why the geometry and tessellation families are not listed yet
+### The geometry family, promoted (2026-09-17)
 
-The optional-stage families are deliberately absent from the diagnostics above,
-and the reason is a packaging one rather than an omission: a leaf can only be
-selected (as acceptance or as a diagnostic) from a module the packaged CTS
-actually builds. This package registers the clipping module because the
-clip/cull work reached the point where its measured subset belongs to that
-module's oracle; the geometry and tessellation modules are not registered yet, so
-no leaf of either can be traced by the selection gate - naming one today would be
-exactly the invented selection the gate rejects.
+The geometry module is registered in this package: its source list and the
+package's own `createChildren` call include it, and its shader and reference-image
+data are compiled and decoded at build time (73 RGBA8 references, cross-checked
+byte for byte against the pinned assets). A leaf can only be selected once the
+package actually builds its module, which is why this had to happen inside the
+promotion slice rather than before it.
 
-Registering them is part of the promotion slice for those two features, not an
-extra: the packaged CTS source list and the package's own `createChildren` call
-have to include the module, and the geometry and tessellation modules each carry
-their own shader and reference-image data. That work is held until the features
-have something to promote, because the leaves it would add cannot pass while
-`geometryShader` and `tessellationShader` are false: the geometry factory gates
-every leaf on `requireDeviceCoreFeature(DEVICE_CORE_FEATURE_GEOMETRY_SHADER)`
-(for example `vktGeometryInputGeometryShaderTests.cpp`) and the tessellation
-factory on `requireFeatures(FEATURE_TESSELLATION_SHADER)` (for example
-`vktTessellationShaderInputOutputTests.cpp`), so both would report
-`NotSupported` and be diagnostics in exactly the way the clip/cull leaves are -
-which is useful at promotion time and noise before it.
+With `geometryShader` advertised by the graphics build, the promotion run
+measured every leaf the module produces:
+
+| family | leaves | measured |
+| --- | --- | --- |
+| `dEQP-VK.geometry.input.basic_primitive.triangles`, its two conversions, six `output_<n>`, `output_vary_by_attribute` and its instancing variant | 11 | **Pass** - acceptance cases |
+| `output_vary_by_{uniform,texture}` and their instancing variants | 4 | **Pass** - acceptance cases once the geometry-stage descriptor binding is carried end to end (see below) |
+| `varying.vertex_{no_op,out_0,out_0,out_1}_geometry_out_{1,1,2,2}` | 4 | **Fail** - refused for primitive restart on a strip, still measured diagnostics |
+| the remaining input families, adjacency, `point_size`, `primitive_id` | 30 | still refused or unmeasured, kept as diagnostics |
+
+**The geometry-stage descriptor path.** The pinned module binds its uniform
+buffer and its combined image sampler to the GEOMETRY stage alone, which two
+separate gates refused. The compiler profile now admits a binding whose
+visibility names that stage when - and only when - the key carries it (the
+merged pre-raster program is what executes it), and the draw path's descriptor
+plan carries the table for that program when the native create recorded the
+geometry pre-raster pair on it; without that flag the same declaration is still
+refused, because the stage projection would have dropped the binding. The run
+that measured it went from `vk.queueSubmit(...): VK_ERROR_FEATURE_NOT_PRESENT`
+on all four leaves to **Pass** on all four.
+
+The four remaining failures are recorded as diagnostics with
+`expected_status: Fail` and the run that measured them, not smoothed into the
+acceptance set, and their cause is now measured rather than inferred: the pinned
+geometry builder enables **primitive restart** for strip topologies
+(`vktGeometryTestsUtil.cpp:153-172` sets `primitiveRestartEnable = VK_TRUE` for
+`LINE_STRIP` and `TRIANGLE_STRIP` and `VK_FALSE` for every list), these four
+leaves are the only ones built with `TRIANGLE_STRIP`, and this profile refuses
+that input-assembly state, so the refusal happens before the adapter is asked
+(the same run shows every runtime-cache acquire at rc=0 and no adapter rejection).
+The witness measures both sides of it: with restart enabled the pipeline is
+refused, and the same indexed strip with restart disabled draws with 72 foreign
+pixels in the gap between its two quads - the bridging primitive a missing cut
+would thread across - so what the profile needs is primitive-restart support for
+strips (`VGT_MULTI_PRIM_IB_RESET_EN` and `VGT_MULTI_PRIM_IB_RESET_INDX`), not a
+change to the geometry path. The accepted set is therefore 290 leaves (211 + 64 clipping + 15
+geometry), and the frozen selection re-run passes **290/290** with zero `Fail`,
+zero `NotSupported`, no missing or unexpected cases, and the title confirmed
+stopped:
+
+- selection SHA-256 `a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679`;
+- eboot SHA-256 `f1e4ef071fc8b1777b75e67ce858da91ebca32fc2e716608a60fb68045f36878`.
+
+The preceding runs are retained privately with their QPA: the promotion run
+(selection
+`a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324091`) measured
+the eight failures, and the descriptor run
+(`a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679` before the
+fix) localized them to the submit.
+
+### Why the tessellation family is not listed yet
+
+Tessellation is still absent, and the reason is the same packaging one: its module
+is not registered, no leaf of it can be traced by the selection gate, and naming
+one today would be exactly the invented selection the gate rejects. Registering
+it belongs to that feature's promotion slice, which cannot happen while
+`tessellationShader` is false - the factory gates every leaf on
+`requireFeatures(FEATURE_TESSELLATION_SHADER)`, so they would all report
+`NotSupported` the way the clip/cull leaves did before that promotion.
 ## Indirect and indexed draw expansion (2026-09-16)
 
 DXVK262-T03 adds 46 original upstream leaves from two draw modules, both

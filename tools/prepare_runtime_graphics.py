@@ -88,6 +88,20 @@ def main():
          "runtime_geometry_points.geom.spv", "geometry_points_stage"),
         ("experiments/graphics/runtime_geometry_lines.geom",
          "runtime_geometry_lines.geom.spv", "geometry_lines_stage"),
+        # Diagnostic-only pair for the primitive-restart witness (order-probe
+        # payloads): two quads with a gap, an indexed strip whose index list
+        # carries a restart index between them, and a vertex stage that colours
+        # each quad by its index value.
+        ("experiments/graphics/runtime_primitive_restart.vert",
+         "runtime_primitive_restart.vert.spv", "primitive_restart_vertex"),
+        ("experiments/graphics/runtime_primitive_restart.frag",
+         "runtime_primitive_restart.frag.spv", "primitive_restart_fragment"),
+        # The component envelope's pixel half: it declares an input for all
+        # sixteen vec4 outputs the geometry half writes, so the OUTPUT side of
+        # the component minimum is consumed rather than only declared.
+        ("experiments/graphics/runtime_geometry_output_components.frag",
+         "runtime_geometry_output_components.frag.spv",
+         "geometry_output_components_fragment"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

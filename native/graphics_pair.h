@@ -12,6 +12,11 @@ struct ps5vk_graphics_pair {
     struct ps5_agc_linked_uc uc;
     unsigned ready;
     uint32_t vertex_quantization;
+    /* 1 when the pre-raster program is the merged vertex+geometry pair, so the
+     * draw path can tell which stage a descriptor binding may name without
+     * keeping the compiled metadata alive. The offline library path leaves it
+     * zero: its programs are vertex+fragment only. */
+    uint32_t geometry_preraster;
     struct ps5vk_runtime_shader runtime_vertex,runtime_fragment;
     struct ps5vk_runtime_draw_abi runtime_arguments;
 };

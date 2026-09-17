@@ -40,10 +40,16 @@ mean the driver advertises them; the reported device version remains Vulkan
   exports the distances (static or dynamically indexed) and a fragment stage
   reads the interpolated values; the compiler describes the distance registers
   on both sides and the driver refuses a pair whose read the metadata does not
-  describe. `geometryShader` and `tessellationShader` remain reported false:
-  the geometry stage compiles and executes through its diagnostic build but its
-  input handoff is still defective, and the tessellation packages are missing
-  link-time state from the pinned compiler.
+  describe. `geometryShader` is reported true by the graphics build, with the
+  five mandatory limits at the Vulkan floor it measured - 256 output vertices,
+  32 invocations, 64 input components, 64 output components and 1024 total
+  output components - because the merged vertex+geometry pre-raster program
+  runs: the ES->GS input handoff, the point, line and triangle input families,
+  `gl_InvocationID`, `gl_PrimitiveIDIn` and each of those five minima are
+  hardware-witnessed, and the leaves of the pinned geometry module that pass
+  their own upstream oracles are acceptance cases. `tessellationShader` remains
+  reported false: the pinned compiler publishes no loadable hull package and no
+  hull/domain pipeline state is programmed.
   See [clip-cull native acceptance](VALIDATION.md#clip-cull-native-acceptance).
 - The focused suite contains the original upstream
   `device_mandatory_features` oracle plus 12 executable compute scalar

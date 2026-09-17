@@ -71,7 +71,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                          * graphics path, which is the only one
                                          * that can export or read them. */
                                         PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
-                                        PS5VK_FEATURE_SHADER_CULL_DISTANCE;
+                                        PS5VK_FEATURE_SHADER_CULL_DISTANCE |
+                                        /* The optional geometry stage belongs to
+                                         * the graphics submit path too, and to
+                                         * the same measured build the witness
+                                         * ran on; this dump mirrors the console
+                                         * platform's initializer so the
+                                         * published matrix is the console's. */
+                                        PS5VK_FEATURE_GEOMETRY_SHADER;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

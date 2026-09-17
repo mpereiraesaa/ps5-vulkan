@@ -386,6 +386,100 @@ static void check_geometry_stage(void)
     puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged for the point, line and triangle families");
 }
 
+/* The output side of the component envelope. A stage may DECLARE sixty-four
+ * output components and still have them dropped: only something that reads them
+ * makes the declaration observable, so the pixel half of this case declares an
+ * input for all sixteen vec4 locations the geometry half writes and folds the
+ * whole set into the colour. This checks the pair against the real compiler
+ * metadata - the pixel stage really declares those locations, and the adapter
+ * packages the pair - and that a pixel stage reading a location the geometry
+ * half does not write is refused instead of interpolating a register nothing
+ * exports. */
+static void check_geometry_output_components(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/geometry_components.vert.spv"),
+        .geometry=read_module("build/runtime-graphics/geometry_components.geom.spv"),
+        .fragment=read_module("build/runtime-graphics/geometry_output_components.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST);
+    /* The pixel half names the sixteen output locations plus the varying, so the
+     * consumed set is in the compiled metadata rather than in the source only. */
+    assert(p->fragment.metadata.input_semantic_count>=17u);
+    ps5vk_runtime_graphics_free(NULL,out);
+    /* The same pixel half against a geometry stage that writes only its colour:
+     * the interface chain refuses the pair before the compiler is reached. */
+    struct ps5vk_graphics_key narrow=key;
+    narrow.geometry=read_module("build/runtime-graphics/geometry_probe.geom.spv");
+    assert(!ps5vk_spirv_graphics_interface(&narrow));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&narrow,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)narrow.geometry.words);
+    free((void *)key.vertex.words);free((void *)key.geometry.words);
+    free((void *)key.fragment.words);
+    puts("Geometry output components: sixty-four written components consumed by the pixel half, and an unwritten read refused");
+}
+
+/* A descriptor the caller declared for the GEOMETRY stage. The pinned
+ * conformance module binds its uniform buffer and its sampled image to that
+ * stage - dEQP-VK.geometry.basic.output_vary_by_uniform and ..._by_texture - so
+ * a layout whose binding names only the geometry stage has to be carried by the
+ * merged pre-raster program rather than refused for not naming the vertex stage.
+ * The same binding on a pipeline without a geometry stage is still refused,
+ * because the stage projection would drop it and the draw would read a table the
+ * caller never bound. */
+static void check_geometry_stage_descriptor_visibility(void)
+{
+    struct ps5vk_set_signature sets[1]={0};
+    sets[0].count=1;
+    sets[0].binding[0].count=1;sets[0].binding[0].first=0;
+    sets[0].binding[0].stages=VK_SHADER_STAGE_GEOMETRY_BIT;
+    sets[0].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    /* Empty bindings keep the canonical prefix: the table layout compares every
+     * slot against it, so a zeroed tail is a malformed signature, not an empty
+     * one. */
+    for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)sets[0].binding[b].first=1;
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/geometry_uniform.vert.spv"),
+        .geometry=read_module("build/runtime-graphics/geometry_uniform.geom.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .descriptor_set_count=1,.descriptor_sets=sets,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    /* The merged pre-raster program is what reads the buffer, so the compiled
+     * metadata has to name the binding and the draw ABI has to carry the table
+     * for that stage: a pipeline that packaged without either would draw the
+     * geometry half with no descriptor at all. */
+    assert(p->vertex.metadata.descriptor_set_valid[0]);
+    assert(p->arguments.vertex_descriptor_valid[0]);
+    ps5vk_runtime_graphics_free(NULL,out);
+    /* The same layout on a vertex+fragment pipeline: refused, because nothing
+     * would execute the geometry-stage binding. */
+    struct ps5vk_graphics_key without_geometry=key;
+    without_geometry.geometry=(struct ps5vk_graphics_module_key){0};
+    without_geometry.feature_mask=0;
+    assert(!ps5vk_runtime_graphics_supported(&without_geometry));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&without_geometry,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)key.vertex.words);free((void *)key.geometry.words);
+    free((void *)key.fragment.words);
+    puts("Geometry descriptors: a geometry-stage binding is carried by the merged program and refused without one");
+}
+
 /* The tessellation pair: compiled through the hull and domain programs.
  *
  * The interface policy reads both stages, their execution modes and the
@@ -1124,6 +1218,8 @@ int main(void)
     check_clip_cull_distances();
     check_fragment_distance_read();
     check_geometry_stage();
+    check_geometry_output_components();
+    check_geometry_stage_descriptor_visibility();
     check_tessellation_stage();
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
