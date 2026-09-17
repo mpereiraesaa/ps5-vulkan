@@ -300,6 +300,69 @@ compile. `tessellationShader` therefore stays false, and the remaining work is
 driver-side assembly plus the hull pipeline state - the same class of
 vendor-side question as geometry.
 
+## Geometry promotion (2026-09-17, later window)
+
+The two defects the section above was opened for are fixed and measured, and the
+feature is advertised on the graphics path.
+
+**The ES->GS read.** Every NGG pre-raster program now has
+`VGT_ESGS_RING_ITEMSIZE` programmed to **1** instead of the compiler's legacy
+**5**: the hardware scales the per-vertex offsets it hands the geometry half by
+that value, so the stage read item `5k` where it had to read item `k` and only
+the first vertex of each primitive came back right. The regression in
+`tests/test_runtime_shader.c` fails before the change and passes after it. The
+device loss in the POSITIONS case was the witness's own loop missing `++i`, so it
+emitted past `max_vertices` forever; with the loop fixed the case runs.
+
+**Determinism.** The same payload run twice now produces byte-identical images
+for **all nineteen** cases - control `aa3cf584`, constant `aa7d3f82`,
+suppression `6927fac7`, sentinel, the three readbacks, the envelope, the
+invocations, the components and both input families - where the pre-fix table
+above showed the ring-reading cases drifting between runs. Runs
+`20260917T180918672Z_PPSA99994_ps5vk_0x285db17d6406` and
+`20260917T180931272Z_PPSA99994_ps5vk_0x2860a07ed6b2`, eboot
+`14478e545d4ab6cc2bc815f4c0d4987d358f2be211434f263669c5bd607284c8`.
+
+**What the stage is measured to do.** The nineteen-case witness verifies
+strictly in both its table and its shipping fail-fast payload
+(`20260917T180945535Z_PPSA99994_ps5vk_0x2863f2ad4767`, eboot
+`ae9e32761215bb845a81d991033b84d86742a001973958153d92c92929493663`): the two
+triangle tiles, the shrink, the suppression, the varying rewrite, the
+amplification, the sentinel value, the raw readback of an indexed vertex, the
+per-primitive id, the **point** and **line** input families under their own input
+assemblies (218/218 with digest `ebb18b9b90df07ca` and 467/467 with
+`deab7726a7ac7625`), 32 invocations, 256 emitted vertices, 64 input components
+and 64 output components that the pixel half consumes and folds into the colour
+(`expected=1024 covered=1024`, centre `808024ff`). The five mandatory limits are
+therefore reported at the Vulkan floor they exercised - 256, 32, 64, 64 and
+1024 - and `geometryShader` is reported true by the graphics build
+(`core_feature_bits` in `src/vk_device.c`, the platform mask in
+`native/platform_ps5.c`, the limits in `src/graphics_limits.h`).
+
+**Conformance.** The promotion run measured the pinned geometry module's leaves
+with the feature advertised: 294 selected leaves, **286 Pass and 8 Fail**. The
+eleven leaves whose own upstream oracles passed are now acceptance cases
+(`dEQP-VK.geometry.input.basic_primitive.triangles` and its two conversions, the
+six `output_<n>` leaves, `output_vary_by_attribute`, and its instancing variant).
+The eight that failed are recorded as measured diagnostics with
+`expected_status: Fail`: the geometry stage's uniform-buffer, sampled-image and
+instancing descriptor variants, and the four varying crosses. They are a real
+remaining gap in this profile - the attribute variant of the same family passes
+in the same run, which separates a descriptor-delivery gap from the stage not
+running - and they are not claimed as coverage. The re-run of the frozen
+selection is **286/286 Pass, zero Fail, no NotSupported, title closed**
+(selection
+`9f3226efcdde219d6699462910b36fcfcb151410bb7db0dd89d8503b1510b5d7`, eboot
+`73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef`).
+
+**Probe.** The DXVK 2.6.2 capability probe was re-measured against the advertised
+profile and verifies strictly: `geometryShader` observed **1**, 10 of 62
+requirements satisfied, 52 blockers. The matrix keeps that row as a blocker
+because the probe executes capability queries, not geometry draws.
+
+Tessellation remains unadvertised: the pinned compiler publishes no loadable hull
+package.
+
 ## Multiview native acceptance
 
 On 2026-09-16 the original 48 multiview leaves (masks, rectangular clears,

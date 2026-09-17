@@ -2727,6 +2727,116 @@
         "VkPhysicalDeviceFeatures::shaderClipDistance"
       ],
       "rationale": "Coverage: the packed pre-raster distance export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance are all implemented and measured on hardware - the eleven-case clip/cull witness verifies case 10 (fragment read of gl_ClipDistance[0]) with expected=4096 covered=4096 foreign=0 wrong_color=0 digest f50dd9368fee6cc9 in run 20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65, and maxClipDistances/maxCullDistances/maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against. The feature this leaf requires is advertised by the graphics build (core_feature_bits in src/vk_device.c plus the platform mask). This is the variant the pinned factory registers with a non-constant write (dynamic index) and/or a fragment-stage read; both are implemented and the fragment read is the case the eleven-case witness verifies on hardware."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_10",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1093",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_128",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1094",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_10_and_100",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1096",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_100_and_10",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1097",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_0_and_128",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1098",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_128_and_0",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1099",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1103",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute_instancing",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1108",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the gateway this leaf was held behind is gone - the pinned module's geometry stage declares gl_PrimitiveIDIn, which the interface policy now delivers and the geometry witness measured (per-primitive-id case, digest 7ccfcd48219a2a95, strict verification), and the leaf's shape (triangle input, up to 128 vertices per invocation, inside the measured 256-vertex envelope) is compiled and packaged. This run measures the leaf's own oracle with its reference images."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangles",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:271",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the pipeline gate that refused it is gone (the feature is advertised by the graphics build and the interface policy binds the stage's declared input arity to the pipeline's topology), so this run measures the leaf's own oracle. Prior state: the leaf ran and reported NotSupported only because geometryShader was unadvertised."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.triangles_to_points",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:296",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the pipeline gate that refused it is gone (the feature is advertised by the graphics build and the interface policy binds the stage's declared input arity to the pipeline's topology), so this run measures the leaf's own oracle. Prior state: the leaf ran and reported NotSupported only because geometryShader was unadvertised."
+    },
+    {
+      "path": "dEQP-VK.geometry.input.conversion.triangles_to_lines",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:299",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Applicable and runnable, and now selected as acceptance: the pipeline gate that refused it is gone (the feature is advertised by the graphics build and the interface policy binds the stage's declared input arity to the pipeline's topology), so this run measures the leaf's own oracle. Prior state: the leaf ran and reported NotSupported only because geometryShader was unadvertised."
     }
   ],
   "diagnostics": [
@@ -3167,194 +3277,84 @@
       "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
     },
     {
-      "path": "dEQP-VK.geometry.basic.output_10",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1093",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_128",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1094",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_10_and_100",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1096",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_100_and_10",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1097",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_0_and_128",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1098",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_128_and_0",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1099",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the stage emits the vertex counts this leaf names (up to 128 per invocation, at most two invocations), which are inside the measured envelope."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1103",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
-    },
-    {
       "path": "dEQP-VK.geometry.basic.output_vary_by_uniform",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1105",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
+      "category": "geometry-stage-descriptor-or-varying-gap",
+      "expected_status": "Fail",
       "features_required": [
         "core:geometryShader"
       ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+      "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a uniform buffer is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
     },
     {
       "path": "dEQP-VK.geometry.basic.output_vary_by_texture",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1107",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
+      "category": "geometry-stage-descriptor-or-varying-gap",
+      "expected_status": "Fail",
       "features_required": [
         "core:geometryShader"
       ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
-    },
-    {
-      "path": "dEQP-VK.geometry.basic.output_vary_by_attribute_instancing",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1108",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+      "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a sampled image is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
     },
     {
       "path": "dEQP-VK.geometry.basic.output_vary_by_uniform_instancing",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1111",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
+      "category": "geometry-stage-descriptor-or-varying-gap",
+      "expected_status": "Fail",
       "features_required": [
         "core:geometryShader"
       ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+      "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a uniform buffer with instancing is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
     },
     {
       "path": "dEQP-VK.geometry.basic.output_vary_by_texture_instancing",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp:1113",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
+      "category": "geometry-stage-descriptor-or-varying-gap",
+      "expected_status": "Fail",
       "features_required": [
         "core:geometryShader"
       ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the descriptor kinds this leaf reads (attribute, uniform buffer, sampled image) are all paths this profile's runtime compiler implements."
+      "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a sampled image with instancing is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
     },
     {
       "path": "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:280",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
+      "category": "geometry-stage-descriptor-or-varying-gap",
+      "expected_status": "Fail",
       "features_required": [
         "core:geometryShader"
       ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
+      "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a vertex-stage varying crossing into one geometry output is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
     },
     {
       "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:281",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
+      "category": "geometry-stage-descriptor-or-varying-gap",
+      "expected_status": "Fail",
       "features_required": [
         "core:geometryShader"
       ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
+      "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a no vertex output against one geometry output is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
     },
     {
       "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:282",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
+      "category": "geometry-stage-descriptor-or-varying-gap",
+      "expected_status": "Fail",
       "features_required": [
         "core:geometryShader"
       ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
+      "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a no vertex output against two geometry outputs is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
     },
     {
       "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:284",
-      "category": "geometry-stage-builtin-gap",
-      "expected_status": "NotSupported",
+      "category": "geometry-stage-descriptor-or-varying-gap",
+      "expected_status": "Fail",
       "features_required": [
         "core:geometryShader"
       ],
-      "rationale": "The device compiles this leaf's shape - triangle input, triangle-strip or line-strip output, at most two invocations and inside the measured envelope - and the pinned module now runs in this payload (its reference images are decoded from the pinned assets at build time and served through tcu::ImageIO::loadPNG). It is refused one step earlier: the module's geometry stage declares gl_PrimitiveIDIn, and this profile does not deliver that per-primitive built-in, so the interface policy refuses the pipeline (measured: vk.createGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT for dEQP-VK.geometry.input.basic_primitive.triangles). A gateway to the feature, not a harness gap and not a device failure. Why the leaf is otherwise applicable: the varying interface this leaf crosses is exactly what the interface policy describes."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.basic_primitive.triangles",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:271",
-      "category": "geometry-stage-awaiting-advertisement",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable AND now runnable: the device compiles this leaf's shape, the per-primitive id it declares is delivered and hardware-witnessed (the seventeen-case geometry witness asserts a case whose markers carry the id the hardware gave), and the pinned pipeline plus the module's reference images run in this payload. Measured on the frozen acceptance: with the feature unadvertised the pinned CTS reports this leaf NotSupported (run 20260917T1731..., 278/278 reported, zero Fail), so it becomes ACCEPTANCE the moment the feature is advertised. That advertisement is not yet honest - the pinned module's other input families (points and lines) are also expected of a device that advertises geometryShader, and this profile still compiles triangles-only geometry stages even though the compiler already accepts points-in and lines-in ones (measured host-side: result=success, es_verts 29 and 56). Next slice: bound the geometry stage's input array by the pipeline topology and witness the points/lines families, then advertise and take this leaf as acceptance."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.triangles_to_points",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:296",
-      "category": "geometry-stage-awaiting-advertisement",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable AND now runnable: the device compiles this leaf's shape, the per-primitive id it declares is delivered and hardware-witnessed (the seventeen-case geometry witness asserts a case whose markers carry the id the hardware gave), and the pinned pipeline plus the module's reference images run in this payload. Measured on the frozen acceptance: with the feature unadvertised the pinned CTS reports this leaf NotSupported (run 20260917T1731..., 278/278 reported, zero Fail), so it becomes ACCEPTANCE the moment the feature is advertised. That advertisement is not yet honest - the pinned module's other input families (points and lines) are also expected of a device that advertises geometryShader, and this profile still compiles triangles-only geometry stages even though the compiler already accepts points-in and lines-in ones (measured host-side: result=success, es_verts 29 and 56). Next slice: bound the geometry stage's input array by the pipeline topology and witness the points/lines families, then advertise and take this leaf as acceptance."
-    },
-    {
-      "path": "dEQP-VK.geometry.input.conversion.triangles_to_lines",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:299",
-      "category": "geometry-stage-awaiting-advertisement",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "Applicable AND now runnable: the device compiles this leaf's shape, the per-primitive id it declares is delivered and hardware-witnessed (the seventeen-case geometry witness asserts a case whose markers carry the id the hardware gave), and the pinned pipeline plus the module's reference images run in this payload. Measured on the frozen acceptance: with the feature unadvertised the pinned CTS reports this leaf NotSupported (run 20260917T1731..., 278/278 reported, zero Fail), so it becomes ACCEPTANCE the moment the feature is advertised. That advertisement is not yet honest - the pinned module's other input families (points and lines) are also expected of a device that advertises geometryShader, and this profile still compiles triangles-only geometry stages even though the compiler already accepts points-in and lines-in ones (measured host-side: result=success, es_verts 29 and 56). Next slice: bound the geometry stage's input array by the pipeline topology and witness the points/lines families, then advertise and take this leaf as acceptance."
+      "rationale": "MEASURED on the promotion run (20260917T185714282Z, eboot 73620c43d4f23ecab843627d6cf045b8b288e7978dd6598135995f5ec312baef, selection a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324092): the leaf RUNS under the advertised feature and its own oracle reports Fail. The geometry stage's use of a one vertex output against two geometry outputs is the shape the merged pre-raster program does not deliver yet - the attribute variant of the same family passes in the same run, which is what separates a descriptor-delivery gap from the stage itself not running. Kept as a measured diagnostic, not an acceptance case, and not a claim about the hardware."
     }
   ]
 }

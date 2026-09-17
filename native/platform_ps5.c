@@ -233,6 +233,15 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * interface policy bounds a declaration against. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
                                     PS5VK_FEATURE_SHADER_CULL_DISTANCE;
+    /* The optional geometry stage, on the same measured graphics path: the
+     * nineteen-case geometry witness verifies the merged pre-raster program end
+     * to end - the ES->GS handoff it reads, the triangle, point and line input
+     * families under their own input assemblies, gl_InvocationID, the
+     * per-primitive id, and the five mandatory minima the profile reports in
+     * src/graphics_limits.h - so this build is the one that may advertise it.
+     * The runtime graphics cache and the interface policy are what refuse a
+     * geometry pipeline on any build without this bit. */
+    platform->supported_features |= PS5VK_FEATURE_GEOMETRY_SHADER;
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

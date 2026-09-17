@@ -51,6 +51,15 @@ static const struct core_feature_bit {
      PS5VK_FEATURE_SHADER_CLIP_DISTANCE},
     {offsetof(VkPhysicalDeviceFeatures, shaderCullDistance),
      PS5VK_FEATURE_SHADER_CULL_DISTANCE},
+    /* The optional geometry stage. The graphics path compiles the merged
+     * vertex+geometry pre-raster program, packages it, and runs it: the ES->GS
+     * input handoff, the point and line input families, the per-primitive id,
+     * gl_InvocationID and the five mandatory minima are all hardware-witnessed
+     * on exactly this build (private-captures/t04), so the platform bit the
+     * graphics build sets is what makes the member report true. Its five limits
+     * are reported at the Vulkan floor in src/graphics_limits.h. */
+    {offsetof(VkPhysicalDeviceFeatures, geometryShader),
+     PS5VK_FEATURE_GEOMETRY_SHADER},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,
