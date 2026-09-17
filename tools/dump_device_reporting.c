@@ -62,7 +62,10 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         platform->supported_features |= PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                         PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
     if (graphics_submit)
-        platform->supported_features |= PS5VK_FEATURE_MULTIVIEW;
+        platform->supported_features |= PS5VK_FEATURE_MULTIVIEW |
+                                        PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
+                                        PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
+                                        PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

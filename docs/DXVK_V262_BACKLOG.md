@@ -8,8 +8,12 @@ execute it.
 
 Current checkpoint: multiview (T02) has all three requirements satisfied by
 public KHR queries, dedicated floor witnesses and 48 passing original CTS
-leaves within a 165/165 regression. The live matrix is 4/62 ready with 58
-blockers. The ordered table preserves the original tranche membership.
+leaves within a 165/165 regression, and the indirect and indexed draws (T03)
+have all three requirements satisfied by core feature reports, the
+per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
+leaves within a 211/211 regression and the public-SDK indirect witness. The
+live matrix is 7/62 ready with 55 blockers. The ordered table preserves the
+original tranche membership.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
 11_0 baseline. Reaching 62/62 means that this profile has complete API,
