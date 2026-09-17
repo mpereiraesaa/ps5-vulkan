@@ -386,6 +386,14 @@ check:
 build/libpsbc.host.a:
 	$(PYTHON) tools/build_psbc.py --host
 .PHONY: test-runtime-header
+.PHONY: test-tessellation-compiler
+# The tessellation compiler contract asserts what the pinned dependency really
+# produces for the pinned tessellation fixtures; it needs the compiler, not the
+# native payload, and is wired into the dependency-gated chain below.
+test-tessellation-compiler: build/libpsbc.host.a graphics-stage-shaders
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -Ithird_party/psbc-reference native/runtime_shader.c tests/test_tessellation_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_tessellation_compiler
+	./build/tests/test_tessellation_compiler
 .PHONY: test-runtime-graphics-compiler
 test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 	mkdir -p build/tests
@@ -402,6 +410,7 @@ test-runtime-header:
 	./build/tests/test_runtime_shader
 test-compiler: build/libpsbc.host.a test-shaders
 	$(MAKE) test-runtime-header
+	$(MAKE) test-tessellation-compiler
 	$(MAKE) test-runtime-graphics-compiler
 	$(MAKE) test-runtime-graphics-native
 	mkdir -p build/tests
