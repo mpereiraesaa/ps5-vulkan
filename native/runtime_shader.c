@@ -289,6 +289,18 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
         for (unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
             if(!find(m->context_registers,m->context_register_count,geometry_registers[i]))
                 return -3;
+        /* Candidate metadata publishes the pair's ES/GS ring item size as its
+         * own field and the same compiler emits it as the context register the
+         * driver programs (VGT_ESGS_RING_ITEMSIZE, CX 0x2ab). A merged package
+         * whose two numbers disagree cannot be programmed from either one, so
+         * it is refused instead of picking a source of truth. */
+        const PsbcRegisterWrite *esgs=
+            find(m->context_registers,m->context_register_count,0x2abu);
+        if (!esgs || esgs->value!=m->merged_esgs_ring_itemsize) return -3;
+        /* The GE PC-line allocation is a UC register (0x260) the candidate
+         * emits only when the caller supplied the device facts; a write to any
+         * other slot is not the allocation this profile knows how to program. */
+        if (m->linkage_ge_pc_alloc_valid && m->linkage_ge_pc_alloc.offset!=0x260u) return -3;
     }
     if (fs && (m->linkage_valid || m->ngg_lds_layout_valid)) return -3;
     if(fs) {

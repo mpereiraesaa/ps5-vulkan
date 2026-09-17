@@ -58,6 +58,16 @@ int main(void)
         m->context_register_count=sizeof(geometry_registers)/sizeof(geometry_registers[0]);
         for(unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
             m->context_registers[i].offset=geometry_registers[i];
+        /* The published ring item size and the context register the driver
+         * programs must agree, and a GE allocation write must be its own slot. */
+        assert(ps5vk_runtime_shader_build(&arena,&c)!=0);
+        for(unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
+            if(m->context_registers[i].offset==0x2abu)
+                m->context_registers[i].value=m->merged_esgs_ring_itemsize;
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        m->linkage_ge_pc_alloc_valid=true;m->linkage_ge_pc_alloc.offset=0x261;
+        assert(ps5vk_runtime_shader_build(&arena,&c)!=0);
+        m->linkage_ge_pc_alloc.offset=0x260;
         assert(!ps5vk_runtime_shader_build(&arena,&c));
         *m=saved;
         /* The accepted merged build above must not leak into the rejection
