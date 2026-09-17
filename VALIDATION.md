@@ -45,37 +45,50 @@ The upstream module that owns these built-ins, `vktClippingTests.cpp`, gates
 **all** of its user-defined distance leaves on the same two features through
 `requireFeatures(FEATURE_SHADER_CLIP_DISTANCE)` and
 `requireFeatures(FEATURE_SHADER_CULL_DISTANCE)` in `testClipDistance`, and its
-factory registers two variants of every leaf that this profile refuses:
+factory registers two variants of every leaf:
 
 * `*_fragmentshader_read` declares the distance arrays as fragment-shader
   inputs and reads them (`fragmentShaderReads`), and
 * `*_dynamic_index` writes them through a loop with a non-constant index
   (`indexingMode`).
 
-The profile's fragment stage refuses a distance mask
-(`native/runtime_shader.c` returns `-2` for any pixel-stage clip or cull mask),
-and dynamic indexing of the arrays is refused by the interface policy. Because
-the feature flag is the only gate the upstream oracle applies, advertising it
-would assert the whole family: it would present the fragment-read and
-dynamic-index variants as supported when they are not. The honest report is
-therefore `false` for both features, the limits stay at the gated-off value,
-and the reporting matrix cites the fragment-stage refusal as the effective gate.
+The measured support is narrower than the family in exactly one place. Dynamic
+indexing is **not** refused: a pre-raster module that redeclares
+`out float gl_ClipDistance[2]` and writes both elements through a loop is
+compiled by the pinned compiler with the full-width mask
+(`clip_distance_mask=0x03`, the same value the equivalent static-index module
+reports) and is accepted by the native header builder
+(`tools/inspect_graphics_compiler.c`, which now prints the masks:
+`distances clip_mask=00000003 cull_mask=00000000`, `native_header_result=0`).
+The fragment read is refused: `native/runtime_shader.c` returns `-2` for any
+pixel-stage clip or cull mask, because this profile does not deliver the
+distances to the pixel stage.
+
+Because the feature flag is the only gate the upstream oracle applies,
+advertising either feature today would assert the whole family, including the
+fragment-read variants this profile cannot run, and it would also present the
+dynamic-index variants as measured when only their compile-and-package path has
+been checked. The honest report is therefore `false` for both features, the
+limits stay at the gated-off value, and the reporting matrix cites the
+fragment-stage refusal as the effective gate.
 
 The 25 leaves this profile's measured subset would cover are recorded in
 `cts/upstream/manifest.json` as diagnostics with `expected_status`
 `NotSupported`, next to the reason above, so a later slice that implements the
-two refused modes can promote them by changing the acceptance list and the
-device report together. The canonical acceptance selection is unchanged at 165
-leaves.
+fragment-stage read - the one genuinely missing mode - can promote them by
+changing the acceptance list and the device report together. The canonical
+acceptance selection is unchanged at 165 leaves.
 
 ### What this does and does not establish
 
 It establishes the vertex-stage clip/cull contract, the packed register state
 the pinned compiler emits for it, the per-half-space culling rule and the
-hardware clipping result for the measured shapes. It does not establish
-fragment-shader reads of the distances, dynamic indexing, any
-tessellation/geometry variant of the family, or the two core features
-themselves, and it is not a Vulkan conformance claim.
+hardware clipping result for the measured shapes, plus the compiler and adapter
+behaviour of a dynamically indexed declaration (full-width mask, accepted
+package). It does not establish fragment-shader reads of the distances, any
+hardware result for a dynamically indexed write, any tessellation/geometry
+variant of the family, or the two core features themselves, and it is not a
+Vulkan conformance claim.
 
 ## Multiview native acceptance
 

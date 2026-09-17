@@ -92,9 +92,9 @@ FEATURE_GATES = {
     # stage of this profile refuses a distance mask, so the feature's whole
     # obligation is not covered yet.
     "shaderClipDistance": ("native/runtime_shader.c", "clip_distance_mask || m->cull_distance_mask) return -2",
-                           "the fragment stage refuses a distance mask, so only the pre-raster export is measured and the feature is not advertised"),
+                           "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised"),
     "shaderCullDistance": ("native/runtime_shader.c", "clip_distance_mask || m->cull_distance_mask) return -2",
-                           "the fragment stage refuses a distance mask, so only the pre-raster export is measured and the feature is not advertised"),
+                           "the fragment stage refuses a distance mask, so only the pre-raster export (static and dynamically indexed) is measured and the feature is not advertised"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
