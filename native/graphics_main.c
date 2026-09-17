@@ -1947,6 +1947,58 @@ static void geometry_probe(VkDevice d)
     CHECK(vkCreateShaderModule(d,&fvi,NULL,&family_vertex_module));
     CHECK(vkCreateShaderModule(d,&poi,NULL,&points_module));
     CHECK(vkCreateShaderModule(d,&loi,NULL,&lines_module));
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    /* Primitive-restart witness (report-only, order-probe payloads only). The
+     * pinned CTS geometry builder enables primitive restart for strip
+     * topologies; this pair draws two quads with a gap as one indexed strip
+     * whose index list carries a restart index between them, so a cut draws two
+     * quads and a missing cut threads a bridging primitive across the gap. The
+     * control below is the same draw with restart disabled. */
+    VkShaderModule restart_vertex_module,restart_fragment_module;
+    VkShaderModuleCreateInfo rvi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_primitive_restart_vertex),
+        .pCode=ps5vk_runtime_primitive_restart_vertex};
+    VkShaderModuleCreateInfo rfi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_primitive_restart_fragment),
+        .pCode=ps5vk_runtime_primitive_restart_fragment};
+    CHECK(vkCreateShaderModule(d,&rvi,NULL,&restart_vertex_module));
+    CHECK(vkCreateShaderModule(d,&rfi,NULL,&restart_fragment_module));
+    VkBuffer restart_vertex_buffer=VK_NULL_HANDLE,restart_index_buffer=VK_NULL_HANDLE;
+    VkDeviceMemory restart_vertex_memory=VK_NULL_HANDLE,restart_index_memory=VK_NULL_HANDLE;
+    {
+        VkBufferCreateInfo vbi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=64,
+            .usage=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
+        CHECK(vkCreateBuffer(d,&vbi,NULL,&restart_vertex_buffer));
+        VkMemoryRequirements vr;vkGetBufferMemoryRequirements(d,restart_vertex_buffer,&vr);
+        VkMemoryAllocateInfo va={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=vr.size+vr.alignment};
+        CHECK(vkAllocateMemory(d,&va,NULL,&restart_vertex_memory));
+        CHECK(vkBindBufferMemory(d,restart_vertex_buffer,restart_vertex_memory,vr.alignment));
+        void *vertices;CHECK(vkMapMemory(d,restart_vertex_memory,0,VK_WHOLE_SIZE,0,&vertices));
+        memset(vertices,0,(size_t)va.allocationSize);
+        const float quads[8][2]={{-0.9f,-0.5f},{-0.2f,-0.5f},{-0.9f,0.5f},{-0.2f,0.5f},
+                                 { 0.2f,-0.5f},{ 0.9f,-0.5f},{ 0.2f,0.5f},{ 0.9f,0.5f}};
+        memcpy((unsigned char *)vertices+vr.alignment,quads,sizeof(quads));
+        VkMappedMemoryRange vflush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=restart_vertex_memory,.size=VK_WHOLE_SIZE};
+        vkFlushMappedMemoryRanges(d,1,&vflush);
+        vkUnmapMemory(d,restart_vertex_memory);
+        VkBufferCreateInfo ibi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=32,
+            .usage=VK_BUFFER_USAGE_INDEX_BUFFER_BIT};
+        CHECK(vkCreateBuffer(d,&ibi,NULL,&restart_index_buffer));
+        VkMemoryRequirements ir;vkGetBufferMemoryRequirements(d,restart_index_buffer,&ir);
+        VkMemoryAllocateInfo ia={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=ir.size+ir.alignment};
+        CHECK(vkAllocateMemory(d,&ia,NULL,&restart_index_memory));
+        CHECK(vkBindBufferMemory(d,restart_index_buffer,restart_index_memory,ir.alignment));
+        void *indices;CHECK(vkMapMemory(d,restart_index_memory,0,VK_WHOLE_SIZE,0,&indices));
+        memset(indices,0,(size_t)ia.allocationSize);
+        const uint16_t list[9]={0,1,2,3,0xffff,4,5,6,7};
+        memcpy((unsigned char *)indices+ir.alignment,list,sizeof(list));
+        VkMappedMemoryRange iflush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory=restart_index_memory,.size=VK_WHOLE_SIZE};
+        vkFlushMappedMemoryRanges(d,1,&iflush);
+        vkUnmapMemory(d,restart_index_memory);
+    }
+#endif
     VkShaderModule invocations_module;
     VkShaderModuleCreateInfo igi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize=sizeof(ps5vk_runtime_geometry_invocations_stage),
@@ -1989,6 +2041,113 @@ static void geometry_probe(VkDevice d)
      * omitted. The sentinel runs third, before any case that can lose the
      * device, so the value oracle reports its own outcome instead of being
      * preempted. */
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    /* Primitive-restart witness. Two quads with a gap, one indexed triangle
+     * strip whose index list carries a restart index between them: a cut draws
+     * exactly the two quads (nothing in the gap), a missing cut threads a
+     * bridging primitive across it. The control is the same draw with restart
+     * disabled, which is the state this profile accepts today, so the pair also
+     * proves the witness discriminates rather than restating the state. */
+    for (unsigned restart = 1; restart <= 2; ++restart) {
+        const VkBool32 enable = restart == 1 ? VK_TRUE : VK_FALSE;
+        VkVertexInputBindingDescription rb={.binding=0,.stride=8,
+            .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+        VkVertexInputAttributeDescription ra={.location=0,.binding=0,
+            .format=VK_FORMAT_R32G32_SFLOAT,.offset=0};
+        VkPipelineVertexInputStateCreateInfo rvi_state={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexBindingDescriptionCount=1,.pVertexBindingDescriptions=&rb,
+            .vertexAttributeDescriptionCount=1,.pVertexAttributeDescriptions=&ra};
+        VkPipelineShaderStageCreateInfo rvs[2]={
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=restart_vertex_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=restart_fragment_module,.pName="main"}};
+        VkPipelineInputAssemblyStateCreateInfo ria={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,.primitiveRestartEnable=enable};
+        VkPipelineRasterizationStateCreateInfo rraster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
+        VkPipelineMultisampleStateCreateInfo rms={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+        VkViewport rvp={0,0,(float)extent,(float)extent,0,1};
+        VkRect2D rsc={{0,0},{extent,extent}};
+        VkPipelineViewportStateCreateInfo rvps={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount=1,.pViewports=&rvp,.scissorCount=1,.pScissors=&rsc};
+        VkPipelineColorBlendAttachmentState rba={.colorWriteMask=15};
+        VkPipelineColorBlendStateCreateInfo rbs={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount=1,.pAttachments=&rba};
+        VkGraphicsPipelineCreateInfo rpi={.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .layout=layout,.renderPass=pass,.stageCount=2,.pStages=rvs,
+            .pVertexInputState=&rvi_state,.pInputAssemblyState=&ria,
+            .pRasterizationState=&rraster,.pMultisampleState=&rms,
+            .pViewportState=&rvps,.pColorBlendState=&rbs};
+        VkPipeline rpipeline=VK_NULL_HANDLE;
+        VkResult rrc=vkCreateGraphicsPipelines(d,0,1,&rpi,NULL,&rpipeline);
+        if(rrc!=VK_SUCCESS || !rpipeline) {
+            ps5log_printf(PS5LOG_MARK,"PS5VK_RESTART_PROBE restart=%u rc=%d created=0",
+                (unsigned)enable,(int)rrc);
+            continue;
+        }
+        VkCommandBuffer rcb=VK_NULL_HANDLE;
+        VkCommandBufferAllocateInfo rcbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+        CHECK(vkAllocateCommandBuffers(d,&rcbi,&rcb));
+        VkCommandBufferBeginInfo rbegin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(rcb,&rbegin));
+        VkClearValue rclear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
+        VkRenderPassBeginInfo rrbi={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass=pass,.framebuffer=fb,.renderArea={{0,0},{extent,extent}},
+            .clearValueCount=1,.pClearValues=&rclear};
+        vkCmdBeginRenderPass(rcb,&rrbi,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(rcb,VK_PIPELINE_BIND_POINT_GRAPHICS,rpipeline);
+        /* Bound at buffer offset zero: the memory alignment above is where the
+         * data was written, not an offset inside the buffer. */
+        VkDeviceSize restart_zero=0;
+        vkCmdBindVertexBuffers(rcb,0,1,&restart_vertex_buffer,&restart_zero);
+        vkCmdBindIndexBuffer(rcb,restart_index_buffer,restart_zero,VK_INDEX_TYPE_UINT16);
+        vkCmdDrawIndexed(rcb,9,1,0,0,0);
+        vkCmdEndRenderPass(rcb);
+        CHECK(vkEndCommandBuffer(rcb));
+        VkSubmitInfo rsubmit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.commandBufferCount=1,.pCommandBuffers=&rcb};
+        VkResult src_rc=vkQueueSubmit(queue,1,&rsubmit,VK_NULL_HANDLE);
+        if(src_rc==VK_SUCCESS)src_rc=vkQueueWaitIdle(queue);
+        if(src_rc!=VK_SUCCESS) {
+            ps5log_printf(PS5LOG_MARK,"PS5VK_RESTART_PROBE restart=%u rc=%d created=1 submit_rc=%d",
+                (unsigned)enable,(int)rrc,(int)src_rc);
+            vkDestroyPipeline(d,rpipeline,NULL);
+            continue;
+        }
+        CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+            .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
+            .offset=0,.size=VK_WHOLE_SIZE}));
+        CHECK(ps5vk_rgba8_64k_rx_detile(detiled,sizeof(detiled),map,(size_t)stride,
+            extent,extent));
+        /* The oracle: the two axis-aligned quads are the coverage; any ink
+         * outside them - most visibly in the gap between them - is the bridging
+         * primitive a missing cut produces. */
+        uint64_t expected=0,ink=0,foreign=0;
+        for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x) {
+            const double nx=2.0*((double)x+0.5)/(double)extent-1.0;
+            const double ny=2.0*((double)y+0.5)/(double)extent-1.0;
+            const int covered=(nx>=-0.9 && nx<=-0.2 && ny>=-0.5 && ny<=0.5) ||
+                              (nx>= 0.2 && nx<= 0.9 && ny>=-0.5 && ny<=0.5);
+            const uint8_t *px=detiled+4*((size_t)y*extent+x);
+            const int is_ink=px[0]||px[1]||px[2];
+            if(covered)++expected;
+            if(is_ink)++ink;
+            if(is_ink && !covered)++foreign;
+        }
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_RESTART_PROBE restart=%u rc=%d created=1 expected=%llu ink=%llu foreign=%llu "
+            "digest=%016llx gap_left=%02x%02x%02x%02x gap_right=%02x%02x%02x%02x",
+            (unsigned)enable,(int)rrc,(unsigned long long)expected,(unsigned long long)ink,
+            (unsigned long long)foreign,
+            (unsigned long long)geometry_digest(detiled,sizeof(detiled)),
+            detiled[4*((size_t)32*extent+(extent/2-4))],detiled[4*((size_t)32*extent+(extent/2-4))+1],
+            detiled[4*((size_t)32*extent+(extent/2-4))+2],detiled[4*((size_t)32*extent+(extent/2-4))+3],
+            detiled[4*((size_t)32*extent+(extent/2+4))],detiled[4*((size_t)32*extent+(extent/2+4))+1],
+            detiled[4*((size_t)32*extent+(extent/2+4))+2],detiled[4*((size_t)32*extent+(extent/2+4))+3]);
+        vkDestroyPipeline(d,rpipeline,NULL);
+    }
+#endif
     static const unsigned order[PS5VK_GEOMETRY_CASES]={
         PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_SENTINEL,
         PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
@@ -2331,6 +2490,14 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,family_vertex_module,NULL);
     vkDestroyShaderModule(d,points_module,NULL);
     vkDestroyShaderModule(d,lines_module,NULL);
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    if(restart_vertex_buffer)vkDestroyBuffer(d,restart_vertex_buffer,NULL);
+    if(restart_index_buffer)vkDestroyBuffer(d,restart_index_buffer,NULL);
+    if(restart_vertex_memory)vkFreeMemory(d,restart_vertex_memory,NULL);
+    if(restart_index_memory)vkFreeMemory(d,restart_index_memory,NULL);
+    vkDestroyShaderModule(d,restart_vertex_module,NULL);
+    vkDestroyShaderModule(d,restart_fragment_module,NULL);
+#endif
     vkDestroyShaderModule(d,components_vertex_module,NULL);
     vkDestroyShaderModule(d,components_module,NULL);
     vkDestroyShaderModule(d,components_output_fragment_module,NULL);

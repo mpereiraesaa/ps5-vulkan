@@ -437,6 +437,8 @@ graphics-stage-shaders:
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_primitive_id.geom -o build/runtime-graphics/geometry_primitive_id.geom.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_points.geom -o build/runtime-graphics/geometry_points.geom.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_lines.geom -o build/runtime-graphics/geometry_lines.geom.spv
+	$(GLSLANG) -V experiments/graphics/runtime_primitive_restart.vert -o build/runtime-graphics/primitive_restart.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_primitive_restart.frag -o build/runtime-graphics/primitive_restart.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_family.vert -o build/runtime-graphics/geometry_family.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_components.vert -o build/runtime-graphics/geometry_components.vert.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_components.geom -o build/runtime-graphics/geometry_components.geom.spv
