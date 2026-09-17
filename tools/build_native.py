@@ -315,6 +315,13 @@ def main():
             if lds_base_probe not in ("0", "1") or (lds_base_probe == "1" and geometry_probe != "1"):
                 raise SystemExit("PS5VK_LDS_BASE_PROBE is a bounded geometry-probe experiment")
             common += ["-DPS5VK_GEOMETRY_LDS_BASE_PROBE=" + lds_base_probe]
+            # Bounded diagnostic ordering for the geometry witness: run the
+            # failing passthrough case last so the other cases report their own
+            # outcomes in the same run. Off unless explicitly requested.
+            order_probe = os.environ.get("PS5VK_GEOMETRY_ORDER_PROBE", "0")
+            if order_probe not in ("0", "1") or (order_probe == "1" and geometry_probe != "1"):
+                raise SystemExit("PS5VK_GEOMETRY_ORDER_PROBE is a bounded geometry-probe diagnostic")
+            common += ["-DPS5VK_GEOMETRY_PROBE_ORDER_PROBE=" + order_probe]
             # Both optional-stage witnesses skip the feature-negotiation gate:
             # they exist to measure capabilities that are not advertised yet.
             common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + 

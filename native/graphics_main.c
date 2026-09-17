@@ -1812,9 +1812,19 @@ static void geometry_probe(VkDevice d)
     /* The input-independent case runs second: if the stage never emits, the log
      * separates that from a broken ES/GS handshake before the other cases. */
     static const unsigned order[PS5VK_GEOMETRY_CASES]={
+#if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
+        /* Bounded diagnostic ordering: the run stops at the first failing case,
+         * so running the failing passthrough case last gives the other geometry
+         * cases a chance to report their own outcomes in the same run. */
+        PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,
+        PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,
+        PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_POSITIONS,PS5VK_GEOMETRY_PASSTHROUGH};
+#else
         PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_PASSTHROUGH,
         PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,
         PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_POSITIONS};
+#endif
+    unsigned failed_cases=0;
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
@@ -1925,9 +1935,19 @@ static void geometry_probe(VkDevice d)
             witness.first_wrong[3],witness.first_wrong_x,witness.first_wrong_y,
             corner[0],corner[1],corner[2],corner[3],
             center[0],center[1],center[2],center[3]);
+#if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
+        /* Bounded diagnostic: report every case's outcome in one run and only
+         * fail after the loop, so the table is complete instead of stopping at
+         * the first failing case. */
+        if(!verified)failed_cases++;
+#else
         if(!verified)fail("geometry-verdict",-1);
+#endif
         vkDestroyPipeline(d,pipeline,NULL);
     }
+#if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
+    if(failed_cases)fail("geometry-verdict",-(int)failed_cases);
+#endif
     /* Passthrough and the amplified image must both reproduce the control image
      * exactly (the three sub-triangles tile the input triangle), the shrunk and
      * suppressed images must differ from it, and the varying rewrite must differ
