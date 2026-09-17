@@ -22,6 +22,9 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
     switch(witness_case) {
     case PS5VK_CLIP_CULL_PLAIN:
     case PS5VK_CLIP_CULL_POSITIVE:
+    /* Every distance stays positive here as well, so the pixel read changes the
+     * colour and not the coverage. */
+    case PS5VK_CLIP_CULL_PIXEL_READ:
     /* A cull distance negative at one vertex only is not a discard: the rule
      * needs one half-space negative for every vertex of the primitive, and this
      * witness draws one primitive whose x values have both signs. */
@@ -44,7 +47,8 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
     }
 }
 
-void ps5vk_clip_cull_witness_expected(unsigned x,unsigned y,unsigned extent,uint8_t rgba[4])
+void ps5vk_clip_cull_witness_expected(unsigned witness_case,unsigned x,unsigned y,
+    unsigned extent,uint8_t rgba[4])
 {
     /* Framebuffer pixel centres in the coordinates the witness vertex stage
      * interpolates: u,v are the vertex-stage varying, and the NDC values the
@@ -57,9 +61,14 @@ void ps5vk_clip_cull_witness_expected(unsigned x,unsigned y,unsigned extent,uint
      * swapped varying cannot pass. */
     const double u=((double)x+0.5)/(double)extent;
     const double v=((double)y+0.5)/(double)extent;
-    rgba[0]=unorm8(u);
-    rgba[1]=unorm8(v);
-    rgba[2]=unorm8(0.5);
+    /* The vertex stage's clip distance 0 is affine in NDC x, so a pixel stage
+     * that reads it multiplies its varying by an exactly predictable value at
+     * the same pixel centre. */
+    const double distance=witness_case==PS5VK_CLIP_CULL_PIXEL_READ?
+        1.0+0.25*(2.0*u-1.0):1.0;
+    rgba[0]=unorm8(u*distance);
+    rgba[1]=unorm8(v*distance);
+    rgba[2]=unorm8(0.5*distance);
     rgba[3]=255u;
 }
 
@@ -83,7 +92,7 @@ void ps5vk_clip_cull_witness_pixel(struct ps5vk_clip_cull_witness *witness,
     }
     ++witness->expected_covered;
     uint8_t want[4];
-    ps5vk_clip_cull_witness_expected(x,y,extent,want);
+    ps5vk_clip_cull_witness_expected(witness_case,x,y,extent,want);
     int matches=1;
     /* One unorm step of slack: the varying is affine, so only the conversion of
      * the exact value may round, and never by more than that. */
@@ -113,6 +122,9 @@ int ps5vk_clip_cull_witness_verify(const struct ps5vk_clip_cull_witness *witness
     case PS5VK_CLIP_CULL_PLAIN:
     case PS5VK_CLIP_CULL_POSITIVE:
     case PS5VK_CLIP_CULL_CULL_HALF:
+    /* The pixel read draws the same full coverage; what it adds is the colour,
+     * which the oracle predicts from the interpolated distance. */
+    case PS5VK_CLIP_CULL_PIXEL_READ:
         return witness->expected_covered==pixels;
     case PS5VK_CLIP_CULL_CULL_NEGATIVE:
     case PS5VK_CLIP_CULL_CULL_INDEX:

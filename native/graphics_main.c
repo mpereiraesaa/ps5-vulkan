@@ -14,6 +14,9 @@
 #include "multiview_witness.h"
 #include "clip_cull_witness.h"
 #include "geometry_witness.h"
+/* The private semantic keys the profile pairs producer and consumer words on
+ * (the clip/cull distance registers among them). */
+#include "libpsbc/psbc_compile.h"
 #include "vk_render_pass.h"
 #include "color_detile.h"
 
@@ -1496,6 +1499,10 @@ static int clip_cull_mode(unsigned witness_case,int *mode)
     case PS5VK_CLIP_CULL_DYNAMIC_INDEX: *mode=7; return 1;
     /* The same program as the direct quadrant: only the draw path differs. */
     case PS5VK_CLIP_CULL_INDIRECT_QUADRANT: *mode=2; return 1;
+    /* The pixel read runs the all-positive distance set: coverage stays the
+     * control's and the fragment stage multiplies its varying by clip
+     * distance 0, so the image is a different function of the position. */
+    case PS5VK_CLIP_CULL_PIXEL_READ: *mode=0; return 1;
     }
     return 0;
 }
@@ -1552,6 +1559,13 @@ static void clip_cull_probe(VkDevice d)
     VkShaderModuleCreateInfo fsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize=sizeof(ps5vk_runtime_fragment),.pCode=ps5vk_runtime_fragment};
     CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment));
+    /* The pixel end of the interface: a fragment stage that reads
+     * gl_ClipDistance[0] instead of only a varying. */
+    VkShaderModule pixel_read_fragment;
+    VkShaderModuleCreateInfo prfsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_clip_distance_read_fragment),
+        .pCode=ps5vk_runtime_clip_distance_read_fragment};
+    CHECK(vkCreateShaderModule(d,&prfsi,NULL,&pixel_read_fragment));
     VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .queueFamilyIndex=0};
     VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
@@ -1605,6 +1619,7 @@ static void clip_cull_probe(VkDevice d)
              .pSpecializationInfo=mode<0?NULL:&spec},
             {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
              .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=fragment,.pName="main"}};
+        if(witness_case==PS5VK_CLIP_CULL_PIXEL_READ)stages[1].module=pixel_read_fragment;
         VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
@@ -1644,6 +1659,18 @@ static void clip_cull_probe(VkDevice d)
         }
         if(seen!=3u || seen_config!=expect_config || seen_pos_format!=expect_pos_format ||
            seen_out_cntl!=expect_out_cntl)fail("clip-cull-state",-1);
+        /* The pixel-read case is about the pixel-input description, so the
+         * fragment stage that will run must name the packed distance register
+         * it reads. A pipeline that quietly dropped the description would
+         * interpolate an attribute nothing mapped, and the image could still
+         * look plausible. */
+        if(witness_case==PS5VK_CLIP_CULL_PIXEL_READ) {
+            const struct ps5vk_runtime_shader *pixel=&native->pair->runtime_fragment;
+            unsigned described=0;
+            for(unsigned i=0;i<pixel->header.num_input_semantics;++i)
+                described+=(pixel->inputs[i]&255u)==PSBC_SEMANTIC_DISTANCE_REGISTER;
+            if(described!=1u)fail("clip-cull-pixel-read",-1);
+        }
         /* One command buffer per case: this profile refuses to record a second
          * time into a submitted buffer, and a fresh one per case keeps each
          * verdict attributable to its own recording. The pool owns them all and
@@ -1735,6 +1762,13 @@ static void clip_cull_probe(VkDevice d)
        digests[PS5VK_CLIP_CULL_CLIP_QUADRANT]!=digests[PS5VK_CLIP_CULL_DYNAMIC_INDEX] ||
        digests[PS5VK_CLIP_CULL_CULL_NEGATIVE]!=digests[PS5VK_CLIP_CULL_CULL_INDEX])
         fail("clip-cull-digest-equality",-1);
+    /* The pixel read keeps the control's coverage but not its colours: an image
+     * that delivered the varying (or any other attribute) would equal the
+     * positive case, so requiring the three to differ is what makes the case
+     * evidence about the distance and not about coverage. */
+    if(digests[PS5VK_CLIP_CULL_PIXEL_READ]==digests[PS5VK_CLIP_CULL_PLAIN] ||
+       digests[PS5VK_CLIP_CULL_PIXEL_READ]==digests[PS5VK_CLIP_CULL_POSITIVE])
+        fail("clip-cull-pixel-read-digest",-1);
     const unsigned distinct[4]={PS5VK_CLIP_CULL_PLAIN,PS5VK_CLIP_CULL_CLIP_HALF,
         PS5VK_CLIP_CULL_CLIP_QUADRANT,PS5VK_CLIP_CULL_CULL_NEGATIVE};
     for(unsigned i=0;i<4;++i)for(unsigned j=0;j<i;++j)
@@ -1745,7 +1779,8 @@ static void clip_cull_probe(VkDevice d)
         "digest_plain=%016llx digest_positive=%016llx digest_clip_half=%016llx "
         "digest_clip_quadrant=%016llx digest_cull_half=%016llx digest_cull_negative=%016llx "
         "digest_mixed=%016llx digest_cull_index=%016llx "
-        "digest_dynamic_index=%016llx digest_indirect_quadrant=%016llx strict_verified=1",
+        "digest_dynamic_index=%016llx digest_indirect_quadrant=%016llx "
+        "digest_pixel_read=%016llx strict_verified=1",
         PS5VK_CLIP_CULL_CASES,extent,ps5vk_clip_cull_clear[0],ps5vk_clip_cull_clear[1],
         ps5vk_clip_cull_clear[2],ps5vk_clip_cull_clear[3],0x03u,0x0cu,
         (unsigned long long)digests[PS5VK_CLIP_CULL_PLAIN],
@@ -1757,11 +1792,13 @@ static void clip_cull_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_CLIP_CULL_MIXED],
         (unsigned long long)digests[PS5VK_CLIP_CULL_CULL_INDEX],
         (unsigned long long)digests[PS5VK_CLIP_CULL_DYNAMIC_INDEX],
-        (unsigned long long)digests[PS5VK_CLIP_CULL_INDIRECT_QUADRANT]);
+        (unsigned long long)digests[PS5VK_CLIP_CULL_INDIRECT_QUADRANT],
+        (unsigned long long)digests[PS5VK_CLIP_CULL_PIXEL_READ]);
     vkDestroyBuffer(d,indirect_buffer,NULL);
     vkFreeMemory(d,indirect_memory,NULL);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,fragment,NULL);
+    vkDestroyShaderModule(d,pixel_read_fragment,NULL);
     vkDestroyPipelineLayout(d,layout,NULL);
     vkDestroyFramebuffer(d,fb,NULL);
     vkDestroyRenderPass(d,pass,NULL);

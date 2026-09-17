@@ -53,7 +53,15 @@ enum {
      * indirect command path renders the identical image", not merely "a draw
      * happened". */
     PS5VK_CLIP_CULL_INDIRECT_QUADRANT = 9,
-    PS5VK_CLIP_CULL_CASES = 10
+    /* The pixel end of the same interface: the fragment stage READS
+     * gl_ClipDistance[0] and multiplies its varying by it, with the vertex
+     * stage's all-positive distance set, so coverage is the control's and the
+     * colour is a distinct function of the position. A pipeline that delivered
+     * the varying (or another attribute) instead of the interpolated distance
+     * cannot produce this image, which is why the case is judged on colour and
+     * not only on coverage. */
+    PS5VK_CLIP_CULL_PIXEL_READ = 10,
+    PS5VK_CLIP_CULL_CASES = 11
 };
 
 struct ps5vk_clip_cull_witness {
@@ -88,6 +96,7 @@ int ps5vk_clip_cull_witness_verify(const struct ps5vk_clip_cull_witness *witness
 /* The varying the witness vertex stage writes for a vertex, and the colours it
  * must interpolate to at a pixel centre. Exposed so the host regression can
  * build the same coordinates the native probe reads back. */
-void ps5vk_clip_cull_witness_expected(unsigned x,unsigned y,unsigned extent,uint8_t rgba[4]);
+void ps5vk_clip_cull_witness_expected(unsigned witness_case,unsigned x,unsigned y,
+    unsigned extent,uint8_t rgba[4]);
 
 #endif

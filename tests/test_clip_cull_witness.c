@@ -22,7 +22,7 @@ static void image_for(unsigned witness_case,uint8_t *image)
         memcpy(pixel,ps5vk_clip_cull_clear,4);
         struct ps5vk_clip_cull_witness probe={0};
         uint8_t expected[4];
-        ps5vk_clip_cull_witness_expected(x,y,EXTENT,expected);
+        ps5vk_clip_cull_witness_expected(witness_case,x,y,EXTENT,expected);
         /* Reuse the oracle's predicate through a one-pixel classification: the
          * synthetic image must be exactly what the oracle predicts, otherwise
          * the negative cases below would prove nothing. */
@@ -60,6 +60,9 @@ int main(void)
         case PS5VK_CLIP_CULL_POSITIVE:
         /* A cull distance negative at one vertex only is not a discard. */
         case PS5VK_CLIP_CULL_CULL_HALF:
+        /* The pixel read keeps the control's coverage; the distance changes the
+         * colour, which the relation below checks against the control image. */
+        case PS5VK_CLIP_CULL_PIXEL_READ:
             assert(witness.expected_covered==pixels);
             break;
         case PS5VK_CLIP_CULL_CLIP_HALF:
@@ -84,7 +87,7 @@ int main(void)
     /* A clipped region that was drawn anyway is not a pass. */
     image_for(PS5VK_CLIP_CULL_CLIP_HALF,image);
     uint8_t expected[4];
-    ps5vk_clip_cull_witness_expected(0,0,EXTENT,expected);
+    ps5vk_clip_cull_witness_expected(PS5VK_CLIP_CULL_PLAIN,0,0,EXTENT,expected);
     memcpy(image,expected,4); /* column 0 row 0 is inside the cut half */
     assert(!classify(PS5VK_CLIP_CULL_CLIP_HALF,image,&witness));
     assert(witness.foreign==1 && witness.first_foreign_x==0 && witness.first_foreign_y==0);
@@ -106,6 +109,22 @@ int main(void)
     image_for(PS5VK_CLIP_CULL_PLAIN,image);
     assert(classify(PS5VK_CLIP_CULL_CULL_HALF,image,&witness));
     assert(witness.covered==pixels);
+    /* The pixel-read case is judged on the value, not on coverage: the control
+     * image covers the same pixels with a plain varying and must fail it, and
+     * the read image must fail the control - otherwise the case could pass
+     * without the distance ever reaching the pixel stage. */
+    {
+        static uint8_t read_image[EXTENT*EXTENT*4];
+        image_for(PS5VK_CLIP_CULL_PIXEL_READ,read_image);
+        assert(classify(PS5VK_CLIP_CULL_PIXEL_READ,read_image,&witness));
+        assert(witness.covered==pixels && !witness.wrong_color && !witness.foreign);
+        assert(!classify(PS5VK_CLIP_CULL_PIXEL_READ,image,&witness));
+        assert(witness.wrong_color>0 && !witness.foreign);
+        image_for(PS5VK_CLIP_CULL_PLAIN,image);
+        assert(!classify(PS5VK_CLIP_CULL_PLAIN,read_image,&witness));
+        assert(witness.wrong_color>0 && !witness.foreign);
+        image_for(PS5VK_CLIP_CULL_PLAIN,image);
+    }
     assert(!classify(PS5VK_CLIP_CULL_CULL_NEGATIVE,image,&witness));
     assert(witness.foreign>0);
     assert(!classify(PS5VK_CLIP_CULL_CULL_INDEX,image,&witness));
