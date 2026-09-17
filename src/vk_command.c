@@ -502,10 +502,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBias(VkCommandBuffer c, float constant,
     float clamp, float slope)
 {
     if (!recording(c)) return;
-    /* depthBiasClamp is not advertised, so its valid value is exactly zero.
-     * Vulkan places no finiteness restriction on the other two factors; retain
-     * their float bit patterns without inventing a narrower API contract. */
-    if (clamp != 0.0f) {
+    /* A non-zero clamp is legal only when depthBiasClamp is ENABLED on this
+     * logical device (the physical mask is not consulted: an application that
+     * did not ask for the feature keeps the rules of a device without it).
+     * Vulkan places no finiteness restriction on any of the three factors;
+     * retain their float bit patterns without inventing a narrower contract. */
+    if (clamp != 0.0f &&
+        !(c->pool->device->enabled_features & PS5VK_FEATURE_DEPTH_BIAS_CLAMP)) {
         invalid(c); return;
     }
     c->depth_bias_constant=constant;c->depth_bias_clamp=clamp;c->depth_bias_slope=slope;
@@ -889,6 +892,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     const VkRect2D *scissor = p->dynamic_scissor ?
         (c->scissor_valid ? &c->scissor : NULL) : &p->scissor;
     if (!viewport || !scissor) { invalid(c); return; }
+    /* Resolve the rasterization snapshot now, by value. Dynamic depth-bias
+     * factors are required only when the bias is enabled: Vulkan ignores them
+     * otherwise, so an unset dynamic state does not invalidate a draw whose
+     * pipeline has the bias disabled. */
+    struct ps5vk_raster_state raster=p->raster;
+    if(p->dynamic_depth_bias && raster.depth_bias_enable) {
+        if(!(c->dynamic_state_valid & PS5VK_DYNAMIC_DEPTH_BIAS)) {invalid(c);return;}
+        raster.depth_bias_constant=c->depth_bias_constant;
+        raster.depth_bias_clamp=c->depth_bias_clamp;
+        raster.depth_bias_slope=c->depth_bias_slope;
+    }
     if(p->push_constant_size && (!c->push_constants_valid ||
         memcmp(p->push_constant_stages,c->push_constant_stages,
                sizeof(c->push_constant_stages)))) {invalid(c);return;}
@@ -916,7 +930,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if(!op)return;
     op->pipeline=p;op->render_pass=pass;op->framebuffer=c->framebuffer;
     op->subpass=c->subpass;
-    op->viewport=*viewport;op->scissor=*scissor;op->vertex_count=vertices;
+    op->viewport=*viewport;op->scissor=*scissor;op->raster=raster;op->vertex_count=vertices;
     op->instance_count=instances;op->first_vertex=first_vertex;op->first_instance=first_instance;
     memcpy(op->vertices,c->vertices,sizeof(c->vertices));
     op->push_constant_size=p->push_constant_size;

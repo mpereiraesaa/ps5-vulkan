@@ -86,6 +86,8 @@ struct ps5vk_operation {
     VkRect2D render_area;
     VkViewport viewport;
     VkRect2D scissor;
+    /* Rasterization state resolved at record time (vk_pipeline.h). */
+    struct ps5vk_raster_state raster;
     VkClearValue clears[2];
     uint32_t clear_count;
     uint32_t vertex_count, instance_count, first_vertex, first_instance;

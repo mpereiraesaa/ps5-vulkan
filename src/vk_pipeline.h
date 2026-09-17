@@ -39,6 +39,18 @@ struct VkShaderModule_T {
     uint32_t words[];
 };
 VkBool32 ps5vk_shader_entry(VkShaderModule, VkShaderStageFlagBits, const char *, uint32_t *id);
+/* Rasterization state a draw executes with. A pipeline holds its static values;
+ * a recorded draw holds a BY-VALUE copy resolved at record time (the pipeline's
+ * value, or the command buffer's current dynamic value where the pipeline
+ * declared that state dynamic), so a later setter or a later pipeline cannot
+ * reach a draw that was already recorded. The native encoder consumes exactly
+ * this snapshot. depth_bias_enable is kept apart from the factors: Vulkan
+ * ignores the factors while the enable is false, and an enabled zero bias is a
+ * different state from a disabled one only in the enable bits it programs. */
+struct ps5vk_raster_state {
+    VkBool32 depth_bias_enable;
+    float depth_bias_constant, depth_bias_clamp, depth_bias_slope;
+};
 struct VkPipeline_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
@@ -61,6 +73,11 @@ struct VkPipeline_T {
     VkViewport viewport;
     VkRect2D scissor;
     VkBool32 dynamic_viewport, dynamic_scissor;
+    /* Static rasterization state, and whether VK_DYNAMIC_STATE_DEPTH_BIAS was
+     * declared: when it was, the three factors here are unused and a draw
+     * takes them from the command buffer instead. */
+    struct ps5vk_raster_state raster;
+    VkBool32 dynamic_depth_bias;
     VkCullModeFlags cull_mode;
     VkFrontFace front_face;
     VkBool32 depth_test, depth_write;

@@ -68,6 +68,21 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_MULTI_DRAW_INDIRECT = 1u << 6,
     /* The full 32-bit range of VK_INDEX_TYPE_UINT32 indices. */
     PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 = 1u << 7,
+    /* Bits 8..11 are reserved for the optional-stage tranche (DXVK262-T04:
+     * clip/cull distances, geometry, tessellation) so the two integrations
+     * union without renumbering. */
+    /* Rasterization and viewport state (DXVK262-T05). Each bit is set by a
+     * platform only when the native path behind it programs the state and was
+     * measured; the logical device carries the bits the application enabled
+     * and the pipeline/command frontends consult THOSE. */
+    /* depthBiasClamp: a non-zero clamp in static or dynamic depth bias. */
+    PS5VK_FEATURE_DEPTH_BIAS_CLAMP = 1u << 12,
+    /* depthClamp: depthClampEnable replaces near/far clipping by clamping. */
+    PS5VK_FEATURE_DEPTH_CLAMP = 1u << 13,
+    /* fillModeNonSolid: VK_POLYGON_MODE_LINE and VK_POLYGON_MODE_POINT. */
+    PS5VK_FEATURE_FILL_MODE_NON_SOLID = 1u << 14,
+    /* multiViewport: viewport/scissor arrays up to maxViewports. */
+    PS5VK_FEATURE_MULTI_VIEWPORT = 1u << 15,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

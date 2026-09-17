@@ -1,14 +1,37 @@
 #include "draw_state_ps5.h"
 #include "viewport_ps5.h"
 #include <string.h>
+static uint32_t float_bits(float f) { uint32_t u; memcpy(&u, &f, sizeof(u)); return u; }
+/* Public Mesa RADV (radv_emit_depth_bias_state, gfx10): the polygon offset
+ * block is CLAMP, FRONT_SCALE, FRONT_OFFSET, BACK_SCALE, BACK_OFFSET at
+ * 0x2df..0x2e3 with the slope scaled by 16, and PA_SU_POLY_OFFSET_DB_FMT_CNTL
+ * (0x2de) describing the depth format: NEG_NUM_DB_BITS = -23 with
+ * POLY_OFFSET_DB_IS_FLOAT_FMT for D32_SFLOAT, and zero when there is no depth
+ * attachment (Vulkan leaves the constant term's unit undefined then). Both
+ * front and back get the same scale/offset: Vulkan has one bias per polygon,
+ * not per face. The factors are written even when the bias is disabled so the
+ * words never carry another draw's values. */
+static void polygon_offset(const struct ps5vk_raster_state *raster, int depth_d32,
+    ps5_agc_register out[6])
+{
+    const uint32_t slope = float_bits(raster->depth_bias_slope * 16.0f);
+    const uint32_t offset = float_bits(raster->depth_bias_constant);
+    out[0] = (ps5_agc_register){0x2de, depth_d32 ? ((uint32_t)(-23) & 0xffu) | (1u << 8) : 0u};
+    out[1] = (ps5_agc_register){0x2df, float_bits(raster->depth_bias_clamp)};
+    out[2] = (ps5_agc_register){0x2e0, slope};
+    out[3] = (ps5_agc_register){0x2e1, offset};
+    out[4] = (ps5_agc_register){0x2e2, slope};
+    out[5] = (ps5_agc_register){0x2e3, offset};
+}
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
-    const VkRect2D *scissor_state, const struct ps5vk_target_registers *color,
+    const VkRect2D *scissor_state, const struct ps5vk_raster_state *raster,
+    const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
     uint32_t width, uint32_t height, struct ps5vk_draw_state *out)
 {
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
-    if (!p || !viewport_state || !scissor_state || !p->graphics || !p->graphics_state || !color || color->count != 16 ||
+    if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state || !color || color->count != 16 ||
         !width || !height || width > 16384 || height > 16384 ||
         (p->color_format != VK_FORMAT_B8G8R8A8_UNORM &&
          p->color_format != VK_FORMAT_R8G8B8A8_UNORM) ||
@@ -63,9 +86,15 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     uint32_t depth_control = depth && p->depth_test ?
         2u | (p->depth_write ? 4u : 0u) | ((uint32_t)p->depth_compare << 4) : 0u;
     result.cx[result.cx_count++] = (ps5_agc_register){0x200, depth_control};
-    /* Public Mesa gfx10/RADV: filled triangles, first provoking vertex. */
+    /* Public Mesa gfx10/RADV PA_SU_SC_MODE_CNTL: cull mode, front face,
+     * filled triangles (POLYMODE_FRONT/BACK_PTYPE = triangles), first
+     * provoking vertex, and the three POLY_OFFSET_*_ENABLE bits (11..13)
+     * exactly when the draw's depth bias is enabled. */
+    const uint32_t polygon_offset_enable = raster->depth_bias_enable ?
+        (1u << 11) | (1u << 12) | (1u << 13) : 0u;
     result.cx[result.cx_count++] = (ps5_agc_register){0x205,
-        (uint32_t)p->cull_mode | ((uint32_t)p->front_face << 2) | (2u << 5) | (2u << 8)};
+        (uint32_t)p->cull_mode | ((uint32_t)p->front_face << 2) | (2u << 5) | (2u << 8) |
+        polygon_offset_enable};
     /* Shader exports homogeneous W, not reciprocal W. Mesa RADV and the
      * compiler's .pa_cl_vte_cntl.vtx_w0_fmt both require this bit. w=1 tests
      * cannot distinguish the two modes. */
@@ -85,6 +114,9 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * pixel center 1, round-to-even 2, 1/256 quantization mode 5. Do not rely
      * on an inherited AGC initialization value for rasterization precision. */
     result.cx[result.cx_count++] = (ps5_agc_register){0x2f9, pair->vertex_quantization};
+    /* Depth bias: the polygon offset block, written on every draw. */
+    polygon_offset(raster, depth != NULL, result.cx + result.cx_count);
+    result.cx_count += 6;
     memcpy(result.sh, base.sh, sizeof(base.sh)); memcpy(result.uc, base.uc, sizeof(base.uc));
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {
