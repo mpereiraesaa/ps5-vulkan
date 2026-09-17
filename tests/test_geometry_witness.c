@@ -46,6 +46,7 @@ int main(void)
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_RECOLOR)==3);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_AMPLIFY)==4);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CONSTANT)==5);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_POSITIONS)==6);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CASES)==-2);
 
     for(unsigned witness_case=0;witness_case<PS5VK_GEOMETRY_CASES;++witness_case) {
@@ -56,6 +57,7 @@ int main(void)
         case PS5VK_GEOMETRY_PASSTHROUGH:
         case PS5VK_GEOMETRY_RECOLOR:
         case PS5VK_GEOMETRY_AMPLIFY:
+        case PS5VK_GEOMETRY_POSITIONS:
             assert(witness.expected_covered==pixels);
             break;
         case PS5VK_GEOMETRY_SHRINK:

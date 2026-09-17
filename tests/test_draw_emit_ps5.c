@@ -42,7 +42,9 @@ int main(void)
     assert(packet[4]==0xc0016900 && packet[5]==0x292 && packet[6]==0x22 && packet[7]==0);
     at=packet;replay.cx_count=2;
     assert(ps5vk_native_emit_scissor_replay(&at,8,&replay)==VK_ERROR_UNKNOWN && at==packet);
-    struct ps5vk_draw_state state = {.cx_count = 87, .modifier = 5};
+    /* The UC block is the linked three registers unless the pre-raster program
+     * is a merged vertex+geometry program, which adds its GE allocation. */
+    struct ps5vk_draw_state state = {.cx_count = 87, .uc_count = 3, .modifier = 5};
     struct ps5vk_operation op = {.type = PS5VK_DRAW, .vertex_count = 3, .instance_count = 7,
         .first_vertex = 11, .first_instance = 13};
     uint32_t commands[64] = {0}, *cursor = commands;
@@ -278,7 +280,7 @@ int main(void)
     depth_layer.registers[15].value=0x0004u;
     assert(depth_prepared.registers[21].offset==0x200u &&
            depth_prepared.registers[21].value==depth_layer.registers[21].value);
-    struct ps5vk_draw_state view_state={.cx_count=87,.modifier=5,.sh_count=10};
+    struct ps5vk_draw_state view_state={.cx_count=87,.uc_count=3,.modifier=5,.sh_count=10};
     view_state.runtime=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=5,.fragment_count=2,
         .fragment_view_index_valid=1,.fragment_view_index_slot=1,
         .base_vertex_slot=0,.start_instance_slot=1,.draw_id_slot=UINT32_MAX,.view_index_slot=2,

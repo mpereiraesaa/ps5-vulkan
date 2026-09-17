@@ -86,6 +86,9 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * on an inherited AGC initialization value for rasterization precision. */
     result.cx[result.cx_count++] = (ps5_agc_register){0x2f9, pair->vertex_quantization};
     memcpy(result.sh, base.sh, sizeof(base.sh)); memcpy(result.uc, base.uc, sizeof(base.uc));
+    /* The linked UC block is ge_cntl, user-VGPR enable and the primitive type;
+     * nothing else in this profile's state is a UC register today. */
+    result.uc_count=3;
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {
         result.sh_count=vs->header.num_sh_registers+fs->header.num_sh_registers;

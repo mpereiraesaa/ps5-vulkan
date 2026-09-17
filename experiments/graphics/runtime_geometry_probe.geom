@@ -18,6 +18,18 @@ void main()
      * the interface policy refuses built-ins the adapter cannot deliver, and
      * this stage's per-primitive delivery has not been established. */
     if (MODE == 2) { return; }
+    if (MODE == 6) {
+        /* Positions from the input, colour constant: this is the position half
+         * of the ES->GS handoff on its own, so a wrong varying cannot hide a
+         * correct position path or the other way round. */
+        for (int i = 0; i < gl_in.length(); i) {
+            gl_Position = gl_in[i].gl_Position;
+            out_color = vec3(1.0, 1.0, 1.0);
+            EmitVertex();
+        }
+        EndPrimitive();
+        return;
+    }
     if (MODE == 5) {
         /* Input-independent emission: a fixed centred quad with a fixed
          * colour, so "the stage runs and its output reaches the pixel stage" is

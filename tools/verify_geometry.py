@@ -37,14 +37,16 @@ CASES = (
     # Three sub-triangles tile the input triangle, so the amplified image must
     # be the control image again.
     (5, 4, PIXELS),
+    # The input positions with a constant colour.
+    (7, 6, PIXELS),
 )
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
-                6: "digest_constant"}
+                6: "digest_constant", 7: "digest_positions"}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 

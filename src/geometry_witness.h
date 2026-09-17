@@ -39,7 +39,10 @@ enum {
      * input: it isolates "the stage ran" from "the stage received the vertex
      * data", which is what a broken ES/GS handshake looks like. */
     PS5VK_GEOMETRY_CONSTANT = 6,
-    PS5VK_GEOMETRY_CASES = 7
+    /* Positions taken from the input, colour constant: the position half of the
+     * ES->GS handoff on its own. */
+    PS5VK_GEOMETRY_POSITIONS = 7,
+    PS5VK_GEOMETRY_CASES = 8
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */
