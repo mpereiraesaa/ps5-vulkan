@@ -321,6 +321,24 @@ def _clip_distance_generated_segments(text: str) -> set[str]:
     return {"clip_distance_dynamic_index", "clip_cull_distance_dynamic_index"}
 
 
+def _geometry_adjacency_leaf_names(text: str) -> set[str]:
+    """Leaf names the pinned geometry input factory composes at run time.
+
+    The triangle-strip-adjacency group names each leaf after the vertex count it
+    iterates, so the name is a literal prefix plus the loop index. Bounded to that
+    factory's exact construction - the prefix literal, de::toString of the loop
+    variable, and the loop's inclusive bound - so a renamed prefix or a different
+    bound derives nothing rather than a wrong list.
+    """
+    match = re.search(
+        r'const string name\s*=\s*"([a-z_]+)"\s*\+\s*de::toString\(vertexCount\)', text)
+    loop = re.search(
+        r'for\s*\(\s*int\s+vertexCount\s*=\s*0\s*;\s*vertexCount\s*<=\s*(\d+)\s*;', text)
+    if not match or not loop or int(loop.group(1)) > 32:
+        return set()
+    return {f"{match.group(1)}{n}" for n in range(int(loop.group(1)) + 1)}
+
+
 def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
     """Derive the user-defined clip/cull leaf names of the pinned clipping module.
 
@@ -1250,6 +1268,12 @@ def main() -> int:
         if re.search(r'"' + re.escape(leaf) + r'"', text):
             continue
         if leaf in _table_composed_leaf_names(text, function_text):
+            continue
+        # The geometry input factory names its triangle-strip-adjacency leaves
+        # after the vertex count it iterates, so only the prefix is a literal.
+        # Bounded to that factory's exact construction expression.
+        if (source_path.name == "vktGeometryInputGeometryShaderTests.cpp" and
+                leaf in _geometry_adjacency_leaf_names(text)):
             continue
         # This factory's manifest citations point at individual registration
         # blocks inside one function, so the generic forward-only extractor

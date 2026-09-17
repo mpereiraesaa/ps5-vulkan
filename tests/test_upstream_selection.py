@@ -59,9 +59,14 @@ class UpstreamSelectionTests(unittest.TestCase):
         manifest = self.current_manifest
         leaves = [c for c in manifest["cases"]
                   if c["path"].startswith(MULTIVIEW_FAMILIES)]
-        # 211 + the 64 promoted clipping leaves are acceptance; the clipping
-        # complementarity/misc leaves and the earlier diagnostics make up the 14.
-        self.assertEqual((275, 14, 48),
+        # 211 + the 64 promoted clipping leaves are acceptance. The diagnostics
+        # are the earlier 14 plus the 49 geometry leaves this slice records: 19 of
+        # them are applicable to the device but cannot run in this payload yet
+        # (the pinned module loads its own reference images from data assets the
+        # integration does not package) and 30 are refused by a gate this profile
+        # documents (a non-triangle input primitive, an undelivered built-in, or
+        # an adjacency input). The geometry feature therefore stays unadvertised.
+        self.assertEqual((275, 63, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))

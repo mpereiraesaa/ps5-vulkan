@@ -102,7 +102,14 @@ VkResult ps5vk_runtime_compile_compute_features(
                           * with VK_ERROR_FEATURE_NOT_PRESENT - the baseline run
                           * of the clip/cull promotion showed exactly that. */
                          PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
-                         PS5VK_FEATURE_SHADER_CULL_DISTANCE))
+                         PS5VK_FEATURE_SHADER_CULL_DISTANCE |
+                         /* The optional geometry stage is the same kind of
+                          * device-wide bit: the compute adapter has no PSBC
+                          * option for it either, and the pinned CTS enables every
+                          * reported core feature on the device it creates, so a
+                          * compute pipeline created on a device that reports it
+                          * must not fail for a bit this path cannot act on. */
+                         PS5VK_FEATURE_GEOMETRY_SHADER))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
