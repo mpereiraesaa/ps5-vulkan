@@ -164,6 +164,21 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return 0;
     }
     uint32_t primitive_type=0;
+    /* A fragment stage that READS gl_ClipDistance/gl_CullDistance needs the
+     * pixel-input description for those attributes: the distances travel in the
+     * packed position registers the pre-raster stage exports, and the AGC
+     * linker maps the pixel attributes from the shader header's input-semantics
+     * list, which the compiler leaves unresolved for any stage that reads a
+     * built-in distance. The interface policy accepts such a declaration (it is
+     * legal SPIR-V, bounded by what the pre-raster stage exports), and a
+     * pipeline that ran it anyway would interpolate an attribute the linker
+     * never mapped. Refuse to run it until that description exists - the same
+     * fail-closed shape as the geometry refusal above. */
+    {
+        unsigned clip_reads=0,cull_reads=0;
+        if(!ps5vk_spirv_stage_distance_reads(&key->fragment,&clip_reads,&cull_reads))return 0;
+        if(clip_reads||cull_reads)return 0;
+    }
     return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
         !ps5vk_agc_primitive_type(key->topology,&primitive_type) &&
         (key->color_format==VK_FORMAT_B8G8R8A8_UNORM ||

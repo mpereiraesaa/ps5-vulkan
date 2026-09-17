@@ -92,25 +92,31 @@ FEATURE_GATES = {
     "pipelineStatisticsQuery": ("src/vk_query_pool.c", "pipelineStatisticsQuery is reported false.",
                                 "pipeline statistics query pools are rejected"),
     # The packed pre-raster distance export is implemented and hardware-witnessed,
-    # and the dynamically indexed write has a witness case whose native result is
-    # still to be taken. Neither distance feature is advertised: the pinned
-    # upstream clipping module gates the fragment-shader-read variant on these
-    # same two features (vktClippingTests.cpp requireFeatures()), and a
-    # fragment-stage distance declaration is refused by the stage-interface
-    # policy - with the metadata adapter refusing a pixel-stage mask behind it -
-    # so the feature's whole obligation is not covered yet.
-    "shaderClipDistance": ("src/spirv_graphics_interface.c", "if(!preraster || d->patch",
+    # and the dynamically indexed write is measured on hardware. Neither distance
+    # feature is advertised, and since the pixel-read contract landed the reason
+    # has moved one layer down: the stage-interface policy now ACCEPTS a fragment
+    # stage that reads the distances its predecessor exports (bounded by that
+    # export), and what refuses to run is the pipeline, because the pinned
+    # compiler leaves the pixel-input list unresolved for a distance attribute -
+    # so the AGC linker has no attribute mapping to program and the read would
+    # interpolate an attribute nobody mapped. The pinned upstream clipping module
+    # gates the fragment-shader-read variant on these same two features
+    # (vktClippingTests.cpp requireFeatures()), so the feature's whole obligation
+    # is not covered yet.
+    "shaderClipDistance": ("native/runtime_graphics_compiler.c", "if(clip_reads||cull_reads)return 0;",
                            "the pre-raster export is implemented and hardware-witnessed for static "
                            "indices, and the dynamically indexed write is measured on hardware "
-                           "(its image is byte-identical to the statically indexed quadrant); a "
-                           "fragment-stage distance declaration is refused by the stage-interface "
-                           "policy, so the feature is not advertised"),
-    "shaderCullDistance": ("src/spirv_graphics_interface.c", "if(!preraster || d->patch",
+                           "(its image is byte-identical to the statically indexed quadrant); the "
+                           "stage-interface policy accepts a bounded fragment-stage read, but the "
+                           "pipeline is refused because the compiler cannot describe the pixel input "
+                           "for a distance attribute yet, so the feature is not advertised"),
+    "shaderCullDistance": ("native/runtime_graphics_compiler.c", "if(clip_reads||cull_reads)return 0;",
                            "the pre-raster export is implemented and hardware-witnessed for static "
                            "indices, and the dynamically indexed write is measured on hardware "
-                           "(its image is byte-identical to the statically indexed quadrant); a "
-                           "fragment-stage distance declaration is refused by the stage-interface "
-                           "policy, so the feature is not advertised"),
+                           "(its image is byte-identical to the statically indexed quadrant); the "
+                           "stage-interface policy accepts a bounded fragment-stage read, but the "
+                           "pipeline is refused because the compiler cannot describe the pixel input "
+                           "for a distance attribute yet, so the feature is not advertised"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",

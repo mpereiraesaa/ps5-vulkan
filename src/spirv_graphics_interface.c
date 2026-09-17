@@ -39,6 +39,12 @@ struct interface {
     /* Declared gl_ClipDistance/gl_CullDistance array lengths, in components.
      * They start at zero and are set at most once per stage. */
     unsigned clip_distances, cull_distances;
+    /* The same two arrays as PIXEL INPUTS: a fragment stage reads what the
+     * last pre-raster stage exported. The rasterizer delivers those components
+     * exactly like a varying, from the same packed position registers, so a
+     * read is budgeted against the same ceiling as an export - but it is not
+     * an export, and a stage cannot be both. */
+    unsigned clip_distance_reads, cull_distance_reads;
     /* A geometry stage's per-vertex input array length: the number of vertices
      * of the input primitive, which the pipeline topology must agree with. */
     unsigned input_vertices;
@@ -304,18 +310,32 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
             }
             /* gl_ClipDistance (3) and gl_CullDistance (4): a float32 array the
              * pre-raster stage writes and the rasterizer clips or culls
-             * against. The fragment stage may not declare either, and the
-             * declared width must fit the exported distance registers. With a
-             * tessellation pair the last pre-raster stage is the control or the
-             * evaluation stage, so both of them may declare and write them. */
+             * against. The declared width must fit the exported distance
+             * registers. With a tessellation pair the last pre-raster stage is
+             * the control or the evaluation stage, so both of them may declare
+             * and write them.
+             *
+             * The fragment stage declares the same two built-ins as INPUTS: the
+             * rasterizer interpolates the packed distance components into the
+             * pixel's attribute space exactly like a varying, so a pixel read is
+             * the same interface at the other end of the pipeline. It is
+             * recorded separately from an export and the pipeline check below
+             * requires the last pre-raster stage to export what the fragment
+             * stage reads - a read whose producer never wrote it would
+             * interpolate against a register the program does not export. */
             if(d->builtin==BUILTIN_CLIP_DISTANCE || d->builtin==BUILTIN_CULL_DISTANCE) {
                 unsigned length=0;
                 const int preraster=model==MODEL_VERTEX || model==MODEL_GEOMETRY ||
                     model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL;
-                if(!preraster || d->patch || d->storage!=3 || d->location!=~0u ||
+                const int fragment=model==MODEL_FRAGMENT;
+                if((!preraster && !fragment) || d->patch || d->location!=~0u ||
+                   d->storage!=(fragment?1u:3u) ||
                    !declared_distance_array(ids,bound,ptr->type,&length))goto done;
-                unsigned *total=d->builtin==BUILTIN_CLIP_DISTANCE?
-                    &out->clip_distances:&out->cull_distances;
+                unsigned *total=fragment?
+                    (d->builtin==BUILTIN_CLIP_DISTANCE?
+                        &out->clip_distance_reads:&out->cull_distance_reads):
+                    (d->builtin==BUILTIN_CLIP_DISTANCE?
+                        &out->clip_distances:&out->cull_distances);
                 if(*total)goto done; /* one declaration per built-in per stage */
                 *total=length;
                 continue;
@@ -431,9 +451,18 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
         if((out->domain==MODE_DOMAIN_TRIANGLES || out->domain==MODE_DOMAIN_QUADS) &&
            !out->spacing)goto done;
     }
+    /* Exports and reads share the two packed distance registers, so both are
+     * budgeted against the same per-feature and combined ceilings. A stage
+     * declares one built-in once and is either pre-raster or fragment, so the
+     * two forms never add up inside one stage - the sum is what keeps the
+     * ceiling honest if that ever changes. */
     if(out->clip_distances>PS5VK_MAX_CLIP_DISTANCES ||
        out->cull_distances>PS5VK_MAX_CULL_DISTANCES ||
-       out->clip_distances+out->cull_distances>PS5VK_MAX_COMBINED_CLIP_CULL_DISTANCES)goto done;
+       out->clip_distance_reads>PS5VK_MAX_CLIP_DISTANCES ||
+       out->cull_distance_reads>PS5VK_MAX_CULL_DISTANCES ||
+       out->clip_distances+out->cull_distances+
+           out->clip_distance_reads+out->cull_distance_reads>
+           PS5VK_MAX_COMBINED_CLIP_CULL_DISTANCES)goto done;
     valid=1;
 done:
     free(ids);return valid;
@@ -454,6 +483,26 @@ int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_k
         return 0;
     if(clip_distances)*clip_distances=stage.clip_distances;
     if(cull_distances)*cull_distances=stage.cull_distances;
+    return 1;
+}
+
+int ps5vk_spirv_stage_distance_reads(const struct ps5vk_graphics_module_key *module,
+                                     unsigned *clip_reads,
+                                     unsigned *cull_reads)
+{
+    struct interface stage={0};
+    if(clip_reads)*clip_reads=0;
+    if(cull_reads)*cull_reads=0;
+    /* The other end of the same built-in: only the fragment stage reads
+     * gl_ClipDistance/gl_CullDistance as an input, and the pre-raster stages
+     * export them (ps5vk_spirv_stage_distance_declarations above). Reporting
+     * the reads is a declaration fact; whether the pixel stage can be handed
+     * them is the native metadata adapter's and the pipeline's decision, and a
+     * fragment module that is not this profile's fragment interface reports no
+     * counts rather than a half-valid pair. */
+    if(!reflect(module,MODEL_FRAGMENT,&stage))return 0;
+    if(clip_reads)*clip_reads=stage.clip_distance_reads;
+    if(cull_reads)*cull_reads=stage.cull_distance_reads;
     return 1;
 }
 
@@ -486,6 +535,11 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
      * before it, and the stage a geometry stage reads is the one before that. */
     const struct interface *previous=has_geometry?&gs:(has_tessellation?&tes:&vs);
     const struct interface *before_geometry=has_tessellation?&tes:&vs;
+    /* The pixel stage's distance reads come from the packed position registers
+     * the last pre-raster stage exports: a read the producer never wrote would
+     * interpolate against a register that stage does not export at all. */
+    if(fs.clip_distance_reads>previous->clip_distances ||
+       fs.cull_distance_reads>previous->cull_distances)return 0;
     for(unsigned i=0;i<LOCATIONS;++i) {
         unsigned matched=0;
         for(uint32_t a=0;a<key->vertex_attribute_count;++a)

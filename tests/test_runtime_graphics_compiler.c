@@ -180,6 +180,49 @@ static int patch_array_length(struct ps5vk_graphics_module_key *m,uint32_t from,
     return patched>=1;
 }
 
+/* The pixel end of the clip-distance interface. A fragment stage that READS
+ * gl_ClipDistance is legal SPIR-V, and the description policy accepts it when
+ * the pre-raster stage exports at least that many components - but this profile
+ * cannot hand the values to the pixel stage yet: the distances travel in the
+ * packed position registers the pre-raster stage exports, and the compiler
+ * leaves the whole pixel-input list unresolved when an attribute is a built-in
+ * distance, so the AGC linker has no attribute mapping to program. The gate
+ * must therefore refuse the *pipeline* (not the interface) until that
+ * description exists, and it must accept the same pair once the read is gone.
+ */
+static void check_fragment_distance_read(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/clip_distance.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/clip_distance_read.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE};
+    unsigned clip=~0u,cull=~0u;
+    /* The declaration is accepted and reported as a read, and the interface
+     * chain accepts it because the vertex stage exports the same width. */
+    assert(ps5vk_spirv_stage_distance_reads(&key.fragment,&clip,&cull));
+    assert(clip==2 && cull==0);
+    assert(ps5vk_spirv_graphics_interface(&key));
+    /* The same pair without the read is a pipeline this profile supports, so
+     * the refusal below is the read and not a side effect of the fixture. */
+    struct ps5vk_graphics_module_key reads=key.fragment;
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    assert(ps5vk_runtime_graphics_supported(&key));
+    free((void *)key.fragment.words);
+    key.fragment=reads;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    /* A read wider than the producer exports never reaches the pipeline gate:
+     * the interface chain refuses it first, which is the bounded-declaration
+     * half of the same contract. */
+    struct ps5vk_graphics_module_key narrow=read_module("build/runtime-graphics/triangle.vert.spv");
+    struct ps5vk_graphics_key too_wide=key;
+    too_wide.vertex=narrow;
+    assert(!ps5vk_spirv_graphics_interface(&too_wide));
+    free((void *)narrow.words);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 /* The optional geometry stage. The interface policy has to describe the whole
  * vertex -> geometry -> fragment link, and the compiler adapter must refuse a
  * geometry key until the merged pre-raster stage exists: compiling the vertex
@@ -925,6 +968,7 @@ int main(void)
     check_sparse_layout_static_use();
     check_view_index_builtin();
     check_clip_cull_distances();
+    check_fragment_distance_read();
     check_geometry_stage();
     check_tessellation_stage();
     struct ps5vk_graphics_key key={

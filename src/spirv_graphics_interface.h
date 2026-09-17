@@ -19,4 +19,18 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *);
 int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_key *,
                                             unsigned *clip_distances,
                                             unsigned *cull_distances);
+/* The same widths as PIXEL INPUTS: the declared component count of the
+ * gl_ClipDistance (3) and gl_CullDistance (4) arrays a fragment module reads
+ * from its predecessor, or zero for a built-in it does not declare. A read is
+ * split by component count, so a stage that declares one array of four and uses
+ * only two of its components reports four here and the pipeline still bounds it
+ * against what the pre-raster stage exports.
+ *
+ * Like the export widths above, this is a declaration fact and not a claim that
+ * the pixel stage receives the values: the native path refuses the pipeline
+ * until the compiler describes the read and the AGC linker can map the
+ * attribute to the exported register. Returns 0 for a module this profile
+ * cannot describe. */
+int ps5vk_spirv_stage_distance_reads(const struct ps5vk_graphics_module_key *,
+                                     unsigned *clip_reads,unsigned *cull_reads);
 #endif
