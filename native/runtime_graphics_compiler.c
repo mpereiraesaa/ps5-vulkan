@@ -173,16 +173,19 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
     }
     /* A geometry stage is compiled through the merged entry point, so its own
      * module passes the same structural screening as the other two. The merged
-     * program is only accepted by the diagnostic build: its ES->GS input handoff
-     * needs the link-time ring item size, which the pinned compiler flags
-     * unresolved and the AGC linked state does not carry, so the shipping profile
-     * refuses a geometry pipeline instead of executing one with a guessed value
-     * (the witness measured what that looks like). */
+     * program IS accepted now: the ES->GS input handoff was the one thing that
+     * made it unsafe, and it is fixed and witnessed on hardware - the hardware
+     * scales the per-vertex offsets it hands the geometry half by
+     * VGT_ESGS_RING_ITEMSIZE, next-gen geometry keeps that at one so the offsets
+     * stay item indices, and the driver now programs it that way instead of with
+     * the compiler's legacy item size (which scaled them twice: the geometry half
+     * read item 5k where it must read item k, so only the first vertex of each
+     * primitive ever came back right). The whole witness table, including a
+     * per-item readback of what the stage read, verifies on the console with this
+     * path. What remains before the FEATURE can be advertised is the applicable
+     * conformance selection, not this adapter. */
     if(ps5vk_graphics_has_geometry(key)) {
         if(!module_supported(&key->geometry,3))return 0;
-#if !PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
-        return 0;
-#endif
     }
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;

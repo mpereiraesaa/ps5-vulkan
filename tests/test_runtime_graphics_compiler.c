@@ -288,14 +288,20 @@ static void check_geometry_stage(void)
     memcpy(key.geometry.specializations[0].data,&passthrough,sizeof(passthrough));
     assert(ps5vk_spirv_graphics_interface(&key));
     const void *out=(void *)1;
-    /* The merged program compiles, but the shipping profile refuses to package it:
-     * the ES->GS input handoff needs the link-time ring item size, which the
-     * pinned compiler flags unresolved and the AGC linked state does not carry.
-     * Executing it with a guessed value corrupts the geometry the stage reads, so
-     * the adapter fails closed here (the diagnostic build is the only one that
-     * lets the witness measure that behaviour). */
-    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
-    /* The same key without the feature is refused for the same reason. */
+    /* The merged program is packaged by the shipping profile too. It used to be
+     * refused because the ES->GS input handoff needed the link-time ring item
+     * size, which the pinned compiler flags unresolved: executing it with a
+     * guessed value corrupted the geometry the stage read. That is fixed and
+     * witnessed - the hardware scales the per-vertex offsets by
+     * VGT_ESGS_RING_ITEMSIZE, next-gen geometry keeps that at one, and the driver
+     * now programs it that way - so the adapter accepts the pair, and what gates
+     * the feature is the conformance selection, not this path. */
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    out=(void *)1;
+    /* The same key without the feature is still refused: a geometry pipeline
+     * needs the feature the logical device enabled, exactly like every other
+     * stage. */
     key.feature_mask=0;
     assert(ps5vk_spirv_graphics_interface(&key));
     out=(void *)1;
@@ -312,7 +318,7 @@ static void check_geometry_stage(void)
     free((void *)patched.words);
     free((void *)key.vertex.words);free((void *)key.geometry.words);
     free((void *)key.fragment.words);
-    puts("Geometry stage: vertex/geometry/fragment link described, merged package refused");
+    puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged with the feature on");
 }
 
 /* The tessellation pair: described and identified, refused by the adapter.
