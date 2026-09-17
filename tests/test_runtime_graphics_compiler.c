@@ -201,18 +201,14 @@ static void check_geometry_stage(void)
     memcpy(key.geometry.specializations[0].data,&passthrough,sizeof(passthrough));
     assert(ps5vk_spirv_graphics_interface(&key));
     const void *out=(void *)1;
-    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
-    const struct ps5vk_runtime_graphics_program *p=out;
-    /* The compiled pre-raster stage is the merged program: it names the geometry
-     * source stage, keeps the NGG layout and exports the varying the fragment
-     * stage reads. */
-    assert(p->vertex.metadata.source_stage==PSBC_STAGE_GEOMETRY &&
-           p->vertex.metadata.hardware_stage==PSBC_HW_STAGE_NGG);
-    assert(p->vertex.metadata.ngg_lds_layout_valid && p->vertex.metadata.output_semantic_count==1);
-    assert(!p->vertex.metadata.clip_distance_mask && !p->vertex.metadata.cull_distance_mask);
-    ps5vk_runtime_graphics_free(NULL,out);
-    /* The same key without the feature is refused: the compiled program is the
-     * usage evidence and the shipping gate is the negotiation. */
+    /* The merged program compiles, but the shipping profile refuses to package it:
+     * the ES->GS input handoff needs the link-time ring item size, which the
+     * pinned compiler flags unresolved and the AGC linked state does not carry.
+     * Executing it with a guessed value corrupts the geometry the stage reads, so
+     * the adapter fails closed here (the diagnostic build is the only one that
+     * lets the witness measure that behaviour). */
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    /* The same key without the feature is refused for the same reason. */
     key.feature_mask=0;
     assert(ps5vk_spirv_graphics_interface(&key));
     out=(void *)1;
@@ -229,7 +225,7 @@ static void check_geometry_stage(void)
     free((void *)patched.words);
     free((void *)key.vertex.words);free((void *)key.geometry.words);
     free((void *)key.fragment.words);
-    puts("Geometry stage: vertex/geometry/fragment link and the merged pre-raster program");
+    puts("Geometry stage: vertex/geometry/fragment link described, merged package refused");
 }
 
 static void check_view_index_builtin(void)

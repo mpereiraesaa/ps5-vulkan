@@ -1809,7 +1809,14 @@ static void geometry_probe(VkDevice d)
     VkQueue queue; vkGetDeviceQueue(d,0,0,&queue);
     static uint8_t detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
     uint64_t digests[PS5VK_GEOMETRY_CASES]={0};
-    for(unsigned witness_case=0;witness_case<PS5VK_GEOMETRY_CASES;++witness_case) {
+    /* The input-independent case runs second: if the stage never emits, the log
+     * separates that from a broken ES/GS handshake before the other cases. */
+    static const unsigned order[PS5VK_GEOMETRY_CASES]={
+        PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_PASSTHROUGH,
+        PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,
+        PS5VK_GEOMETRY_AMPLIFY};
+    for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
+        const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
         if(mode==-2)fail("geometry-case",-1);
         const int32_t specialization=mode<0?0:mode;
@@ -1930,13 +1937,14 @@ static void geometry_probe(VkDevice d)
        digests[PS5VK_GEOMETRY_CONTROL]!=digests[PS5VK_GEOMETRY_AMPLIFY] ||
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SHRINK] ||
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SUPPRESS] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_CONSTANT] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_GEOMETRY_PROBE cases=%u extent=%u clear=%02x%02x%02x%02x out_prim_type=2 "
         "max_vertices=3 digest_control=%016llx digest_passthrough=%016llx "
         "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
-        "digest_amplify=%016llx strict_verified=1",
+        "digest_amplify=%016llx digest_constant=%016llx strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
         (unsigned long long)digests[PS5VK_GEOMETRY_CONTROL],
@@ -1944,7 +1952,8 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_SHRINK],
         (unsigned long long)digests[PS5VK_GEOMETRY_SUPPRESS],
         (unsigned long long)digests[PS5VK_GEOMETRY_RECOLOR],
-        (unsigned long long)digests[PS5VK_GEOMETRY_AMPLIFY]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_AMPLIFY],
+        (unsigned long long)digests[PS5VK_GEOMETRY_CONSTANT]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);

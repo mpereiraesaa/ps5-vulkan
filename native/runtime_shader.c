@@ -298,9 +298,11 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     for (uint32_t i=0;i<m->context_register_count;++i) {
         d->context[i]=convert(m->context_registers[i]);
         /* A vertex-only NGG program exports unscaled vertex indices and runs one
-         * item per vertex; with a geometry stage the ring item size is the
-         * merged program's, which the compiler computed and the register check
-         * above required, so it is left exactly as emitted. */
+         * item per vertex. With a geometry stage the compiler marks the ring item
+         * size unresolved because the linked driver computes it from the ES half's
+         * output size, which the compiled metadata does not carry; the value is
+         * programmed as emitted, and the measured consequence is recorded with the
+         * geometry witness (the stage executes, its input handoff does not). */
         if (vs && !has_geometry && d->context[i].offset==0x2ab) d->context[i].value=1;
     }
     for (uint32_t i=0;i<m->shader_register_count;++i) d->shader[i]=convert(m->shader_registers[i]);

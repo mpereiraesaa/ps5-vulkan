@@ -19,6 +19,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_SUPPRESS:return 2;
     case PS5VK_GEOMETRY_RECOLOR:return 3;
     case PS5VK_GEOMETRY_AMPLIFY:return 4;
+    case PS5VK_GEOMETRY_CONSTANT:return 5;
     }
     return -2;
 }
@@ -44,6 +45,9 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
     case PS5VK_GEOMETRY_SHRINK:
         return ndc_x>=-shrink_extent && ndc_x<=shrink_extent &&
                ndc_y>=-shrink_extent && ndc_y<=shrink_extent;
+    case PS5VK_GEOMETRY_CONSTANT:
+        /* The fixed quad the stage emits without reading its input. */
+        return ndc_x>=-0.5 && ndc_x<=0.5 && ndc_y>=-0.5 && ndc_y<=0.5;
     default:
         /* The stage emits nothing at all. */
         return 0;
@@ -58,6 +62,13 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
      * clip/cull witness measured on this path. */
     const double u=((double)x+0.5)/(double)extent;
     const double v=((double)y+0.5)/(double)extent;
+    if(witness_case==PS5VK_GEOMETRY_CONSTANT) {
+        rgba[0]=unorm8(0.25);
+        rgba[1]=unorm8(0.5);
+        rgba[2]=unorm8(0.75);
+        rgba[3]=255u;
+        return;
+    }
     const double red=witness_case==PS5VK_GEOMETRY_RECOLOR?1.0-u:u;
     rgba[0]=unorm8(red);
     rgba[1]=unorm8(v);
@@ -117,6 +128,7 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     case PS5VK_GEOMETRY_AMPLIFY:
         return witness->expected_covered==pixels;
     case PS5VK_GEOMETRY_SHRINK:
+    case PS5VK_GEOMETRY_CONSTANT:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
         return witness->expected_covered==0u && witness->covered==0u;
