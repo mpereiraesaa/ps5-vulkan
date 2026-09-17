@@ -10,6 +10,14 @@ from lab import lab_root
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The geometry witness's drawn case counts, mirrored from src/geometry_witness.h
+# (PS5VK_GEOMETRY_VALUE_CASES / PS5VK_GEOMETRY_CASES) and checked against it and
+# against tools/verify_geometry.py's certified case table by
+# tests/test_verify_geometry.py, so the artifact profile, the log and the parser
+# cannot drift apart silently.
+GEOMETRY_VALUE_CASES = 9
+GEOMETRY_DIAGNOSTIC_CASES = 12
+
 
 def run(*args, env=None):
     subprocess.run(list(map(str, args)), check=True, cwd=ROOT, env=env)
@@ -490,10 +498,17 @@ def main():
                                 sample_count=1, clip_cull_probe=1,
                                 clip_cull_extent=64, clip_cull_cases=8)
             if geometry_probe == "1":
+                # The default matrix is the value-oracle case set (the sentinel
+                # replaces the empty-image S1 claim); the S1/S2/S3 characterisation
+                # probes join it only in the bounded diagnostic ordering, and the
+                # manifest then describes the larger set the run actually draws.
                 manifest.update(scene=None,
                                 geometry_fixture="geometry-stage-coverage",
                                 sample_count=1, geometry_probe=1,
-                                geometry_extent=64, geometry_cases=8)
+                                geometry_extent=64,
+                                geometry_cases=(GEOMETRY_DIAGNOSTIC_CASES
+                                                if order_probe == "1"
+                                                else GEOMETRY_VALUE_CASES))
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")

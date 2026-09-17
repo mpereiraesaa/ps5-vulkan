@@ -10,6 +10,13 @@ the digest relations only a real readback satisfies: passthrough must reproduce
 the two-stage control image, and the shrunk, suppressed and rewritten images
 must differ from it.
 
+The case set it certifies is the value-oracle matrix: every case there asserts
+the exact expected image, coverage and colour. The S1/S2/S3 characterisation
+probes are deliberately outside it - their oracle is an empty image, which
+cannot separate a correct read from a zero read (a run that produced nothing and
+returned nothing passes it), so they are bounded diagnostics whose evidence
+stays per-run and is never promoted by this parser.
+
 Artifact hashes must additionally be tied to a verified deployment by the run
 operator. This parser does not prove which executable the OS launched, nor OS
 process exit, and never promotes generic Vulkan conformance.
@@ -25,11 +32,17 @@ PIXELS = EXTENT * EXTENT
 # the case's coverage predicate keeps
 SHRINK_PIXELS = int(EXTENT * 0.6) ** 2
 # In the order the probe logs them: the input-independent case runs second so a
-# stage that never emits is separable from a broken input path.
+# stage that never emits is separable from a broken input path, and the sentinel
+# runs third so no later case can lose the device before its value oracle has
+# reported.
 CASES = (
     (0, -1, PIXELS),
     # The fixed centred quad covers half of each axis.
     (6, 5, (EXTENT // 2) ** 2),
+    # The input triangle unchanged with the colour computed from the position the
+    # geometry stage read: real coverage, and a value assertion that a zero read
+    # (collapsed triangle) or a shifted item (moved or reshaped triangle) fails.
+    (11, 10, PIXELS),
     (1, 0, PIXELS),
     (2, 1, SHRINK_PIXELS),
     (3, 2, 0),
@@ -43,10 +56,11 @@ CASES = (
 # The amplified image must hash equal to the control, and the four structurally
 # different images must all differ.
 DIGEST_EQUAL = ((0, 1), (0, 5))
-DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7)
+DIGEST_DISTINCT = (0, 2, 3, 4, 6, 7, 11)
 DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink",
                 3: "digest_suppress", 4: "digest_recolor", 5: "digest_amplify",
-                6: "digest_constant", 7: "digest_positions"}
+                6: "digest_constant", 7: "digest_positions",
+                11: "digest_sentinel"}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 

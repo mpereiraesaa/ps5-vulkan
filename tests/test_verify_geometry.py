@@ -38,7 +38,10 @@ class Fixture:
         self.digests = {0: "1111111111111111", 1: "1111111111111111",
                         2: "2222222222222222", 3: "3333333333333333",
                         4: "4444444444444444", 5: "1111111111111111",
-                        6: "6666666666666666", 7: "7777777777777777"}
+                        6: "6666666666666666", 7: "7777777777777777",
+                        # The sentinel shares the control's coverage and differs
+                        # from it in the colour its own mapping computes.
+                        11: "8888888888888888"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(
@@ -164,6 +167,43 @@ class GeometryVerifierTests(unittest.TestCase):
                          for r in fixture.records])
         with self.assertRaises(ValueError):
             fixture.validate()
+        # The sentinel must not reproduce the control image: that image carries
+        # the control's blue, so a sentinel that hashed equal to it is a draw
+        # whose colour did not come from the read the case asserts.
+        fixture = Fixture()
+        fixture.rebuild([r.replace("digest=8888888888888888", "digest=1111111111111111")
+                         if r.startswith("PS5VK_GEOMETRY_CASE") and "case=11 " in r
+                         else r.replace("digest_sentinel=8888888888888888",
+                                        "digest_sentinel=1111111111111111")
+                         if r.startswith("PS5VK_GEOMETRY_PROBE") else r
+                         for r in fixture.records])
+        with self.assertRaises(ValueError):
+            fixture.validate()
+
+    def test_case_counts_agree_across_the_header_parser_and_builder(self):
+        """The header's case counts, the certified table and the artifact profile
+        are three copies of one number; a disagreement would let a witness run
+        certify a matrix the binary did not draw."""
+        header = (ROOT / "src/geometry_witness.h").read_text()
+        builder = (ROOT / "tools/build_native.py").read_text()
+        total = int(re.search(r"PS5VK_GEOMETRY_CASES = (\d+)", header).group(1))
+        value = int(re.search(r"PS5VK_GEOMETRY_VALUE_CASES = (\d+)", header).group(1))
+        built_total = int(re.search(r"GEOMETRY_DIAGNOSTIC_CASES = (\d+)", builder).group(1))
+        built_value = int(re.search(r"GEOMETRY_VALUE_CASES = (\d+)", builder).group(1))
+        self.assertEqual(len(verify.CASES), value)
+        self.assertEqual(built_value, value)
+        self.assertEqual(built_total, total)
+        # The certified matrix is the value one: no case in it may be an
+        # empty-image characterisation probe.
+        certified = {case for case, _, _ in verify.CASES}
+        self.assertEqual(certified, {0, 6, 11, 1, 2, 3, 4, 5, 7})
+        self.assertFalse(certified & {8, 9, 10}, "S1/S2/S3 certify an empty image")
+        expected = {case: pixels for case, _, pixels in verify.CASES}
+        self.assertEqual(expected[3], 0)
+        self.assertEqual(expected[2], verify.SHRINK_PIXELS)
+        self.assertEqual(expected[6], (verify.EXTENT // 2) ** 2)
+        for case in (0, 1, 4, 5, 7, 11):
+            self.assertEqual(expected[case], verify.PIXELS)
 
     def test_receipt_and_artifact_identity_are_required(self):
         fixture = Fixture()

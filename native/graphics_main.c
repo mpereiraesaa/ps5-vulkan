@@ -1819,34 +1819,56 @@ static void geometry_probe(VkDevice d)
     uint64_t digests[PS5VK_GEOMETRY_CASES]={0};
     /* The input-independent case runs second: if the stage never emits, the log
      * separates that from a broken ES/GS handshake before the other cases. */
+    /* Every case must appear exactly once: a short initialiser would leave the
+     * remaining slots zero - i.e. extra control runs - and would silently drop
+     * the cases it omitted. */
     static const unsigned order[PS5VK_GEOMETRY_CASES]={
 #if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
         /* Bounded diagnostic ordering: the run stops at the first failing case,
          * so running the failing passthrough case last gives the other geometry
          * cases a chance to report their own outcomes in the same run. */
         PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,
+        /* The sentinel runs third, before any case that can lose the device: it
+         * is the value oracle for the position read, so it must report its own
+         * outcome rather than be preempted by the faulting indexed read. */
+        PS5VK_GEOMETRY_SENTINEL,
         /* Amplify first: if the device still dies, the loss is inherent to that
          * program; if it does not, the loss depends on state left by the cases
          * that used to precede it. */
         /* Positions first: if the POSITIONS program loses the device on its own
          * the fault is that program; if it survives first but dies later, it
          * depends on the cases that used to precede it. */
-        PS5VK_GEOMETRY_POSITION12,PS5VK_GEOMETRY_LOOP_CONST,PS5VK_GEOMETRY_POSITION0,PS5VK_GEOMETRY_POSITIONS,PS5VK_GEOMETRY_AMPLIFY,
+        PS5VK_GEOMETRY_POSITION12,PS5VK_GEOMETRY_LOOP_CONST,PS5VK_GEOMETRY_POSITION0,
+        PS5VK_GEOMETRY_POSITIONS,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_SHRINK,
         PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_PASSTHROUGH};
 #else
-        PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_PASSTHROUGH,
-        PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,
-        PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_POSITIONS};
+        PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_SENTINEL,
+        PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
+        PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_POSITIONS,
+        PS5VK_GEOMETRY_POSITION0,PS5VK_GEOMETRY_POSITION12,PS5VK_GEOMETRY_LOOP_CONST};
 #endif
-    unsigned failed_cases=0;
+    /* The default run draws only the value-oracle matrix: the sentinel and the
+     * other value cases, whose verdict asserts the exact expected image. The
+     * S1/S2/S3 probes assert nothing but an empty image, so drawing them would
+     * let a vacuous outcome ride along with the certified ones; they stay behind
+     * the bounded diagnostic ordering. The count printed in the summary and the
+     * manifest are the same number. */
 #if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
+    const unsigned probe_cases=PS5VK_GEOMETRY_CASES;
+#else
+    const unsigned probe_cases=PS5VK_GEOMETRY_VALUE_CASES;
+#endif
+#if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
+    /* Only the diagnostic ordering keeps going after a failing case, so only it
+     * counts failures: the default run fails at the first one. */
+    unsigned failed_cases=0;
     /* Bounded diagnostic: run the whole case sequence twice in one process.
      * If the device loss and the foreign-count variation reappear at the same
      * points on the second pass it is a per-pipeline/AGC-object property; if
      * they move, it is cumulative session wear. */
     for(unsigned geometry_pass=0;geometry_pass<2;++geometry_pass)
 #endif
-    for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
+    for(unsigned case_index=0;case_index<probe_cases;++case_index) {
         const unsigned witness_case=order[case_index];
 #if PS5VK_GEOMETRY_PROBE_ORDER_PROBE
         ps5log_printf(PS5LOG_MARK,"PS5VK_GEOMETRY_PASS pass=%u case=%u",
@@ -1986,6 +2008,12 @@ static void geometry_probe(VkDevice d)
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SUPPRESS] ||
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_CONSTANT] ||
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_POSITIONS] ||
+       /* The sentinel carries the same coverage as the control with the colour
+        * its own mapping computes, so a sentinel image equal to any of these
+        * three means the value it drew did not come from the read. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_SENTINEL] ||
+       digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_SENTINEL] ||
+       digests[PS5VK_GEOMETRY_POSITIONS]==digests[PS5VK_GEOMETRY_SENTINEL] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -1993,8 +2021,9 @@ static void geometry_probe(VkDevice d)
         "max_vertices=3 digest_control=%016llx digest_passthrough=%016llx "
         "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
         "digest_amplify=%016llx digest_constant=%016llx digest_positions=%016llx "
+        "digest_sentinel=%016llx "
         "strict_verified=1",
-        PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
+        probe_cases,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
         (unsigned long long)digests[PS5VK_GEOMETRY_CONTROL],
         (unsigned long long)digests[PS5VK_GEOMETRY_PASSTHROUGH],
@@ -2003,7 +2032,8 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_RECOLOR],
         (unsigned long long)digests[PS5VK_GEOMETRY_AMPLIFY],
         (unsigned long long)digests[PS5VK_GEOMETRY_CONSTANT],
-        (unsigned long long)digests[PS5VK_GEOMETRY_POSITIONS]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_POSITIONS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_SENTINEL]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
