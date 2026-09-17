@@ -53,6 +53,9 @@ struct ps5vk_raster_state {
     /* depthClampEnable: near/far clipping is replaced by clamping z_f to the
      * viewport's [min(n,f), max(n,f)]. Static in this profile. */
     VkBool32 depth_clamp;
+    /* VK_POLYGON_MODE_FILL, _LINE or _POINT (fillModeNonSolid for the last
+     * two). Static in this profile. */
+    VkPolygonMode polygon_mode;
 };
 struct VkPipeline_T {
     VkDevice device;

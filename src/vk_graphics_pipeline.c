@@ -128,7 +128,13 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          * is invented; the factors keep their float bit patterns. */
         (r->depthBiasEnable && !dynamic_depth_bias && r->depthBiasClamp != 0.0f &&
          !(d->enabled_features & PS5VK_FEATURE_DEPTH_BIAS_CLAMP)) ||
-        r->polygonMode != VK_POLYGON_MODE_FILL || r->lineWidth != 1.0f ||
+        /* LINE and POINT polygon modes need fillModeNonSolid ENABLED; every
+         * other value (FILL_RECTANGLE_NV) stays refused. wideLines is not
+         * advertised, so the static line width is exactly 1.0. */
+        (r->polygonMode != VK_POLYGON_MODE_FILL &&
+         ((r->polygonMode != VK_POLYGON_MODE_LINE && r->polygonMode != VK_POLYGON_MODE_POINT) ||
+          !(d->enabled_features & PS5VK_FEATURE_FILL_MODE_NON_SOLID))) ||
+        r->lineWidth != 1.0f ||
         m->pNext || m->flags || m->rasterizationSamples != VK_SAMPLE_COUNT_1_BIT ||
         m->sampleShadingEnable || m->alphaToCoverageEnable || m->alphaToOneEnable ||
         (m->pSampleMask && !(m->pSampleMask[0] & 1)) ||
@@ -215,6 +221,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * bias keeps zero factors so a snapshot never carries ignored values. */
     p->dynamic_depth_bias=dynamic_depth_bias;
     p->raster.depth_clamp=r->depthClampEnable?VK_TRUE:VK_FALSE;
+    p->raster.polygon_mode=r->polygonMode;
     p->raster.depth_bias_enable=r->depthBiasEnable?VK_TRUE:VK_FALSE;
     if(r->depthBiasEnable && !dynamic_depth_bias) {
         p->raster.depth_bias_constant=r->depthBiasConstantFactor;
