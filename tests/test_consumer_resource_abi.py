@@ -40,6 +40,15 @@ def indirect_messages(first_serial=19):
         f"PS5VK_CONSUMER_INDIRECT_START cases={len(INDIRECT_CASES)} extent={INDIRECT_EXTENT} "
         f"clear_word={INDIRECT_CLEAR_WORD:08x}",
         "PS5VK_CONSUMER_INDIRECT_PIPELINE topology=triangle_list push_bytes=16 created=1",
+        # The target's GENERAL transition and clear: a transfer prelude that the
+        # router prepares with no dispatch and that submits and completes
+        # without a graphics prepare record. Its serial sits outside every
+        # graphics range the fixture can produce.
+        "PS5VK_QUEUE_PREPARED serial=201 dispatches=0",
+        "PS5VK_GRAPHICS_SUBMIT serial=201 rc=0",
+        "PS5VK_GRAPHICS_SUSPEND_POINT serial=201 rc=0",
+        "PS5VK_GRAPHICS_COMPLETED serial=201 image_bytes=0",
+        f"PS5VK_CONSUMER_INDIRECT_TARGET layout=general clear_word={INDIRECT_CLEAR_WORD:08x} prelude=1",
     ]
     expansions = {name: (commands, drawing, draws)
                   for name, commands, drawing, draws in INDIRECT_EXPANSIONS}

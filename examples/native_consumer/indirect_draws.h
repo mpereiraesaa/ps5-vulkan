@@ -418,6 +418,41 @@ static void run_indirect_draws(VkPhysicalDevice physical, VkDevice device, VkQue
     VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     CHECK(vkCreateFence(device, &fence_info, NULL, &f.fence));
 
+    /* The colour target enters GENERAL exactly the way the pinned upstream
+     * draw cases and the draw-parameter witness do: an UNDEFINED -> GENERAL
+     * transfer transition, a clear in GENERAL and the resource-less transfer
+     * -> colour-attachment barrier, in one prelude submission. The render pass
+     * below declares GENERAL for its initial and final layouts, so the tracked
+     * layout must really be GENERAL before the first frame loads it. */
+    {
+        CHECK(vkResetCommandBuffer(f.command, 0));
+        VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        CHECK(vkBeginCommandBuffer(f.command, &begin));
+        VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkImageMemoryBarrier to_general = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = f.image, .subresourceRange = range};
+        vkCmdPipelineBarrier(f.command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_general);
+        VkClearColorValue prelude_clear = {0};
+        prelude_clear.float32[0] = prelude_clear.float32[1] = prelude_clear.float32[2] = 0x40 / 255.0f;
+        prelude_clear.float32[3] = 1.0f;
+        vkCmdClearColorImage(f.command, f.image, VK_IMAGE_LAYOUT_GENERAL, &prelude_clear, 1, &range);
+        VkMemoryBarrier to_color = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT};
+        vkCmdPipelineBarrier(f.command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 1, &to_color, 0, NULL, 0, NULL);
+        indirect_submit_and_wait(&f);
+        ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_INDIRECT_TARGET layout=general clear_word=%08x prelude=1",
+                      INDIRECT_CLEAR_WORD);
+    }
+
     static uint32_t expected[INDIRECT_MAX_EXPECTED];
     unsigned witnessed = 0;
     const uint32_t junk[4] = {0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu};

@@ -466,6 +466,9 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
             f"clear_word={INDIRECT_CLEAR_WORD:08x}"], "indirect witness start")
         require(one("PS5VK_CONSUMER_INDIRECT_PIPELINE ")[1].split()[1:] == [
             "topology=triangle_list", "push_bytes=16", "created=1"], "indirect witness pipeline")
+        require(one("PS5VK_CONSUMER_INDIRECT_TARGET ")[1].split()[1:] == [
+            "layout=general", f"clear_word={INDIRECT_CLEAR_WORD:08x}", "prelude=1"],
+            "indirect witness target prelude")
         require(one("PS5VK_CONSUMER_INDIRECT_ARGUMENTS_GENERATED ")[1].split()[1:] == [
             "commands=4", "vertices=3", "first_instance_base=20",
             "barrier=compute_shader_write_to_indirect_command_read"],
@@ -626,10 +629,12 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     # Four compute submissions, plus the draw-parameter witness's one
     # resource-less prelude submission when that scenario ran; its staging
     # readback is frontend work and adds none.
-    extra_witness_prelude = 1 if draw_parameters_present else 0
-    # The indirect witness generates one command set on the GPU: one compute
-    # submission with one dispatch, prepared, submitted and completed between
-    # its START and RESULT markers.
+    extra_witness_prelude = (1 if draw_parameters_present else 0) + (1 if indirect_present else 0)
+    # The indirect witness adds its own transfer prelude (the GENERAL transition
+    # and clear of its target, prepared like the draw-parameter one) and
+    # generates one command set on the GPU: one compute submission with one
+    # dispatch, prepared, submitted and completed between its START and RESULT
+    # markers.
     require(len(prepared) == 4 + extra_witness_prelude + (1 if texel_formats else 0) +
             indirect_compute_dispatches and
             all(len(rows) == 6 + extra_texel_dispatches + indirect_compute_dispatches
@@ -637,8 +642,9 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
             "resource, narrow and synchronization submit records")
     if indirect_present:
         generated = [row for row in prepared if indirect_start[0] < row[0] < indirect_result[0]]
-        require(len(generated) == 1 and generated[0][1].endswith("dispatches=1"),
-                "compute-generated argument submission")
+        require(len(generated) == 2 and generated[0][1].endswith("dispatches=0") and
+                generated[1][1].endswith("dispatches=1"),
+                "indirect target prelude and compute-generated argument submissions")
     ordered = [boot, physical, physical_queries, negotiated,
                transfer_start, transfer_witness, transfer_retired,
                start]
@@ -848,7 +854,7 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     # The draw-parameter witness also records one transfer prelude (its colour
     # transition), which submits and completes but is never prepared by the
     # graphics backend. Every other submission is a graphics one.
-    prelude_submissions = 1 if draw_parameters_present else 0
+    prelude_submissions = (1 if draw_parameters_present else 0) + (1 if indirect_present else 0)
     require(len(graphics_prepared) == graphics_count and
             all(len(rows) == graphics_count + prelude_submissions for rows in
                 (graphics_submitted, graphics_suspended, graphics_completed)),
