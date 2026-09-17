@@ -64,7 +64,12 @@ class Fixture:
                         15: "ffffffffffffffff",
                         # The per-primitive id image is two coloured columns, so
                         # it is its own image too.
-                        16: "0101010101010101"}
+                        16: "0101010101010101",
+                        # The input families draw their own markers under their
+                        # own input assembly, so each is its own image and the
+                        # line case cannot look like the point case.
+                        17: "0202020202020202",
+                        18: "0303030303030303"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(
@@ -72,7 +77,8 @@ class Fixture:
                 f"{2 if mode < 0 else 3} out_prim_type={0 if mode < 0 else 2} "
                 f"max_vertices={0 if mode < 0 else verify.MAX_VERTICES.get(case, 9)} "
                 f"vertices={verify.DRAW_VERTICES.get(case, 6)} instances=1 "
-                f"gs_invocations={0 if mode < 0 else verify.GS_INVOCATIONS.get(case, 0)}")
+                f"gs_invocations={0 if mode < 0 else verify.GS_INVOCATIONS.get(case, 0)} "
+                f"in_prim={verify.IN_PRIMITIVE.get(case, 3)}")
             records.append(
                 f"PS5VK_GEOMETRY_CASE case={case} mode={mode} pixels={verify.PIXELS} "
                 f"expected={expected} covered={expected} missing=0 foreign=0 wrong_color=0 "
@@ -233,7 +239,20 @@ class GeometryVerifierTests(unittest.TestCase):
         declared = int(
             re.search(r"PS5VK_GEOMETRY_READ_VERTICES = (\d+)", native).group(1))
         self.assertEqual(declared, verify.READ_VERTICES)
-        self.assertEqual(set(verify.DRAW_VERTICES.values()), {declared})
+        # The input families draw their own vertex counts and declare their own
+        # maximum vertex count, so both numbers are certified in two places: the
+        # point case draws the first four vertices of the family table, the line
+        # case all six, and the two stages' max_vertices is what the verifier
+        # requires the launch state to carry.
+        family = int(re.search(r"PS5VK_GEOMETRY_FAMILY_VERTICES = (\d+)", header).group(1))
+        self.assertIn("PS5VK_GEOMETRY_FAMILY_VERTICES", native)
+        self.assertEqual(family, verify.DRAW_VERTICES[18])
+        self.assertEqual(verify.DRAW_VERTICES[17], 4)
+        for module in ("runtime_geometry_points.geom", "runtime_geometry_lines.geom"):
+            source = (ROOT / "experiments/graphics" / module).read_text()
+            maximum = int(re.search(r"max_vertices = (\d+)", source).group(1))
+            self.assertEqual(verify.MAX_VERTICES[17 if "points" in module else 18],
+                             maximum)
 
     def test_receipt_and_artifact_identity_are_required(self):
         fixture = Fixture()

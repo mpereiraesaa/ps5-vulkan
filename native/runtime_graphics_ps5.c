@@ -16,10 +16,10 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
      * and the pair's shaders were compiled for the primitive it recorded. A
      * caller that asks for a different primitive is refused before any
      * allocation or linking rather than producing a pair whose compiled code
-     * and linked state describe different primitives. */
+     * and linked state describe different primitives, and the value itself has
+     * to be one this profile resolves from a topology. */
     if(primitive_type!=input->primitive_type ||
-       (primitive_type!=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST &&
-        primitive_type!=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP))
+       !ps5vk_agc_primitive_linkable(primitive_type))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_runtime_shader check;
     struct ps5vk_runtime_draw_abi arguments;

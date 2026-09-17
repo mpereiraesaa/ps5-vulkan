@@ -1921,6 +1921,24 @@ static void geometry_probe(VkDevice d)
         .codeSize=sizeof(ps5vk_runtime_geometry_primitive_id_stage),
         .pCode=ps5vk_runtime_geometry_primitive_id_stage};
     CHECK(vkCreateShaderModule(d,&pgi,NULL,&primitive_id_module));
+    /* The input families: their own pre-raster half, whose positions and colours
+     * identify the vertex, plus the point-list and line-list geometry stages that
+     * read their input primitive's own arity. The pipeline's input assembly is
+     * the family's topology, which is what the interface policy binds the
+     * stage's declared input array to. */
+    VkShaderModule family_vertex_module,points_module,lines_module;
+    VkShaderModuleCreateInfo fvi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_family_vertex),
+        .pCode=ps5vk_runtime_geometry_family_vertex};
+    VkShaderModuleCreateInfo poi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_points_stage),
+        .pCode=ps5vk_runtime_geometry_points_stage};
+    VkShaderModuleCreateInfo loi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_lines_stage),
+        .pCode=ps5vk_runtime_geometry_lines_stage};
+    CHECK(vkCreateShaderModule(d,&fvi,NULL,&family_vertex_module));
+    CHECK(vkCreateShaderModule(d,&poi,NULL,&points_module));
+    CHECK(vkCreateShaderModule(d,&loi,NULL,&lines_module));
     VkShaderModule invocations_module;
     VkShaderModuleCreateInfo igi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize=sizeof(ps5vk_runtime_geometry_invocations_stage),
@@ -1969,7 +1987,8 @@ static void geometry_probe(VkDevice d)
         PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_INDEXED_MARKER,
         PS5VK_GEOMETRY_READ_V0,PS5VK_GEOMETRY_READ_V1,PS5VK_GEOMETRY_READ_V2,
         PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_INVOCATIONS,PS5VK_GEOMETRY_COMPONENTS,
-        PS5VK_GEOMETRY_PRIMITIVE_ID,PS5VK_GEOMETRY_POSITIONS};
+        PS5VK_GEOMETRY_PRIMITIVE_ID,PS5VK_GEOMETRY_POINTS,PS5VK_GEOMETRY_LINES,
+        PS5VK_GEOMETRY_POSITIONS};
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
@@ -2001,10 +2020,22 @@ static void geometry_probe(VkDevice d)
             stages[0].module=components_vertex_module;
             stages[1].module=components_module;
         }
+        /* The input families: their own pre-raster half identifies each input
+         * item by position and colour, and the pipeline's input assembly carries
+         * the family's topology, so the stage's declared input arity and the
+         * primitive the linker programs are the same claim. */
+        if(witness_case==PS5VK_GEOMETRY_POINTS || witness_case==PS5VK_GEOMETRY_LINES) {
+            stages[0].module=family_vertex_module;
+            stages[1].module=witness_case==PS5VK_GEOMETRY_POINTS?points_module:lines_module;
+        }
         VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
         VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        if(witness_case==PS5VK_GEOMETRY_POINTS)
+            ia.topology=VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+        else if(witness_case==PS5VK_GEOMETRY_LINES)
+            ia.topology=VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
         VkPipelineRasterizationStateCreateInfo raster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
         VkPipelineMultisampleStateCreateInfo ms={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
             .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
@@ -2047,10 +2078,14 @@ static void geometry_probe(VkDevice d)
             }
             /* The envelope case declares 256 output vertices - the mandatory
              * minimum the feature names - and every other geometry case declares
-             * the witness's nine. The state the GE reads must be that number, or
-             * the case would not be measuring what it claims. */
+             * the witness's nine, except the two input families, whose stage
+             * emits a four-vertex marker per input primitive. The state the GE
+             * reads must be that number, or the case would not be measuring what
+             * it claims. */
             const uint32_t expect_vertices=
-                witness_case==PS5VK_GEOMETRY_ENVELOPE?256u:9u;
+                witness_case==PS5VK_GEOMETRY_ENVELOPE?256u:
+                ((witness_case==PS5VK_GEOMETRY_POINTS ||
+                  witness_case==PS5VK_GEOMETRY_LINES)?4u:9u);
             if(seen!=sizeof(required)/sizeof(required[0]) || topology!=2u ||
                max_vertices!=expect_vertices)
                 fail("geometry-state",-1);
@@ -2071,7 +2106,9 @@ static void geometry_probe(VkDevice d)
         vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
         const uint32_t draw_vertices=
             (witness_case>=PS5VK_GEOMETRY_READ_V0 && witness_case<=PS5VK_GEOMETRY_READ_V2)
-                ? (uint32_t)PS5VK_GEOMETRY_READ_VERTICES : 6u;
+                ? (uint32_t)PS5VK_GEOMETRY_READ_VERTICES
+                : ((witness_case==PS5VK_GEOMETRY_POINTS) ? 4u :
+                   (witness_case==PS5VK_GEOMETRY_LINES) ? (uint32_t)PS5VK_GEOMETRY_FAMILY_VERTICES : 6u);
         vkCmdDraw(cb,draw_vertices,1,0,0);
         vkCmdEndRenderPass(cb);
         CHECK(vkEndCommandBuffer(cb));
@@ -2081,9 +2118,9 @@ static void geometry_probe(VkDevice d)
         CHECK(vkQueueWaitIdle(queue));
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_GEOMETRY_DRAW case=%u mode=%d stages=%u out_prim_type=%u max_vertices=%u "
-            "vertices=%u instances=1 gs_invocations=%u",
+            "vertices=%u instances=1 gs_invocations=%u in_prim=%u",
             witness_case,mode,mode<0?2u:3u,topology,max_vertices,draw_vertices,
-            mode<0?0u:gs_instances);
+            mode<0?0u:gs_instances,(uint32_t)ia.topology);
         CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
             .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
             .offset=0,.size=VK_WHOLE_SIZE}));
@@ -2221,6 +2258,21 @@ static void geometry_probe(VkDevice d)
         * full-coverage case would mean the markers were not placed. */
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_PRIMITIVE_ID] ||
        digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_PRIMITIVE_ID] ||
+       /* The input families draw their own markers under their own topology, so
+        * an image equal to a full-coverage case would mean the stage never ran
+        * for that shape - the exact failure the old triangle-only profile could
+        * not observe, because it refused the pipeline before it could draw. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_POINTS] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_POINTS] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_POINTS] ||
+       digests[PS5VK_GEOMETRY_INDEXED_MARKER]==digests[PS5VK_GEOMETRY_POINTS] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_LINES] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_LINES] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_LINES] ||
+       /* The two families draw a different number of markers of different sizes
+        * from different items: identical images would mean the line stage read
+        * only one vertex per primitive and produced the point case's shape. */
+       digests[PS5VK_GEOMETRY_POINTS]==digests[PS5VK_GEOMETRY_LINES] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -2236,7 +2288,7 @@ static void geometry_probe(VkDevice d)
         "digest_read_v0=%016llx digest_read_v1=%016llx digest_read_v2=%016llx "
         "digest_envelope=%016llx "
         "digest_invocations=%016llx digest_components=%016llx "
-        "digest_primitive_id=%016llx "
+        "digest_primitive_id=%016llx digest_points=%016llx digest_lines=%016llx "
         "strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
@@ -2256,13 +2308,18 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_ENVELOPE],
         (unsigned long long)digests[PS5VK_GEOMETRY_INVOCATIONS],
         (unsigned long long)digests[PS5VK_GEOMETRY_COMPONENTS],
-        (unsigned long long)digests[PS5VK_GEOMETRY_PRIMITIVE_ID]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_PRIMITIVE_ID],
+        (unsigned long long)digests[PS5VK_GEOMETRY_POINTS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_LINES]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
     vkDestroyShaderModule(d,envelope_module,NULL);
     vkDestroyShaderModule(d,invocations_module,NULL);
     vkDestroyShaderModule(d,primitive_id_module,NULL);
+    vkDestroyShaderModule(d,family_vertex_module,NULL);
+    vkDestroyShaderModule(d,points_module,NULL);
+    vkDestroyShaderModule(d,lines_module,NULL);
     vkDestroyShaderModule(d,components_vertex_module,NULL);
     vkDestroyShaderModule(d,components_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
