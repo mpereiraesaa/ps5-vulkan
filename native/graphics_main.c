@@ -1907,6 +1907,15 @@ static void geometry_probe(VkDevice d)
     CHECK(vkCreateShaderModule(d,&egi,NULL,&envelope_module));
     /* The invocations case's own pre-raster half, for the same reason: the
      * invocations count is a module-level declaration too. */
+    VkShaderModule components_vertex_module,components_module;
+    VkShaderModuleCreateInfo components_vertex_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_components_vertex),
+        .pCode=ps5vk_runtime_geometry_components_vertex};
+    VkShaderModuleCreateInfo components_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_components_stage),
+        .pCode=ps5vk_runtime_geometry_components_stage};
+    CHECK(vkCreateShaderModule(d,&components_vertex_info,NULL,&components_vertex_module));
+    CHECK(vkCreateShaderModule(d,&components_info,NULL,&components_module));
     VkShaderModule invocations_module;
     VkShaderModuleCreateInfo igi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize=sizeof(ps5vk_runtime_geometry_invocations_stage),
@@ -1954,7 +1963,8 @@ static void geometry_probe(VkDevice d)
         PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
         PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_INDEXED_MARKER,
         PS5VK_GEOMETRY_READ_V0,PS5VK_GEOMETRY_READ_V1,PS5VK_GEOMETRY_READ_V2,
-        PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_INVOCATIONS,PS5VK_GEOMETRY_POSITIONS};
+        PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_INVOCATIONS,PS5VK_GEOMETRY_COMPONENTS,
+        PS5VK_GEOMETRY_POSITIONS};
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
@@ -1980,6 +1990,10 @@ static void geometry_probe(VkDevice d)
             stages[1].module=envelope_module;
         if(witness_case==PS5VK_GEOMETRY_INVOCATIONS)
             stages[1].module=invocations_module;
+        if(witness_case==PS5VK_GEOMETRY_COMPONENTS) {
+            stages[0].module=components_vertex_module;
+            stages[1].module=components_module;
+        }
         VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
         VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -2192,6 +2206,10 @@ static void geometry_probe(VkDevice d)
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
        digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
        digests[PS5VK_GEOMETRY_ENVELOPE]==digests[PS5VK_GEOMETRY_INVOCATIONS] ||
+       /* The components image is the constant quad's shape with its own colour,
+        * so equal to either would mean its inputs did not reach the stage. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_COMPONENTS] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_COMPONENTS] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -2206,7 +2224,7 @@ static void geometry_probe(VkDevice d)
         "digest_sentinel=%016llx digest_indexed_marker=%016llx "
         "digest_read_v0=%016llx digest_read_v1=%016llx digest_read_v2=%016llx "
         "digest_envelope=%016llx "
-        "digest_invocations=%016llx "
+        "digest_invocations=%016llx digest_components=%016llx "
         "strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
@@ -2224,12 +2242,15 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_READ_V1],
         (unsigned long long)digests[PS5VK_GEOMETRY_READ_V2],
         (unsigned long long)digests[PS5VK_GEOMETRY_ENVELOPE],
-        (unsigned long long)digests[PS5VK_GEOMETRY_INVOCATIONS]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_INVOCATIONS],
+        (unsigned long long)digests[PS5VK_GEOMETRY_COMPONENTS]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
     vkDestroyShaderModule(d,envelope_module,NULL);
     vkDestroyShaderModule(d,invocations_module,NULL);
+    vkDestroyShaderModule(d,components_vertex_module,NULL);
+    vkDestroyShaderModule(d,components_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
     vkDestroyShaderModule(d,suppress_fragment_module,NULL);
     vkDestroyShaderModule(d,identity_vertex_module,NULL);
