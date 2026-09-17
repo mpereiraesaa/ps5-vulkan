@@ -42,7 +42,11 @@ enum {
     /* Positions taken from the input, colour constant: the position half of the
      * ES->GS handoff on its own. */
     PS5VK_GEOMETRY_POSITIONS = 7,
-    PS5VK_GEOMETRY_CASES = 8
+    /* S1: read only gl_in[0] and emit a degenerate triangle there - the
+     * oracle expects no geometry, so the observable is whether the read
+     * faults the device. */
+    PS5VK_GEOMETRY_POSITION0 = 8,
+    PS5VK_GEOMETRY_CASES = 9
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */

@@ -30,6 +30,19 @@ void main()
         EndPrimitive();
         return;
     }
+    if (MODE == 7) {
+        /* S1 characterisation: read ONE gl_in vertex and emit a degenerate triangle
+         * there. Whether the read returns the real position, zeros or garbage, the
+         * triangle covers no pixels; the only observable difference is whether the
+         * read faults the device. */
+        for (int i = 0; i < 3; ++i) {
+            gl_Position = gl_in[0].gl_Position;
+            out_color = vec3(0.5, 0.5, 0.5);
+            EmitVertex();
+        }
+        EndPrimitive();
+        return;
+    }
     if (MODE == 5) {
         /* Input-independent emission: a fixed centred quad with a fixed
          * colour, so "the stage runs and its output reaches the pixel stage" is

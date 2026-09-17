@@ -21,6 +21,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_AMPLIFY:return 4;
     case PS5VK_GEOMETRY_CONSTANT:return 5;
     case PS5VK_GEOMETRY_POSITIONS:return 6;
+    case PS5VK_GEOMETRY_POSITION0:return 7;
     }
     return -2;
 }
