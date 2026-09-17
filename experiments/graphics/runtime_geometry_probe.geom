@@ -30,6 +30,22 @@ void main()
         EndPrimitive();
         return;
     }
+    if (MODE == 10) {
+        /* Sentinel: real coverage with an observable colour. The vertex's read
+         * position drives the colour (position in [-1,1] mapped to [0,1]), so a
+         * correct read, a zero read and a shifted read produce three different
+         * images; the oracle asserts the exact per-pixel colour derived from the
+         * same mapping, which is the coverage-plus-value split S1-S3 lacked. */
+        for (int i = 0; i < 3; ++i) {
+            gl_Position = gl_in[i].gl_Position;
+            out_color = vec3(gl_in[i].gl_Position.x * 0.5 + 0.5,
+                             gl_in[i].gl_Position.y * 0.5 + 0.5,
+                             0.25);
+            EmitVertex();
+        }
+        EndPrimitive();
+        return;
+    }
     if (MODE == 9) {
         /* S3 characterisation: the same loop shape as POSITIONS but with a constant
          * trip count, so a fault here is the compiler's indexed ring addressing and
