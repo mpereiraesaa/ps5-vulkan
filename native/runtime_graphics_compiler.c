@@ -216,6 +216,10 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * bounded by the interface chain above. */
     return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
         !ps5vk_agc_primitive_type(key->topology,&primitive_type) &&
+        /* A point or line input primitive is accepted only when there is a
+         * geometry stage to feed it: that is the shape the native witness
+         * measures, and a plain point/line pipeline stays fail-closed. */
+        (ps5vk_graphics_has_geometry(key) || !ps5vk_agc_primitive_needs_geometry(primitive_type)) &&
         (key->color_format==VK_FORMAT_B8G8R8A8_UNORM ||
          key->color_format==VK_FORMAT_R8G8B8A8_UNORM) && key->samples==VK_SAMPLE_COUNT_1_BIT &&
         key->color_write_mask==15 && !key->blend_enable &&

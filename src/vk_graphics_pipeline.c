@@ -149,6 +149,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * accepted set and its values live in one place. */
     uint32_t primitive_type=0;
     if(ps5vk_agc_primitive_type(ia->topology,&primitive_type))return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Points and lines are the input families a geometry stage is fed with, and
+     * that is the only shape the profile has a witness for; without the stage
+     * they stay refused. */
+    if (!gs && ps5vk_agc_primitive_needs_geometry(primitive_type))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (v->pNext || v->flags ||
         ia->pNext || ia->flags || ia->primitiveRestartEnable ||
         r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable ||
