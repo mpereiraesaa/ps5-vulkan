@@ -22,8 +22,40 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_CONSTANT:return 5;
     case PS5VK_GEOMETRY_POSITIONS:return 6;
     case PS5VK_GEOMETRY_SENTINEL:return 10;
+    case PS5VK_GEOMETRY_INDEXED_MARKER:return 11;
     }
     return -2;
+}
+
+/* The indexed-marker diagnostic's geometry, mirrored from the witness geometry
+ * stage's MODE 11 so the oracle and the shader cannot drift apart: the read
+ * position is clamped into the target, a small triangle is emitted around it,
+ * and the colour is the UNCLAMPED read position mapped to 0..1. */
+static void marker_centre(int marker,double *x,double *y)
+{
+    /* The witness draws six vertices in two triangles; gl_in[0] of each is the
+     * first vertex of that triangle. */
+    const double px=marker?-1.2:1.2;
+    const double py=-1.2;
+    *x=px<-0.75?-0.75:(px>0.75?0.75:px);
+    *y=py<-0.75?-0.75:(py>0.75?0.75:py);
+}
+
+static void marker_colour(int marker,double *r,double *g)
+{
+    const double px=marker?1.2:-1.2;
+    const double py=-1.2;
+    *r=px*0.5+0.5;
+    *g=py*0.5+0.5;
+}
+
+static int marker_covers(int marker,double ndc_x,double ndc_y)
+{
+    double cx=0.0,cy=0.0;
+    marker_centre(marker,&cx,&cy);
+    /* The shader emits an axis-aligned quad, so the oracle's test is a rectangle
+     * and cannot disagree with the rasterizer's pixel-centre rule. */
+    return ndc_x>=cx-0.2 && ndc_x<=cx+0.2 && ndc_y>=cy-0.2 && ndc_y<=cy+0.2;
 }
 
 static uint8_t unorm8(double value)
@@ -57,6 +89,10 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
     case PS5VK_GEOMETRY_CONSTANT:
         /* The fixed quad the stage emits without reading its input. */
         return ndc_x>=-0.5 && ndc_x<=0.5 && ndc_y>=-0.5 && ndc_y<=0.5;
+    /* The indexed-marker diagnostic covers two small triangles, one per input
+     * primitive, at the place the read position puts them. */
+    case PS5VK_GEOMETRY_INDEXED_MARKER:
+        return marker_covers(0,ndc_x,ndc_y) || marker_covers(1,ndc_x,ndc_y);
     default:
         /* The stage emits nothing at all. */
         return 0;
@@ -103,6 +139,21 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
          * triangles, which carries no observable difference on this input. */
         rgba[0]=unorm8(u);
         rgba[1]=unorm8(v);
+        rgba[2]=unorm8(0.25);
+        rgba[3]=255u;
+        return;
+    }
+    if(witness_case==PS5VK_GEOMETRY_INDEXED_MARKER) {
+        /* Each marker carries the colour of the positions it was built from, so
+         * the two input primitives produce two distinguishable markers: red 0
+         * for the triangle whose first vertex is (-1.2,-1.2), red 255 for the
+         * one starting at (1.2,-1.2). A read that returned a different vertex
+         * changes both the place and the colour, and the marker that would have
+         * been there is missing. */
+        double r=0.0,g=0.0;
+        marker_colour(marker_covers(1,2.0*u-1.0,2.0*v-1.0)?1:0,&r,&g);
+        rgba[0]=unorm8(r);
+        rgba[1]=unorm8(g);
         rgba[2]=unorm8(0.25);
         rgba[3]=255u;
         return;
@@ -173,6 +224,10 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
         return witness->expected_covered==pixels;
     case PS5VK_GEOMETRY_SHRINK:
     case PS5VK_GEOMETRY_CONSTANT:
+        return witness->expected_covered>0u && witness->expected_covered<pixels;
+    /* The two markers cover a small part of the target: real coverage, not the
+     * whole image, and not the empty image a stage that never ran produces. */
+    case PS5VK_GEOMETRY_INDEXED_MARKER:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
         return witness->expected_covered==0u && witness->covered==0u;

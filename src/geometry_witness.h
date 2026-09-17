@@ -48,7 +48,18 @@ enum {
      * is the case that separates "the read returned the data" from "the read
      * returned zeros", which a coverage-only case cannot. */
     PS5VK_GEOMETRY_SENTINEL = 8,
-    PS5VK_GEOMETRY_CASES = 9
+    /* The discriminating read diagnostic: the stage reads gl_in[0] with a FIXED
+     * index and emits a small marker triangle around the position that read
+     * reported, coloured by that same position. The oracle expects both markers
+     * (one per input primitive) at their computable places with their exact
+     * colours, so the outcome separates the four ways this can go wrong:
+     * both markers exactly right - the indexed read and its addressing are
+     * sound; a marker at another computable place - the read returned another
+     * item; a clean target - the geometry half did not run for this shape; one
+     * marker - an input primitive was not processed at all. Unlike the earlier
+     * single-read cases an empty image is a FAILURE here. */
+    PS5VK_GEOMETRY_INDEXED_MARKER = 9,
+    PS5VK_GEOMETRY_CASES = 10
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */

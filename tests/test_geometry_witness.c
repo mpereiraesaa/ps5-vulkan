@@ -48,6 +48,7 @@ int main(void)
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CONSTANT)==5);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_POSITIONS)==6);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_SENTINEL)==10);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_INDEXED_MARKER)==11);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CASES)==-2);
     /* Every declared case must be registered: an unregistered one would be
      * skipped by the native matrix without any run logging that it was missing. */
@@ -74,6 +75,12 @@ int main(void)
             /* The fixed quad is half the target on each axis. */
             assert(witness.expected_covered==(uint64_t)(EXTENT/2)*(uint64_t)(EXTENT/2));
             break;
+        case PS5VK_GEOMETRY_INDEXED_MARKER:
+            /* Two 12x12 markers at 64x64: one per input primitive, at the place
+             * the read position puts them. The exact count matters - a marker
+             * that moved or went missing changes it. */
+            assert(witness.expected_covered==288u);
+            break;
         default:
             assert(witness.expected_covered==0);
             break;
@@ -98,6 +105,35 @@ int main(void)
     assert(witness.wrong_color>0);
     assert(classify(PS5VK_GEOMETRY_RECOLOR,image,&witness));
     assert(witness.covered==pixels);
+    /* The marker diagnostic is judged on place AND colour, so it refuses the
+     * full-image cases (its own image is two small quads), and an image with a
+     * marker missing is a failure rather than a "coverage" answer. */
+    assert(!classify(PS5VK_GEOMETRY_INDEXED_MARKER,image,&witness));
+    image_for(PS5VK_GEOMETRY_INDEXED_MARKER,image);
+    assert(classify(PS5VK_GEOMETRY_INDEXED_MARKER,image,&witness));
+    assert(witness.covered==288u && !witness.foreign && !witness.wrong_color);
+    assert(!classify(PS5VK_GEOMETRY_CONTROL,image,&witness));
+    {
+        static uint8_t moved[EXTENT*EXTENT*4];
+        memcpy(moved,image,sizeof(moved));
+        for(unsigned y=0;y<EXTENT;++y)for(unsigned x=0;x<EXTENT;++x) {
+            uint8_t *pixel=moved+4*((size_t)y*EXTENT+x);
+            memcpy(pixel,ps5vk_geometry_clear,4);
+            struct ps5vk_geometry_witness probe={0};
+            uint8_t candidate[4];
+            ps5vk_geometry_witness_expected(PS5VK_GEOMETRY_INDEXED_MARKER,x,y,EXTENT,candidate);
+            ps5vk_geometry_witness_pixel(&probe,PS5VK_GEOMETRY_INDEXED_MARKER,x,y,EXTENT,candidate);
+            /* Keep only the right-hand marker; drop the left one entirely. */
+            if(probe.expected_covered && candidate[0]>128u)memcpy(pixel,candidate,4);
+        }
+        assert(!classify(PS5VK_GEOMETRY_INDEXED_MARKER,moved,&witness));
+        /* The dropped marker's 144 pixels are expected and left clear, so the
+         * oracle reports exactly those 144 as the wrong colour (the clear value
+         * is not the marker's own colour): a partial image can never satisfy
+         * the case, and the verdict says how many pixels went missing. */
+        assert(witness.expected_covered==288u && witness.covered==144u &&
+               witness.wrong_color==144u && !witness.foreign);
+    }
     /* A covered pixel left at the clear colour, and a covered pixel whose
      * varying is wrong, are both failures. */
     image_for(PS5VK_GEOMETRY_PASSTHROUGH,image);
