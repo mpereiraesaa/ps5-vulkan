@@ -888,7 +888,7 @@ measured every leaf the module produces:
 | --- | --- | --- |
 | `dEQP-VK.geometry.input.basic_primitive.triangles`, its two conversions, six `output_<n>`, `output_vary_by_attribute` and its instancing variant | 11 | **Pass** - acceptance cases |
 | `output_vary_by_{uniform,texture}` and their instancing variants | 4 | **Pass** - acceptance cases once the geometry-stage descriptor binding is carried end to end (see below) |
-| `varying.vertex_{no_op,out_0,out_0,out_1}_geometry_out_{1,1,2,2}` | 4 | **Fail** - the varying crosses, still measured diagnostics |
+| `varying.vertex_{no_op,out_0,out_0,out_1}_geometry_out_{1,1,2,2}` | 4 | **Fail** - refused for primitive restart on a strip, still measured diagnostics |
 | the remaining input families, adjacency, `point_size`, `primitive_id` | 30 | still refused or unmeasured, kept as diagnostics |
 
 **The geometry-stage descriptor path.** The pinned module binds its uniform
@@ -902,13 +902,21 @@ refused, because the stage projection would have dropped the binding. The run
 that measured it went from `vk.queueSubmit(...): VK_ERROR_FEATURE_NOT_PRESENT`
 on all four leaves to **Pass** on all four.
 
-The four varying-cross failures are recorded as diagnostics with
+The four remaining failures are recorded as diagnostics with
 `expected_status: Fail` and the run that measured them, not smoothed into the
-acceptance set: the exact pinned shape (a vertex shader with an unused
-attribute, a geometry stage with a varying output, `TRIANGLE_STRIP`) is accepted
-by the adapter and compiles host-side, so their console
-`createGraphicsPipelines` refusal is a question for a targeted diagnostic rather
-than a claim. The accepted set is therefore 290 leaves (211 + 64 clipping + 15
+acceptance set, and their cause is now measured rather than inferred: the pinned
+geometry builder enables **primitive restart** for strip topologies
+(`vktGeometryTestsUtil.cpp:153-172` sets `primitiveRestartEnable = VK_TRUE` for
+`LINE_STRIP` and `TRIANGLE_STRIP` and `VK_FALSE` for every list), these four
+leaves are the only ones built with `TRIANGLE_STRIP`, and this profile refuses
+that input-assembly state, so the refusal happens before the adapter is asked
+(the same run shows every runtime-cache acquire at rc=0 and no adapter rejection).
+The witness measures both sides of it: with restart enabled the pipeline is
+refused, and the same indexed strip with restart disabled draws with 72 foreign
+pixels in the gap between its two quads - the bridging primitive a missing cut
+would thread across - so what the profile needs is primitive-restart support for
+strips (`VGT_MULTI_PRIM_IB_RESET_EN` and `VGT_MULTI_PRIM_IB_RESET_INDX`), not a
+change to the geometry path. The accepted set is therefore 290 leaves (211 + 64 clipping + 15
 geometry), and the frozen selection re-run passes **290/290** with zero `Fail`,
 zero `NotSupported`, no missing or unexpected cases, and the title confirmed
 stopped:

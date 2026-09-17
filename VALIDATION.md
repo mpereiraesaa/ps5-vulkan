@@ -350,10 +350,16 @@ module binds those resources to the GEOMETRY stage alone, which the compiler
 profile now admits when - and only when - the pipeline carries that stage, and
 which the draw path's descriptor plan now carries for the merged pre-raster
 program once the native create records the geometry pair on it (a host regression
-checks both directions). The four varying crosses are recorded as measured
-diagnostics with `expected_status: Fail`; their exact pinned shape is accepted by
-the adapter and compiles host-side, so their console `createGraphicsPipelines`
-refusal is a question for a targeted diagnostic rather than a claim. The frozen
+checks both directions). The four remaining leaves are recorded as measured
+diagnostics with `expected_status: Fail`, and their cause is measured too: the
+pinned geometry builder enables primitive restart for strip topologies
+(`vktGeometryTestsUtil.cpp:153-172`), these four are the only leaves built with
+`TRIANGLE_STRIP`, and this profile refuses that input-assembly state before the
+adapter is asked. The witness measures both sides - restart enabled is refused,
+and the same indexed strip with restart disabled draws 72 foreign pixels in the
+gap between its two quads, which is the bridging primitive a missing cut threads
+across - so the open item is primitive-restart support for strips, not the
+geometry path. The frozen
 selection re-run is **290/290 Pass, zero Fail, no NotSupported, title closed**
 (selection
 `a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679`, eboot
