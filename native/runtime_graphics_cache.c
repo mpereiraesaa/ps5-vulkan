@@ -186,6 +186,13 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     if(!out)return VK_ERROR_UNKNOWN;
     *out=NULL;
     if(!ps5vk_runtime_graphics_supported(key))return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* The cached payload stores exactly the pre-raster and pixel programs, so a
+     * tessellation pipeline's hull and domain halves have no representation
+     * here yet. The uncached adapter compiles them; the cache fails closed
+     * rather than serving a pair it cannot describe, until its payload format
+     * gains the two halves. The cache identity already covers the pair, so the
+     * later extension is additive. */
+    if(ps5vk_graphics_has_tessellation(key))return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_compilation_cache *cache=context;
     if(!cache)return VK_ERROR_OUT_OF_HOST_MEMORY;
     struct ps5vk_cache_key identity;

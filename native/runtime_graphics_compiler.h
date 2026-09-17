@@ -4,7 +4,16 @@
 #include "runtime_shader.h"
 
 struct ps5vk_runtime_graphics_program {
+    /* The pre-raster program: a vertex-only compile, the merged vertex+geometry
+     * program, or zero for a tessellation pipeline, whose pre-raster state is
+     * the hull and domain programs below. The loader gate keeps refusing the
+     * tessellation halves while their pipeline state is unwritten. */
     PsbcShaderOutput vertex,fragment;
+    /* Tessellation pair. The hull is the LS+HS program psbc_compile_tess_pipeline
+     * links (HS machine code at offset 0, the vertex half behind it, hull_ls_*
+     * publication), the domain the TES NGG package the evaluation half compiles
+     * to. Both are zero for every earlier pipeline shape. */
+    PsbcShaderOutput hull,domain;
     struct ps5vk_runtime_draw_abi arguments;
     /* The GFX1013 primitive this pair was compiled for, resolved from the key's
      * topology. The native create path links the pair with a primitive the

@@ -386,16 +386,20 @@ static void check_geometry_stage(void)
     puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged for the point, line and triangle families");
 }
 
-/* The tessellation pair: described and identified, refused by the adapter.
+/* The tessellation pair: compiled through the hull and domain programs.
  *
- * The interface policy now reads both stages, their execution modes and the
+ * The interface policy reads both stages, their execution modes and the
  * per-patch interface, and the program key carries the pair and the patch
- * control points the pipeline states. The compiler adapter must still refuse
- * the pair, because the pinned compiler emits ISA for both stages while
- * declaring the tessellation pipeline state missing - compiling the vertex and
- * fragment modules alone and calling the result a tessellation pipeline is the
- * silent substitution this profile refuses everywhere else. The same modules
- * without the pair do compile, which is what makes the refusal specific. */
+ * control points. The pinned compiler links the hull (vertex half as the LS
+ * program behind the control half's machine code) and publishes the evaluation
+ * half as a loadable NGG package, so the adapter compiles the whole pipeline:
+ * the hull and domain halves carry their own metadata, and the feature the
+ * logical device enabled is checked against the compiled evidence. The runtime
+ * loader gate keeps refusing both halves - the hull launch state the driver
+ * owns is unwritten - and the cached lease has no payload representation for
+ * the pair yet, so nothing can reach the hardware from this slice. The same
+ * modules without the pair do compile, which is what makes the tessellation
+ * path specific. */
 static void check_tessellation_stage(void)
 {
     struct ps5vk_graphics_key key={
@@ -405,15 +409,50 @@ static void check_tessellation_stage(void)
         .fragment=read_module("build/runtime-graphics/tess.frag.spv"),
         .patch_control_points=3,
         .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_TESSELLATION_SHADER};
     assert(ps5vk_graphics_has_tessellation(&key));
     assert(ps5vk_graphics_tessellation_key_valid(&key));
     assert(ps5vk_spirv_graphics_interface(&key));
-    /* The pair is refused before any compile, with the descriptor untouched: a
-     * caller can never receive a partially compiled program for it. */
-    assert(!ps5vk_runtime_graphics_supported(&key));
-    const void *out=(void *)1;
-    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    /* The whole pipeline compiles: hull, domain and fragment. */
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    /* The hull half: the control stage's metadata, still explicitly short of a
+     * loadable hull package because the hull state is the driver's. */
+    assert(p->hull.machine_code && p->hull.machine_code_size);
+    assert(p->hull.metadata.source_stage==PSBC_STAGE_TESS_CTRL);
+    assert(p->hull.metadata.hardware_stage==PSBC_HW_STAGE_UNKNOWN);
+    assert(p->hull.metadata.unresolved_fields & PSBC_UNRESOLVED_TESS_PIPELINE);
+    assert(p->hull.metadata.hull_ls_valid);
+    /* The domain half: the loadable NGG package, no tessellation bit. */
+    assert(p->domain.machine_code && p->domain.machine_code_size);
+    assert(p->domain.metadata.source_stage==PSBC_STAGE_TESS_EVAL);
+    assert(p->domain.metadata.hardware_stage==PSBC_HW_STAGE_NGG);
+    assert(p->domain.metadata.unresolved_fields==
+        (PSBC_UNRESOLVED_PROGRAM_CHECKSUM |
+         PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE));
+    /* No pre-raster vertex compile: the hull consumed the vertex half. */
+    assert(!p->vertex.machine_code && !p->vertex.metadata.source_stage);
+    assert(p->fragment.machine_code && p->fragment.machine_code_size);
+    assert(p->primitive_type==9); /* DI_PT_PATCH, pinned gfx103 register data */
+    ps5vk_runtime_graphics_free(NULL,out);
+
+    /* The feature is checked against the compiled evidence: the same pipeline
+     * on a device that did not enable tessellationShader is refused. */
+    struct ps5vk_graphics_key disabled=key;
+    disabled.feature_mask=0;
+    assert(ps5vk_runtime_graphics_supported(&disabled));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&disabled,&out)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !out);
+
+    /* The cached lease has no hull/domain representation: it refuses the pair
+     * fail-closed instead of serving a program it cannot describe. */
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_cached_acquire(NULL,&key,&out)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !out);
 
     /* The patch control points the pipeline states must be the control stage's
      * output vertex count, so a state that disagrees is refused as a malformed
@@ -432,7 +471,7 @@ static void check_tessellation_stage(void)
     assert(!ps5vk_runtime_graphics_supported(&half));
 
     /* The same vertex and fragment modules without the pair are a supported
-     * pipeline: the refusal above is about the tessellation stages, not about
+     * pipeline: the tessellation path above is about the pair, not about
      * the modules themselves. */
     struct ps5vk_graphics_key plain=key;
     plain.tess_control=(struct ps5vk_graphics_module_key){0};
@@ -447,7 +486,7 @@ static void check_tessellation_stage(void)
 
     free((void *)key.vertex.words);free((void *)key.tess_control.words);
     free((void *)key.tess_eval.words);free((void *)key.fragment.words);
-    puts("Tessellation stage: pair described, adapter refuses it, identity keeps every stage");
+    puts("Tessellation stage: hull and domain compiled, feature and cache fail closed");
 }
 
 static void check_view_index_builtin(void)
