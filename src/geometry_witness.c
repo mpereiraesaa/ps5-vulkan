@@ -27,6 +27,7 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_READ_V0:return 12;
     case PS5VK_GEOMETRY_READ_V1:return 13;
     case PS5VK_GEOMETRY_READ_V2:return 14;
+    case PS5VK_GEOMETRY_ENVELOPE:return 15;
     }
     return -2;
 }
@@ -195,6 +196,10 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
                 return 1;
         return 0;
     }
+    /* The envelope's ribbon tiles this band: x within the columns the 256
+     * vertices span, y between the two edges they alternate between. */
+    case PS5VK_GEOMETRY_ENVELOPE:
+        return ndc_x>=-0.75 && ndc_x<=0.75 && ndc_y>=-0.25 && ndc_y<=0.25;
     default:
         /* The stage emits nothing at all. */
         return 0;
@@ -275,6 +280,16 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
             return;
         }
         rgba[0]=rgba[1]=rgba[2]=0u;
+        rgba[3]=255u;
+        return;
+    }
+    if(witness_case==PS5VK_GEOMETRY_ENVELOPE) {
+        /* The envelope stage emits a constant colour, so the band is uniform:
+         * the verdict is "the whole band the 256 vertices span is covered with
+         * that colour", which a stage that emitted fewer vertices cannot make. */
+        rgba[0]=unorm8(0.25);
+        rgba[1]=unorm8(0.5);
+        rgba[2]=unorm8(0.75);
         rgba[3]=255u;
         return;
     }
@@ -367,6 +382,9 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     case PS5VK_GEOMETRY_READ_V0:
     case PS5VK_GEOMETRY_READ_V1:
     case PS5VK_GEOMETRY_READ_V2:
+    /* The envelope's band is real coverage of a known shape, neither empty nor
+     * the whole target. */
+    case PS5VK_GEOMETRY_ENVELOPE:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
         return witness->expected_covered==0u && witness->covered==0u;

@@ -1897,6 +1897,14 @@ static void geometry_probe(VkDevice d)
     CHECK(vkCreateShaderModule(d,&vsi,NULL,&vertex_module));
     VkShaderModule geometry_module;
     CHECK(vkCreateShaderModule(d,&gsi,NULL,&geometry_module));
+    /* The envelope's own pre-raster half: `max_vertices` is a module-level
+     * declaration, so the 256-vertex emission the feature's mandatory minimum
+     * names needs a module of its own. Every other case keeps the witness stage. */
+    VkShaderModule envelope_module;
+    VkShaderModuleCreateInfo egi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_envelope_stage),
+        .pCode=ps5vk_runtime_geometry_envelope_stage};
+    CHECK(vkCreateShaderModule(d,&egi,NULL,&envelope_module));
     CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment_module));
     /* The readback's own pre-raster half: a position whose x is unique per vertex
      * index, so the bytes the geometry half reads identify the item they came
@@ -1939,7 +1947,7 @@ static void geometry_probe(VkDevice d)
         PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
         PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_INDEXED_MARKER,
         PS5VK_GEOMETRY_READ_V0,PS5VK_GEOMETRY_READ_V1,PS5VK_GEOMETRY_READ_V2,
-        PS5VK_GEOMETRY_POSITIONS};
+        PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_POSITIONS};
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
@@ -1961,6 +1969,8 @@ static void geometry_probe(VkDevice d)
             stages[2].module=suppress_fragment_module;
         if(witness_case>=PS5VK_GEOMETRY_READ_V0 && witness_case<=PS5VK_GEOMETRY_READ_V2)
             stages[0].module=identity_vertex_module;
+        if(witness_case==PS5VK_GEOMETRY_ENVELOPE)
+            stages[1].module=envelope_module;
         VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
         VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1999,7 +2009,14 @@ static void geometry_probe(VkDevice d)
                 if(offset==0x29bu)topology=stage->context[i].value;
                 if(offset==0x2ceu)max_vertices=stage->context[i].value;
             }
-            if(seen!=sizeof(required)/sizeof(required[0]) || topology!=2u || max_vertices!=9u)
+            /* The envelope case declares 256 output vertices - the mandatory
+             * minimum the feature names - and every other geometry case declares
+             * the witness's nine. The state the GE reads must be that number, or
+             * the case would not be measuring what it claims. */
+            const uint32_t expect_vertices=
+                witness_case==PS5VK_GEOMETRY_ENVELOPE?256u:9u;
+            if(seen!=sizeof(required)/sizeof(required[0]) || topology!=2u ||
+               max_vertices!=expect_vertices)
                 fail("geometry-state",-1);
         }
         VkCommandBuffer cb=VK_NULL_HANDLE;
@@ -2146,18 +2163,26 @@ static void geometry_probe(VkDevice d)
         * cannot look like the two that read a single sign. */
        digests[PS5VK_GEOMETRY_READ_V0]==digests[PS5VK_GEOMETRY_READ_V1] ||
        digests[PS5VK_GEOMETRY_READ_V0]==digests[PS5VK_GEOMETRY_READ_V2] ||
+       /* The envelope's band is its own shape: an image equal to the control,
+        * the constant quad or the shrunk square would mean the 256 vertices did
+        * not produce the band this case is named after. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
+       digests[PS5VK_GEOMETRY_SHRINK]==digests[PS5VK_GEOMETRY_ENVELOPE] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_GEOMETRY_PROBE cases=%u extent=%u clear=%02x%02x%02x%02x out_prim_type=2 "
-        /* The stage's maximum vertex count, which is the state the per-case
-         * check above reads back from VGT_GS_MAX_VERT_OUT: the summary has to
-         * carry the same number the cases were judged with. */
+        /* The WITNESS stage's maximum vertex count, the state the per-case check
+         * reads back from VGT_GS_MAX_VERT_OUT. The envelope case declares 256 and
+         * carries that number in its own DRAW record, which the parser checks
+         * case by case; this one is the stage every other case uses. */
         "max_vertices=9 digest_control=%016llx digest_passthrough=%016llx "
         "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
         "digest_amplify=%016llx digest_constant=%016llx digest_positions=%016llx "
         "digest_sentinel=%016llx digest_indexed_marker=%016llx "
         "digest_read_v0=%016llx digest_read_v1=%016llx digest_read_v2=%016llx "
+        "digest_envelope=%016llx "
         "strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
@@ -2173,10 +2198,12 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_INDEXED_MARKER],
         (unsigned long long)digests[PS5VK_GEOMETRY_READ_V0],
         (unsigned long long)digests[PS5VK_GEOMETRY_READ_V1],
-        (unsigned long long)digests[PS5VK_GEOMETRY_READ_V2]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_READ_V2],
+        (unsigned long long)digests[PS5VK_GEOMETRY_ENVELOPE]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
+    vkDestroyShaderModule(d,envelope_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
     vkDestroyShaderModule(d,suppress_fragment_module,NULL);
     vkDestroyShaderModule(d,identity_vertex_module,NULL);

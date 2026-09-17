@@ -56,6 +56,11 @@ def main():
         ("experiments/graphics/runtime_geometry_identity.vert",
          "runtime_geometry_identity.vert.spv", "geometry_identity_vertex"),
         ("experiments/graphics/runtime_geometry_probe.geom", "runtime_geometry_probe.geom.spv", "geometry_stage"),
+        # Envelope-only pre-raster half: a 256-vertex emission, the mandatory
+        # minimum maxGeometryOutputVertices names. max_vertices is module-level,
+        # so the envelope case needs a module of its own.
+        ("experiments/graphics/runtime_geometry_envelope.geom",
+         "runtime_geometry_envelope.geom.spv", "geometry_envelope_stage"),
         # Synthetic suppress diagnostic only: an input-less fragment stage, so
         # the geometry half's suppress case (which emits nothing) still forms a
         # legal pipeline instead of being refused for an unmatched input.
