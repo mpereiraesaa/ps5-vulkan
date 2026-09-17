@@ -433,6 +433,7 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_identity.vert -o build/runtime-graphics/geometry_identity.vert.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_probe.geom -o build/runtime-graphics/geometry_probe.geom.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_envelope.geom -o build/runtime-graphics/geometry_envelope.geom.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_invocations.geom -o build/runtime-graphics/geometry_invocations.geom.spv
 	$(GLSLANG) -V experiments/graphics/runtime_tess.vert -o build/runtime-graphics/tess.vert.spv
 	$(GLSLANG) -V -S tesc experiments/graphics/runtime_tess.tesc -o build/runtime-graphics/tess.tesc.spv
 	$(GLSLANG) -V -S tese experiments/graphics/runtime_tess.tese -o build/runtime-graphics/tess.tese.spv

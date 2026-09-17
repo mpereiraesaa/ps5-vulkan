@@ -52,6 +52,8 @@ int main(void)
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_READ_V0)==12);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_READ_V1)==13);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_READ_V2)==14);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_ENVELOPE)==15);
+    assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_INVOCATIONS)==16);
     assert(ps5vk_geometry_witness_mode(PS5VK_GEOMETRY_CASES)==-2);
     /* Every declared case must be registered: an unregistered one would be
      * skipped by the native matrix without any run logging that it was missing. */
@@ -93,6 +95,12 @@ int main(void)
              * moves its quadrant to that item's place and changes its colour. */
             assert(witness.expected_covered==336u);
             assert(witness.covered==336u);
+            break;
+        case PS5VK_GEOMETRY_INVOCATIONS:
+            /* 32 columns, one per invocation, each as wide as its marker: 480 px
+             * at 64x64. A stage that ran once covers one column. */
+            assert(witness.expected_covered==480u);
+            assert(witness.covered==480u);
             break;
         case PS5VK_GEOMETRY_ENVELOPE:
             /* The 256-vertex ribbon tiles a band 1.5 wide and 0.5 tall: 48x16

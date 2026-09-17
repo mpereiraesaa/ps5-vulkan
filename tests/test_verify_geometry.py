@@ -55,14 +55,18 @@ class Fixture:
                         12: "cccccccccccccccc",
                         # The envelope is its own shape (a band its 256 emitted
                         # vertices tile), so it differs from every other case.
-                        13: "dddddddddddddddd"}
+                        13: "dddddddddddddddd",
+                        # The invocations image is 32 columns coloured by id, so
+                        # it is its own image too.
+                        14: "eeeeeeeeeeeeeeee"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(
                 f"PS5VK_GEOMETRY_DRAW case={case} mode={mode} stages="
                 f"{2 if mode < 0 else 3} out_prim_type={0 if mode < 0 else 2} "
                 f"max_vertices={0 if mode < 0 else verify.MAX_VERTICES.get(case, 9)} "
-                f"vertices={verify.DRAW_VERTICES.get(case, 6)} instances=1")
+                f"vertices={verify.DRAW_VERTICES.get(case, 6)} instances=1 "
+                f"gs_invocations={0 if mode < 0 else verify.GS_INVOCATIONS.get(case, 0)}")
             records.append(
                 f"PS5VK_GEOMETRY_CASE case={case} mode={mode} pixels={verify.PIXELS} "
                 f"expected={expected} covered={expected} missing=0 foreign=0 wrong_color=0 "

@@ -316,6 +316,18 @@ static void check_geometry_stage(void)
     assert(!ps5vk_spirv_graphics_interface(&wrong));
     assert(ps5vk_runtime_graphics_compile(NULL,&wrong,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     free((void *)patched.words);
+    /* The geometry invocation id. The feature's mandatory invocations minimum is
+     * meaningless without it - an invocation that cannot tell which one it is can
+     * only repeat the same work - so the policy has to describe a stage that
+     * reads it, and this one is a geometry built-in rather than a vertex one. */
+    struct ps5vk_graphics_key invoked=key;
+    invoked.geometry=read_module("build/runtime-graphics/geometry_invocations.geom.spv");
+    invoked.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER;
+    assert(ps5vk_spirv_graphics_interface(&invoked));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&invoked,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)invoked.geometry.words);
     free((void *)key.vertex.words);free((void *)key.geometry.words);
     free((void *)key.fragment.words);
     puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged with the feature on");

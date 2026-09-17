@@ -77,7 +77,13 @@ enum {
      * triangle-strip ribbon tiling a band, so a stage that stopped early would
      * cover a shorter band and fail. */
     PS5VK_GEOMETRY_ENVELOPE = 13,
-    PS5VK_GEOMETRY_CASES = 14
+    /* The invocations: 32 invocations, the mandatory minimum
+     * maxGeometryShaderInvocations names, each emitting its own marker and
+     * colouring it by its invocation id, so one image says whether all 32 ran and
+     * whether each saw the id it should. Its own module again, because
+     * invocations is module-level. */
+    PS5VK_GEOMETRY_INVOCATIONS = 14,
+    PS5VK_GEOMETRY_CASES = 15
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */
