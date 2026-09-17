@@ -44,7 +44,15 @@ class Fixture:
                         8: "8888888888888888",
                         # The indexed marker draws two small quads, so it differs
                         # from every full-coverage case by construction.
-                        9: "9999999999999999"}
+                        9: "9999999999999999",
+                        # The readback draws four small squares carrying the raw
+                        # bytes of the value the stage read, so it differs from
+                        # every other case as well.
+                        10: "aaaaaaaaaaaaaaaa",
+                        # The other two readbacks read the other two input
+                        # vertices, so they are three different images.
+                        11: "bbbbbbbbbbbbbbbb",
+                        12: "cccccccccccccccc"}
         records = ["PS5VK_BOOT stage=graphics-api submit_enabled=1"]
         for case, mode, expected in verify.CASES:
             records.append(
@@ -190,10 +198,20 @@ class GeometryVerifierTests(unittest.TestCase):
         header = (ROOT / "src/geometry_witness.h").read_text()
         total = int(re.search(r"PS5VK_GEOMETRY_CASES = (\d+)", header).group(1))
         self.assertEqual(len(verify.CASES), total)
+        # The manifest the builder advertises has to carry the same number: the
+        # parser refuses an artifact whose case count disagrees with the table it
+        # certified, and a builder left behind would refuse every real run.
+        builder = (ROOT / "tools/build_native.py").read_text()
+        advertised = set(re.findall(r"geometry_cases=(\d+)", builder))
+        self.assertEqual(advertised, {str(total)})
         # The sentinel is part of the certified matrix: it is the case whose
         # verdict asserts the value the geometry stage read.
         self.assertIn(8, {case for case, _, _ in verify.CASES})
         self.assertIn(8, verify.DIGEST_NAMES)
+        # The raw readback is the case that reports the bits the geometry half
+        # read, so it has to be in the certified matrix too.
+        self.assertIn(10, {case for case, _, _ in verify.CASES})
+        self.assertIn(10, verify.DIGEST_NAMES)
 
     def test_receipt_and_artifact_identity_are_required(self):
         fixture = Fixture()

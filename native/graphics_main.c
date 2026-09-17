@@ -1922,6 +1922,7 @@ static void geometry_probe(VkDevice d)
         PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_SENTINEL,
         PS5VK_GEOMETRY_PASSTHROUGH,PS5VK_GEOMETRY_SHRINK,PS5VK_GEOMETRY_SUPPRESS,
         PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_INDEXED_MARKER,
+        PS5VK_GEOMETRY_READ_V0,PS5VK_GEOMETRY_READ_V1,PS5VK_GEOMETRY_READ_V2,
         PS5VK_GEOMETRY_POSITIONS};
     for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
         const unsigned witness_case=order[case_index];
@@ -2035,6 +2036,29 @@ static void geometry_probe(VkDevice d)
             witness.first_wrong[3],witness.first_wrong_x,witness.first_wrong_y,
             corner[0],corner[1],corner[2],corner[3],
             center[0],center[1],center[2],center[3]);
+        if(witness_case>=PS5VK_GEOMETRY_READ_V0 && witness_case<=PS5VK_GEOMETRY_READ_V2) {
+            /* The readback's own probes: the centre of each quadrant the oracle
+             * expects (left/right column, low/high row) plus the middle column,
+             * so the log carries the bytes the stage wrote at each of them - and
+             * the clear colour where the read put its quadrant elsewhere. Without
+             * this the case line only says HOW MANY pixels disagreed, not which
+             * bytes the geometry half actually read. */
+            const uint8_t *probe[6]={detiled+4*((size_t)16*extent+8),
+                detiled+4*((size_t)16*extent+32),detiled+4*((size_t)16*extent+56),
+                detiled+4*((size_t)48*extent+8),detiled+4*((size_t)48*extent+32),
+                detiled+4*((size_t)48*extent+56)};
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_GEOMETRY_SAMPLE case=%u left_low=%02x%02x%02x%02x "
+                "middle_low=%02x%02x%02x%02x right_low=%02x%02x%02x%02x "
+                "left_high=%02x%02x%02x%02x middle_high=%02x%02x%02x%02x "
+                "right_high=%02x%02x%02x%02x",
+                witness_case,probe[0][0],probe[0][1],probe[0][2],probe[0][3],
+                probe[1][0],probe[1][1],probe[1][2],probe[1][3],
+                probe[2][0],probe[2][1],probe[2][2],probe[2][3],
+                probe[3][0],probe[3][1],probe[3][2],probe[3][3],
+                probe[4][0],probe[4][1],probe[4][2],probe[4][3],
+                probe[5][0],probe[5][1],probe[5][2],probe[5][3]);
+        }
 #if PS5VK_GEOMETRY_ORDER_PROBE
         if(!verified)++failed_cases;
 #else
@@ -2070,6 +2094,23 @@ static void geometry_probe(VkDevice d)
        digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
        digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
        digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_INDEXED_MARKER] ||
+       /* The readbacks draw four small squares, so they too cannot coincide with
+        * a full-coverage image, and the three of them read three different
+        * vertices: identical images would mean the index is not applied. */
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_READ_V0] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_READ_V0] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_READ_V0] ||
+       digests[PS5VK_GEOMETRY_INDEXED_MARKER]==digests[PS5VK_GEOMETRY_READ_V0] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_READ_V1] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_READ_V1] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_READ_V1] ||
+       digests[PS5VK_GEOMETRY_CONTROL]==digests[PS5VK_GEOMETRY_READ_V2] ||
+       digests[PS5VK_GEOMETRY_CONSTANT]==digests[PS5VK_GEOMETRY_READ_V2] ||
+       digests[PS5VK_GEOMETRY_SENTINEL]==digests[PS5VK_GEOMETRY_READ_V2] ||
+       /* gl_in[0] of the two primitives is +1.2 and -1.2, so that readback
+        * cannot look like the two that read a single sign. */
+       digests[PS5VK_GEOMETRY_READ_V0]==digests[PS5VK_GEOMETRY_READ_V1] ||
+       digests[PS5VK_GEOMETRY_READ_V0]==digests[PS5VK_GEOMETRY_READ_V2] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
         fail("geometry-digest",-1);
     ps5log_printf(PS5LOG_MARK,
@@ -2078,6 +2119,7 @@ static void geometry_probe(VkDevice d)
         "digest_shrink=%016llx digest_suppress=%016llx digest_recolor=%016llx "
         "digest_amplify=%016llx digest_constant=%016llx digest_positions=%016llx "
         "digest_sentinel=%016llx digest_indexed_marker=%016llx "
+        "digest_read_v0=%016llx digest_read_v1=%016llx digest_read_v2=%016llx "
         "strict_verified=1",
         PS5VK_GEOMETRY_CASES,extent,ps5vk_geometry_clear[0],ps5vk_geometry_clear[1],
         ps5vk_geometry_clear[2],ps5vk_geometry_clear[3],
@@ -2090,7 +2132,10 @@ static void geometry_probe(VkDevice d)
         (unsigned long long)digests[PS5VK_GEOMETRY_CONSTANT],
         (unsigned long long)digests[PS5VK_GEOMETRY_POSITIONS],
         (unsigned long long)digests[PS5VK_GEOMETRY_SENTINEL],
-        (unsigned long long)digests[PS5VK_GEOMETRY_INDEXED_MARKER]);
+        (unsigned long long)digests[PS5VK_GEOMETRY_INDEXED_MARKER],
+        (unsigned long long)digests[PS5VK_GEOMETRY_READ_V0],
+        (unsigned long long)digests[PS5VK_GEOMETRY_READ_V1],
+        (unsigned long long)digests[PS5VK_GEOMETRY_READ_V2]);
     vkDestroyCommandPool(d,pool,NULL);
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);

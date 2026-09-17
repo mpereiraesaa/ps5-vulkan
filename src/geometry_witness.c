@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "geometry_witness.h"
+#include <string.h>
 
 const uint8_t ps5vk_geometry_clear[4]={0u,0u,0u,255u};
 
@@ -23,8 +24,72 @@ int ps5vk_geometry_witness_mode(unsigned witness_case)
     case PS5VK_GEOMETRY_POSITIONS:return 6;
     case PS5VK_GEOMETRY_SENTINEL:return 10;
     case PS5VK_GEOMETRY_INDEXED_MARKER:return 11;
+    case PS5VK_GEOMETRY_READ_V0:return 12;
+    case PS5VK_GEOMETRY_READ_V1:return 13;
+    case PS5VK_GEOMETRY_READ_V2:return 14;
     }
     return -2;
+}
+
+/* Which input vertex each readback case reads, and the x the witness vertex
+ * stage gives that vertex. The draw is two triangles - (0,1,2) and (3,4,5) - so
+ * gl_in[k] of the second primitive is vertex k+3. */
+struct read_bytes_case { unsigned vertex; double values[2]; unsigned count; };
+static const struct read_bytes_case read_bytes_cases[3]={
+    /* gl_in[0]: vertex 0 at x = -1.2 and vertex 3 at x = +1.2. */
+    {0,{-1.2,1.2},2},
+    /* gl_in[1]: vertex 1 and vertex 4, both at x = +1.2. */
+    {1,{1.2,1.2},1},
+    /* gl_in[2]: vertex 2 and vertex 5, both at x = -1.2. */
+    {2,{-1.2,-1.2},1},
+};
+
+static const struct read_bytes_case *read_bytes_case(unsigned witness_case)
+{
+    if(witness_case<PS5VK_GEOMETRY_READ_V0)return 0;
+    const unsigned index=witness_case-PS5VK_GEOMETRY_READ_V0;
+    return index<3u?&read_bytes_cases[index]:0;
+}
+/* The two quadrants each read is written into: the low three bytes below, the
+ * top byte above. Both sit at the place the value's own sign bit puts them, so
+ * a read that returned anything at all still lands in one of the two columns
+ * the oracle knows - the bytes change, the layout does not. */
+static const double read_bytes_rows[2]={-0.5,0.5};
+
+/* The column a read value is written into: its sign bit, nothing else. A value
+ * of any magnitude still lands on one of the two known columns, so an
+ * unreadable-item image cannot hide in the interior of the target. */
+static double read_bytes_column(double value)
+{ return value<0.0?-0.75:0.75; }
+
+/* One readback quadrant: an axis-aligned square, so the oracle's per-pixel test
+ * and the rasterizer's pixel-centre rule agree exactly. */
+static int read_bytes_covers(double value,double row,double ndc_x,double ndc_y)
+{
+    const double cx=read_bytes_column(value);
+    return ndc_x>=cx-0.2 && ndc_x<=cx+0.2 && ndc_y>=row-0.2 && ndc_y<=row+0.2;
+}
+
+/* The bytes of the value the way the geometry stage writes them: the low three
+ * bytes in the lower quadrant's colour, the top byte in the upper one's red. */
+static void read_bytes_colour(double value,double row,uint8_t rgba[4])
+{
+    const float narrowed=(float)value;
+    uint32_t bits=0;
+    memcpy(&bits,&narrowed,sizeof(bits));
+    if(row<0.0) {
+        rgba[0]=(uint8_t)((bits>>16)&0xffu);
+        rgba[1]=(uint8_t)((bits>>8)&0xffu);
+        rgba[2]=(uint8_t)(bits&0xffu);
+    } else {
+        /* The top byte's quadrant also carries fixed green and blue so that a
+         * value whose high byte is zero is still ink on this black clear colour
+         * instead of an image indistinguishable from no draw. */
+        rgba[0]=(uint8_t)((bits>>24)&0xffu);
+        rgba[1]=128u;
+        rgba[2]=64u;
+    }
+    rgba[3]=255u;
 }
 
 /* The indexed-marker diagnostic's geometry, mirrored from the witness geometry
@@ -93,6 +158,19 @@ static int covers(unsigned witness_case,double ndc_x,double ndc_y)
      * primitive, at the place the read position puts them. */
     case PS5VK_GEOMETRY_INDEXED_MARKER:
         return marker_covers(0,ndc_x,ndc_y) || marker_covers(1,ndc_x,ndc_y);
+    /* The readback writes two quadrants per input primitive at the place the
+     * value's own sign bit puts them, so a correct run covers exactly the
+     * squares the oracle knows and a read that returned anything else changes
+     * the bytes there rather than moving the ink out of sight. */
+    case PS5VK_GEOMETRY_READ_V0:
+    case PS5VK_GEOMETRY_READ_V1:
+    case PS5VK_GEOMETRY_READ_V2: {
+        const struct read_bytes_case *rc=read_bytes_case(witness_case);
+        for(unsigned i=0;i<rc->count;++i)for(unsigned r=0;r<2u;++r)
+            if(read_bytes_covers(rc->values[i],read_bytes_rows[r],ndc_x,ndc_y))
+                return 1;
+        return 0;
+    }
     default:
         /* The stage emits nothing at all. */
         return 0;
@@ -155,6 +233,23 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
         rgba[0]=unorm8(r);
         rgba[1]=unorm8(g);
         rgba[2]=unorm8(0.25);
+        rgba[3]=255u;
+        return;
+    }
+    const struct read_bytes_case *read=read_bytes_case(witness_case);
+    if(read) {
+        /* The pixel is inside one of the four quadrants a correct run covers;
+         * its colour is the raw bytes of the value the stage read there. A read
+         * that returned another value puts the quadrant somewhere else, which
+         * the coverage half of the verdict reports as missing or foreign
+         * pixels, and its colour is then reported verbatim in the log. */
+        for(unsigned i=0;i<read->count;++i)for(unsigned r=0;r<2u;++r) {
+            if(!read_bytes_covers(read->values[i],read_bytes_rows[r],2.0*u-1.0,2.0*v-1.0))
+                continue;
+            read_bytes_colour(read->values[i],read_bytes_rows[r],rgba);
+            return;
+        }
+        rgba[0]=rgba[1]=rgba[2]=0u;
         rgba[3]=255u;
         return;
     }
@@ -228,6 +323,11 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     /* The two markers cover a small part of the target: real coverage, not the
      * whole image, and not the empty image a stage that never ran produces. */
     case PS5VK_GEOMETRY_INDEXED_MARKER:
+    /* Same shape for the readback: four small squares, so the verdict is real
+     * coverage plus the exact bytes the stage read at each of them. */
+    case PS5VK_GEOMETRY_READ_V0:
+    case PS5VK_GEOMETRY_READ_V1:
+    case PS5VK_GEOMETRY_READ_V2:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
         return witness->expected_covered==0u && witness->covered==0u;

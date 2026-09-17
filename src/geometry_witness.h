@@ -59,7 +59,19 @@ enum {
      * marker - an input primitive was not processed at all. Unlike the earlier
      * single-read cases an empty image is a FAILURE here. */
     PS5VK_GEOMETRY_INDEXED_MARKER = 9,
-    PS5VK_GEOMETRY_CASES = 10
+    /* The read-value readback, one case per input vertex: the stage reads ONE
+     * scalar (gl_in[k].gl_Position.x of the primitive it is invoked for) and
+     * writes the raw bytes of the value it read into two fixed quadrants. Where
+     * the indexed-marker case says "the read returned the wrong item", this case
+     * says what the bits at the address actually were - a byte-shifted float, an
+     * integer bit pattern, zero, or the expected value - which is what separates
+     * a wrong address or stride from an item the ES never wrote. The column comes
+     * from the value's sign bit alone, so any value still lands on a place the
+     * oracle knows. */
+    PS5VK_GEOMETRY_READ_V0 = 10,
+    PS5VK_GEOMETRY_READ_V1 = 11,
+    PS5VK_GEOMETRY_READ_V2 = 12,
+    PS5VK_GEOMETRY_CASES = 13
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */
