@@ -363,11 +363,17 @@ the `SQ_NON_EVENT` workaround the GFX10 synchronisation bug needs. The witness
 measures it end to end: the indexed strip with a restart index between two quads
 draws **foreign=0** with the cut, and 72 foreign pixels without it - the bridging
 primitive a missing cut threads across. The frozen
-selection re-run is **294/294 Pass, zero Fail, no NotSupported, title closed**
+selection re-run is **304/304 Pass, zero Fail, no NotSupported, title closed**
 (selection
-`141fa4454666bdc3896a437655f327cde0712a6bc5fd8dc17406aac859d05df3`, eboot
-`2c0cce298614fb3ca55260ddcf1a9eff480a63fd11d4b1bf11bbaa9f31e51e3e`), with all
-nineteen applicable geometry leaves passing their own upstream oracles.
+`7406de91ef883de7c1dd8522926773b72c846834fde37b45f686ff5994c8601b`, eboot
+`afe1755291ef231f6f7c3e730abcd062f3a57618e879c758a1f0a89a42c207aa`), with all
+twenty-nine geometry leaves the module produces for a device that advertises the
+feature passing their own upstream oracles - the input families, the conversions,
+the output-count and varying families, the descriptor variants, the strip
+restart family and both per-primitive-id leaves. A geometry stage that reads
+nothing per-vertex declares no gl_in array at all, so the policy binds it to the
+pipeline's topology through the input primitive its execution mode states and
+drops a declared attribute no shader input consumes, which Vulkan permits.
 
 **Probe.** The DXVK 2.6.2 capability probe was re-measured against the advertised
 profile and verifies strictly: `geometryShader` observed **1**, 10 of 62

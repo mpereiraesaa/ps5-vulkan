@@ -643,13 +643,25 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
                     ps5vk_vertex_format_info(key->vertex_attributes[a].format);
                 /* Vulkan component completion/discard permits the attribute
                  * format and shader input to have different component counts.
-                 * Their scalar numeric categories must still agree. */
-                if(!format.bytes || !vs.inputs[i].components ||
-                   format.numeric!=vs.inputs[i].numeric)return 0;
+                 * Their scalar numeric categories must still agree - but only
+                 * for an attribute the shader actually consumes: Vulkan lets a
+                 * pipeline declare an attribute no input reads (the pinned
+                 * geometry module's primitive_id_in leaf does exactly that), and
+                 * the fetch path prepares only the spans the compiled vertex
+                 * input reads. */
+                if(!format.bytes)return 0;
+                if(vs.inputs[i].components && format.numeric!=vs.inputs[i].numeric)return 0;
                 ++matched;
             }
-        if((vs.inputs[i].components && matched!=1) ||
-           (!vs.inputs[i].components && matched))return 0;
+        /* A shader input must have exactly one matching attribute. The reverse
+         * is not a contract: Vulkan lets a pipeline declare a vertex attribute
+         * no shader input consumes, and the pinned geometry module's
+         * primitive_id_in leaf does exactly that (its vertex shader reads
+         * a_position and drops the unused a_color while the pipeline still
+         * declares both). The native fetch path prepares the spans the compiled
+         * vertex input actually reads, so an unused declaration is dropped
+         * rather than fetched against a table nothing names. */
+        if(vs.inputs[i].components && matched!=1)return 0;
         if(i && fs.outputs[i].components)return 0;
         if(fs.inputs[i].components &&
            (fs.inputs[i].components!=previous->outputs[i].components ||
