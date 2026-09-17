@@ -41,16 +41,24 @@ def main():
                              args.out.with_name("indirect_witness.vert.spv"))
     arguments = compile_shader(compiler, arguments_source,
                                args.out.with_name("indirect_arguments.comp.spv"))
+    # The rasterization-state witness (DXVK262-T05) shares the fragment stage
+    # and adds a vertex shader that passes explicit clip-space positions and
+    # colours through.
+    raster_source = ROOT / "experiments/graphics/runtime_raster_witness.vert"
+    raster = compile_shader(compiler, raster_source,
+                            args.out.with_name("raster_witness.vert.spv"))
 
     header = ("/* Generated from experiments/graphics/runtime_draw_parameters.vert,\n"
               " * experiments/graphics/runtime_vertex_format.frag,\n"
-              " * experiments/graphics/runtime_indirect_witness.vert and\n"
-              " * experiments/compute/indirect_arguments.comp. */\n"
+              " * experiments/graphics/runtime_indirect_witness.vert,\n"
+              " * experiments/compute/indirect_arguments.comp and\n"
+              " * experiments/graphics/runtime_raster_witness.vert. */\n"
               "#include <stdint.h>\n")
     header += emit_array("consumer_draw_parameters_vert_spirv", vertex)
     header += emit_array("consumer_draw_parameters_frag_spirv", fragment)
     header += emit_array("consumer_indirect_witness_vert_spirv", witness)
     header += emit_array("consumer_indirect_arguments_comp_spirv", arguments)
+    header += emit_array("consumer_raster_witness_vert_spirv", raster)
     header += ('#define CONSUMER_DRAW_PARAMETERS_VERT_SPIRV_SHA256 "'
                + hashlib.sha256(vertex).hexdigest() + '"\n')
     header += ('#define CONSUMER_DRAW_PARAMETERS_FRAG_SPIRV_SHA256 "'
@@ -59,6 +67,8 @@ def main():
                + hashlib.sha256(witness).hexdigest() + '"\n')
     header += ('#define CONSUMER_INDIRECT_ARGUMENTS_COMP_SPIRV_SHA256 "'
                + hashlib.sha256(arguments).hexdigest() + '"\n')
+    header += ('#define CONSUMER_RASTER_WITNESS_VERT_SPIRV_SHA256 "'
+               + hashlib.sha256(raster).hexdigest() + '"\n')
     args.out.write_text(header)
 
 
