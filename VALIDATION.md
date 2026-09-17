@@ -69,8 +69,18 @@ digest relation, which refuses a run where the two differ. Writing the
 distances dynamically and getting the static image back is the whole content of
 the variant; the witness's own module is accepted by the host compiler with the
 full-width masks (`clip_mask=00000003 cull_mask=0000000c`,
-`native_header_result=0`), so the case is not refused before it can run, and the
-native result still has to be taken.
+`native_header_result=0`), so the case is not refused before it can run. The
+native result is now taken: the nine-case witness run
+`20260917T072542029Z_PPSA99994_ps5vk_0x53eadab9451` (eboot
+`f02fcf3dadfbe2f19ef360af2964b7ca18060801912bc54d0477577230f69b04`) reports
+`cases=9 clip_mask=03 cull_mask=0c strict_verified=1` with every case
+`missing=0 foreign=0 wrong_color=0 verified=1`, and the dynamically indexed
+write hashes **exactly** like the statically indexed quadrant
+(`digest_dynamic_index = digest_clip_quadrant = 85679b0d4edbc725`). So the
+compile-time full-width mask the host measured is what the hardware executed,
+and the variant's whole content - writing the distances through a non-constant
+index and getting the static image back - holds on the console. None of the nine
+cases faulted.
 The fragment read is refused, and it is worth stating which gate a pipeline
 actually hits: the stage-interface policy refuses a fragment-stage
 `gl_ClipDistance`/`gl_CullDistance` declaration outright, so pipeline creation
@@ -127,9 +137,10 @@ hardware clipping result for the measured shapes, plus the compiler and adapter
 behaviour of a dynamically indexed declaration (full-width mask, accepted
 package) and the witness case that renders a dynamically indexed write and
 requires it to reproduce the static image. It does not establish fragment-shader
-reads of the distances, a hardware result for the dynamically indexed write (the
-case exists, the run does not), any tessellation/geometry variant of the family,
-or the two core features themselves, and it is not a Vulkan conformance claim.
+reads of the distances (the one mode still missing), any tessellation or geometry
+variant of the family, or the two core features themselves, and it is not a
+Vulkan conformance claim. The dynamically indexed write is now *established* by
+the run above, including its byte-identical static image.
 
 ## Optional stage blockers: geometry and tessellation (2026-09-17)
 
@@ -171,8 +182,19 @@ triangle and a shifted item moves or reshapes it, while the control's own image
 is refused because the sentinel's blue differs. Its stated limit is that
 exchanging the two structurally identical input triangles wholesale maps the
 image onto itself, so it separates correct, zero, garbage and shifted reads, not
-that exchange. No run has used it yet: it is in the payload and the next geometry
-run is where it can say whether the read returned the data.
+that exchange. The first run to use it
+(`20260917T072649435Z_PPSA99994_ps5vk_0x54e5f74a004`, eboot
+`7f1523a9157bec7eeed7ceeaaf8bf25646ef9364cb52d2a4124ed7c9df0f9ed3`) reports
+control `verified=1`, constant emission `verified=1`, and the sentinel
+`verified=0` with `expected=4096 covered=0 wrong_color=4096` - the image carries
+none of the expected per-pixel colour and is uniform black, the first
+value-level judgement of this path rather than another coverage check. Its limit
+in this shape is that the render pass clears to opaque black, so the log alone
+does not separate "the read returned zero for the colour computation" from "the
+read returned zero everywhere and the triangle collapsed"; the constant-emission
+case passing in the same run shows the stage draws and the fragment path works.
+The harness is fail-fast in the shipping profile, so the POSITIONS case did not
+execute after the failing verdict and the device did not fault.
 
 **Tessellation.** The isolated compiler candidate does produce a two-program
 hull buffer for a real vertex+control pair - the control half and the vertex half

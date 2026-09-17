@@ -100,14 +100,16 @@ FEATURE_GATES = {
     # so the feature's whole obligation is not covered yet.
     "shaderClipDistance": ("src/spirv_graphics_interface.c", "if(!preraster || d->patch",
                            "the pre-raster export is implemented and hardware-witnessed for static "
-                           "indices, and the dynamically indexed write is rendered by the witness "
-                           "(no native result yet); a fragment-stage distance declaration is refused "
-                           "by the stage-interface policy, so the feature is not advertised"),
+                           "indices, and the dynamically indexed write is measured on hardware "
+                           "(its image is byte-identical to the statically indexed quadrant); a "
+                           "fragment-stage distance declaration is refused by the stage-interface "
+                           "policy, so the feature is not advertised"),
     "shaderCullDistance": ("src/spirv_graphics_interface.c", "if(!preraster || d->patch",
                            "the pre-raster export is implemented and hardware-witnessed for static "
-                           "indices, and the dynamically indexed write is rendered by the witness "
-                           "(no native result yet); a fragment-stage distance declaration is refused "
-                           "by the stage-interface policy, so the feature is not advertised"),
+                           "indices, and the dynamically indexed write is measured on hardware "
+                           "(its image is byte-identical to the statically indexed quadrant); a "
+                           "fragment-stage distance declaration is refused by the stage-interface "
+                           "policy, so the feature is not advertised"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
