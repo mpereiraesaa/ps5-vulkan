@@ -553,7 +553,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); a fragment-stage distance declaration is refused by the stage-interface policy, so the feature is not advertised (src/spirv_graphics_interface.c)",
+      "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); the stage-interface policy accepts a bounded fragment-stage read, but the pipeline is refused because the compiler cannot describe the pixel input for a distance attribute yet, so the feature is not advertised (native/runtime_graphics_compiler.c)",
       "feature": "shaderClipDistance",
       "kind": "feature",
       "profile": "graphics",
@@ -566,7 +566,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); a fragment-stage distance declaration is refused by the stage-interface policy, so the feature is not advertised (src/spirv_graphics_interface.c)",
+      "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); the stage-interface policy accepts a bounded fragment-stage read, but the pipeline is refused because the compiler cannot describe the pixel input for a distance attribute yet, so the feature is not advertised (native/runtime_graphics_compiler.c)",
       "feature": "shaderCullDistance",
       "kind": "feature",
       "profile": "graphics",
@@ -1280,7 +1280,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); a fragment-stage distance declaration is refused by the stage-interface policy, so the feature is not advertised (src/spirv_graphics_interface.c)",
+      "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); the stage-interface policy accepts a bounded fragment-stage read, but the pipeline is refused because the compiler cannot describe the pixel input for a distance attribute yet, so the feature is not advertised (native/runtime_graphics_compiler.c)",
       "feature": "shaderClipDistance",
       "kind": "feature",
       "profile": "compute",
@@ -1293,7 +1293,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); a fragment-stage distance declaration is refused by the stage-interface policy, so the feature is not advertised (src/spirv_graphics_interface.c)",
+      "detail": "the pre-raster export is implemented and hardware-witnessed for static indices, and the dynamically indexed write is measured on hardware (its image is byte-identical to the statically indexed quadrant); the stage-interface policy accepts a bounded fragment-stage read, but the pipeline is refused because the compiler cannot describe the pixel input for a distance attribute yet, so the feature is not advertised (native/runtime_graphics_compiler.c)",
       "feature": "shaderCullDistance",
       "kind": "feature",
       "profile": "compute",
