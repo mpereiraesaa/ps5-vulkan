@@ -100,24 +100,22 @@ hull-packaging entry point, delivered as dependency pull requests that are
 identities are published here, and the raw captures stay private.
 
 **Geometry.** The compiler emits a self-consistent merged program for the
-witness's vertex+geometry pair: one ACO program
-(`SW (VS+GS+), HW (NEXT_GEN_GEOMETRY_SHADER)`) whose geometry half writes one
-ES/GS ring item per emitted vertex and advances the ring base by exactly one
-9-dword item (36 bytes) each time - the same stride and the same intra-item
-offsets the read side uses, and the same size the package publishes as the ES
-item size and as `VGT_ESGS_RING_ITEMSIZE`. The driver accepts that package: with
-the witness's own pipeline key and the optional-stage diagnostic build, the host
-build reports the profile as supported and the compile as successful, and the
-adapter checks the merged identification and the GE allocation slot. On hardware
-the stage executes and reaches the pixel stage - the input-independent cases are
-pixel-exact - while every case that reads `gl_in` is wrong on every pixel, and
-that outcome is identical with the pinned compiler and with the candidate. The
-bases the geometry half reads its ring items through are the per-invocation
-offsets the hardware hands it at launch, and nothing in the pinned AGC linkage
-shape this driver builds (the GS resource registers, `ge_cntl`, the stage
-enables, the CX counts and the user-data range) expresses an ES/GS ring base, an
-LDS allocation for the ring, or a scratch allocation; the compiler reports
-scratch as zero and the adapter requires that. `geometryShader` therefore stays
+witness's vertex+geometry pair - one ACO program
+(`SW (VS+GS+), HW (NEXT_GEN_GEOMETRY_SHADER)`) - and the two halves agree on the
+exchange layout it uses: the vertex half stores each vertex's 9-dword (36-byte)
+ring item to shared memory and the geometry half reads the same dwords back
+(position in dwords 0-3, the varying in 4-6, bookkeeping in 7-8), with the same
+per-item stride the package publishes as the ES item size and programs into
+`VGT_ESGS_RING_ITEMSIZE`. Positions therefore arrive: the passthrough case covers
+exactly the pixels the control covers. The varying does not: every covered pixel
+is uniform black, which is what a zero read looks like, and it is identical with
+the pinned compiler and with the candidate - the candidate's merged
+identification and ES-half sizes are bookkeeping for the driver, not the fix. The
+exchange is an LDS ring rather than an SPI parameter-export stream, so the export
+configuration is not the path under question. What remains open is the item-index
+mapping (the vertex half indexes by its lane id, the geometry half by the
+per-vertex offsets the hardware hands it) and whether the ring's LDS region is
+allocated and visible between the two phases. `geometryShader` therefore stays
 false.
 
 **Tessellation.** The isolated compiler candidate does produce a two-program
