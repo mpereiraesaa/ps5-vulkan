@@ -432,7 +432,7 @@ int main(void)
         .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkFramebuffer_T other_fb = fb;
-    struct VkPipeline_T graphics = {.device = &d, .graphics = VK_TRUE,
+    struct VkPipeline_T graphics = {.device = &d, .graphics = VK_TRUE, .viewport_count = 1,
         .graphics_state = &graphics, .color_format = VK_FORMAT_B8G8R8A8_UNORM};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = &pass, .framebuffer = &fb, .renderArea = {.extent = {4,4}}};

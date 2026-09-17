@@ -118,8 +118,8 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         if (rc != VK_SUCCESS) return rc;
     }
     struct ps5vk_draw_state plan;
-    rc = ps5vk_native_draw_state(op->pipeline, &op->viewport, &op->scissor, &op->raster,
-        &color, has_depth ? &depth : NULL, area,
+    rc = ps5vk_native_draw_state(op->pipeline, op->viewports, op->scissors, op->viewport_count,
+        &op->raster, &color, has_depth ? &depth : NULL, area,
         fb->width, fb->height, &plan);
     if (rc != VK_SUCCESS) return rc;
     struct ps5vk_descriptor_table_layout tables;

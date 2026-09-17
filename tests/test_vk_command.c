@@ -374,7 +374,7 @@ static void subpass_transitions(void)
      * tests/test_vk_graphics_pipeline.c; here the identity is what matters. */
     struct VkPipeline_T first = {.device = &d, .graphics = VK_TRUE, .subpass = 0,
         .color_format = VK_FORMAT_B8G8R8A8_UNORM,
-        .viewport = {0,0,8,8,0,1}, .scissor = {{0,0},{8,8}}};
+        .viewport_count=1, .viewport={0,0,8,8,0,1}, .scissor = {{0,0},{8,8}}};
     struct VkPipeline_T second = first; second.subpass = 1;
     VkClearValue value = {.color = {.float32 = {0, 0, 0, 1}}};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -546,7 +546,7 @@ static void graphics_recording(void)
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T pipeline = {.device = &d, .graphics = VK_TRUE,
         .color_format = VK_FORMAT_B8G8R8A8_UNORM,
-        .viewport = {0,0,100,100,0,1}, .scissor = {{0,0},{100,100}}};
+        .viewport_count=1, .viewport={0,0,100,100,0,1}, .scissor = {{0,0},{100,100}}};
     VkClearValue value = {.color = {.float32 = {0.25f, 0, 0, 1}}};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = &pass, .framebuffer = &fb, .renderArea = {.extent = {100, 100}},
@@ -627,6 +627,85 @@ static void graphics_recording(void)
     assert(!c->operations[1].raster.depth_bias_enable &&
         c->operations[1].raster.depth_bias_constant==0.0f);
     vkCmdEndRenderPass(c);assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+    {
+        /* Viewport/scissor arrays. Without multiViewport enabled the setters
+         * take exactly (0,1). With it, any first/count inside the 16-entry
+         * array is stored index by index, partial updates keep the other
+         * indices, a draw needs every index below its pipeline's count, and
+         * each draw snapshots the arrays by value. */
+        VkViewport vps[PS5VK_MAX_VIEWPORTS]; VkRect2D scs[PS5VK_MAX_VIEWPORTS];
+        for(unsigned i=0;i<PS5VK_MAX_VIEWPORTS;++i) {
+            vps[i]=(VkViewport){(float)(10*i),0,10,10,0,1};
+            scs[i]=(VkRect2D){{(int32_t)(10*i),0},{10,10}};
+        }
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdSetViewport(c,0,2,vps);assert(c->state==PS5VK_INVALID);
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdSetScissor(c,1,1,scs);assert(c->state==PS5VK_INVALID);
+        d.enabled_features|=PS5VK_FEATURE_MULTI_VIEWPORT;
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdSetViewport(c,0,0,vps);assert(c->state==PS5VK_INVALID);
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdSetViewport(c,15,2,vps);assert(c->state==PS5VK_INVALID);
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdSetScissor(c,16,1,scs);assert(c->state==PS5VK_INVALID);
+        /* One bad element rejects the call and leaves the array untouched. */
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdSetViewport(c,0,2,vps);
+        VkViewport bad[2]={{0,0,5,5,0,1},{0,0,NAN,5,0,1}};
+        vkCmdSetViewport(c,0,2,bad);
+        assert(c->state==PS5VK_INVALID && c->viewports[0].width==10 && c->viewports[1].width==10);
+        /* Partial updates: indices 2..3 then 0..1, the mask tracks every set index. */
+        struct VkPipeline_T quad=pipeline;
+        quad.dynamic_viewport=quad.dynamic_scissor=VK_TRUE;quad.viewport_count=4;
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&quad);
+        vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(c,2,2,vps+2);vkCmdSetScissor(c,0,4,scs);
+        assert(c->viewport_valid==0xcu && c->scissor_valid==0xfu);
+        vkCmdDraw(c,3,1,0,0);assert(c->state==PS5VK_INVALID); /* viewports 0..1 unset */
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&quad);
+        vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(c,2,2,vps+2);vkCmdSetViewport(c,0,2,vps);vkCmdSetScissor(c,0,4,scs);
+        vkCmdDraw(c,3,1,0,0);
+        assert(c->state==PS5VK_RECORDING && c->operations[1].viewport_count==4);
+        assert(c->operations[1].viewports[3].x==30 && c->operations[1].scissors[3].offset.x==30 &&
+            c->operations[1].viewport.x==0);
+        /* A later partial update reaches only later draws, index by index. */
+        VkViewport moved={99,0,10,10,0,1};VkRect2D moved_scissor={{99,0},{10,10}};
+        vkCmdSetViewport(c,1,1,&moved);vkCmdSetScissor(c,3,1,&moved_scissor);
+        vkCmdDraw(c,3,1,0,0);
+        assert(c->operations[1].viewports[1].x==10 && c->operations[1].scissors[3].offset.x==30);
+        assert(c->operations[2].viewports[1].x==99 && c->operations[2].viewports[0].x==0 &&
+            c->operations[2].viewports[2].x==20 && c->operations[2].scissors[3].offset.x==99 &&
+            c->operations[2].scissors[2].offset.x==20);
+        /* A single-viewport dynamic pipeline needs only index 0 and copies one. */
+        struct VkPipeline_T single=pipeline;
+        single.dynamic_viewport=single.dynamic_scissor=VK_TRUE;
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&single);
+        vkCmdDraw(c,3,1,0,0);
+        assert(c->state==PS5VK_RECORDING && c->operations[3].viewport_count==1 &&
+            c->operations[3].viewport.x==0 && c->operations[3].viewports[1].x==0);
+        /* A static array pipeline snapshots its own arrays, not the buffer's. */
+        struct VkPipeline_T static_quad=pipeline;
+        static_quad.viewport_count=3;
+        for(unsigned i=0;i<3;++i){static_quad.viewports[i]=(VkViewport){(float)(100+i),0,4,4,0,1};
+            static_quad.scissors[i]=(VkRect2D){{(int32_t)(100+i),0},{4,4}};}
+        vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&static_quad);
+        vkCmdDraw(c,3,1,0,0);
+        assert(c->state==PS5VK_RECORDING && c->operations[4].viewport_count==3 &&
+            c->operations[4].viewports[2].x==102 && c->operations[4].scissors[2].offset.x==102);
+        vkCmdEndRenderPass(c);assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+        /* Reset clears every index. */
+        assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && !c->viewport_valid && !c->scissor_valid);
+        d.enabled_features&=~PS5VK_FEATURE_MULTI_VIEWPORT;
+        /* The dynamic (0,1) path still works without the feature. */
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdSetViewport(c,0,1,vps);vkCmdSetScissor(c,0,1,scs);
+        assert(c->state==PS5VK_RECORDING && c->viewport_valid==1u && c->scissor_valid==1u);
+        assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+    }
     {
         /* Dynamic depth bias. The factors are required only when the bias is
          * enabled; each draw snapshots the CURRENT factors, a later setter

@@ -138,20 +138,30 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         m->pNext || m->flags || m->rasterizationSamples != VK_SAMPLE_COUNT_1_BIT ||
         m->sampleShadingEnable || m->alphaToCoverageEnable || m->alphaToOneEnable ||
         (m->pSampleMask && !(m->pSampleMask[0] & 1)) ||
-        vp->pNext || vp->flags || vp->viewportCount != 1 || vp->scissorCount != 1 ||
+        /* Viewport arrays: the two counts must match and lie in
+         * 1..PS5VK_MAX_VIEWPORTS; more than one needs multiViewport ENABLED
+         * on this logical device. The count is static in this profile (no
+         * *_WITH_COUNT dynamic state), so a zero count is malformed. */
+        vp->pNext || vp->flags || !vp->viewportCount || vp->viewportCount > PS5VK_MAX_VIEWPORTS ||
+        vp->scissorCount != vp->viewportCount ||
+        (vp->viewportCount > 1 && !(d->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)) ||
         b->pNext || b->flags || b->logicOpEnable || b->attachmentCount != 1)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
         !b->pAttachments) return VK_ERROR_UNKNOWN;
-    const VkViewport *viewport=vp->pViewports; const VkRect2D *scissor=vp->pScissors;
-    if ((!dynamic_viewport && (!finite_float(viewport->x) || !finite_float(viewport->y) ||
-        !finite_float(viewport->width) || !finite_float(viewport->height) ||
-        !(viewport->width > 0) || !(viewport->height > 0) ||
-        !(viewport->minDepth >= 0 && viewport->minDepth <= 1) ||
-        !(viewport->maxDepth >= 0 && viewport->maxDepth <= 1))) ||
-        (!dynamic_scissor && (scissor->offset.x < 0 || scissor->offset.y < 0 ||
-        !scissor->extent.width || !scissor->extent.height)) ||
-        r->cullMode & ~VK_CULL_MODE_FRONT_AND_BACK ||
+    /* Every static element is validated before any is stored. */
+    for (uint32_t i = 0; i < vp->viewportCount; ++i) {
+        const VkViewport *viewport=&vp->pViewports[i]; const VkRect2D *scissor=&vp->pScissors[i];
+        if ((!dynamic_viewport && (!finite_float(viewport->x) || !finite_float(viewport->y) ||
+            !finite_float(viewport->width) || !finite_float(viewport->height) ||
+            !(viewport->width > 0) || !(viewport->height > 0) ||
+            !(viewport->minDepth >= 0 && viewport->minDepth <= 1) ||
+            !(viewport->maxDepth >= 0 && viewport->maxDepth <= 1))) ||
+            (!dynamic_scissor && (scissor->offset.x < 0 || scissor->offset.y < 0 ||
+            !scissor->extent.width || !scissor->extent.height)))
+            return VK_ERROR_UNKNOWN;
+    }
+    if (r->cullMode & ~VK_CULL_MODE_FRONT_AND_BACK ||
         (r->frontFace != VK_FRONT_FACE_CLOCKWISE && r->frontFace != VK_FRONT_FACE_COUNTER_CLOCKWISE))
         return VK_ERROR_UNKNOWN;
     const VkPipelineDepthStencilStateCreateInfo *depth=in->pDepthStencilState;
@@ -214,8 +224,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if(p->set_count)memcpy(p->sets,in->layout->sets,p->set_count*sizeof(*p->sets));
     p->graphics_release=d->graphics_release;
     p->dynamic_viewport=dynamic_viewport;p->dynamic_scissor=dynamic_scissor;
-    if(!dynamic_viewport)p->viewport=*viewport;
-    if(!dynamic_scissor)p->scissor=*scissor;
+    p->viewport_count=vp->viewportCount;
+    if(!dynamic_viewport)memcpy(p->viewports,vp->pViewports,vp->viewportCount*sizeof(*p->viewports));
+    if(!dynamic_scissor)memcpy(p->scissors,vp->pScissors,vp->viewportCount*sizeof(*p->scissors));
     /* The enable is always static in this profile; the factors are static
      * only when VK_DYNAMIC_STATE_DEPTH_BIAS was not declared, and a disabled
      * bias keeps zero factors so a snapshot never carries ignored values. */
