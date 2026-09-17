@@ -284,6 +284,22 @@ three newly reported core features. The adapter now lists the three
 graphics-only bits, a real-compiler regression test pins a full graphics
 device mask, and the run above is the clean repeat.
 
+## Integrated acceptance on the synced tree (2026-09-17)
+
+After `main` (with T03 and its two review fixes) was merged into `t04-final`,
+the same frozen selection was run again on the tree this pull request proposes:
+**211/211 `Pass`**, zero `Fail`, zero `NotSupported`, no missing, unexpected or
+duplicate case, exit status 0, and the title closed and confirmed stopped.
+Deployed SELF SHA-256
+`8c3a4a5614703cb4f9bb0abda6cbc923ef797edad227e876b15aead972701983` (read back
+through FTP before launch), selection SHA-256
+`266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`, run
+`20260917T073014110Z_PPSA99994_upstream-cts_0x57e06d347b9`, reassembled report
+28,417,865 bytes with SHA-256
+`24af364c39c204f97bd3f5e1a6dd77b044c0be00d2a940c92d9f83153ed80a6f`. This is
+the T02 + T03 regression on the integrated tree; nothing optional runs inside
+that selection, and no feature is advertised by it.
+
 **Public-SDK indirect witness**, run
 `20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a`, SELF
 `779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a`, log
