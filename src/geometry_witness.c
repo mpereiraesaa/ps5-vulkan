@@ -141,6 +141,10 @@ int ps5vk_geometry_witness_verify(const struct ps5vk_geometry_witness *witness,
     case PS5VK_GEOMETRY_CONSTANT:
         return witness->expected_covered>0u && witness->expected_covered<pixels;
     case PS5VK_GEOMETRY_SUPPRESS:
+    /* S1: the degenerate triangle at gl_in[0] covers nothing whatever the read
+     * returns, so the verdict is the empty image - the same shape as suppress -
+     * and the only other observable is whether the read faults the device. */
+    case PS5VK_GEOMETRY_POSITION0:
         return witness->expected_covered==0u && witness->covered==0u;
     }
     return 0;
