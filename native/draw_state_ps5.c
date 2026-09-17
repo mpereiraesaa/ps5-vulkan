@@ -4,7 +4,7 @@
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     const VkRect2D *scissor_state, const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
-    uint32_t width, uint32_t height, struct ps5vk_draw_state *out)
+    uint32_t width, uint32_t height, unsigned index_width, struct ps5vk_draw_state *out)
 {
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
@@ -85,10 +85,38 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * pixel center 1, round-to-even 2, 1/256 quantization mode 5. Do not rely
      * on an inherited AGC initialization value for rasterization precision. */
     result.cx[result.cx_count++] = (ps5_agc_register){0x2f9, pair->vertex_quantization};
+    uint32_t restart_enable=0;
+    /* Primitive restart, at the front end that acts on it. On GFX10 the ENABLE is
+     * a UCONFIG register (0x3092c, written with the other user-config registers
+     * below) while the index the hardware compares against is a CONTEXT register
+     * (0x2840c); RADV programs exactly that pair for gfx_level >= GFX9 and
+     * gfx_level < GFX11, with the index the bound index type implies (0xffff for
+     * UINT16, 0xffffffff for UINT32) and no MATCH_ALL_BITS, whose default already
+     * compares only the index's own bits. A non-indexed draw carries no restart
+     * index, so the enable stays clear and a stale value cannot cut anything. */
+    {
+        const int indexed = index_width != 0;
+        if (index_width != 0 && index_width != 2 && index_width != 4)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        const int restart = p->primitive_restart && indexed;
+        result.cx[result.cx_count++] = (ps5_agc_register){0x103,
+            restart ? (index_width == 2 ? 0xffffu : 0xffffffffu) : 0u};
+        /* GFX10 has a known synchronisation bug when the primitive-restart state
+         * is updated and no context register is written between draws; Mesa
+         * emits a SQ_NON_EVENT NOP before the update, and so does this path when
+         * the update happens. */
+        if (restart)
+            result.cx[result.cx_count++] = (ps5_agc_register){0x2a4, 38u};
+        restart_enable = restart ? 1u : 0u;
+    }
     memcpy(result.sh, base.sh, sizeof(base.sh)); memcpy(result.uc, base.uc, sizeof(base.uc));
     /* The linked UC block is ge_cntl, user-VGPR enable and the primitive type;
      * nothing else in this profile's state is a UC register today. */
     result.uc_count=3;
+    /* The enable lives in the user-config block on GFX9-GFX10: R_03092C named
+     * VGT_MULTI_PRIM_IB_RESET_EN there, reached with the same index space the
+     * linked UC block and the index-type packet use, (address - 0x30000)/4. */
+    result.uc[result.uc_count++]=(ps5_agc_register){0x24b,restart_enable};
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {
         result.sh_count=vs->header.num_sh_registers+fs->header.num_sh_registers;

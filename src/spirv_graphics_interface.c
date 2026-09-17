@@ -21,6 +21,9 @@ enum { DECORATION_PATCH=15 };
 enum { MODE_SPACING_EQUAL=1, MODE_SPACING_FRACTIONAL_EVEN=2,
        MODE_SPACING_FRACTIONAL_ODD=3, MODE_VERTEX_ORDER_CW=4,
        MODE_VERTEX_ORDER_CCW=5, MODE_POINT_MODE=10,
+       MODE_INPUT_POINTS=19, MODE_INPUT_LINES=20, MODE_INPUT_LINES_ADJACENCY=21,
+       MODE_TRIANGLES=22, MODE_INPUT_TRIANGLES_ADJACENCY=23,
+       MODE_QUADS=24, MODE_ISOLINES=25,
        MODE_DOMAIN_TRIANGLES=22, MODE_DOMAIN_QUADS=24, MODE_DOMAIN_ISOLINES=25,
        MODE_OUTPUT_VERTICES=26, MODE_OUTPUT_POINTS=27, MODE_OUTPUT_LINE_STRIP=28,
        MODE_OUTPUT_TRIANGLE_STRIP=29 };
@@ -31,6 +34,11 @@ struct id_info {
 };
 struct interface_slot { unsigned components, numeric; };
 struct interface {
+    /* The geometry stage's INPUT PRIMITIVE, from its execution mode: Triangles,
+     * Quads, Isolines, InputPoints or InputLines. A stage that reads nothing
+     * per-vertex declares no gl_in array at all, so the mode is what binds it to
+     * the primitive the pipeline assembles. */
+    unsigned input_primitive;
     struct interface_slot inputs[LOCATIONS], outputs[LOCATIONS];
     /* Per-patch interface: a variable or built-in that carries the Patch
      * decoration. It lives at the same locations as the per-vertex interface,
@@ -105,6 +113,23 @@ static int declared_distance_array(const struct id_info *ids,unsigned bound,
  * topology this profile does not feed a geometry stage from. The geometry
  * stage's declared per-vertex input array must hold exactly one such primitive,
  * which is what binds the shader's declaration to the pipeline's topology. */
+/* The EXECUTION MODE a geometry stage must declare for each topology this
+ * profile feeds one from: points for a point list, lines for either line
+ * topology, triangles for a triangle list or strip. Adjacency topologies report
+ * zero here and stay refused, exactly like the vertex-count helper below. */
+static unsigned ps5vk_topology_input_mode(VkPrimitiveTopology topology)
+{
+    switch(topology) {
+    case VK_PRIMITIVE_TOPOLOGY_POINT_LIST:return MODE_INPUT_POINTS;
+    case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
+    case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:return MODE_INPUT_LINES;
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:return MODE_TRIANGLES;
+    default:return 0u;
+    }
+}
+
 static unsigned ps5vk_topology_input_vertices(VkPrimitiveTopology topology)
 {
     switch(topology) {
@@ -209,6 +234,16 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                 if(!value || value>PS5VK_MAX_PATCH_CONTROL_POINTS ||
                    out->control_points)goto done;
                 out->control_points=value;
+            } else if(model==MODEL_GEOMETRY &&
+                      (mode==MODE_INPUT_POINTS || mode==MODE_INPUT_LINES ||
+                       mode==MODE_INPUT_LINES_ADJACENCY || mode==MODE_TRIANGLES ||
+                       mode==MODE_INPUT_TRIANGLES_ADJACENCY || mode==MODE_QUADS ||
+                       mode==MODE_ISOLINES)) {
+                /* One input primitive per stage, and it is the same execution
+                 * mode space the tessellation domains use - keyed by the stage
+                 * model above, so the two cannot be confused. */
+                if(n!=3 || out->input_primitive)goto done;
+                out->input_primitive=mode;
             } else if(model==MODEL_TESS_EVAL &&
                       (mode==MODE_DOMAIN_TRIANGLES || mode==MODE_DOMAIN_QUADS ||
                        mode==MODE_DOMAIN_ISOLINES || mode==MODE_SPACING_EQUAL ||
@@ -579,7 +614,15 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * refused until the front end is measured to accept their four- and
          * six-vertex inputs. */
         const unsigned input_vertices=ps5vk_topology_input_vertices(key->topology);
-        if(!input_vertices || gs.input_vertices!=input_vertices)return 0;
+        const unsigned input_mode=ps5vk_topology_input_mode(key->topology);
+        /* The stage's declared input primitive is what binds it to the topology
+         * the pipeline assembles: a stage that never reads gl_in declares no
+         * per-vertex array, so requiring the array's length would refuse a legal
+         * stage (the pinned module's vertex_no_op leaf is exactly that), while
+         * requiring the execution mode is the fact the hardware and the compiler
+         * both act on. A stage that does declare the array must agree with it. */
+        if(!input_vertices || !input_mode || gs.input_primitive!=input_mode ||
+           (gs.input_vertices && gs.input_vertices!=input_vertices))return 0;
     }
     if(fs.outputs[0].components!=4 ||
        fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;

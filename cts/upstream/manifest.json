@@ -2877,6 +2877,46 @@
         "core:geometryShader"
       ],
       "rationale": "Runnable and now selected as acceptance: the geometry-stage descriptor binding is carried end to end - the compiler profile admits a binding whose visibility names the GEOMETRY stage when the key has that stage, the native create records that fact on the built pair, and the draw path's descriptor plan carries the table for the pre-raster program when - and only when - that flag is set (host regression in test_draw_prepare_ps5.c checks both directions). The leaf failed before at vkQueueSubmit; this run measures its own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:280",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:281",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:282",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
+    },
+    {
+      "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:284",
+      "category": "geometry-render",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "rationale": "Runnable and now selected as acceptance: the pinned builder enables primitive restart for strip topologies, and this profile now carries it - pipeline creation accepts the state for LINE_STRIP and TRIANGLE_STRIP (and refuses it for lists, where it cannot act), the native draw state programs VGT_MULTI_PRIM_IB_RESET_EN and VGT_MULTI_PRIM_IB_RESET_INDX from the pipeline's flag and the draw's index width, and the witness draws the same indexed strip with a restart index between two quads: foreign drops from 72 pixels to zero, which is the bridging primitive a missing cut used to thread across the gap. This run measures the leaf's own oracle."
     }
   ],
   "diagnostics": [
@@ -3315,46 +3355,6 @@
         "core:geometryShader"
       ],
       "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile."
-    },
-    {
-      "path": "dEQP-VK.geometry.varying.vertex_no_op_geometry_out_1",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:280",
-      "category": "primitive-restart-unsupported",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "MEASURED root cause (run 20260917T205303001Z, and the instrumented runs after it): the leaf is not refused by the geometry path. The pinned geometry builder enables primitive restart for strip topologies (vktGeometryTestsUtil.cpp:153-172 sets primitiveRestartEnable=VK_TRUE for LINE_STRIP and TRIANGLE_STRIP and VK_FALSE for every list), these four leaves are the only ones built with TRIANGLE_STRIP, and this profile refuses that input-assembly state, so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT before the adapter is consulted (321 runtime-cache acquires in that run, all rc=0; the adapter's own rejection code never fired). The witness in src/geometry_witness.c/private-captures measures both sides: restart enabled rc=-8 created=0, and the same indexed strip with restart disabled draws with 72 foreign pixels in the gap - the bridging primitive a missing cut threads across. Kept as a measured diagnostic until strip restart is implemented: accepting the state without programming VGT_MULTI_PRIM_IB_RESET_EN (0x2a5) and VGT_MULTI_PRIM_IB_RESET_INDX (0x103) would silently merge two primitives."
-    },
-    {
-      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_1",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:281",
-      "category": "primitive-restart-unsupported",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "MEASURED root cause (run 20260917T205303001Z, and the instrumented runs after it): the leaf is not refused by the geometry path. The pinned geometry builder enables primitive restart for strip topologies (vktGeometryTestsUtil.cpp:153-172 sets primitiveRestartEnable=VK_TRUE for LINE_STRIP and TRIANGLE_STRIP and VK_FALSE for every list), these four leaves are the only ones built with TRIANGLE_STRIP, and this profile refuses that input-assembly state, so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT before the adapter is consulted (321 runtime-cache acquires in that run, all rc=0; the adapter's own rejection code never fired). The witness in src/geometry_witness.c/private-captures measures both sides: restart enabled rc=-8 created=0, and the same indexed strip with restart disabled draws with 72 foreign pixels in the gap - the bridging primitive a missing cut threads across. Kept as a measured diagnostic until strip restart is implemented: accepting the state without programming VGT_MULTI_PRIM_IB_RESET_EN (0x2a5) and VGT_MULTI_PRIM_IB_RESET_INDX (0x103) would silently merge two primitives."
-    },
-    {
-      "path": "dEQP-VK.geometry.varying.vertex_out_0_geometry_out_2",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:282",
-      "category": "primitive-restart-unsupported",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "MEASURED root cause (run 20260917T205303001Z, and the instrumented runs after it): the leaf is not refused by the geometry path. The pinned geometry builder enables primitive restart for strip topologies (vktGeometryTestsUtil.cpp:153-172 sets primitiveRestartEnable=VK_TRUE for LINE_STRIP and TRIANGLE_STRIP and VK_FALSE for every list), these four leaves are the only ones built with TRIANGLE_STRIP, and this profile refuses that input-assembly state, so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT before the adapter is consulted (321 runtime-cache acquires in that run, all rc=0; the adapter's own rejection code never fired). The witness in src/geometry_witness.c/private-captures measures both sides: restart enabled rc=-8 created=0, and the same indexed strip with restart disabled draws with 72 foreign pixels in the gap - the bridging primitive a missing cut threads across. Kept as a measured diagnostic until strip restart is implemented: accepting the state without programming VGT_MULTI_PRIM_IB_RESET_EN (0x2a5) and VGT_MULTI_PRIM_IB_RESET_INDX (0x103) would silently merge two primitives."
-    },
-    {
-      "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_2",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:284",
-      "category": "primitive-restart-unsupported",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "rationale": "MEASURED root cause (run 20260917T205303001Z, and the instrumented runs after it): the leaf is not refused by the geometry path. The pinned geometry builder enables primitive restart for strip topologies (vktGeometryTestsUtil.cpp:153-172 sets primitiveRestartEnable=VK_TRUE for LINE_STRIP and TRIANGLE_STRIP and VK_FALSE for every list), these four leaves are the only ones built with TRIANGLE_STRIP, and this profile refuses that input-assembly state, so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT before the adapter is consulted (321 runtime-cache acquires in that run, all rc=0; the adapter's own rejection code never fired). The witness in src/geometry_witness.c/private-captures measures both sides: restart enabled rc=-8 created=0, and the same indexed strip with restart disabled draws with 72 foreign pixels in the gap - the bridging primitive a missing cut threads across. Kept as a measured diagnostic until strip restart is implemented: accepting the state without programming VGT_MULTI_PRIM_IB_RESET_EN (0x2a5) and VGT_MULTI_PRIM_IB_RESET_INDX (0x103) would silently merge two primitives."
     }
   ]
 }

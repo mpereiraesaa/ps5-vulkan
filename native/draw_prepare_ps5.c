@@ -133,9 +133,16 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         if (rc != VK_SUCCESS) return rc;
     }
     struct ps5vk_draw_state plan;
+    /* The index width the draw's bound index buffer declares, or zero for a
+     * non-indexed draw. The direct and indirect indexed ops both carry the
+     * binding vkCmdBindIndexBuffer recorded, and the hardware needs the width to
+     * compare the right reset value. */
+    const unsigned index_width =
+        (op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_DRAW_INDEXED_INDIRECT) ?
+        (op->indices.type == VK_INDEX_TYPE_UINT16 ? 2u : 4u) : 0u;
     rc = ps5vk_native_draw_state(op->pipeline, &op->viewport, &op->scissor,
         &color, has_depth ? &depth : NULL, area,
-        fb->width, fb->height, &plan);
+        fb->width, fb->height, index_width, &plan);
     if (rc != VK_SUCCESS) return rc;
     struct ps5vk_descriptor_table_layout tables;
     uint32_t set_mask=0;
