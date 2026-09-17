@@ -59,6 +59,14 @@ def main():
     geometry_probe = os.environ.get("PS5VK_GEOMETRY_PROBE", "0")
     if geometry_probe not in ("0", "1") or (geometry_probe == "1" and not graphics_api):
         raise SystemExit("PS5VK_GEOMETRY_PROBE requires the graphics profile API and must be 0 or 1")
+    # Bounded diagnostic table mode for that witness: report every case in one
+    # run instead of stopping at the first failing verdict, so the run that shows
+    # the value verdict also shows the case that has lost the device before. It
+    # is meaningless without the witness, and the shipping build keeps the
+    # fail-fast behaviour.
+    geometry_order_probe = os.environ.get("PS5VK_GEOMETRY_ORDER_PROBE", "0")
+    if geometry_order_probe not in ("0", "1") or (geometry_order_probe == "1" and geometry_probe != "1"):
+        raise SystemExit("PS5VK_GEOMETRY_ORDER_PROBE is a bounded geometry-probe diagnostic")
     # The six-view witness is the only consumer of the diagnostic gate, so it
     # requires both: a real view mask AND a runtime-compiled vertex stage that
     # reads gl_ViewIndex. It is a single bounded scene, never combined with the
@@ -307,6 +315,7 @@ def main():
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
+            common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
             # Both optional-stage witnesses skip the feature-negotiation gate:
             # they exist to measure capabilities that are not advertised yet.
             common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + 

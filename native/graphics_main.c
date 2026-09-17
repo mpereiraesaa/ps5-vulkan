@@ -57,6 +57,15 @@
 #ifndef PS5VK_GEOMETRY_PROBE
 #define PS5VK_GEOMETRY_PROBE 0
 #endif
+/* Bounded diagnostic mode for the geometry witness: report every case's outcome
+ * in one run instead of stopping at the first failing verdict. The shipping
+ * profile keeps the fail-fast behaviour, because a witness that stops at the
+ * first failure is the one a promotion gate should judge; this exists so a
+ * single diagnostic run can show the whole table - including the case that has
+ * lost the device before - without the first failure hiding the rest. */
+#ifndef PS5VK_GEOMETRY_ORDER_PROBE
+#define PS5VK_GEOMETRY_ORDER_PROBE 0
+#endif
 #if defined(PS5VK_LAYER_PROBE) && PS5VK_LAYER_PROBE
 /* Slice A measurement: the pattern seeded into the allocation slot no
  * attachment is bound to, so "the neighbouring layer is untouched" is a
@@ -1810,12 +1819,27 @@ static void geometry_probe(VkDevice d)
     VkShaderModule geometry_module;
     CHECK(vkCreateShaderModule(d,&gsi,NULL,&geometry_module));
     CHECK(vkCreateShaderModule(d,&fsi,NULL,&fragment_module));
+    /* Synthetic suppress diagnostic: a fragment stage that reads no input, so
+     * the geometry half's suppress case (which emits nothing) still forms a
+     * legal pipeline under this profile's draw-ABI rule instead of being
+     * refused for an input the pre-raster stage never exports. Every other case
+     * keeps fragment_module. */
+    VkShaderModule suppress_fragment_module;
+    VkShaderModuleCreateInfo sfsi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_suppress_fragment),
+        .pCode=ps5vk_runtime_geometry_suppress_fragment};
+    CHECK(vkCreateShaderModule(d,&sfsi,NULL,&suppress_fragment_module));
     VkCommandPoolCreateInfo cpi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .queueFamilyIndex=0};
     VkCommandPool pool; CHECK(vkCreateCommandPool(d,&cpi,NULL,&pool));
     VkQueue queue; vkGetDeviceQueue(d,0,0,&queue);
     static uint8_t detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
     uint64_t digests[PS5VK_GEOMETRY_CASES]={0};
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    /* Only the diagnostic table mode keeps going after a failing verdict, so
+     * only it counts failures; the shipping run fails at the first one. */
+    unsigned failed_cases=0;
+#endif
     /* The input-independent case runs second: if the stage never emits, the log
      * separates that from a broken ES/GS handshake before the other cases. Every
      * case appears exactly once - a short initialiser would leave the remaining
@@ -1844,6 +1868,8 @@ static void geometry_probe(VkDevice d)
              .pSpecializationInfo=&spec},
             {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
              .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=fragment_module,.pName="main"}};
+        if(witness_case==PS5VK_GEOMETRY_SUPPRESS)
+            stages[2].module=suppress_fragment_module;
         VkPipelineShaderStageCreateInfo two_stage[2]={stages[0],stages[2]};
         VkPipelineVertexInputStateCreateInfo vi={.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1937,9 +1963,18 @@ static void geometry_probe(VkDevice d)
             witness.first_wrong[3],witness.first_wrong_x,witness.first_wrong_y,
             corner[0],corner[1],corner[2],corner[3],
             center[0],center[1],center[2],center[3]);
+#if PS5VK_GEOMETRY_ORDER_PROBE
+        if(!verified)++failed_cases;
+#else
         if(!verified)fail("geometry-verdict",-1);
+#endif
         vkDestroyPipeline(d,pipeline,NULL);
     }
+#if PS5VK_GEOMETRY_ORDER_PROBE
+    /* The diagnostic table mode reported every case; the run still fails, so a
+     * diagnostic log can never read as an acceptance pass. */
+    if(failed_cases)fail("geometry-verdict",-(int)failed_cases);
+#endif
     /* Passthrough and the amplified image must both reproduce the control image
      * exactly (the three sub-triangles tile the input triangle), the shrunk and
      * suppressed images must differ from it, and the varying rewrite must differ
@@ -1981,6 +2016,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,vertex_module,NULL);
     vkDestroyShaderModule(d,geometry_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
+    vkDestroyShaderModule(d,suppress_fragment_module,NULL);
     vkDestroyPipelineLayout(d,layout,NULL);
     vkDestroyFramebuffer(d,fb,NULL);
     vkDestroyRenderPass(d,pass,NULL);
