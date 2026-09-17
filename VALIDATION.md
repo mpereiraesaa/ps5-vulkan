@@ -201,6 +201,24 @@ a table mode (`PS5VK_GEOMETRY_ORDER_PROBE`) as well: the shipping build is
 fail-fast and stopped at the sentinel, so it never reached the case that was
 broken on this tree.
 
+That reading is not an inference from mixed builds. The same payload
+(`ae239b852a70e0a68516e0fb4e0e947ebd430a51bbf036148e5d88370844ca07`, verified by
+hash on the console before the pair of runs) was run twice through the table
+mode, and the two logs differ exactly on the cases that read the ring:
+control (`aa3cf584`), constant emission (`aa7d3f82`) and suppression
+(`6927fac7`) are bit-identical between the runs and verified both times, while
+the sentinel (`6927fac7` then `38d61b94`), passthrough (`6927fac7` then
+`0a4ac999`), shrink (`93df309c` then `02ad379e`), recolor (`38bcd39e` then
+`e0e55980`) and amplify (`fc3e50b7` then `45abe76c`) each produce a different
+image, and the loop case loses the device in both (`vkQueueWaitIdle` `rc=-4`).
+Runs `20260917T075403021Z_PPSA99994_ps5vk_0x6cab7462e29` and
+`20260917T080954327Z_PPSA99994_ps5vk_0x7a8352a45b2`. The register state for the
+ring is published by the merged program and programmed by the driver
+(`VGT_GS_ONCHIP_CNTL`, `VGT_GS_OUT_PRIM_TYPE`, `VGT_ESGS_RING_ITEMSIZE`,
+`VGT_GS_MAX_VERT_OUT`, `GE_NGG_SUBGRP_CNTL`), so what remains open is whether the
+values describe the launch the hardware performs - not whether the registers are
+there.
+
 The witness also carries an observable sentinel for exactly that question: the
 input triangle emitted unchanged with the colour computed from the position the
 geometry half read (`x*0.5+0.5`, `y*0.5+0.5`, `0.25`), so the verdict asserts the
