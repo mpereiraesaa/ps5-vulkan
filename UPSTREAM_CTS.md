@@ -843,6 +843,30 @@ Diagnostics are not part of the packaged case list and do not affect the strict
 verdict. The selection gate derives the composed combined-group leaf names from
 the pinned factory construction, so a renamed or removed leaf fails the gate
 instead of silently disappearing.
+
+### Why the geometry and tessellation families are not listed yet
+
+The optional-stage families are deliberately absent from the diagnostics above,
+and the reason is a packaging one rather than an omission: a leaf can only be
+selected (as acceptance or as a diagnostic) from a module the packaged CTS
+actually builds. This package registers the clipping module because the
+clip/cull work reached the point where its measured subset belongs to that
+module's oracle; the geometry and tessellation modules are not registered yet, so
+no leaf of either can be traced by the selection gate - naming one today would be
+exactly the invented selection the gate rejects.
+
+Registering them is part of the promotion slice for those two features, not an
+extra: the packaged CTS source list and the package's own `createChildren` call
+have to include the module, and the geometry and tessellation modules each carry
+their own shader and reference-image data. That work is held until the features
+have something to promote, because the leaves it would add cannot pass while
+`geometryShader` and `tessellationShader` are false: the geometry factory gates
+every leaf on `requireDeviceCoreFeature(DEVICE_CORE_FEATURE_GEOMETRY_SHADER)`
+(for example `vktGeometryInputGeometryShaderTests.cpp`) and the tessellation
+factory on `requireFeatures(FEATURE_TESSELLATION_SHADER)` (for example
+`vktTessellationShaderInputOutputTests.cpp`), so both would report
+`NotSupported` and be diagnostics in exactly the way the clip/cull leaves are -
+which is useful at promotion time and noise before it.
 ## Indirect and indexed draw expansion (2026-09-16)
 
 DXVK262-T03 adds 46 original upstream leaves from two draw modules, both

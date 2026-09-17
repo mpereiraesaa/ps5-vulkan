@@ -163,6 +163,17 @@ other modes, so the fault follows that program rather than its surroundings,
 while the constant-emission and suppression modes pass. `geometryShader`
 therefore stays false.
 
+The witness also carries an observable sentinel for exactly that question: the
+input triangle emitted unchanged with the colour computed from the position the
+geometry half read (`x*0.5+0.5`, `y*0.5+0.5`, `0.25`), so the verdict asserts the
+value the read produced instead of only the coverage. A zero read collapses the
+triangle and a shifted item moves or reshapes it, while the control's own image
+is refused because the sentinel's blue differs. Its stated limit is that
+exchanging the two structurally identical input triangles wholesale maps the
+image onto itself, so it separates correct, zero, garbage and shifted reads, not
+that exchange. No run has used it yet: it is in the payload and the next geometry
+run is where it can say whether the read returned the data.
+
 **Tessellation.** The isolated compiler candidate does produce a two-program
 hull buffer for a real vertex+control pair - the control half and the vertex half
 in one buffer, with the vertex half's program and resource registers published -
