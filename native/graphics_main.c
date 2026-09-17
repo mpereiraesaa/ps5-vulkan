@@ -1831,7 +1831,7 @@ static void geometry_probe(VkDevice d)
         /* Positions first: if the POSITIONS program loses the device on its own
          * the fault is that program; if it survives first but dies later, it
          * depends on the cases that used to precede it. */
-        PS5VK_GEOMETRY_POSITIONS,PS5VK_GEOMETRY_AMPLIFY,PS5VK_GEOMETRY_SHRINK,
+        PS5VK_GEOMETRY_POSITION0,PS5VK_GEOMETRY_POSITIONS,PS5VK_GEOMETRY_AMPLIFY,
         PS5VK_GEOMETRY_SUPPRESS,PS5VK_GEOMETRY_RECOLOR,PS5VK_GEOMETRY_PASSTHROUGH};
 #else
         PS5VK_GEOMETRY_CONTROL,PS5VK_GEOMETRY_CONSTANT,PS5VK_GEOMETRY_PASSTHROUGH,
