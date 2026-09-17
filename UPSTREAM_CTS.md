@@ -902,3 +902,30 @@ QPA `de55e1c79828b06a9e50ccff5628c546c61e3daf16c518b57576548411c98b17`,
 the same selection is also recorded there: every draw leaf passed while the
 compute leaves failed at pipeline creation because the compute compiler adapter
 did not yet accept the three newly reported graphics-only feature bits.
+
+## Integrated acceptance run (2026-09-17)
+
+The T03 integration head (`t04-final` after the `t03-final` merge) rebuilt the
+payload from the merged manifest and passed the whole canonical selection
+unchanged: **211/211 `Pass`**, zero `Fail`, zero `NotSupported`, no missing,
+unexpected or duplicate cases, exit status 0, a complete `ps5log/1` transport
+and a verified Close Game of the exact title (`strict_verified` and
+`lifecycle_ok` both true).
+
+- selection SHA-256
+  `266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`
+  (211 acceptance leaves, the same selection T03 validated from its own branch)
+- deployed SELF SHA-256
+  `1b2164811cf90fb9e2cce567acdb56d54366fe5e34debe2bb236980860ab461a`,
+  read back exactly through FTP before launch
+- run `20260917T022854608Z_PPSA99994_upstream-cts_0x158fe3a13085d`, log SHA-256
+  `f757ca6739a83df308b83c2430966abef818d3d3466db8fdb58e6253475aa747`, QPA
+  SHA-256 `4fa9cf9651f0fcfe25c0b97591de245c8ce0f39cf8405d8bc9680de65f8b8cdc`
+
+The integrated selection is the original 165 leaves (the 48 multiview leaves
+among them), T03's 46 indirect/indexed draw leaves and the 30 diagnostics T04
+records - the 25 user-defined clip/cull distance leaves are among those
+diagnostics because the two distance features are not advertised. This run is
+evidence for the selected leaves only: no clipping, geometry or tessellation
+pipeline executes in it, none of those features is advertised, and it is not a
+Vulkan conformance claim.
