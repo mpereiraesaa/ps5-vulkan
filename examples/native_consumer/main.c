@@ -43,6 +43,7 @@
 
 #include "sampled_sets.h"
 #include "indirect_draws.h"
+#include "raster_state.h"
 
 static int parse_is_continuous(void)
 {
@@ -3285,6 +3286,11 @@ int main(void)
     /* Indirect firstInstance, multi-draw DrawIndex, GPU-generated arguments,
      * the 65535-command floor and the 32-bit index range (DXVK262-T03). */
     run_indirect_draws(physical_device, device, queue);
+
+    /* Rasterization/viewport state (DXVK262-T05): depth bias with clamps,
+     * depth clamp, polygon modes and viewport arrays, where the device
+     * reports the four features (the run is skipped otherwise). */
+    run_raster_state(physical_device, device, queue);
 
     /* 7. Run runtime procedural graphics and presentation */
     run_consumer(physical_device, device, queue, is_continuous);
