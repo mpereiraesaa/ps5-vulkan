@@ -30,6 +30,19 @@ void main()
         EndPrimitive();
         return;
     }
+    if (MODE == 8) {
+        /* S2 characterisation: constant-index reads of gl_in[1] and gl_in[2], no
+         * loop. Degenerate triangle between them, so the image stays empty and the
+         * only observable is whether the indexed reads fault the device. */
+        vec4 middle = (gl_in[1].gl_Position + gl_in[2].gl_Position) * 0.5;
+        for (int i = 0; i < 3; ++i) {
+            gl_Position = middle;
+            out_color = vec3(0.5, 0.5, 0.5);
+            EmitVertex();
+        }
+        EndPrimitive();
+        return;
+    }
     if (MODE == 7) {
         /* S1 characterisation: read ONE gl_in vertex and emit a degenerate triangle
          * there. Whether the read returns the real position, zeros or garbage, the

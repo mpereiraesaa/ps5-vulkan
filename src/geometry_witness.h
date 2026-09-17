@@ -46,7 +46,9 @@ enum {
      * oracle expects no geometry, so the observable is whether the read
      * faults the device. */
     PS5VK_GEOMETRY_POSITION0 = 8,
-    PS5VK_GEOMETRY_CASES = 9
+    /* S2: constant-index reads of gl_in[1] and gl_in[2], no loop. */
+    PS5VK_GEOMETRY_POSITION12 = 9,
+    PS5VK_GEOMETRY_CASES = 10
 };
 /* The geometry stage's mode for a case: -1 means the control has no geometry
  * stage at all. */
