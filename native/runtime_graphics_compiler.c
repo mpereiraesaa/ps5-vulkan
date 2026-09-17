@@ -54,7 +54,8 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
     (void)context;
     struct ps5vk_runtime_graphics_program *p=(void *)data;
     if(!p)return;
-    psbc_free_output(&p->vertex);psbc_free_output(&p->fragment);free(p);
+    psbc_free_output(&p->vertex);psbc_free_output(&p->fragment);
+    psbc_free_output(&p->hull);psbc_free_output(&p->domain);free(p);
 }
 
 int ps5vk_runtime_graphics_distance_reads_described(const PsbcShaderMetadata *pre_raster,
@@ -116,6 +117,12 @@ int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
      * geometry pipeline, and it needs the feature like any other stage. */
     if(pre_raster->source_stage==PSBC_STAGE_GEOMETRY &&
        !(feature_mask & PS5VK_FEATURE_GEOMETRY_SHADER))return 0;
+    /* The hull half of a tessellation pipeline: its source stage names the
+     * control half the compiler linked, so a tessellation pipeline can only be
+     * compiled for a device that enabled the feature. The evaluation half is
+     * gated by the TESS_EVAL check below when the caller passes it. */
+    if(pre_raster->source_stage==PSBC_STAGE_TESS_CTRL &&
+       !(feature_mask & PS5VK_FEATURE_TESSELLATION_SHADER))return 0;
     if(pre_raster->source_stage==PSBC_STAGE_TESS_EVAL &&
        !(feature_mask & PS5VK_FEATURE_TESSELLATION_SHADER))return 0;
     return 1;
@@ -132,16 +139,21 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_set_signature *set=&key->descriptor_sets[s];
             /* The canonical table validates the full core visibility mask;
-             * descriptor options project it onto the executing VS/FS stage.
+             * descriptor options project it onto the executing stages.
              * Combined image samplers coexist with the mandatory uniform-buffer
              * resources a real pipeline layout carries, and an input attachment
              * is admitted as fragment-only resource-only image data: it is read
              * by subpassLoad in a fragment shader, so a layout that exposes it
              * to the vertex stage is refused rather than projected onto a stage
-             * that cannot read it. Every other descriptor type stays outside the
-             * profile instead of being half-delivered. */
+             * that cannot read it. The tessellation stages join the vertex
+             * stage's visibility when the pipeline carries the pair. Every
+             * other descriptor type stays outside the profile instead of being
+             * half-delivered. */
             if(set->binding[b].count &&
-                (!(set->binding[b].stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)) ||
+                (!(set->binding[b].stages&(VK_SHADER_STAGE_VERTEX_BIT|
+                     VK_SHADER_STAGE_FRAGMENT_BIT|
+                     VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
+                     VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)) ||
                 (set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
@@ -153,23 +165,42 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
     return 1;
 }
 
+/* The DI primitive type a patch-list draw feeds: the pinned gfx103 register
+ * data names DI_PT_PATCH 9 (src/amd/registers/gfx103.json), and the shape the
+ * tessellator generates from the patch comes from VGT_TF_PARAM, which the hull
+ * compile publishes from the control stage's own execution modes. This is a
+ * resolver, not a new primitive: everything else stays fail-closed. */
+static int ps5vk_tess_patch_primitive_type(uint32_t *out)
+{
+    if(!out)return 0;
+    *out=9u;
+    return 1;
+}
+
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
        key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
-    /* The tessellation pair now has an identity and an interface policy, but no
-     * loadable package and no programming path: the pinned compiler emits ISA
-     * for both stages while declaring the tessellation pipeline state missing.
-     * The pair is therefore refused here, before anything else could screen it
-     * as a vertex+fragment pipeline and silently drop the tessellator. The two
-     * modules still go through the same structural screening and the interface
-     * chain is still checked, so a caller can tell a malformed pair from a pair
-     * this profile simply cannot program yet. */
+    /* The tessellation pair is compiled through the hull and domain programs:
+     * the pinned compiler links the vertex half as the LS program behind the
+     * control half's machine code and publishes the loadable evaluation package
+     * through the same NGG shape the vertex path uses. The pair is accepted at
+     * the adapter level here - the interface chain, the module screening and
+     * the patch state are all checked - while the loader gate and the pipeline
+     * create path still refuse to RUN one: the hull launch state the driver
+     * owns (stage enables, LS_HS_CONFIG, TF ring, offchip parameter, the tess
+     * factor buffer) is not written yet. The pair therefore compiles and is
+     * validated, but nothing can submit it. */
     if(ps5vk_graphics_has_tessellation(key)) {
         if(!ps5vk_graphics_tessellation_key_valid(key))return 0;
         if(!module_supported(&key->tess_control,1) || !module_supported(&key->tess_eval,2))return 0;
         if(!ps5vk_spirv_graphics_interface(key))return 0;
-        return 0;
+        uint32_t patch_type=0;
+        return key->topology==VK_PRIMITIVE_TOPOLOGY_PATCH_LIST &&
+            ps5vk_tess_patch_primitive_type(&patch_type) &&
+            key->color_format==VK_FORMAT_B8G8R8A8_UNORM &&
+            key->samples==VK_SAMPLE_COUNT_1_BIT && key->color_write_mask==15 &&
+            !key->blend_enable && descriptor_profile_supported(key);
     }
     /* A geometry stage is compiled through the merged entry point, so its own
      * module passes the same structural screening as the other two. The merged
@@ -287,10 +318,13 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
     VkShaderStageFlags stages,PsbcCompileOptions *options)
 {
     /* `stages` is the set of stages whose bindings the table must carry: a
-     * single stage for a standalone compilation, and every stage of the merged
-     * pre-raster program when the compiler links a vertex+geometry pair. */
+     * single stage for a standalone compilation, every stage of the merged
+     * pre-raster program when the compiler links a vertex+geometry pair, and
+     * the vertex+control or evaluation stage of a tessellation pipeline. */
     if(!key || !options || !(stages&(VK_SHADER_STAGE_VERTEX_BIT|
-            VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
+            VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|
+            VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
+            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)))
         return VK_ERROR_UNKNOWN;
     struct ps5vk_descriptor_table_layout tables;
     VkResult rc=ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
@@ -403,7 +437,18 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
         .entrypoint=key->fragment.entry,.optimise=true,.address32_hi=2,
         .primitive_type=0,.rasterization_samples=1};
-    if(ps5vk_agc_primitive_type(key->topology,&options.primitive_type))goto failed;
+    /* A patch-list draw feeds the patch assembler the pinned gfx103 register
+     * data names DI_PT_PATCH; every other topology resolves the value the AGC
+     * linker programs. The DI patch type is the DRAW's identity, not a compile
+     * option: the tessellator, not the assembler, generates the rasterized
+     * primitive, so the shader compiles keep the compiler's default primitive
+     * state and the flat/provoking semantics of the tessellated primitive are
+     * the witness slice's measurement, not a guess here. */
+    const int has_tessellation=ps5vk_graphics_has_tessellation(key);
+    if(has_tessellation) {
+        if(!ps5vk_tess_patch_primitive_type(&p->primitive_type))goto failed;
+    } else if(ps5vk_agc_primitive_type(key->topology,&options.primitive_type))
+        goto failed;
     if(!apply_parameters(&options,&key->fragment,key,VK_SHADER_STAGE_FRAGMENT_BIT))goto failed;
     result=psbc_compile_shader(key->fragment.words,key->fragment.word_count*4u,&options,&p->fragment);
     if(result!=PSBC_RESULT_OK)goto failed;
@@ -411,6 +456,60 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     if(p->fragment.metadata.input_semantic_count>PSBC_MAX_SEMANTICS)goto failed;
     for(unsigned i=0;i<p->fragment.metadata.input_semantic_count;++i)
         if((p->fragment.metadata.input_semantics[i]&255u)==PSBC_SEMANTIC_PRIMITIVE_ID)goto failed;
+    if(has_tessellation) {
+        /* The pre-raster state is two programs: the hull (the compiler links
+         * the vertex half as the LS program behind the control half, whose
+         * metadata this output carries) and the domain (the evaluation half's
+         * loadable NGG package). One merged hull carries one specialization
+         * map, the same rule the geometry pair follows. */
+        PsbcCompileOptions hull_options={.target=PSBC_TARGET_PS5,
+            .stage=PSBC_STAGE_TESS_CTRL,.entrypoint=key->tess_control.entry,
+            .optimise=true,.address32_hi=2,.rasterization_samples=1};
+        if(key->tess_control.specialization_count && key->vertex.specialization_count)goto failed;
+        const struct ps5vk_graphics_module_key *hull_specialized=
+            key->tess_control.specialization_count?&key->tess_control:&key->vertex;
+        if(!apply_parameters(&hull_options,hull_specialized,key,
+                VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT))goto failed;
+        result=psbc_compile_tess_pipeline(key->vertex.words,key->vertex.word_count*4u,
+            key->tess_control.words,key->tess_control.word_count*4u,&hull_options,&p->hull);
+        if(result!=PSBC_RESULT_OK)goto failed;
+        /* The hull's metadata describes the shared argument block from the
+         * control half's view, so its push constants are checked against the
+         * control stage's visibility, the same rule the merged geometry
+         * program follows for the geometry half. */
+        if(!push_metadata_supported(&p->hull.metadata,key,
+                VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT))goto failed;
+        PsbcCompileOptions domain_options={.target=PSBC_TARGET_PS5,
+            .stage=PSBC_STAGE_TESS_EVAL,.entrypoint=key->tess_eval.entry,
+            .optimise=true,.ngg=true,.address32_hi=2,.rasterization_samples=1};
+        if(!apply_parameters(&domain_options,&key->tess_eval,key,
+                VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))goto failed;
+        result=psbc_compile_shader(key->tess_eval.words,key->tess_eval.word_count*4u,
+            &domain_options,&p->domain);
+        if(result!=PSBC_RESULT_OK)goto failed;
+        if(!push_metadata_supported(&p->domain.metadata,key,
+                VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))goto failed;
+        /* The compiled halves are the usage evidence: a tessellation pipeline
+         * really runs the tessellator, so both halves' source stages require
+         * the feature the application must have enabled, and the pixel end of
+         * the distance interface is checked against the pre-raster stage the
+         * fragment stage actually reads from - the evaluation half. */
+        if(!ps5vk_runtime_graphics_feature_use_ok(&p->hull.metadata,
+                &p->fragment.metadata,key->feature_mask) ||
+           !ps5vk_runtime_graphics_feature_use_ok(&p->domain.metadata,
+                &p->fragment.metadata,key->feature_mask))goto failed;
+        unsigned declared_clip=0,declared_cull=0;
+        if(!ps5vk_spirv_stage_distance_reads(&key->fragment,&declared_clip,&declared_cull))goto failed;
+        if((declared_clip||declared_cull) &&
+           !ps5vk_runtime_graphics_distance_reads_described(&p->domain.metadata,
+               &p->fragment.metadata,declared_clip,declared_cull))goto failed;
+        /* The runtime loader gate keeps refusing both halves while the hull
+         * launch state the driver owns is unwritten: no runtime header, no
+         * draw ABI, no submission. Compiling is not running. The draw's DI
+         * patch type was recorded when it was resolved. */
+        *out=p;
+        return VK_SUCCESS;
+    }
     options.ngg=true;
     options.entrypoint=key->vertex.entry;options.omit_implicit_primitive_id=true;
     if(!apply_parameters(&options,&key->vertex,key,VK_SHADER_STAGE_VERTEX_BIT))goto failed;
