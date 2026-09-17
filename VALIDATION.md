@@ -232,14 +232,19 @@ that exchange. The first run to use it
 `7f1523a9157bec7eeed7ceeaaf8bf25646ef9364cb52d2a4124ed7c9df0f9ed3`) reports
 control `verified=1`, constant emission `verified=1`, and the sentinel
 `verified=0` with `expected=4096 covered=0 wrong_color=4096` - the image carries
-none of the expected per-pixel colour and is uniform black, the first
-value-level judgement of this path rather than another coverage check. Its limit
-in this shape is that the render pass clears to opaque black, so the log alone
-does not separate "the read returned zero for the colour computation" from "the
-read returned zero everywhere and the triangle collapsed"; the constant-emission
-case passing in the same run shows the stage draws and the fragment path works.
+none of the expected per-pixel colour, the first value-level judgement of this
+path rather than another coverage check. What image it produced instead is not
+stable: that run hashed `436f0a07`, the first table run hashed the cleared target
+`6927fac7`, and the second hashed `38d61b94` - three different images for the
+same case, which is the non-determinism measured below and not a constant zero.
+The shape's own limit is that the render pass clears to opaque black, so a log
+alone does not separate "the read returned zero for the colour computation" from
+"the read returned zero everywhere and the triangle collapsed"; comparing the
+digest against the suppression case's does, and the constant-emission case
+passing in the same run shows the stage draws and the fragment path works.
 The harness is fail-fast in the shipping profile, so the POSITIONS case did not
-execute after the failing verdict and the device did not fault.
+execute after the failing verdict in that run and the device did not fault
+there - it faults whenever it is reached, as the table runs show.
 
 **Tessellation.** The isolated compiler candidate does produce a two-program
 hull buffer for a real vertex+control pair - the control half and the vertex half
