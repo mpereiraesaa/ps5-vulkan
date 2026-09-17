@@ -57,6 +57,37 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
     psbc_free_output(&p->vertex);psbc_free_output(&p->fragment);free(p);
 }
 
+int ps5vk_runtime_graphics_distance_reads_described(const PsbcShaderMetadata *pre_raster,
+    const PsbcShaderMetadata *fragment,unsigned declared_clip,unsigned declared_cull)
+{
+    if(!pre_raster || !fragment || declared_clip>8u || declared_cull>8u)return 0;
+    if(!declared_clip && !declared_cull)return 1;
+    /* The pixel stage's own report must agree with what the module declares. */
+    if(fragment->ps_clip_distance_reads!=declared_clip ||
+       fragment->ps_cull_distance_reads!=declared_cull)return 0;
+    /* The pre-raster stage must export every component the pixel stage reads... */
+    if((pre_raster->clip_distance_mask&((1u<<declared_clip)-1u))!=
+           ((1u<<declared_clip)-1u) ||
+       (pre_raster->cull_distance_mask&((1u<<declared_cull)-1u))!=
+           ((1u<<declared_cull)-1u))return 0;
+    /* ... and both halves must name the same packed registers: the producer
+     * word carries the register's parameter index, the consumer word names the
+     * register it reads, and the AGC linker pairs them on that private key. */
+    const unsigned registers=(declared_clip+declared_cull+3u)/4u;
+    if(!registers || registers>2u)return 0;
+    for(unsigned r=0;r<registers;++r) {
+        unsigned described_in=0,described_out=0;
+        for(uint32_t i=0;i<fragment->input_semantic_count;++i)
+            described_in+=(fragment->input_semantics[i]&255u)==
+                (PSBC_SEMANTIC_DISTANCE_REGISTER+r);
+        for(uint32_t i=0;i<pre_raster->output_semantic_count;++i)
+            described_out+=(pre_raster->output_semantics[i]&255u)==
+                (PSBC_SEMANTIC_DISTANCE_REGISTER+r);
+        if(described_in!=1 || described_out!=1)return 0;
+    }
+    return 1;
+}
+
 int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
     const PsbcShaderMetadata *fragment,uint32_t feature_mask)
 {
@@ -164,21 +195,13 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return 0;
     }
     uint32_t primitive_type=0;
-    /* A fragment stage that READS gl_ClipDistance/gl_CullDistance needs the
-     * pixel-input description for those attributes: the distances travel in the
-     * packed position registers the pre-raster stage exports, and the AGC
-     * linker maps the pixel attributes from the shader header's input-semantics
-     * list, which the compiler leaves unresolved for any stage that reads a
-     * built-in distance. The interface policy accepts such a declaration (it is
-     * legal SPIR-V, bounded by what the pre-raster stage exports), and a
-     * pipeline that ran it anyway would interpolate an attribute the linker
-     * never mapped. Refuse to run it until that description exists - the same
-     * fail-closed shape as the geometry refusal above. */
-    {
-        unsigned clip_reads=0,cull_reads=0;
-        if(!ps5vk_spirv_stage_distance_reads(&key->fragment,&clip_reads,&cull_reads))return 0;
-        if(clip_reads||cull_reads)return 0;
-    }
+    /* A fragment stage that READS gl_ClipDistance/gl_CullDistance is not
+     * screened out here: whether this profile can deliver the read is a fact
+     * about the compiled metadata - does the pixel input list name the packed
+     * distance registers, and does the pre-raster stage describe the same ones -
+     * and that is decided where the metadata exists (see the delivery check in
+     * ps5vk_runtime_graphics_compile). The declaration itself is already
+     * bounded by the interface chain above. */
     return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
         !ps5vk_agc_primitive_type(key->topology,&primitive_type) &&
         (key->color_format==VK_FORMAT_B8G8R8A8_UNORM ||
@@ -405,6 +428,32 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
      * consumes a capability the application never enabled. */
     if(!ps5vk_runtime_graphics_feature_use_ok(&p->vertex.metadata,&p->fragment.metadata,
         key->feature_mask))goto failed;
+    /* The pixel end of the clip/cull interface is delivered only when the
+     * compiled metadata describes it end to end: the pre-raster stage names each
+     * packed distance register it exports (parameter index included) and the
+     * pixel stage names the same registers as inputs, which is what the AGC
+     * linker turns into the pixel-input control. A module that reads a distance
+     * while either list is incomplete is refused here - the attributes would be
+     * interpolated from registers nothing names. The shipping profile also
+     * requires native evidence for the read before it runs one, exactly like the
+     * geometry path: the witness measures it under the diagnostic profile. */
+    {
+        unsigned declared_clip=0,declared_cull=0;
+        if(!ps5vk_spirv_stage_distance_reads(&key->fragment,&declared_clip,&declared_cull))goto failed;
+        if((declared_clip||declared_cull) &&
+           !ps5vk_runtime_graphics_distance_reads_described(&p->vertex.metadata,
+               &p->fragment.metadata,declared_clip,declared_cull))goto failed;
+        if(declared_clip||declared_cull) {
+#if !PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
+            /* Described and programmable, but this profile has no native
+             * evidence yet that the rasterizer delivers the interpolated
+             * distance to the pixel stage: the witness measures that under the
+             * diagnostic profile first, and the shipping build keeps refusing
+             * until the run exists. */
+            goto failed;
+#endif
+        }
+    }
     struct ps5vk_runtime_shader header;
     if(ps5vk_runtime_shader_build(&header,&p->vertex) ||
        ps5vk_runtime_shader_build(&header,&p->fragment) ||
