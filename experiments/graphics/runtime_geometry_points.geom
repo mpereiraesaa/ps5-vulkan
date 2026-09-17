@@ -8,6 +8,7 @@
  * somewhere the oracle does not expect, which is what makes this a witness. */
 layout(points) in;
 layout(triangle_strip, max_vertices = 4) out;
+layout(constant_id = 0) const int MODE = 19;
 layout(location = 0) in vec3 color[];
 layout(location = 0) out vec3 out_color;
 void main()

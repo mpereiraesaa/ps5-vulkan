@@ -8,6 +8,7 @@
  * a zero read produce three different images. */
 layout(lines) in;
 layout(triangle_strip, max_vertices = 4) out;
+layout(constant_id = 0) const int MODE = 20;
 layout(location = 0) in vec3 color[];
 layout(location = 0) out vec3 out_color;
 void main()

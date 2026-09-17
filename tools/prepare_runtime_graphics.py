@@ -78,6 +78,16 @@ def main():
         # legal pipeline instead of being refused for an unmatched input.
         ("experiments/graphics/runtime_geometry_suppress.frag",
          "runtime_geometry_suppress.frag.spv", "geometry_suppress_fragment"),
+        # The input families a geometryShader device is expected to accept: a
+        # pre-raster half whose positions and colours identify the vertex, plus
+        # the point-list and line-list geometry stages that read their input
+        # primitive's own arity (one vertex per point, two per line).
+        ("experiments/graphics/runtime_geometry_family.vert",
+         "runtime_geometry_family.vert.spv", "geometry_family_vertex"),
+        ("experiments/graphics/runtime_geometry_points.geom",
+         "runtime_geometry_points.geom.spv", "geometry_points_stage"),
+        ("experiments/graphics/runtime_geometry_lines.geom",
+         "runtime_geometry_lines.geom.spv", "geometry_lines_stage"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
