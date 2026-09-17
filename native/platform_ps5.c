@@ -224,6 +224,17 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features |= PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
                                     PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
                                     PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
+#if defined(PS5VK_RASTER_DIAGNOSTIC) && PS5VK_RASTER_DIAGNOSTIC
+    /* Private measurement build for DXVK262-T05 (tools/build_sdk.py honours
+     * PS5VK_RASTER_DIAGNOSTIC=1): report the four rasterization/viewport
+     * features so the consumer witness can negotiate them through the public
+     * API and measure them on hardware. Never set in the shipping build; the
+     * shipping promotion is a separate, evidence-backed change. */
+    platform->supported_features |= PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
+                                    PS5VK_FEATURE_DEPTH_CLAMP |
+                                    PS5VK_FEATURE_FILL_MODE_NON_SOLID |
+                                    PS5VK_FEATURE_MULTI_VIEWPORT;
+#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
