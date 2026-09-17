@@ -816,8 +816,9 @@ produce.
 The package now compiles and registers the original upstream clipping module
 (`external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp`) and the
 module's shared draw utility (`util/vktDrawUtil.cpp`). Registration adds the
-group; it does not add acceptance cases, so the strict acceptance selection is
-unchanged at 165 leaves and the packaged case list grows by nothing.
+group; it does not add acceptance cases, so the strict acceptance selection was
+unchanged by that change (the 165 leaves it held then, 211 after T03's tranche)
+and the packaged case list grew by nothing.
 
 The module is registered because its factory is the oracle the profile's
 measured clip/cull subset belongs to, and because the leaves are needed the

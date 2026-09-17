@@ -117,7 +117,7 @@ The 25 leaves this profile's measured subset would cover are recorded in
 `NotSupported`, next to the reason above, so a later slice that implements the
 fragment-stage read - the one genuinely missing mode - can promote them by
 changing the acceptance list and the device report together. The canonical
-acceptance selection is unchanged at 165 leaves.
+acceptance selection is unchanged at 211 leaves (165 before the T03 tranche).
 
 ### What this does and does not establish
 
