@@ -228,6 +228,16 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     int vs=(m->source_stage==PSBC_STAGE_VERTEX || has_geometry) &&
         m->hardware_stage==PSBC_HW_STAGE_NGG;
     int fs=m->source_stage==PSBC_STAGE_FRAGMENT && m->hardware_stage==PSBC_HW_STAGE_PIXEL;
+    /* Candidate metadata (psbc PR #12, metadata 15) identifies a merged pair
+     * explicitly, because the linked AGC block has no geometry variant. The two
+     * identifications must agree: a geometry pipeline that does not report the
+     * merged program (or the reverse) is a compiler/driver contract mismatch,
+     * refused before any register is programmed. */
+    if (has_geometry != m->merged_geometry) return -2;
+    /* A merged pair must also publish the ES half's ring item size: the driver
+     * programs the pair from the compiler's numbers, never from a leftover
+     * context register. */
+    if (m->merged_geometry && !m->merged_esgs_ring_itemsize) return -2;
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
         m->address32_hi!=2 || m->user_sgpr_count>16 || m->scratch_valid ||
         m->scratch_bytes_per_wave || m->scratch_size_per_thread || m->streamout_valid ||

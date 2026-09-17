@@ -42,6 +42,28 @@ int main(void)
     REJECT(ngg_lds_layout_user_data_dword,2);
     REJECT(linkage_user_vgpr_en.offset,0x25c);
     REJECT(source_stage,PSBC_STAGE_GEOMETRY);
+    /* Candidate metadata contract (psbc PR #12, metadata 15): a geometry
+     * pipeline must be identified as a merged pair, and only a geometry
+     * pipeline may be, with the ES half's ring item size published. */
+    REJECT(merged_geometry,true);
+    {
+        PsbcShaderMetadata saved=*m;
+        m->source_stage=PSBC_STAGE_GEOMETRY;
+        assert(ps5vk_runtime_shader_build(&arena,&c)!=0); /* not identified as merged */
+        m->merged_geometry=true;
+        assert(ps5vk_runtime_shader_build(&arena,&c)!=0); /* ring item size missing */
+        m->merged_esgs_ring_itemsize=9;
+        assert(ps5vk_runtime_shader_build(&arena,&c)!=0); /* geometry state missing */
+        static const unsigned geometry_registers[]={0x1ffu,0x291u,0x29bu,0x2abu,0x2ceu,0x2d3u};
+        m->context_register_count=sizeof(geometry_registers)/sizeof(geometry_registers[0]);
+        for(unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
+            m->context_registers[i].offset=geometry_registers[i];
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        *m=saved;
+        /* The accepted merged build above must not leak into the rejection
+         * comparisons that follow. */
+        arena=before;
+    }
     /* A slot that is not declared must come with a zero dword: a malformed pair
      * is refused instead of being silently discarded. */
     REJECT(base_vertex_user_data_dword,1);
