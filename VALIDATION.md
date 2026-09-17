@@ -115,8 +115,12 @@ exchange is an LDS ring rather than an SPI parameter-export stream, so the expor
 configuration is not the path under question. What remains open is the item-index
 mapping (the vertex half indexes by its lane id, the geometry half by the
 per-vertex offsets the hardware hands it) and whether the ring's LDS region is
-allocated and visible between the two phases. `geometryShader` therefore stays
-false.
+allocated and visible between the two phases. The same path also faults: a
+geometry program that reads `gl_in[i]` in a loop over the input array loses the
+device (the submission never completes) whether it runs before or after the
+other modes, so the fault follows that program rather than its surroundings,
+while the constant-emission and suppression modes pass. `geometryShader`
+therefore stays false.
 
 **Tessellation.** The isolated compiler candidate does produce a two-program
 hull buffer for a real vertex+control pair - the control half and the vertex half
