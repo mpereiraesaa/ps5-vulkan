@@ -329,13 +329,22 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     d->header.sh_registers=relative(&d->header.sh_registers,d->shader);
     for (uint32_t i=0;i<m->context_register_count;++i) {
         d->context[i]=convert(m->context_registers[i]);
-        /* A vertex-only NGG program exports unscaled vertex indices and runs one
-         * item per vertex. With a geometry stage the compiler marks the ring item
-         * size unresolved because the linked driver computes it from the ES half's
-         * output size, which the compiled metadata does not carry; the value is
-         * programmed as emitted, and the measured consequence is recorded with the
-         * geometry witness (the stage executes, its input handoff does not). */
-        if (vs && !has_geometry && d->context[i].offset==0x2ab) d->context[i].value=1;
+        /* VGT_ESGS_RING_ITEMSIZE (0x2ab) is the hardware's ES->GS item size, and
+         * the hardware scales the per-vertex offsets it hands the merged
+         * geometry half by it. Next-gen geometry keeps it at ONE so that those
+         * offsets are ITEM INDICES: upstream never writes the register on the
+         * NGG path (radv's register precompute for next-gen geometry does not
+         * touch it and the state initialiser sets 1) and lets the shader carry
+         * the item size instead - which is what this compiler's addressing does
+         * too, multiplying the offset by the item size in dwords and then by
+         * four. Programming the compiler's legacy value here scales the offsets
+         * twice, and that is measured, not inferred: with the compiler's 5
+         * programmed, the geometry half read item 5k where it must read item k
+         * (k = 3p+index), so only the first vertex of each primitive - the one
+         * whose offset is zero whatever the scale - ever came back correct, and
+         * the second and third read another primitive's vertex. A vertex-only
+         * program wants the same 1 for the same reason. */
+        if (vs && d->context[i].offset==0x2ab) d->context[i].value=1;
     }
     for (uint32_t i=0;i<m->shader_register_count;++i) d->shader[i]=convert(m->shader_registers[i]);
     if (vs) {

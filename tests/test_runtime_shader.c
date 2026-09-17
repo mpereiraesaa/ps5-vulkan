@@ -48,6 +48,49 @@ int main(void)
     REJECT(start_instance_user_data_dword,1);
     REJECT(draw_id_user_data_dword,1);
 #undef REJECT
+    /* The hardware scales the per-vertex offsets it hands a merged geometry half
+     * by VGT_ESGS_RING_ITEMSIZE, and next-gen geometry keeps that register at one
+     * so those offsets stay ITEM INDICES: upstream never writes it on the NGG
+     * path, the state initialiser sets 1, and the shader carries the item size
+     * itself - which is what this compiler's addressing does too. The compiler's
+     * metadata instead carries the legacy value (the item size in dwords, 5 for
+     * a 20-byte item) and even marks it unresolved for a merged pair, so
+     * programming it as emitted scales the offsets twice: the console measured
+     * the geometry half reading item 5k where it must read item k, which made
+     * only the first vertex of each primitive come back correct. */
+    {
+        uint32_t merged_code=0;
+        PsbcShaderOutput pair={.machine_code=&merged_code,.machine_code_size=4};
+        PsbcShaderMetadata *g=&pair.metadata;
+        static const unsigned geometry_registers[]={0x1ffu,0x291u,0x29bu,0x2abu,0x2ceu,0x2d3u};
+        g->version=PSBC_SHADER_METADATA_VERSION;g->target=PSBC_TARGET_PS5;
+        g->source_stage=PSBC_STAGE_GEOMETRY;g->hardware_stage=PSBC_HW_STAGE_NGG;
+        g->address32_hi=2;g->user_sgpr_count=2;g->ngg_lds_layout_valid=true;
+        g->ngg_lds_layout_user_data_dword=1;g->ngg_lds_layout=1680;
+        g->linkage_valid=true;
+        g->linkage_ge_cntl.offset=0x25b;g->linkage_stages_en.offset=0x2d5;
+        g->linkage_user_vgpr_en.offset=0x262;
+        g->user_data_window_base=8;g->esgs_system_sgprs_valid=true;
+        g->esgs_gs_tg_info_sgpr=2;g->esgs_merged_wave_info_sgpr=3;
+        g->unresolved_fields=PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE;
+        g->context_register_count=sizeof(geometry_registers)/sizeof(geometry_registers[0]);
+        for(unsigned i=0;i<g->context_register_count;++i)
+            g->context_registers[i]=(PsbcRegisterWrite){.offset=geometry_registers[i],
+                .value=geometry_registers[i]==0x2abu?5u:i};
+        g->shader_register_count=4;
+        g->shader_registers[0].offset=0xc8;g->shader_registers[1].offset=0xc9;
+        g->shader_registers[2].offset=0x8a;g->shader_registers[3].offset=0x8b;
+        g->output_semantic_count=1;g->output_semantics[0]=15;
+        struct ps5vk_runtime_shader merged;
+        assert(!ps5vk_runtime_shader_build(&merged,&pair));
+        unsigned seen=0;
+        for(unsigned i=0;i<merged.header.num_cx_registers;++i) {
+            if(merged.context[i].offset!=0x2ab)continue;
+            ++seen;
+            assert(merged.context[i].value==1);
+        }
+        assert(seen==1u);
+    }
     PsbcShaderMetadata fragment={.version=PSBC_SHADER_METADATA_VERSION,.source_stage=PSBC_STAGE_FRAGMENT,
         .hardware_stage=PSBC_HW_STAGE_PIXEL,.user_sgpr_count=2,
         .input_semantic_count=1,.input_semantics={15}};

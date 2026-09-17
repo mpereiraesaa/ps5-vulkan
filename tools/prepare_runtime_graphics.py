@@ -50,6 +50,11 @@ def main():
         ("experiments/graphics/runtime_clip_distance_read.frag",
          "runtime_clip_distance_read.frag.spv", "clip_distance_read_fragment"),
         ("experiments/graphics/runtime_geometry_probe.vert", "runtime_geometry_probe.vert.spv", "geometry_vertex"),
+        # Readback-only pre-raster half: a position whose x is unique per vertex
+        # index, so the bytes the geometry half reads name the ES item they came
+        # from instead of only their sign.
+        ("experiments/graphics/runtime_geometry_identity.vert",
+         "runtime_geometry_identity.vert.spv", "geometry_identity_vertex"),
         ("experiments/graphics/runtime_geometry_probe.geom", "runtime_geometry_probe.geom.spv", "geometry_stage"),
         # Synthetic suppress diagnostic only: an input-less fragment stage, so
         # the geometry half's suppress case (which emits nothing) still forms a

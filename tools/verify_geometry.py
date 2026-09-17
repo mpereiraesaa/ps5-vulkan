@@ -47,16 +47,17 @@ CASES = (
     # marker carries the place and the colour of the value that read returned.
     # Two 12x12 markers at 64x64, one per input primitive.
     (9, 11, 288),
-    # The read-value readbacks, one case per input vertex: a fixed scalar read
-    # per input primitive whose raw bytes are written into two quadrants placed
-    # by the value's sign bit. gl_in[0] is +1.2 and -1.2 across the two
-    # primitives, so it covers four 12x12 squares; gl_in[1] and gl_in[2] are one
-    # sign each and cover two. The oracle asserts the exact bit pattern, so a
-    # byte-shifted, integer or unwritten read is a wrong-colour failure with
-    # those bytes recorded in the log.
-    (10, 12, 576),
-    (11, 13, 288),
-    (12, 14, 288),
+    # The read-value readbacks, one case per input vertex. They draw 21 vertices
+    # (7 triangles, item indices 0..20) with a pre-raster stage that gives every
+    # vertex a different, exactly representable x, so the bytes the geometry half
+    # reads name the item they came from: item 3p+k if the index it is given is
+    # an item index, item 5(3p+k) if it is in dwords, item 20(3p+k) if it is in
+    # bytes. Each read writes two small quadrants - 672 px per case - and the
+    # oracle asserts the exact bit pattern, so a read of another item is a
+    # wrong-colour failure at that item's own place, with its bytes in the log.
+    (10, 12, 336),
+    (11, 13, 336),
+    (12, 14, 336),
     # The input positions with a constant colour; it runs last because it is the
     # case that has lost the device before.
     (7, 6, PIXELS),
@@ -70,6 +71,12 @@ DIGEST_NAMES = {0: "digest_control", 1: "digest_passthrough", 2: "digest_shrink"
                 6: "digest_constant", 7: "digest_positions",
                 8: "digest_sentinel", 9: "digest_indexed_marker",
                 10: "digest_read_v0", 11: "digest_read_v1", 12: "digest_read_v2"}
+# The readback cases draw 21 vertices (7 triangles) instead of the witness's six,
+# so item indices 0..20 exist and the three plausible readings of gl_in[k] - an
+# item index, a dword-scaled one and a byte-scaled one - land on written items
+# that identify themselves. Every other case keeps the two-triangle draw.
+READ_VERTICES = 21
+DRAW_VERTICES = {10: READ_VERTICES, 11: READ_VERTICES, 12: READ_VERTICES}
 GEOMETRY_REGISTERS = ("1ff", "291", "2ab", "2ce", "2d3")
 
 
@@ -144,7 +151,8 @@ def validate(log, receipt, artifact):
                 f"case {case} identity")
         require(draw.get("mode") == str(mode) and fields.get("mode") == str(mode),
                 f"case {case} mode")
-        require(draw.get("vertices") == "6" and draw.get("instances") == "1",
+        require(draw.get("vertices") == str(DRAW_VERTICES.get(case, 6)) and
+                draw.get("instances") == "1",
                 f"case {case} draw")
         if mode < 0:
             require(draw.get("stages") == "2", f"case {case} control stages")

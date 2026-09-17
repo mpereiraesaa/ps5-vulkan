@@ -430,6 +430,7 @@ graphics-stage-shaders:
 	$(GLSLANG) -V -DWITH_DISTANCES=1 experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_control.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_probe.vert -o build/runtime-graphics/geometry_probe.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_geometry_identity.vert -o build/runtime-graphics/geometry_identity.vert.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_probe.geom -o build/runtime-graphics/geometry_probe.geom.spv
 	$(GLSLANG) -V experiments/graphics/runtime_tess.vert -o build/runtime-graphics/tess.vert.spv
 	$(GLSLANG) -V -S tesc experiments/graphics/runtime_tess.tesc -o build/runtime-graphics/tess.tesc.spv
