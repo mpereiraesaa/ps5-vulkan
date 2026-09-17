@@ -88,6 +88,12 @@ def main():
          "runtime_geometry_points.geom.spv", "geometry_points_stage"),
         ("experiments/graphics/runtime_geometry_lines.geom",
          "runtime_geometry_lines.geom.spv", "geometry_lines_stage"),
+        # The component envelope's pixel half: it declares an input for all
+        # sixteen vec4 outputs the geometry half writes, so the OUTPUT side of
+        # the component minimum is consumed rather than only declared.
+        ("experiments/graphics/runtime_geometry_output_components.frag",
+         "runtime_geometry_output_components.frag.spv",
+         "geometry_output_components_fragment"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

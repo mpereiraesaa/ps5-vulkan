@@ -1921,6 +1921,14 @@ static void geometry_probe(VkDevice d)
         .codeSize=sizeof(ps5vk_runtime_geometry_primitive_id_stage),
         .pCode=ps5vk_runtime_geometry_primitive_id_stage};
     CHECK(vkCreateShaderModule(d,&pgi,NULL,&primitive_id_module));
+    /* The component envelope's pixel half: it declares an input for every one of
+     * the sixteen vec4s the geometry stage writes and folds all sixty-four into
+     * the colour, so the OUTPUT side of the envelope is observable. */
+    VkShaderModule components_output_fragment_module;
+    VkShaderModuleCreateInfo cofi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(ps5vk_runtime_geometry_output_components_fragment),
+        .pCode=ps5vk_runtime_geometry_output_components_fragment};
+    CHECK(vkCreateShaderModule(d,&cofi,NULL,&components_output_fragment_module));
     /* The input families: their own pre-raster half, whose positions and colours
      * identify the vertex, plus the point-list and line-list geometry stages that
      * read their input primitive's own arity. The pipeline's input assembly is
@@ -2019,6 +2027,9 @@ static void geometry_probe(VkDevice d)
         if(witness_case==PS5VK_GEOMETRY_COMPONENTS) {
             stages[0].module=components_vertex_module;
             stages[1].module=components_module;
+            /* The pixel half reads all sixteen output locations the geometry
+             * stage writes, so the declared output envelope is also consumed. */
+            stages[2].module=components_output_fragment_module;
         }
         /* The input families: their own pre-raster half identifies each input
          * item by position and colour, and the pipeline's input assembly carries
@@ -2322,6 +2333,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,lines_module,NULL);
     vkDestroyShaderModule(d,components_vertex_module,NULL);
     vkDestroyShaderModule(d,components_module,NULL);
+    vkDestroyShaderModule(d,components_output_fragment_module,NULL);
     vkDestroyShaderModule(d,fragment_module,NULL);
     vkDestroyShaderModule(d,suppress_fragment_module,NULL);
     vkDestroyShaderModule(d,identity_vertex_module,NULL);

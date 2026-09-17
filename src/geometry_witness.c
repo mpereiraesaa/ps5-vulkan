@@ -438,12 +438,19 @@ void ps5vk_geometry_witness_expected(unsigned witness_case,unsigned x,unsigned y
         return;
     }
     if(witness_case==PS5VK_GEOMETRY_COMPONENTS) {
-        /* The sixteen exported vec4s carry (k, k+1, k+2, k+3) for location k, so
-         * their 64 components sum to 576. The stage folds that sum into the
-         * colour, which is therefore an exact function of every one of them. */
-        rgba[0]=unorm8(576.0/4096.0);
-        rgba[1]=unorm8(0.5);
-        rgba[2]=unorm8(0.25);
+        /* Both halves of the component envelope are in this image. The geometry
+         * stage folds the sixty-four components it READ (the pre-raster stage's
+         * sixteen vec4s, whose values sum to 576) into the varying at location
+         * zero, so blue is 576/4096. It then WRITES sixty-four components of its
+         * own at locations 1..16, every one of them 1.0, and the pixel half
+         * reads all sixteen locations and folds them: red is the plain sum
+         * (64/128) and green the location-weighted one (136/272). Red therefore
+         * moves by eight unorm steps if one location is dropped, and green moves
+         * if two locations are exchanged, which is what makes the OUTPUT side of
+         * the envelope observable instead of merely declared. */
+        rgba[0]=unorm8(64.0/128.0);
+        rgba[1]=unorm8(136.0/272.0);
+        rgba[2]=unorm8(576.0/4096.0);
         rgba[3]=255u;
         return;
     }
