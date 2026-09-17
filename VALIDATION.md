@@ -159,10 +159,22 @@ ring item to shared memory and the geometry half reads the same dwords back
 (position in dwords 0-3, the varying in 4-6, bookkeeping in 7-8), with the same
 per-item stride the package publishes as the ES item size and programs into
 `VGT_ESGS_RING_ITEMSIZE`. Positions therefore arrive: the passthrough case covers
-exactly the pixels the control covers. The varying does not: every covered pixel
-is uniform black, which is what a zero read looks like, and it is identical with
-the pinned compiler and with the candidate - the candidate's merged
-identification and ES-half sizes are bookkeeping for the driver, not the fix. The
+exactly the pixels the control covers. **That sentence is withdrawn** - see the
+measurement below: it came from reading the oracle's expected-coverage count
+(4096, a property of the predicate) as if it were the image's coverage, and the
+image is in fact empty. What the varying does is not the only failure either: in
+a single diagnostic run the same read path produced the empty image for some
+cases and a drawn image for others, and the same case has produced both in
+different runs. Concretely, the SUPPRESS case emits nothing by construction and
+its own verdict certifies its image as the cleared target (`6927fac75e74a325`);
+in the same run PASSTHROUGH and the SENTINEL carry exactly that digest (they drew
+nothing) while SHRINK, RECOLOR and AMPLIFY drew something - and in an earlier run
+RECOLOR carried the cleared digest. A handoff that sometimes sees the vertex data
+and sometimes reads zeros is a *race*, not a constant offset, which is what a
+missing visibility or ordering guarantee between the two halves of the merged
+program looks like; the host-side A/B already ruled out a fixed wrong base, item
+size or stride. The candidate's merged identification and ES-half sizes are
+bookkeeping for the driver, not the fix. The
 exchange is an LDS ring rather than an SPI parameter-export stream, so the export
 configuration is not the path under question. What remains open is the item-index
 mapping (the vertex half indexes by its lane id, the geometry half by the
@@ -170,9 +182,24 @@ per-vertex offsets the hardware hands it) and whether the ring's LDS region is
 allocated and visible between the two phases. The same path also faults: a
 geometry program that reads `gl_in[i]` in a loop over the input array loses the
 device (the submission never completes) whether it runs before or after the
-other modes, so the fault follows that program rather than its surroundings,
-while the constant-emission and suppression modes pass. `geometryShader`
-therefore stays false.
+other modes, so the fault follows that program rather than its surroundings, and
+the loss was reproduced again in the table run below. `geometryShader` therefore
+stays false.
+
+The table run in question
+(`20260917T075403021Z_PPSA99994_ps5vk_0x6cab7462e29`, eboot
+`ae239b852a70e0a68516e0fb4e0e947ebd430a51bbf036148e5d88370844ca07`) reports every
+case in one log: control and constant emission verify, SUPPRESS verifies once its
+input-less fragment stage is present, the sentinel, passthrough and shrink
+fail, recolor and amplify draw something other than the cleared target, and
+POSITIONS then loses the device (`vkQueueWaitIdle` `rc=-4`). The first attempt at
+this run died entering SUPPRESS with `vkCreateGraphicsPipelines` `rc=-8`
+(`VK_ERROR_FEATURE_NOT_PRESENT`): this branch never carried the synthetic
+input-less fragment stage, so a geometry program that emits nothing was refused
+for an input its pre-raster stage cannot export. That is why the witness now has
+a table mode (`PS5VK_GEOMETRY_ORDER_PROBE`) as well: the shipping build is
+fail-fast and stopped at the sentinel, so it never reached the case that was
+broken on this tree.
 
 The witness also carries an observable sentinel for exactly that question: the
 input triangle emitted unchanged with the colour computed from the position the

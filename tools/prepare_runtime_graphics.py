@@ -46,6 +46,11 @@ def main():
         ("experiments/graphics/runtime_clip_cull_probe.vert", "runtime_clip_cull_control.vert.spv", "clip_cull_control"),
         ("experiments/graphics/runtime_geometry_probe.vert", "runtime_geometry_probe.vert.spv", "geometry_vertex"),
         ("experiments/graphics/runtime_geometry_probe.geom", "runtime_geometry_probe.geom.spv", "geometry_stage"),
+        # Synthetic suppress diagnostic only: an input-less fragment stage, so
+        # the geometry half's suppress case (which emits nothing) still forms a
+        # legal pipeline instead of being refused for an unmatched input.
+        ("experiments/graphics/runtime_geometry_suppress.frag",
+         "runtime_geometry_suppress.frag.spv", "geometry_suppress_fragment"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
