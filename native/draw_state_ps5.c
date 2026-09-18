@@ -83,20 +83,18 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         memcpy(result.cx+result.cx_count,pair->runtime_hull_hs.context,
             pair->runtime_hull_hs.header.num_cx_registers*sizeof(*result.cx));
         result.cx_count+=pair->runtime_hull_hs.header.num_cx_registers;
-        /* The hull is TWO programs, each with its own user-data window and
-         * each dereferencing the ring descriptor table at its ring-offsets
-         * dwords (SGPRs 0-1): the LS half's window (SPI_SHADER_USER_DATA_LS
-         * at sh offset 0x130) and the HS half's (SPI_SHADER_USER_DATA_HS at
-         * 0x10c). Both windows map one-to-one to their program's SGPRs - the
+        /* The hull is the gfx10 LSHS block, and on gfx10 its ONE user-data
+         * window is SPI_SHADER_USER_DATA_HS/LS_0 (R_00B430, sh offset
+         * 0x10c): the register the pinned header names for both names on
+         * gfx10 (R_00B4C0 is SPI_SHADER_REQ_CTRL_LSHS there, NOT user
+         * data). The window maps one-to-one to the hull's SGPRs - the
          * hull's own argument layout proves it with its vertex-buffer table
-         * at dword 10. The tess-factor writes the HS half makes go through
-         * the ring table too, so a window left unwritten faults the draw
-         * even when nothing reads off-chip. */
-        if(result.sh_count+4>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
-        result.sh[result.sh_count++]=(ps5_agc_register){0x130,
-            pair->tess_ring_table_low};
-        result.sh[result.sh_count++]=(ps5_agc_register){0x131,
-            pair->tess_ring_table_high};
+         * at dword 10 - so the ring descriptor table's address lands at the
+         * hull's ring-offsets dwords (SGPRs 0-1) through this one write
+         * pair. The tess-factor writes the HS half makes go through the
+         * ring table too, so a window left unwritten faults the draw even
+         * when nothing reads off-chip. */
+        if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
         result.sh[result.sh_count++]=(ps5_agc_register){0x10c,
             pair->tess_ring_table_low};
         result.sh[result.sh_count++]=(ps5_agc_register){0x10d,
