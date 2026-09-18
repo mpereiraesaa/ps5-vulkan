@@ -1069,3 +1069,41 @@ was taken in the same console window, on its own payload; the geometry witness
 was taken there too. None of those optional-stage runs is part of this selection,
 and no feature is advertised by them.
 Vulkan conformance claim.
+
+## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18)
+
+The four T05 requirements are implemented and measured through the public ABI,
+but **no leaf is promoted for any of them, because no candidate family is
+applicable to this profile today**. The frozen selection is therefore unchanged
+at 304 acceptance cases and 34 diagnostics, and nothing is advertised. The
+candidates were re-derived in the pinned checkout
+`a0270c1897597e6c77679870e10415398a13001c` rather than carried over:
+
+| Requirement | Candidate leaves | Why they cannot be selected yet |
+|---|---|---|
+| `depthBiasClamp` | `dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_{negative,positive}` | Both read the depth attachment back with `readDepth(...)` over `VK_IMAGE_ASPECT_DEPTH_BIT` (`external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:554-555`). Every copy path in `src/vk_image_transfer.c` validates `VK_IMAGE_ASPECT_COLOR_BIT` (`:63,197-198,237-238,525-526,627-628`), the only DEPTH-aspect path is the whole-subresource clear (`:355,:374`), and `src/depth_layout.h:9-10` states the GFX10 64KB_Z_X pixel addressing is not supplied. |
+| `depthClamp` | the same family, plus `..._clamp_four_viewports` | Same depth readback; the four-viewport leaf additionally needs a geometry stage and `multiViewport`. |
+| `fillModeNonSolid` | `dEQP-VK.rasterization.culling.*_{line,point}` for the list and strip topologies | The rasterization module is not registered in `cts/upstream/package_ps5.cpp` (the registered roots are api, binding_model, clipping, compute, draw, dynamic_state, geometry, info, memory, multiview, pipeline, robustness, spirv_assembly and synchronization), so these leaves are absent from the built payload rather than failing on the device. Registering a new module is a package change this tranche did not make. |
+| `multiViewport` | `dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_1..16` | Needs (a) a geometry stage writing `gl_ViewportIndex`, which the adapter describes but still refuses because the pinned compiler leaves `PSBC_UNRESOLVED_AGC_LINKAGE` set for that export (see VALIDATION.md), and (b) the `fragment_ops` module registered in the same package. |
+
+Two further applicability facts, recorded so the next attempt does not re-derive
+them. `dEQP-VK.draw.depth_bias.*` is D16_UNORM in every script
+(`external/vulkancts/data/vulkan/amber/draw/depth_bias/*.amber:19`, family
+declared in `modules/vulkan/draw/vktDrawDepthBiasTests.cpp:43,52-56`), so it is
+out of scope for a profile that does not offer D16. And
+`dEQP-VK.rasterization.depth_bias.d32_sfloat*` **is** format-applicable - it is
+registered at `modules/vulkan/rasterization/vktRasterizationTests.cpp:9282-9305`
+over `data/vulkan/amber/rasterization/depth_bias/` and carries four D32_SFLOAT
+leaves - but its oracle samples the depth image as a combined image sampler
+(`d32_sfloat.amber:106`, the `depthdump` pipeline at `:150-153`), and
+`src/texture_format.c:183` gives `VK_FORMAT_D32_SFLOAT` only `CAP_DEPTH|CAP_DST`
+with no sampled role, for the same missing-pixel-addressing reason. That family
+is therefore blocked by a capability, not by registration.
+
+The consequence is stated plainly rather than worked around: T05 has hardware
+evidence for the four features - the consumer's raster and viewport witnesses in
+[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses) -
+and no upstream acceptance to attach to it. Promoting a feature without an
+applicable upstream leaf would violate the selection policy above, so the
+platform mask is untouched and the DXVK profile matrix keeps all four rows as
+blockers.

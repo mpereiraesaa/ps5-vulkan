@@ -119,6 +119,21 @@ contract without claiming dynamic blending, stencil, depth bounds or depth
 bias execution. Viewport and scissor remain the only dynamic states consumed by
 draws.
 
+The DXVK262-T05 rasterization and viewport states - `depthBiasClamp`,
+`depthClamp`, `fillModeNonSolid` and `multiViewport` - are implemented end to
+end behind a build-time measurement gate (`PS5VK_RASTER_DIAGNOSTIC`) and are
+**not advertised**: the shipping platform mask sets none of the four bits, a
+request for one is still rejected before device creation, and the profile keeps
+reporting `maxViewports` 1. They are gated rather than shipped because no
+upstream CTS leaf is applicable to them yet - the candidate families and their
+exact blocking reasons are in [UPSTREAM_CTS.md](UPSTREAM_CTS.md) - and because
+the first hardware run of their own witnesses leaves six of thirty-one raster
+cases unverified and the shader-selected viewport path blocked on compiler
+metadata, as recorded in
+[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses).
+Nothing here should be read as these features being usable by an application
+today.
+
 ## Images and sampling
 
 The GFX1013 texture-format table records exact descriptor encodings, Vulkan
