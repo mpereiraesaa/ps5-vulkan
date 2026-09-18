@@ -631,6 +631,17 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     return VK_SUCCESS;
 failed:
     ps5vk_runtime_graphics_diag_result=(int)result;
+#if defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GEOMETRY_COMPILE_FAIL result=%s(%d) failure=%d "
+        "fs=%u hull=%u domain=%u tess=%u hull_wg=%u",
+        psbc_result_string(result),(int)result,(int)failure,
+        (unsigned)(p->fragment.machine_code!=NULL),
+        (unsigned)(p->hull.machine_code!=NULL),
+        (unsigned)(p->domain.machine_code!=NULL),
+        (unsigned)ps5vk_graphics_has_tessellation(key),
+        (unsigned)p->hull.metadata.hull_tess_wg_valid);
+#endif
     if(result==PSBC_RESULT_OUT_OF_MEMORY)failure=VK_ERROR_OUT_OF_HOST_MEMORY;
     ps5vk_runtime_graphics_free(NULL,p);
     return failure;

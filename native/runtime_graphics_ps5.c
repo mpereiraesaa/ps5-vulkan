@@ -3,6 +3,13 @@
 #include "graphics_program.h"
 #include <stdlib.h>
 #include <string.h>
+#if defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG
+#include "ps5log.h"
+#define TESS_CREATE_FAIL(stage) ps5log_printf(PS5LOG_MARK, \
+    "PS5VK_TESS_CREATE_FAIL stage=" stage)
+#else
+#define TESS_CREATE_FAIL(stage) ((void)0)
+#endif
 
 /* The tessellation ring sizing, from the pinned radv device-topology formula
  * (ac_gpu_info.c) with the GFX1013 console's measured engine topology: two
@@ -48,7 +55,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         (has_tessellation ?
             (primitive_type!=9u || !input->domain.machine_code) :
             !ps5vk_agc_primitive_linkable(primitive_type)))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        {TESS_CREATE_FAIL("primitive");return VK_ERROR_FEATURE_NOT_PRESENT;}
     struct ps5vk_runtime_shader check;
     struct ps5vk_runtime_draw_abi arguments;
     /* The domain half is the pre-raster program a tessellation pipeline
@@ -62,10 +69,10 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
        ps5vk_runtime_draw_abi_build(
            has_tessellation?&input->domain.metadata:&input->vertex.metadata,
            &input->fragment.metadata,&arguments))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        {TESS_CREATE_FAIL("abi");return VK_ERROR_FEATURE_NOT_PRESENT;}
     if(has_tessellation &&
        ps5vk_runtime_hull_build(&hull_ls,&hull_hs,&input->hull))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        {TESS_CREATE_FAIL("hull");return VK_ERROR_FEATURE_NOT_PRESENT;}
     size_t vs_at=(sizeof(struct ps5vk_graphics_pair)+255u)&~(size_t)255u;
     size_t fs_at=(vs_at+(has_tessellation?input->domain:input->vertex).machine_code_size+
         255u)&~(size_t)255u;
@@ -92,6 +99,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
     if(ps5vk_runtime_shader_build(&pair->runtime_vertex,
            has_tessellation?&input->domain:&input->vertex) ||
        ps5vk_runtime_shader_build(&pair->runtime_fragment,&input->fragment)) {
+        TESS_CREATE_FAIL("pair-headers");
         rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
     }
     if(has_tessellation) {
@@ -116,6 +124,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             has_tessellation?PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST:primitive_type);
     }
     if(agc_rc || vs!=&pair->runtime_vertex || fs!=&pair->runtime_fragment) {
+        TESS_CREATE_FAIL("agc");
         rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
     }
     if(has_tessellation) {

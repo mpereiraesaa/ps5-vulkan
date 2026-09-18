@@ -4,6 +4,23 @@
 #include "vk_pipeline_cache.h"
 #include <float.h>
 #include <string.h>
+/* Every plain feature refusal gets a site number, so a console run can name
+ * the condition the way the adapter's rejection diagnostic does. The variable
+ * lives here: the refusals are this file's, and the diagnostics read it. */
+unsigned ps5vk_pipeline_refusal_site_value;
+unsigned ps5vk_pipeline_refusal_site_value_state(void)
+{
+    return ps5vk_pipeline_refusal_site_value;
+}
+unsigned ps5vk_pipeline_refusal_site(void)
+{
+    return ps5vk_pipeline_refusal_site_value;
+}
+static VkResult refuse(unsigned site)
+{
+    ps5vk_pipeline_refusal_site_value=site;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
 static int dynamic_states(const VkPipelineDynamicStateCreateInfo *info,
                           VkBool32 *viewport, VkBool32 *scissor)
@@ -66,17 +83,17 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (in->pNext || in->flags || in->subpass >= in->renderPass->subpass_count ||
         (in->stageCount != 2 && in->stageCount != 3 && in->stageCount != 4) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(2);
     VkBool32 dynamic_viewport,dynamic_scissor;
     if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(3);
     const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL, *gs=NULL,
         *tcs=NULL, *tes=NULL;
     for (unsigned i=0; i<in->stageCount; ++i) {
         const VkPipelineShaderStageCreateInfo *s=&in->pStages[i];
         if (s->sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO || !s->module ||
             s->module->device != d || !s->pName) return VK_ERROR_UNKNOWN;
-        if (s->flags || s->pNext) return VK_ERROR_FEATURE_NOT_PRESENT;
+        if (s->flags || s->pNext) return refuse(4);
         uint32_t id;
         if (!ps5vk_shader_entry(s->module, s->stage, s->pName, &id)) return VK_ERROR_UNKNOWN;
         if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;
@@ -84,7 +101,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         else if (s->stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT && !tes) tes=s;
         else if (s->stage == VK_SHADER_STAGE_GEOMETRY_BIT && !gs) gs=s;
         else if (s->stage == VK_SHADER_STAGE_FRAGMENT_BIT && !fs) fs=s;
-        else return VK_ERROR_FEATURE_NOT_PRESENT;
+        else return refuse(5);
     }
     /* Vulkan requires the control and evaluation stages to appear together, and
      * the stage count to name exactly the stages that were provided. */
@@ -97,9 +114,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * tessellation pair is the same shape: its stages are the feature. */
 #if !PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
     if (gs && !(d->enabled_features & PS5VK_FEATURE_GEOMETRY_SHADER))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(6);
     if (tcs && !(d->enabled_features & PS5VK_FEATURE_TESSELLATION_SHADER))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(7);
 #endif
     const VkPipelineVertexInputStateCreateInfo *v=in->pVertexInputState;
     const VkPipelineInputAssemblyStateCreateInfo *ia=in->pInputAssemblyState;
@@ -116,16 +133,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         b->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO) return VK_ERROR_UNKNOWN;
     if (v->vertexBindingDescriptionCount>16 || v->vertexAttributeDescriptionCount>32 ||
         (v->vertexBindingDescriptionCount && !v->pVertexBindingDescriptions) ||
-        (v->vertexAttributeDescriptionCount && !v->pVertexAttributeDescriptions))return VK_ERROR_FEATURE_NOT_PRESENT;
+        (v->vertexAttributeDescriptionCount && !v->pVertexAttributeDescriptions))return refuse(8);
     for(uint32_t i=0;i<v->vertexBindingDescriptionCount;++i) {
         const VkVertexInputBindingDescription *binding=&v->pVertexBindingDescriptions[i];
         if(binding->binding>=16 || binding->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
-           !binding->stride || binding->stride>0x3fff)return VK_ERROR_FEATURE_NOT_PRESENT;
+           !binding->stride || binding->stride>0x3fff)return refuse(9);
         for(uint32_t j=0;j<i;++j)
             if(v->pVertexBindingDescriptions[j].binding==binding->binding)return VK_ERROR_UNKNOWN;
     }
     for(uint32_t a=0;a<v->vertexAttributeDescriptionCount;++a)
-        if(v->pVertexAttributeDescriptions[a].location>=32)return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(v->pVertexAttributeDescriptions[a].location>=32)return refuse(10);
     /* Tessellation contract. Vulkan requires the control and evaluation stages
      * together, PATCH_LIST as the input assembly when they are present, and a
      * patchControlPoints in range; pTessellationState is ignored without them.
@@ -140,7 +157,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             t->pNext || t->flags || !t->patchControlPoints ||
             t->patchControlPoints > PS5VK_MAX_PATCH_CONTROL_POINTS ||
             ia->topology != VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)
-            return VK_ERROR_FEATURE_NOT_PRESENT;
+            return refuse(11);
     }
     if (in->pTessellationState &&
        in->pTessellationState->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO)
@@ -148,12 +165,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     /* The topology decides the primitive the AGC linker programs, so the
      * accepted set and its values live in one place. */
     uint32_t primitive_type=0;
-    if(ps5vk_agc_primitive_type(ia->topology,&primitive_type))return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(ps5vk_agc_primitive_type(ia->topology,&primitive_type))return refuse(12);
     /* Points and lines are the input families a geometry stage is fed with, and
      * that is the only shape the profile has a witness for; without the stage
      * they stay refused. */
     if (!gs && ps5vk_agc_primitive_needs_geometry(primitive_type))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(13);
     /* Primitive restart is input-assembly state: the front end compares each
      * index against a reset index and starts a new primitive where it matches,
      * so it can only act on a strip. The profile accepts it for the two strips
@@ -163,7 +180,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (ia->primitiveRestartEnable &&
         ia->topology != VK_PRIMITIVE_TOPOLOGY_LINE_STRIP &&
         ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(14);
     if (v->pNext || v->flags ||
         ia->pNext || ia->flags ||
         r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable ||
@@ -182,7 +199,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         (m->pSampleMask && !(m->pSampleMask[0] & 1)) ||
         vp->pNext || vp->flags || vp->viewportCount != 1 || vp->scissorCount != 1 ||
         b->pNext || b->flags || b->logicOpEnable || b->attachmentCount != 1)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(15);
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
         !b->pAttachments) return VK_ERROR_UNKNOWN;
     const VkViewport *viewport=vp->pViewports; const VkRect2D *scissor=vp->pScissors;
@@ -205,7 +222,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
         depth->pNext || depth->flags || depth->depthBoundsTestEnable || depth->stencilTestEnable ||
         depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(16);
     struct ps5vk_graphics_key key={
         .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
         .fragment={.words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName},
@@ -234,7 +251,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
        (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)) ||
        (tcs && !specialization_key(tcs->pSpecializationInfo,&key.tess_control)) ||
        (tes && !specialization_key(tes->pSpecializationInfo,&key.tess_eval)))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(17);
     const void *data=NULL;
     const struct ps5vk_graphics_program *program=NULL;
     VkResult rc;
@@ -303,7 +320,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineC
         !d->graphics_enabled || (!d->graphics_library && !d->graphics_acquire) ||
         (!!d->graphics_acquire != !!d->graphics_compiled_release) ||
         !d->graphics_create || !d->graphics_release)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        return refuse(18);
     VkResult rc=VK_SUCCESS;
     for (uint32_t i=0;i<count;++i) {
         VkResult current=create(d,&infos[i],allocator,&out[i]);

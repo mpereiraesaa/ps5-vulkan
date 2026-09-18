@@ -167,6 +167,19 @@ def main():
             "-DPS5VK_TARGET_PS5=1",
             "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
             "-DPS5VK_RUNTIME_GRAPHICS=1", "-DPS5VK_NO_OFFLINE_LIBRARY=1",
+            # The diagnostic probes are environment-declared for the whole
+            # payload: the runtime library the SDK builds compiles the same
+            # sources the native build does, so the optional-stage negotiation
+            # gate must see the same diagnostic decision. The value is passed
+            # through from the caller (build_native.py sets it for its probe
+            # builds); the shipping default stays zero.
+            *(["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" +
+               os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"]]
+              if os.environ.get("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC") else []),
+            *(["-DPS5VK_TESS_PROBE=" + os.environ["PS5VK_TESS_PROBE"]]
+              if os.environ.get("PS5VK_TESS_PROBE") else []),
+            *(["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
+              if os.environ.get("PS5VK_GEOMETRY_KEY_DIAG") == "1" else []),
         ]
 
         obj_dir = ROOT / "build/sdk-objs-native"

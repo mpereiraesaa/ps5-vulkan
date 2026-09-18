@@ -2498,6 +2498,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,points_module,NULL);
     vkDestroyShaderModule(d,lines_module,NULL);
 #if PS5VK_TESS_PROBE
+    extern unsigned ps5vk_pipeline_refusal_site(void);
     /* Tessellation witness (report-only). Two triangle patches: the left
      * tessellated at level three, the right at level one. The evaluation half
      * paints the QUANTISED tessCoord field - colour = (floor(u*n)/n,
@@ -2704,7 +2705,8 @@ static void geometry_probe(VkDevice d)
             vkDestroyPipeline(d,tess_pipeline,NULL);
         } else {
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_TESS_PROBE rc=%d created=0",(int)tess_rc);
+                "PS5VK_TESS_PROBE rc=%d created=0 site=%u",(int)tess_rc,
+                ps5vk_pipeline_refusal_site());
         }
     }
     for(unsigned i=0;i<4;++i)vkDestroyShaderModule(d,tess_modules[i],NULL);

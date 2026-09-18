@@ -324,10 +324,19 @@ def main():
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
             common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
             common += ["-DPS5VK_TESS_PROBE=" + tess_probe]
+            # The tessellation witness runs with the key-rejection diagnostic
+            # on, so a refused pipeline names its rejection site in the log
+            # instead of only reporting the Vulkan error code.
+            if tess_probe == "1":
+                common += ["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
             # Both optional-stage witnesses skip the feature-negotiation gate:
             # they exist to measure capabilities that are not advertised yet.
-            common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" +
-                       ("1" if (clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1") else "0")]
+            # Exported, because the SDK build compiles the same sources.
+            optional_stage_diagnostic = "1" if (clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1") else "0"
+            os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"] = optional_stage_diagnostic
+            if tess_probe == "1":
+                os.environ["PS5VK_GEOMETRY_KEY_DIAG"] = "1"
+            common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + optional_stage_diagnostic]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]
