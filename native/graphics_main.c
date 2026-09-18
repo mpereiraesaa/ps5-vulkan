@@ -2566,8 +2566,13 @@ static void geometry_probe(VkDevice d)
             .pInputAssemblyState=&coord_ia,.pTessellationState=&coord_ts,
             .pRasterizationState=&coord_raster,.pMultisampleState=&coord_ms,
             .pViewportState=&coord_vp,.pColorBlendState=&coord_blend};
-        for(unsigned zero_level=0;zero_level<2;++zero_level) {
-        coord_stage_infos[1].module=zero_level?zero_tcs_module:coord_modules[1];
+        /* The bisect order puts the least-engine candidate first: variant 2
+         * runs with the LS/HS halves DISABLED in the stage enables (no hull
+         * launch, no tessellator), variant 1 with a zero-level control half
+         * (the hull runs, the factors are zeros), variant 0 the real control.
+         * A fault that moves down the order names the stage. */
+        for(unsigned zero_level=2;zero_level<3;--zero_level) {
+        coord_stage_infos[1].module=zero_level==1?zero_tcs_module:coord_modules[1];
         VkPipeline coord_pipeline;
         const VkResult coord_rc=vkCreateGraphicsPipelines(d,0,1,&coord_pi,NULL,
             &coord_pipeline);
@@ -2577,6 +2582,10 @@ static void geometry_probe(VkDevice d)
             if(!coord_native || !coord_native->pair || !coord_native->pair->ready ||
                !coord_native->pair->tessellation)
                 fail("tess-coord-pipeline",-1);
+            /* The create's own stage-enable value (the domain's linked value
+             * with the LS/HS enables ORed in): the variants mutate from it. */
+            const uint32_t coord_stages_en_base=
+                coord_native->pair->tess_state[0].value;
             VkCommandPool coord_pool;
             VkCommandPoolCreateInfo coord_pci={
                 .sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -2603,12 +2612,24 @@ static void geometry_probe(VkDevice d)
             vkCmdDraw(coord_cb,3,1,0,0);
             vkCmdEndRenderPass(coord_cb);
             CHECK(vkEndCommandBuffer(coord_cb));
+            /* The variant's stage-enable mutation: variant 2 clears the LS
+             * and HS enables from the prepared value, so the engine runs the
+             * draw with the domain half only. The pair is flushed, because
+             * the prepare reads its state back. */
+            coord_native->pair->tess_state[0].value=zero_level==2?
+                (coord_stages_en_base & ~((1u<<0)|(1u<<2))):
+                coord_stages_en_base;
+            VkResult coord_flush_rc=coord_native->memory.flush(
+                coord_native->memory.context,coord_native->backing,0,
+                coord_native->allocation_bytes);
+            if(coord_flush_rc!=VK_SUCCESS)fail("tess-coord-flush",-1);
             /* The prepared launch state, logged before the submit: the
              * LS_HS_CONFIG and the domain's stage enables are what the
              * engine is about to run with. */
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_TESS_COORD_PREPARED di_patch=9 ls_hs_config=%08x "
-                "stages_en=%08x tf_param=%08x",
+                "PS5VK_TESS_COORD_PREPARED variant=%u di_patch=9 "
+                "ls_hs_config=%08x stages_en=%08x tf_param=%08x",
+                zero_level,
                 coord_native->pair->tess_state[1].value,
                 coord_native->pair->tess_state[0].value,
                 coord_native->pair->runtime_hull_hs.context[0].value);
