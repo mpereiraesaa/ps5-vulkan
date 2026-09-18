@@ -166,6 +166,12 @@ def main():
         # configuration measured by the same descriptor-free mechanism.
         ("experiments/graphics/runtime_tess_spin_iso.tese",
          "runtime_tess_spin_iso.tese.spv", "tess_spin_iso_evaluation"),
+        # The POSITIVE CONTROL for that witness: the same spin in the CONTROL
+        # half, which is proven to execute because its factors are in the
+        # ring. Reading "no stall" as "did not execute" is only sound if a
+        # stage that does execute produces a stall.
+        ("experiments/graphics/runtime_tess_spin_hull.tesc",
+         "runtime_tess_spin_hull.tesc.spv", "tess_spin_hull_control"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

@@ -2651,7 +2651,9 @@ static void geometry_probe(VkDevice d)
 #else
 #define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_witness_exec_evaluation
 #endif
-#if defined(PS5VK_TESS_HIGH_LEVELS) && PS5VK_TESS_HIGH_LEVELS
+#if defined(PS5VK_TESS_SPIN_HULL) && PS5VK_TESS_SPIN_HULL
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_spin_hull_control
+#elif defined(PS5VK_TESS_HIGH_LEVELS) && PS5VK_TESS_HIGH_LEVELS
 #define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_high_control
 #else
 #define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
@@ -2992,6 +2994,42 @@ static void geometry_probe(VkDevice d)
             vkCmdDraw(coord_cb,3,1,0,0);
             vkCmdEndRenderPass(coord_cb);
             CHECK(vkEndCommandBuffer(coord_cb));
+#if defined(PS5VK_TESS_PREFILL) && PS5VK_TESS_PREFILL
+            /* PRE-FILL THE WHOLE TESSELLATION FACTOR RING WITH A VALID LEVEL.
+             *
+             * The hull is proven to store correct factors, and the
+             * tessellator is proven not to produce anything. Between those
+             * two facts sits an assumption nobody has tested: that the
+             * geometry engine READS the factors from where the hull WROTE
+             * them. The hull stores at the ring base plus the per-wave
+             * tcs_factor_offset the engine itself hands it, so they agree by
+             * construction - unless the engine's own read base is not this
+             * ring at all.
+             *
+             * Filling the ENTIRE extent with 2.0f removes the offset from the
+             * question: wherever in this ring the engine reads, it finds a
+             * legal tessellation level. If the domain then executes, the hull
+             * writes to a place the engine does not read and the whole
+             * remaining problem is an addressing one. If it still does not,
+             * the engine is not reading this ring at all - or not running the
+             * tessellator - and that is a different and much more structural
+             * answer.
+             *
+             * The hull overwrites its own four words afterwards with the same
+             * 2.0 and a 1.0 inner, which is still a legal patch, so this does
+             * not fabricate a result the shader would not have produced. */
+            {
+                const uint32_t *pf_table=
+                    (const uint32_t *)coord_native->pair->tess_rings;
+                volatile uint32_t *pf=(volatile uint32_t *)(uintptr_t)
+                    (((uint64_t)pf_table[21]<<32)|pf_table[20]);
+                const uint32_t pf_words=pf_table[22]/4u;
+                for(uint32_t i=0;i<pf_words;++i)pf[i]=0x40000000u;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_PREFILL variant=%s words=%u value=40000000",
+                    PS5VK_TESS_CONTROL_NAME,pf_words);
+            }
+#endif
             tess_receipt(PS5VK_TESS_CONTROL_NAME,coord_native,3u);
             /* A BOUNDED wait, not vkQueueWaitIdle.
              *

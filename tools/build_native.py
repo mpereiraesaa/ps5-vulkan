@@ -477,6 +477,23 @@ def main():
                 # 1 = the triangle domain, 2 = the isoline domain: a
                 # materially different tessellator configuration measured by
                 # the same descriptor-free mechanism.
+                # The POSITIVE CONTROL for the spin witness: the same loop
+                # in the CONTROL half, which is proven to execute because its
+                # factors are in the ring. Reading "no stall" as "did not
+                # execute" is only sound if a stage that does execute
+                # produces one.
+                # Fill the whole tessellation factor ring with a legal level
+                # before the draw, so the engine finds one wherever it reads.
+                # Separates "the hull writes where the engine does not read"
+                # from "the engine does not read this ring at all". Default 0.
+                tess_prefill = os.environ.get("PS5VK_TESS_PREFILL", "0")
+                if tess_prefill not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_PREFILL must be 0 or 1")
+                common += ["-DPS5VK_TESS_PREFILL=" + tess_prefill]
+                tess_spin_hull = os.environ.get("PS5VK_TESS_SPIN_HULL", "0")
+                if tess_spin_hull not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_SPIN_HULL must be 0 or 1")
+                common += ["-DPS5VK_TESS_SPIN_HULL=" + tess_spin_hull]
                 tess_spin = os.environ.get("PS5VK_TESS_SPIN", "0")
                 if tess_spin not in ("0", "1", "2"):
                     raise SystemExit(
@@ -539,7 +556,9 @@ def main():
                                          tess_high_levels + ":" +
                                          tess_only + ":" + tess_gs_en + ":" +
                                          tess_dynamic_hs + ":" +
-                                         tess_max_vert_out + ":" + tess_spin) +
+                                         tess_max_vert_out + ":" + tess_spin +
+                                         ":" + tess_spin_hull + ":" +
+                                         tess_prefill) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump
