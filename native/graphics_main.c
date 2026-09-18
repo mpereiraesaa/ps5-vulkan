@@ -2520,6 +2520,13 @@ static void geometry_probe(VkDevice d)
             .codeSize=coord_codes[i].bytes,.pCode=coord_codes[i].code};
         CHECK(vkCreateShaderModule(d,&mi,NULL,&coord_modules[i]));
     }
+    VkShaderModule zero_tcs_module;
+    {
+        VkShaderModuleCreateInfo mi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(ps5vk_runtime_tess_coord_zero_control),
+            .pCode=ps5vk_runtime_tess_coord_zero_control};
+        CHECK(vkCreateShaderModule(d,&mi,NULL,&zero_tcs_module));
+    }
     {
         const VkShaderStageFlagBits coord_stages[4]={
             VK_SHADER_STAGE_VERTEX_BIT,VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
@@ -2559,6 +2566,8 @@ static void geometry_probe(VkDevice d)
             .pInputAssemblyState=&coord_ia,.pTessellationState=&coord_ts,
             .pRasterizationState=&coord_raster,.pMultisampleState=&coord_ms,
             .pViewportState=&coord_vp,.pColorBlendState=&coord_blend};
+        for(unsigned zero_level=0;zero_level<2;++zero_level) {
+        coord_stage_infos[1].module=zero_level?zero_tcs_module:coord_modules[1];
         VkPipeline coord_pipeline;
         const VkResult coord_rc=vkCreateGraphicsPipelines(d,0,1,&coord_pi,NULL,
             &coord_pipeline);
@@ -2656,9 +2665,9 @@ static void geometry_probe(VkDevice d)
                 if(wrong)++c_wrong;
             }
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_TESS_COORD expected=%llu covered=%llu wrong=%llu "
+                "PS5VK_TESS_COORD zero=%u expected=%llu covered=%llu wrong=%llu "
                 "digest=%016llx ls_hs_config=%08x tf_param=%08x verified=%d",
-                (unsigned long long)c_expected,(unsigned long long)c_covered,
+                zero_level,(unsigned long long)c_expected,(unsigned long long)c_covered,
                 (unsigned long long)c_wrong,
                 (unsigned long long)geometry_digest(coord_detiled,sizeof(coord_detiled)),
                 coord_native->pair->tess_state[1].value,
@@ -2668,11 +2677,13 @@ static void geometry_probe(VkDevice d)
             vkDestroyCommandPool(d,coord_pool,NULL);
         } else {
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_TESS_COORD rc=%d created=0 site=%u",(int)coord_rc,
-                ps5vk_pipeline_refusal_site());
+                "PS5VK_TESS_COORD zero=%u rc=%d created=0 site=%u",zero_level,
+                (int)coord_rc,ps5vk_pipeline_refusal_site());
+        }
         }
     }
     for(unsigned i=0;i<4;++i)vkDestroyShaderModule(d,coord_modules[i],NULL);
+    vkDestroyShaderModule(d,zero_tcs_module,NULL);
 #endif
 #if PS5VK_TESS_PROBE
     /* Tessellation witness (report-only). Two triangle patches: the left
