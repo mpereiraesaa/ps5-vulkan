@@ -2562,7 +2562,6 @@ static void geometry_probe(VkDevice d)
             .pViewportState=&tess_vp,.pColorBlendState=&tess_blend};
         VkPipeline tess_pipeline;
         const VkResult tess_rc=vkCreateGraphicsPipelines(d,0,1,&tess_pi,NULL,&tess_pipeline);
-        unsigned long long t_expected=0,t_covered=0,t_missing=0,t_foreign=0,t_wrong=0;
         uint32_t t_stages_en=0,t_ls_hs=0,t_tf=0;
         if(tess_rc==VK_SUCCESS && tess_pipeline) {
             /* The pre-raster program a tessellation pipeline packages is the
