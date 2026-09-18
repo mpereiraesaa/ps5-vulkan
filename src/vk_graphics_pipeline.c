@@ -5,6 +5,31 @@
 #include <float.h>
 #include <string.h>
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
+/* The rasterization state's pNext chain. This profile implements no optional
+ * rasterization structure, and every state that would change behaviour is
+ * refused, but the pinned upstream rasterization module chains one
+ * VkPipelineRasterizationLineStateCreateInfoEXT unconditionally - it sets the
+ * sType even when VK_EXT_line_rasterization is not enabled, which is the case
+ * on this device - so refusing every pNext fails a module this profile
+ * otherwise implements, at pipeline creation
+ * (measured: dEQP-VK.rasterization.culling.* -> vk.createGraphicsPipelines
+ * VK_ERROR_FEATURE_NOT_PRESENT in the 2026-09-18 acceptance run).
+ *
+ * The one structure is therefore accepted only in the exact form that asks for
+ * what this driver already does: the default rectangular rasterization mode and
+ * no stipple. Everything else stays refused: any other sType, a non-default
+ * line rasterization mode, an enabled stipple, or a second structure in the
+ * chain. */
+static int rasterization_pnext_supported(const void *pnext)
+{
+    if(!pnext)return 1;
+    const VkBaseInStructure *base_=pnext;
+    if(base_->sType!=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT)return 0;
+    const VkPipelineRasterizationLineStateCreateInfoEXT *line=(const void *)base_;
+    if(line->pNext)return 0;
+    return line->lineRasterizationMode==VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT &&
+        !line->stippledLineEnable;
+}
 /* The core dynamic states this profile executes: viewport, scissor and depth
  * bias. Every other VkDynamicState stays refused, so a pipeline can never be
  * created with a dynamic state that no draw would honour. */
@@ -173,7 +198,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          * topologies it can act on, and refused there for every other
          * topology, so it is not part of this blanket refusal. */
         ia->pNext || ia->flags ||
-        r->pNext || r->flags || r->rasterizerDiscardEnable ||
+        !rasterization_pnext_supported(r->pNext) || r->flags || r->rasterizerDiscardEnable ||
         /* depthClampEnable needs depthClamp ENABLED on this logical device;
          * the state itself executes (native PA_CL_CLIP_CNTL ZCLIP_*_DISABLE
          * with the viewport depth range as the clamp interval). */

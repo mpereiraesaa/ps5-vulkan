@@ -965,7 +965,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
       "implementation": {
-        "detail": "raw storage/uniform descriptors carry the byte span and vertex descriptors carry the bounded record count",
+        "detail": "raw storage/uniform descriptors carry the byte span and the vertex plan bounds the addressable vertex count against the bound data's extent",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],

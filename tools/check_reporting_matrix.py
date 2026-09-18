@@ -155,10 +155,15 @@ ADVERTISED_FEATURES = {
     "robustBufferAccess": {
         "citations": (
             ("src/descriptor_encode.c", "out[3] = 0x31016fac;"),
-            ("src/vertex_descriptor.c", "1+(bytes-attribute_extent)/stride"),
+            # The bound that makes the vertex fetch a bounded access moved with
+            # the descriptor-window change: the descriptor now covers the whole
+            # bound buffer, so a structure-of-arrays attribute is reachable, and
+            # the plan is what bounds how many vertices a draw may address.
+            ("src/vertex_fetch.c", "1+(bytes-fetch->attribute_extent)/fetch->stride"),
         ),
-        "detail": ("raw storage/uniform descriptors carry the byte span and "
-                   "vertex descriptors carry the bounded record count"),
+        "detail": ("raw storage/uniform descriptors carry the byte span and the "
+                   "vertex plan bounds the addressable vertex count against the "
+                   "bound data's extent"),
         "cts": ("dEQP-VK.info.device_mandatory_features",),
     },
     # DXVK262-T03. Each feature is reported behind its platform bit and its
