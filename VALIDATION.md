@@ -350,20 +350,30 @@ module binds those resources to the GEOMETRY stage alone, which the compiler
 profile now admits when - and only when - the pipeline carries that stage, and
 which the draw path's descriptor plan now carries for the merged pre-raster
 program once the native create records the geometry pair on it (a host regression
-checks both directions). The four remaining leaves are recorded as measured
-diagnostics with `expected_status: Fail`, and their cause is measured too: the
-pinned geometry builder enables primitive restart for strip topologies
-(`vktGeometryTestsUtil.cpp:153-172`), these four are the only leaves built with
-`TRIANGLE_STRIP`, and this profile refuses that input-assembly state before the
-adapter is asked. The witness measures both sides - restart enabled is refused,
-and the same indexed strip with restart disabled draws 72 foreign pixels in the
-gap between its two quads, which is the bridging primitive a missing cut threads
-across - so the open item is primitive-restart support for strips, not the
-geometry path. The frozen
-selection re-run is **290/290 Pass, zero Fail, no NotSupported, title closed**
+checks both directions). The four strip-topology leaves that remained were
+blocked on one measured fact: the pinned geometry builder enables primitive
+restart for strips (`vktGeometryTestsUtil.cpp:153-172`), they are the only leaves
+built with `TRIANGLE_STRIP`, and the profile refused that input-assembly state
+before the adapter was asked. It now carries it: pipeline creation accepts the
+state for `LINE_STRIP`/`TRIANGLE_STRIP` and refuses it for lists, and the draw
+path programs the pair RADV programs on gfx10 - the enable in the user-config
+`VGT_MULTI_PRIM_IB_RESET_EN` (0x3092c), the index in the context
+`VGT_MULTI_PRIM_IB_RESET_INDX` (0x2840c, 0xffff / 0xffffffff by index width) and
+the `SQ_NON_EVENT` workaround the GFX10 synchronisation bug needs. The witness
+measures it end to end: the indexed strip with a restart index between two quads
+draws **foreign=0** with the cut, and 72 foreign pixels without it - the bridging
+primitive a missing cut threads across. The frozen
+selection re-run is **304/304 Pass, zero Fail, no NotSupported, title closed**
 (selection
-`a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679`, eboot
-`f1e4ef071fc8b1777b75e67ce858da91ebca32fc2e716608a60fb68045f36878`).
+`7406de91ef883de7c1dd8522926773b72c846834fde37b45f686ff5994c8601b`, eboot
+`afe1755291ef231f6f7c3e730abcd062f3a57618e879c758a1f0a89a42c207aa`), with all
+twenty-nine geometry leaves the module produces for a device that advertises the
+feature passing their own upstream oracles - the input families, the conversions,
+the output-count and varying families, the descriptor variants, the strip
+restart family and both per-primitive-id leaves. A geometry stage that reads
+nothing per-vertex declares no gl_in array at all, so the policy binds it to the
+pipeline's topology through the input primitive its execution mode states and
+drops a declared attribute no shader input consumes, which Vulkan permits.
 
 **Probe.** The DXVK 2.6.2 capability probe was re-measured against the advertised
 profile and verifies strictly: `geometryShader` observed **1**, 10 of 62
