@@ -409,6 +409,11 @@ int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *hull,
         !m->hull_tess_wg_valid ||
         !m->hull_num_patches_per_wg || m->hull_num_patches_per_wg>255 ||
         !m->hull_tcs_lds_size ||
+        /* The ring descriptor table must have a user-data home: the hull
+         * dereferences the table on every patch draw and cannot be launched
+         * without it on this platform. */
+        !m->ps5_ring_table_valid ||
+        m->ps5_ring_table_user_data_dword+1u>=m->user_sgpr_count ||
         /* One image: the separate LS carriage the two-program model used is
          * gone, and a package still claiming it is not this ABI. */
         m->hull_ls_valid || m->hull_ls_code_offset || m->hull_ls_code_size ||

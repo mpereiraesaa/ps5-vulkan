@@ -82,7 +82,22 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         memcpy(result.cx+result.cx_count,pair->runtime_hull.context,
             pair->runtime_hull.header.num_cx_registers*sizeof(*result.cx));
         result.cx_count+=pair->runtime_hull.header.num_cx_registers;
-        /* NO ring-table write here, deliberately.
+        /* The ring descriptor table, delivered as USER DATA.
+         *
+         * The hull's first memory operation is an SMEM load of a buffer
+         * descriptor from this table (entry 5, the tess-factor ring), so a
+         * patch draw faults at any tessellation level without it. The
+         * compiler assigns the window-relative dword and the driver writes
+         * the 64-bit address there; the hull's user-data window on gfx10 is
+         * SPI_SHADER_USER_DATA_HS_0, sh offset 0x10c. */
+        if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
+        result.sh[result.sh_count++]=(ps5_agc_register){
+            (uint16_t)(0x10c+pair->tess_ring_table_slot),
+            pair->tess_ring_table_low};
+        result.sh[result.sh_count++]=(ps5_agc_register){
+            (uint16_t)(0x10c+pair->tess_ring_table_slot+1u),
+            pair->tess_ring_table_high};
+        /* What is NOT written here, deliberately.
          *
          * An earlier version wrote the ring descriptor table's address into
          * the hull's user-data window at sh 0x10c/0x10d, intending to reach

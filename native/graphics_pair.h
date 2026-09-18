@@ -43,6 +43,11 @@ struct ps5vk_graphics_pair {
      * ring, audited raw buffer SRDs), and the hull's ring-offsets dwords
      * carry its address. */
     uint32_t tess_ring_table_low, tess_ring_table_high;
+    /* The hull's user-data dword the compiler assigned to the ring descriptor
+     * table, window-relative. The table address is delivered there because the
+     * system-block ring_offsets at s0/s1 is not writable for a merged
+     * program on this platform. */
+    uint32_t tess_ring_table_slot;
     /* The ring block's GPU address; the backing is tracked by the owning
      * native pipeline and released with it. */
     void *tess_rings;

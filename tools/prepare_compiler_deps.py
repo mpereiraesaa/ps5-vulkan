@@ -29,7 +29,7 @@ DEPS = [
         # by history. The pin is the whole
         # contract, so a different commit has to be pinned explicitly and the
         # driver cache key moves with the metadata version.
-        "pin": "ad78d8aa1ec1520d43abce4b218b84c3c210a7cf",
+        "pin": "87e0d6c650b0c7c958d170b5768493cb1ec20a23",
     },
     {
         "name": "opengnm",

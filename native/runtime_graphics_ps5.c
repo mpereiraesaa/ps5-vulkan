@@ -252,10 +252,22 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
                 entry[3]=PS5VK_TESS_RING_SRD_FORMAT;
             }
         }
-        /* The table's address is what the hull's ring-offsets dwords carry
-         * (SGPRs 0-1 of the merged program, one-to-one in the LS window). */
+        /* The table's address, and the hull user-data dword that carries it.
+         * The hull dereferences the table (its first memory operation is an
+         * SMEM load of the tess-factor ring descriptor at table + 5*16), and
+         * on this platform it has to arrive as user data: the system-block
+         * ring_offsets at s0/s1 is below the merged program's user-data
+         * window and nothing here configures a global ring table. */
         pair->tess_ring_table_low=(uint32_t)rings_va;
         pair->tess_ring_table_high=(uint32_t)(rings_va>>32);
+        if(!input->hull.metadata.ps5_ring_table_valid ||
+           input->hull.metadata.ps5_ring_table_user_data_dword+1u>=
+               input->hull.metadata.user_sgpr_count) {
+            TESS_CREATE_FAIL("hull-ring-slot");
+            rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+        }
+        pair->tess_ring_table_slot=
+            input->hull.metadata.ps5_ring_table_user_data_dword;
         /* The tessellation ring device state, in the USER-CONFIG bank.
          *
          * These four registers carry OFFSETS in that bank's index space,
