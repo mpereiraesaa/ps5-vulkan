@@ -128,6 +128,8 @@ def main():
          "runtime_tess_coord.tese.spv", "tess_coord_evaluation"),
         ("experiments/graphics/runtime_tess_coord.frag",
          "runtime_tess_coord.frag.spv", "tess_coord_fragment"),
+        ("experiments/graphics/runtime_tess_coord_zero.tesc",
+         "runtime_tess_coord_zero.tesc.spv", "tess_coord_zero_control"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
