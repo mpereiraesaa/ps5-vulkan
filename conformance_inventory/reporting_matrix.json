@@ -22787,12 +22787,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:multiViewport: reported 0 must be >= 1; blocker: compute-only build: graphics limits are not applied to this profile",
+      "detail": "cts-gated-off:multiViewport: reported 1 must be >= 1",
       "kind": "limit",
       "limit": "maxViewports",
       "profile": "compute",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 1,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -26559,9 +26559,9 @@
       "satisfied": 138
     },
     "limits": {
-      "blocker": 60,
+      "blocker": 59,
       "not-applicable": 656,
-      "satisfied": 138
+      "satisfied": 139
     },
     "shader_capabilities": {
       "not-audited": 2,

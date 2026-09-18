@@ -59,6 +59,8 @@ static inline void ps5vk_device_profile_init(VkPhysicalDeviceProperties *propert
     if (graphics_submit) ps5vk_graphics_limits(&properties->limits);
     properties->limits.maxDrawIndirectCount =
         ps5vk_platform_max_draw_indirect_count(supported_features);
+    properties->limits.maxViewports =
+        ps5vk_platform_max_viewports(supported_features);
 }
 
 #endif
