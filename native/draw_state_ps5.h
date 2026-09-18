@@ -6,18 +6,10 @@
 #include "ps5_pipeline.h"
 #include "runtime_draw_abi.h"
 /* The extra two slots are the primitive-restart enable and reset index this path
- * programs from the pipeline's flag and the draw's index width; the tessellation
- * pair adds its hull launch state, the tessellator configuration and the ring
- * set, so the context capacity grows with the hull's own registers. The shader
- * bank carries both hull programs' register blocks behind the runtime pair's. */
-enum {
-    PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 15 + PS5_DEPTH_REGISTER_COUNT + 8 + 16,
-    PS5VK_DRAW_SH_CAPACITY = 32,
-    PS5VK_DRAW_UC_CAPACITY = 12
-};
+ * programs from the pipeline's flag and the draw's index width. */
+enum { PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 15 + PS5_DEPTH_REGISTER_COUNT + 8 };
 struct ps5vk_draw_state {
-    ps5_agc_register cx[PS5VK_DRAW_CX_CAPACITY], sh[PS5VK_DRAW_SH_CAPACITY],
-        uc[PS5VK_DRAW_UC_CAPACITY];
+    ps5_agc_register cx[PS5VK_DRAW_CX_CAPACITY], sh[16], uc[4];
     uint32_t cx_count;
     /* The UC registers this draw programs. The linked three are the whole UC
      * block the AGC link exposes; a merged vertex+geometry program additionally

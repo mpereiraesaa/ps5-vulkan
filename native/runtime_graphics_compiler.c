@@ -556,9 +556,7 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
            ps5vk_runtime_shader_build(&header,&p->fragment) ||
            ps5vk_runtime_draw_abi_build(&p->domain.metadata,&p->fragment.metadata,
                &p->arguments))goto failed;
-        /* The draw's DI patch type was recorded when it was resolved. The
-         * patch control points ride along for the launch state. */
-        p->patch_control_points=key->patch_control_points;
+        /* The draw's DI patch type was recorded when it was resolved. */
         *out=p;
         return VK_SUCCESS;
     }

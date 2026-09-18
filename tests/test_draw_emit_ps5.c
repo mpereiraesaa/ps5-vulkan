@@ -241,7 +241,7 @@ int main(void)
     state.runtime.lds_slot=2;
     assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0x123400)!=VK_SUCCESS);
     assert(cursor==commands && !calls);
-    state.runtime.lds_slot=1;state.sh_count=PS5VK_DRAW_SH_CAPACITY+1;
+    state.runtime.lds_slot=1;state.sh_count=17;
     assert(ps5vk_native_emit_draw(&cursor,64,&state,&state,sizeof(state),&op,0)!=VK_SUCCESS);
     assert(cursor==commands && !calls);
 
