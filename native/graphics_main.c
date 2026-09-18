@@ -3030,6 +3030,63 @@ static void geometry_probe(VkDevice d)
                     PS5VK_TESS_CONTROL_NAME,pf_words);
             }
 #endif
+#if defined(PS5VK_TESS_DEFAULTS_DUMP) && PS5VK_TESS_DEFAULTS_DUMP
+            /* WHAT ELSE IS IN AGC's REGISTER-DEFAULTS LIBRARY.
+             *
+             * sceAgcGetRegisterDefaults() returns a root with 137 keyed
+             * entries indexing 84 context blocks plus shader and user-config
+             * tables. This driver uses EXACTLY ONE of them - the MRT0 colour
+             * target, key 0x38e92c91 - and ignores the rest.
+             *
+             * That is worth looking at now because of where the search has
+             * ended up. Every register this driver knows to write is correct
+             * and the tessellator still never runs, which is the signature of
+             * state the platform expects a title to apply and this driver has
+             * never heard of. A keyed block containing the tessellation
+             * context registers would be exactly that, and nothing in this
+             * task has ever enumerated the table.
+             *
+             * Read-only: every block is inspected and nothing is programmed.
+             * Bounds are explicit - context offsets are below 0x400, so a
+             * block is walked only while its entries look like context
+             * registers and never past a fixed cap. */
+            {
+                const struct ps5_agc_register_defaults *root=
+                    (const struct ps5_agc_register_defaults *)
+                    sceAgcGetRegisterDefaults();
+                if(!root || !root->type_index_pairs) {
+                    ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_DEFAULTS root=absent");
+                } else {
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_TESS_DEFAULTS count=%u cx=%d sh=%d uc=%d t3=%d",
+                        root->count,root->table_cx?1:0,root->table_sh?1:0,
+                        root->table_uc?1:0,root->table_3?1:0);
+                    for(uint32_t i=0;i<root->count && i<160u;++i) {
+                        const struct ps5_agc_type_index *e=
+                            &root->type_index_pairs[i];
+                        const uint32_t bank=ps5_agc_type_index_bank(e);
+                        const uint32_t idx=ps5_agc_type_index_value(e);
+                        uint32_t first=0xffffu,n=0,tess=0;
+                        if(bank==0u && root->table_cx && idx<84u &&
+                           root->table_cx[idx]) {
+                            const ps5_agc_register *b=root->table_cx[idx];
+                            for(;n<64u;++n) {
+                                const uint32_t off=b[n].offset;
+                                if(off>=0x400u)break;
+                                if(n==0)first=off;
+                                if(off==0x2d4u||off==0x2d5u||off==0x2d6u||
+                                   off==0x2dbu||off==0x286u||off==0x287u)
+                                    tess=off;
+                            }
+                        }
+                        ps5log_printf(PS5LOG_MARK,
+                            "PS5VK_TESS_DEFAULTS i=%u key=%08x bank=%u idx=%u "
+                            "first=%03x n=%u tess=%03x",
+                            i,e->key,bank,idx,first,n,tess);
+                    }
+                }
+            }
+#endif
             tess_receipt(PS5VK_TESS_CONTROL_NAME,coord_native,3u);
             /* A BOUNDED wait, not vkQueueWaitIdle.
              *

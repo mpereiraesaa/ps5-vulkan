@@ -490,6 +490,15 @@ def main():
                 # pointers - VS_PARTIAL_FLUSH then VGT_FLUSH - before a patch
                 # draw's register banks. This driver rewrites the tessellation
                 # ring registers on every draw and emits no events at all.
+                # Read-only enumeration of AGC's register-defaults library.
+                # The driver uses exactly one of its 137 keyed blocks; this
+                # asks whether any of the others carries tessellation context
+                # registers the platform expects a title to apply.
+                tess_defaults_dump = os.environ.get(
+                    "PS5VK_TESS_DEFAULTS_DUMP", "0")
+                if tess_defaults_dump not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_DEFAULTS_DUMP must be 0 or 1")
+                common += ["-DPS5VK_TESS_DEFAULTS_DUMP=" + tess_defaults_dump]
                 tess_vgt_flush = os.environ.get("PS5VK_TESS_VGT_FLUSH", "0")
                 if tess_vgt_flush not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_VGT_FLUSH must be 0 or 1")
@@ -566,7 +575,8 @@ def main():
                                          tess_dynamic_hs + ":" +
                                          tess_max_vert_out + ":" + tess_spin +
                                          ":" + tess_spin_hull + ":" +
-                                         tess_prefill + ":" + tess_vgt_flush) +
+                                         tess_prefill + ":" + tess_vgt_flush +
+                                         ":" + tess_defaults_dump) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump
