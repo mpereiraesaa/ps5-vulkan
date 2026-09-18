@@ -6,6 +6,9 @@ struct ps5vk_native_graphics_pipeline {
     VkDevice device;
     struct ps5vk_memory_backend memory;
     void *backing;
+    /* The tessellation ring block's backing, allocated with the pair for a
+     * tessellation pipeline and released with it. */
+    void *rings_backing;
     struct ps5vk_graphics_pair *pair;
     /* Empty table for the current no-resource procedural shader ABI. Same
      * high 32 address bits as both stages, retained with their allocation. */

@@ -14,6 +14,9 @@ struct ps5vk_runtime_graphics_program {
      * publication), the domain the TES NGG package the evaluation half compiles
      * to. Both are zero for every earlier pipeline shape. */
     PsbcShaderOutput hull,domain;
+    /* The pipeline's input patch control points, the tessellation launch
+     * state's input/output control-point counts. Zero without the pair. */
+    uint32_t patch_control_points;
     struct ps5vk_runtime_draw_abi arguments;
     /* The GFX1013 primitive this pair was compiled for, resolved from the key's
      * topology. The native create path links the pair with a primitive the

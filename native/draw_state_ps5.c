@@ -23,12 +23,21 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (native->device != p->device || !native->pair || !native->pair->ready) return VK_ERROR_UNKNOWN;
     struct ps5vk_graphics_pair *pair = native->pair;
     int runtime=pair->runtime_arguments.enabled!=0;
+    /* A tessellation pipeline's pre-raster bank is the domain half's, and its
+     * draw is a patch list; anything else is a broken pair. */
+    const int has_tessellation=pair->tessellation!=0;
+    if(has_tessellation && !runtime)return VK_ERROR_UNKNOWN;
     const struct ps5vk_runtime_shader *vs=&pair->runtime_vertex,*fs=&pair->runtime_fragment;
     if(runtime && (vs->header.num_cx_registers>PS5VK_RUNTIME_CX_MAX ||
         fs->header.num_cx_registers>PS5VK_RUNTIME_CX_MAX ||
         !vs->header.num_sh_registers || !fs->header.num_sh_registers ||
         vs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX ||
-        fs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX))return VK_ERROR_UNKNOWN;
+        fs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX ||
+        (has_tessellation &&
+            (pair->runtime_hull_ls.header.num_sh_registers>4 ||
+             pair->runtime_hull_hs.header.num_sh_registers>4 ||
+             pair->runtime_hull_hs.header.num_cx_registers>PS5VK_RUNTIME_CX_MAX))))
+        return VK_ERROR_UNKNOWN;
     if (pair->vertex_quantization != 0x2d) return VK_ERROR_FEATURE_NOT_PRESENT;
     ps5_agc_register viewport[PS5VK_VIEWPORT_REGISTERS];
     VkResult rc = ps5vk_native_viewport(viewport_state, scissor_state, area, viewport);
@@ -57,6 +66,23 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (depth) {
         memcpy(result.cx + result.cx_count, depth->registers, depth->count * sizeof(ps5_agc_register));
         result.cx_count += depth->count;
+    }
+    /* The tessellation pair's hull launch state and the hull programs' own
+     * register blocks join the context/shader banks: the stage enables and the
+     * LS_HS_CONFIG the driver derived at create, the hull HS's context block
+     * (which carries VGT_TF_PARAM) and both programs' shader blocks. The
+     * context registers carry VGT_TF_PARAM; the ring configuration is
+     * program-referenced state below. */
+    if (has_tessellation) {
+        if (result.cx_count+2+pair->runtime_hull_hs.header.num_cx_registers >
+            PS5VK_DRAW_CX_CAPACITY)
+            return VK_ERROR_UNKNOWN;
+        memcpy(result.cx+result.cx_count,pair->tess_state,
+            sizeof(pair->tess_state));
+        result.cx_count+=2;
+        memcpy(result.cx+result.cx_count,pair->runtime_hull_hs.context,
+            pair->runtime_hull_hs.header.num_cx_registers*sizeof(*result.cx));
+        result.cx_count+=pair->runtime_hull_hs.header.num_cx_registers;
     }
     /* Override the depth builder's Gears policy. Vulkan disables writes when
      * depth testing is disabled, even if depthWriteEnable was specified. */
@@ -117,11 +143,34 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * VGT_MULTI_PRIM_IB_RESET_EN there, reached with the same index space the
      * linked UC block and the index-type packet use, (address - 0x30000)/4. */
     result.uc[result.uc_count++]=(ps5_agc_register){0x24b,restart_enable};
+    /* The tessellation rings are program-referenced device state: the whole
+     * configuration is written on every patch draw so nothing depends on what
+     * another pipeline left configured. */
+    if(has_tessellation) {
+        if(result.uc_count+4>PS5VK_DRAW_UC_CAPACITY)return VK_ERROR_UNKNOWN;
+        memcpy(result.uc+result.uc_count,pair->tess_ring_state,
+            sizeof(pair->tess_ring_state));
+        result.uc_count+=4;
+    }
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {
         result.sh_count=vs->header.num_sh_registers+fs->header.num_sh_registers;
         memcpy(result.sh,vs->shader,vs->header.num_sh_registers*sizeof(*result.sh));
         memcpy(result.sh+vs->header.num_sh_registers,fs->shader,fs->header.num_sh_registers*sizeof(*result.sh));
+        /* The hull programs' shader blocks follow the runtime pair's: the HS
+         * program (its VGT_TF_PARAM context block went into the context bank)
+         * and the LS program behind it, both with the create-path addresses. */
+        if(has_tessellation) {
+            if(result.sh_count+pair->runtime_hull_ls.header.num_sh_registers+
+                pair->runtime_hull_hs.header.num_sh_registers>PS5VK_DRAW_SH_CAPACITY)
+                return VK_ERROR_UNKNOWN;
+            memcpy(result.sh+result.sh_count,pair->runtime_hull_hs.shader,
+                pair->runtime_hull_hs.header.num_sh_registers*sizeof(*result.sh));
+            result.sh_count+=pair->runtime_hull_hs.header.num_sh_registers;
+            memcpy(result.sh+result.sh_count,pair->runtime_hull_ls.shader,
+                pair->runtime_hull_ls.header.num_sh_registers*sizeof(*result.sh));
+            result.sh_count+=pair->runtime_hull_ls.header.num_sh_registers;
+        }
         result.runtime=pair->runtime_arguments;
         /* This is the lab's audited draw-auto command modifier, not compiler
          * metadata. PSBC headers do not populate the legacy PAL field. */
