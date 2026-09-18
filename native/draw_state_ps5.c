@@ -1,6 +1,36 @@
 #include "draw_state_ps5.h"
 #include "viewport_ps5.h"
 #include <string.h>
+#if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
+#include "ps5log.h"
+/* The complete register set a patch draw actually emits, logged once.
+ *
+ * Every tessellation candidate so far has been argued from ONE register read
+ * out of the object that holds it. That cannot see the two failure modes the
+ * emitted stream can still have after every individual value is right: a
+ * register the pipeline never writes at all, and a register written TWICE
+ * where the later write wins. The banks are emitted in order and the last
+ * write for an offset is the one the engine sees, so printing the stream in
+ * emission order is the only way to read either off. Four registers per
+ * record, with no string formatting of its own, so the dump cannot itself
+ * fail on a buffer bound. */
+static void tess_dump_bank(const char *bank,const ps5_agc_register *regs,
+    unsigned count)
+{
+    for(unsigned i=0;i<count;i+=4) {
+        const ps5_agc_register zero={0xfff,0};
+        const ps5_agc_register *a=&regs[i];
+        const ps5_agc_register *b=i+1<count?&regs[i+1]:&zero;
+        const ps5_agc_register *c=i+2<count?&regs[i+2]:&zero;
+        const ps5_agc_register *d=i+3<count?&regs[i+3]:&zero;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_TESS_EMIT bank=%s at=%u of=%u %03x=%08x %03x=%08x "
+            "%03x=%08x %03x=%08x",bank,i,count,
+            (unsigned)a->offset,a->value,(unsigned)b->offset,b->value,
+            (unsigned)c->offset,c->value,(unsigned)d->offset,d->value);
+    }
+}
+#endif
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     const VkRect2D *scissor_state, const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
@@ -89,15 +119,20 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
          * patch draw faults at any tessellation level without it. The
          * compiler assigns the window-relative dword and the driver writes
          * the 64-bit address there; the hull's user-data window on gfx10 is
-         * SPI_SHADER_USER_DATA_HS_0, sh offset 0x10c. */
-        if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
-        result.sh[result.sh_count++]=(ps5_agc_register){
-            (uint16_t)(0x10c+pair->tess_ring_table_slot),
-            pair->tess_ring_table_low};
-        result.sh[result.sh_count++]=(ps5_agc_register){
-            (uint16_t)(0x10c+pair->tess_ring_table_slot+1u),
-            pair->tess_ring_table_high};
-        /* What is NOT written here, deliberately.
+         * SPI_SHADER_USER_DATA_HS_0, sh offset 0x10c.
+         *
+         * It is written with the SHADER bank below, not here. This block
+         * runs before the shader bank exists: the runtime path assigns
+         * result.sh_count from the pre-raster and fragment counts and
+         * memcpy()s both programs over result.sh[0..], so two entries
+         * written here were overwritten by the vertex program and the count
+         * that would have carried them was reset to zero. The registers
+         * were individually correct and simply never reached the engine -
+         * measured, not reasoned: the full emitted stream showed the shader
+         * bank holding exactly fourteen entries, the domain's six, the
+         * fragment's four and the hull's four, with 0x112 and 0x113 absent.
+         *
+         * What is NOT written with it, deliberately.
          *
          * An earlier version wrote the ring descriptor table's address into
          * the hull's user-data window at sh 0x10c/0x10d, intending to reach
@@ -203,6 +238,24 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             memcpy(result.sh+result.sh_count,pair->runtime_hull.shader,
                 pair->runtime_hull.header.num_sh_registers*sizeof(*result.sh));
             result.sh_count+=pair->runtime_hull.header.num_sh_registers;
+            /* The ring descriptor table's address, as USER DATA, appended to
+             * the bank that actually reaches the engine. The hull's first
+             * memory operation is an SMEM load of a buffer descriptor from
+             * this table (entry 5, the tess-factor ring), so without it the
+             * merged LS/HS program has no ring to write its tessellation
+             * factors into and the patch draw never retires at any
+             * tessellation level. The compiler assigns the window-relative
+             * dword; the hull's user-data window on gfx10 is
+             * SPI_SHADER_USER_DATA_HS_0 at sh offset 0x10c, whose dword N is
+             * SGPR 8+N for a merged program. */
+            if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)
+                return VK_ERROR_UNKNOWN;
+            result.sh[result.sh_count++]=(ps5_agc_register){
+                (uint16_t)(0x10c+pair->tess_ring_table_slot),
+                pair->tess_ring_table_low};
+            result.sh[result.sh_count++]=(ps5_agc_register){
+                (uint16_t)(0x10c+pair->tess_ring_table_slot+1u),
+                pair->tess_ring_table_high};
         }
         result.runtime=pair->runtime_arguments;
         /* This is the lab's audited draw-auto command modifier, not compiler
@@ -210,5 +263,16 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         result.modifier=5;
     }
     if (!result.modifier) return VK_ERROR_UNKNOWN;
+#if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
+    if(has_tessellation) {
+        static unsigned dumped;
+        if(!dumped) {
+            ++dumped;
+            tess_dump_bank("cx",result.cx,result.cx_count);
+            tess_dump_bank("sh",result.sh,result.sh_count);
+            tess_dump_bank("uc",result.uc,result.uc_count);
+        }
+    }
+#endif
     *out = result; return VK_SUCCESS;
 }

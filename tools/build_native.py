@@ -15,7 +15,7 @@ def run(*args, env=None):
     subprocess.run(list(map(str, args)), check=True, cwd=ROOT, env=env)
 
 
-def tess_build_id(probe, variant, no_draw):
+def tess_build_id(probe, variant, no_draw, state_dump="0"):
     """A stable 16-hex-digit identity for the exact tessellation candidate.
 
     Digests the source families the manifest already hashes (the same set, so
@@ -26,7 +26,7 @@ def tess_build_id(probe, variant, no_draw):
     digest = hashlib.sha256()
     digest.update(b"ps5vk-tess-candidate/1\n")
     for key, value in (("probe", probe), ("variant", variant),
-                       ("no_draw", no_draw)):
+                       ("no_draw", no_draw), ("state_dump", state_dump)):
         digest.update(f"{key}={value}\n".encode())
     paths = [ROOT / "Makefile"]
     for folder in ("src", "native", "tools", "experiments/graphics"):
@@ -379,6 +379,18 @@ def main():
                 # published capacity, which is the shipped behaviour.
                 common += ["-DPS5VK_TESS_PATCHES_PER_WG=" +
                            os.environ.get("PS5VK_TESS_PATCHES_PER_WG", "0")]
+                # Diagnostic only: log the COMPLETE register stream a patch
+                # draw emits, in emission order, once per process. Every
+                # candidate so far was argued from one register read out of
+                # the object holding it, which cannot see a register the
+                # pipeline never writes or one written twice where the later
+                # write wins. Default off: it costs log records and says
+                # nothing a shipped build needs.
+                tess_state_dump = os.environ.get("PS5VK_TESS_STATE_DUMP", "0")
+                if tess_state_dump not in ("0", "1"):
+                    raise SystemExit(
+                        "PS5VK_TESS_STATE_DUMP must be 0 or 1")
+                common += ["-DPS5VK_TESS_STATE_DUMP=" + tess_state_dump]
                 # The source-candidate identity the payload logs before the
                 # submit. It digests exactly the source families the manifest
                 # already records plus the build inputs that change the
@@ -390,9 +402,11 @@ def main():
                 # is a log boot id, which is only a process token.
                 common += ['-DPS5VK_TESS_BUILD_ID="' +
                            tess_build_id(tess_probe, tess_variant,
-                                         os.environ.get("PS5VK_TESS_NO_DRAW", "0")) +
+                                         os.environ.get("PS5VK_TESS_NO_DRAW", "0"),
+                                         tess_state_dump) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
+                os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump
             # Both optional-stage witnesses skip the feature-negotiation gate:
             # they exist to measure capabilities that are not advertised yet.
             # Exported, because the SDK build compiles the same sources.
