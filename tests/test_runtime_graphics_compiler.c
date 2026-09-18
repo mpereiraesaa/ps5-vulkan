@@ -431,14 +431,17 @@ static void check_viewport_index_routing(void)
      * geometry module with only the "gl_ViewportIndex = gl_PrimitiveIDIn" line
      * removed compiles clean through this same key, so the export - not the
      * interface, the topology or the descriptor plan - is the discriminator.
-     * When psbc accounts for the export, this assertion flips to VK_SUCCESS and
-     * the sixteen-tile viewport witness can run; until then the feature stays
-     * unadvertised and the dependency is a compiler one, in a file this tranche
-     * does not own. */
+     * That dependency is now fixed and pinned: the compiler names the export as
+     * PSBC_SEMANTIC_VIEWPORT_INDEX (mpereiraesaa/opengnm-psbc#17, the pin in
+     * tools/prepare_compiler_deps.py), so the same key compiles. This assertion
+     * is what fails if the pin ever moves back to a compiler that does not name
+     * it. Advertising the feature stays a separate question: it also needs an
+     * applicable upstream CTS leaf, which UPSTREAM_CTS.md records as absent. */
     key.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER|PS5VK_FEATURE_MULTI_VIEWPORT;
     assert(ps5vk_runtime_graphics_supported(&key));
     out=(void *)1;
-    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
     free((void *)key.vertex.words);free((void *)key.geometry.words);
     free((void *)key.fragment.words);
 }
