@@ -100,6 +100,11 @@ struct ps5vk_graphics_library {
 #define PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP 3u
 #define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST 4u
 #define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP 6u
+/* The patch-list draw's DI type: the pinned gfx103 register data names
+ * DI_PT_PATCH 9 (src/amd/registers/gfx103.json). The tessellator, not the
+ * assembler, generates the rasterized primitive - VGT_TF_PARAM carries that
+ * shape - so the patch type only feeds the DI and the hull state. */
+#define PS5VK_AGC_PRIMITIVE_TYPE_PATCH 9u
 static inline int ps5vk_agc_primitive_type(VkPrimitiveTopology topology,uint32_t *out)
 {
     if(!out)return -1;
@@ -116,9 +121,20 @@ static inline int ps5vk_agc_primitive_type(VkPrimitiveTopology topology,uint32_t
         *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;return 0;
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
         *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_PATCH;return 0;
     default:
         return -1;
     }
+}
+/* The tessellation compile options keep the compiler's default primitive
+ * state (the compiler refuses the DI patch value as an option), so the
+ * pipeline's patch type is resolved separately from the compile's. */
+static inline int ps5vk_tess_patch_primitive_type(uint32_t *out)
+{
+    if(!out)return 0;
+    *out=PS5VK_AGC_PRIMITIVE_TYPE_PATCH;
+    return 1;
 }
 /* True for the primitive families this profile accepts only as the input of a
  * geometry stage. The geometry witness measures exactly that shape - the

@@ -174,17 +174,10 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
     return 1;
 }
 
-/* The DI primitive type a patch-list draw feeds: the pinned gfx103 register
- * data names DI_PT_PATCH 9 (src/amd/registers/gfx103.json), and the shape the
- * tessellator generates from the patch comes from VGT_TF_PARAM, which the hull
- * compile publishes from the control stage's own execution modes. This is a
- * resolver, not a new primitive: everything else stays fail-closed. */
-static int ps5vk_tess_patch_primitive_type(uint32_t *out)
-{
-    if(!out)return 0;
-    *out=9u;
-    return 1;
-}
+/* The DI primitive type a patch-list draw feeds resolves in
+ * graphics_program.h (pinned gfx103 DI_PT_PATCH); the compile options keep
+ * the compiler's own default primitive state because the tessellator, not
+ * the assembler, generates the rasterized primitive. */
 
 /* Diagnostic rejection codes. When PS5VK_GEOMETRY_KEY_DIAG is defined (the SDK
  * build of a diagnostic CTS payload) a refused key is logged field by field, so
