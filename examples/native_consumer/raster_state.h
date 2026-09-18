@@ -121,22 +121,31 @@ static float raster_pixel_centre(unsigned p)
 }
 
 /* A right triangle with its vertices exactly on the centres of pixels
- * (8,8), (55,8) and (8,55). Vulkan decides facing from the signed area in
- * framebuffer coordinates (x right, y down): the order (8,8) -> (55,8) ->
- * (8,55) has a positive area, i.e. it is the COUNTER-clockwise triangle that
- * VK_FRONT_FACE_COUNTER_CLOCKWISE calls front-facing, and the reverse order
- * is the clockwise one. */
-static unsigned raster_triangle(struct raster_frame *f, int ccw, float z, uint32_t word)
+ * (8,8), (55,8) and (8,55). Facing comes from the signed area of the polygon
+ * in framebuffer coordinates, and the pinned specification states that area
+ * with a LEADING MINUS:
+ *
+ *     a = -1/2 * sum_i (x_i * y_(i+1) - x_(i+1) * y_i)
+ *         (primsrast.adoc, Basic Polygon Rasterization)
+ *
+ * For the order (8,8) -> (55,8) -> (8,55) the sum is
+ * (64 - 440) + (3025 - 64) + (64 - 440) = 2209, so a = -1104.5: NEGATIVE.
+ * VK_FRONT_FACE_COUNTER_CLOCKWISE calls a triangle with POSITIVE area
+ * front-facing, so this order is the BACK-facing one under the front face the
+ * pipeline below sets, and `positive_area` selects the reverse order, which is
+ * the front-facing one. Getting this sign wrong inverts every culling
+ * expectation, which is exactly what the first version of this witness did. */
+static unsigned raster_triangle(struct raster_frame *f, int positive_area, float z, uint32_t word)
 {
     const unsigned first = f->vertex_count;
     const float a = raster_pixel_centre(8), b = raster_pixel_centre(55);
     raster_vertex(f, a, a, z, 1.0f, word);
-    if (ccw) {
-        raster_vertex(f, b, a, z, 1.0f, word);
+    if (positive_area) {
         raster_vertex(f, a, b, z, 1.0f, word);
+        raster_vertex(f, b, a, z, 1.0f, word);
     } else {
-        raster_vertex(f, a, b, z, 1.0f, word);
         raster_vertex(f, b, a, z, 1.0f, word);
+        raster_vertex(f, a, b, z, 1.0f, word);
     }
     return first;
 }
@@ -580,8 +589,11 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
     const unsigned crossing_w2_first = raster_quad(&f, -0.5f, 1.5f, 2.0f, RASTER_TEST_WORD);
     const unsigned probe_first = raster_quad(&f, 0.74f, 0.74f, 1.0f, RASTER_PROBE_WORD);
     const unsigned near_probe_first = raster_quad(&f, 0.999f, 0.999f, 1.0f, RASTER_PROBE_WORD);
-    const unsigned ccw_first = raster_triangle(&f, 1, 0.5f, RASTER_TEST_WORD);
-    const unsigned cw_first = raster_triangle(&f, 0, 0.5f, RASTER_TEST_WORD);
+    /* Under VK_FRONT_FACE_COUNTER_CLOCKWISE (what the pipeline below sets), the
+     * positive-area order is the front-facing one and the other is back
+     * facing. */
+    const unsigned front_first = raster_triangle(&f, 1, 0.5f, RASTER_TEST_WORD);
+    const unsigned back_first = raster_triangle(&f, 0, 0.5f, RASTER_TEST_WORD);
     const unsigned full_first = raster_quad(&f, 0.25f, 0.25f, 1.0f, RASTER_TEST_WORD);
     const unsigned full_probe_first = raster_quad(&f, 0.25f, 0.25f, 1.0f, RASTER_PROBE_WORD);
     raster_flush_vertices(&f);
@@ -700,7 +712,15 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
      *                          plane at z_f = 0.74 drawn with GREATER and no
      *                          write then passes where the stored depth is
      *                          below 0.74: z_d < 0.98 -> columns 0..46 -> 3008
-     *                          (control, clipped: columns 16..46 -> 1984)
+     *                          (control, clipped: columns 16..46 -> 1984).
+     *                          Those columns span the left half of the target
+     *                          (x < 32) as well: 32 columns -> 2048 probe
+     *                          pixels on the left when the plane is not
+     *                          clipped, and columns 16..31 -> 16 columns ->
+     *                          1024 on the left in the clipped control. The
+     *                          first version of this table expected 0 for both,
+     *                          which its own column arithmetic above already
+     *                          contradicted.
      *   viewport [0.75,0.25]: the same interval mirrored, z_f = 0.75 - 0.5 z_d;
      *                          the probe passes for z_d > 0.02 -> columns
      *                          17..63 -> 3008, of which the left half holds
@@ -718,8 +738,8 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
             {"clamp_disabled_control", VK_FALSE, &full_viewport, 0, 0, 2048, 2048, 0, 0, 0, "test=2048"},
             {"clamp_enabled", VK_TRUE, &full_viewport, 0, 0, 3072, 3072, 0, 0, 0, "test=3072"},
             {"clamp_enabled_w2", VK_TRUE, &full_viewport, 1, 0, 3072, 3072, 0, 0, 0, "test=3072"},
-            {"clamp_disabled_narrow_probe", VK_FALSE, &narrow, 0, 1, 2048, 2048, 1984, 0, 0, "test=2048,probe=1984"},
-            {"clamp_enabled_narrow_probe", VK_TRUE, &narrow, 0, 1, 4096, 4096, 3008, 0, 0, "test=4096,probe=3008"},
+            {"clamp_disabled_narrow_probe", VK_FALSE, &narrow, 0, 1, 2048, 2048, 1984, 1024, 1024, "test+probe=2048,probe=1984,probe_left=1024"},
+            {"clamp_enabled_narrow_probe", VK_TRUE, &narrow, 0, 1, 4096, 4096, 3008, 2048, 2048, "test+probe=4096,probe=3008,probe_left=2048"},
             {"clamp_enabled_reversed_probe", VK_TRUE, &reversed, 0, 1, 4096, 4096, 3008, 960, 960, "test=4096,probe=3008,probe_left=960"},
         };
         /* The probe plane is drawn with GREATER and no depth write through a
@@ -794,27 +814,34 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
         }
     }
 
-    /* ---- C. Polygon modes. The counter-clockwise right triangle has its
-     * vertices on the centres of pixels (8,8), (55,8), (8,55). FILL covers the
-     * pixels with (x-8)+(y-8) < 47 plus whatever the edge rule admits on the
-     * hypotenuse: 1128 with the diamond/top-left rule, so 1080..1176 is
-     * accepted, and pixel (20,20) is inside. LINE covers only the three edges
-     * (~47 pixels each, about 141) and leaves (20,20) clear; POINT covers the
-     * three vertex pixels and nothing else. Culling is decided on the polygon
-     * before the mode applies: with cullMode FRONT the CCW triangle disappears
-     * in every mode, and the clockwise copy with cullMode BACK does too. */
+    /* ---- C. Polygon modes. The right triangle has its vertices on the centres
+     * of pixels (8,8), (55,8), (8,55). FILL covers the pixels with
+     * (x-8)+(y-8) < 47 - 1128 of them - plus whatever the fill rule admits on
+     * the edges, so 1080..1176 is accepted and pixel (20,20) is strictly
+     * inside. LINE covers only the three edges (~47 pixels each, about 141) and
+     * leaves (20,20) clear; POINT covers the three vertex pixels and nothing
+     * else.
+     *
+     * Culling is decided on the polygon before the mode applies. Which order
+     * faces front is settled by the signed area above: `back_first` is a
+     * back-facing polygon under VK_FRONT_FACE_COUNTER_CLOCKWISE and
+     * `front_first` is a front-facing one, so cullMode FRONT keeps
+     * `back_first`, cullMode BACK removes it, and cullMode BACK keeps
+     * `front_first`. The first version of this table had every one of those
+     * three inverted, because it derived the area without the specification's
+     * leading minus. */
     {
         struct polygon_case {
-            const char *name; VkPolygonMode mode; VkCullModeFlags cull; int ccw;
+            const char *name; VkPolygonMode mode; VkCullModeFlags cull; int front;
             unsigned low, high; int centre, vertices; const char *expected;
         };
         static const struct polygon_case cases[] = {
-            {"polygon_fill", VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, 1, 1080, 1176, 1, 1, "1128+-48,centre,vertices"},
+            {"polygon_fill", VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, 0, 1080, 1176, 1, -1, "1128+-48,centre,vertices_optional"},
             {"polygon_line", VK_POLYGON_MODE_LINE, VK_CULL_MODE_NONE, 1, 120, 170, 0, 1, "141+-25,no_centre,vertices"},
             {"polygon_point", VK_POLYGON_MODE_POINT, VK_CULL_MODE_NONE, 1, 3, 3, 0, 1, "3,vertices_only"},
-            {"polygon_line_cull_front", VK_POLYGON_MODE_LINE, VK_CULL_MODE_FRONT_BIT, 1, 0, 0, 0, 0, "0"},
-            {"polygon_point_cull_back_cw", VK_POLYGON_MODE_POINT, VK_CULL_MODE_BACK_BIT, 0, 0, 0, 0, 0, "0"},
-            {"polygon_line_cull_back_ccw", VK_POLYGON_MODE_LINE, VK_CULL_MODE_BACK_BIT, 1, 120, 170, 0, 1, "141+-25,no_centre,vertices"},
+            {"polygon_line_cull_front", VK_POLYGON_MODE_LINE, VK_CULL_MODE_FRONT_BIT, 0, 120, 170, 0, 1, "141+-25,no_centre,vertices"},
+            {"polygon_point_cull_back_front", VK_POLYGON_MODE_POINT, VK_CULL_MODE_BACK_BIT, 1, 3, 3, 0, 1, "3,vertices_only"},
+            {"polygon_line_cull_back", VK_POLYGON_MODE_LINE, VK_CULL_MODE_BACK_BIT, 0, 0, 0, 0, 0, "0"},
         };
         for (unsigned n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n) {
             const struct polygon_case *c = &cases[n];
@@ -824,15 +851,23 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
             VkPipeline pipeline = raster_pipeline(&f, &desc);
             raster_begin_frame(&f);
             vkCmdBindPipeline(f.command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            vkCmdDraw(f.command, 3, 1, c->ccw ? ccw_first : cw_first, 0);
+            vkCmdDraw(f.command, 3, 1, c->front ? front_first : back_first, 0);
             raster_end_frame(&f);
             const struct raster_count count = raster_count_frame(&f);
             const int centre = raster_pixel(&f, 20, 20) == RASTER_TEST_WORD;
             const int vertices = raster_pixel(&f, 8, 8) == RASTER_TEST_WORD &&
                 raster_pixel(&f, 55, 8) == RASTER_TEST_WORD &&
                 raster_pixel(&f, 8, 55) == RASTER_TEST_WORD;
+            /* A vertex pixel is a sample location exactly on a polygon edge (and
+             * on two of them), and the specification only fixes that case for a
+             * sample lying on an edge SHARED by two polygons with identical
+             * endpoints, where exactly one of them must cover it. A lone
+             * triangle therefore may or may not cover its own corner samples,
+             * which is what the -1 (not required) entry encodes for the fill
+             * case; the line and point cases below are covered by their own
+             * rasterization rules and do require their endpoints. */
             const int valid = raster_between(count.test, c->low, c->high) && !count.other &&
-                centre == c->centre && vertices == c->vertices &&
+                centre == c->centre && (c->vertices < 0 || vertices == c->vertices) &&
                 count.test + count.clear == RASTER_PIXELS;
             witnessed += raster_report(c->name, &count, valid, c->expected);
             vkDestroyPipeline(device, pipeline, NULL);
@@ -850,7 +885,7 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
             vkCmdBindPipeline(f.command, VK_PIPELINE_BIND_POINT_GRAPHICS, floor_pipeline);
             vkCmdDraw(f.command, 6, 1, floor_first, 0);
             vkCmdBindPipeline(f.command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            vkCmdDraw(f.command, 3, 1, ccw_first, 0);
+            vkCmdDraw(f.command, 3, 1, back_first, 0);
             raster_end_frame(&f);
             const struct raster_count count = raster_count_frame(&f);
             const int valid = (biased ? raster_between(count.test, 120, 170) : count.test == 0) &&
@@ -939,8 +974,15 @@ static void run_raster_state(VkPhysicalDevice physical, VkDevice device, VkQueue
         vkDestroyPipeline(device, pipeline, NULL);
     }
 
+    /* `valid_cases` counts the cases whose own oracle was satisfied, which is
+     * also what "witnessed" means on the wire: the verifier requires it to
+     * equal the case count. The first version of this line printed that count
+     * under "witnessed" and the all-cases flag under "valid", so a partial run
+     * read as "witnessed=25 valid=0" next to 25 per-case lines saying valid=1 -
+     * a self-contradicting transcript. */
+    const unsigned valid_cases = witnessed;
     ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_RESULT cases=%u witnessed=%u valid=%d",
-                  (unsigned)CASE_COUNT, witnessed, witnessed == CASE_COUNT);
+                  (unsigned)CASE_COUNT, valid_cases, valid_cases == CASE_COUNT);
     vkDestroyPipeline(device, floor_pipeline, NULL);
     raster_frame_close(&f);
     ps5log_printf(PS5LOG_MARK, "PS5VK_CONSUMER_RASTER_RETIRED cases=%u witnessed=%u",
