@@ -112,9 +112,29 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             sizeof(pair->tess_state));
         result.cx_count+=(unsigned)(sizeof(pair->tess_state)/
             sizeof(pair->tess_state[0]));
+        /* DIAGNOSTIC, default off: omit the hull's own context block, which
+         * on this profile is exactly VGT_TF_PARAM.
+         *
+         * This driver writes that register WHOLE, from a value psbc derives
+         * from the control half's declared interface alone - domain, spacing,
+         * topology - so DISABLE_DONUTS, DETECT_ONE, DETECT_ZERO and MTYPE are
+         * all zeroed every patch draw. Whether that matters was a theory
+         * until run 42 turned it into a mechanism: the tessellation-level
+         * clamps at cx 0x286/0x287 had never been written by this driver and
+         * turned out to already hold sane values, which proves the platform
+         * DOES leave context registers initialised and that zeroing a field
+         * destroys something real.
+         *
+         * Omitting the write is the only way to ask the question, because
+         * there is no read-modify-write for these banks. The domain type may
+         * then be wrong - but the witness measures whether the evaluation
+         * half EXECUTES, not whether it produces the right picture, so a
+         * wrong tessellator configuration still answers it. */
+#if !(defined(PS5VK_TESS_NO_TF_PARAM) && PS5VK_TESS_NO_TF_PARAM)
         memcpy(result.cx+result.cx_count,pair->runtime_hull.context,
             pair->runtime_hull.header.num_cx_registers*sizeof(*result.cx));
         result.cx_count+=pair->runtime_hull.header.num_cx_registers;
+#endif
         /* The ring descriptor table, delivered as USER DATA.
          *
          * The hull's first memory operation is an SMEM load of a buffer

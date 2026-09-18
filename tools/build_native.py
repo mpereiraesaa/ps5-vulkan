@@ -433,6 +433,13 @@ def main():
                     raise SystemExit(
                         "PS5VK_TESS_DISTRIBUTION_MODE is 0..3")
                 common += ["-DPS5VK_TESS_DISTRIBUTION_MODE=" + tess_dist_mode]
+                # Diagnostic: omit VGT_TF_PARAM entirely, to ask whether
+                # zeroing the fields this driver cannot derive is what stops
+                # the tessellator. Default 0 writes it as usual.
+                tess_no_tf_param = os.environ.get("PS5VK_TESS_NO_TF_PARAM", "0")
+                if tess_no_tf_param not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_NO_TF_PARAM must be 0 or 1")
+                common += ["-DPS5VK_TESS_NO_TF_PARAM=" + tess_no_tf_param]
                 # The source-candidate identity the payload logs before the
                 # submit. It digests exactly the source families the manifest
                 # already records plus the build inputs that change the
@@ -449,7 +456,8 @@ def main():
                                          tess_ds_waves + ":" +
                                          tess_no_passthru + ":" +
                                          tess_tf_rdreq + ":" +
-                                         tess_dist_mode) +
+                                         tess_dist_mode + ":" +
+                                         tess_no_tf_param) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump
