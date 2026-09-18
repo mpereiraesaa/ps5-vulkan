@@ -462,6 +462,20 @@ def main():
                 # does; it exists because ES_STAGE_DS with GS_EN=0 is the one
                 # stage combination no passing pipeline on this device has
                 # ever used. Default 0 is the shipped behaviour.
+                # Diagnostic bisect: VGT_GS_MAX_VERT_OUT for the domain,
+                # which psbc publishes as zero for any non-geometry stage. A
+                # zero output bound costs a vertex-fed NGG pipeline nothing
+                # because the engine knows the count from the draw; a
+                # tessellator-fed one gets its count from the tessellator.
+                # 0 keeps the compiler's value, which is the shipped
+                # behaviour; 128 is the subgroup limit this pipeline already
+                # publishes at GE_MAX_OUTPUT_PER_SUBGROUP.
+                tess_max_vert_out = os.environ.get(
+                    "PS5VK_TESS_GS_MAX_VERT_OUT", "0")
+                if not tess_max_vert_out.isdigit() or int(tess_max_vert_out) > 2047:
+                    raise SystemExit(
+                        "PS5VK_TESS_GS_MAX_VERT_OUT is 0..2047")
+                common += ["-DPS5VK_TESS_GS_MAX_VERT_OUT=" + tess_max_vert_out]
                 tess_gs_en = os.environ.get("PS5VK_TESS_GS_EN", "0")
                 if tess_gs_en not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_GS_EN must be 0 or 1")
@@ -502,7 +516,8 @@ def main():
                                          tess_no_tf_param + ":" +
                                          tess_link_prim + ":" +
                                          tess_high_levels + ":" +
-                                         tess_only + ":" + tess_gs_en) +
+                                         tess_only + ":" + tess_gs_en + ":" +
+                                         tess_max_vert_out) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump

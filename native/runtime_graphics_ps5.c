@@ -314,6 +314,44 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
          * next to the pinned fui(64) it comes from. */
         pair->tess_state[3]=(ps5_agc_register){0x286,0x42800000u};
         pair->tess_state[4]=(ps5_agc_register){0x287,0x00000000u};
+        /* DIAGNOSTIC BISECT, default off.
+         *
+         * VGT_GS_MAX_VERT_OUT bounds how many vertices the NGG stage may
+         * emit. psbc publishes gs.vertices_out for it, which is ZERO for any
+         * stage that is not an API geometry shader - so both this pipeline
+         * and the PASSING vertex NGG draws run with zero there, measured in
+         * both.
+         *
+         * The reason it is worth a run anyway is the asymmetry that has been
+         * the shape of this whole problem: for a VERTEX-fed NGG pipeline the
+         * geometry engine knows the vertex count from the draw itself, so a
+         * zero bound costs nothing. For a TESSELLATOR-fed one the vertex
+         * count comes out of the tessellator, and a bound of zero is a
+         * legitimate reading of "emit at most nothing" - which is exactly
+         * what is measured: the hull executes, its factors are correct, and
+         * the evaluation half never runs. Every other register that passed
+         * the "the working draw has it too" test passed it fairly; this one
+         * passes it only because the working draw never needs the field.
+         *
+         * The candidate value is the subgroup's own output limit, which this
+         * pipeline already publishes at GE_MAX_OUTPUT_PER_SUBGROUP, rather
+         * than a number chosen to be large. */
+#if defined(PS5VK_TESS_GS_MAX_VERT_OUT) && PS5VK_TESS_GS_MAX_VERT_OUT
+        {
+            unsigned patched_mvo=0;
+            for(unsigned i=0;i<input->domain.metadata.context_register_count;++i)
+                if(input->domain.metadata.context_registers[i].offset==0x2ce)
+                    ++patched_mvo;
+            if(patched_mvo!=1) {
+                TESS_CREATE_FAIL("domain-max-vert-out");
+                rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+            }
+            for(unsigned i=0;i<pair->runtime_vertex.header.num_cx_registers;++i)
+                if(pair->runtime_vertex.context[i].offset==0x2ce)
+                    pair->runtime_vertex.context[i].value=
+                        (PS5VK_TESS_GS_MAX_VERT_OUT & 0x7ffu);
+        }
+#endif
         /* VGT_TF_PARAM.DISTRIBUTION_MODE, paired with the register above.
          *
          * The accumulators this driver writes at 0x2d4 only mean anything

@@ -2868,8 +2868,14 @@ static void geometry_probe(VkDevice d)
             const VkResult cb_rc=vkCreateGraphicsPipelines(d,0,1,&cb_gpi,NULL,
                 &cb_pipeline);
             if(cb_rc!=VK_SUCCESS || !cb_pipeline) {
+                /* Name the refusal site rather than the error code. The
+                 * graphics pipeline path already records one, and every gate
+                 * in this driver returns the same VK_ERROR_FEATURE_NOT_PRESENT
+                 * from a different file - which has cost a window per gate
+                 * while getting this control built. */
                 ps5log_printf(PS5LOG_MARK,
-                    "PS5VK_TESS_WITNESS_CONTROL rc=%d created=0",(int)cb_rc);
+                    "PS5VK_TESS_WITNESS_CONTROL rc=%d created=0 site=%u",
+                    (int)cb_rc,ps5vk_pipeline_refusal_site());
             } else {
                 VkCommandPool cb_cp;
                 VkCommandPoolCreateInfo cb_cpi={
