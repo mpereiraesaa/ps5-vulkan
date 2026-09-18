@@ -2566,12 +2566,13 @@ static void geometry_probe(VkDevice d)
             .pInputAssemblyState=&coord_ia,.pTessellationState=&coord_ts,
             .pRasterizationState=&coord_raster,.pMultisampleState=&coord_ms,
             .pViewportState=&coord_vp,.pColorBlendState=&coord_blend};
-        /* The bisect order puts the least-engine candidate first: variant 2
-         * runs with the LS/HS halves DISABLED in the stage enables (no hull
-         * launch, no tessellator), variant 1 with a zero-level control half
-         * (the hull runs, the factors are zeros), variant 0 the real control.
-         * A fault that moves down the order names the stage. */
-        for(unsigned zero_level=2;zero_level<3;--zero_level) {
+        /* The bisect order puts the least-engine candidate first: variant 3
+         * draws with the UC primitive as TRIANGLE_LIST (no DI patch state at
+         * all) and the LS/HS halves disabled; variant 2 re-enables the patch
+         * DI with the halves still off; variant 1 runs the hull with zero
+         * levels; variant 0 is the real control. A fault that moves down the
+         * order names the stage. */
+        for(unsigned zero_level=3;zero_level<3;--zero_level) {
         coord_stage_infos[1].module=zero_level==1?zero_tcs_module:coord_modules[1];
         VkPipeline coord_pipeline;
         const VkResult coord_rc=vkCreateGraphicsPipelines(d,0,1,&coord_pi,NULL,
@@ -2616,9 +2617,13 @@ static void geometry_probe(VkDevice d)
              * and HS enables from the prepared value, so the engine runs the
              * draw with the domain half only. The pair is flushed, because
              * the prepare reads its state back. */
-            coord_native->pair->tess_state[0].value=zero_level==2?
+            coord_native->pair->tess_state[0].value=zero_level>=2?
                 (coord_stages_en_base & ~((1u<<0)|(1u<<2))):
                 coord_stages_en_base;
+            /* Variant 3 also draws as triangles: the UC primitive override
+             * the create made (DI_PT_PATCH) goes back to the linked value. */
+            coord_native->pair->uc.vgt_primitive_type.value=
+                zero_level==3?PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST:9u;
             VkResult coord_flush_rc=coord_native->memory.flush(
                 coord_native->memory.context,coord_native->backing,0,
                 coord_native->allocation_bytes);
@@ -2627,9 +2632,10 @@ static void geometry_probe(VkDevice d)
              * LS_HS_CONFIG and the domain's stage enables are what the
              * engine is about to run with. */
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_TESS_COORD_PREPARED variant=%u di_patch=9 "
+                "PS5VK_TESS_COORD_PREPARED variant=%u di_patch=%u "
                 "ls_hs_config=%08x stages_en=%08x tf_param=%08x",
                 zero_level,
+                zero_level==3?4u:9u,
                 coord_native->pair->tess_state[1].value,
                 coord_native->pair->tess_state[0].value,
                 coord_native->pair->runtime_hull_hs.context[0].value);
