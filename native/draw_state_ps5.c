@@ -240,10 +240,16 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * configuration is written on every patch draw so nothing depends on what
      * another pipeline left configured. */
     if(has_tessellation) {
-        if(result.uc_count+4>PS5VK_DRAW_UC_CAPACITY)return VK_ERROR_UNKNOWN;
-        memcpy(result.uc+result.uc_count,pair->tess_ring_state,
-            sizeof(pair->tess_ring_state));
-        result.uc_count+=4;
+        {
+            const unsigned ring_state_count=
+                (unsigned)(sizeof(pair->tess_ring_state)/
+                    sizeof(pair->tess_ring_state[0]));
+            if(result.uc_count+ring_state_count>PS5VK_DRAW_UC_CAPACITY)
+                return VK_ERROR_UNKNOWN;
+            memcpy(result.uc+result.uc_count,pair->tess_ring_state,
+                sizeof(pair->tess_ring_state));
+            result.uc_count+=ring_state_count;
+        }
     }
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {

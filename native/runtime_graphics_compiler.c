@@ -563,6 +563,29 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
              * SGPR, an ABI nothing here supplies. The patch size is what the
              * control half's patch-count derivation needs. */
             .patch_control_points=key->patch_control_points,
+            /* The device facts the GE's parameter-cache allocation needs.
+             *
+             * radv programs GE_PC_ALLOC for every NGG pipeline, and psbc will
+             * compute it through the same ac_compute_late_alloc() radv uses -
+             * but only when the caller supplies these. Nothing in this driver
+             * ever supplied them, for any pipeline, so the register has never
+             * been programmed and every NGG draw has run on whatever the
+             * platform left there. That is tolerable for the vertex-fed
+             * pipelines that pass; it is the last register in radv's tracked
+             * per-draw set that a tessellation pipeline also leaves alone, and
+             * a domain shader's parameter-cache allocation happens after
+             * tessellation rather than as vertices arrive.
+             *
+             * The values are the pinned tables, not estimates: ac_gpu_info.c
+             * names CHIP_GFX1013 explicitly with pc_lines = 1024, and the
+             * eighteen good compute units per shader array are the same
+             * measured topology this driver's tessellation ring sizing already
+             * uses. Culling is off and this domain needs no scratch. */
+            .ngg_device_facts=true,
+            .ngg_pc_lines=1024u,
+            .ngg_min_good_cu_per_sa=18u,
+            .ngg_culling=false,
+            .ngg_uses_scratch=false,
             /* DIAGNOSTIC BISECT, default off: the domain compiled with NGG
              * passthrough forced off. Every passing NGG draw on this device
              * is vertex-fed, so passthrough has never been exercised WITH a

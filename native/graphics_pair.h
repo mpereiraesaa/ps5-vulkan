@@ -37,9 +37,10 @@ struct ps5vk_graphics_pair {
     /* The tessellation ring configuration as user-config registers, prepared
      * at create from the rings this pipeline allocates: VGT_TF_RING_SIZE
      * (0x30938), VGT_HS_OFFCHIP_PARAM (0x3093c), VGT_TF_MEMORY_BASE (0x30940)
-     * and its high word (0x30984). Written on every patch draw with the rest
-     * of the state, so nothing depends on a previous pipeline's rings. */
-    ps5_agc_register tess_ring_state[4];
+     * and its high word (0x30984), plus the GE's parameter-cache allocation
+     * at GE_PC_ALLOC (0x30980). Written on every patch draw with the rest of
+     * the state, so nothing depends on a previous pipeline's rings. */
+    ps5_agc_register tess_ring_state[5];
     /* The ring descriptor table's address, split for the user-data bank:
      * the pipeline's ring block starts with the table (sixteen bytes per
      * ring, audited raw buffer SRDs), and the hull's ring-offsets dwords

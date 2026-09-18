@@ -567,6 +567,25 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         pair->tess_ring_state[3]=(ps5_agc_register){
             PS5VK_UC_OFFSET(0x030984u),           /* VGT_TF_MEMORY_BASE_HI */
             (uint32_t)((tf_va>>40)&255u)};
+        /* The GE's parameter-cache allocation for the NGG stage.
+         *
+         * radv programs GE_PC_ALLOC for every NGG pipeline; this driver has
+         * never programmed it for any, so every NGG draw has run on whatever
+         * the platform left. The compiler computes it through the same
+         * ac_compute_late_alloc() radv uses, now that the domain compile is
+         * given the device facts, and publishes it as a linked user-config
+         * write. Refused rather than guessed if the compiler did not publish
+         * it: an unprogrammed register is at least the platform's value,
+         * while a fabricated one is nobody's. */
+        if(!input->domain.metadata.linkage_ge_pc_alloc_valid ||
+           input->domain.metadata.linkage_ge_pc_alloc.offset!=
+               PS5VK_UC_OFFSET(0x030980u)) {
+            TESS_CREATE_FAIL("domain-pc-alloc");
+            rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+        }
+        pair->tess_ring_state[4]=(ps5_agc_register){
+            input->domain.metadata.linkage_ge_pc_alloc.offset,
+            input->domain.metadata.linkage_ge_pc_alloc.value};
         rc=p->memory.flush(p->memory.context,p->rings_backing,0,PS5VK_TESS_RING_BYTES);
         if(rc!=VK_SUCCESS)goto failed;
     }
