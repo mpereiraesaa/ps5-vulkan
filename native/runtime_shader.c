@@ -226,7 +226,6 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .esgs_gs_tg_info_sgpr=v->esgs_gs_tg_info_sgpr,
         .esgs_merged_wave_info_sgpr=v->esgs_merged_wave_info_sgpr,
         .vertex_push_slot=v->push_constants_valid?v->push_constants_user_data_dword:UINT32_MAX,
-
         .fragment_push_slot=f->push_constants_valid?f->push_constants_user_data_dword:UINT32_MAX,
         .push_constant_size=v->push_constant_size>f->push_constant_size?
             v->push_constant_size:f->push_constant_size};
