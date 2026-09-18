@@ -455,6 +455,18 @@ int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *hull,
     hull->header.cx_registers=relative(&hull->header.cx_registers,hull->context);
     hull->header.num_sh_registers=4;
     hull->header.sh_registers=relative(&hull->header.sh_registers,hull->shader);
+    /* The header AGC itself would accept, not just the register container this
+     * driver reads. Every authorised AGC header carries a user-data block and
+     * a specials block; a hand-built header that leaves those pointers null is
+     * structurally unlike anything the native constructor has seen, and it
+     * crashes inside sceAgcCreateShader rather than returning an error.
+     * The blocks are present and zeroed here: the hull has no linkage block to
+     * publish (its metadata deliberately carries linkage_valid = false, the
+     * stage enables being the domain's), so there is nothing to put in the
+     * specials beyond making them exist. */
+    hull->header.user_data=relative(&hull->header.user_data,&hull->resources);
+    hull->header.specials=relative(&hull->header.specials,&hull->specials);
+    hull->header.special_sizes_bytes=sizeof(hull->specials);
     for (uint32_t i=0;i<m->context_register_count;++i) hull->context[i]=convert(m->context_registers[i]);
     for (uint32_t i=0;i<4;++i) hull->shader[i]=convert(m->shader_registers[i]);
     return 0;
