@@ -183,7 +183,7 @@ int main(void)
             VK_PRIMITIVE_TOPOLOGY_POINT_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
             VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
             VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
-        const unsigned before_created=created;
+        unsigned before_created=created;
         for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
             ia.topology=unsupported_topologies[i];
             assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==
@@ -193,6 +193,25 @@ int main(void)
         expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS);
         vkDestroyPipeline(&d,topo,NULL);
+        /* Primitive restart is input-assembly state the front end can only act
+         * on across a strip, and the pinned conformance geometry module declares
+         * it exactly for the strips (vktGeometryTestsUtil.cpp:153-172). It is
+         * accepted on a strip - and recorded on the pipeline, because the draw
+         * path programs the cut from that flag and the draw's index width - and
+         * refused on a list, where a restart index could not do what the caller
+         * declared. */
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+        expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;
+        ia.primitiveRestartEnable=VK_TRUE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS && topo->graphics);
+        assert(topo->primitive_restart==VK_TRUE);
+        vkDestroyPipeline(&d,topo,NULL);
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
+        before_created=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !topo && created==before_created);
+        ia.primitiveRestartEnable=VK_FALSE;
         created=saved_created;released=saved_released;
         acquired=saved_acquired;compiled_released=saved_compiled;
     }

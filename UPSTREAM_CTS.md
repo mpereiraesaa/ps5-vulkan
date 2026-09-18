@@ -888,8 +888,9 @@ measured every leaf the module produces:
 | --- | --- | --- |
 | `dEQP-VK.geometry.input.basic_primitive.triangles`, its two conversions, six `output_<n>`, `output_vary_by_attribute` and its instancing variant | 11 | **Pass** - acceptance cases |
 | `output_vary_by_{uniform,texture}` and their instancing variants | 4 | **Pass** - acceptance cases once the geometry-stage descriptor binding is carried end to end (see below) |
-| `varying.vertex_{no_op,out_0,out_0,out_1}_geometry_out_{1,1,2,2}` | 4 | **Fail** - refused for primitive restart on a strip, still measured diagnostics |
-| the remaining input families, adjacency, `point_size`, `primitive_id` | 30 | still refused or unmeasured, kept as diagnostics |
+| `varying.vertex_{no_op,out_0,out_0,out_1}_geometry_out_{1,1,2,2}` | 4 | **Pass** - acceptance once the profile carried primitive restart for strips |
+| the point/line/triangle-strip input families, their four remaining conversions and both `primitive_id_in` leaves | 10 | **Pass** - acceptance cases once the stage was bound by its declared input mode and unused attributes were allowed |
+| adjacency, `triangle_fan`, `point_size`, fragment `primitive_id` and the varying drop | 20 | still refused or unmeasured, kept as diagnostics |
 
 **The geometry-stage descriptor path.** The pinned module binds its uniform
 buffer and its combined image sampler to the GEOMETRY stage alone, which two
@@ -902,27 +903,43 @@ refused, because the stage projection would have dropped the binding. The run
 that measured it went from `vk.queueSubmit(...): VK_ERROR_FEATURE_NOT_PRESENT`
 on all four leaves to **Pass** on all four.
 
-The four remaining failures are recorded as diagnostics with
-`expected_status: Fail` and the run that measured them, not smoothed into the
-acceptance set, and their cause is now measured rather than inferred: the pinned
+The four strip-topology leaves were held as measured diagnostics until the cause
+was fixed rather than inferred: the pinned
 geometry builder enables **primitive restart** for strip topologies
 (`vktGeometryTestsUtil.cpp:153-172` sets `primitiveRestartEnable = VK_TRUE` for
 `LINE_STRIP` and `TRIANGLE_STRIP` and `VK_FALSE` for every list), these four
 leaves are the only ones built with `TRIANGLE_STRIP`, and this profile refuses
 that input-assembly state, so the refusal happens before the adapter is asked
 (the same run shows every runtime-cache acquire at rc=0 and no adapter rejection).
-The witness measures both sides of it: with restart enabled the pipeline is
-refused, and the same indexed strip with restart disabled draws with 72 foreign
-pixels in the gap between its two quads - the bridging primitive a missing cut
-would thread across - so what the profile needs is primitive-restart support for
-strips (`VGT_MULTI_PRIM_IB_RESET_EN` and `VGT_MULTI_PRIM_IB_RESET_INDX`), not a
-change to the geometry path. The accepted set is therefore 290 leaves (211 + 64 clipping + 15
-geometry), and the frozen selection re-run passes **290/290** with zero `Fail`,
+Rather than accept the state without programming the cut, the profile now carries
+it: pipeline creation accepts `primitiveRestartEnable` for the two strips and
+refuses it for lists, and the draw path programs the same pair RADV programs on
+gfx10 - the enable in the user-config register `VGT_MULTI_PRIM_IB_RESET_EN`
+(0x3092c), the index in the context register `VGT_MULTI_PRIM_IB_RESET_INDX`
+(0x2840c, 0xffff for 16-bit indices and 0xffffffff for 32-bit), and the
+`SQ_NON_EVENT` workaround the GFX10 synchronisation bug requires before the
+update. The witness measures it end to end: the same indexed strip whose index
+list carries a restart index between two quads draws **foreign=0** with the cut
+(and 72 foreign pixels without it, which is the bridging primitive a missing cut
+threads across).
+
+**Binding the stage by its input mode.** A geometry stage that reads nothing
+per-vertex declares no `gl_in` array at all: the pinned `primitive_id_in` leaves
+are exactly that shape, and their vertex shaders drop the unused `a_color` while
+the pipeline still declares it, which Vulkan permits. The policy now binds the
+stage to the pipeline's topology through the input primitive its execution mode
+states - points, lines or triangles - cross-checks the array length only when the
+stage declares one, and drops an attribute no shader input consumes instead of
+refusing it. The reverse, a shader input with no attribute to feed it, is still
+refused.
+
+The accepted set is therefore 304 leaves (211 + 64 clipping + 29
+geometry), and the frozen selection re-run passes **304/304** with zero `Fail`,
 zero `NotSupported`, no missing or unexpected cases, and the title confirmed
 stopped:
 
-- selection SHA-256 `a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679`;
-- eboot SHA-256 `f1e4ef071fc8b1777b75e67ce858da91ebca32fc2e716608a60fb68045f36878`.
+- selection SHA-256 `7406de91ef883de7c1dd8522926773b72c846834fde37b45f686ff5994c8601b`;
+- eboot SHA-256 `afe1755291ef231f6f7c3e730abcd062f3a57618e879c758a1f0a89a42c207aa`.
 
 The preceding runs are retained privately with their QPA: the promotion run
 (selection
