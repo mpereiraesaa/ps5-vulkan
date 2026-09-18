@@ -67,6 +67,9 @@ The exact supported profile is documented in [API.md](API.md). Build and test
 requirements are in [BUILDING.md](BUILDING.md).
 Runtime graphics test results and their limits are summarized in [VALIDATION.md](VALIDATION.md).
 Vertex-fetch preparation and shader-cache identity are described in [VERTEX_INPUT.md](VERTEX_INPUT.md).
+Why tessellation is not advertised - what the hardware was measured doing, and
+where the investigation stopped - is recorded in
+[TESSELLATION_STATUS.md](TESSELLATION_STATUS.md).
 The provenance and current deficits of physical-device limits, memory, queues
 and formats are tracked in
 [PHYSICAL_DEVICE_REPORTING.md](PHYSICAL_DEVICE_REPORTING.md).

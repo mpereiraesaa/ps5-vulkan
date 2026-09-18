@@ -235,7 +235,13 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
              *
              * Two bits, replaced rather than ORed: the field is two bits wide
              * and VS_STAGE_COPY_SHADER is 2, so an OR could produce a value
-             * that means something else entirely - the same trap ES_EN had. */
+             * that means something else entirely - the same trap ES_EN had.
+             *
+             * MEASURED AND CLOSED, run 59: VGT_SHADER_STAGES_EN read back
+             * 0x0201204d with VS_EN = V_028B54_VS_STAGE_DS, the evaluation
+             * half still did not execute, no stall line, 0.157 s. This is not
+             * what was missing. It stays default off - it is a diagnostic, and
+             * setting a field the hardware did not ask for buys nothing. */
             (1u<<6) | /* V_028B54_VS_STAGE_DS */
 #endif
 #if defined(PS5VK_TESS_DYNAMIC_HS) && PS5VK_TESS_DYNAMIC_HS
