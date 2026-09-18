@@ -2729,14 +2729,38 @@ are recorded rather than quietly fixed: `PS5VK_CONSUMER_RASTER_RESULT` prints
 counter does not accumulate; and `PS5VK_CONSUMER_RASTER_GS_*` counts a skipped
 witness as a case in `witnessed=25`.
 
-**The run stops at the geometry witness.** `viewport_index_routing` ends in
-`vkCreateGraphicsPipelines -> -8`, which is the compiler dependency isolated
-host-side on the same day: the pinned compiler leaves
-`PSBC_UNRESOLVED_AGC_LINKAGE` set for a merged vertex+geometry program that
-exports `gl_ViewportIndex` (measured `unresolved=0x7`,
-`PA_CL_VS_OUT_CNTL=0x01280000`), and `ps5vk_runtime_shader_build` refuses an
-unresolved linkage instead of guessing a parameter mapping. The control is
-exact: the same geometry module with only the `gl_ViewportIndex =
-gl_PrimitiveIDIn;` line removed compiles clean through the identical key.
-`multiViewport` therefore stays unadvertised, and its sixteen-tile routing
-oracle has not been witnessed.
+**The geometry witness first failed here and now passes.** In the run above,
+`viewport_index_routing` ended in `vkCreateGraphicsPipelines -> -8`: the pinned
+compiler left `PSBC_UNRESOLVED_AGC_LINKAGE` set for a merged vertex+geometry
+program that exports `gl_ViewportIndex` (measured `unresolved=0x7`,
+`PA_CL_VS_OUT_CNTL=0x01280000`), because RADV counts that export in
+`param_exports` while the semantic list only walked user locations.
+`ps5vk_runtime_shader_build` refuses an unresolved linkage instead of guessing a
+parameter mapping, and the control was exact - the same geometry module with
+only the `gl_ViewportIndex = gl_PrimitiveIDIn;` line removed compiled clean
+through the identical key.
+
+That gap is closed. The compiler now names the export
+(`PSBC_SEMANTIC_VIEWPORT_INDEX`, mpereiraesaa/opengnm-psbc#17, pinned in
+`tools/prepare_compiler_deps.py`), and the same window was repeated on
+`t05-final` `a888290` with eboot
+`436a5c2856eec1b67dca27f6e46475f8c3b206fc73f5b6dc0bfc566940a813a7`, run
+`20260918T133046476Z_PPSA99994_ps5vk_0x67beeedc4fef`:
+
+```
+PS5VK_CONSUMER_RASTER_GS_FEATURES geometryShader=1 multiViewport=1 maxViewports=16
+PS5VK_CONSUMER_RASTER_GS_START cases=1 extent=64 tiles=16 clear_word=ff000000
+PS5VK_CONSUMER_RASTER_GS_PIPELINE stages=3 viewports=16 created=1
+PS5VK_CONSUMER_RASTER_GS_RESULT cases=1 witnessed=1 valid=1
+PS5VK_CONSUMER_RASTER_GS_RETIRED cases=1 witnessed=1
+```
+
+So `multiViewport` now has end-to-end evidence: a geometry stage writes
+`gl_ViewportIndex`, sixteen viewport banks are programmed, and the sixteen-tile
+oracle verifies each tile holds the colour of its own input primitive rather
+than a broadcast or a permuted bank. It still stays unadvertised, for a reason
+that has nothing to do with the driver: no applicable upstream CTS leaf exists
+for it (see UPSTREAM_CTS.md), and the six raster oracle mismatches below are
+unresolved. The consumer's own verifier now stops the run on the first of them
+(`raster oracle for clamp_disabled_narrow_probe`), which is why the repeat run
+ended there rather than at the geometry pipeline.
