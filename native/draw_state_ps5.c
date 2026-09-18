@@ -34,9 +34,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         vs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX ||
         fs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX ||
         (has_tessellation &&
-            (pair->runtime_hull_ls.header.num_sh_registers>4 ||
-             pair->runtime_hull_hs.header.num_sh_registers>4 ||
-             pair->runtime_hull_hs.header.num_cx_registers>PS5VK_RUNTIME_CX_MAX))))
+            (pair->runtime_hull.header.num_sh_registers>4 ||
+             pair->runtime_hull.header.num_cx_registers>PS5VK_RUNTIME_CX_MAX))))
         return VK_ERROR_UNKNOWN;
     if (pair->vertex_quantization != 0x2d) return VK_ERROR_FEATURE_NOT_PRESENT;
     ps5_agc_register viewport[PS5VK_VIEWPORT_REGISTERS];
@@ -74,31 +73,36 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * context registers carry VGT_TF_PARAM; the ring configuration is
      * program-referenced state below. */
     if (has_tessellation) {
-        if (result.cx_count+2+pair->runtime_hull_hs.header.num_cx_registers >
+        if (result.cx_count+2+pair->runtime_hull.header.num_cx_registers >
             PS5VK_DRAW_CX_CAPACITY)
             return VK_ERROR_UNKNOWN;
         memcpy(result.cx+result.cx_count,pair->tess_state,
             sizeof(pair->tess_state));
         result.cx_count+=2;
-        memcpy(result.cx+result.cx_count,pair->runtime_hull_hs.context,
-            pair->runtime_hull_hs.header.num_cx_registers*sizeof(*result.cx));
-        result.cx_count+=pair->runtime_hull_hs.header.num_cx_registers;
-        /* The hull is the gfx10 LSHS block, and on gfx10 its ONE user-data
-         * window is SPI_SHADER_USER_DATA_HS/LS_0 (R_00B430, sh offset
-         * 0x10c): the register the pinned header names for both names on
-         * gfx10 (R_00B4C0 is SPI_SHADER_REQ_CTRL_LSHS there, NOT user
-         * data). The window maps one-to-one to the hull's SGPRs - the
-         * hull's own argument layout proves it with its vertex-buffer table
-         * at dword 10 - so the ring descriptor table's address lands at the
-         * hull's ring-offsets dwords (SGPRs 0-1) through this one write
-         * pair. The tess-factor writes the HS half makes go through the
-         * ring table too, so a window left unwritten faults the draw even
-         * when nothing reads off-chip. */
-        if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
-        result.sh[result.sh_count++]=(ps5_agc_register){0x10c,
-            pair->tess_ring_table_low};
-        result.sh[result.sh_count++]=(ps5_agc_register){0x10d,
-            pair->tess_ring_table_high};
+        memcpy(result.cx+result.cx_count,pair->runtime_hull.context,
+            pair->runtime_hull.header.num_cx_registers*sizeof(*result.cx));
+        result.cx_count+=pair->runtime_hull.header.num_cx_registers;
+        /* NO ring-table write here, deliberately.
+         *
+         * An earlier version wrote the ring descriptor table's address into
+         * the hull's user-data window at sh 0x10c/0x10d, intending to reach
+         * the hull's ring_offsets. The register mapping was right - 0x10c
+         * really is SPI_SHADER_USER_DATA_HS_0 - but the DELIVERY MODEL was
+         * wrong, and measurably so. The merged hull's own argument layout
+         * says:
+         *
+         *   ring_offsets   SGPR 0-2   (system block, below the user-data
+         *                              window base of 8: hardware-supplied)
+         *   ud[18] AC_UD_DYNAMIC_DESCRIPTORS             SGPR 8
+         *   ud[19] AC_UD_DYNAMIC_DESCRIPTORS_OFFSET_ADDR SGPR 9
+         *
+         * User-data dwords 0 and 1 ARE SGPRs 8 and 9, so that write never
+         * reached ring_offsets at all - it overwrote the hull's two
+         * dynamic-descriptor pointers. ring_offsets is supplied by the
+         * hardware from the device's global ring configuration, which is why
+         * every working vertex/NGG path on this device needs no such write
+         * either. The rings themselves are still bound, through the VGT
+         * registers the create path programs in the user-config bank. */
     }
     /* Override the depth builder's Gears policy. Vulkan disables writes when
      * depth testing is disabled, even if depthWriteEnable was specified. */
@@ -173,19 +177,17 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         result.sh_count=vs->header.num_sh_registers+fs->header.num_sh_registers;
         memcpy(result.sh,vs->shader,vs->header.num_sh_registers*sizeof(*result.sh));
         memcpy(result.sh+vs->header.num_sh_registers,fs->shader,fs->header.num_sh_registers*sizeof(*result.sh));
-        /* The hull programs' shader blocks follow the runtime pair's: the HS
-         * program (its VGT_TF_PARAM context block went into the context bank)
-         * and the LS program behind it, both with the create-path addresses. */
+        /* The merged hull program's one shader block follows the runtime
+         * pair's: its address register at the LS block and its resource pair
+         * at the HS block, with the create-path address. Its VGT_TF_PARAM
+         * context block went into the context bank. */
         if(has_tessellation) {
-            if(result.sh_count+pair->runtime_hull_ls.header.num_sh_registers+
-                pair->runtime_hull_hs.header.num_sh_registers>PS5VK_DRAW_SH_CAPACITY)
+            if(result.sh_count+pair->runtime_hull.header.num_sh_registers>
+                PS5VK_DRAW_SH_CAPACITY)
                 return VK_ERROR_UNKNOWN;
-            memcpy(result.sh+result.sh_count,pair->runtime_hull_hs.shader,
-                pair->runtime_hull_hs.header.num_sh_registers*sizeof(*result.sh));
-            result.sh_count+=pair->runtime_hull_hs.header.num_sh_registers;
-            memcpy(result.sh+result.sh_count,pair->runtime_hull_ls.shader,
-                pair->runtime_hull_ls.header.num_sh_registers*sizeof(*result.sh));
-            result.sh_count+=pair->runtime_hull_ls.header.num_sh_registers;
+            memcpy(result.sh+result.sh_count,pair->runtime_hull.shader,
+                pair->runtime_hull.header.num_sh_registers*sizeof(*result.sh));
+            result.sh_count+=pair->runtime_hull.header.num_sh_registers;
         }
         result.runtime=pair->runtime_arguments;
         /* This is the lab's audited draw-auto command modifier, not compiler

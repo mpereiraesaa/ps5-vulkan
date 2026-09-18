@@ -17,13 +17,19 @@ DEPS = [
         # and launch counts, the driver user-data window base, the pixel stage's
         # distance reads, the tessellation evaluation half's loadable NGG
         # package and the hull's tessellation workgroup layout) under metadata
-        # version 17. That dependency review is explicitly pending (branch
-        # codex/tess-eval-package, opengnm-psbc PR #16); this pin is the
-        # reproducible candidate the tessellation work builds against, not a
-        # claim that dependency main contains it. The pin is the whole
+        # version 17. That dependency review is explicitly pending; this pin
+        # is the reproducible candidate the tessellation work builds against,
+        # not a claim that dependency main contains it. It now carries the
+        # cross-stage tessellation linkage as well (branch
+        # codex/tess-merged-lshs, opengnm-psbc PR #19, also open and
+        # unreviewed): the hull compiled as ONE merged LS/HS program so the
+        # vertex half is a real LS, and the domain linked against the control
+        # half so its patch count, attribute stride and tess-factor read flag
+        # stay compile-time constants. PR #16's TESS_EVAL package is included
+        # by history. The pin is the whole
         # contract, so a different commit has to be pinned explicitly and the
         # driver cache key moves with the metadata version.
-        "pin": "6bd9a6eb79c9a73a62f752db58d26981a8ee166c",
+        "pin": "ad78d8aa1ec1520d43abce4b218b84c3c210a7cf",
     },
     {
         "name": "opengnm",

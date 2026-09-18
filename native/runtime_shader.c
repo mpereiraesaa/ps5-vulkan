@@ -394,38 +394,44 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
  * exists, so it is checked as present, not refused. The pgm lo/hi values stay
  * zero through this call, which is what the address patch keys on.
  * Returns 0 on success. */
-int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *ls,
-    struct ps5vk_runtime_shader *hs,const PsbcShaderOutput *c)
+int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *hull,
+    const PsbcShaderOutput *c)
 {
-    if (!ls || !hs || !c || !c->machine_code || !c->machine_code_size ||
+    if (!hull || !c || !c->machine_code || !c->machine_code_size ||
         (c->machine_code_size & 3u) || c->machine_code_size>16u*1024u*1024u) return -1;
     const PsbcShaderMetadata *m=&c->metadata;
+    /* The merged pair is a launchable hull program, so it must NOT carry the
+     * tessellation-pipeline unresolved bit any more: a control half compiled
+     * without its vertex half still does, and is still refused here. */
     if (m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
-        m->source_stage!=PSBC_STAGE_TESS_CTRL || m->hardware_stage!=PSBC_HW_STAGE_UNKNOWN ||
-        !(m->unresolved_fields & PSBC_UNRESOLVED_TESS_PIPELINE) ||
-        !m->hull_ls_valid || !m->hull_tess_wg_valid ||
+        m->source_stage!=PSBC_STAGE_TESS_CTRL ||
+        m->hardware_stage!=PSBC_HW_STAGE_HULL ||
+        !m->hull_tess_wg_valid ||
         !m->hull_num_patches_per_wg || m->hull_num_patches_per_wg>255 ||
-        !m->hull_ls_code_offset || m->hull_ls_code_offset>c->machine_code_size ||
-        c->machine_code_size!=(size_t)m->hull_ls_code_offset+(size_t)m->hull_ls_code_size ||
+        !m->hull_tcs_lds_size ||
+        /* One image: the separate LS carriage the two-program model used is
+         * gone, and a package still claiming it is not this ABI. */
+        m->hull_ls_valid || m->hull_ls_code_offset || m->hull_ls_code_size ||
         m->user_sgpr_count>16 || m->scratch_valid || m->scratch_bytes_per_wave ||
         /* The linked stage enables are the DOMAIN half's publication (the
          * domain's NGG linkage carries ES_EN/PRIMGEN and the driver ORs the
          * LS/HS enables in), so the hull does not carry a linkage block. */
         m->linkage_valid ||
-        (m->unresolved_fields & ~(PSBC_UNRESOLVED_PROGRAM_CHECKSUM |
-            PSBC_UNRESOLVED_TESS_PIPELINE))) return -2;
-    /* Both programs keep zero pgm values through this builder, and the HS
-     * block plus the LS block's four registers must be the whole sh set. */
-    if (m->shader_register_count!=4 ||
-        m->hull_ls_pgm_lo.offset!=0x148 || m->hull_ls_pgm_lo.value ||
-        m->hull_ls_pgm_hi.offset!=0x149 || m->hull_ls_pgm_hi.value ||
-        m->hull_ls_rsrc1.offset!=0x14a || !m->hull_ls_rsrc1.value ||
-        m->hull_ls_rsrc2.offset!=0x14b || !m->hull_ls_rsrc2.value) return -3;
-    const PsbcRegisterWrite *lo=find(m->shader_registers,m->shader_register_count,0x108);
-    const PsbcRegisterWrite *hi=find(m->shader_registers,m->shader_register_count,0x109);
+        (m->unresolved_fields & ~PSBC_UNRESOLVED_PROGRAM_CHECKSUM)) return -2;
+    /* On GFX10 the merged stage is ONE program counter and the pinned
+     * radv_get_shader_regs() puts it at the LS block (R_00B520/R_00B524, sh
+     * 0x148/0x149) while the resource pair stays at the HS block
+     * (R_00B428/R_00B42C, sh 0x10a/0x10b). R_00B420 PGM_LO_HS is the address
+     * register only below GFX9 and must not appear. */
+    if (m->shader_register_count!=4) return -3;
+    const PsbcRegisterWrite *lo=find(m->shader_registers,m->shader_register_count,0x148);
+    const PsbcRegisterWrite *hi=find(m->shader_registers,m->shader_register_count,0x149);
     const PsbcRegisterWrite *rsrc1=find(m->shader_registers,m->shader_register_count,0x10a);
     const PsbcRegisterWrite *rsrc2=find(m->shader_registers,m->shader_register_count,0x10b);
-    if (!lo || !hi || lo->value || hi->value || !rsrc1->value || !rsrc2->value) return -3;
+    if (!lo || !hi || !rsrc1 || !rsrc2 || lo->value || hi->value ||
+        !rsrc1->value || !rsrc2->value) return -3;
+    if (find(m->shader_registers,m->shader_register_count,0x108) ||
+        find(m->shader_registers,m->shader_register_count,0x109)) return -3;
     /* The tessellator's own configuration is the one context register this
      * stage fully determines, and the launch state needs it from here. */
     if (!find(m->context_registers,m->context_register_count,0x2db)) return -3;
@@ -435,25 +441,16 @@ int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *ls,
         m->descriptor_set_valid[2] || m->descriptor_set_valid[3] ||
         m->push_constants_valid || m->push_constant_size ||
         m->vertex_buffer_table_valid) return -5;
-    memset(ls,0,sizeof(*ls));memset(hs,0,sizeof(*hs));
-    ls->header.file_header=0x34333231; ls->header.version=24;
-    ls->header.header_size=sizeof(*ls); ls->header.shader_size=m->hull_ls_code_size;
-    ls->header.target=5; ls->header.type=PS5_SHADER_PRE_RASTER;
-    ls->header.num_sh_registers=4;
-    ls->header.sh_registers=relative(&ls->header.sh_registers,ls->shader);
-    ls->shader[0]=convert(m->hull_ls_pgm_lo);
-    ls->shader[1]=convert(m->hull_ls_pgm_hi);
-    ls->shader[2]=convert(m->hull_ls_rsrc1);
-    ls->shader[3]=convert(m->hull_ls_rsrc2);
-    hs->header.file_header=0x34333231; hs->header.version=24;
-    hs->header.header_size=sizeof(*hs);
-    hs->header.shader_size=(uint32_t)m->hull_ls_code_offset;
-    hs->header.target=5; hs->header.type=PS5_SHADER_PRE_RASTER;
-    hs->header.num_cx_registers=(uint8_t)m->context_register_count;
-    hs->header.cx_registers=relative(&hs->header.cx_registers,hs->context);
-    hs->header.num_sh_registers=4;
-    hs->header.sh_registers=relative(&hs->header.sh_registers,hs->shader);
-    for (uint32_t i=0;i<m->context_register_count;++i) hs->context[i]=convert(m->context_registers[i]);
-    for (uint32_t i=0;i<4;++i) hs->shader[i]=convert(m->shader_registers[i]);
+    memset(hull,0,sizeof(*hull));
+    hull->header.file_header=0x34333231; hull->header.version=24;
+    hull->header.header_size=sizeof(*hull);
+    hull->header.shader_size=(uint32_t)c->machine_code_size;
+    hull->header.target=5; hull->header.type=PS5_SHADER_PRE_RASTER;
+    hull->header.num_cx_registers=(uint8_t)m->context_register_count;
+    hull->header.cx_registers=relative(&hull->header.cx_registers,hull->context);
+    hull->header.num_sh_registers=4;
+    hull->header.sh_registers=relative(&hull->header.sh_registers,hull->shader);
+    for (uint32_t i=0;i<m->context_register_count;++i) hull->context[i]=convert(m->context_registers[i]);
+    for (uint32_t i=0;i<4;++i) hull->shader[i]=convert(m->shader_registers[i]);
     return 0;
 }

@@ -513,13 +513,16 @@ static void check_tessellation_stage(void)
     const void *out=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     const struct ps5vk_runtime_graphics_program *p=out;
-    /* The hull half: the control stage's metadata, still explicitly short of a
-     * loadable hull package because the hull state is the driver's. */
+    /* The hull: ONE merged LS/HS program, launchable, so no tessellation
+     * bit and no separate LS carriage. The launch state the driver owns
+     * (stage enables, LS_HS_CONFIG, the rings, LDS_SIZE) is still the
+     * driver's and is not in the package. */
     assert(p->hull.machine_code && p->hull.machine_code_size);
     assert(p->hull.metadata.source_stage==PSBC_STAGE_TESS_CTRL);
-    assert(p->hull.metadata.hardware_stage==PSBC_HW_STAGE_UNKNOWN);
-    assert(p->hull.metadata.unresolved_fields & PSBC_UNRESOLVED_TESS_PIPELINE);
-    assert(p->hull.metadata.hull_ls_valid);
+    assert(p->hull.metadata.hardware_stage==PSBC_HW_STAGE_HULL);
+    assert(!(p->hull.metadata.unresolved_fields & PSBC_UNRESOLVED_TESS_PIPELINE));
+    assert(!p->hull.metadata.hull_ls_valid);
+    assert(p->hull.metadata.hull_tess_wg_valid);
     /* The domain half: the loadable NGG package, no tessellation bit. */
     assert(p->domain.machine_code && p->domain.machine_code_size);
     assert(p->domain.metadata.source_stage==PSBC_STAGE_TESS_EVAL);

@@ -9,10 +9,10 @@ struct ps5vk_runtime_graphics_program {
      * the hull and domain programs below. The loader gate keeps refusing the
      * tessellation halves while their pipeline state is unwritten. */
     PsbcShaderOutput vertex,fragment;
-    /* Tessellation pair. The hull is the LS+HS program psbc_compile_tess_pipeline
-     * links (HS machine code at offset 0, the vertex half behind it, hull_ls_*
-     * publication), the domain the TES NGG package the evaluation half compiles
-     * to. Both are zero for every earlier pipeline shape. */
+    /* Tessellation pair. The hull is the ONE merged LS/HS image
+     * psbc_compile_tess_pipeline emits by compiling the vertex and control
+     * halves together, and the domain is the TES NGG package the evaluation
+     * half compiles to. Both are zero for every earlier pipeline shape. */
     PsbcShaderOutput hull,domain;
     /* The pipeline's input patch control points, the tessellation launch
      * state's input/output control-point counts. Zero without the pair. */

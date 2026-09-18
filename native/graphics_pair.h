@@ -22,7 +22,10 @@ struct ps5vk_graphics_pair {
      * two program views live below, and the draw path appends the hull's
      * register banks plus the driver-owned launch state. */
     uint32_t tessellation;
-    struct ps5vk_runtime_shader runtime_hull_ls,runtime_hull_hs;
+    /* THE merged LS/HS program: on GFX9+ the vertex and control halves are
+     * one hardware stage running one image, so there is one runtime shader
+     * here, not a pair. */
+    struct ps5vk_runtime_shader runtime_hull;
     /* The driver-owned hull launch state, prepared at create from the hull
      * metadata's workgroup layout and the domain's linked stage enables:
      * VGT_SHADER_STAGES_EN (0x2d5) with the LS/HS enables ORed in, and

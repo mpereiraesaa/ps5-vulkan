@@ -1895,17 +1895,17 @@ static void tess_receipt(const char *variant,
 {
     const struct ps5vk_graphics_pair *pair=native->pair;
     uint32_t tf_param=0;
-    for(unsigned i=0;i<pair->runtime_hull_hs.header.num_cx_registers;++i)
-        if(pair->runtime_hull_hs.context[i].offset==0x2db)
-            tf_param=pair->runtime_hull_hs.context[i].value;
+    for(unsigned i=0;i<pair->runtime_hull.header.num_cx_registers;++i)
+        if(pair->runtime_hull.context[i].offset==0x2db)
+            tf_param=pair->runtime_hull.context[i].value;
     /* The merged LS/HS resource register the hull actually launches with.
      * LDS_SIZE lives at bits 18..26 and the compiler cannot publish it, so a
      * run that reports zero here is a hull launched without the LDS its own
      * code writes. */
     uint32_t hs_rsrc2=0;
-    for(unsigned i=0;i<pair->runtime_hull_hs.header.num_sh_registers;++i)
-        if(pair->runtime_hull_hs.shader[i].offset==0x10b)
-            hs_rsrc2=pair->runtime_hull_hs.shader[i].value;
+    for(unsigned i=0;i<pair->runtime_hull.header.num_sh_registers;++i)
+        if(pair->runtime_hull.shader[i].offset==0x10b)
+            hs_rsrc2=pair->runtime_hull.shader[i].value;
     const uint32_t *table=(const uint32_t *)pair->tess_rings;
     const uint64_t pipeline_va=(uint64_t)(uintptr_t)native;
     const uint64_t pair_va=(uint64_t)(uintptr_t)pair;
@@ -2905,9 +2905,9 @@ coord_done:
              * Read the register the driver actually wrote. */
             t_stages_en=tess_native->pair->tess_state[0].value;
             t_ls_hs=tess_native->pair->tess_state[1].value;
-            for(unsigned i=0;i<tess_native->pair->runtime_hull_hs.header.num_cx_registers;++i)
-                if(tess_native->pair->runtime_hull_hs.context[i].offset==0x2db)
-                    t_tf=tess_native->pair->runtime_hull_hs.context[i].value;
+            for(unsigned i=0;i<tess_native->pair->runtime_hull.header.num_cx_registers;++i)
+                if(tess_native->pair->runtime_hull.context[i].offset==0x2db)
+                    t_tf=tess_native->pair->runtime_hull.context[i].value;
             VkCommandPool tess_pool;
             VkCommandPoolCreateInfo tess_pci={
                 .sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,

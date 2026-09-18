@@ -523,10 +523,19 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
                 VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT))goto failed;
         PsbcCompileOptions domain_options={.target=PSBC_TARGET_PS5,
             .stage=PSBC_STAGE_TESS_EVAL,.entrypoint=key->tess_eval.entry,
-            .optimise=true,.ngg=true,.address32_hi=2,.rasterization_samples=1};
+            .optimise=true,.ngg=true,.address32_hi=2,.rasterization_samples=1,
+            /* The domain is LINKED against the control half, which is what
+             * keeps num_tess_patches, the attribute stride and
+             * tes_reads_tess_factors compile-time constants. Compiled alone
+             * it reads all three at runtime from the tcs_offchip_layout user
+             * SGPR, an ABI nothing here supplies. The patch size is what the
+             * control half's patch-count derivation needs. */
+            .patch_control_points=key->patch_control_points};
         if(!apply_parameters(&domain_options,&key->tess_eval,key,
                 VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))goto failed;
-        result=psbc_compile_shader(key->tess_eval.words,key->tess_eval.word_count*4u,
+        result=psbc_compile_domain_pipeline(
+            key->tess_control.words,key->tess_control.word_count*4u,
+            key->tess_eval.words,key->tess_eval.word_count*4u,
             &domain_options,&p->domain);
         if(result!=PSBC_RESULT_OK)goto failed;
         if(!push_metadata_supported(&p->domain.metadata,key,
