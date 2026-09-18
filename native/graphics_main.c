@@ -2799,20 +2799,28 @@ static void geometry_probe(VkDevice d)
                  * the offset itself becomes a measurement. */
                 const uint32_t extent=coord_table[22];
                 const uint32_t words=extent/4u;
-                uint32_t nonzero=0,at[4]={0,0,0,0},val[4]={0,0,0,0};
+                /* Every non-zero word, not the first four. Two runs of the
+                 * identical payload reported four and then five, which means
+                 * the truncation was hiding part of the answer: a factor
+                 * store whose word count varies between runs is either more
+                 * than one wave writing or a layout this task has not
+                 * understood, and neither can be read off a truncated list. */
+                uint32_t nonzero=0,at[8]={0},val[8]={0};
                 for(uint32_t i=0;i<words;++i) {
                     const uint32_t v=factors[i];
                     if(!v)continue;
-                    if(nonzero<4){at[nonzero]=i;val[nonzero]=v;}
+                    if(nonzero<8){at[nonzero]=i;val[nonzero]=v;}
                     ++nonzero;
                 }
                 ps5log_printf(PS5LOG_MARK,
                     "PS5VK_TESS_FACTORS variant=%s factor_va=%08x%08x "
                     "extent=%08x nonzero=%u w0=%u:%08x w1=%u:%08x "
-                    "w2=%u:%08x w3=%u:%08x f0=%08x f1=%08x f2=%08x f3=%08x",
+                    "w2=%u:%08x w3=%u:%08x w4=%u:%08x w5=%u:%08x "
+                    "w6=%u:%08x w7=%u:%08x",
                     PS5VK_TESS_CONTROL_NAME,coord_table[21],coord_table[20],
                     extent,nonzero,at[0],val[0],at[1],val[1],at[2],val[2],
-                    at[3],val[3],factors[0],factors[1],factors[2],factors[3]);
+                    at[3],val[3],at[4],val[4],at[5],val[5],at[6],val[6],
+                    at[7],val[7]);
             }
             CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
                 .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,

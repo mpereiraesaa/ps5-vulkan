@@ -244,6 +244,44 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         pair->tess_state[2]=(ps5_agc_register){0x2d4,
             (32u&0xffu) | ((11u&0xffu)<<8) | ((11u&0xffu)<<16) |
             ((16u&0x1fu)<<24) | ((3u&0x7u)<<29)};
+        /* VGT_TF_PARAM.DISTRIBUTION_MODE, paired with the register above.
+         *
+         * The accumulators this driver writes at 0x2d4 only mean anything
+         * when the tessellator is actually distributing work, and the pinned
+         * tree says so in its own words: radv_pipeline_graphics.c carries the
+         * comment "Needed for 028B6C_DISTRIBUTION_MODE != 0" over the
+         * has_distributed_tess branch. ac_gpu_info.c sets
+         * has_distributed_tess for every gfx_level >= GFX10, so this device
+         * is one of them, and radv therefore runs CHIP_NAVI21 with the
+         * accumulators AND a non-zero distribution mode.
+         *
+         * We were programming the accumulators with DISTRIBUTION_MODE left
+         * at V_028B6C_NO_DIST, because the mode lives in VGT_TF_PARAM, which
+         * psbc derives from the control half's declared interface alone -
+         * domain, spacing and output topology - and a shader interface knows
+         * nothing about how the hardware distributes patches. That is a
+         * pairing radv never produces, and it is the same
+         * compiled-in-isolation shape as every other defect in this pipeline:
+         * a pipeline-level decision taken from a stage that cannot make it.
+         *
+         * V_028B6C_TRAPEZOIDS is 3 in the pinned header, not 2; the
+         * enumerant list is NO_DIST 0, PATCHES 1, DONUTS 2, TRAPEZOIDS 3.
+         * Patched into the hull's own published context register so the draw
+         * keeps emitting exactly one VGT_TF_PARAM. */
+        {
+            unsigned patched_tf=0;
+            for(unsigned i=0;i<pair->runtime_hull.header.num_cx_registers;++i)
+                if(pair->runtime_hull.context[i].offset==0x2db) {
+                    pair->runtime_hull.context[i].value=
+                        (pair->runtime_hull.context[i].value & ~(3u<<17)) |
+                        (3u<<17); /* V_028B6C_TRAPEZOIDS */
+                    ++patched_tf;
+                }
+            if(patched_tf!=1) {
+                TESS_CREATE_FAIL("hull-tf-param");
+                rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+            }
+        }
         /* The merged hull program is loaded here, so its ONE address register
          * pair takes the real address. On GFX10 that register is the LS block
          * (R_00B520/R_00B524, sh 0x148/0x149) per the pinned

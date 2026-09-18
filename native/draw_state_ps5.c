@@ -264,13 +264,28 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     }
     if (!result.modifier) return VK_ERROR_UNKNOWN;
 #if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
-    if(has_tessellation) {
-        static unsigned dumped;
-        if(!dumped) {
-            ++dumped;
-            tess_dump_bank("cx",result.cx,result.cx_count);
-            tess_dump_bank("sh",result.sh,result.sh_count);
-            tess_dump_bank("uc",result.uc,result.uc_count);
+    /* One patch draw and one ORDINARY runtime draw, so the two can be
+     * diffed against each other.
+     *
+     * The tessellation pipeline's pre-raster stage is an NGG program and so
+     * is the geometry probe's, and the geometry probe passes every case in
+     * the same process on the same device through the same encoder. That
+     * makes its emitted banks a real working control for every pre-raster
+     * register the patch draw also programs - strictly more than a
+     * host-compiled comparison, which can only see what the compiler
+     * publishes and not the linked AGC block, the target state or anything
+     * else the driver adds. Whatever the two share is not the defect;
+     * whatever only the patch draw sets, or only the working draw sets, is
+     * the entire remaining candidate list. */
+    {
+        static unsigned dumped_patch,dumped_plain;
+        unsigned *once=has_tessellation?&dumped_patch:&dumped_plain;
+        if(!*once && (has_tessellation || runtime)) {
+            const char *tag=has_tessellation?"cx":"gcx";
+            ++*once;
+            tess_dump_bank(tag,result.cx,result.cx_count);
+            tess_dump_bank(has_tessellation?"sh":"gsh",result.sh,result.sh_count);
+            tess_dump_bank(has_tessellation?"uc":"guc",result.uc,result.uc_count);
         }
     }
 #endif

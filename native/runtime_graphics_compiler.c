@@ -512,8 +512,14 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
             key->tess_control.specialization_count?&key->tess_control:&key->vertex;
         if(!apply_parameters(&hull_options,hull_specialized,key,
                 VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT))goto failed;
+        /* The evaluation half goes in LINK-ONLY, so the control half learns
+         * the tessellator configuration it cannot declare for itself: the
+         * domain, spacing, winding and point mode live in the .tese, and the
+         * tessellation-factor layout the hull stores depends on the domain. */
         result=psbc_compile_tess_pipeline(key->vertex.words,key->vertex.word_count*4u,
-            key->tess_control.words,key->tess_control.word_count*4u,&hull_options,&p->hull);
+            key->tess_control.words,key->tess_control.word_count*4u,
+            key->tess_eval.words,key->tess_eval.word_count*4u,
+            &hull_options,&p->hull);
         if(result!=PSBC_RESULT_OK)goto failed;
         /* The hull's metadata describes the shared argument block from the
          * control half's view, so its push constants are checked against the

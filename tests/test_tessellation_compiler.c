@@ -89,7 +89,7 @@ int main(void)
         .optimise=true,.address32_hi=2,.primitive_type=4,
         .rasterization_samples=1,.patch_control_points=3};
     PsbcShaderOutput hull={0};
-    assert(psbc_compile_tess_pipeline(vs,vn*4,hs,hn*4,&options,&hull)==
+    assert(psbc_compile_tess_pipeline(vs,vn*4,hs,hn*4,es,en*4,&options,&hull)==
         PSBC_RESULT_OK);
     const PsbcShaderMetadata *m=&hull.metadata;
     assert(m->version==PSBC_SHADER_METADATA_VERSION);
@@ -108,14 +108,31 @@ int main(void)
     assert(!m->hull_ls_valid);
     assert(!m->hull_ls_code_offset && !m->hull_ls_code_size);
     assert(hull.machine_code_size%4==0);
-    /* The merged image genuinely contains the vertex half: compiling the SAME
-     * control shader alone produces strictly less code, and that compile still
-     * reports the old unlaunchable shape. */
+    /* The same control shader compiled ALONE still reports the old
+     * unlaunchable shape. */
     PsbcShaderOutput solo={0};
     assert(psbc_compile_shader(hs,hn*4,&options,&solo)==PSBC_RESULT_OK);
     assert(solo.metadata.hardware_stage==PSBC_HW_STAGE_UNKNOWN);
     assert(solo.metadata.unresolved_fields & PSBC_UNRESOLVED_TESS_PIPELINE);
-    assert(hull.machine_code_size>solo.machine_code_size);
+    /* And it produces MORE code than the linked pair, which is the opposite
+     * of what this test asserted before the evaluation half was linked in.
+     *
+     * The old assertion used total size as a proxy for "the merged image
+     * really contains the vertex half". That proxy is now wrong, and it is
+     * wrong for the right reason: an unlinked control half cannot know the
+     * tessellator's domain - the .tese declares it - so
+     * ac_nir_lower_tess_io_to_mem emits a RUNTIME three-way branch on
+     * nir_load_tcs_primitive_mode_amd with a separate factor store for
+     * triangles, isolines and quads, plus a conditional store of the levels
+     * for a TES that might read them. Linking the evaluation half resolves
+     * both to compile-time constants and the dead arms disappear, which is
+     * worth more than the vertex half's few instructions cost.
+     *
+     * Asserting the direction pins that: a dependency move that stopped
+     * resolving the primitive mode would put the branches back and fail
+     * here, instead of silently restoring a hull that stores quad-shaped
+     * tessellation factors for a triangle domain. */
+    assert(hull.machine_code_size<solo.machine_code_size);
     psbc_free_output(&solo);
     /* On GFX10 the merged stage is ONE program counter, and the pinned
      * radv_get_shader_regs() puts it at the LS block with the resource pair at
@@ -240,7 +257,7 @@ int main(void)
     PsbcCompileOptions wrong=options;
     wrong.stage=PSBC_STAGE_VERTEX;
     PsbcShaderOutput bad={0};
-    assert(psbc_compile_tess_pipeline(vs,vn*4,hs,hn*4,&wrong,&bad)!=
+    assert(psbc_compile_tess_pipeline(vs,vn*4,hs,hn*4,es,en*4,&wrong,&bad)!=
         PSBC_RESULT_OK);
     assert(!bad.machine_code && !bad.data);
     psbc_free_output(&bad);
