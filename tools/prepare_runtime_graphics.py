@@ -154,6 +154,12 @@ def main():
         # accumulator is not a comparison anyone has made yet.
         ("experiments/graphics/runtime_tess_coord_high.tesc",
          "runtime_tess_coord_high.tesc.spv", "tess_coord_high_control"),
+        # The descriptor-free domain-execution witness: an evaluation half
+        # that costs time instead of writing memory, so "did the domain run"
+        # is answered by the bounded fence wait the harness already has,
+        # without a storage buffer whose own delivery cannot be validated.
+        ("experiments/graphics/runtime_tess_spin.tese",
+         "runtime_tess_spin.tese.spv", "tess_spin_evaluation"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

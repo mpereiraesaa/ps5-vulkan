@@ -470,6 +470,14 @@ def main():
                 # 0 keeps the compiler's value, which is the shipped
                 # behaviour; 128 is the subgroup limit this pipeline already
                 # publishes at GE_MAX_OUTPUT_PER_SUBGROUP.
+                # The descriptor-free domain-execution witness: an evaluation
+                # half that spins instead of writing memory, so the bounded
+                # fence wait answers "did the domain run" with no storage
+                # buffer in the path. Default 0.
+                tess_spin = os.environ.get("PS5VK_TESS_SPIN", "0")
+                if tess_spin not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_SPIN must be 0 or 1")
+                common += ["-DPS5VK_TESS_SPIN=" + tess_spin]
                 tess_max_vert_out = os.environ.get(
                     "PS5VK_TESS_GS_MAX_VERT_OUT", "0")
                 if not tess_max_vert_out.isdigit() or int(tess_max_vert_out) > 2047:
@@ -517,7 +525,7 @@ def main():
                                          tess_link_prim + ":" +
                                          tess_high_levels + ":" +
                                          tess_only + ":" + tess_gs_en + ":" +
-                                         tess_max_vert_out) +
+                                         tess_max_vert_out + ":" + tess_spin) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump
