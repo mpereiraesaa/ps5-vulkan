@@ -2638,9 +2638,6 @@ static void geometry_probe(VkDevice d)
                 tess_native->pair->tess_ring_table_high,
                 tess_native->pair->tess_ring_table_low);
             }
-                if(wrong)++t_wrong;
-                ++t_covered;
-            }
             vkDestroyPipeline(d,tess_pipeline,NULL);
             vkDestroyCommandPool(d,tess_pool,NULL);
         } else {
