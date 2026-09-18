@@ -11,7 +11,7 @@ enum { MODEL_VERTEX=0, MODEL_TESS_CTRL=1, MODEL_TESS_EVAL=2, MODEL_GEOMETRY=3,
 enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
        BUILTIN_CULL_DISTANCE=4, BUILTIN_VERTEX_INDEX=42, BUILTIN_INSTANCE_INDEX=43,
        BUILTIN_BASE_VERTEX=4424, BUILTIN_BASE_INSTANCE=4425, BUILTIN_DRAW_INDEX=4426,
-       BUILTIN_VIEW_INDEX=4440 };
+       BUILTIN_VIEW_INDEX=4440, BUILTIN_VIEWPORT_INDEX=10 };
 /* The tessellation built-ins the two stages exchange with the tessellator, and
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
@@ -47,6 +47,13 @@ struct interface {
     /* Declared gl_ClipDistance/gl_CullDistance array lengths, in components.
      * They start at zero and are set at most once per stage. */
     unsigned clip_distances, cull_distances;
+    /* The geometry stage's gl_ViewportIndex export. It is not a varying: it is
+     * a 32-bit integer scalar with no location that selects one of the viewport
+     * banks the pipeline programs, and core Vulkan lets ONLY a geometry stage
+     * write it. Set at most once per stage, like the distance arrays; whether
+     * the pipeline may use it at all is the multiViewport negotiation, which
+     * the adapter decides on the logical device's enabled mask. */
+    unsigned viewport_index;
     /* The same two arrays as PIXEL INPUTS: a fragment stage reads what the
      * last pre-raster stage exported. The rasterizer delivers those components
      * exactly like a varying, from the same packed position registers, so a
@@ -370,6 +377,22 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                    type->count!=32)goto done;
                 continue;
             }
+            /* gl_ViewportIndex: the geometry stage's per-primitive selection of
+             * one of the viewport banks. Core Vulkan lets only a geometry stage
+             * write it, it is a 32-bit integer scalar rather than a varying, and
+             * the hardware acts on it through the viewport-index vector the
+             * compiler publishes for the merged pair. What this function decides
+             * is only that the DECLARATION is one this profile can describe; the
+             * capability gate on the enabled multiViewport bit lives in the
+             * adapter, because a pipeline that writes an index while the profile
+             * programs a single bank would silently route everything to viewport
+             * zero. */
+            if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_VIEWPORT_INDEX) {
+                if(d->location!=~0u || d->storage!=3 || d->patch ||
+                   type->op!=21 || type->count!=32 || out->viewport_index)goto done;
+                out->viewport_index=1;
+                continue;
+            }
             if(model==MODEL_TESS_CTRL &&
                (d->builtin==BUILTIN_TESS_LEVEL_OUTER || d->builtin==BUILTIN_TESS_LEVEL_INNER)) {
                 unsigned length=0,element=0;
@@ -689,4 +712,11 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
         }
     }
     return 1;
+}
+
+int ps5vk_spirv_stage_viewport_index(const struct ps5vk_graphics_module_key *module)
+{
+    struct interface stage={0};
+    if(!reflect(module,MODEL_GEOMETRY,&stage))return 0;
+    return (int)stage.viewport_index;
 }

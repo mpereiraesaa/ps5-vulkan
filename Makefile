@@ -445,6 +445,8 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_output_components.frag -o build/runtime-graphics/geometry_output_components.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_uniform.vert -o build/runtime-graphics/geometry_uniform.vert.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_uniform.geom -o build/runtime-graphics/geometry_uniform.geom.spv
+	$(GLSLANG) -V experiments/graphics/runtime_raster_witness.vert -o build/runtime-graphics/raster_witness.vert.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_raster_viewport_index.geom -o build/runtime-graphics/raster_viewport_index.geom.spv
 	$(GLSLANG) -V experiments/graphics/runtime_tess.vert -o build/runtime-graphics/tess.vert.spv
 	$(GLSLANG) -V -S tesc experiments/graphics/runtime_tess.tesc -o build/runtime-graphics/tess.tesc.spv
 	$(GLSLANG) -V -S tese experiments/graphics/runtime_tess.tese -o build/runtime-graphics/tess.tese.spv

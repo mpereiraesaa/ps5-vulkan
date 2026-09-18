@@ -386,6 +386,63 @@ static void check_geometry_stage(void)
     puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged for the point, line and triangle families");
 }
 
+/* multiViewport end to end. A geometry stage selects which of the pipeline's
+ * viewport banks it writes to by writing gl_ViewportIndex, and core Vulkan lets
+ * ONLY a geometry stage write it. The declaration is a pipeline shape this
+ * profile can describe - refusing the shape outright would be stricter than
+ * Vulkan - but it is also a capability: with a single bank programmed the index
+ * would be silently ignored and every primitive would paint viewport zero, so
+ * the adapter refuses the pipeline unless the logical device enabled
+ * multiViewport. The refusal is asserted by its own diagnostic site, not by the
+ * error code alone, so a failure for an unrelated reason cannot pass this test. */
+static void check_viewport_index_routing(void)
+{
+    VkVertexInputBindingDescription binding={.binding=0,.stride=32,
+        .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription attributes[2]={
+        {.location=0,.binding=0,.format=VK_FORMAT_R32G32B32A32_SFLOAT,.offset=0},
+        {.location=1,.binding=0,.format=VK_FORMAT_R32G32B32A32_SFLOAT,.offset=16}};
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/raster_witness.vert.spv"),
+        .geometry=read_module("build/runtime-graphics/raster_viewport_index.geom.spv"),
+        .fragment=read_module("build/runtime-graphics/vertex_format.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .vertex_binding_count=1,.vertex_bindings=&binding,
+        .vertex_attribute_count=2,.vertex_attributes=attributes,
+        .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
+    /* The built-in is described where it is legal and nowhere else: the geometry
+     * module writes it, the vertex module of the same pipeline does not. */
+    assert(ps5vk_spirv_stage_viewport_index(&key.geometry));
+    assert(!ps5vk_spirv_stage_viewport_index(&key.vertex));
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_runtime_graphics_diag_site==14);
+    /* With the capability enabled the mask-driven gate stops refusing, and that
+     * is as far as this profile can go today. MEASURED DEPENDENCY, named here
+     * rather than hidden: the adapter then refuses the pair one step later, in
+     * ps5vk_runtime_shader_build, because the pinned compiler leaves
+     * PSBC_UNRESOLVED_AGC_LINKAGE set for a merged vertex+geometry program that
+     * exports this built-in - its fill_output_semantics() accounts for the
+     * described varyings, the primitive id and the distance registers but not
+     * for the viewport-index vector it does program in PA_CL_VS_OUT_CNTL
+     * (0x01280000, USE_VTX_VIEWPORT_INDX). The control is exact: the same
+     * geometry module with only the "gl_ViewportIndex = gl_PrimitiveIDIn" line
+     * removed compiles clean through this same key, so the export - not the
+     * interface, the topology or the descriptor plan - is the discriminator.
+     * When psbc accounts for the export, this assertion flips to VK_SUCCESS and
+     * the sixteen-tile viewport witness can run; until then the feature stays
+     * unadvertised and the dependency is a compiler one, in a file this tranche
+     * does not own. */
+    key.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER|PS5VK_FEATURE_MULTI_VIEWPORT;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)key.vertex.words);free((void *)key.geometry.words);
+    free((void *)key.fragment.words);
+}
+
 /* The output side of the component envelope. A stage may DECLARE sixty-four
  * output components and still have them dropped: only something that reads them
  * makes the declaration observable, so the pixel half of this case declares an
@@ -1194,6 +1251,7 @@ int main(void)
     check_clip_cull_distances();
     check_fragment_distance_read();
     check_geometry_stage();
+    check_viewport_index_routing();
     check_geometry_output_components();
     check_geometry_stage_descriptor_visibility();
     check_tessellation_stage();
