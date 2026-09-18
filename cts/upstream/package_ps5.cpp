@@ -20,6 +20,8 @@
 #include "vktDrawShaderDrawParametersTests.hpp"
 #include "vktDrawIndirectTest.hpp"
 #include "vktMultiViewTests.hpp"
+#include "vktClippingTests.hpp"
+#include "vktGeometryTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -184,6 +186,25 @@ void FocusedVkTestPackage::init(void)
     // families - and nothing else. Its own support gate and per-view oracle are
     // untouched.
     addChild(vkt::MultiView::createTests(m_testCtx, "multiview"));
+
+    // clipping group: the original upstream user-defined clip/cull distance
+    // module, registered whole under its own name. Both features are advertised
+    // (the export, the dynamically indexed write and the fragment-stage read are
+    // implemented and hardware-witnessed), so the family's vertex-only,
+    // static-index and dynamic-index leaves, with and without the fragment read,
+    // are acceptance cases in cts/upstream/manifest.json. Only the
+    // complementarity and misc leaves stay diagnostics: the pinned binary does
+    // not report them when they are filtered by the name the module's
+    // construction implies.
+    addChild(vkt::clipping::createTests(m_testCtx, "clipping"));
+
+    // geometry group: the original upstream geometry shader module, registered
+    // whole under its own name. Its reference images are embedded at build time
+    // (tools/embed_cts_reference_images.py, served by cts/upstream/image_io_ps5.cpp),
+    // so the leaves whose input primitive, built-ins and envelope this profile
+    // compiles are acceptance cases in cts/upstream/manifest.json and every other
+    // leaf stays a diagnostic there with the gate that refuses it.
+    addChild(vkt::geometry::createTests(m_testCtx, "geometry"));
 
     // compute.basic group
     {

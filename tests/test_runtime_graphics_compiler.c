@@ -41,6 +41,509 @@ static int patch_builtin(struct ps5vk_graphics_module_key *m, uint32_t from, uin
 
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
+/* Clip and cull distances leave the pre-raster stage through the packed
+ * position registers, and the pinned compiler already emits the matching
+ * context state. What this checks is the adapter contract: exactly the
+ * consistent combinations are packaged, and a mask whose registers disagree
+ * with it is refused instead of being trusted. GPU execution is a separate
+ * native gate. */
+static PsbcRegisterWrite *context_register(PsbcShaderMetadata *m,unsigned offset)
+{
+    for(unsigned i=0;i<m->context_register_count;++i)
+        if(m->context_registers[i].offset==offset)return &m->context_registers[i];
+    return NULL;
+}
+
+static void check_clip_cull_distances(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/clip_distance.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=NULL;
+    /* The compiled pair is the usage evidence: without the feature enabled the
+     * same key is refused even though the declaration policy accepted it. */
+    key.feature_mask=0;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    key.feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->vertex.metadata.clip_distance_mask==0x03u);
+    assert(!p->vertex.metadata.cull_distance_mask);
+    /* The standalone information pass used to leave the whole linkage
+     * unresolved because the packed distance register was not described; the
+     * description now names it (key PSBC_SEMANTIC_DISTANCE_REGISTER + register,
+     * parameter index above it), so the only unresolved fields left are the
+     * program checksum and the link-time ring item size. */
+    assert(p->vertex.metadata.unresolved_fields==
+           (PSBC_UNRESOLVED_PROGRAM_CHECKSUM|PSBC_UNRESOLVED_NGG_ESGS_RING_ITEMSIZE));
+    {
+        unsigned described=0;
+        for(uint32_t i=0;i<p->vertex.metadata.output_semantic_count;++i) {
+            if((p->vertex.metadata.output_semantics[i]&255u)!=PSBC_SEMANTIC_DISTANCE_REGISTER)
+                continue;
+            assert(((p->vertex.metadata.output_semantics[i]>>8)&255u)==1u);
+            ++described;
+        }
+        assert(described==1);
+    }
+    struct ps5vk_runtime_shader header;
+    assert(!ps5vk_runtime_shader_build(&header,&p->vertex));
+    /* State that contradicts the mask is refused: a non-contiguous clip mask,
+     * a cull mask the registers do not carry, a missing packed position
+     * register, a cleared distance enable, a changed export count, a width
+     * past the two registers and a pixel stage that claims a distance. */
+    PsbcShaderOutput mutated=p->vertex;
+    mutated.metadata.clip_distance_mask=0x05u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    mutated.metadata.cull_distance_mask=0x04u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    context_register(&mutated.metadata,0x1c3u)->value=0x04u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    context_register(&mutated.metadata,0x207u)->value&=~(1u<<22);
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    context_register(&mutated.metadata,0x1b1u)->value=0u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    mutated.metadata.clip_distance_mask=0xffu;
+    mutated.metadata.cull_distance_mask=0x0fu;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->vertex;
+    context_register(&mutated.metadata,0x1c3u)->offset=0x0fffu;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    mutated=p->fragment;
+    mutated.metadata.clip_distance_mask=0x01u;
+    assert(ps5vk_runtime_shader_build(&header,&mutated));
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+
+    /* Cull-only and the four-plus-four ceiling: the two shapes whose packed
+     * register count differs from the clip-only one. */
+    key.vertex=read_module("build/runtime-graphics/cull_distance.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    key.feature_mask=PS5VK_FEATURE_SHADER_CULL_DISTANCE;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(!p->vertex.metadata.clip_distance_mask && p->vertex.metadata.cull_distance_mask==0x01u);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    key.vertex=read_module("build/runtime-graphics/clip_cull_distance.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    key.feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE|PS5VK_FEATURE_SHADER_CULL_DISTANCE;
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(p->vertex.metadata.clip_distance_mask==0x0fu &&
+           p->vertex.metadata.cull_distance_mask==0xf0u);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+
+    /* The coverage witness declares both arrays and selects the distances with
+     * one specialization constant, so every mode shares the packed mask pair
+     * and the parameter accounting that counts the packed slots. The control is
+     * the same vertex stage with neither array declared. */
+    for(unsigned mode=0;mode<6;++mode) {
+        struct ps5vk_graphics_key probe={
+            .vertex=read_module("build/runtime-graphics/clip_cull_probe.vert.spv"),
+            .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+            .feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE|PS5VK_FEATURE_SHADER_CULL_DISTANCE};
+        probe.vertex.specialization_count=1;
+        probe.vertex.specializations[0]=(struct ps5vk_graphics_specialization){
+            .constant_id=0,.size=sizeof(mode)};
+        memcpy(probe.vertex.specializations[0].data,&mode,sizeof(mode));
+        assert(ps5vk_spirv_graphics_interface(&probe));
+        assert(ps5vk_runtime_graphics_compile(NULL,&probe,&out)==VK_SUCCESS && out);
+        p=out;
+        assert(p->vertex.metadata.clip_distance_mask==0x03u &&
+               p->vertex.metadata.cull_distance_mask==0x0cu);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)probe.vertex.words);free((void *)probe.fragment.words);
+    }
+    key.vertex=read_module("build/runtime-graphics/clip_cull_control.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    key.feature_mask=0;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(!p->vertex.metadata.clip_distance_mask && !p->vertex.metadata.cull_distance_mask);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    puts("Clip/cull distances: packed masks, register state and metadata refusal");
+}
+
+/* Rewrite every OpConstant whose value is `from`, which is how the per-vertex
+ * array lengths of a geometry stage are declared (the built-in block and the
+ * varying array share the input primitive's vertex count). */
+static int patch_array_length(struct ps5vk_graphics_module_key *m,uint32_t from,uint32_t to)
+{
+    uint32_t *words=(uint32_t *)m->words;size_t patched=0;
+    for(size_t at=5;at<m->word_count;at+=words[at]>>16) {
+        uint32_t *w=words+at;
+        if((w[0]&65535u)==43u && (w[0]>>16)==4u && w[3]==from) { w[3]=to;++patched; }
+    }
+    return patched>=1;
+}
+
+/* The pixel end of the clip-distance interface. A fragment stage that READS
+ * gl_ClipDistance is legal SPIR-V, and the description policy accepts it when
+ * the pre-raster stage exports at least that many components. Delivery is a
+ * separate fact about the compiled metadata: the distances travel in the packed
+ * position registers the pre-raster stage exports, the compiler names those
+ * registers on both sides (the producer's word carries the parameter index to
+ * interpolate from), and the profile still refuses to RUN the pair until a
+ * native witness shows the rasterizer delivers the interpolated value. This
+ * checks the description against the real compiled metadata, the refusal in the
+ * shipping profile, and the description predicate's own negatives.
+ */
+static void check_fragment_distance_read(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/clip_distance.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/clip_distance_read.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE};
+    unsigned clip=~0u,cull=~0u;
+    assert(ps5vk_spirv_stage_distance_reads(&key.fragment,&clip,&cull));
+    assert(clip==2 && cull==0);
+    assert(ps5vk_spirv_graphics_interface(&key));
+    /* The interface decision is independent of delivery, so the profile keeps
+     * accepting the shape; the run is what is refused. */
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *read_pair=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&read_pair)==VK_SUCCESS && read_pair);
+    ps5vk_runtime_graphics_free(NULL,read_pair);
+    /* The same pair without the read compiles, so the refusal above is the read
+     * and not a side effect of the fixture. */
+    struct ps5vk_graphics_module_key reads=key.fragment;
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    const void *plain=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&plain)==VK_SUCCESS && plain);
+    ps5vk_runtime_graphics_free(NULL,plain);
+    free((void *)key.fragment.words);
+    key.fragment=reads;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    /* A read wider than the producer exports never reaches the pipeline gate:
+     * the interface chain refuses it first, which is the bounded-declaration
+     * half of the same contract. */
+    struct ps5vk_graphics_module_key narrow=read_module("build/runtime-graphics/triangle.vert.spv");
+    struct ps5vk_graphics_key too_wide=key;
+    too_wide.vertex=narrow;
+    assert(!ps5vk_spirv_graphics_interface(&too_wide));
+    free((void *)narrow.words);
+    /* The description predicate over the compiled pair: the producer names the
+     * packed distance register (key 48, parameter index above it) and the pixel
+     * stage names the same register as an input. Each negative changes exactly
+     * one field of a consistent pair. */
+    PsbcShaderMetadata pre={0},ps={0};
+    pre.clip_distance_mask=0x3u;
+    pre.output_semantic_count=2;
+    pre.output_semantics[0]=0x0000000fu;                        /* colour varying, param 0 */
+    pre.output_semantics[1]=PSBC_SEMANTIC_DISTANCE_REGISTER|(1u<<8);
+    ps.ps_clip_distance_reads=2;
+    ps.input_semantic_count=2;
+    ps.input_semantics[0]=PSBC_SEMANTIC_DISTANCE_REGISTER;      /* distance register, attr 0 */
+    ps.input_semantics[1]=0x0000000fu;                          /* colour varying, attr 1 */
+    assert(ps5vk_runtime_graphics_distance_reads_described(&pre,&ps,2,0));
+    assert(ps5vk_runtime_graphics_distance_reads_described(&pre,&ps,0,0));
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&pre,&ps,3,0)); /* reads > exports */
+    PsbcShaderMetadata mutated=pre;
+    mutated.output_semantics[1]=0x0000010fu;                    /* producer stopped naming it */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&mutated,&ps,2,0));
+    mutated=pre;mutated.clip_distance_mask=0x1u;                /* one component exported */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&mutated,&ps,2,0));
+    mutated=ps;mutated.ps_clip_distance_reads=1;                /* pixel report disagrees */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&pre,&mutated,2,0));
+    mutated=ps;mutated.input_semantics[0]=0x0000000fu;          /* pixel stopped naming it */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&pre,&mutated,2,0));
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
+/* The optional geometry stage. The interface policy has to describe the whole
+ * vertex -> geometry -> fragment link, and the compiler adapter must refuse a
+ * geometry key until the merged pre-raster stage exists: compiling the vertex
+ * stage alone and calling it a geometry pipeline would be the exact silent
+ * substitution this profile refuses everywhere else. */
+static void check_geometry_stage(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/geometry_probe.vert.spv"),
+        .geometry=read_module("build/runtime-graphics/geometry_probe.geom.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
+    const int32_t passthrough=0;
+    key.geometry.specialization_count=1;
+    key.geometry.specializations[0]=(struct ps5vk_graphics_specialization){
+        .constant_id=0,.size=sizeof(passthrough)};
+    memcpy(key.geometry.specializations[0].data,&passthrough,sizeof(passthrough));
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=(void *)1;
+    /* The merged program is packaged by the shipping profile too. It used to be
+     * refused because the ES->GS input handoff needed the link-time ring item
+     * size, which the pinned compiler flags unresolved: executing it with a
+     * guessed value corrupted the geometry the stage read. That is fixed and
+     * witnessed - the hardware scales the per-vertex offsets by
+     * VGT_ESGS_RING_ITEMSIZE, next-gen geometry keeps that at one, and the driver
+     * now programs it that way - so the adapter accepts the pair, and what gates
+     * the feature is the conformance selection, not this path. */
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    out=(void *)1;
+    /* The same key without the feature is still refused: a geometry pipeline
+     * needs the feature the logical device enabled, exactly like every other
+     * stage. */
+    key.feature_mask=0;
+    assert(ps5vk_spirv_graphics_interface(&key));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    /* A geometry stage whose per-vertex input array is not the three vertices of
+     * one triangle has no input primitive this profile can feed it. */
+    struct ps5vk_graphics_module_key patched=
+        read_module("build/runtime-graphics/geometry_probe.geom.spv");
+    assert(patch_array_length(&patched,3,2));
+    struct ps5vk_graphics_key wrong=key;
+    wrong.geometry=patched;
+    assert(!ps5vk_spirv_graphics_interface(&wrong));
+    assert(ps5vk_runtime_graphics_compile(NULL,&wrong,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)patched.words);
+    /* The geometry invocation id. The feature's mandatory invocations minimum is
+     * meaningless without it - an invocation that cannot tell which one it is can
+     * only repeat the same work - so the policy has to describe a stage that
+     * reads it, and this one is a geometry built-in rather than a vertex one. */
+    struct ps5vk_graphics_key invoked=key;
+    invoked.geometry=read_module("build/runtime-graphics/geometry_invocations.geom.spv");
+    invoked.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER;
+    assert(ps5vk_spirv_graphics_interface(&invoked));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&invoked,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)invoked.geometry.words);
+    /* The input-primitive families. A device that advertises geometryShader is
+     * expected to feed the stage points and lines as well as triangles, so the
+     * declared per-vertex input array is bound to the pipeline's topology rather
+     * than to one fixed length: each family declares its own arity (one vertex
+     * per input point, two per input line) and packages with the primitive value
+     * the linker will program. Patching the triangle module's array length is
+     * NOT how this is tested - the module's own body reads three vertices, and
+     * rewriting only the declaration produces SPIR-V the parser rejects (the
+     * compiler traps on an OpCompositeConstruct whose operand count no longer
+     * matches the rewritten array type) - so the families have their own
+     * modules, which are the same ones the native witness uses. */
+    const VkPrimitiveTopology families[3]={VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+        VK_PRIMITIVE_TOPOLOGY_LINE_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_STRIP};
+    const char *family_modules[3]={
+        "build/runtime-graphics/geometry_points.geom.spv",
+        "build/runtime-graphics/geometry_lines.geom.spv",
+        "build/runtime-graphics/geometry_lines.geom.spv"};
+    const uint32_t family_primitives[3]={PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST,
+        PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST,PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP};
+    for(unsigned f=0;f<3;++f) {
+        struct ps5vk_graphics_module_key family=read_module(family_modules[f]);
+        struct ps5vk_graphics_key family_key=key;
+        family_key.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER;
+        family_key.topology=families[f];
+        family_key.geometry=family;
+        assert(ps5vk_spirv_graphics_interface(&family_key));
+        out=(void *)1;
+        assert(ps5vk_runtime_graphics_compile(NULL,&family_key,&out)==VK_SUCCESS && out);
+        assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==
+            family_primitives[f]);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)family.words);
+    }
+    /* The binding is a real constraint in both directions: the point module is
+     * refused when the pipeline says triangles, and the line module when it says
+     * points, so neither family can ride on another's primitive. */
+    struct ps5vk_graphics_module_key point_module=
+        read_module("build/runtime-graphics/geometry_points.geom.spv");
+    struct ps5vk_graphics_key misbound=key;
+    misbound.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER;
+    misbound.geometry=point_module;
+    assert(!ps5vk_spirv_graphics_interface(&misbound));
+    assert(ps5vk_runtime_graphics_compile(NULL,&misbound,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)point_module.words);
+    struct ps5vk_graphics_module_key line_module=
+        read_module("build/runtime-graphics/geometry_lines.geom.spv");
+    misbound=key;
+    misbound.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER;
+    misbound.topology=VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    misbound.geometry=line_module;
+    assert(!ps5vk_spirv_graphics_interface(&misbound));
+    assert(ps5vk_runtime_graphics_compile(NULL,&misbound,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)line_module.words);
+    free((void *)key.vertex.words);free((void *)key.geometry.words);
+    free((void *)key.fragment.words);
+    puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged for the point, line and triangle families");
+}
+
+/* The output side of the component envelope. A stage may DECLARE sixty-four
+ * output components and still have them dropped: only something that reads them
+ * makes the declaration observable, so the pixel half of this case declares an
+ * input for all sixteen vec4 locations the geometry half writes and folds the
+ * whole set into the colour. This checks the pair against the real compiler
+ * metadata - the pixel stage really declares those locations, and the adapter
+ * packages the pair - and that a pixel stage reading a location the geometry
+ * half does not write is refused instead of interpolating a register nothing
+ * exports. */
+static void check_geometry_output_components(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/geometry_components.vert.spv"),
+        .geometry=read_module("build/runtime-graphics/geometry_components.geom.spv"),
+        .fragment=read_module("build/runtime-graphics/geometry_output_components.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST);
+    /* The pixel half names the sixteen output locations plus the varying, so the
+     * consumed set is in the compiled metadata rather than in the source only. */
+    assert(p->fragment.metadata.input_semantic_count>=17u);
+    ps5vk_runtime_graphics_free(NULL,out);
+    /* The same pixel half against a geometry stage that writes only its colour:
+     * the interface chain refuses the pair before the compiler is reached. */
+    struct ps5vk_graphics_key narrow=key;
+    narrow.geometry=read_module("build/runtime-graphics/geometry_probe.geom.spv");
+    assert(!ps5vk_spirv_graphics_interface(&narrow));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&narrow,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)narrow.geometry.words);
+    free((void *)key.vertex.words);free((void *)key.geometry.words);
+    free((void *)key.fragment.words);
+    puts("Geometry output components: sixty-four written components consumed by the pixel half, and an unwritten read refused");
+}
+
+/* A descriptor the caller declared for the GEOMETRY stage. The pinned
+ * conformance module binds its uniform buffer and its sampled image to that
+ * stage - dEQP-VK.geometry.basic.output_vary_by_uniform and ..._by_texture - so
+ * a layout whose binding names only the geometry stage has to be carried by the
+ * merged pre-raster program rather than refused for not naming the vertex stage.
+ * The same binding on a pipeline without a geometry stage is still refused,
+ * because the stage projection would drop it and the draw would read a table the
+ * caller never bound. */
+static void check_geometry_stage_descriptor_visibility(void)
+{
+    struct ps5vk_set_signature sets[1]={0};
+    sets[0].count=1;
+    sets[0].binding[0].count=1;sets[0].binding[0].first=0;
+    sets[0].binding[0].stages=VK_SHADER_STAGE_GEOMETRY_BIT;
+    sets[0].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    /* Empty bindings keep the canonical prefix: the table layout compares every
+     * slot against it, so a zeroed tail is a malformed signature, not an empty
+     * one. */
+    for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)sets[0].binding[b].first=1;
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/geometry_uniform.vert.spv"),
+        .geometry=read_module("build/runtime-graphics/geometry_uniform.geom.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .descriptor_set_count=1,.descriptor_sets=sets,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    /* The merged pre-raster program is what reads the buffer, so the compiled
+     * metadata has to name the binding and the draw ABI has to carry the table
+     * for that stage: a pipeline that packaged without either would draw the
+     * geometry half with no descriptor at all. */
+    assert(p->vertex.metadata.descriptor_set_valid[0]);
+    assert(p->arguments.vertex_descriptor_valid[0]);
+    ps5vk_runtime_graphics_free(NULL,out);
+    /* The same layout on a vertex+fragment pipeline: refused, because nothing
+     * would execute the geometry-stage binding. */
+    struct ps5vk_graphics_key without_geometry=key;
+    without_geometry.geometry=(struct ps5vk_graphics_module_key){0};
+    without_geometry.feature_mask=0;
+    assert(!ps5vk_runtime_graphics_supported(&without_geometry));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&without_geometry,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)key.vertex.words);free((void *)key.geometry.words);
+    free((void *)key.fragment.words);
+    puts("Geometry descriptors: a geometry-stage binding is carried by the merged program and refused without one");
+}
+
+/* The tessellation pair: described and identified, refused by the adapter.
+ *
+ * The interface policy now reads both stages, their execution modes and the
+ * per-patch interface, and the program key carries the pair and the patch
+ * control points the pipeline states. The compiler adapter must still refuse
+ * the pair, because the pinned compiler emits ISA for both stages while
+ * declaring the tessellation pipeline state missing - compiling the vertex and
+ * fragment modules alone and calling the result a tessellation pipeline is the
+ * silent substitution this profile refuses everywhere else. The same modules
+ * without the pair do compile, which is what makes the refusal specific. */
+static void check_tessellation_stage(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/tess.vert.spv"),
+        .tess_control=read_module("build/runtime-graphics/tess.tesc.spv"),
+        .tess_eval=read_module("build/runtime-graphics/tess.tese.spv"),
+        .fragment=read_module("build/runtime-graphics/tess.frag.spv"),
+        .patch_control_points=3,
+        .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_graphics_has_tessellation(&key));
+    assert(ps5vk_graphics_tessellation_key_valid(&key));
+    assert(ps5vk_spirv_graphics_interface(&key));
+    /* The pair is refused before any compile, with the descriptor untouched: a
+     * caller can never receive a partially compiled program for it. */
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+
+    /* The patch control points the pipeline states must be the control stage's
+     * output vertex count, so a state that disagrees is refused as a malformed
+     * pair rather than compiled against the wrong patch. */
+    struct ps5vk_graphics_key wrong=key;
+    wrong.patch_control_points=4;
+    assert(!ps5vk_spirv_graphics_interface(&wrong));
+    assert(!ps5vk_runtime_graphics_supported(&wrong));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&wrong,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+
+    /* Half a pair is refused even before the stages are read. */
+    struct ps5vk_graphics_key half=key;
+    half.tess_eval=(struct ps5vk_graphics_module_key){0};
+    assert(!ps5vk_graphics_tessellation_key_valid(&half));
+    assert(!ps5vk_runtime_graphics_supported(&half));
+
+    /* The same vertex and fragment modules without the pair are a supported
+     * pipeline: the refusal above is about the tessellation stages, not about
+     * the modules themselves. */
+    struct ps5vk_graphics_key plain=key;
+    plain.tess_control=(struct ps5vk_graphics_module_key){0};
+    plain.tess_eval=(struct ps5vk_graphics_module_key){0};
+    plain.patch_control_points=0;
+    plain.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    assert(!ps5vk_graphics_has_tessellation(&plain));
+    assert(ps5vk_spirv_graphics_interface(&plain));
+    out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&plain,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+
+    free((void *)key.vertex.words);free((void *)key.tess_control.words);
+    free((void *)key.tess_eval.words);free((void *)key.fragment.words);
+    puts("Tessellation stage: pair described, adapter refuses it, identity keeps every stage");
+}
+
 static void check_view_index_builtin(void)
 {
     struct ps5vk_graphics_key key={
@@ -91,8 +594,11 @@ static void check_view_index_builtin(void)
     /* Every refusal below leaves the output untouched (null), so the caller can
      * never mistake a failed compilation for a program to free. */
     const void *out=NULL;
-    /* ViewIndex is a vertex input built-in, never an attribute: a key that
-     * declared an attribute for it could not be matched to the module. */
+    /* ViewIndex is a vertex input built-in, never an attribute. A key that ALSO
+     * declares an attribute at a location no shader input reads is legal Vulkan
+     * - the attribute is dropped rather than matched, and the fetch path prepares
+     * only the spans the compiled input reads - so the interface accepts it. The
+     * pinned geometry module's primitive_id_in leaf is exactly that shape. */
     VkVertexInputBindingDescription binding={.binding=0,.stride=4,
         .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
     VkVertexInputAttributeDescription attribute={.location=0,.binding=0,
@@ -100,8 +606,20 @@ static void check_view_index_builtin(void)
     struct ps5vk_graphics_key attributed=key;
     attributed.vertex_binding_count=1;attributed.vertex_attribute_count=1;
     attributed.vertex_bindings=&binding;attributed.vertex_attributes=&attribute;
-    assert(!ps5vk_spirv_graphics_interface(&attributed));
-    assert(ps5vk_runtime_graphics_compile(NULL,&attributed,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_spirv_graphics_interface(&attributed));
+    const void *attributed_out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&attributed,&attributed_out)==VK_SUCCESS &&
+        attributed_out);
+    ps5vk_runtime_graphics_free(NULL,attributed_out);
+    /* The reverse stays refused: a shader input with no attribute to feed it. */
+    struct ps5vk_graphics_key unfed=key;
+    unfed.vertex=read_module("build/runtime-graphics/vertex_input.vert.spv");
+    unfed.vertex_binding_count=0;unfed.vertex_attribute_count=0;
+    unfed.vertex_bindings=NULL;unfed.vertex_attributes=NULL;
+    assert(!ps5vk_spirv_graphics_interface(&unfed));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&unfed,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)unfed.vertex.words);
 
     /* Changing only the execution model does not turn this vertex module into
      * a legal fragment module: it still has VertexIndex and a position block. */
@@ -673,6 +1191,12 @@ int main(void)
     check_input_attachment_probe_pipelines();
     check_sparse_layout_static_use();
     check_view_index_builtin();
+    check_clip_cull_distances();
+    check_fragment_distance_read();
+    check_geometry_stage();
+    check_geometry_output_components();
+    check_geometry_stage_descriptor_visibility();
+    check_tessellation_stage();
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
@@ -986,23 +1510,54 @@ int main(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
     key.blend_enable=0;
     /* Topology selects the primitive the composite pipeline links, so the key
-     * carries it and the compiler is asked for the matching value. Both
-     * accepted topologies compile; everything else stays fail-closed, before
-     * the compiler is reached. */
+     * carries it and the compiler is asked for the matching value. Every
+     * accepted topology compiles; everything else stays fail-closed, before the
+     * compiler is reached. */
+    const VkPrimitiveTopology unsupported_topologies[]={
+        /* Point and line topologies resolve, but a pipeline WITHOUT a geometry
+         * stage has no witness for rasterizing them directly, so they are
+         * refused like the families the resolver does not carry at all. */
+        VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+        VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+        VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+        VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
     uint32_t primitive_type=0;
+    assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_POINT_LIST,&primitive_type)==0 &&
+           primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST);
+    assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_LINE_LIST,&primitive_type)==0 &&
+           primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST);
+    assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,&primitive_type)==0 &&
+           primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP);
     assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,&primitive_type)==0 &&
            primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST);
     assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,&primitive_type)==0 &&
            primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
+    /* The resolver carries points and lines (they feed a geometry stage), while
+     * the plain-pipeline list above is refused for a different reason: no
+     * geometry stage. The native link gate names the resolver's whole set, so a
+     * value the key resolves can never be refused by the linker's own check. */
+    for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
+        const int resolved=!ps5vk_agc_primitive_type(unsupported_topologies[i],&primitive_type);
+        assert(!resolved || ps5vk_agc_primitive_needs_geometry(primitive_type));
+        primitive_type=0;
+    }
+    assert(ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP) &&
+           !ps5vk_agc_primitive_linkable(0u) && !ps5vk_agc_primitive_linkable(5u) &&
+           !ps5vk_agc_primitive_linkable(9u) && !ps5vk_agc_primitive_linkable(12u));
     key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     assert(ps5vk_runtime_graphics_supported(&key) && ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==
         PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
     ps5vk_runtime_graphics_free(NULL,out);out=NULL;
-    const VkPrimitiveTopology unsupported_topologies[]={
-        VK_PRIMITIVE_TOPOLOGY_POINT_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
     for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
         key.topology=unsupported_topologies[i];
         assert(!ps5vk_runtime_graphics_supported(&key) &&

@@ -53,6 +53,11 @@ static int inspect(const char *path, PsbcStage stage)
            m->linkage_ge_cntl.offset, m->linkage_ge_cntl.value,
            m->linkage_stages_en.offset, m->linkage_stages_en.value,
            m->linkage_user_vgpr_en.offset, m->linkage_user_vgpr_en.value);
+    /* The distance masks the compiler reports for this module: the widths the
+     * declaration policy bounds are printed by the interface check, while these
+     * are what the compiled shader really consumes. */
+    printf("distances clip_mask=%08x cull_mask=%08x\n",
+           m->clip_distance_mask, m->cull_distance_mask);
     struct ps5vk_runtime_shader arena;
     int package_result=ps5vk_runtime_shader_build(&arena,&output);
     printf("native_header_result=%d bytes=%zu\n",package_result,sizeof(arena));
