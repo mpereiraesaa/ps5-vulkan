@@ -440,6 +440,20 @@ def main():
                 if tess_no_tf_param not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_NO_TF_PARAM must be 0 or 1")
                 common += ["-DPS5VK_TESS_NO_TF_PARAM=" + tess_no_tf_param]
+                # What sceAgcLinkShaders is TOLD a tessellation pipeline
+                # draws. The default is the shipped TRIANGLE_LIST; "patch"
+                # passes PS5VK_AGC_PRIMITIVE_TYPE_PATCH instead, which is the
+                # honest argument for a patch draw and lets the link derive
+                # its whole state from it rather than having one register
+                # corrected afterwards.
+                tess_link_prim = os.environ.get("PS5VK_TESS_LINK_PRIM", "tri")
+                if tess_link_prim not in ("tri", "patch"):
+                    raise SystemExit(
+                        "PS5VK_TESS_LINK_PRIM is 'tri' or 'patch'")
+                common += ["-DPS5VK_TESS_LINK_PRIMITIVE=" +
+                           ("PS5VK_AGC_PRIMITIVE_TYPE_PATCH"
+                            if tess_link_prim == "patch"
+                            else "PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST")]
                 # The source-candidate identity the payload logs before the
                 # submit. It digests exactly the source families the manifest
                 # already records plus the build inputs that change the
@@ -457,7 +471,8 @@ def main():
                                          tess_no_passthru + ":" +
                                          tess_tf_rdreq + ":" +
                                          tess_dist_mode + ":" +
-                                         tess_no_tf_param) +
+                                         tess_no_tf_param + ":" +
+                                         tess_link_prim) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump

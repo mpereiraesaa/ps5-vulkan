@@ -26,6 +26,9 @@
  * the register address and converting here keeps a raw address from being
  * mistaken for an offset, which is what silently dropped the tessellation
  * ring state. */
+#ifndef PS5VK_TESS_LINK_PRIMITIVE
+#define PS5VK_TESS_LINK_PRIMITIVE PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST
+#endif
 #ifndef PS5VK_TESS_DISTRIBUTION_MODE
 #define PS5VK_TESS_DISTRIBUTION_MODE 3 /* V_028B6C_TRAPEZOIDS */
 #endif
@@ -148,10 +151,29 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         agc_rc=sceAgcCreateShader(&fs,&pair->runtime_fragment,fs_code);
     }
     if(!agc_rc && fs==&pair->runtime_fragment) {
-        /* The tessellator generates triangles for the triangle domain, which
-         * is the primitive the linked pixel/param state is derived from. */
+        /* WHAT AGC IS TOLD THE PIPELINE DRAWS.
+         *
+         * This passed TRIANGLE_LIST for a tessellation pipeline, on the
+         * reasoning that the tessellator generates triangles and the linked
+         * pixel/parameter state is derived from the primitive. The register
+         * it produces was then overridden to DI_PT_PATCH afterwards.
+         *
+         * That reasoning is about the REGISTER, and sceAgcLinkShaders is not
+         * a register setter: it derives the whole linked context and
+         * user-config state from its arguments, including
+         * VGT_SHADER_STAGES_EN and VGT_GS_OUT_PRIM_TYPE. Telling it
+         * TRIANGLE_LIST describes a pipeline whose front end assembles
+         * triangles, and then correcting one register afterwards leaves
+         * anything else the link derived describing that other pipeline -
+         * which is the same shape as ES_EN describing a vertex-fed export
+         * stage while the enables claimed otherwise.
+         *
+         * PS5VK_AGC_PRIMITIVE_TYPE_PATCH exists and is the honest argument
+         * for a patch draw. It is a knob rather than a change because AGC may
+         * refuse it, and a refusal is an ordinary error return the create
+         * path already reports. */
         agc_rc=sceAgcLinkShaders(&pair->cx,&pair->uc,NULL,vs,fs,
-            has_tessellation?PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST:primitive_type);
+            has_tessellation?PS5VK_TESS_LINK_PRIMITIVE:primitive_type);
     }
     if(agc_rc || vs!=&pair->runtime_vertex || fs!=&pair->runtime_fragment) {
         TESS_CREATE_FAIL("agc");
