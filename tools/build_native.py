@@ -451,6 +451,16 @@ def main():
                 # triangles instead of four. Tests whether the domain fails to
                 # launch below a batching threshold rather than because of a
                 # misconfiguration. Default 0 keeps the shipped fixture.
+                # Diagnostic: skip the geometry cases so the tessellation
+                # draw is the first and only draw in the process. Tests
+                # whether nineteen preceding draws leave state a patch draw
+                # cannot recover from - which no register experiment could
+                # show. Default 0 keeps the geometry table, whose 19/19 pass
+                # is also this probe's evidence that the device is healthy.
+                tess_only = os.environ.get("PS5VK_TESS_ONLY", "0")
+                if tess_only not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_ONLY must be 0 or 1")
+                common += ["-DPS5VK_TESS_ONLY=" + tess_only]
                 tess_high_levels = os.environ.get("PS5VK_TESS_HIGH_LEVELS", "0")
                 if tess_high_levels not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_HIGH_LEVELS must be 0 or 1")
@@ -482,7 +492,8 @@ def main():
                                          tess_dist_mode + ":" +
                                          tess_no_tf_param + ":" +
                                          tess_link_prim + ":" +
-                                         tess_high_levels) +
+                                         tess_high_levels + ":" +
+                                         tess_only) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump

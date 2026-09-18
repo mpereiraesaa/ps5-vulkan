@@ -2241,7 +2241,23 @@ static void geometry_probe(VkDevice d)
         PS5VK_GEOMETRY_ENVELOPE,PS5VK_GEOMETRY_INVOCATIONS,PS5VK_GEOMETRY_COMPONENTS,
         PS5VK_GEOMETRY_PRIMITIVE_ID,PS5VK_GEOMETRY_POINTS,PS5VK_GEOMETRY_LINES,
         PS5VK_GEOMETRY_POSITIONS};
-    for(unsigned case_index=0;case_index<PS5VK_GEOMETRY_CASES;++case_index) {
+    /* DIAGNOSTIC, default off: skip the geometry cases so the tessellation
+     * draw is the FIRST and ONLY draw the process submits.
+     *
+     * Every tessellation measurement in this task has been taken after
+     * nineteen geometry draws in the same process, and the handoff that
+     * started this work was specifically about eliminating contamination of
+     * shared state. Whether those draws leave the geometry engine in a
+     * configuration a patch draw cannot recover from has never been tested -
+     * it is not a register this driver writes, so no register experiment
+     * could have shown it, and fifteen of those have now died. */
+    const unsigned geometry_case_limit=
+#if defined(PS5VK_TESS_ONLY) && PS5VK_TESS_ONLY
+        0u;
+#else
+        PS5VK_GEOMETRY_CASES;
+#endif
+    for(unsigned case_index=0;case_index<geometry_case_limit;++case_index) {
         const unsigned witness_case=order[case_index];
         const int mode=ps5vk_geometry_witness_mode(witness_case);
         if(mode==-2)fail("geometry-case",-1);
@@ -2529,7 +2545,17 @@ static void geometry_probe(VkDevice d)
         * only one vertex per primitive and produced the point case's shape. */
        digests[PS5VK_GEOMETRY_POINTS]==digests[PS5VK_GEOMETRY_LINES] ||
        digests[PS5VK_GEOMETRY_PASSTHROUGH]==digests[PS5VK_GEOMETRY_RECOLOR])
+    {
+        /* The digest cross-check compares images the geometry cases produced,
+         * so it is meaningless - and fails closed, as it should - when those
+         * cases were deliberately skipped to isolate the patch draw. Skipping
+         * the check is only correct because skipping the cases is itself a
+         * diagnostic: the run then carries no evidence that the device is
+         * healthy, which is the stated cost of isolating the variable. */
+#if !(defined(PS5VK_TESS_ONLY) && PS5VK_TESS_ONLY)
         fail("geometry-digest",-1);
+#endif
+    }
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_GEOMETRY_PROBE cases=%u extent=%u clear=%02x%02x%02x%02x out_prim_type=2 "
         /* The WITNESS stage's maximum vertex count, the state the per-case check
