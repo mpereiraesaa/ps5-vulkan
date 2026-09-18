@@ -83,6 +83,16 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         memcpy(result.cx+result.cx_count,pair->runtime_hull_hs.context,
             pair->runtime_hull_hs.header.num_cx_registers*sizeof(*result.cx));
         result.cx_count+=pair->runtime_hull_hs.header.num_cx_registers;
+        /* The hull's ring descriptor table address at the merged program's
+         * ring-offsets dwords (SGPRs 0-1): the LS block's user-data window
+         * base (SPI_SHADER_USER_DATA_LS at sh offset 0x130), which maps
+         * one-to-one to the hull's SGPRs - the layout its own vertex-buffer
+         * table slot at dword 10 proves. */
+        if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
+        result.sh[result.sh_count++]=(ps5_agc_register){0x130,
+            pair->tess_ring_table_low};
+        result.sh[result.sh_count++]=(ps5_agc_register){0x131,
+            pair->tess_ring_table_high};
     }
     /* Override the depth builder's Gears policy. Vulkan disables writes when
      * depth testing is disabled, even if depthWriteEnable was specified. */

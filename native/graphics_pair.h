@@ -35,6 +35,11 @@ struct ps5vk_graphics_pair {
      * and its high word (0x30984). Written on every patch draw with the rest
      * of the state, so nothing depends on a previous pipeline's rings. */
     ps5_agc_register tess_ring_state[4];
+    /* The ring descriptor table's address, split for the user-data bank:
+     * the pipeline's ring block starts with the table (sixteen bytes per
+     * ring, audited raw buffer SRDs), and the hull's ring-offsets dwords
+     * carry its address. */
+    uint32_t tess_ring_table_low, tess_ring_table_high;
     /* The ring block's GPU address; the backing is tracked by the owning
      * native pipeline and released with it. */
     void *tess_rings;

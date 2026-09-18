@@ -28,8 +28,21 @@ enum {
     PS5VK_TESS_OFFCHIP_BYTES =
         PS5VK_TESS_OFFCHIP_WORKGROUPS*PS5VK_TESS_OFFCHIP_WORKGROUP_DWORDS*4u,
     PS5VK_TESS_FACTOR_BYTES = (192u/3u)*16u*3u*18u*2u,
+    /* The ring descriptor table the tessellation shaders dereference:
+     * sixteen bytes per ring entry, holding an audited raw buffer SRD (the
+     * descriptor encoder's byte-addressed word set: base low/high, byte
+     * extent, the raw format word). RING_HS_TESS_FACTOR 5 and
+     * RING_HS_TESS_OFFCHIP 6 are the entries the stages load; every other
+     * entry stays zero. The table sits in front of the rings, 256B aligned,
+     * so one allocation carries the table and both rings. */
+    PS5VK_TESS_RING_TABLE_BYTES = 256u,
+    PS5VK_TESS_OFFCHIP_OFFSET = PS5VK_TESS_RING_TABLE_BYTES,
+    PS5VK_TESS_FACTOR_OFFSET = PS5VK_TESS_OFFCHIP_OFFSET+PS5VK_TESS_OFFCHIP_BYTES,
+    PS5VK_TESS_RING_INDEX_HS_TESS_FACTOR = 5u,
+    PS5VK_TESS_RING_INDEX_HS_TESS_OFFCHIP = 6u,
+    PS5VK_TESS_RING_SRD_FORMAT = 0x31016facu,
     PS5VK_TESS_RING_BYTES =
-        (PS5VK_TESS_OFFCHIP_BYTES+PS5VK_TESS_FACTOR_BYTES+0xffffu)&~0xffffu
+        (PS5VK_TESS_FACTOR_OFFSET+PS5VK_TESS_FACTOR_BYTES+0xffffu)&~0xffffu
 };
 
 VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
@@ -172,8 +185,31 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             rc=VK_ERROR_MEMORY_MAP_FAILED;goto failed;
         }
         memset(pair->tess_rings,0,PS5VK_TESS_RING_BYTES);
+        /* The ring descriptor table: every entry zeroed, then the two rings
+         * the tessellation stages read get their audited raw buffer SRDs
+         * with the exact base and byte extent. */
         const uint64_t rings_va=(uintptr_t)pair->tess_rings;
-        const uint64_t tf_va=rings_va+PS5VK_TESS_OFFCHIP_BYTES;
+        const uint64_t offchip_va=rings_va+PS5VK_TESS_OFFCHIP_OFFSET;
+        const uint64_t tf_va=rings_va+PS5VK_TESS_FACTOR_OFFSET;
+        {
+            const uint64_t bases[2]={tf_va,offchip_va};
+            const uint32_t extents[2]={PS5VK_TESS_FACTOR_BYTES,
+                PS5VK_TESS_OFFCHIP_BYTES};
+            const unsigned indices[2]={PS5VK_TESS_RING_INDEX_HS_TESS_FACTOR,
+                PS5VK_TESS_RING_INDEX_HS_TESS_OFFCHIP};
+            uint32_t *ring_table=(uint32_t *)pair->tess_rings;
+            for(unsigned r=0;r<2;++r) {
+                uint32_t *entry=ring_table+indices[r]*4;
+                entry[0]=(uint32_t)bases[r];
+                entry[1]=(uint32_t)(bases[r]>>32);
+                entry[2]=extents[r];
+                entry[3]=PS5VK_TESS_RING_SRD_FORMAT;
+            }
+        }
+        /* The table's address is what the hull's ring-offsets dwords carry
+         * (SGPRs 0-1 of the merged program, one-to-one in the LS window). */
+        pair->tess_ring_table_low=(uint32_t)rings_va;
+        pair->tess_ring_table_high=(uint32_t)(rings_va>>32);
         /* S_03093C: OFFCHIP_BUFFERING_GFX103(workgroups-1) in bits 0..9 and
          * the 8K-dword granularity enum 0 in bits 10..11, from the pinned
          * register header and the pinned emitter's device derivation. */
