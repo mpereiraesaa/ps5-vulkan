@@ -542,11 +542,13 @@ static void check_tessellation_stage(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&disabled,&out)==
         VK_ERROR_FEATURE_NOT_PRESENT && !out);
 
-    /* The cached lease has no hull/domain representation: it refuses the pair
-     * fail-closed instead of serving a program it cannot describe. */
+    /* The cached acquire path cannot store the pair, so it serves the SAME
+     * adapter's compile UNCACHED: one lease per acquire, the release retiring
+     * the compiled program. The value verdict is identical to the uncached
+     * adapter's. */
     out=(void *)1;
-    assert(ps5vk_runtime_graphics_cached_acquire(NULL,&key,&out)==
-        VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_runtime_graphics_cached_acquire(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_cached_release(NULL,out);
 
     /* The patch control points the pipeline states must be the control stage's
      * output vertex count, so a state that disagrees is refused as a malformed

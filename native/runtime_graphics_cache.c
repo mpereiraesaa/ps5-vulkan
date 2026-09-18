@@ -14,6 +14,9 @@ struct pair_payload {
 struct pair_lease {
     struct ps5vk_runtime_graphics_program program; /* consumer view, first */
     struct ps5vk_cache_entry *entry;
+    /* An uncached (tessellation) lease's owning allocation: the program the
+     * adapter compiled, released with the lease instead of a cache entry. */
+    void *uncached_program;
 };
 
 static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
@@ -188,11 +191,23 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     if(!ps5vk_runtime_graphics_supported(key))return VK_ERROR_FEATURE_NOT_PRESENT;
     /* The cached payload stores exactly the pre-raster and pixel programs, so a
      * tessellation pipeline's hull and domain halves have no representation
-     * here yet. The uncached adapter compiles them; the cache fails closed
-     * rather than serving a pair it cannot describe, until its payload format
-     * gains the two halves. The cache identity already covers the pair, so the
-     * later extension is additive. */
-    if(ps5vk_graphics_has_tessellation(key))return VK_ERROR_FEATURE_NOT_PRESENT;
+     * here yet. The pair is compiled UNCACHED instead - the same adapter, one
+     * lease per acquire - rather than served from a payload that cannot
+     * describe it. The cache identity already covers the pair, so the later
+     * cached extension is additive. */
+    if(ps5vk_graphics_has_tessellation(key)) {
+        const void *compiled=NULL;
+        VkResult rc=ps5vk_runtime_graphics_compile(NULL,key,&compiled);
+        if(rc!=VK_SUCCESS)return rc;
+        struct pair_lease *uncached=calloc(1,sizeof(*uncached));
+        if(!uncached){ps5vk_runtime_graphics_free(NULL,compiled);
+            return VK_ERROR_OUT_OF_HOST_MEMORY;}
+        uncached->entry=NULL; /* uncached: the program is the owner */
+        uncached->uncached_program=(void *)compiled;
+        uncached->program=*(struct ps5vk_runtime_graphics_program *)compiled;
+        *out=&uncached->program;
+        return VK_SUCCESS;
+    }
     struct ps5vk_compilation_cache *cache=context;
     if(!cache)return VK_ERROR_OUT_OF_HOST_MEMORY;
     struct ps5vk_cache_key identity;
@@ -249,6 +264,7 @@ void ps5vk_runtime_graphics_cached_release(void *context,const void *data)
 {
     if(!data)return;
     struct pair_lease *lease=(void *)data;
-    ps5vk_cache_entry_release(context,lease->entry);
+    if(lease->entry)ps5vk_cache_entry_release(context,lease->entry);
+    else ps5vk_runtime_graphics_free(NULL,lease->uncached_program);
     free(lease);
 }
