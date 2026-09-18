@@ -391,6 +391,15 @@ def main():
                     raise SystemExit(
                         "PS5VK_TESS_STATE_DUMP must be 0 or 1")
                 common += ["-DPS5VK_TESS_STATE_DUMP=" + tess_state_dump]
+                # Diagnostic bisect for VGT_TF_PARAM.NUM_DS_WAVES_PER_SIMD,
+                # which this driver zeroes because it writes the whole
+                # register from a value derived only from the control half's
+                # declared interface. Zero keeps the shipped behaviour.
+                tess_ds_waves = os.environ.get("PS5VK_TESS_DS_WAVES", "0")
+                if not tess_ds_waves.isdigit() or int(tess_ds_waves) > 15:
+                    raise SystemExit(
+                        "PS5VK_TESS_DS_WAVES is a 4-bit bisect: 0 to 15")
+                common += ["-DPS5VK_TESS_DS_WAVES=" + tess_ds_waves]
                 # The source-candidate identity the payload logs before the
                 # submit. It digests exactly the source families the manifest
                 # already records plus the build inputs that change the
@@ -403,7 +412,8 @@ def main():
                 common += ['-DPS5VK_TESS_BUILD_ID="' +
                            tess_build_id(tess_probe, tess_variant,
                                          os.environ.get("PS5VK_TESS_NO_DRAW", "0"),
-                                         tess_state_dump) +
+                                         tess_state_dump + ":" +
+                                         tess_ds_waves) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump

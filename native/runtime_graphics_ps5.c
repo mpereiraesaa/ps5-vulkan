@@ -275,6 +275,34 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
                     pair->runtime_hull.context[i].value=
                         (pair->runtime_hull.context[i].value & ~(3u<<17)) |
                         (3u<<17); /* V_028B6C_TRAPEZOIDS */
+                    /* DIAGNOSTIC BISECT, not a promoted value. Default 0
+                     * leaves the shipped behaviour untouched.
+                     *
+                     * VGT_TF_PARAM is written WHOLE from a value psbc derives
+                     * from the control half's declared interface - domain,
+                     * spacing, topology - so every other field in the
+                     * register is zeroed, including NUM_DS_WAVES_PER_SIMD at
+                     * bits 10..13. The pinned header says that field exists
+                     * on gfx10 and gfx103. Nothing in the pinned tree derives
+                     * it, and radv on Linux never writes it either, which
+                     * means on Linux it keeps whatever the kernel's context
+                     * initialisation left there - a default this driver
+                     * destroys, because the register is not in the linked AGC
+                     * block and nothing restores it.
+                     *
+                     * That matters here only because of what is now measured:
+                     * the hull executes, stores correct triangle-layout
+                     * factors, and NOTHING downstream appears. A field that
+                     * bounds how many domain-shader waves a SIMD may run is
+                     * the one field in this register that could produce
+                     * exactly that if zero means none rather than unlimited.
+                     * It is a HYPOTHESIS with no primary source, so it gets a
+                     * switch and one run rather than a promotion. */
+#if defined(PS5VK_TESS_DS_WAVES) && PS5VK_TESS_DS_WAVES
+                    pair->runtime_hull.context[i].value=
+                        (pair->runtime_hull.context[i].value & ~(15u<<10)) |
+                        ((PS5VK_TESS_DS_WAVES & 15u)<<10);
+#endif
                     ++patched_tf;
                 }
             if(patched_tf!=1) {
