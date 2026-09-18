@@ -2755,6 +2755,65 @@ static void geometry_probe(VkDevice d)
                 goto coord_done;
             }
             vkDestroyFence(d,coord_fence,NULL);
+            /* The tessellation factors the merged LS/HS program stored, read
+             * back after the draw RETIRED rather than out of a stalled
+             * process. This is the fork the whole remaining search turns on
+             * and it deserves to be measured rather than assumed in either
+             * direction: the control half writes outer 2.0, 2.0, 2.0 and
+             * inner 1.0 into a ring memset to zero at create, so 0x40000000
+             * three times and 0x3f800000 say the hull executed and reached
+             * its store, and the failure that remains is downstream in the
+             * tessellator, the domain or rasterisation. All zeros say the
+             * hull still does not store, with the draw now retiring anyway.
+             * The address comes from the ring table's own entry 5 rather
+             * than a constant, so the record carries the address it read.
+             *
+             * THE CAVEAT, stated before the answer rather than after it, and
+             * unchanged from the stall-path read: the ring backs the
+             * PIPELINE's own allocation, not the readback memory this
+             * harness owns a handle to, so there is no invalidate to issue
+             * for it here and this is a volatile load from non-coherent
+             * memory. A NON-ZERO result is therefore strong - nothing
+             * invents those bit patterns in a zeroed buffer - while a zero
+             * result is weaker, because a stale line could in principle hide
+             * a write that did happen. */
+            {
+                const uint32_t *coord_table=
+                    (const uint32_t *)coord_native->pair->tess_rings;
+                const volatile uint32_t *factors=
+                    (const volatile uint32_t *)(uintptr_t)
+                    (((uint64_t)coord_table[21]<<32)|coord_table[20]);
+                /* SCAN THE WHOLE RING, not its first words.
+                 *
+                 * The earlier read printed factors[0..7] and called an
+                 * all-zero result evidence about the hull. That was a flawed
+                 * instrument and the flaw favoured the conclusion I was
+                 * already leaning towards. The hull stores at the ring base
+                 * plus tcs_factor_offset, a PER-WAVE offset the geometry
+                 * engine hands the program in a system SGPR; nothing makes
+                 * it zero, so the first eight words are a location the hull
+                 * may simply never write. A scan of the ring's whole byte
+                 * extent - taken from the same SRD the shader dereferences,
+                 * entry 5 word 2 - cannot miss a store the way a fixed
+                 * window can, and it reports WHERE the first ones landed so
+                 * the offset itself becomes a measurement. */
+                const uint32_t extent=coord_table[22];
+                const uint32_t words=extent/4u;
+                uint32_t nonzero=0,at[4]={0,0,0,0},val[4]={0,0,0,0};
+                for(uint32_t i=0;i<words;++i) {
+                    const uint32_t v=factors[i];
+                    if(!v)continue;
+                    if(nonzero<4){at[nonzero]=i;val[nonzero]=v;}
+                    ++nonzero;
+                }
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_FACTORS variant=%s factor_va=%08x%08x "
+                    "extent=%08x nonzero=%u w0=%u:%08x w1=%u:%08x "
+                    "w2=%u:%08x w3=%u:%08x f0=%08x f1=%08x f2=%08x f3=%08x",
+                    PS5VK_TESS_CONTROL_NAME,coord_table[21],coord_table[20],
+                    extent,nonzero,at[0],val[0],at[1],val[1],at[2],val[2],
+                    at[3],val[3],factors[0],factors[1],factors[2],factors[3]);
+            }
             CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
                 .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
                 .offset=0,.size=VK_WHOLE_SIZE}));

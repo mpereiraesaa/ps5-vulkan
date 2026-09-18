@@ -770,6 +770,45 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 #undef BATCH_RESERVE
     j->words=0;
     for(unsigned b=0;b<j->chain.count;++b)j->words+=j->chain.words[b];
+#if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
+    /* The COMMAND WORDS of a patch submission, which is the last stream in
+     * this driver that has never been read.
+     *
+     * Dumping the built register banks found a register the pipeline never
+     * emitted; the banks are still one level above what the GPU executes.
+     * These words are the packets themselves - the register writes the banks
+     * turn into, their counts, and the draw packet - so a register that the
+     * bank carries but the encoder drops, or a draw packet with the wrong
+     * count, is visible here and nowhere else.
+     *
+     * Gated on a patch draw rather than on every job: a tessellation draw
+     * emits VGT_LS_HS_CONFIG at cx 0x2d6 and nothing else in this profile
+     * does, so the nineteen geometry submissions in the same process stay
+     * silent and the record count stays bounded. */
+    {
+        unsigned patch=0;
+        for(unsigned k=0;k<j->count && !patch;++k) {
+            const struct ps5vk_draw_state *st=j->draws[k].state;
+            if(!st)continue;
+            for(unsigned i=0;i<st->cx_count;++i)
+                if(st->cx[i].offset==0x2d6u){patch=1;break;}
+        }
+        if(patch) {
+            for(unsigned b=0;b<j->chain.count;++b) {
+                const uint32_t *w=(const uint32_t *)j->chain.arenas[b].address;
+                const uint32_t n=j->chain.words[b];
+                if(!w)continue;
+                for(uint32_t i=0;i<n;i+=4)
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_TESS_PM4 serial=%llu arena=%u at=%u of=%u "
+                        "%08x %08x %08x %08x",
+                        (unsigned long long)j->serial,b,i,n,
+                        w[i],i+1<n?w[i+1]:0u,i+2<n?w[i+2]:0u,
+                        i+3<n?w[i+3]:0u);
+            }
+        }
+    }
+#endif
     *out=j;
     ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_PREPARED serial=%llu draws=%u words=%u",(unsigned long long)j->serial,j->count,j->words);
     if(j->chain.count>1u)
