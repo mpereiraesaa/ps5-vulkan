@@ -93,9 +93,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return VK_ERROR_UNKNOWN;
     /* A geometry pipeline needs the feature the logical device enabled. The
      * private witness build keeps its own gate, exactly as the multiview
-     * diagnostic does, so shipping behaviour stays the negotiation. */
+     * diagnostic does, so shipping behaviour stays the negotiation. The
+     * tessellation pair is the same shape: its stages are the feature. */
 #if !PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
     if (gs && !(d->enabled_features & PS5VK_FEATURE_GEOMETRY_SHADER))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (tcs && !(d->enabled_features & PS5VK_FEATURE_TESSELLATION_SHADER))
         return VK_ERROR_FEATURE_NOT_PRESENT;
 #endif
     const VkPipelineVertexInputStateCreateInfo *v=in->pVertexInputState;
@@ -126,13 +129,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     /* Tessellation contract. Vulkan requires the control and evaluation stages
      * together, PATCH_LIST as the input assembly when they are present, and a
      * patchControlPoints in range; pTessellationState is ignored without them.
-     * The profile validates all of that and then refuses the pipeline: the
-     * pinned compiler emits ISA for both stages but no loadable package state
-     * (measured c96cb63b: source_stage 2/3, hardware_stage UNKNOWN, zero context
-     * registers, no linkage registers), so nothing here could program the
-     * hardware. Until that compiler gap closes, tessellationShader stays
-     * unadvertised and every tessellation pipeline fails closed instead of
-     * executing with whatever state the previous draw left behind. */
+     * The profile validates all of that and hands the pair to the compiler
+     * adapter, which compiles the hull and domain programs; the runtime loader
+     * refuses to package the hull while the launch state it needs is unwritten,
+     * so a pipeline that reaches the hardware still cannot be a tessellation
+     * one until that state exists. tessellationShader stays unadvertised. */
     if (tcs) {
         const VkPipelineTessellationStateCreateInfo *t=in->pTessellationState;
         if (!t || t->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO ||
@@ -140,7 +141,6 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             t->patchControlPoints > PS5VK_MAX_PATCH_CONTROL_POINTS ||
             ia->topology != VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     if (in->pTessellationState &&
        in->pTessellationState->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO)
@@ -212,6 +212,13 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         .geometry=gs? (struct ps5vk_graphics_module_key){
             .words=gs->module->words,.word_count=gs->module->word_count,.entry=gs->pName} :
             (struct ps5vk_graphics_module_key){0},
+        .tess_control=tcs? (struct ps5vk_graphics_module_key){
+            .words=tcs->module->words,.word_count=tcs->module->word_count,.entry=tcs->pName} :
+            (struct ps5vk_graphics_module_key){0},
+        .tess_eval=tes? (struct ps5vk_graphics_module_key){
+            .words=tes->module->words,.word_count=tes->module->word_count,.entry=tes->pName} :
+            (struct ps5vk_graphics_module_key){0},
+        .patch_control_points=tcs?in->pTessellationState->patchControlPoints:0,
         .feature_mask=d->enabled_features,
         .topology=ia->topology, .color_format=pass->attachments[subpass->color.attachment].format,
         .samples=m->rasterizationSamples, .color_write_mask=b->pAttachments[0].colorWriteMask,
@@ -224,7 +231,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
            sizeof(key.push_constant_stages));
     if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
        !specialization_key(fs->pSpecializationInfo,&key.fragment) ||
-       (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)))
+       (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)) ||
+       (tcs && !specialization_key(tcs->pSpecializationInfo,&key.tess_control)) ||
+       (tes && !specialization_key(tes->pSpecializationInfo,&key.tess_eval)))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const void *data=NULL;
     const struct ps5vk_graphics_program *program=NULL;

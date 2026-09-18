@@ -545,10 +545,18 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
         if((declared_clip||declared_cull) &&
            !ps5vk_runtime_graphics_distance_reads_described(&p->domain.metadata,
                &p->fragment.metadata,declared_clip,declared_cull))goto failed;
-        /* The runtime loader gate keeps refusing both halves while the hull
-         * launch state the driver owns is unwritten: no runtime header, no
-         * draw ABI, no submission. Compiling is not running. The draw's DI
-         * patch type was recorded when it was resolved. */
+        /* The domain half is packaged through the same runtime header the
+         * vertex programs use - it is an NGG pre-raster program - and the draw
+         * ABI is built from its metadata and the fragment's. The hull half is
+         * NOT packaged here: its runtime header would need the hull launch
+         * state the native create path owns (the load gate keeps refusing the
+         * hull, which is that contract, not a bug). */
+        struct ps5vk_runtime_shader header;
+        if(ps5vk_runtime_shader_build(&header,&p->domain) ||
+           ps5vk_runtime_shader_build(&header,&p->fragment) ||
+           ps5vk_runtime_draw_abi_build(&p->domain.metadata,&p->fragment.metadata,
+               &p->arguments))goto failed;
+        /* The draw's DI patch type was recorded when it was resolved. */
         *out=p;
         return VK_SUCCESS;
     }

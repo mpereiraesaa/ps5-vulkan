@@ -190,7 +190,8 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
          v->esgs_gs_tg_info_sgpr>=v->user_data_window_base ||
          v->esgs_merged_wave_info_sgpr>=v->user_data_window_base ||
          v->esgs_gs_tg_info_sgpr==v->esgs_merged_wave_info_sgpr)) ||
-       (v->source_stage!=PSBC_STAGE_VERTEX && v->source_stage!=PSBC_STAGE_GEOMETRY) ||
+       (v->source_stage!=PSBC_STAGE_VERTEX && v->source_stage!=PSBC_STAGE_GEOMETRY &&
+        v->source_stage!=PSBC_STAGE_TESS_EVAL) ||
        v->hardware_stage!=PSBC_HW_STAGE_NGG || f->source_stage!=PSBC_STAGE_FRAGMENT ||
        f->hardware_stage!=PSBC_HW_STAGE_PIXEL || !v->ngg_lds_layout_valid ||
        v->output_semantic_count>PSBC_MAX_SEMANTICS || f->input_semantic_count>PSBC_MAX_SEMANTICS ||
@@ -253,11 +254,13 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if (!d || !c || !c->machine_code || !c->machine_code_size ||
         (c->machine_code_size & 3u) || c->machine_code_size>16u*1024u*1024u) return -1;
     const PsbcShaderMetadata *m=&c->metadata;
-    /* The pre-raster stage is the vertex program, or the merged vertex+geometry
-     * program when the pipeline carries a geometry stage: its source stage then
-     * names the last programmable stage it contains. */
+    /* The pre-raster stage is the vertex program, the merged vertex+geometry
+     * program, or the tessellation domain half: all three run on the NGG
+     * hardware stage and export vertices, so their source stages share the
+     * pre-raster shape. */
     const int has_geometry=m->source_stage==PSBC_STAGE_GEOMETRY;
-    int vs=(m->source_stage==PSBC_STAGE_VERTEX || has_geometry) &&
+    const int has_domain=m->source_stage==PSBC_STAGE_TESS_EVAL;
+    int vs=(m->source_stage==PSBC_STAGE_VERTEX || has_geometry || has_domain) &&
         m->hardware_stage==PSBC_HW_STAGE_NGG;
     int fs=m->source_stage==PSBC_STAGE_FRAGMENT && m->hardware_stage==PSBC_HW_STAGE_PIXEL;
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
@@ -310,6 +313,19 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
         static const unsigned geometry_registers[]={0x1ffu,0x291u,0x29bu,0x2abu,0x2ceu,0x2d3u};
         for (unsigned i=0;i<sizeof(geometry_registers)/sizeof(geometry_registers[0]);++i)
             if(!find(m->context_registers,m->context_register_count,geometry_registers[i]))
+                return -3;
+    }
+    /* The tessellation domain half's pipeline state: the subgroup/on-chip
+     * limits, the ring item size, the instance count and the maximum vertices
+     * one invocation emits (one for a passthrough domain) have to be present,
+     * or the GE would run with whatever the previous pipeline left behind. The
+     * output primitive type is the one register this list does NOT need: a
+     * tessellated patch's shape comes from VGT_TF_PARAM, which the hull half
+     * publishes, not from the domain. */
+    if (has_domain) {
+        static const unsigned domain_registers[]={0x1ffu,0x291u,0x2abu,0x2ceu,0x2d3u};
+        for (unsigned i=0;i<sizeof(domain_registers)/sizeof(domain_registers[0]);++i)
+            if(!find(m->context_registers,m->context_register_count,domain_registers[i]))
                 return -3;
     }
     if (fs && (m->linkage_valid || m->ngg_lds_layout_valid)) return -3;
