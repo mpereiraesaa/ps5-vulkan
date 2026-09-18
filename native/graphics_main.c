@@ -1898,6 +1898,14 @@ static void tess_receipt(const char *variant,
     for(unsigned i=0;i<pair->runtime_hull_hs.header.num_cx_registers;++i)
         if(pair->runtime_hull_hs.context[i].offset==0x2db)
             tf_param=pair->runtime_hull_hs.context[i].value;
+    /* The merged LS/HS resource register the hull actually launches with.
+     * LDS_SIZE lives at bits 18..26 and the compiler cannot publish it, so a
+     * run that reports zero here is a hull launched without the LDS its own
+     * code writes. */
+    uint32_t hs_rsrc2=0;
+    for(unsigned i=0;i<pair->runtime_hull_hs.header.num_sh_registers;++i)
+        if(pair->runtime_hull_hs.shader[i].offset==0x10b)
+            hs_rsrc2=pair->runtime_hull_hs.shader[i].value;
     const uint32_t *table=(const uint32_t *)pair->tess_rings;
     const uint64_t pipeline_va=(uint64_t)(uintptr_t)native;
     const uint64_t pair_va=(uint64_t)(uintptr_t)pair;
@@ -1905,7 +1913,7 @@ static void tess_receipt(const char *variant,
         "PS5VK_TESS_RECEIPT build=%s variant=%s vertices=%u no_draw=%d "
         "pipeline=%08x%08x pair=%08x%08x tessellation=%u "
         "stages_en=%08x@%03x primitive=%08x ls_hs_config=%08x@%03x "
-        "tf_param=%08x ring_table=%08x%08x "
+        "tf_param=%08x hs_rsrc2=%08x lds_granules=%u ring_table=%08x%08x "
         "e5=%08x %08x %08x %08x e6=%08x %08x %08x %08x",
         PS5VK_TESS_BUILD_ID,variant,vertices,(int)PS5VK_TESS_NO_DRAW,
         (uint32_t)(pipeline_va>>32),(uint32_t)pipeline_va,
@@ -1914,7 +1922,7 @@ static void tess_receipt(const char *variant,
         pair->tess_state[0].value,(unsigned)pair->tess_state[0].offset,
         pair->uc.vgt_primitive_type.value,
         pair->tess_state[1].value,(unsigned)pair->tess_state[1].offset,
-        tf_param,
+        tf_param,hs_rsrc2,(hs_rsrc2>>18)&0x1ffu,
         pair->tess_ring_table_high,pair->tess_ring_table_low,
         table[20],table[21],table[22],table[23],
         table[24],table[25],table[26],table[27]);

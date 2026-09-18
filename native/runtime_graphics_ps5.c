@@ -172,6 +172,48 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         pair->runtime_hull_hs.shader[1].value=(uint32_t)((hs_va>>40)&255u);
         pair->runtime_hull_ls.shader[0].value=(uint32_t)(ls_va>>8);
         pair->runtime_hull_ls.shader[1].value=(uint32_t)((ls_va>>40)&255u);
+        /* The merged LS/HS workgroup's LDS allocation. The compiler CANNOT
+         * publish it: the combined RSRC1/RSRC2 pair comes from the pinned
+         * radv_shader_combine_cfg_vs_tcs(), which merges VGPR/SGPR counts and
+         * ORs the control half's RSRC2 bits but never writes an LDS_SIZE,
+         * because the size depends on the patch count - a PIPELINE property.
+         * The measured combined value is 0x00000006 (SCRATCH_EN 0, USER_SGPR
+         * 3, LDS_SIZE 0), while the same compile publishes
+         * hull_tcs_lds_size = 16400 bytes for this fixture. Launching a hull
+         * that stages its control points and tess factors in LDS with a
+         * zero-sized LDS allocation is what faults the GPU on the first patch
+         * draw, whatever the tessellation levels are, which is exactly the
+         * measured signature: the level-2 control and the zero-level control
+         * die identically while the geometry cases in the same process pass.
+         *
+         * The encoding is the pinned ac_shader_encode_lds_size(): round the
+         * byte count up to the allocation granularity, then divide by the
+         * encode granularity. psbc compiles PSBC_TARGET_PS5 as GFX10_3 /
+         * CHIP_NAVI21 (libpsbc/psbc_compile.c setup_target), so the
+         * allocation granularity is 1024 and the encode granularity is 512.
+         * The field is LDS_SIZE at bits 18..26 of SPI_SHADER_PGM_RSRC2_HS
+         * (S_00B42C_LDS_SIZE_GFX10), reached at sh offset 0x10b. */
+        {
+            const uint32_t lds_bytes=input->hull.metadata.hull_tcs_lds_size;
+            const uint32_t granules=(lds_bytes+1023u)/1024u;      /* alloc 1024 */
+            const uint32_t encoded=granules*2u;                    /* /512 */
+            /* 64 KiB of LDS per workgroup is the device maximum and the field
+             * is nine bits; refuse rather than truncate into a wrong size. */
+            if(!lds_bytes || lds_bytes>65536u || encoded>511u) {
+                TESS_CREATE_FAIL("hull-lds");
+                rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+            }
+            unsigned patched=0;
+            for(unsigned i=0;i<pair->runtime_hull_hs.header.num_sh_registers;++i)
+                if(pair->runtime_hull_hs.shader[i].offset==0x10b) {
+                    pair->runtime_hull_hs.shader[i].value|=encoded<<18;
+                    ++patched;
+                }
+            if(patched!=1) {
+                TESS_CREATE_FAIL("hull-rsrc2");
+                rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+            }
+        }
         /* The tessellation rings: one bounded block backing the offchip
          * workgroups and the tess-factor ring behind them, owned by the
          * pipeline and programmed as device state on every patch draw. */
