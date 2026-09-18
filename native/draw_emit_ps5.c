@@ -158,7 +158,7 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     if (!(indices?op->index_count:op->vertex_count) || !op->instance_count) return VK_SUCCESS;
     uint32_t runtime_vertex[16],runtime_pixel[16];
     uint32_t sh_count=state->sh_count?state->sh_count:12;
-    if(sh_count>16)return VK_ERROR_UNKNOWN;
+    if(sh_count>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
     const uint32_t single_table[PS5VK_RUNTIME_DESCRIPTOR_SETS]={texture_low?*texture_low:0,0,0,0};
     /* The runtime ABI describes how the compiled stages receive their user
      * SGPRs; it is orthogonal to how vertices are addressed. An indexed draw
