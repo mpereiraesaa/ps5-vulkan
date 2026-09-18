@@ -15,6 +15,32 @@ def run(*args, env=None):
     subprocess.run(list(map(str, args)), check=True, cwd=ROOT, env=env)
 
 
+def tess_build_id(probe, variant, no_draw):
+    """A stable 16-hex-digit identity for the exact tessellation candidate.
+
+    Digests the source families the manifest already hashes (the same set, so
+    the two agree by construction) together with the build switches that
+    change the emitted code. Deliberately excludes dev.conf and anything else
+    private: this value is printed in telemetry.
+    """
+    digest = hashlib.sha256()
+    digest.update(b"ps5vk-tess-candidate/1\n")
+    for key, value in (("probe", probe), ("variant", variant),
+                       ("no_draw", no_draw)):
+        digest.update(f"{key}={value}\n".encode())
+    paths = [ROOT / "Makefile"]
+    for folder in ("src", "native", "tools", "experiments/graphics"):
+        paths += [p for p in (ROOT / folder).rglob("*")
+                  if p.is_file() and p.suffix in (".c", ".h", ".py", ".vert",
+                                                  ".frag", ".tesc", ".tese",
+                                                  ".geom")]
+    for path in sorted(paths):
+        digest.update(str(path.relative_to(ROOT)).encode())
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()[:16]
+
+
 def main():
     compute = os.environ.get("PS5VK_COMPUTE") == "1"
     graphics = os.environ.get("PS5VK_GRAPHICS_LINK")
@@ -74,6 +100,21 @@ def main():
     tess_probe = os.environ.get("PS5VK_TESS_PROBE", "0")
     if tess_probe not in ("0", "1") or (tess_probe == "1" and not graphics_api):
         raise SystemExit("PS5VK_TESS_PROBE requires the graphics profile API and must be 0 or 1")
+    # ONE materially distinct tessellation candidate per executable. A faulting
+    # draw leaves engine state that invalidates whatever runs after it in the
+    # same process, so the variant is a build input and the artifact IS the
+    # variant: 1 = control A (legal nonzero levels, no off-chip reads),
+    # 2 = control B (legal zero outer levels, patch discarded), 3 = witness C
+    # (off-chip per-vertex/per-patch readback). There is deliberately no knob
+    # for a stage-disabled or triangle-list-drawn tessellation pipeline: those
+    # are invalid hardware combinations that can never establish Vulkan
+    # behaviour, and a build knob is how such a run becomes acceptance
+    # evidence by accident.
+    tess_variant = os.environ.get("PS5VK_TESS_VARIANT", "3")
+    if tess_variant not in ("1", "2", "3"):
+        raise SystemExit("PS5VK_TESS_VARIANT selects one candidate: 1, 2 or 3")
+    if tess_variant != "3" and tess_probe != "1":
+        raise SystemExit("PS5VK_TESS_VARIANT requires PS5VK_TESS_PROBE=1")
     # The six-view witness is the only consumer of the diagnostic gate, so it
     # requires both: a real view mask AND a runtime-compiled vertex stage that
     # reads gl_ViewIndex. It is a single bounded scene, never combined with the
@@ -324,6 +365,7 @@ def main():
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
             common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
             common += ["-DPS5VK_TESS_PROBE=" + tess_probe]
+            common += ["-DPS5VK_TESS_VARIANT=" + tess_variant]
             # The tessellation witness runs with the key-rejection diagnostic
             # on, so a refused pipeline names its rejection site in the log
             # instead of only reporting the Vulkan error code.
@@ -331,6 +373,20 @@ def main():
                 common += ["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
                 common += ["-DPS5VK_TESS_NO_DRAW=" +
                            os.environ.get("PS5VK_TESS_NO_DRAW", "0")]
+                # The source-candidate identity the payload logs before the
+                # submit. It digests exactly the source families the manifest
+                # already records plus the build inputs that change the
+                # generated code, so a receipt line names the tree that
+                # produced the package. This is the SOURCE half of the
+                # identity chain; the ARTIFACT half is the deployed eboot's
+                # own sha256, verified against the built one by reading the
+                # file back after the transfer and the mount refresh. Neither
+                # is a log boot id, which is only a process token.
+                common += ['-DPS5VK_TESS_BUILD_ID="' +
+                           tess_build_id(tess_probe, tess_variant,
+                                         os.environ.get("PS5VK_TESS_NO_DRAW", "0")) +
+                           '"']
+                os.environ["PS5VK_TESS_VARIANT"] = tess_variant
             # Both optional-stage witnesses skip the feature-negotiation gate:
             # they exist to measure capabilities that are not advertised yet.
             # Exported, because the SDK build compiles the same sources.

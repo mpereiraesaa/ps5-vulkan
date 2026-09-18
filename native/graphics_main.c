@@ -70,6 +70,33 @@
 #ifndef PS5VK_TESS_NO_DRAW
 #define PS5VK_TESS_NO_DRAW 0
 #endif
+/* ONE materially distinct tessellation candidate per executable. The engine
+ * state a faulting draw leaves behind invalidates anything measured after it
+ * in the same process, and a runtime loop over variants that mutates the
+ * pipeline's launch state cannot be attributed to a build at all, so the
+ * choice is made at compile time and the artifact IS the variant:
+ *   1 = control A - TCS writes legal nonzero levels (outer 2/2/2, inner 1)
+ *                   and nothing else; TES position/colour are pure functions
+ *                   of gl_TessCoord, so no user TCS output is consumed.
+ *   2 = control B - the same pipeline with legal ZERO outer levels, which
+ *                   discards the patch; its own artifact, never a second draw
+ *                   after a faulting one.
+ *   3 = witness C - TCS writes per-vertex/per-patch data that TES reads back
+ *                   through off-chip storage.
+ * Variants that disable required stages or draw a tessellation pipeline as a
+ * triangle list are deliberately NOT available: they are invalid hardware
+ * combinations that can inspect packet construction but can never establish
+ * Vulkan behaviour, so they must not be able to become acceptance evidence. */
+#ifndef PS5VK_TESS_VARIANT
+#define PS5VK_TESS_VARIANT 0
+#endif
+/* The source-candidate identity the build injects. The run logs it and the
+ * deployed package's own sha256 is verified host-side after the transfer and
+ * the mount refresh, which binds run -> artifact -> source. A log boot id is
+ * a process token, not a cryptographic artifact identity. */
+#ifndef PS5VK_TESS_BUILD_ID
+#define PS5VK_TESS_BUILD_ID "unset"
+#endif
 /* Bounded diagnostic mode for the geometry witness: report every case's outcome
  * in one run instead of stopping at the first failing verdict. The shipping
  * profile keeps the fail-fast behaviour, because a witness that stops at the
@@ -1854,6 +1881,46 @@ static uint64_t geometry_digest(const uint8_t *bytes,size_t size)
     return hash;
 }
 
+#if PS5VK_TESS_PROBE
+/* The pre-submit receipt. Every field is READ BACK from the pipeline object
+ * the draw is about to use - never a literal, never a value this harness just
+ * wrote from its own copy - so the line reports the launch state the engine
+ * will actually see. The predecessor's witness printed "di_patch=9" as a
+ * string literal and scanned the WRONG register bank for the stage enables
+ * (pair->runtime_vertex holds the domain program; the enables live in the
+ * separate pair->tess_state[0]), so it reported stages_en=00000000 for a
+ * pipeline whose enables were in fact programmed. Read the source of truth. */
+static void tess_receipt(const char *variant,
+    const struct ps5vk_native_graphics_pipeline *native,unsigned vertices)
+{
+    const struct ps5vk_graphics_pair *pair=native->pair;
+    uint32_t tf_param=0;
+    for(unsigned i=0;i<pair->runtime_hull_hs.header.num_cx_registers;++i)
+        if(pair->runtime_hull_hs.context[i].offset==0x2db)
+            tf_param=pair->runtime_hull_hs.context[i].value;
+    const uint32_t *table=(const uint32_t *)pair->tess_rings;
+    const uint64_t pipeline_va=(uint64_t)(uintptr_t)native;
+    const uint64_t pair_va=(uint64_t)(uintptr_t)pair;
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_TESS_RECEIPT build=%s variant=%s vertices=%u no_draw=%d "
+        "pipeline=%08x%08x pair=%08x%08x tessellation=%u "
+        "stages_en=%08x@%03x primitive=%08x ls_hs_config=%08x@%03x "
+        "tf_param=%08x ring_table=%08x%08x "
+        "e5=%08x %08x %08x %08x e6=%08x %08x %08x %08x",
+        PS5VK_TESS_BUILD_ID,variant,vertices,(int)PS5VK_TESS_NO_DRAW,
+        (uint32_t)(pipeline_va>>32),(uint32_t)pipeline_va,
+        (uint32_t)(pair_va>>32),(uint32_t)pair_va,
+        (unsigned)pair->tessellation,
+        pair->tess_state[0].value,(unsigned)pair->tess_state[0].offset,
+        pair->uc.vgt_primitive_type.value,
+        pair->tess_state[1].value,(unsigned)pair->tess_state[1].offset,
+        tf_param,
+        pair->tess_ring_table_high,pair->tess_ring_table_low,
+        table[20],table[21],table[22],table[23],
+        table[24],table[25],table[26],table[27]);
+}
+#endif
+
 static void geometry_probe(VkDevice d)
 {
     const uint32_t extent=PS5VK_GEOMETRY_EXTENT;
@@ -2500,9 +2567,256 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,family_vertex_module,NULL);
     vkDestroyShaderModule(d,points_module,NULL);
     vkDestroyShaderModule(d,lines_module,NULL);
-#if PS5VK_TESS_PROBE
+#if PS5VK_TESS_PROBE && (PS5VK_TESS_VARIANT==1 || PS5VK_TESS_VARIANT==2)
     extern unsigned ps5vk_pipeline_refusal_site(void);
-    /* Tessellation witness (report-only). Two triangle patches: the left
+    /* CONTROL A (PS5VK_TESS_VARIANT==1) and CONTROL B (==2). Exactly ONE of
+     * them is compiled into an executable, and the executable draws it once:
+     * a faulting draw leaves engine state that invalidates anything measured
+     * after it, so two candidates never share a process.
+     *
+     * Both are semantically VALID tessellation pipelines, which is what makes
+     * them usable as causal evidence:
+     *   A - the control half writes legal nonzero levels (outer 2/2/2, inner
+     *       1) and NOTHING else, and the evaluation half's position and colour
+     *       are pure functions of gl_TessCoord, so no user control-half output
+     *       is consumed and the off-chip read path stays out of the picture.
+     *       A completing A isolates the tessellator and the domain launch from
+     *       the off-chip delivery.
+     *   B - the same pipeline with legal ZERO outer levels, which discards the
+     *       patch, so the hull makes no factor writes and nothing rasterises.
+     *
+     * Interpretation, per the handoff: A ok + C fails -> the off-chip layout,
+     * the ring-offset/system-SGPR delivery, item strides and offsets. B ok +
+     * A fails -> generated primitive/domain launch and factor interpretation.
+     * A and B both fail -> the common hull/domain launch state, the merged
+     * program ABI and the VGT/GE programming. */
+#if PS5VK_TESS_VARIANT==1
+#define PS5VK_TESS_CONTROL_NAME "A-tesscoord-nonzero"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
+#else
+#define PS5VK_TESS_CONTROL_NAME "B-tesscoord-zero"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_zero_control
+#endif
+    VkShaderModule coord_modules[4];
+    {
+    const struct { const uint32_t *code; size_t bytes; } coord_codes[4]={
+        {ps5vk_runtime_tess_coord_vertex,sizeof(ps5vk_runtime_tess_coord_vertex)},
+        {PS5VK_TESS_CONTROL_CODE,sizeof(PS5VK_TESS_CONTROL_CODE)},
+        {ps5vk_runtime_tess_coord_evaluation,sizeof(ps5vk_runtime_tess_coord_evaluation)},
+        {ps5vk_runtime_tess_coord_fragment,sizeof(ps5vk_runtime_tess_coord_fragment)}};
+    for(unsigned i=0;i<4;++i) {
+        VkShaderModuleCreateInfo mi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=coord_codes[i].bytes,.pCode=coord_codes[i].code};
+        CHECK(vkCreateShaderModule(d,&mi,NULL,&coord_modules[i]));
+    }
+    }
+    {
+        const VkShaderStageFlagBits coord_stages[4]={
+            VK_SHADER_STAGE_VERTEX_BIT,VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,VK_SHADER_STAGE_FRAGMENT_BIT};
+        VkPipelineShaderStageCreateInfo coord_stage_infos[4];
+        for(unsigned i=0;i<4;++i)
+            coord_stage_infos[i]=(VkPipelineShaderStageCreateInfo){
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage=coord_stages[i],.module=coord_modules[i],.pName="main"};
+        VkPipelineInputAssemblyStateCreateInfo coord_ia={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
+        VkPipelineTessellationStateCreateInfo coord_ts={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+            .patchControlPoints=3};
+        VkPipelineVertexInputStateCreateInfo coord_vi={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        VkPipelineRasterizationStateCreateInfo coord_raster={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
+        VkPipelineMultisampleStateCreateInfo coord_ms={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+        VkViewport coord_vp_v={0,0,(float)extent,(float)extent,0,1};
+        VkRect2D coord_vp_s={{0,0},{extent,extent}};
+        VkPipelineViewportStateCreateInfo coord_vp={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount=1,.pViewports=&coord_vp_v,.scissorCount=1,.pScissors=&coord_vp_s};
+        VkPipelineColorBlendAttachmentState coord_blend_a={.colorWriteMask=15};
+        VkPipelineColorBlendStateCreateInfo coord_blend={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount=1,.pAttachments=&coord_blend_a};
+        VkGraphicsPipelineCreateInfo coord_pi={
+            .sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .layout=layout,.renderPass=pass,.stageCount=4,
+            .pStages=coord_stage_infos,.pVertexInputState=&coord_vi,
+            .pInputAssemblyState=&coord_ia,.pTessellationState=&coord_ts,
+            .pRasterizationState=&coord_raster,.pMultisampleState=&coord_ms,
+            .pViewportState=&coord_vp,.pColorBlendState=&coord_blend};
+        VkPipeline coord_pipeline;
+        const VkResult coord_rc=vkCreateGraphicsPipelines(d,0,1,&coord_pi,NULL,
+            &coord_pipeline);
+        if(coord_rc==VK_SUCCESS && coord_pipeline) {
+            const struct ps5vk_native_graphics_pipeline *coord_native=
+                coord_pipeline->graphics_state;
+            if(!coord_native || !coord_native->pair || !coord_native->pair->ready ||
+               !coord_native->pair->tessellation)
+                fail("tess-coord-pipeline",-1);
+            VkCommandPool coord_pool;
+            VkCommandPoolCreateInfo coord_pci={
+                .sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                .queueFamilyIndex=0};
+            CHECK(vkCreateCommandPool(d,&coord_pci,NULL,&coord_pool));
+            VkCommandBuffer coord_cb=VK_NULL_HANDLE;
+            VkCommandBufferAllocateInfo coord_cbi={
+                .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .commandPool=coord_pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount=1};
+            CHECK(vkAllocateCommandBuffers(d,&coord_cbi,&coord_cb));
+            if(PS5VK_TESS_NO_DRAW) {
+                /* The create-only control: the pipeline exists and the launch
+                 * state is programmed. Nothing is submitted, so this is the
+                 * artifact to run first after any console recovery. */
+                tess_receipt(PS5VK_TESS_CONTROL_NAME,coord_native,0u);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_CONTROL variant=%s rc=%d created=1 draw_skipped=1",
+                    PS5VK_TESS_CONTROL_NAME,(int)coord_rc);
+                vkDestroyPipeline(d,coord_pipeline,NULL);
+                vkDestroyCommandPool(d,coord_pool,NULL);
+                goto coord_done;
+            }
+            VkCommandBufferBeginInfo coord_begin={
+                .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+            CHECK(vkBeginCommandBuffer(coord_cb,&coord_begin));
+            VkClearValue coord_clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
+            VkRenderPassBeginInfo coord_rbi={
+                .sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                .renderPass=pass,.framebuffer=fb,
+                .renderArea={{0,0},{extent,extent}},
+                .clearValueCount=1,.pClearValues=&coord_clear};
+            vkCmdBeginRenderPass(coord_cb,&coord_rbi,VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(coord_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,coord_pipeline);
+            /* ONE patch, three control points. */
+            vkCmdDraw(coord_cb,3,1,0,0);
+            vkCmdEndRenderPass(coord_cb);
+            CHECK(vkEndCommandBuffer(coord_cb));
+            tess_receipt(PS5VK_TESS_CONTROL_NAME,coord_native,3u);
+            VkSubmitInfo coord_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .commandBufferCount=1,.pCommandBuffers=&coord_cb};
+            CHECK(vkQueueSubmit(queue,1,&coord_submit,VK_NULL_HANDLE));
+            CHECK(vkQueueWaitIdle(queue));
+            CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+                .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
+                .offset=0,.size=VK_WHOLE_SIZE}));
+            static uint8_t coord_detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
+            if(ps5vk_rgba8_64k_rx_detile(coord_detiled,sizeof(coord_detiled),map,
+                (size_t)stride,extent,extent))fail("tess-coord-detile",-1);
+            unsigned long long c_ink=0,c_expected=0,c_covered=0,c_missing=0,
+                c_foreign=0,c_wrong=0;
+            unsigned first_wrong_x=0,first_wrong_y=0;
+            uint8_t first_wrong[4]={0,0,0,0},first_want[3]={0,0,0};
+            /* The oracle, derived from the evaluation half's own math BEFORE
+             * the run and independent of the image.
+             *
+             * The evaluation half maps the domain point to
+             *   ndc = (u*1.8-0.9, v*1.8-0.9)
+             * so the covered region is the triangle (-0.9,-0.9),(0.9,-0.9),
+             * (-0.9,0.9) - note this is NOT the vertex half's triangle, whose
+             * third corner is (0,0.9), so coverage alone already separates
+             * "the tessellator ran" from "the vertex half was rasterised".
+             *
+             * Vulkan framebuffer coordinates: origin upper left, pixel centre
+             * at +0.5, viewport (0,0,extent,extent), so
+             *   ndc = 2*(pixel+0.5)/extent - 1
+             * which is the inverse of the mapping the geometry witness's own
+             * oracle uses (src/geometry_witness.c: pixel=(ndc+1)*0.5*extent).
+             *
+             * Colour: at outer level 2 with inner level 1, equal_spacing on
+             * the triangle domain generates exactly the three corners and the
+             * three edge midpoints - every barycentric component lands in
+             * {0, 0.5, 1}. For those values floor(c*2)/2 == c exactly, so the
+             * evaluation half's quantised colour EQUALS gl_TessCoord at every
+             * generated vertex and the rasteriser's interpolation of it is
+             * exactly linear in (u,v). The per-pixel expectation is therefore
+             * closed form - (u, v, 0.5) - with no sub-triangle or
+             * interpolation modelling, and every component influences it. */
+            const float eps=1.5f*(2.0f/(float)extent)/1.8f;
+            for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x) {
+                const float ndc_x=2.0f*((float)x+0.5f)/(float)extent-1.0f;
+                const float ndc_y=2.0f*((float)y+0.5f)/(float)extent-1.0f;
+                const float u=(ndc_x+0.9f)/1.8f,v=(ndc_y+0.9f)/1.8f;
+                const uint8_t *pxb=coord_detiled+4*((size_t)y*extent+x);
+                const int is_ink=pxb[0]||pxb[1]||pxb[2];
+                if(is_ink)++c_ink;
+                const int inside=u>eps&&v>eps&&(u+v)<1.0f-eps;
+                const int outside=u<-eps||v<-eps||(u+v)>1.0f+eps;
+                if(outside) {
+                    if(is_ink)++c_foreign;
+                    continue;
+                }
+                /* The one-pixel band along the edges is not under test here:
+                 * which side of a shared edge owns a sample is a rasterisation
+                 * rule, not a tessellation result. */
+                if(!inside)continue;
+                ++c_expected;
+                if(!is_ink){++c_missing;continue;}
+                ++c_covered;
+                const float expect[3]={u,v,0.5f};
+                int wrong=0;
+                for(int ch=0;ch<3;++ch) {
+                    const unsigned got=pxb[ch];
+                    const unsigned want=(unsigned)(expect[ch]*255.0f+0.5f);
+                    const unsigned diff=got>want?got-want:want-got;
+                    if(diff>3u)wrong=1;
+                }
+                if(wrong) {
+                    if(!c_wrong) {
+                        first_wrong_x=x;first_wrong_y=y;
+                        for(int ch=0;ch<4;++ch)first_wrong[ch]=pxb[ch];
+                        for(int ch=0;ch<3;++ch)
+                            first_want[ch]=(uint8_t)(expect[ch]*255.0f+0.5f);
+                    }
+                    ++c_wrong;
+                }
+            }
+#if PS5VK_TESS_VARIANT==1
+            /* A: the patch must appear, in the right place, with the right
+             * field. */
+            const int coord_verified=c_expected>0&&c_missing==0&&c_foreign==0&&
+                c_wrong==0;
+#else
+            /* B: zero outer levels discard the patch, so NOTHING may be
+             * rasterised anywhere in the target. */
+            const int coord_verified=c_ink==0;
+#endif
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_CONTROL variant=%s rc=%d created=1 vertices=3 "
+                "ink=%llu expected=%llu covered=%llu missing=%llu foreign=%llu "
+                "wrong_color=%llu digest=%016llx verified=%d "
+                "first_wrong=%02x%02x%02x%02x want=%02x%02x%02x at=%u,%u",
+                PS5VK_TESS_CONTROL_NAME,(int)coord_rc,
+                (unsigned long long)c_ink,(unsigned long long)c_expected,
+                (unsigned long long)c_covered,(unsigned long long)c_missing,
+                (unsigned long long)c_foreign,(unsigned long long)c_wrong,
+                (unsigned long long)geometry_digest(coord_detiled,
+                    sizeof(coord_detiled)),
+                coord_verified,
+                first_wrong[0],first_wrong[1],first_wrong[2],first_wrong[3],
+                first_want[0],first_want[1],first_want[2],
+                first_wrong_x,first_wrong_y);
+            vkDestroyPipeline(d,coord_pipeline,NULL);
+            vkDestroyCommandPool(d,coord_pool,NULL);
+        } else {
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_CONTROL variant=%s rc=%d created=0 site=%u",
+                PS5VK_TESS_CONTROL_NAME,(int)coord_rc,
+                ps5vk_pipeline_refusal_site());
+        }
+    }
+coord_done:
+    for(unsigned i=0;i<4;++i)vkDestroyShaderModule(d,coord_modules[i],NULL);
+#undef PS5VK_TESS_CONTROL_NAME
+#undef PS5VK_TESS_CONTROL_CODE
+#endif
+#if PS5VK_TESS_PROBE && PS5VK_TESS_VARIANT==3
+    extern unsigned ps5vk_pipeline_refusal_site(void);
+    /* WITNESS C (PS5VK_TESS_VARIANT==3), report-only. Two triangle patches: the left
      * tessellated at level three, the right at level one. The evaluation half
      * paints the QUANTISED tessCoord field - colour = (floor(u*n)/n,
      * floor(v*n)/n, patch) - so the image names the sub-triangle each pixel
@@ -2572,9 +2886,16 @@ static void geometry_probe(VkDevice d)
             if(!tess_native || !tess_native->pair || !tess_native->pair->ready ||
                !tess_native->pair->tessellation)
                 fail("tess-pipeline",-1);
-            for(unsigned i=0;i<tess_native->pair->runtime_vertex.header.num_cx_registers;++i)
-                if(tess_native->pair->runtime_vertex.context[i].offset==0x2d5)
-                    t_stages_en=tess_native->pair->tess_state[0].value;
+            /* The stage enables live in pair->tess_state[0], which the create
+             * path programs directly; they are NOT republished in the domain
+             * program's own linked context block. The previous form only
+             * assigned t_stages_en if a scan of pair->runtime_vertex.context[]
+             * found offset 0x2d5 - and runtime_vertex holds the DOMAIN program
+             * for a tessellation pipeline, whose linked block carries no 0x2d5
+             * at all. The scan never matched, so the witness reported
+             * stages_en=00000000 for a pipeline whose enables were programmed.
+             * Read the register the driver actually wrote. */
+            t_stages_en=tess_native->pair->tess_state[0].value;
             t_ls_hs=tess_native->pair->tess_state[1].value;
             for(unsigned i=0;i<tess_native->pair->runtime_hull_hs.header.num_cx_registers;++i)
                 if(tess_native->pair->runtime_hull_hs.context[i].offset==0x2db)
@@ -2597,10 +2918,12 @@ static void geometry_probe(VkDevice d)
             if (PS5VK_TESS_NO_DRAW) {
                 /* The create-only diagnostic: the pipeline exists and the
                  * launch state is programmed; the draw is the bisect step. */
+                tess_receipt("C-offchip-witness",tess_native,0u);
                 ps5log_printf(PS5LOG_MARK,
                     "PS5VK_TESS_PROBE rc=%d created=1 draw_skipped=1 "
-                    "stages_en=%08x ls_hs_config=%08x tf_param=%08x di_patch=9",
-                    (int)tess_rc,t_stages_en,t_ls_hs,t_tf);
+                    "stages_en=%08x ls_hs_config=%08x tf_param=%08x primitive=%08x",
+                    (int)tess_rc,t_stages_en,t_ls_hs,t_tf,
+                    tess_native->pair->uc.vgt_primitive_type.value);
                 vkDestroyPipeline(d,tess_pipeline,NULL);
                 vkDestroyCommandPool(d,tess_pool,NULL);
                 goto tess_done;
@@ -2617,6 +2940,7 @@ static void geometry_probe(VkDevice d)
             vkCmdDraw(tess_cb,6,1,0,0);
             vkCmdEndRenderPass(tess_cb);
             CHECK(vkEndCommandBuffer(tess_cb));
+            tess_receipt("C-offchip-witness",tess_native,6u);
             VkSubmitInfo tess_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
                 .commandBufferCount=1,.pCommandBuffers=&tess_cb};
             CHECK(vkQueueSubmit(queue,1,&tess_submit,VK_NULL_HANDLE));
@@ -2716,12 +3040,13 @@ static void geometry_probe(VkDevice d)
             ps5log_printf(PS5LOG_MARK,
                 "PS5VK_TESS_PROBE rc=%d created=1 expected=%llu covered=%llu missing=%llu "
                 "foreign=%llu wrong_color=%llu digest=%016llx patches=2 levels=3,1 "
-                "stages_en=%08x ls_hs_config=%08x tf_param=%08x di_patch=9",
+                "stages_en=%08x ls_hs_config=%08x tf_param=%08x primitive=%08x",
                 (int)tess_rc,(unsigned long long)t_expected,(unsigned long long)t_covered,
                 (unsigned long long)t_missing,(unsigned long long)t_foreign,
                 (unsigned long long)t_wrong,
                 (unsigned long long)geometry_digest(tess_detiled,sizeof(tess_detiled)),
-                t_stages_en,t_ls_hs,t_tf);
+                t_stages_en,t_ls_hs,t_tf,
+                tess_native->pair->uc.vgt_primitive_type.value);
             vkDestroyPipeline(d,tess_pipeline,NULL);
             vkDestroyCommandPool(d,tess_pool,NULL);
         } else {
