@@ -26,10 +26,15 @@ DEPS = [
         # vertex half is a real LS, and the domain linked against the control
         # half so its patch count, attribute stride and tess-factor read flag
         # stay compile-time constants. PR #16's TESS_EVAL package is included
-        # by history. The pin is the whole
+        # by history. The pin now also carries the link in the OTHER direction
+        # - the evaluation half linked into the hull compile - without which
+        # the control half reports TESS_PRIMITIVE_UNSPECIFIED and stores
+        # QUAD-shaped tessellation factors for a triangle domain, measured on
+        # hardware as inner[0] landing one dword past where the tessellator
+        # reads it. The pin is the whole
         # contract, so a different commit has to be pinned explicitly and the
         # driver cache key moves with the metadata version.
-        "pin": "87e0d6c650b0c7c958d170b5768493cb1ec20a23",
+        "pin": "441e841708be6e12f514a2dc608efc4e5d9aa795",
     },
     {
         "name": "opengnm",
