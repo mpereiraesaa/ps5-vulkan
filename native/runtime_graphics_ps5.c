@@ -173,6 +173,24 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             (num_patches&255u) |
             ((input->patch_control_points&63u)<<8) |
             ((input->patch_control_points&63u)<<14)};
+        /* VGT_TESS_DISTRIBUTION. The pinned emitter programs this for every
+         * GFX8+ device as part of its initialisation (ac_cmdbuf_cp.c, the
+         * non-GFX9 branch): ACCUM_ISOLINE 32, ACCUM_TRI 11, ACCUM_QUAD 11,
+         * DONUT_SPLIT 16, and TRAP_SPLIT 3 for CHIP_FIJI or >= CHIP_POLARIS10,
+         * which CHIP_NAVI21 is. It tells the geometry engine how to distribute
+         * tessellation work, and this driver has never written it at all -
+         * it was read as device state the native graphics API would own.
+         *
+         * That assumption was never tested, and the failure it would produce
+         * is a STALL rather than a fault, which is what the measured silence
+         * before the watchdog kill now says this is. Written with the rest of
+         * the tessellation context, so nothing depends on what another
+         * pipeline left configured. Field widths are the pinned header's:
+         * three 8-bit accumulators, then DONUT_SPLIT 5 bits at 24 and
+         * TRAP_SPLIT 3 bits at 29 on this generation. */
+        pair->tess_state[2]=(ps5_agc_register){0x2d4,
+            (32u&0xffu) | ((11u&0xffu)<<8) | ((11u&0xffu)<<16) |
+            ((16u&0x1fu)<<24) | ((3u&0x7u)<<29)};
         /* The merged hull program is loaded here, so its ONE address register
          * pair takes the real address. On GFX10 that register is the LS block
          * (R_00B520/R_00B524, sh 0x148/0x149) per the pinned

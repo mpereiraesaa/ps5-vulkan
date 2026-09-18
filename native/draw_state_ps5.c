@@ -73,12 +73,12 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * context registers carry VGT_TF_PARAM; the ring configuration is
      * program-referenced state below. */
     if (has_tessellation) {
-        if (result.cx_count+2+pair->runtime_hull.header.num_cx_registers >
+        if (result.cx_count+3+pair->runtime_hull.header.num_cx_registers >
             PS5VK_DRAW_CX_CAPACITY)
             return VK_ERROR_UNKNOWN;
         memcpy(result.cx+result.cx_count,pair->tess_state,
             sizeof(pair->tess_state));
-        result.cx_count+=2;
+        result.cx_count+=3;
         memcpy(result.cx+result.cx_count,pair->runtime_hull.context,
             pair->runtime_hull.header.num_cx_registers*sizeof(*result.cx));
         result.cx_count+=pair->runtime_hull.header.num_cx_registers;

@@ -31,7 +31,7 @@ struct ps5vk_graphics_pair {
      * VGT_SHADER_STAGES_EN (0x2d5) with the LS/HS enables ORed in, and
      * VGT_LS_HS_CONFIG (0x2d6) with the patch count per workgroup and the
      * input/output control-point counts. */
-    ps5_agc_register tess_state[2];
+    ps5_agc_register tess_state[3];
     /* The tessellation ring configuration as user-config registers, prepared
      * at create from the rings this pipeline allocates: VGT_TF_RING_SIZE
      * (0x30938), VGT_HS_OFFCHIP_PARAM (0x3093c), VGT_TF_MEMORY_BASE (0x30940)
