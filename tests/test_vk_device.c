@@ -219,6 +219,17 @@ static void lifecycle(void)
                ps5vk_platform_max_viewports(PS5VK_FEATURE_MULTI_VIEWPORT|PS5VK_FEATURE_DEPTH_CLAMP)==16 &&
                ps5vk_platform_max_viewports(PS5VK_FEATURE_DEPTH_CLAMP)==1 &&
                PS5VK_MULTI_VIEWPORT_COUNT==16);
+        /* ...and the shared profile initializer reports that limit from the
+         * same mask that reports the feature, so a platform can never say
+         * multiViewport with maxViewports 1 (measured run 20260917T200309802Z). */
+        assert(pl->maxViewports==1 && compute_profile.limits.maxViewports==1);
+        ps5vk_device_profile_init(&multi_profile, &multi_memory, VK_TRUE, VK_TRUE,
+            PS5VK_FEATURE_MULTI_VIEWPORT|PS5VK_FEATURE_DEPTH_CLAMP|PS5VK_FEATURE_MULTI_DRAW_INDIRECT);
+        assert(multi_profile.limits.maxViewports==PS5VK_MULTI_VIEWPORT_COUNT &&
+               multi_profile.limits.maxDrawIndirectCount==65535);
+        ps5vk_device_profile_init(&multi_profile, &multi_memory, VK_TRUE, VK_TRUE,
+            PS5VK_FEATURE_DEPTH_BIAS_CLAMP|PS5VK_FEATURE_DEPTH_CLAMP|PS5VK_FEATURE_FILL_MODE_NON_SOLID);
+        assert(multi_profile.limits.maxViewports==1);
         assert(compute_memory.memoryHeaps[0].size==PS5VK_PROFILE_COMPUTE_HEAP_BYTES);
         const VkDeviceSize max_allocation = PS5VK_PROFILE_GRAPHICS_HEAP_BYTES;
         const VkQueueFlags queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
