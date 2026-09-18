@@ -446,6 +446,15 @@ def main():
                 # honest argument for a patch draw and lets the link derive
                 # its whole state from it rather than having one register
                 # corrected afterwards.
+                # Diagnostic: draw the patch with tessellation levels of 16
+                # instead of 2 and 1, so the tessellated work is hundreds of
+                # triangles instead of four. Tests whether the domain fails to
+                # launch below a batching threshold rather than because of a
+                # misconfiguration. Default 0 keeps the shipped fixture.
+                tess_high_levels = os.environ.get("PS5VK_TESS_HIGH_LEVELS", "0")
+                if tess_high_levels not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_HIGH_LEVELS must be 0 or 1")
+                common += ["-DPS5VK_TESS_HIGH_LEVELS=" + tess_high_levels]
                 tess_link_prim = os.environ.get("PS5VK_TESS_LINK_PRIM", "tri")
                 if tess_link_prim not in ("tri", "patch"):
                     raise SystemExit(
@@ -472,7 +481,8 @@ def main():
                                          tess_tf_rdreq + ":" +
                                          tess_dist_mode + ":" +
                                          tess_no_tf_param + ":" +
-                                         tess_link_prim) +
+                                         tess_link_prim + ":" +
+                                         tess_high_levels) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump

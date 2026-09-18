@@ -147,6 +147,13 @@ def main():
         # half's tessellation factors are in memory.
         ("experiments/graphics/runtime_tess_witness_exec.vert",
          "runtime_tess_witness_exec.vert.spv", "tess_witness_exec_vertex"),
+        # The same control half with levels of 16 instead of 2 and 1, to test
+        # whether the domain fails to launch because the tessellated work
+        # never reaches a batching threshold rather than because something is
+        # misconfigured. Four triangles against an eleven-triangle
+        # accumulator is not a comparison anyone has made yet.
+        ("experiments/graphics/runtime_tess_coord_high.tesc",
+         "runtime_tess_coord_high.tesc.spv", "tess_coord_high_control"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
