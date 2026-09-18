@@ -47,6 +47,14 @@ struct ps5vk_runtime_draw_abi {
     uint32_t esgs_described;
     uint32_t esgs_gs_tg_info_sgpr, esgs_merged_wave_info_sgpr;
     uint32_t vertex_push_slot, fragment_push_slot, push_constant_size;
+    /* The tessellation ring descriptor table's address. The DOMAIN half is a
+     * merged NGG program: its SGPRs 0-7 are the hardware's system block (the
+     * user-data window starts at 8 - the mapping every working NGG path
+     * proves), so the hardware hands it the ring bases from the device ring
+     * state the patch draw programs. The HULL half's LS window maps 1:1
+     * (its user data starts at SGPR 0), and its delivery is the draw state's
+     * sh writes at the LS user-data base - not this bank. No field here
+     * carries the ring address, and the window rule stands for both. */
     uint32_t vertex_descriptor_valid[PS5VK_RUNTIME_DESCRIPTOR_SETS];
     uint32_t fragment_descriptor_valid[PS5VK_RUNTIME_DESCRIPTOR_SETS];
     uint32_t vertex_descriptor_slot[PS5VK_RUNTIME_DESCRIPTOR_SETS];

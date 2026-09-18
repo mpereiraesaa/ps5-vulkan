@@ -356,3 +356,4 @@ int main(void)
     puts("Runtime shader header: pass (11 registers, relative semantics, rejection without mutation)");
     return 0;
 }
+
