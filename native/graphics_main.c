@@ -2612,6 +2612,10 @@ static void geometry_probe(VkDevice d)
             vkCmdDraw(tess_cb,tess_vertices,1,0,0);
             vkCmdEndRenderPass(tess_cb);
             CHECK(vkEndCommandBuffer(tess_cb));
+            {
+                const struct ps5vk_draw_state *prepared=NULL;
+                (void)prepared;
+            }
             VkSubmitInfo tess_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
                 .commandBufferCount=1,.pCommandBuffers=&tess_cb};
             CHECK(vkQueueSubmit(queue,1,&tess_submit,VK_NULL_HANDLE));
@@ -2626,6 +2630,19 @@ static void geometry_probe(VkDevice d)
             for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x) {
                 const uint8_t *pxb=tess_detiled+4*((size_t)y*extent+x);
                 if(pxb[0]||pxb[1]||pxb[2])++t_ink;
+            }
+            /* The prepared delivery, logged BEFORE the submit: the table's
+             * own SRD words as the memory holds them, the draw state's ring
+             * dwords (the LS window writes), and the domain bank's first
+             * dwords - the readback's evidence, not an assumption. */
+            {
+                const uint32_t *rt=(const uint32_t *)tess_native->pair->tess_rings;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_TABLE va=%08x%08x "
+                    "e5=%08x %08x %08x %08x e6=%08x %08x %08x %08x",
+                    tess_native->pair->tess_ring_table_high,
+                    tess_native->pair->tess_ring_table_low,
+                    rt[20],rt[21],rt[22],rt[23],rt[24],rt[25],rt[26],rt[27]);
             }
             ps5log_printf(PS5LOG_MARK,
                 "PS5VK_TESS_DRAW vertices=%u ink=%llu digest=%016llx "
