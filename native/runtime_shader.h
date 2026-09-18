@@ -19,13 +19,16 @@ _Static_assert(PS5VK_RUNTIME_SEMANTICS_MAX >= PSBC_MAX_SEMANTICS,"compiler seman
  * sampler at set 0/binding 0. Other descriptor profiles fail before writes. */
 int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *destination,
                               const PsbcShaderOutput *compiled);
-/* The hull half's two loader views (LS and HS), built without the AGC linker.
- * The pgm lo/hi values stay zero; the native create path patches the real
- * addresses after loading the code. The tessellation launch state the hull
- * still needs (stage enables, LS_HS_CONFIG, the rings) is the create path's,
- * derived from the hull metadata's workgroup layout. */
-int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *ls,
-    struct ps5vk_runtime_shader *hs,const PsbcShaderOutput *hull);
+/* The merged LS/HS program's loader view, built without the AGC linker. It is
+ * ONE program: GFX9+ runs the vertex and control halves as a single hardware
+ * stage, and the compiler emits a single image whose halves dispatch on
+ * merged_wave_info. The pgm lo/hi values stay zero; the native create path
+ * patches the real address after loading the code. The tessellation launch
+ * state the hull still needs (stage enables, LS_HS_CONFIG, the rings, and the
+ * LDS allocation) is the create path's, derived from the hull metadata's
+ * workgroup layout. */
+int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *hull,
+    const PsbcShaderOutput *compiled);
 int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *vertex,
     const PsbcShaderMetadata *fragment,struct ps5vk_runtime_draw_abi *out);
 

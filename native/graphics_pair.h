@@ -22,19 +22,35 @@ struct ps5vk_graphics_pair {
      * two program views live below, and the draw path appends the hull's
      * register banks plus the driver-owned launch state. */
     uint32_t tessellation;
-    struct ps5vk_runtime_shader runtime_hull_ls,runtime_hull_hs;
+    /* THE merged LS/HS program: on GFX9+ the vertex and control halves are
+     * one hardware stage running one image, so there is one runtime shader
+     * here, not a pair. */
+    struct ps5vk_runtime_shader runtime_hull;
     /* The driver-owned hull launch state, prepared at create from the hull
      * metadata's workgroup layout and the domain's linked stage enables:
-     * VGT_SHADER_STAGES_EN (0x2d5) with the LS/HS enables ORed in, and
+     * VGT_SHADER_STAGES_EN (0x2d5) with the LS/HS enables ORed in,
      * VGT_LS_HS_CONFIG (0x2d6) with the patch count per workgroup and the
-     * input/output control-point counts. */
-    ps5_agc_register tess_state[2];
+     * input/output control-point counts, VGT_TESS_DISTRIBUTION (0x2d4), and
+     * the hardware's tessellation-level CLAMPS at VGT_HOS_MAX_TESS_LEVEL
+     * (0x286) and VGT_HOS_MIN_TESS_LEVEL (0x287). */
+    ps5_agc_register tess_state[5];
     /* The tessellation ring configuration as user-config registers, prepared
      * at create from the rings this pipeline allocates: VGT_TF_RING_SIZE
      * (0x30938), VGT_HS_OFFCHIP_PARAM (0x3093c), VGT_TF_MEMORY_BASE (0x30940)
-     * and its high word (0x30984). Written on every patch draw with the rest
-     * of the state, so nothing depends on a previous pipeline's rings. */
-    ps5_agc_register tess_ring_state[4];
+     * and its high word (0x30984), plus the GE's parameter-cache allocation
+     * at GE_PC_ALLOC (0x30980). Written on every patch draw with the rest of
+     * the state, so nothing depends on a previous pipeline's rings. */
+    ps5_agc_register tess_ring_state[5];
+    /* The ring descriptor table's address, split for the user-data bank:
+     * the pipeline's ring block starts with the table (sixteen bytes per
+     * ring, audited raw buffer SRDs), and the hull's ring-offsets dwords
+     * carry its address. */
+    uint32_t tess_ring_table_low, tess_ring_table_high;
+    /* The hull's user-data dword the compiler assigned to the ring descriptor
+     * table, window-relative. The table address is delivered there because the
+     * system-block ring_offsets at s0/s1 is not writable for a merged
+     * program on this platform. */
+    uint32_t tess_ring_table_slot;
     /* The ring block's GPU address; the backing is tracked by the owning
      * native pipeline and released with it. */
     void *tess_rings;

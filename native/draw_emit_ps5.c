@@ -189,8 +189,48 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
      * Those may leave bytes in this unsubmitted scratch - the documented
      * contract is that the caller's cursor does not advance and the whole job is
      * discarded - so no stronger promise is made or needed here. */
-    if (capacity < 13u + view_words) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (capacity < 17u + view_words) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;
+#if defined(PS5VK_TESS_VGT_FLUSH) && PS5VK_TESS_VGT_FLUSH
+    /* WAIT FOR IDLE AND RESET THE VGT's POINTERS BEFORE UPDATING ITS RING
+     * STATE, which this driver has never done.
+     *
+     * A patch draw rewrites VGT_TF_RING_SIZE, VGT_HS_OFFCHIP_PARAM,
+     * VGT_TF_MEMORY_BASE and its high word on EVERY draw, because the
+     * tessellation rings belong to the pipeline rather than to a device
+     * initialisation this driver does not perform.
+     *
+     * THE CITATION IS NARROWER THAN IT FIRST LOOKS, and the distinction
+     * matters: the sequence below is quoted verbatim from ac_shadowed_regs.c,
+     * but it lives in ac_build_load_reg(), which builds the REGISTER-SHADOW
+     * LOAD preamble - not a general per-draw guard for updating ring
+     * registers. The comments are the pinned tree's own and they describe
+     * what the events do; they do not establish that a driver must emit them
+     * before every ring update. This is therefore a diagnostic, default off,
+     * and it stays one. In the pinned tree's words:
+     *
+     *   "Wait for idle, because we'll update VGT ring pointers."
+     *     EVENT_WRITE(VS_PARTIAL_FLUSH, EVENT_INDEX(4))
+     *   "VGT_FLUSH is required even if VGT is idle. It resets VGT pointers."
+     *     EVENT_WRITE(VGT_FLUSH, EVENT_INDEX(0))
+     *
+     * Our command stream contains no events at all - the dump of a whole
+     * patch submission is three indirect register packets, two direct shader
+     * writes, NUM_INSTANCES and the draw. So the geometry engine is told
+     * where the tessellation factor ring lives without ever being made to
+     * re-read it, and a stale internal pointer would explain the one result
+     * nothing else does: pre-filling this driver's entire factor ring with a
+     * legal level changed nothing, which is what you would expect if the
+     * engine is reading a different ring altogether.
+     *
+     * Emitted before the register banks, in the pinned order: idle first,
+     * then the pointer reset, then the new values. */
+    if (end - next < 4) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    *next++ = 0xc0004600u;  /* PKT3(PKT3_EVENT_WRITE, 0, 0) */
+    *next++ = 0x0000040fu;  /* VS_PARTIAL_FLUSH, EVENT_INDEX(4) */
+    *next++ = 0xc0004600u;
+    *next++ = 0x00000024u;  /* VGT_FLUSH, EVENT_INDEX(0) */
+#endif
     if (ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->cx, state->cx_count,
             mapping, mapping_bytes, sceAgcDcbSetCxRegistersIndirect) ||
         ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->uc, state->uc_count,

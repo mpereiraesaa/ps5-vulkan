@@ -11,18 +11,31 @@
  * input attachments and mandatory uniform buffers from the same per-set table.
  * Every other descriptor type stays out of the profile rather than being
  * silently accepted. */
+/* The storage-buffer arm is DIAGNOSTIC ONLY and matches the same condition in
+ * descriptor_profile_supported() and in the queue's own predicate. This is the
+ * THIRD place the profile is decided, and the three had to be opened one run
+ * at a time because each refuses with the same error code from a different
+ * file - which is the argument for having them agree by construction rather
+ * than by three separate edits. The shipped build sees the original sets. */
+#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+#define PS5VK_DIAGNOSTIC_STORAGE_BUFFER(t) ((t) == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+#else
+#define PS5VK_DIAGNOSTIC_STORAGE_BUFFER(t) (0)
+#endif
 static int graphics_descriptor_type(VkDescriptorType type)
 {
     return type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
         type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
         type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+        PS5VK_DIAGNOSTIC_STORAGE_BUFFER(type);
 }
 
 static int graphics_buffer_type(VkDescriptorType type)
 {
     return type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+        PS5VK_DIAGNOSTIC_STORAGE_BUFFER(type);
 }
 
 static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
@@ -45,6 +58,20 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
             p->graphics_state?(const struct ps5vk_native_graphics_pipeline *)p->graphics_state:NULL;
         if(native && native->pair && native->pair->ready && native->pair->geometry_preraster)
             visible|=VK_SHADER_STAGE_GEOMETRY_BIT;
+        /* And the tessellation pair's two stages when the pipeline carries
+         * it, for the same reason and from the same source.
+         *
+         * They were missing, and the two profiles disagreed because of it:
+         * descriptor_profile_supported() admits a binding named for a
+         * tessellation stage whenever the pipeline has tessellation, so such a
+         * pipeline is CREATED, and this mask then refused it at submit with
+         * VK_ERROR_FEATURE_NOT_PRESENT. A descriptor bound to either
+         * tessellation stage - a uniform buffer as much as anything else -
+         * could therefore never be drawn with, and the failure appeared only
+         * at vkQueueSubmit, which is the worst place to learn it. */
+        if(native && native->pair && native->pair->ready && native->pair->tessellation)
+            visible|=VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
+                     VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
     }
     *mask=0;
     if(runtime->enabled) {

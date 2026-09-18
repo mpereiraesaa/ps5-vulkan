@@ -178,6 +178,16 @@ def main():
               if os.environ.get("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC") else []),
             *(["-DPS5VK_TESS_PROBE=" + os.environ["PS5VK_TESS_PROBE"]]
               if os.environ.get("PS5VK_TESS_PROBE") else []),
+            # The SDK build compiles the same sources, so it must select the
+            # same single tessellation candidate the native build selected.
+            *(["-DPS5VK_TESS_VARIANT=" + os.environ["PS5VK_TESS_VARIANT"]]
+              if os.environ.get("PS5VK_TESS_VARIANT") else []),
+            # The register-stream dump lives in the runtime draw path, which
+            # the SDK build compiles, so the switch has to reach here too or
+            # the dump silently does not exist in the deployed payload.
+            *(["-DPS5VK_TESS_STATE_DUMP=" +
+               os.environ["PS5VK_TESS_STATE_DUMP"]]
+              if os.environ.get("PS5VK_TESS_STATE_DUMP") else []),
             *(["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
               if os.environ.get("PS5VK_GEOMETRY_KEY_DIAG") == "1" else []),
         ]

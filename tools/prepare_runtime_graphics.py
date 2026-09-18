@@ -115,6 +115,63 @@ def main():
          "runtime_tess_witness.tese.spv", "tess_witness_evaluation"),
         ("experiments/graphics/runtime_tess_witness.frag",
          "runtime_tess_witness.frag.spv", "tess_witness_fragment"),
+        # The TessCoord control: the same pipeline shape with an evaluation
+        # half whose position is a pure function of gl_TessCoord and a control
+        # half that writes only the levels - no off-chip reads at all, so the
+        # draw isolates the tessellator + the domain launch from the ring
+        # delivery.
+        ("experiments/graphics/runtime_tess_coord.vert",
+         "runtime_tess_coord.vert.spv", "tess_coord_vertex"),
+        ("experiments/graphics/runtime_tess_coord.tesc",
+         "runtime_tess_coord.tesc.spv", "tess_coord_control"),
+        ("experiments/graphics/runtime_tess_coord.tese",
+         "runtime_tess_coord.tese.spv", "tess_coord_evaluation"),
+        ("experiments/graphics/runtime_tess_coord.frag",
+         "runtime_tess_coord.frag.spv", "tess_coord_fragment"),
+        ("experiments/graphics/runtime_tess_coord_zero.tesc",
+         "runtime_tess_coord_zero.tesc.spv", "tess_coord_zero_control"),
+        # The domain-execution witness: the TessCoord control's evaluation
+        # half with one addition, a storage-buffer write. A tessellation
+        # evaluation shader has no per-vertex input except gl_TessCoord, so if
+        # it runs at all its exports must cover pixels - and the measured
+        # image is empty with no foreign pixels either. A memory write is the
+        # only observable the stage has that does not depend on
+        # rasterisation, which is what separates "the domain never executes"
+        # from "it executes and its exports are discarded".
+        ("experiments/graphics/runtime_tess_witness_exec.tese",
+         "runtime_tess_witness_exec.tese.spv", "tess_witness_exec_evaluation"),
+        # The witness's own control: the same vertex half with a write to the
+        # same buffer at a different counter. "The domain wrote nothing" and
+        # "a storage-buffer write from a graphics stage does not land" read
+        # identically, and this half is proven to run because its control
+        # half's tessellation factors are in memory.
+        ("experiments/graphics/runtime_tess_witness_exec.vert",
+         "runtime_tess_witness_exec.vert.spv", "tess_witness_exec_vertex"),
+        # The same control half with levels of 16 instead of 2 and 1, to test
+        # whether the domain fails to launch because the tessellated work
+        # never reaches a batching threshold rather than because something is
+        # misconfigured. Four triangles against an eleven-triangle
+        # accumulator is not a comparison anyone has made yet.
+        ("experiments/graphics/runtime_tess_coord_high.tesc",
+         "runtime_tess_coord_high.tesc.spv", "tess_coord_high_control"),
+        # The descriptor-free domain-execution witness: an evaluation half
+        # that costs time instead of writing memory, so "did the domain run"
+        # is answered by the bounded fence wait the harness already has,
+        # without a storage buffer whose own delivery cannot be validated.
+        ("experiments/graphics/runtime_tess_spin.tese",
+         "runtime_tess_spin.tese.spv", "tess_spin_evaluation"),
+        # The same witness on the ISOLINE domain: two outer levels instead of
+        # three plus inner, a two-dword factor layout instead of four, line
+        # output instead of triangles. A materially different tessellator
+        # configuration measured by the same descriptor-free mechanism.
+        ("experiments/graphics/runtime_tess_spin_iso.tese",
+         "runtime_tess_spin_iso.tese.spv", "tess_spin_iso_evaluation"),
+        # The POSITIVE CONTROL for that witness: the same spin in the CONTROL
+        # half, which is proven to execute because its factors are in the
+        # ring. Reading "no stall" as "did not execute" is only sound if a
+        # stage that does execute produces a stall.
+        ("experiments/graphics/runtime_tess_spin_hull.tesc",
+         "runtime_tess_spin_hull.tesc.spv", "tess_spin_hull_control"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

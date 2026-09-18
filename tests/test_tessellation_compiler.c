@@ -9,27 +9,26 @@
  * changes the contract fails here instead of inside the driver. Measured, not
  * assumed:
  *
- *   - psbc_compile_tess_pipeline() links the vertex half as the LS program and
- *     the control half as the HS program: the HS machine code (with its GNM
- *     wrapper) stays at offset 0 and the LS machine code is appended at
- *     hull_ls_code_offset, with the LS program/resource registers published
- *     through hull_ls_pgm_lo/hi and hull_ls_rsrc1/2.
- *   - The HS half's RSRC1/RSRC2 are the combined pair the radv
- *     radv_shader_combine_cfg_vs_tcs() rule produces, and the metadata carries
- *     VGT_TF_PARAM derived from the control stage's own execution modes.
- *   - The result still carries PSBC_UNRESOLVED_TESS_PIPELINE: the hull state
- *     the driver owns (stage enables, LS_HS_CONFIG, TF ring, offchip param)
- *     and the loadable domain package do not exist yet. The DOMAIN half's
- *     loadable package is the NGG form (measured): same shape as the vertex
- *     NGG program, with the offchip system SGPRs the tessellation args
- *     declare, and it drops the unresolved tessellation-pipeline bit.
- *   - A stand-alone evaluation stage without the NGG option compiles to
- *     machine code but publishes NO register writes at all, so a driver
- *     cannot launch it from that metadata; the loadable form is the NGG one,
- *     which the driver-side loader packages as a pre-raster program, while
- *     the hull half stays unpackagable (its launch state is the driver's).
- *   - Until that changes, native/runtime_shader.c must refuse to package the
- *     hull or the domain half: the load gate is the contract, not a bug.
+ *   - psbc_compile_tess_pipeline() compiles the vertex and control halves
+ *     TOGETHER, in one ACO call, and publishes ONE merged LS/HS image. That
+ *     is what makes the vertex half a real LS: RADV's gather_shader_info_vs()
+ *     sets vs.as_ls only when next_stage is MESA_SHADER_TESS_CTRL, so a half
+ *     compiled standalone came out as a legacy VS that exported to the
+ *     parameter cache instead of writing its outputs to LDS for the control
+ *     half - and two such images concatenated have no merged entry for the
+ *     single program counter the hardware launches LS/HS from.
+ *   - On GFX10 that one program counter is the LS block (R_00B520/R_00B524)
+ *     with the resource pair at the HS block (R_00B428/R_00B42C), per the
+ *     pinned radv_get_shader_regs(); R_00B420 PGM_LO_HS is the address
+ *     register only below GFX9 and is not published here.
+ *   - The package is launchable, so it no longer carries
+ *     PSBC_UNRESOLVED_TESS_PIPELINE. A control half compiled ALONE still does,
+ *     and the hull loader still refuses it.
+ *   - LDS_SIZE in RSRC2_HS stays zero from the compiler: it depends on the
+ *     patch count, a pipeline property, so the driver owns it. The compiler
+ *     publishes the byte count through hull_tcs_lds_size instead.
+ *   - The DOMAIN half's loadable package is the NGG form, with the offchip
+ *     system SGPRs the tessellation args declare.
  */
 #include "libpsbc/psbc_compile.h"
 #include "runtime_shader.h"
@@ -82,59 +81,101 @@ int main(void)
         standalone_vs.metadata.shader_register_count,0x4b);
     assert(vs_rsrc1 && vs_rsrc2);
 
+    /* The pipeline's INPUT patch size. The merged pair needs it: the LSHS
+     * workgroup layout is derived from it, and without it the compile is
+     * refused rather than publishing an unlaunchable package. */
     PsbcCompileOptions options={
         .target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_TESS_CTRL,.entrypoint="main",
         .optimise=true,.address32_hi=2,.primitive_type=4,
-        .rasterization_samples=1};
+        .rasterization_samples=1,.patch_control_points=3};
     PsbcShaderOutput hull={0};
-    assert(psbc_compile_tess_pipeline(vs,vn*4,hs,hn*4,&options,&hull)==
+    assert(psbc_compile_tess_pipeline(vs,vn*4,hs,hn*4,es,en*4,&options,&hull)==
         PSBC_RESULT_OK);
     const PsbcShaderMetadata *m=&hull.metadata;
     assert(m->version==PSBC_SHADER_METADATA_VERSION);
     assert(m->target==PSBC_TARGET_PS5);
     assert(m->source_stage==PSBC_STAGE_TESS_CTRL);
-    assert(m->hardware_stage==PSBC_HW_STAGE_UNKNOWN);
-    assert(m->unresolved_fields & PSBC_UNRESOLVED_TESS_PIPELINE);
-    /* The hull half carries both programs: the HS wrapper at offset 0 and the
-     * LS machine code appended behind it. */
-    assert(m->hull_ls_valid);
-    assert(m->hull_ls_code_offset>0);
-    assert(m->hull_ls_code_size>0);
-    assert(hull.machine_code_size==(size_t)m->hull_ls_code_offset+
-        (size_t)m->hull_ls_code_size);
+    /* ONE merged LS/HS program. The halves are compiled together by ACO, so
+     * the vertex half is a real LS - RADV's gather_shader_info_vs() sets
+     * vs.as_ls only when next_stage is TESS_CTRL - and not a legacy VS that
+     * exports to the parameter cache. */
+    assert(m->hardware_stage==PSBC_HW_STAGE_HULL);
+    /* A launchable hull program: the tessellation-pipeline bit is gone and
+     * only the checksum remains unresolved. */
+    assert(!(m->unresolved_fields & PSBC_UNRESOLVED_TESS_PIPELINE));
+    assert(!(m->unresolved_fields & ~PSBC_UNRESOLVED_PROGRAM_CHECKSUM));
+    /* One image: the separate LS carriage the two-program model used is gone. */
+    assert(!m->hull_ls_valid);
+    assert(!m->hull_ls_code_offset && !m->hull_ls_code_size);
     assert(hull.machine_code_size%4==0);
-    /* The published LS register set is complete and names the LS block the
-     * hardware programs, and its config is the vertex half's own. */
-    assert(m->hull_ls_pgm_lo.offset==0x148 && !m->hull_ls_pgm_lo.value);
-    assert(m->hull_ls_pgm_hi.offset==0x149 && !m->hull_ls_pgm_hi.value);
-    assert(m->hull_ls_rsrc1.offset==0x14a);
-    assert(m->hull_ls_rsrc1.value==vs_rsrc1->value);
-    assert(m->hull_ls_rsrc2.offset==0x14b);
-    assert(m->hull_ls_rsrc2.value==vs_rsrc2->value);
-    /* The HS half keeps its program registers with the combined config, and
-     * the combined RSRC1 is not simply the LS one (the halves differ). */
+    /* The same control shader compiled ALONE still reports the old
+     * unlaunchable shape. */
+    PsbcShaderOutput solo={0};
+    assert(psbc_compile_shader(hs,hn*4,&options,&solo)==PSBC_RESULT_OK);
+    assert(solo.metadata.hardware_stage==PSBC_HW_STAGE_UNKNOWN);
+    assert(solo.metadata.unresolved_fields & PSBC_UNRESOLVED_TESS_PIPELINE);
+    /* And it produces MORE code than the linked pair, which is the opposite
+     * of what this test asserted before the evaluation half was linked in.
+     *
+     * The old assertion used total size as a proxy for "the merged image
+     * really contains the vertex half". That proxy is now wrong, and it is
+     * wrong for the right reason: an unlinked control half cannot know the
+     * tessellator's domain - the .tese declares it - so
+     * ac_nir_lower_tess_io_to_mem emits a RUNTIME three-way branch on
+     * nir_load_tcs_primitive_mode_amd with a separate factor store for
+     * triangles, isolines and quads, plus a conditional store of the levels
+     * for a TES that might read them. Linking the evaluation half resolves
+     * both to compile-time constants and the dead arms disappear, which is
+     * worth more than the vertex half's few instructions cost.
+     *
+     * Asserting the direction pins that: a dependency move that stopped
+     * resolving the primitive mode would put the branches back and fail
+     * here, instead of silently restoring a hull that stores quad-shaped
+     * tessellation factors for a triangle domain. */
+    assert(hull.machine_code_size<solo.machine_code_size);
+    psbc_free_output(&solo);
+    /* On GFX10 the merged stage is ONE program counter, and the pinned
+     * radv_get_shader_regs() puts it at the LS block with the resource pair at
+     * the HS block. R_00B420 PGM_LO_HS is the address register only below
+     * GFX9, so it must NOT be published for this target. */
+    const PsbcRegisterWrite *pgm_lo=find_register(m,
+        m->shader_registers,m->shader_register_count,0x148);
+    const PsbcRegisterWrite *pgm_hi=find_register(m,
+        m->shader_registers,m->shader_register_count,0x149);
+    assert(pgm_lo && pgm_hi && !pgm_lo->value && !pgm_hi->value);
+    assert(!find_register(m,m->shader_registers,m->shader_register_count,0x108));
+    assert(!find_register(m,m->shader_registers,m->shader_register_count,0x109));
     const PsbcRegisterWrite *hs_rsrc1=find_register(m,
         m->shader_registers,m->shader_register_count,0x10a);
     const PsbcRegisterWrite *hs_rsrc2=find_register(m,
         m->shader_registers,m->shader_register_count,0x10b);
     assert(hs_rsrc1 && hs_rsrc2 && hs_rsrc1->value && hs_rsrc2->value);
-    assert(find_register(m,m->shader_registers,m->shader_register_count,
-        0x108) && find_register(m,m->shader_registers,m->shader_register_count,
-        0x109));
+    assert(m->shader_register_count==4);
+    /* The merged config is genuinely merged: it is NOT the standalone vertex
+     * half's config, which is what the old two-program model republished. */
+    assert(hs_rsrc1->value!=vs_rsrc1->value ||
+           hs_rsrc2->value!=vs_rsrc2->value);
+    /* LDS_SIZE (bits 18..26 of RSRC2_HS) stays the DRIVER's field: the merged
+     * config cannot carry it because the size depends on the patch count, a
+     * pipeline property. The compiler publishes the byte count instead. */
+    assert(((hs_rsrc2->value>>18)&0x1ffu)==0u);
+    assert(m->hull_tess_wg_valid);
+    assert(m->hull_num_patches_per_wg>0 && m->hull_num_patches_per_wg<=255);
+    assert(m->hull_tcs_lds_size>0);
+    assert(m->hull_workgroup_size>0);
     /* The hull/domain interface state the control stage fully determines:
      * triangles, integer spacing, clockwise output for this fixture. */
     const PsbcRegisterWrite *tf=find_register(m,m->context_registers,
         m->context_register_count,0x2db);
     assert(tf && tf->value==0x41u);
-    /* The control stage compiled with a user-SGPR window (its consumer vertex
-     * half shares the argument block) and no advertised descriptor/push use in
-     * this fixture; that is the shape the driver's ABI has to serve. */
+    /* The merged program shares one argument block across both halves. */
     assert(m->user_sgpr_count>0);
     assert(!m->descriptor_set0_valid && !m->push_constants_valid);
-    /* The load gate must keep refusing both halves while the tessellation
-     * package state is unresolved. */
+    /* The generic loader still refuses it - a hull is not a plain pre-raster
+     * program - but the HULL loader accepts exactly this shape. */
     struct ps5vk_runtime_shader arena;
     assert(ps5vk_runtime_shader_build(&arena,&hull)!=0);
+    assert(ps5vk_runtime_hull_build(&arena,&hull)==0);
     psbc_free_output(&hull);
 
     /* The evaluation half compiles, but a plain evaluation compile publishes
@@ -216,7 +257,7 @@ int main(void)
     PsbcCompileOptions wrong=options;
     wrong.stage=PSBC_STAGE_VERTEX;
     PsbcShaderOutput bad={0};
-    assert(psbc_compile_tess_pipeline(vs,vn*4,hs,hn*4,&wrong,&bad)!=
+    assert(psbc_compile_tess_pipeline(vs,vn*4,hs,hn*4,es,en*4,&wrong,&bad)!=
         PSBC_RESULT_OK);
     assert(!bad.machine_code && !bad.data);
     psbc_free_output(&bad);

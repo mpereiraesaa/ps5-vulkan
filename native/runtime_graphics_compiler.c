@@ -161,7 +161,33 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
              * to the vertex stage is refused rather than projected onto a stage
              * that cannot read it. Every other descriptor type stays outside
              * the profile instead of being half-delivered. */
-            if(set->binding[b].count &&
+            /* DIAGNOSTIC ONLY, and deliberately not a widening of the
+             * shipped profile.
+             *
+             * A storage buffer is the only way a tessellation EVALUATION half
+             * can produce an observable that does not depend on
+             * rasterisation, and that is the one measurement this task now
+             * needs: the hull is proven to execute and store correct
+             * tessellation factors, the draw retires, and nothing reaches the
+             * rasteriser, which leaves "the domain never executes" and "it
+             * executes and its exports are discarded" with no register able
+             * to separate them.
+             *
+             * Admitting the type under PS5VK_TESS_PROBE lets that
+             * measurement happen without advertising a capability nothing has
+             * evidenced. The shipped build keeps the profile exactly as it
+             * was, so no application can reach this path and no contract
+             * changes. If the measurement shows the rest of the descriptor
+             * path really does deliver a storage buffer to a graphics stage,
+             * that is evidence for promoting it properly, with its own tests
+             * - not a reason to have promoted it here. */
+            const int diagnostic_storage_buffer =
+#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+                set->type[b]==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+#else
+                0;
+#endif
+            if(set->binding[b].count && !diagnostic_storage_buffer &&
                 (!(set->binding[b].stages&visible) ||
                 (set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
@@ -512,8 +538,14 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
             key->tess_control.specialization_count?&key->tess_control:&key->vertex;
         if(!apply_parameters(&hull_options,hull_specialized,key,
                 VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT))goto failed;
+        /* The evaluation half goes in LINK-ONLY, so the control half learns
+         * the tessellator configuration it cannot declare for itself: the
+         * domain, spacing, winding and point mode live in the .tese, and the
+         * tessellation-factor layout the hull stores depends on the domain. */
         result=psbc_compile_tess_pipeline(key->vertex.words,key->vertex.word_count*4u,
-            key->tess_control.words,key->tess_control.word_count*4u,&hull_options,&p->hull);
+            key->tess_control.words,key->tess_control.word_count*4u,
+            key->tess_eval.words,key->tess_eval.word_count*4u,
+            &hull_options,&p->hull);
         if(result!=PSBC_RESULT_OK)goto failed;
         /* The hull's metadata describes the shared argument block from the
          * control half's view, so its push constants are checked against the
@@ -523,10 +555,52 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
                 VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT))goto failed;
         PsbcCompileOptions domain_options={.target=PSBC_TARGET_PS5,
             .stage=PSBC_STAGE_TESS_EVAL,.entrypoint=key->tess_eval.entry,
-            .optimise=true,.ngg=true,.address32_hi=2,.rasterization_samples=1};
+            .optimise=true,.ngg=true,.address32_hi=2,.rasterization_samples=1,
+            /* The domain is LINKED against the control half, which is what
+             * keeps num_tess_patches, the attribute stride and
+             * tes_reads_tess_factors compile-time constants. Compiled alone
+             * it reads all three at runtime from the tcs_offchip_layout user
+             * SGPR, an ABI nothing here supplies. The patch size is what the
+             * control half's patch-count derivation needs. */
+            .patch_control_points=key->patch_control_points,
+            /* The device facts the GE's parameter-cache allocation needs.
+             *
+             * radv programs GE_PC_ALLOC for every NGG pipeline, and psbc will
+             * compute it through the same ac_compute_late_alloc() radv uses -
+             * but only when the caller supplies these. Nothing in this driver
+             * ever supplied them, for any pipeline, so the register has never
+             * been programmed and every NGG draw has run on whatever the
+             * platform left there. That is tolerable for the vertex-fed
+             * pipelines that pass; it is the last register in radv's tracked
+             * per-draw set that a tessellation pipeline also leaves alone, and
+             * a domain shader's parameter-cache allocation happens after
+             * tessellation rather than as vertices arrive.
+             *
+             * The values are the pinned tables, not estimates: ac_gpu_info.c
+             * names CHIP_GFX1013 explicitly with pc_lines = 1024, and the
+             * eighteen good compute units per shader array are the same
+             * measured topology this driver's tessellation ring sizing already
+             * uses. Culling is off and this domain needs no scratch. */
+            .ngg_device_facts=true,
+            .ngg_pc_lines=1024u,
+            .ngg_min_good_cu_per_sa=18u,
+            .ngg_culling=false,
+            .ngg_uses_scratch=false,
+            /* DIAGNOSTIC BISECT, default off: the domain compiled with NGG
+             * passthrough forced off. Every passing NGG draw on this device
+             * is vertex-fed, so passthrough has never been exercised WITH a
+             * domain shader here, and the measurements now say the hull runs,
+             * its factors are correct, and the evaluation half never
+             * launches. */
+#if defined(PS5VK_TESS_NO_PASSTHRU) && PS5VK_TESS_NO_PASSTHRU
+            .ngg_no_passthrough=true,
+#endif
+            };
         if(!apply_parameters(&domain_options,&key->tess_eval,key,
                 VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))goto failed;
-        result=psbc_compile_shader(key->tess_eval.words,key->tess_eval.word_count*4u,
+        result=psbc_compile_domain_pipeline(
+            key->tess_control.words,key->tess_control.word_count*4u,
+            key->tess_eval.words,key->tess_eval.word_count*4u,
             &domain_options,&p->domain);
         if(result!=PSBC_RESULT_OK)goto failed;
         if(!push_metadata_supported(&p->domain.metadata,key,
