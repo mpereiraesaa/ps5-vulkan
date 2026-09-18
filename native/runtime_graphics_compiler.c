@@ -499,7 +499,11 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
          * map, the same rule the geometry pair follows. */
         PsbcCompileOptions hull_options={.target=PSBC_TARGET_PS5,
             .stage=PSBC_STAGE_TESS_CTRL,.entrypoint=key->tess_control.entry,
-            .optimise=true,.address32_hi=2,.rasterization_samples=1};
+            .optimise=true,.address32_hi=2,.rasterization_samples=1,
+            /* The input patch size is what makes the hull compile derive its
+             * workgroup layout; without it the metadata publishes no tess
+             * workgroup state and the native loader refuses the hull. */
+            .patch_control_points=key->patch_control_points};
         if(key->tess_control.specialization_count && key->vertex.specialization_count)goto failed;
         const struct ps5vk_graphics_module_key *hull_specialized=
             key->tess_control.specialization_count?&key->tess_control:&key->vertex;
