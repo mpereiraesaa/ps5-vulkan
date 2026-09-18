@@ -215,6 +215,17 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .vertex_buffer_slot=v->vertex_buffer_table_user_data_dword,
         .vertex_buffer_usage_mask=v->vertex_buffer_usage_mask,
         .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout,
+        /* The pre-raster stage's ring descriptor table, when it declares one.
+         * Only a tessellation DOMAIN does: the PS5 argument path declares the
+         * table as a user SGPR pair for both tessellation stages because the
+         * system-block ring_offsets is not writable here. The address is not
+         * known yet - the pipeline allocates the rings after this - so the
+         * slot is recorded now and the owner fills the two words in once the
+         * block exists. A stage that declares no table leaves all four fields
+         * zero, which the value builder rejects if any of them is set. */
+        .ring_table_valid=v->ps5_ring_table_valid,
+        .ring_table_slot=v->ps5_ring_table_valid?
+            v->ps5_ring_table_user_data_dword:0u,
         /* Where the compiler says the driver's block starts, and the two system
          * registers a merged pair gates on. They are recorded, not written: the
          * base was measured below the window on every compiled program, so the

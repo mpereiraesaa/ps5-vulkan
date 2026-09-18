@@ -382,6 +382,16 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
          * window and nothing here configures a global ring table. */
         pair->tess_ring_table_low=(uint32_t)rings_va;
         pair->tess_ring_table_high=(uint32_t)(rings_va>>32);
+        /* The DOMAIN half's copy of the same pointer. Its metadata declares
+         * the table at a window-relative dword and the draw path writes the
+         * pre-raster user-data block from these fields, which could not be
+         * filled when the block was built because the rings are allocated
+         * here. A domain that declares a table and receives zero dereferences
+         * NULL the moment it reads a per-vertex or per-patch input. */
+        if(pair->runtime_arguments.ring_table_valid) {
+            pair->runtime_arguments.ring_table_low=(uint32_t)rings_va;
+            pair->runtime_arguments.ring_table_high=(uint32_t)(rings_va>>32);
+        }
         if(!input->hull.metadata.ps5_ring_table_valid ||
            input->hull.metadata.ps5_ring_table_user_data_dword+1u>=
                input->hull.metadata.user_sgpr_count) {
