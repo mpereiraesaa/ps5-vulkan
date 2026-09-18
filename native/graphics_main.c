@@ -2501,6 +2501,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,points_module,NULL);
     vkDestroyShaderModule(d,lines_module,NULL);
 #if PS5VK_TESS_PROBE
+    extern unsigned ps5vk_pipeline_refusal_site(void);
     /* The TessCoord CONTROL draw, run FIRST: the same pipeline shape with an
      * evaluation half whose position is a pure function of gl_TessCoord and a
      * control half that writes only the levels - no off-chip reads anywhere.
@@ -2674,7 +2675,6 @@ static void geometry_probe(VkDevice d)
     for(unsigned i=0;i<4;++i)vkDestroyShaderModule(d,coord_modules[i],NULL);
 #endif
 #if PS5VK_TESS_PROBE
-    extern unsigned ps5vk_pipeline_refusal_site(void);
     /* Tessellation witness (report-only). Two triangle patches: the left
      * tessellated at level three, the right at level one. The evaluation half
      * paints the QUANTISED tessCoord field - colour = (floor(u*n)/n,
