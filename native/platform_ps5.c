@@ -224,12 +224,32 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features |= PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
                                     PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
                                     PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
-#if defined(PS5VK_RASTER_DIAGNOSTIC) && PS5VK_RASTER_DIAGNOSTIC
+    /* User-defined clip and cull distances: the pre-raster export (static and
+     * dynamically indexed) and the fragment stage's read of the interpolated
+     * value are native-witnessed on exactly this build - the eleven-case
+     * clip/cull witness, private-captures/t04/clip-cull-pixel-read-acceptance -
+     * and the profile reports the three distance limits at the Vulkan floor of
+     * eight, which is the width of the two packed position registers the
+     * interface policy bounds a declaration against. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
+                                    PS5VK_FEATURE_SHADER_CULL_DISTANCE;
+    /* The optional geometry stage, on the same measured graphics path: the
+     * nineteen-case geometry witness verifies the merged pre-raster program end
+     * to end - the ES->GS handoff it reads, the triangle, point and line input
+     * families under their own input assemblies, gl_InvocationID, the
+     * per-primitive id, and the five mandatory minima the profile reports in
+     * src/graphics_limits.h - so this build is the one that may advertise it.
+     * The runtime graphics cache and the interface policy are what refuse a
+     * geometry pipeline on any build without this bit. */
+    platform->supported_features |= PS5VK_FEATURE_GEOMETRY_SHADER;
     /* Private measurement build for DXVK262-T05 (tools/build_sdk.py honours
      * PS5VK_RASTER_DIAGNOSTIC=1): report the four rasterization/viewport
      * features so the consumer witness can negotiate them through the public
-     * API and measure them on hardware. Never set in the shipping build; the
+     * API and measure them on hardware. Default off, like the optional-stage
+     * diagnostic, and never set in the shipping build; the bits are declared
+     * in src/vk_internal.h and nothing else in this file sets them. The
      * shipping promotion is a separate, evidence-backed change. */
+#if defined(PS5VK_RASTER_DIAGNOSTIC) && PS5VK_RASTER_DIAGNOSTIC
     platform->supported_features |= PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
                                     PS5VK_FEATURE_DEPTH_CLAMP |
                                     PS5VK_FEATURE_FILL_MODE_NON_SOLID |

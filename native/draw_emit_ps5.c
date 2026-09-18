@@ -193,7 +193,7 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     uint32_t *next = *cursor, *end = next + capacity;
     if (ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->cx, state->cx_count,
             mapping, mapping_bytes, sceAgcDcbSetCxRegistersIndirect) ||
-        ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->uc, 3,
+        ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->uc, state->uc_count,
             mapping, mapping_bytes, sceAgcDcbSetUcRegistersIndirect) ||
         ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->sh, sh_count,
             mapping, mapping_bytes, sceAgcDcbSetShRegistersIndirect)) return VK_ERROR_UNKNOWN;

@@ -12,7 +12,14 @@ DEPS = [
         "name": "opengnm-psbc",
         "dest": ROOT / "third_party/psbc-reference",
         "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
-        "pin": "c96cb63ba2c3b65b22ae76457e726dde7aeb2ace",
+        # The published T04 candidate, pinned by exact commit: it carries the
+        # metadata this integration reads (the merged pair's system-SGPR indices
+        # and launch counts, the driver user-data window base, the pixel stage's
+        # distance reads) under metadata version 17. It is an audited dependency
+        # candidate, not a merge of the dependency's main: the pin is the whole
+        # contract, so a different commit has to be pinned explicitly and the
+        # driver cache key moves with the metadata version.
+        "pin": "cce48c6cc49b5d4ad24de2bf587fa4f3b63a326a",
     },
     {
         "name": "opengnm",

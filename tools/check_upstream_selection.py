@@ -303,6 +303,121 @@ def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dic
     return leaves
 
 
+def _clip_distance_generated_segments(text: str) -> set[str]:
+    """Group segments the pinned clipping factory composes at run time.
+
+    The user-defined distance factory registers each case group twice: under its
+    literal name and under that name with `_dynamic_index` appended for the
+    non-constant write. The suffixed names therefore never appear as literals in
+    the module, and accepting them requires the exact composition expression to
+    be present together with both literal group names.
+    """
+    if not ('const std::string mainGroupName =' in text and
+            'de::toString(caseGroups[groupNdx].groupName) + (dynamicIndexing ? "_dynamic_index" : "")'
+            in text and
+            '{"clip_distance", false},' in text and
+            '{"clip_cull_distance", true},' in text):
+        return set()
+    return {"clip_distance_dynamic_index", "clip_cull_distance_dynamic_index"}
+
+
+def _geometry_adjacency_leaf_names(text: str) -> set[str]:
+    """Leaf names the pinned geometry input factory composes at run time.
+
+    The triangle-strip-adjacency group names each leaf after the vertex count it
+    iterates, so the name is a literal prefix plus the loop index. Bounded to that
+    factory's exact construction - the prefix literal, de::toString of the loop
+    variable, and the loop's inclusive bound - so a renamed prefix or a different
+    bound derives nothing rather than a wrong list.
+    """
+    match = re.search(
+        r'const string name\s*=\s*"([a-z_]+)"\s*\+\s*de::toString\(vertexCount\)', text)
+    loop = re.search(
+        r'for\s*\(\s*int\s+vertexCount\s*=\s*0\s*;\s*vertexCount\s*<=\s*(\d+)\s*;', text)
+    if not match or not loop or int(loop.group(1)) > 32:
+        return set()
+    return {f"{match.group(1)}{n}" for n in range(int(loop.group(1)) + 1)}
+
+
+def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
+    """Derive the user-defined clip/cull leaf names of the pinned clipping module.
+
+    The factory registers one leaf per clip count, named from the count and - in
+    the combined group - from the widest cull count that still fits the combined
+    ceiling: `numClipPlanes` plus, when the group uses cull distances,
+    `"_" + min(MAX_CULL_DISTANCES, MAX_COMBINED - numClipPlanes)`. Accept a name
+    only when the module still contains that exact construction, the group and
+    shader segments name the static-index vertex-only variants, and the ceiling
+    constants are the ones the module declares.
+    """
+    construction = (
+        'const std::string caseName =' in text and
+        'de::toString(numClipPlanes) +' in text and
+        'de::toString(numCullPlanes)' in text and
+        '{"clip_distance", false},' in text and
+        '{"clip_cull_distance", true},' in text and
+        'const uint32_t flagTessellation = 1u << 0;' in text and
+        'const uint32_t flagGeometry     = 1u << 1;' in text
+    )
+    if not construction:
+        return set()
+    def constant(name: str) -> int:
+        match = re.search(rf"\b{name}\s*=\s*(\d+)", text)
+        return int(match.group(1)) if match else 0
+    max_clip = constant("MAX_CLIP_DISTANCES")
+    max_cull = constant("MAX_CULL_DISTANCES")
+    max_combined = constant("MAX_COMBINED_CLIP_AND_CULL_DISTANCES")
+    if not max_clip or not max_cull or not max_combined:
+        return set()
+    # The same factory registers the leaves a second time under a
+    # `_dynamic_index` main group (the non-constant write) and appends
+    # `_fragmentshader_read` to the case name for the variant the fragment stage
+    # reads. Both constructions have to be present in the pinned module, exactly
+    # like the static one above, or neither suffix is accepted.
+    construction_reads = (
+        '{"", false}, {"_fragmentshader_read", true}};' in text and
+        'fragmentShaderReads[fragmentShaderReadNdx].name' in text and
+        'readInFragmentShader' in text
+    )
+    construction_dynamic = (
+        'const std::string mainGroupName =' in text and
+        'de::toString(caseGroups[groupNdx].groupName) + (dynamicIndexing ? "_dynamic_index" : "")' in text
+    )
+    segments = path.split(".")
+    if len(segments) != 6 or segments[1] != "clipping" or segments[2] != "user_defined":
+        return set()
+    group = segments[3]
+    shader = segments[4]
+    leaf = segments[5]
+    if shader != "vert":
+        return set()
+    read_suffix = ""
+    if leaf.endswith("_fragmentshader_read"):
+        if not construction_reads:
+            return set()
+        read_suffix = "_fragmentshader_read"
+        leaf = leaf[: -len(read_suffix)]
+    dynamic = False
+    if group.endswith("_dynamic_index"):
+        if not construction_dynamic:
+            return set()
+        dynamic = True
+        group = group[: -len("_dynamic_index")]
+    names: set[str] = set()
+    for clip in range(1, max_clip + 1):
+        # The combined group adds the widest cull count that still fits.
+        if group == "clip_cull_distance":
+            cull = min(max_cull, max_combined - clip)
+            names.add(f"{clip}_{cull}" if cull else str(clip))
+        elif group == "clip_distance":
+            names.add(str(clip))
+    # `dynamic` selects which main group the leaf belongs to; the name set is
+    # the same because the factory builds both groups from the same loop, and the
+    # read suffix is already reflected in `leaf`.
+    assert dynamic in (False, True)
+    return {name + read_suffix for name in names}
+
+
 def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
     """Derive the shader_draw_parameters leaf names of the pinned draw module.
 
@@ -1074,7 +1189,9 @@ def main() -> int:
             _dynamic_state_compute_generated_segments(text)
             if source_path.name == "vktDynamicStateComputeTests.cpp" else
             _indirect_draw_generated_segments(text)
-            if source_path.name == "vktDrawIndirectTest.cpp" else set()
+            if source_path.name == "vktDrawIndirectTest.cpp" else
+            _clip_distance_generated_segments(text)
+            if source_path.name == "vktClippingTests.cpp" else set()
         )
         for segment in segments[1:-1]:
             if (not re.search(r'"' + re.escape(segment) + r'"', searchable) and
@@ -1152,6 +1269,12 @@ def main() -> int:
             continue
         if leaf in _table_composed_leaf_names(text, function_text):
             continue
+        # The geometry input factory names its triangle-strip-adjacency leaves
+        # after the vertex count it iterates, so only the prefix is a literal.
+        # Bounded to that factory's exact construction expression.
+        if (source_path.name == "vktGeometryInputGeometryShaderTests.cpp" and
+                leaf in _geometry_adjacency_leaf_names(text)):
+            continue
         # This factory's manifest citations point at individual registration
         # blocks inside one function, so the generic forward-only extractor
         # cannot recover the enclosing function. The recognizer itself is
@@ -1172,6 +1295,12 @@ def main() -> int:
         # construction and to the cited group block. Applied to this one module.
         if (source_path.name == "vktDrawShaderDrawParametersTests.cpp" and
                 leaf in _draw_shader_draw_parameters_leaf_names(text, function_text)):
+            continue
+        # The clip/cull distance factory composes its combined-group leaf names
+        # from the clip count and the widest cull count that fits the combined
+        # ceiling. Bounded to that factory's exact construction expressions.
+        if (source_path.name == "vktClippingTests.cpp" and
+                leaf in _clip_distance_leaf_names(path, text)):
             continue
         if leaf.isdigit():
             continue

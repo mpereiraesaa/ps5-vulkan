@@ -1,5 +1,6 @@
 #include "draw_prepare_ps5.h"
 #include "vertex_fetch.h"
+#include "graphics_pipeline_ps5.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,13 +75,15 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport,
     const VkRect2D *scissor, uint32_t viewport_count, const struct ps5vk_raster_state *raster,
     const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
-    uint32_t width, uint32_t height, struct ps5vk_draw_state *out)
+    uint32_t width, uint32_t height, unsigned index_width, struct ps5vk_draw_state *out)
 {
     /* The prepared draw hands the operation's OWN viewport arrays and raster
-     * snapshot to the state builder, never the pipeline's static copies. */
+     * snapshot to the state builder, never the pipeline's static copies, and
+     * the non-indexed fixture must reach it with no index width, so a stale
+     * restart index cannot be programmed for a draw that carries none. */
     assert(p && viewport_count == 2 && viewport[0].width == 4 && viewport[1].width == 2 &&
         scissor[0].extent.width == 4 && scissor[1].extent.width == 2 && raster &&
-        raster->depth_bias_enable && raster->depth_bias_slope == 2.0f &&
+        raster->depth_bias_enable && raster->depth_bias_slope == 2.0f && index_width == 0 &&
         color->count == 16 && !depth && area->extent.width == 4 && width == 4 && height == 4);
     *out = (struct ps5vk_draw_state){.cx_count = 87, .modifier = 5,.runtime=runtime}; return VK_SUCCESS;
 }
@@ -176,6 +179,31 @@ int main(void)
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=VK_SUCCESS &&
         allocations==allocated && !prepared.backing);
     set.signature.binding[1].first=1;
+    /* A binding the caller declared for the GEOMETRY stage. The pinned
+     * conformance module binds its uniform buffer and its sampled image to that
+     * stage alone, so the draw path has to carry it when - and only when - the
+     * pipeline's pre-raster program is the merged vertex+geometry pair. The flag
+     * is what the native create recorded from the compiled metadata; without it
+     * the same declaration stays refused, because the stage projection would
+     * have dropped the binding. */
+    {
+        struct ps5vk_graphics_pair pair={.ready=1,.geometry_preraster=1};
+        struct ps5vk_native_graphics_pipeline native={.pair=&pair};
+        VkShaderStageFlags saved=set.signature.binding[0].stages;
+        set.signature.binding[0].stages=VK_SHADER_STAGE_GEOMETRY_BIT;
+        p.sets[0]=set.signature;
+        p.graphics_state=&native;
+        assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)==VK_SUCCESS);
+        assert(prepared.texture_table==prepared.vertex_table+4);
+        ps5vk_native_release_draw(&prepared);
+        pair.geometry_preraster=0;
+        allocated=allocations;
+        assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=
+            VK_SUCCESS && allocations==allocated && !prepared.backing);
+        p.graphics_state=NULL;
+        set.signature.binding[0].stages=saved;
+        p.sets[0]=set.signature;
+    }
     set.pool=NULL;
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,&prepared)!=VK_SUCCESS);
     set.pool=&pool;
