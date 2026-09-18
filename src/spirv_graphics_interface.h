@@ -33,4 +33,14 @@ int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_k
  * cannot describe. */
 int ps5vk_spirv_stage_distance_reads(const struct ps5vk_graphics_module_key *,
                                      unsigned *clip_reads,unsigned *cull_reads);
+/* Whether one GEOMETRY module writes gl_ViewportIndex (built-in 10): nonzero
+ * when it declares the output, zero for a module that does not write it and for
+ * a module this profile cannot describe.
+ *
+ * A declaration is what the profile can describe, not permission to use it.
+ * Core Vulkan lets only a geometry stage select a viewport, and the selection
+ * is meaningful only when the pipeline programs more than one bank, so the
+ * adapter refuses a pipeline that writes an index unless the logical device
+ * enabled multiViewport - decided on the enabled mask, never on this fact. */
+int ps5vk_spirv_stage_viewport_index(const struct ps5vk_graphics_module_key *);
 #endif
