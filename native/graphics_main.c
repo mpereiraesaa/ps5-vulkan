@@ -2593,18 +2593,15 @@ static void geometry_probe(VkDevice d)
             CHECK(vkAllocateCommandBuffers(d,&tess_cbi,&tess_cb));
             VkCommandBufferBeginInfo tess_begin={
                 .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+            /* The DI semantics bisect: the same pipeline draws ONE patch
+             * (three vertices) and then TWO (six), each with its own pass,
+             * readback and log line, so a patch-count semantics fault
+             * separates from the state faults in one run. */
+            for(unsigned draw_index=0;draw_index<2 && !PS5VK_TESS_NO_DRAW;++draw_index) {
+            const uint32_t tess_vertices=draw_index?6u:3u;
+            VkCommandBufferResetFlags unused_reset={0};(void)unused_reset;
+            CHECK(vkResetCommandPool(d,tess_pool,0));
             CHECK(vkBeginCommandBuffer(tess_cb,&tess_begin));
-            if (PS5VK_TESS_NO_DRAW) {
-                /* The create-only diagnostic: the pipeline exists and the
-                 * launch state is programmed; the draw is the bisect step. */
-                ps5log_printf(PS5LOG_MARK,
-                    "PS5VK_TESS_PROBE rc=%d created=1 draw_skipped=1 "
-                    "stages_en=%08x ls_hs_config=%08x tf_param=%08x di_patch=9",
-                    (int)tess_rc,t_stages_en,t_ls_hs,t_tf);
-                vkDestroyPipeline(d,tess_pipeline,NULL);
-                vkDestroyCommandPool(d,tess_pool,NULL);
-                goto tess_done;
-            }
             VkClearValue tess_clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
             VkRenderPassBeginInfo tess_rbi={
                 .sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -2613,8 +2610,7 @@ static void geometry_probe(VkDevice d)
                 .clearValueCount=1,.pClearValues=&tess_clear};
             vkCmdBeginRenderPass(tess_cb,&tess_rbi,VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(tess_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,tess_pipeline);
-            /* Two triangle patches, three vertices each. */
-            vkCmdDraw(tess_cb,6,1,0,0);
+            vkCmdDraw(tess_cb,tess_vertices,1,0,0);
             vkCmdEndRenderPass(tess_cb);
             CHECK(vkEndCommandBuffer(tess_cb));
             VkSubmitInfo tess_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -2627,101 +2623,24 @@ static void geometry_probe(VkDevice d)
             static uint8_t tess_detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
             if(ps5vk_rgba8_64k_rx_detile(tess_detiled,sizeof(tess_detiled),map,
                 (size_t)stride,extent,extent))fail("tess-detile",-1);
-            /* The two patches' screen-space corners, derived from the witness
-             * vertex stage's own NDC list through the viewport mapping. */
-            const float corners[2][3][2]={
-                {{-0.9f,-0.9f},{-0.1f,-0.9f},{-0.5f,0.9f}},
-                {{ 0.1f,-0.9f},{ 0.9f,-0.9f},{ 0.5f,0.9f}}};
+            unsigned long long t_ink=0;
             for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x) {
-                const float px=(float)x+0.5f,py=(float)y+0.5f;
-                const float ndc_x=px/(float)extent*2.0f-1.0f;
-                const float ndc_y=1.0f-py/(float)extent*2.0f;
-                int patch=-1;
-                float tess[3]={0,0,0};
-                for(unsigned p=0;p<2;++p) {
-                    const float (*t)[2]=corners[p];
-                    const float denom=(t[1][1]-t[2][1])*(t[0][0]-t[2][0])+
-                        (t[2][0]-t[1][0])*(t[0][1]-t[2][1]);
-                    if(denom==0.0f)continue;
-                    const float a=((t[1][1]-t[2][1])*(ndc_x-t[2][0])+
-                        (t[2][0]-t[1][0])*(ndc_y-t[2][1]))/denom;
-                    const float b=((t[2][1]-t[0][1])*(ndc_x-t[2][0])+
-                        (t[0][0]-t[2][0])*(ndc_y-t[2][1]))/denom;
-                    const float c=1.0f-a-b;
-                    if(a>=-0.002f&&b>=-0.002f&&c>=-0.002f){
-                        patch=(int)p;tess[0]=a;tess[1]=b;tess[2]=c;break;}
-                }
                 const uint8_t *pxb=tess_detiled+4*((size_t)y*extent+x);
-                const int is_ink=pxb[0]||pxb[1]||pxb[2];
-                if(patch<0) {
-                    if(is_ink)++t_foreign;
-                    continue;
-                }
-                ++t_expected;
-                if(!is_ink){++t_missing;continue;}
-                /* The containing sub-triangle of the pixel's tessCoord: the
-                 * equal-spacing grid cell it sits in, split by its diagonal. */
-                const float level=patch==0?3.0f:1.0f;
-                const float u=tess[0]*level,v=tess[1]*level;
-                const float iu=floorf(u),iv=floorf(v);
-                const int upright=((u-iu)+(v-iv))<=1.0f;
-                float corner_tess[3][3];
-                if(upright) {
-                    corner_tess[0][0]=iu/level;corner_tess[0][1]=iv/level;
-                    corner_tess[1][0]=(iu+1.0f)/level;corner_tess[1][1]=iv/level;
-                    corner_tess[2][0]=iu/level;corner_tess[2][1]=(iv+1.0f)/level;
-                } else {
-                    corner_tess[0][0]=(iu+1.0f)/level;corner_tess[0][1]=iv/level;
-                    corner_tess[1][0]=(iu+1.0f)/level;corner_tess[1][1]=(iv+1.0f)/level;
-                    corner_tess[2][0]=iu/level;corner_tess[2][1]=(iv+1.0f)/level;
-                }
-                corner_tess[0][2]=1.0f-corner_tess[0][0]-corner_tess[0][1];
-                corner_tess[1][2]=1.0f-corner_tess[1][0]-corner_tess[1][1];
-                corner_tess[2][2]=1.0f-corner_tess[2][0]-corner_tess[2][1];
-                /* The pixel's weights inside its sub-triangle, solved directly
-                 * against its own tessCoord. */
-                const float d=(corner_tess[1][0]-corner_tess[0][0])*
-                    (corner_tess[2][1]-corner_tess[0][1])-
-                    (corner_tess[2][0]-corner_tess[0][0])*
-                    (corner_tess[1][1]-corner_tess[0][1]);
-                if(d==0.0f){++t_wrong;++t_covered;continue;}
-                const float wa=((corner_tess[1][0]-tess[0])*
-                    (corner_tess[2][1]-corner_tess[0][1])-
-                    (corner_tess[2][0]-tess[0])*
-                    (corner_tess[1][1]-corner_tess[0][1]))/d;
-                const float wb=((corner_tess[2][0]-corner_tess[0][0])*
-                    (tess[1]-corner_tess[0][1])-
-                    (tess[0]-corner_tess[0][0])*
-                    (corner_tess[2][1]-corner_tess[0][1]))/d;
-                const float weights[3]={wa,wb,1.0f-wa-wb};
-                /* The evaluation half's colour at each corner: the quantised
-                 * tessCoord components plus the patch's own constant. */
-                float expect[3]={0,0,patch==0?0.125f:0.625f};
-                for(int corner=0;corner<3;++corner)
-                    for(int ch=0;ch<2;++ch) {
-                        const float q=floorf(corner_tess[corner][ch]*level)/level;
-                        expect[ch]+=weights[corner]*q;
-                    }
-                /* B8G8R8A8: byte 2 red, byte 1 green, byte 0 blue. */
-                int wrong=0;
-                for(int ch=0;ch<3;++ch) {
-                    const unsigned got=pxb[ch];
-                    const unsigned want=(unsigned)(expect[2-ch]*255.0f+0.5f);
-                    const unsigned diff=got>want?got-want:want-got;
-                    if(diff>1)++wrong;
-                }
+                if(pxb[0]||pxb[1]||pxb[2])++t_ink;
+            }
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_DRAW vertices=%u ink=%llu digest=%016llx "
+                "stages_en=%08x ls_hs_config=%08x tf_param=%08x di_patch=9 "
+                "ring_table=%08x%08x",
+                tess_vertices,(unsigned long long)t_ink,
+                (unsigned long long)geometry_digest(tess_detiled,sizeof(tess_detiled)),
+                t_stages_en,t_ls_hs,t_tf,
+                tess_native->pair->tess_ring_table_high,
+                tess_native->pair->tess_ring_table_low);
+            }
                 if(wrong)++t_wrong;
                 ++t_covered;
             }
-            ps5log_printf(PS5LOG_MARK,
-                "PS5VK_TESS_PROBE rc=%d created=1 expected=%llu covered=%llu missing=%llu "
-                "foreign=%llu wrong_color=%llu digest=%016llx patches=2 levels=3,1 "
-                "stages_en=%08x ls_hs_config=%08x tf_param=%08x di_patch=9",
-                (int)tess_rc,(unsigned long long)t_expected,(unsigned long long)t_covered,
-                (unsigned long long)t_missing,(unsigned long long)t_foreign,
-                (unsigned long long)t_wrong,
-                (unsigned long long)geometry_digest(tess_detiled,sizeof(tess_detiled)),
-                t_stages_en,t_ls_hs,t_tf);
             vkDestroyPipeline(d,tess_pipeline,NULL);
             vkDestroyCommandPool(d,tess_pool,NULL);
         } else {
