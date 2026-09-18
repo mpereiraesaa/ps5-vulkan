@@ -2575,7 +2575,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,family_vertex_module,NULL);
     vkDestroyShaderModule(d,points_module,NULL);
     vkDestroyShaderModule(d,lines_module,NULL);
-#if PS5VK_TESS_PROBE && (PS5VK_TESS_VARIANT==1 || PS5VK_TESS_VARIANT==2)
+#if PS5VK_TESS_PROBE && (PS5VK_TESS_VARIANT==1 || PS5VK_TESS_VARIANT==2 || PS5VK_TESS_VARIANT==4)
     extern unsigned ps5vk_pipeline_refusal_site(void);
     /* CONTROL A (PS5VK_TESS_VARIANT==1) and CONTROL B (==2). Exactly ONE of
      * them is compiled into an executable, and the executable draws it once:
@@ -2601,16 +2601,38 @@ static void geometry_probe(VkDevice d)
 #if PS5VK_TESS_VARIANT==1
 #define PS5VK_TESS_CONTROL_NAME "A-tesscoord-nonzero"
 #define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_coord_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==4
+/* Variant D: control A's pipeline exactly, with the evaluation half replaced
+ * by one that also writes to a storage buffer.
+ *
+ * The position and colour maths are identical, so the image oracle is the
+ * same and the two variants are directly comparable. The addition answers the
+ * one question no register can: a tessellation evaluation shader has NO
+ * per-vertex input except gl_TessCoord, so if it executes its exports must
+ * cover pixels - and control A's image is empty with no foreign pixels
+ * either. That leaves "the domain never executes" and "it executes and its
+ * exports are discarded", and a memory write is the only observable the stage
+ * has that does not depend on rasterisation. The buffer answers three things
+ * at once: whether the stage ran, how many vertices the tessellator produced,
+ * and whether gl_TessCoord arrives with real values or as zeroes. */
+#define PS5VK_TESS_CONTROL_NAME "D-domain-exec-witness"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_witness_exec_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
 #else
 #define PS5VK_TESS_CONTROL_NAME "B-tesscoord-zero"
 #define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_zero_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_coord_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
 #endif
     VkShaderModule coord_modules[4];
     {
     const struct { const uint32_t *code; size_t bytes; } coord_codes[4]={
-        {ps5vk_runtime_tess_coord_vertex,sizeof(ps5vk_runtime_tess_coord_vertex)},
+        {PS5VK_TESS_COORD_VERT,sizeof(PS5VK_TESS_COORD_VERT)},
         {PS5VK_TESS_CONTROL_CODE,sizeof(PS5VK_TESS_CONTROL_CODE)},
-        {ps5vk_runtime_tess_coord_evaluation,sizeof(ps5vk_runtime_tess_coord_evaluation)},
+        {PS5VK_TESS_COORD_EVAL,sizeof(PS5VK_TESS_COORD_EVAL)},
         {ps5vk_runtime_tess_coord_fragment,sizeof(ps5vk_runtime_tess_coord_fragment)}};
     for(unsigned i=0;i<4;++i) {
         VkShaderModuleCreateInfo mi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -2649,9 +2671,228 @@ static void geometry_probe(VkDevice d)
         VkPipelineColorBlendStateCreateInfo coord_blend={
             .sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .attachmentCount=1,.pAttachments=&coord_blend_a};
+        VkPipelineLayout coord_layout=layout;
+#if PS5VK_TESS_VARIANT==4
+        /* The witness storage buffer, its descriptor set and a pipeline
+         * layout that names it. Host-visible and read straight back after the
+         * fence: the buffer is a normal Vulkan allocation this harness owns,
+         * unlike the tessellation rings, so the read needs no caveat about
+         * coherency or about an address the harness had to guess. */
+        VkBuffer coord_witness_buffer=VK_NULL_HANDLE;
+        VkDeviceMemory coord_witness_memory=VK_NULL_HANDLE;
+        void *coord_witness_mapped=NULL;
+        VkDescriptorSetLayout coord_witness_set_layout=VK_NULL_HANDLE;
+        VkDescriptorPool coord_witness_pool=VK_NULL_HANDLE;
+        VkDescriptorSet coord_witness_set=VK_NULL_HANDLE;
+        enum { PS5VK_TESS_WITNESS_BYTES=1024u };
+        {
+            VkBufferCreateInfo wbi={
+                .sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .size=PS5VK_TESS_WITNESS_BYTES,
+                .usage=VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
+            CHECK(vkCreateBuffer(d,&wbi,NULL,&coord_witness_buffer));
+            VkMemoryRequirements wreq;
+            vkGetBufferMemoryRequirements(d,coord_witness_buffer,&wreq);
+            VkMemoryAllocateInfo wmi={
+                .sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize=wreq.size};
+            CHECK(vkAllocateMemory(d,&wmi,NULL,&coord_witness_memory));
+            CHECK(vkBindBufferMemory(d,coord_witness_buffer,
+                coord_witness_memory,0));
+            CHECK(vkMapMemory(d,coord_witness_memory,0,VK_WHOLE_SIZE,0,
+                &coord_witness_mapped));
+            memset(coord_witness_mapped,0,PS5VK_TESS_WITNESS_BYTES);
+            VkDescriptorSetLayoutBinding wb={
+                .binding=0,
+                .descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount=1,
+                .stageFlags=VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT};
+            VkDescriptorSetLayoutCreateInfo wsi={
+                .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .bindingCount=1,.pBindings=&wb};
+            CHECK(vkCreateDescriptorSetLayout(d,&wsi,NULL,
+                &coord_witness_set_layout));
+            VkPipelineLayoutCreateInfo wli={
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .setLayoutCount=1,.pSetLayouts=&coord_witness_set_layout};
+            CHECK(vkCreatePipelineLayout(d,&wli,NULL,&coord_layout));
+            VkDescriptorPoolSize wps={VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1};
+            VkDescriptorPoolCreateInfo wpi={
+                .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                .maxSets=1,.poolSizeCount=1,.pPoolSizes=&wps};
+            CHECK(vkCreateDescriptorPool(d,&wpi,NULL,&coord_witness_pool));
+            VkDescriptorSetAllocateInfo wai={
+                .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .descriptorPool=coord_witness_pool,.descriptorSetCount=1,
+                .pSetLayouts=&coord_witness_set_layout};
+            CHECK(vkAllocateDescriptorSets(d,&wai,&coord_witness_set));
+            VkDescriptorBufferInfo wdb={coord_witness_buffer,0,VK_WHOLE_SIZE};
+            VkWriteDescriptorSet wwr={
+                .sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet=coord_witness_set,.descriptorCount=1,
+                .descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo=&wdb};
+            vkUpdateDescriptorSets(d,1,&wwr,0,NULL);
+        }
+        /* THE WITNESS'S OWN CONTROL: an ordinary vertex+fragment draw that
+         * writes the SAME buffer at a second counter.
+         *
+         * "The domain wrote nothing" and "a storage-buffer write from a
+         * graphics stage does not land on this driver" produce an identical
+         * reading, and the whole point of this witness is to tell apart things
+         * that look alike. The control needs its own descriptor set layout
+         * because the profile refuses a binding named for a stage the
+         * pipeline does not carry, in both directions: a TESS_EVAL binding on
+         * a pipeline without tessellation is refused exactly as a
+         * tessellation binding was refused before the visibility fix.
+         *
+         * It cannot be the tessellation pipeline's own vertex half, which was
+         * the first thing I tried: in a tessellation pipeline the vertex
+         * shader is the LS end of the merged hull, and this driver has no
+         * descriptor delivery for that program at all - the pre-raster ABI
+         * slots come from the DOMAIN. That is a real gap, recorded, and much
+         * too deep to open for a diagnostic. */
+        {
+            VkDescriptorSetLayoutBinding cb_b={
+                .binding=0,
+                .descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount=1,
+                .stageFlags=VK_SHADER_STAGE_VERTEX_BIT};
+            VkDescriptorSetLayoutCreateInfo cb_si={
+                .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .bindingCount=1,.pBindings=&cb_b};
+            VkDescriptorSetLayout cb_set_layout;
+            CHECK(vkCreateDescriptorSetLayout(d,&cb_si,NULL,&cb_set_layout));
+            VkPipelineLayoutCreateInfo cb_li={
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .setLayoutCount=1,.pSetLayouts=&cb_set_layout};
+            VkPipelineLayout cb_layout;
+            CHECK(vkCreatePipelineLayout(d,&cb_li,NULL,&cb_layout));
+            VkDescriptorPoolSize cb_ps={VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1};
+            VkDescriptorPoolCreateInfo cb_pi={
+                .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                .maxSets=1,.poolSizeCount=1,.pPoolSizes=&cb_ps};
+            VkDescriptorPool cb_pool;
+            CHECK(vkCreateDescriptorPool(d,&cb_pi,NULL,&cb_pool));
+            VkDescriptorSetAllocateInfo cb_ai={
+                .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .descriptorPool=cb_pool,.descriptorSetCount=1,
+                .pSetLayouts=&cb_set_layout};
+            VkDescriptorSet cb_set;
+            CHECK(vkAllocateDescriptorSets(d,&cb_ai,&cb_set));
+            VkDescriptorBufferInfo cb_db={coord_witness_buffer,0,VK_WHOLE_SIZE};
+            VkWriteDescriptorSet cb_wr={
+                .sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet=cb_set,.descriptorCount=1,
+                .descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo=&cb_db};
+            vkUpdateDescriptorSets(d,1,&cb_wr,0,NULL);
+            VkShaderModule cb_modules[2];
+            const struct { const uint32_t *code; size_t bytes; } cb_codes[2]={
+                {ps5vk_runtime_tess_witness_exec_vertex,
+                 sizeof(ps5vk_runtime_tess_witness_exec_vertex)},
+                {ps5vk_runtime_tess_coord_fragment,
+                 sizeof(ps5vk_runtime_tess_coord_fragment)}};
+            for(unsigned i=0;i<2;++i) {
+                VkShaderModuleCreateInfo cmi={
+                    .sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                    .codeSize=cb_codes[i].bytes,.pCode=cb_codes[i].code};
+                CHECK(vkCreateShaderModule(d,&cmi,NULL,&cb_modules[i]));
+            }
+            const VkShaderStageFlagBits cb_stages[2]={
+                VK_SHADER_STAGE_VERTEX_BIT,VK_SHADER_STAGE_FRAGMENT_BIT};
+            VkPipelineShaderStageCreateInfo cb_stage_infos[2];
+            for(unsigned i=0;i<2;++i)
+                cb_stage_infos[i]=(VkPipelineShaderStageCreateInfo){
+                    .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .stage=cb_stages[i],.module=cb_modules[i],.pName="main"};
+            VkPipelineInputAssemblyStateCreateInfo cb_ia={
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+            VkPipelineVertexInputStateCreateInfo cb_vi={
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+            VkPipelineRasterizationStateCreateInfo cb_raster={
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                .lineWidth=1};
+            VkPipelineMultisampleStateCreateInfo cb_ms={
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+            VkViewport cb_vp_v={0,0,(float)extent,(float)extent,0,1};
+            VkRect2D cb_vp_s={{0,0},{extent,extent}};
+            VkPipelineViewportStateCreateInfo cb_vp={
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                .viewportCount=1,.pViewports=&cb_vp_v,
+                .scissorCount=1,.pScissors=&cb_vp_s};
+            VkPipelineColorBlendAttachmentState cb_blend_a={.colorWriteMask=15};
+            VkPipelineColorBlendStateCreateInfo cb_blend={
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                .attachmentCount=1,.pAttachments=&cb_blend_a};
+            VkGraphicsPipelineCreateInfo cb_gpi={
+                .sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .layout=cb_layout,.renderPass=pass,.stageCount=2,
+                .pStages=cb_stage_infos,.pVertexInputState=&cb_vi,
+                .pInputAssemblyState=&cb_ia,.pRasterizationState=&cb_raster,
+                .pMultisampleState=&cb_ms,.pViewportState=&cb_vp,
+                .pColorBlendState=&cb_blend};
+            VkPipeline cb_pipeline=VK_NULL_HANDLE;
+            const VkResult cb_rc=vkCreateGraphicsPipelines(d,0,1,&cb_gpi,NULL,
+                &cb_pipeline);
+            if(cb_rc!=VK_SUCCESS || !cb_pipeline) {
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_WITNESS_CONTROL rc=%d created=0",(int)cb_rc);
+            } else {
+                VkCommandPool cb_cp;
+                VkCommandPoolCreateInfo cb_cpi={
+                    .sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                    .flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                    .queueFamilyIndex=0};
+                CHECK(vkCreateCommandPool(d,&cb_cpi,NULL,&cb_cp));
+                VkCommandBuffer cb_cb=VK_NULL_HANDLE;
+                VkCommandBufferAllocateInfo cb_cbi={
+                    .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                    .commandPool=cb_cp,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                    .commandBufferCount=1};
+                CHECK(vkAllocateCommandBuffers(d,&cb_cbi,&cb_cb));
+                VkCommandBufferBeginInfo cb_bi={
+                    .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+                CHECK(vkBeginCommandBuffer(cb_cb,&cb_bi));
+                VkClearValue cb_clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
+                VkRenderPassBeginInfo cb_rbi={
+                    .sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                    .renderPass=pass,.framebuffer=fb,
+                    .renderArea={{0,0},{extent,extent}},
+                    .clearValueCount=1,.pClearValues=&cb_clear};
+                vkCmdBeginRenderPass(cb_cb,&cb_rbi,VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(cb_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,cb_pipeline);
+                vkCmdBindDescriptorSets(cb_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    cb_layout,0,1,&cb_set,0,NULL);
+                vkCmdDraw(cb_cb,3,1,0,0);
+                vkCmdEndRenderPass(cb_cb);
+                CHECK(vkEndCommandBuffer(cb_cb));
+                VkFence cb_fence=VK_NULL_HANDLE;
+                VkFenceCreateInfo cb_fi={.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+                CHECK(vkCreateFence(d,&cb_fi,NULL,&cb_fence));
+                VkSubmitInfo cb_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                    .commandBufferCount=1,.pCommandBuffers=&cb_cb};
+                const VkResult cb_srq=vkQueueSubmit(queue,1,&cb_submit,cb_fence);
+                const VkResult cb_wait=cb_srq==VK_SUCCESS?
+                    vkWaitForFences(d,1,&cb_fence,VK_TRUE,300000000ull):cb_srq;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_WITNESS_CONTROL rc=0 created=1 submit=%d wait=%d",
+                    (int)cb_srq,(int)cb_wait);
+                vkDestroyFence(d,cb_fence,NULL);
+                vkDestroyCommandPool(d,cb_cp,NULL);
+                vkDestroyPipeline(d,cb_pipeline,NULL);
+            }
+            for(unsigned i=0;i<2;++i)vkDestroyShaderModule(d,cb_modules[i],NULL);
+            vkDestroyDescriptorPool(d,cb_pool,NULL);
+            vkDestroyPipelineLayout(d,cb_layout,NULL);
+            vkDestroyDescriptorSetLayout(d,cb_set_layout,NULL);
+        }
+#endif
         VkGraphicsPipelineCreateInfo coord_pi={
             .sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .layout=layout,.renderPass=pass,.stageCount=4,
+            .layout=coord_layout,.renderPass=pass,.stageCount=4,
             .pStages=coord_stage_infos,.pVertexInputState=&coord_vi,
             .pInputAssemblyState=&coord_ia,.pTessellationState=&coord_ts,
             .pRasterizationState=&coord_raster,.pMultisampleState=&coord_ms,
@@ -2700,6 +2941,10 @@ static void geometry_probe(VkDevice d)
                 .clearValueCount=1,.pClearValues=&coord_clear};
             vkCmdBeginRenderPass(coord_cb,&coord_rbi,VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(coord_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,coord_pipeline);
+#if PS5VK_TESS_VARIANT==4
+            vkCmdBindDescriptorSets(coord_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,
+                coord_layout,0,1,&coord_witness_set,0,NULL);
+#endif
             /* ONE patch, three control points. */
             vkCmdDraw(coord_cb,3,1,0,0);
             vkCmdEndRenderPass(coord_cb);
@@ -2825,6 +3070,30 @@ static void geometry_probe(VkDevice d)
             CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
                 .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
                 .offset=0,.size=VK_WHOLE_SIZE}));
+#if PS5VK_TESS_VARIANT==4
+            /* Did the evaluation half execute? This is the whole point of the
+             * variant, and unlike every factor-ring read in this task it
+             * needs no caveat: the buffer is an ordinary Vulkan allocation the
+             * harness owns, invalidated through the API before it is read. */
+            CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+                .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory=coord_witness_memory,.offset=0,.size=VK_WHOLE_SIZE}));
+            {
+                const uint32_t *w=(const uint32_t *)coord_witness_mapped;
+                const float *c=(const float *)(w+4);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_DOMAIN_EXEC variant=%s invocations=%u vertex=%u "
+                    "c0=%08x %08x %08x c1=%08x %08x %08x "
+                    "c2=%08x %08x %08x c3=%08x %08x %08x",
+                    PS5VK_TESS_CONTROL_NAME,w[0],w[1],
+                    ((const uint32_t *)c)[0],((const uint32_t *)c)[1],
+                    ((const uint32_t *)c)[2],((const uint32_t *)c)[3],
+                    ((const uint32_t *)c)[4],((const uint32_t *)c)[5],
+                    ((const uint32_t *)c)[6],((const uint32_t *)c)[7],
+                    ((const uint32_t *)c)[8],((const uint32_t *)c)[9],
+                    ((const uint32_t *)c)[10],((const uint32_t *)c)[11]);
+            }
+#endif
             static uint8_t coord_detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
             if(ps5vk_rgba8_64k_rx_detile(coord_detiled,sizeof(coord_detiled),map,
                 (size_t)stride,extent,extent))fail("tess-coord-detile",-1);

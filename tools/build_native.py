@@ -105,14 +105,19 @@ def main():
     # same process, so the variant is a build input and the artifact IS the
     # variant: 1 = control A (legal nonzero levels, no off-chip reads),
     # 2 = control B (legal zero outer levels, patch discarded), 3 = witness C
-    # (off-chip per-vertex/per-patch readback). There is deliberately no knob
+    # (off-chip per-vertex/per-patch readback), 4 = witness D (control A's
+    # pipeline with an evaluation half that also writes a storage buffer, so
+    # the run answers whether the DOMAIN EXECUTES at all - the one question no
+    # register can answer once the image is empty and the hull is proven to
+    # store correct factors). There is deliberately no knob
     # for a stage-disabled or triangle-list-drawn tessellation pipeline: those
     # are invalid hardware combinations that can never establish Vulkan
     # behaviour, and a build knob is how such a run becomes acceptance
     # evidence by accident.
     tess_variant = os.environ.get("PS5VK_TESS_VARIANT", "3")
-    if tess_variant not in ("1", "2", "3"):
-        raise SystemExit("PS5VK_TESS_VARIANT selects one candidate: 1, 2 or 3")
+    if tess_variant not in ("1", "2", "3", "4"):
+        raise SystemExit(
+            "PS5VK_TESS_VARIANT selects one candidate: 1, 2, 3 or 4")
     if tess_variant != "3" and tess_probe != "1":
         raise SystemExit("PS5VK_TESS_VARIANT requires PS5VK_TESS_PROBE=1")
     # The six-view witness is the only consumer of the diagnostic gate, so it

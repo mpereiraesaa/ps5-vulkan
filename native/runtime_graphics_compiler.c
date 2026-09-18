@@ -161,7 +161,33 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
              * to the vertex stage is refused rather than projected onto a stage
              * that cannot read it. Every other descriptor type stays outside
              * the profile instead of being half-delivered. */
-            if(set->binding[b].count &&
+            /* DIAGNOSTIC ONLY, and deliberately not a widening of the
+             * shipped profile.
+             *
+             * A storage buffer is the only way a tessellation EVALUATION half
+             * can produce an observable that does not depend on
+             * rasterisation, and that is the one measurement this task now
+             * needs: the hull is proven to execute and store correct
+             * tessellation factors, the draw retires, and nothing reaches the
+             * rasteriser, which leaves "the domain never executes" and "it
+             * executes and its exports are discarded" with no register able
+             * to separate them.
+             *
+             * Admitting the type under PS5VK_TESS_PROBE lets that
+             * measurement happen without advertising a capability nothing has
+             * evidenced. The shipped build keeps the profile exactly as it
+             * was, so no application can reach this path and no contract
+             * changes. If the measurement shows the rest of the descriptor
+             * path really does deliver a storage buffer to a graphics stage,
+             * that is evidence for promoting it properly, with its own tests
+             * - not a reason to have promoted it here. */
+            const int diagnostic_storage_buffer =
+#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+                set->type[b]==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+#else
+                0;
+#endif
+            if(set->binding[b].count && !diagnostic_storage_buffer &&
                 (!(set->binding[b].stages&visible) ||
                 (set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&

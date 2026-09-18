@@ -123,6 +123,12 @@ fail:
 static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 {
     const char *phase="shape";
+    /* Which refusal inside the draw phase fired. Every one of them returns the
+     * same error code from a different line, so a failure reports "phase=draw"
+     * and nothing else - which cost a window per gate while opening the
+     * descriptor profile for a diagnostic. Numbering them makes one run name
+     * the line. Zero means the failure was not one of the numbered sites. */
+    unsigned draw_site=0;
     *out=NULL;
     /* One color pass, optional D32 and texture-upload prelude.  LOAD preserves
      * an attachment only when its tracked initial layout matches.  CLEAR is
@@ -367,7 +373,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
         size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),(uint64_t)(uintptr_t)j->slot.address);
-        if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+        if(!n){rc=VK_ERROR_UNKNOWN;draw_site=1;goto fail;}cursor+=n;
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_OCCLUSION_PROBE_BEGIN serial=%llu base=%llx pairs=%u",
             (unsigned long long)j->serial,(unsigned long long)(uintptr_t)j->slot.address,
@@ -379,7 +385,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         const struct ps5vk_operation *recorded=body[i];
         if(recorded->type==PS5VK_CLEAR_ATTACHMENT) {
             if(recorded->subpass!=subpass_index || !ps5vk_clear_attachment_valid(recorded)) {
-                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=2;goto fail;
             }
             VkImageView view=recorded->framebuffer->attachments[
                 ps5vk_render_pass_subpass(pass,subpass_index)->color.attachment];
@@ -388,7 +394,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(rc!=VK_SUCCESS)goto fail;
             rc=ps5vk_native_layer_footprint(d,view->image,&stride);
             if(rc!=VK_SUCCESS || !stride || stride>bytes/view->image->info.arrayLayers) {
-                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=3;goto fail;
             }
             /* The final reserved tail word of the arena that EXECUTES this
              * clear is a private intra-submission token, never the label that
@@ -398,18 +404,18 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u);
             size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
                 (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),i+1u);
-            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=4;goto fail;}cursor+=n;
             n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=5;goto fail;}cursor+=n;
             VkDeviceSize offset=(VkDeviceSize)view->range.baseArrayLayer*stride;
             n=ps5vk_color_rect_clear(cursor,(size_t)(end-cursor),
                 (uintptr_t)address+offset,bytes-offset,(size_t)stride,
                 view->image->info.extent.width,view->image->info.extent.height,
                 view->range.layerCount,multiview->present?multiview->view_masks[subpass_index]:0,
                 recorded->clear_rect.rect,recorded->clear_word);
-            if(!n){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}cursor+=n;
+            if(!n){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=6;goto fail;}cursor+=n;
             n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=7;goto fail;}cursor+=n;
             continue;
         }
         if(recorded->type==PS5VK_NEXT_SUBPASS) {
@@ -421,7 +427,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
              * refused before anything is read. */
             if(recorded->subpass!=subpass_index+1u ||
                recorded->subpass>=pass->subpass_count) {
-                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=8;goto fail;
             }
             subpass_index=recorded->subpass;
             BATCH_RESERVE(PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WORDS+PS5VK_GRAPHICS_ACQUIRE_WORDS);
@@ -430,14 +436,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(next_subpass->input_count || pass->dependency_count) {
                 size_t color_barrier=ps5vk_graphics_color_to_texture(
                     cursor,(size_t)(end-cursor));
-                if(!color_barrier){rc=VK_ERROR_UNKNOWN;goto fail;}
+                if(!color_barrier){rc=VK_ERROR_UNKNOWN;draw_site=9;goto fail;}
                 cursor+=color_barrier;
                 ps5log_printf(PS5LOG_MARK,
                     "PS5VK_COLOR_TO_TEXTURE_BARRIER serial=%llu subpass=%u words=%zu",
                     (unsigned long long)j->serial,recorded->subpass,color_barrier);
             }
             size_t boundary=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-            if(!boundary){rc=VK_ERROR_UNKNOWN;goto fail;}
+            if(!boundary){rc=VK_ERROR_UNKNOWN;draw_site=10;goto fail;}
             cursor+=boundary;
             ps5log_printf(PS5LOG_MARK,
                 "PS5VK_SUBPASS_BOUNDARY serial=%llu subpass=%u words=%zu",
@@ -473,10 +479,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         }
         struct ps5vk_prepared_draw *draw=&j->draws[j->count];
         struct ps5vk_native_graphics_pipeline *p=op->pipeline->graphics_state;
-        if(!p || !p->pair || !p->pair->ready){rc=VK_ERROR_UNKNOWN;goto fail;}
+        if(!p || !p->pair || !p->pair->ready){rc=VK_ERROR_UNKNOWN;draw_site=11;goto fail;}
         /* Check each sampled resource, not just element zero of set zero.
          * Preparation validates generations and copies exactly these tables. */
-        if(op->pipeline->set_count>PS5VK_MAX_SETS){rc=VK_ERROR_UNKNOWN;goto fail;}
+        if(op->pipeline->set_count>PS5VK_MAX_SETS){rc=VK_ERROR_UNKNOWN;draw_site=12;goto fail;}
         /* The one-input profile: how many input-attachment bindings the whole
          * pipeline declares. The gate refuses anything but exactly one, so a
          * second attachment can never be half-served. */
@@ -495,20 +501,30 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(!set || !set->pool || set->pool->device!=d ||
                set->generation!=op->generations[set_index] ||
                memcmp(&set->signature,&op->pipeline->sets[set_index],sizeof(set->signature))) {
-                rc=VK_ERROR_UNKNOWN;goto fail;
+                rc=VK_ERROR_UNKNOWN;draw_site=13;goto fail;
             }
             for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
                 const struct ps5vk_binding *binding=&set->signature.binding[b];
                 const VkDescriptorType type=set->signature.type[b];
+                /* The storage-buffer arm is DIAGNOSTIC ONLY and matches the
+                 * same gate in descriptor_profile_supported(): the type is a
+                 * buffer here exactly when the tessellation probe admitted it
+                 * at pipeline creation, so the two boundaries cannot drift
+                 * apart. The shipped build sees the original predicate and no
+                 * application can reach the path. */
                 const int buffer_type=type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-                    type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                    type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+                    || type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+#endif
+                    ;
                 const int input_type=type==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
                 if(binding->count && type!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                    !buffer_type && !input_type) {
-                    rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                    rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=14;goto fail;
                 }
                 if(binding->first>PS5VK_MAX_DESCRIPTORS ||
-                   binding->count>PS5VK_MAX_DESCRIPTORS-binding->first){rc=VK_ERROR_UNKNOWN;goto fail;}
+                   binding->count>PS5VK_MAX_DESCRIPTORS-binding->first){rc=VK_ERROR_UNKNOWN;draw_site=15;goto fail;}
                 /* Only the bindings the compiled stages dereference are a
                  * requirement; the table is shared, so the two stage masks are
                  * ORed. A zero mask keeps the whole declaration (fail closed). */
@@ -520,12 +536,12 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 }
                 for(unsigned e=0;e<binding->count;++e) {
                     unsigned index=binding->first+e;
-                    if(!set->defined[index]){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+                    if(!set->defined[index]){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=16;goto fail;}
                     if(buffer_type) {
                         /* The encoder resolves and validates the base address;
                          * a null handle must never be encoded. */
                         if(!set->buffers[index].buffer) {
-                            rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                            rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=17;goto fail;
                         }
                         continue;
                     }
@@ -543,7 +559,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                     }
                     if(!set->image_resources[index] ||
                        set->images[index].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-                        rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                        rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=18;goto fail;
                     }
                     rc=ps5vk_layout_require(&j->layouts,set->image_resources[index],set->images[index].imageLayout);
                     if(rc!=VK_SUCCESS)goto fail;
@@ -552,7 +568,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         }
         struct ps5vk_index_fetch indices={0};
         if(op->type==PS5VK_DRAW_INDEXED) {
-            if(!op->pipeline->vertex_binding_count){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+            if(!op->pipeline->vertex_binding_count){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=19;goto fail;}
             rc=ps5vk_index_fetch_prepare(d,op,&indices);if(rc!=VK_SUCCESS)goto fail;
         }
         const uint32_t vertex_usage=p->pair->runtime_arguments.enabled?
@@ -585,7 +601,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 (unsigned long long)j->serial,j->count-1,k,
                 draw->state->sh[k].offset,draw->state->sh[k].value);
 #endif
-        if(!p->global_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+        if(!p->global_table){rc=VK_ERROR_UNKNOWN;draw_site=20;goto fail;}
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
         if(draw->texture_table)
             for(unsigned k=0;k<12;++k)
@@ -612,7 +628,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
              * profile cannot tell whether a stage reads the built-in and has no
              * slot to deliver the value through, so a multiview subpass runs on
              * the metadata ABI or it does not run. */
-            if(!p->pair->runtime_arguments.enabled){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+            if(!p->pair->runtime_arguments.enabled){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=21;goto fail;}
             uint32_t view_indices[PS5VK_MAX_VIEW_MASK_VIEWS],view_count=0;
             rc=ps5vk_native_view_expand(view_mask,view_indices,PS5VK_MAX_VIEW_MASK_VIEWS,&view_count);
             if(rc!=VK_SUCCESS)goto fail;
@@ -684,9 +700,9 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                             view_mask?&view_emit[v]:NULL,
                             op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
                     } else if(vertex_usage) {
-                        if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+                        if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;draw_site=22;goto fail;}
                         if(op->pipeline->set_count) {
-                            if(!draw->texture_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+                            if(!draw->texture_table){rc=VK_ERROR_UNKNOWN;draw_site=23;goto fail;}
                             rc=ps5vk_native_emit_textured_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
                                 (uint32_t)(uintptr_t)p->global_table,(uint32_t)(uintptr_t)draw->vertex_table,
                                 (uint32_t)(uintptr_t)draw->texture_table,op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
@@ -726,12 +742,12 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     /* A pass must have reached its last subpass: recording refuses to end one
      * early and the submission layer refuses it independently, so a body that
      * never entered the last subpass cannot be executed without dropping it. */
-    if(subpass_index+1u!=pass->subpass_count) {rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+    if(subpass_index+1u!=pass->subpass_count) {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=24;goto fail;}
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
         size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),
             (uint64_t)(uintptr_t)j->slot.address+8);
-        if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+        if(!n){rc=VK_ERROR_UNKNOWN;draw_site=25;goto fail;}cursor+=n;
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_OCCLUSION_PROBE_END serial=%llu base_plus_8=%llx",
             (unsigned long long)j->serial,(unsigned long long)(uintptr_t)j->slot.address+8);
@@ -816,8 +832,9 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             (unsigned long long)j->serial,j->chain.count,j->words);
     return VK_SUCCESS;
 fail:
-    ps5log_printf(PS5LOG_ERR,"PS5VK_GRAPHICS_PREPARE_FAILED serial=%llu phase=%s rc=%d",
-        (unsigned long long)j->serial,phase,rc);
+    ps5log_printf(PS5LOG_ERR,
+        "PS5VK_GRAPHICS_PREPARE_FAILED serial=%llu phase=%s site=%u rc=%d",
+        (unsigned long long)j->serial,phase,draw_site,rc);
     release(d,j);return rc;
 }
 /* Submit arena `index` of the chain. The first arena keeps the historic

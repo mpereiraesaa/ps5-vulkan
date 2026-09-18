@@ -130,6 +130,23 @@ def main():
          "runtime_tess_coord.frag.spv", "tess_coord_fragment"),
         ("experiments/graphics/runtime_tess_coord_zero.tesc",
          "runtime_tess_coord_zero.tesc.spv", "tess_coord_zero_control"),
+        # The domain-execution witness: the TessCoord control's evaluation
+        # half with one addition, a storage-buffer write. A tessellation
+        # evaluation shader has no per-vertex input except gl_TessCoord, so if
+        # it runs at all its exports must cover pixels - and the measured
+        # image is empty with no foreign pixels either. A memory write is the
+        # only observable the stage has that does not depend on
+        # rasterisation, which is what separates "the domain never executes"
+        # from "it executes and its exports are discarded".
+        ("experiments/graphics/runtime_tess_witness_exec.tese",
+         "runtime_tess_witness_exec.tese.spv", "tess_witness_exec_evaluation"),
+        # The witness's own control: the same vertex half with a write to the
+        # same buffer at a different counter. "The domain wrote nothing" and
+        # "a storage-buffer write from a graphics stage does not land" read
+        # identically, and this half is proven to run because its control
+        # half's tessellation factors are in memory.
+        ("experiments/graphics/runtime_tess_witness_exec.vert",
+         "runtime_tess_witness_exec.vert.spv", "tess_witness_exec_vertex"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
