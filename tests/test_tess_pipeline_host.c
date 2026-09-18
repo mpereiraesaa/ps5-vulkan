@@ -44,27 +44,6 @@ static VkResult cache_flush(void *context, void *backing, uint64_t offset,
     (void)context; (void)backing; (void)offset; (void)size;
     return VK_SUCCESS;
 }
-static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend; }
-
-VkResult ps5vk_platform_query(struct ps5vk_platform *p)
-{
-    *p = (struct ps5vk_platform){.open = NULL, .close = close_backend,
-                                 .max_allocation = 1u << 24,
-                                 .queue_flags = VK_QUEUE_GRAPHICS_BIT |
-                                                VK_QUEUE_COMPUTE_BIT};
-    const struct ps5vk_physical_profile_info profile = {
-        .name = "host mock, not a GPU",
-        .vendor_id = 0x1002,
-        .device_id = 0x73a0,
-        .heap_size = 1u << 26,
-        .allocation_granularity = 1,
-        .buffer_image_granularity = 1,
-        .host_coherent = VK_TRUE,
-    };
-    ps5vk_physical_profile_init(&p->properties, &p->memory_properties, &profile);
-    return VK_SUCCESS;
-}
-
 static uint32_t *read_spv(const char *path, size_t *words)
 {
     FILE *f=fopen(path,"rb");assert(f);
@@ -78,23 +57,26 @@ int main(void)
 {
     struct { const char *path; VkShaderModule module; size_t words; uint32_t *code; }
         modules[4]={
-            {"build/runtime-graphics/tess_witness.vert.spv"},
-            {"build/runtime-graphics/tess_witness_control.spv"},
-            {"build/runtime-graphics/tess_witness_evaluation.spv"},
-            {"build/runtime-graphics/tess_witness_fragment.spv"}};
+            {"build/runtime-graphics/runtime_tess_witness.vert.spv"},
+            {"build/runtime-graphics/runtime_tess_witness.tesc.spv"},
+            {"build/runtime-graphics/runtime_tess_witness.tese.spv"},
+            {"build/runtime-graphics/runtime_tess_witness.frag.spv"}};
     VkInstance instance;
     VkInstanceCreateInfo ici={.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-    assert(vkCreateInstance(&ici,NULL,&instance)==VK_SUCCESS);
+    const VkResult irc=vkCreateInstance(&ici,NULL,&instance);
+    if(irc!=VK_SUCCESS){printf("instance rc=%d\n",(int)irc);return 1;}
     uint32_t count=1;
     VkPhysicalDevice physical;
-    assert(vkEnumeratePhysicalDevices(instance,&count,&physical)==VK_SUCCESS);
+    const VkResult erc=vkEnumeratePhysicalDevices(instance,&count,&physical);
+    if(erc!=VK_SUCCESS){printf("enumerate rc=%d count=%u\n",(int)erc,count);return 1;}
     float priority=1.0f;
     VkDeviceQueueCreateInfo qci={.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo dci={.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount=1,.pQueueCreateInfos=&qci};
     VkDevice device;
-    assert(vkCreateDevice(physical,&dci,NULL,&device)==VK_SUCCESS);
+    const VkResult drc=vkCreateDevice(physical,&dci,NULL,&device);
+    if(drc!=VK_SUCCESS){printf("device rc=%d\n",(int)drc);return 1;}
 
     /* The runtime graphics adapter, exactly as the payload configures it. */
     device->graphics_enabled=VK_TRUE;

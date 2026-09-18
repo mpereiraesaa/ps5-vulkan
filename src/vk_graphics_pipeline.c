@@ -2,6 +2,9 @@
 #include "vk_render_pass.h"
 #include "graphics_program.h"
 #include "vk_pipeline_cache.h"
+#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+#include "ps5log.h"
+#endif
 #include <float.h>
 #include <string.h>
 /* Every plain feature refusal gets a site number, so a console run can name
@@ -257,6 +260,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     VkResult rc;
     if(d->graphics_acquire) {
         rc=d->graphics_acquire(d->graphics_compiler_context,&key,&data);
+#ifdef PS5VK_TESS_PROBE
+        if(rc!=VK_SUCCESS)
+            ps5log_printf(PS5LOG_MARK,"PS5VK_PIPELINE_ACQUIRE_FAIL rc=%d",(int)rc);
+#endif
         if(rc!=VK_SUCCESS || !data) {
             if(data)d->graphics_compiled_release(d->graphics_compiler_context,data);
             return rc==VK_SUCCESS?VK_ERROR_INITIALIZATION_FAILED:rc;
@@ -275,6 +282,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     memset(p,0,sizeof(*p));
     rc=d->graphics_create(d,data,primitive_type,&p->graphics_state);
+#ifdef PS5VK_TESS_PROBE
+    if(rc!=VK_SUCCESS)
+        ps5log_printf(PS5LOG_MARK,"PS5VK_PIPELINE_NATIVE_CREATE_FAIL rc=%d",(int)rc);
+#endif
     if(d->graphics_acquire)d->graphics_compiled_release(d->graphics_compiler_context,data);
     if (rc != VK_SUCCESS || !p->graphics_state) {
         if (p->graphics_state) d->graphics_release(d,p->graphics_state);

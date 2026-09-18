@@ -329,6 +329,8 @@ def main():
             # instead of only reporting the Vulkan error code.
             if tess_probe == "1":
                 common += ["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
+                common += ["-DPS5VK_TESS_NO_DRAW=" +
+                           os.environ.get("PS5VK_TESS_NO_DRAW", "0")]
             # Both optional-stage witnesses skip the feature-negotiation gate:
             # they exist to measure capabilities that are not advertised yet.
             # Exported, because the SDK build compiles the same sources.

@@ -226,16 +226,19 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * factor buffer) is not written yet. The pair therefore compiles and is
      * validated, but nothing can submit it. */
     if(ps5vk_graphics_has_tessellation(key)) {
-        if(!ps5vk_graphics_tessellation_key_valid(key))return ps5vk_reject(key,2);
+        if(key->topology!=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)return ps5vk_reject(key,2);
+        if(!ps5vk_graphics_tessellation_key_valid(key))return ps5vk_reject(key,3);
         if(!module_supported(&key->tess_control,1) ||
-           !module_supported(&key->tess_eval,2))return ps5vk_reject(key,3);
-        if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,4);
+           !module_supported(&key->tess_eval,2))return ps5vk_reject(key,4);
+        if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,5);
         uint32_t patch_type=0;
-        return key->topology==VK_PRIMITIVE_TOPOLOGY_PATCH_LIST &&
-            ps5vk_tess_patch_primitive_type(&patch_type) &&
-            key->color_format==VK_FORMAT_B8G8R8A8_UNORM &&
-            key->samples==VK_SAMPLE_COUNT_1_BIT && key->color_write_mask==15 &&
-            !key->blend_enable && descriptor_profile_supported(key);
+        if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
+        if(key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
+           key->color_format!=VK_FORMAT_R8G8B8A8_UNORM)return ps5vk_reject(key,7);
+        if(key->samples!=VK_SAMPLE_COUNT_1_BIT || key->color_write_mask!=15 ||
+           key->blend_enable)return ps5vk_reject(key,8);
+        if(!descriptor_profile_supported(key))return ps5vk_reject(key,9);
+        return 1;
     }
     /* A geometry stage is compiled through the merged entry point, so its own
      * module passes the same structural screening as the other two. The merged
