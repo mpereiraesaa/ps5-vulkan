@@ -72,7 +72,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # instead of being claimed as coverage.
         geometry = [c for c in manifest["cases"]
                     if "geometryShader" in " ".join(c.get("features_required", []))]
-        self.assertEqual((304, 34, 48),
+        # 34 diagnostics plus the 28 rasterization culling leaves that are the
+        # oracle for fillModeNonSolid: they run and pass with the feature
+        # advertised and move to acceptance in the change that advertises it.
+        self.assertEqual((304, 62, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
         self.assertEqual(29, len(geometry))

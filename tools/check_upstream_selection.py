@@ -128,6 +128,60 @@ def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
             for capability in capabilities for type_name in type_names}
 
 
+def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]:
+    """Leaves of the rasterization module's culling family.
+
+    The factory composes every leaf name from four tables in the same function -
+    a cull-mode prefix, a primitive-type name, a front-face postfix and a
+    polygon-mode suffix - and omits the combinations that cull both faces while
+    asking for a polygon mode other than FILL. The recognizer reads those tables
+    and applies that one omission, and it refuses to derive anything unless the
+    construction it was written against is still there, so a rewritten factory
+    stops matching instead of yielding invented names. Bounded to the exact
+    initializer shapes in this one pinned module.
+    """
+    # The cited line is inside the registration loop, so the brace-matched slice
+    # starts after the tables; the module text is what carries them. The bound is
+    # the construction itself: every table shape and the one omission must be
+    # present, and the citation must still point at the registration.
+    if ("CullingTestCase" not in function_text or
+            not re.search(r"culling->addChild\(new CullingTestCase\(", text)):
+        return set()
+    if not re.search(
+            r"cullModes\[cullModeNdx\]\.mode\s*==\s*VK_CULL_MODE_FRONT_AND_BACK\s*&&\s*"
+            r"polygonModes\[polygonModeNdx\]\.mode\s*!=\s*VK_POLYGON_MODE_FILL",
+            text):
+        return set()
+
+    def entries(name: str) -> list[tuple[str, str]]:
+        match = re.search(rf"\b{name}\[\]\s*=\s*\{{(.*?)\n\s*\}};", text, re.DOTALL)
+        if not match:
+            return []
+        return re.findall(r"\{\s*(VK_[A-Z_]+)\s*,\s*\"([a-z_]*)\"\s*\}", match.group(1))
+
+    culls = entries("cullModes")
+    primitives = entries("primitiveTypes")
+    faces = entries("frontOrders")
+    modes = entries("polygonModes")
+    if not (culls and primitives and faces and modes):
+        return set()
+    both = [index for index, (token, _) in enumerate(culls)
+            if token == "VK_CULL_MODE_FRONT_AND_BACK"]
+    fill = [index for index, (token, _) in enumerate(modes)
+            if token == "VK_POLYGON_MODE_FILL"]
+    if len(both) != 1 or len(fill) != 1:
+        return set()
+    names: set[str] = set()
+    for cull_index, (_, prefix) in enumerate(culls):
+        for _, primitive in primitives:
+            for _, postfix in faces:
+                for mode_index, (_, suffix) in enumerate(modes):
+                    if cull_index == both[0] and mode_index != fill[0]:
+                        continue
+                    names.add(f"{prefix}{primitive}{postfix}{suffix}")
+    return names
+
+
 def _mapping_group_segment(text: str, segment: str) -> bool:
     """Recognize numeric mapping groups generated from fixed upstream tables."""
     table = "allocationSizes"
@@ -1268,6 +1322,12 @@ def main() -> int:
         if re.search(r'"' + re.escape(leaf) + r'"', text):
             continue
         if leaf in _table_composed_leaf_names(text, function_text):
+            continue
+        # The rasterization module's culling family composes its names from four
+        # tables inside the cited factory, with one combination omitted. Bounded
+        # to that factory's exact construction expressions and to this module.
+        if (source_path.name == "vktRasterizationTests.cpp" and
+                leaf in _rasterization_culling_leaf_names(text, function_text)):
             continue
         # The geometry input factory names its triangle-strip-adjacency leaves
         # after the vertex count it iterates, so only the prefix is a literal.

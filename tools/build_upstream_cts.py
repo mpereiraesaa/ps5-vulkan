@@ -791,6 +791,19 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderPassUtil.cpp",
+        # Original rasterization module: the only upstream family that exercises
+        # LINE and POINT polygon rasterization on a colour attachment, which is
+        # what fillModeNonSolid needs an oracle for. Its own factory is
+        # registered in package_ps5.cpp and its own support checks and oracles
+        # are untouched; cases.txt selects only the culling leaves this profile
+        # can run. All six translation units of the module are needed because
+        # createTests() calls the sub-factories they define.
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationProvokingVertexTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationDepthBiasControlTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationFragShaderSideEffectsTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationOrderAttachmentAccessTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktShaderTileImageTests.cpp",
         # Original user-defined clip/cull distance module. The package registers
         # the module's own factory; none of its leaves is selected for strict
         # acceptance, because the feature flag that gates the whole family also

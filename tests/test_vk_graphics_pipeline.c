@@ -60,6 +60,57 @@ int main(void)
     /* A pipeline is created for ONE subpass and carries that identity, which
      * is what vkCmdDraw later checks the recording subpass against. */
     assert(!p->subpass);
+    {
+        /* The rasterization state's pNext chain. The pinned upstream
+         * rasterization module chains VkPipelineRasterizationLineStateCreateInfoEXT
+         * unconditionally - sType set even without VK_EXT_line_rasterization,
+         * which this device does not expose - and the exact form it supplies
+         * asks only for the default rectangular mode with no stipple, which is
+         * what this driver already does. That one form is accepted; every other
+         * chain and every other value stays refused, because accepting a
+         * structure that asks for different rasterization would change the
+         * output this profile claims to produce. */
+        const unsigned saved_created = created, saved_released = released;
+        const unsigned saved_acquired = acquired, saved_compiled = compiled_released;
+        VkPipelineRasterizationLineStateCreateInfoEXT line={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT,
+            .pNext=NULL,
+            .lineRasterizationMode=VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT,
+            .stippledLineEnable=VK_FALSE};
+        VkPipelineRasterizationStateCreateInfo chained=r;
+        chained.pNext=&line;
+        VkGraphicsPipelineCreateInfo with_chain=info;
+        with_chain.pRasterizationState=&chained;
+        VkPipeline chained_pipeline=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==VK_SUCCESS &&
+            chained_pipeline && chained_pipeline->graphics);
+        vkDestroyPipeline(&d,chained_pipeline,NULL);
+        line.stippledLineEnable=VK_TRUE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !chained_pipeline);
+        line.stippledLineEnable=VK_FALSE;
+        line.lineRasterizationMode=VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !chained_pipeline);
+        line.lineRasterizationMode=VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
+        VkPipelineRasterizationProvokingVertexStateCreateInfoEXT provoking={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT, .pNext=NULL};
+        line.pNext=&provoking;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !chained_pipeline);
+        line.pNext=NULL;
+        VkPipelineRasterizationProvokingVertexStateCreateInfoEXT unknown={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT, .pNext=NULL};
+        VkPipelineRasterizationStateCreateInfo other_chain=r;
+        other_chain.pNext=&unknown;
+        with_chain.pRasterizationState=&other_chain;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !chained_pipeline);
+        created=saved_created;
+        released=saved_released;
+        acquired=saved_acquired;
+        compiled_released=saved_compiled;
+    }
     viewport.width=1; assert(p->viewport.width==1920);
     {
         /* The counters below are pinned by later assertions, so this block

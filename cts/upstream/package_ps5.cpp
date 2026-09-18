@@ -22,6 +22,7 @@
 #include "vktMultiViewTests.hpp"
 #include "vktClippingTests.hpp"
 #include "vktGeometryTests.hpp"
+#include "vktRasterizationTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -205,6 +206,16 @@ void FocusedVkTestPackage::init(void)
     // compiles are acceptance cases in cts/upstream/manifest.json and every other
     // leaf stays a diagnostic there with the gate that refuses it.
     addChild(vkt::geometry::createTests(m_testCtx, "geometry"));
+
+    // rasterization group: the original upstream rasterization module, registered
+    // whole under its own name, because it is the only module that covers the
+    // polygon modes fillModeNonSolid turns on - every other family that exercises
+    // LINE or POINT polygon rasterization either needs a D16_UNORM depth
+    // attachment this profile does not offer or needs depth-image sampling it
+    // does not claim. The factory is registered unmodified and cases.txt remains
+    // the only execution filter, so only the culling leaves this profile can run
+    // are selected; the rest stay diagnostics in cts/upstream/manifest.json.
+    addChild(vkt::rasterization::createTests(m_testCtx, "rasterization"));
 
     // compute.basic group
     {
