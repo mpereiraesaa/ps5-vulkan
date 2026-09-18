@@ -174,17 +174,10 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
     return 1;
 }
 
-/* The DI primitive type a patch-list draw feeds: the pinned gfx103 register
- * data names DI_PT_PATCH 9 (src/amd/registers/gfx103.json), and the shape the
- * tessellator generates from the patch comes from VGT_TF_PARAM, which the hull
- * compile publishes from the control stage's own execution modes. This is a
- * resolver, not a new primitive: everything else stays fail-closed. */
-static int ps5vk_tess_patch_primitive_type(uint32_t *out)
-{
-    if(!out)return 0;
-    *out=9u;
-    return 1;
-}
+/* The DI primitive type a patch-list draw feeds resolves in
+ * graphics_program.h (pinned gfx103 DI_PT_PATCH); the compile options keep
+ * the compiler's own default primitive state because the tessellator, not
+ * the assembler, generates the rasterized primitive. */
 
 /* Diagnostic rejection codes. When PS5VK_GEOMETRY_KEY_DIAG is defined (the SDK
  * build of a diagnostic CTS payload) a refused key is logged field by field, so
@@ -233,16 +226,19 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * factor buffer) is not written yet. The pair therefore compiles and is
      * validated, but nothing can submit it. */
     if(ps5vk_graphics_has_tessellation(key)) {
-        if(!ps5vk_graphics_tessellation_key_valid(key))return ps5vk_reject(key,2);
+        if(key->topology!=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)return ps5vk_reject(key,2);
+        if(!ps5vk_graphics_tessellation_key_valid(key))return ps5vk_reject(key,3);
         if(!module_supported(&key->tess_control,1) ||
-           !module_supported(&key->tess_eval,2))return ps5vk_reject(key,3);
-        if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,4);
+           !module_supported(&key->tess_eval,2))return ps5vk_reject(key,4);
+        if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,5);
         uint32_t patch_type=0;
-        return key->topology==VK_PRIMITIVE_TOPOLOGY_PATCH_LIST &&
-            ps5vk_tess_patch_primitive_type(&patch_type) &&
-            key->color_format==VK_FORMAT_B8G8R8A8_UNORM &&
-            key->samples==VK_SAMPLE_COUNT_1_BIT && key->color_write_mask==15 &&
-            !key->blend_enable && descriptor_profile_supported(key);
+        if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
+        if(key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
+           key->color_format!=VK_FORMAT_R8G8B8A8_UNORM)return ps5vk_reject(key,7);
+        if(key->samples!=VK_SAMPLE_COUNT_1_BIT || key->color_write_mask!=15 ||
+           key->blend_enable)return ps5vk_reject(key,8);
+        if(!descriptor_profile_supported(key))return ps5vk_reject(key,9);
+        return 1;
     }
     /* A geometry stage is compiled through the merged entry point, so its own
      * module passes the same structural screening as the other two. The merged
@@ -506,7 +502,11 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
          * map, the same rule the geometry pair follows. */
         PsbcCompileOptions hull_options={.target=PSBC_TARGET_PS5,
             .stage=PSBC_STAGE_TESS_CTRL,.entrypoint=key->tess_control.entry,
-            .optimise=true,.address32_hi=2,.rasterization_samples=1};
+            .optimise=true,.address32_hi=2,.rasterization_samples=1,
+            /* The input patch size is what makes the hull compile derive its
+             * workgroup layout; without it the metadata publishes no tess
+             * workgroup state and the native loader refuses the hull. */
+            .patch_control_points=key->patch_control_points};
         if(key->tess_control.specialization_count && key->vertex.specialization_count)goto failed;
         const struct ps5vk_graphics_module_key *hull_specialized=
             key->tess_control.specialization_count?&key->tess_control:&key->vertex;
@@ -634,6 +634,17 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     return VK_SUCCESS;
 failed:
     ps5vk_runtime_graphics_diag_result=(int)result;
+#if defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GEOMETRY_COMPILE_FAIL result=%s(%d) failure=%d "
+        "fs=%u hull=%u domain=%u tess=%u hull_wg=%u",
+        psbc_result_string(result),(int)result,(int)failure,
+        (unsigned)(p->fragment.machine_code!=NULL),
+        (unsigned)(p->hull.machine_code!=NULL),
+        (unsigned)(p->domain.machine_code!=NULL),
+        (unsigned)ps5vk_graphics_has_tessellation(key),
+        (unsigned)p->hull.metadata.hull_tess_wg_valid);
+#endif
     if(result==PSBC_RESULT_OUT_OF_MEMORY)failure=VK_ERROR_OUT_OF_HOST_MEMORY;
     ps5vk_runtime_graphics_free(NULL,p);
     return failure;

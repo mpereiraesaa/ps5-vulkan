@@ -67,6 +67,9 @@
 #ifndef PS5VK_TESS_PROBE
 #define PS5VK_TESS_PROBE 0
 #endif
+#ifndef PS5VK_TESS_NO_DRAW
+#define PS5VK_TESS_NO_DRAW 0
+#endif
 /* Bounded diagnostic mode for the geometry witness: report every case's outcome
  * in one run instead of stopping at the first failing verdict. The shipping
  * profile keeps the fail-fast behaviour, because a witness that stops at the
@@ -2498,6 +2501,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,points_module,NULL);
     vkDestroyShaderModule(d,lines_module,NULL);
 #if PS5VK_TESS_PROBE
+    extern unsigned ps5vk_pipeline_refusal_site(void);
     /* Tessellation witness (report-only). Two triangle patches: the left
      * tessellated at level three, the right at level one. The evaluation half
      * paints the QUANTISED tessCoord field - colour = (floor(u*n)/n,
@@ -2575,15 +2579,32 @@ static void geometry_probe(VkDevice d)
             for(unsigned i=0;i<tess_native->pair->runtime_hull_hs.header.num_cx_registers;++i)
                 if(tess_native->pair->runtime_hull_hs.context[i].offset==0x2db)
                     t_tf=tess_native->pair->runtime_hull_hs.context[i].value;
+            VkCommandPool tess_pool;
+            VkCommandPoolCreateInfo tess_pci={
+                .sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                .queueFamilyIndex=0};
+            CHECK(vkCreateCommandPool(d,&tess_pci,NULL,&tess_pool));
             VkCommandBuffer tess_cb=VK_NULL_HANDLE;
             VkCommandBufferAllocateInfo tess_cbi={
                 .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandPool=tess_pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                 .commandBufferCount=1};
             CHECK(vkAllocateCommandBuffers(d,&tess_cbi,&tess_cb));
             VkCommandBufferBeginInfo tess_begin={
                 .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
             CHECK(vkBeginCommandBuffer(tess_cb,&tess_begin));
+            if (PS5VK_TESS_NO_DRAW) {
+                /* The create-only diagnostic: the pipeline exists and the
+                 * launch state is programmed; the draw is the bisect step. */
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_PROBE rc=%d created=1 draw_skipped=1 "
+                    "stages_en=%08x ls_hs_config=%08x tf_param=%08x di_patch=9",
+                    (int)tess_rc,t_stages_en,t_ls_hs,t_tf);
+                vkDestroyPipeline(d,tess_pipeline,NULL);
+                vkDestroyCommandPool(d,tess_pool,NULL);
+                goto tess_done;
+            }
             VkClearValue tess_clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
             VkRenderPassBeginInfo tess_rbi={
                 .sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -2702,12 +2723,15 @@ static void geometry_probe(VkDevice d)
                 (unsigned long long)geometry_digest(tess_detiled,sizeof(tess_detiled)),
                 t_stages_en,t_ls_hs,t_tf);
             vkDestroyPipeline(d,tess_pipeline,NULL);
+            vkDestroyCommandPool(d,tess_pool,NULL);
         } else {
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_TESS_PROBE rc=%d created=0",(int)tess_rc);
+                "PS5VK_TESS_PROBE rc=%d created=0 site=%u",(int)tess_rc,
+                ps5vk_pipeline_refusal_site());
         }
     }
     for(unsigned i=0;i<4;++i)vkDestroyShaderModule(d,tess_modules[i],NULL);
+tess_done:
 #endif
 #if PS5VK_GEOMETRY_ORDER_PROBE
     if(restart_vertex_buffer)vkDestroyBuffer(d,restart_vertex_buffer,NULL);

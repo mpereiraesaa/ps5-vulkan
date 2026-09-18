@@ -1565,8 +1565,10 @@ int main(void)
         VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
         VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
-        VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
+    /* PATCH_LIST resolves now (the tessellation draw's DI_PT_PATCH), but its
+     * pipeline stands or falls on the tessellation contract, not on this
+     * plain-pipeline resolver list. */
     uint32_t primitive_type=0;
     assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_POINT_LIST,&primitive_type)==0 &&
            primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST);
