@@ -51,6 +51,17 @@ enum {
         (PS5VK_TESS_FACTOR_OFFSET+PS5VK_TESS_FACTOR_BYTES+0xffffu)&~0xffffu
 };
 
+/* VGT_TF_PARAM as the control stage published it: the tessellator's domain,
+ * partitioning and output topology, which the hull metadata carries in its
+ * context block at cx 0x2db. */
+static uint32_t tess_tf_param_value(const PsbcShaderMetadata *m)
+{
+    for(uint32_t i=0;i<m->context_register_count;++i)
+        if(m->context_registers[i].offset==0x2db)
+            return m->context_registers[i].value;
+    return 0u;
+}
+
 VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
     uint32_t primitive_type,void **out)
 {
@@ -152,8 +163,25 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
          * with the input/output control-point counts the pipeline stated. */
         pair->uc.vgt_primitive_type.value=9u;
         pair->tessellation=1;
+        /* VGT_SHADER_STAGES_EN for a tessellation pipeline.
+         *
+         * The domain publishes this value for a STANDALONE NGG program, so it
+         * says ES_EN = ES_STAGE_REAL: an export stage fed by the vertex
+         * fetcher. In a tessellation pipeline the export stage IS the domain
+         * shader and it is fed by the TESSELLATOR, which the pinned register
+         * data spells as a distinct enumerant - VGT_STAGES_ES_EN is
+         * ES_STAGE_OFF 0, ES_STAGE_DS 1, ES_STAGE_REAL 2, and DS is the domain
+         * shader case. Leaving REAL there describes a vertex-fed pipeline, and
+         * the LS/HS stages and the tessellator are not on that path at all,
+         * which is measurably what happens: the hull never reaches its factor
+         * store and the draw stalls waiting for work that never flows.
+         *
+         * So ES_EN is REPLACED rather than ORed - the two enumerants share
+         * bits 3..4 and ORing REAL with DS would give the reserved value 3 -
+         * and the LS/HS enables are added on top. */
         pair->tess_state[0]=(ps5_agc_register){0x2d5,
-            input->domain.metadata.linkage_stages_en.value |
+            (input->domain.metadata.linkage_stages_en.value & ~(3u<<3)) |
+            (1u<<3) | /* V_028B54_ES_STAGE_DS: the tessellator feeds it */
             (1u<<0) | /* V_028B54_LS_STAGE_ON */
             (1u<<2)}; /* V_028B54_HS_STAGE_ON */
         /* DIAGNOSTIC BISECT, not a promoted value. NUM_PATCHES is the
@@ -173,6 +201,31 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             (num_patches&255u) |
             ((input->patch_control_points&63u)<<8) |
             ((input->patch_control_points&63u)<<14)};
+        /* VGT_GS_OUT_PRIM_TYPE, corrected for the tessellator.
+         *
+         * The linked value comes from the domain compiled as a STANDALONE NGG
+         * program, and it came back 0 = V_028A6C_POINTLIST, measured directly
+         * off the linked context block. The working geometry pipeline runs
+         * with 2 = V_028A6C_TRISTRIP. A pre-raster stage that tells the
+         * geometry engine it emits POINTS while the tessellator is generating
+         * triangles describes a pipeline that does not exist, and the engine
+         * has no triangle work to schedule - which is the same
+         * compiled-in-isolation mistake as the LS half, the domain's patch
+         * count and ES_EN.
+         *
+         * Derived from the tessellator's own configuration rather than
+         * assumed: VGT_TF_PARAM's TYPE says isolines, triangles or quads, and
+         * its TOPOLOGY says point mode. Isolines emit line strips, point mode
+         * emits points, everything else emits triangle strips. */
+        {
+            const uint32_t tf=tess_tf_param_value(&input->hull.metadata);
+            const uint32_t tf_type=tf&3u,tf_topology=(tf>>5)&7u;
+            uint32_t out_prim=2u;                 /* V_028A6C_TRISTRIP */
+            if(tf_topology==0u)out_prim=0u;       /* OUTPUT_POINT */
+            else if(tf_type==0u)out_prim=1u;      /* TESS_ISOLINE */
+            pair->cx.vgt_gs_out_prim_type=
+                (ps5_agc_register){0x29b,out_prim};
+        }
         /* VGT_TESS_DISTRIBUTION. The pinned emitter programs this for every
          * GFX8+ device as part of its initialisation (ac_cmdbuf_cp.c, the
          * non-GFX9 branch): ACCUM_ISOLINE 32, ACCUM_TRI 11, ACCUM_QUAD 11,
