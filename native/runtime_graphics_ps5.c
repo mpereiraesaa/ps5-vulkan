@@ -205,9 +205,39 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
          * bits 3..4 and ORing REAL with DS would give the reserved value 3 -
          * and the LS/HS enables are added on top. */
         pair->tess_state[0]=(ps5_agc_register){0x2d5,
-            (input->domain.metadata.linkage_stages_en.value & ~(3u<<3)) |
+            (input->domain.metadata.linkage_stages_en.value & ~(3u<<3)
+#if defined(PS5VK_TESS_VS_EN_DS) && PS5VK_TESS_VS_EN_DS
+             & ~(3u<<6)
+#endif
+             ) |
             (1u<<3) | /* V_028B54_ES_STAGE_DS: the tessellator feeds it */
             (1u<<0) | /* V_028B54_LS_STAGE_ON */
+#if defined(PS5VK_TESS_VS_EN_DS) && PS5VK_TESS_VS_EN_DS
+            /* DIAGNOSTIC BISECT, default off: VS_EN = V_028B54_VS_STAGE_DS.
+             *
+             * I claimed in the mailbox that every bit of
+             * VGT_SHADER_STAGES_EN had been measured in both states. That was
+             * wrong. VS_EN at bits 6..7 has never been varied - it has read
+             * V_028B54_VS_STAGE_REAL, which is zero, in all fifty-eight runs
+             * because nothing ever writes it.
+             *
+             * It deserves the run it should have had earlier because it is
+             * the OTHER "this stage is fed by the tessellator" enumerant in
+             * the same register, exactly parallel to ES_EN - and ES_EN
+             * reading ES_STAGE_REAL instead of ES_STAGE_DS was a real defect
+             * found in this task. On the legacy path the domain shader runs
+             * on the VS hardware stage and VS_EN selects VS_STAGE_DS; with
+             * NGG the ES stage takes that role through ES_EN, which is why
+             * radv leaves VS_EN alone. Whether this hardware also consults it
+             * is not something any register dump can answer, and no working
+             * pipeline on this device has ever had a tessellator-fed stage to
+             * exercise it with.
+             *
+             * Two bits, replaced rather than ORed: the field is two bits wide
+             * and VS_STAGE_COPY_SHADER is 2, so an OR could produce a value
+             * that means something else entirely - the same trap ES_EN had. */
+            (1u<<6) | /* V_028B54_VS_STAGE_DS */
+#endif
 #if defined(PS5VK_TESS_DYNAMIC_HS) && PS5VK_TESS_DYNAMIC_HS
             /* DIAGNOSTIC BISECT, default off, no primary source: radv never
              * sets DYNAMIC_HS and works on this generation under Linux, where

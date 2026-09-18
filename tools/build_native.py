@@ -527,6 +527,14 @@ def main():
                 # than a stage enable, and the failure now sits exactly at the
                 # hull-to-tessellator handoff. No primary source; radv never
                 # sets it. Default 0 is the shipped behaviour.
+                # Diagnostic bisect: VGT_SHADER_STAGES_EN.VS_EN =
+                # V_028B54_VS_STAGE_DS. The other "fed by the tessellator"
+                # enumerant in the same register, parallel to ES_EN, which was
+                # a real defect here. Never varied in 58 runs. Default 0.
+                tess_vs_en_ds = os.environ.get("PS5VK_TESS_VS_EN_DS", "0")
+                if tess_vs_en_ds not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_VS_EN_DS must be 0 or 1")
+                common += ["-DPS5VK_TESS_VS_EN_DS=" + tess_vs_en_ds]
                 tess_dynamic_hs = os.environ.get("PS5VK_TESS_DYNAMIC_HS", "0")
                 if tess_dynamic_hs not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_DYNAMIC_HS must be 0 or 1")
@@ -573,6 +581,7 @@ def main():
                                          tess_high_levels + ":" +
                                          tess_only + ":" + tess_gs_en + ":" +
                                          tess_dynamic_hs + ":" +
+                                         tess_vs_en_ds + ":" +
                                          tess_max_vert_out + ":" + tess_spin +
                                          ":" + tess_spin_hull + ":" +
                                          tess_prefill + ":" + tess_vgt_flush +
