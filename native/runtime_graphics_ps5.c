@@ -22,6 +22,12 @@
  * cannot leak in. The ring block backs the offchip workgroups first and the
  * tess-factor ring behind them, and the TF ring base follows the offchip ring
  * exactly as the pinned emitter computes it (ac_cmdbuf_cp.c). */
+/* The user-config bank addresses registers by (address - 0x30000)/4. Naming
+ * the register address and converting here keeps a raw address from being
+ * mistaken for an offset, which is what silently dropped the tessellation
+ * ring state. */
+#define PS5VK_UC_OFFSET(address) ((uint16_t)(((address)-0x30000u)/4u))
+
 enum {
     PS5VK_TESS_OFFCHIP_WORKGROUPS = 144u,
     PS5VK_TESS_OFFCHIP_WORKGROUP_DWORDS = 8192u,
@@ -75,7 +81,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
      * packages: the same NGG pre-raster shape a vertex program has. The hull's
      * two program views come from its own builder, whose remaining refusal is
      * the launch state this path prepares below. */
-    struct ps5vk_runtime_shader hull_ls,hull_hs;
+    struct ps5vk_runtime_shader hull;
     if(ps5vk_runtime_shader_build(&check,
             has_tessellation?&input->domain:&input->vertex) ||
        ps5vk_runtime_shader_build(&check,&input->fragment) ||
@@ -83,17 +89,15 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
            has_tessellation?&input->domain.metadata:&input->vertex.metadata,
            &input->fragment.metadata,&arguments))
         {TESS_CREATE_FAIL("abi");return VK_ERROR_FEATURE_NOT_PRESENT;}
-    if(has_tessellation &&
-       ps5vk_runtime_hull_build(&hull_ls,&hull_hs,&input->hull))
+    if(has_tessellation && ps5vk_runtime_hull_build(&hull,&input->hull))
         {TESS_CREATE_FAIL("hull");return VK_ERROR_FEATURE_NOT_PRESENT;}
     size_t vs_at=(sizeof(struct ps5vk_graphics_pair)+255u)&~(size_t)255u;
     size_t fs_at=(vs_at+(has_tessellation?input->domain:input->vertex).machine_code_size+
         255u)&~(size_t)255u;
-    size_t hs_at=(fs_at+input->fragment.machine_code_size+255u)&~(size_t)255u;
-    size_t ls_at=has_tessellation?
-        (hs_at+input->hull.metadata.hull_ls_code_offset+255u)&~(size_t)255u:fs_at;
+    /* One merged hull image, so one 256B-aligned slot for it. */
+    size_t hull_at=(fs_at+input->fragment.machine_code_size+255u)&~(size_t)255u;
     size_t table_at=(has_tessellation?
-        ls_at+input->hull.metadata.hull_ls_code_size:fs_at+
+        hull_at+input->hull.machine_code_size:fs_at+
         input->fragment.machine_code_size+15u)&~(size_t)15u;
     struct ps5vk_native_graphics_pipeline *p=calloc(1,sizeof(*p));
     if(!p)return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -116,10 +120,9 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
     }
     if(has_tessellation) {
-        /* The hull views are appended to the prepared pair: their pointers are
+        /* The hull view is appended to the prepared pair: its pointers are
          * field-relative already, so a straight copy keeps them valid. */
-        pair->runtime_hull_ls=hull_ls;
-        pair->runtime_hull_hs=hull_hs;
+        pair->runtime_hull=hull;
     }
     void *vs_code=(unsigned char *)address+vs_at,*fs_code=(unsigned char *)address+fs_at;
     memcpy(vs_code,(has_tessellation?input->domain:input->vertex).machine_code,
@@ -157,21 +160,22 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             (input->hull.metadata.hull_num_patches_per_wg&255u) |
             ((input->patch_control_points&63u)<<8) |
             ((input->patch_control_points&63u)<<14)};
-        /* The hull programs are loaded here, so their pgm registers take the
-         * real addresses now: the HS half sits at offset 0 of the hull machine
-         * code and the LS half behind it, both 256B-aligned by construction. */
-        void *hs_code=(unsigned char *)address+hs_at,*ls_code=(unsigned char *)address+ls_at;
-        memcpy(hs_code,input->hull.machine_code,
-            input->hull.metadata.hull_ls_code_offset);
-        memcpy(ls_code,(unsigned char *)input->hull.machine_code+
-            input->hull.metadata.hull_ls_code_offset,
-            input->hull.metadata.hull_ls_code_size);
-        const uint64_t hs_va=(uintptr_t)hs_code,ls_va=(uintptr_t)ls_code;
-        if((hs_va|ls_va)&255u){rc=VK_ERROR_MEMORY_MAP_FAILED;goto failed;}
-        pair->runtime_hull_hs.shader[0].value=(uint32_t)(hs_va>>8);
-        pair->runtime_hull_hs.shader[1].value=(uint32_t)((hs_va>>40)&255u);
-        pair->runtime_hull_ls.shader[0].value=(uint32_t)(ls_va>>8);
-        pair->runtime_hull_ls.shader[1].value=(uint32_t)((ls_va>>40)&255u);
+        /* The merged hull program is loaded here, so its ONE address register
+         * pair takes the real address. On GFX10 that register is the LS block
+         * (R_00B520/R_00B524, sh 0x148/0x149) per the pinned
+         * radv_get_shader_regs(); the loader already refused a package that
+         * published the pre-GFX9 HS address register instead. */
+        void *hull_code=(unsigned char *)address+hull_at;
+        memcpy(hull_code,input->hull.machine_code,input->hull.machine_code_size);
+        const uint64_t hull_va=(uintptr_t)hull_code;
+        if(hull_va&255u){rc=VK_ERROR_MEMORY_MAP_FAILED;goto failed;}
+        if(pair->runtime_hull.shader[0].offset!=0x148 ||
+           pair->runtime_hull.shader[1].offset!=0x149) {
+            TESS_CREATE_FAIL("hull-pgm");
+            rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+        }
+        pair->runtime_hull.shader[0].value=(uint32_t)(hull_va>>8);
+        pair->runtime_hull.shader[1].value=(uint32_t)((hull_va>>40)&255u);
         /* The merged LS/HS workgroup's LDS allocation. The compiler CANNOT
          * publish it: the combined RSRC1/RSRC2 pair comes from the pinned
          * radv_shader_combine_cfg_vs_tcs(), which merges VGPR/SGPR counts and
@@ -204,9 +208,9 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
                 rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
             }
             unsigned patched=0;
-            for(unsigned i=0;i<pair->runtime_hull_hs.header.num_sh_registers;++i)
-                if(pair->runtime_hull_hs.shader[i].offset==0x10b) {
-                    pair->runtime_hull_hs.shader[i].value|=encoded<<18;
+            for(unsigned i=0;i<pair->runtime_hull.header.num_sh_registers;++i)
+                if(pair->runtime_hull.shader[i].offset==0x10b) {
+                    pair->runtime_hull.shader[i].value|=encoded<<18;
                     ++patched;
                 }
             if(patched!=1) {
@@ -252,16 +256,36 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
          * (SGPRs 0-1 of the merged program, one-to-one in the LS window). */
         pair->tess_ring_table_low=(uint32_t)rings_va;
         pair->tess_ring_table_high=(uint32_t)(rings_va>>32);
-        /* S_03093C: OFFCHIP_BUFFERING_GFX103(workgroups-1) in bits 0..9 and
-         * the 8K-dword granularity enum 0 in bits 10..11, from the pinned
-         * register header and the pinned emitter's device derivation. */
-        pair->tess_ring_state[0]=(ps5_agc_register){0x30938,
-            PS5VK_TESS_FACTOR_BYTES/4u};
-        pair->tess_ring_state[1]=(ps5_agc_register){0x3093c,
+        /* The tessellation ring device state, in the USER-CONFIG bank.
+         *
+         * These four registers carry OFFSETS in that bank's index space,
+         * (address - 0x30000)/4, exactly like the primitive-restart enable the
+         * draw state writes at 0x24b for R_03092C. They previously carried the
+         * RAW ADDRESSES 0x30938/0x3093c/0x30940/0x30984, which are not offsets
+         * at all: the tess-factor ring base, its size and the off-chip
+         * parameter therefore never reached their registers, and four writes
+         * landed at out-of-range indices instead. A hull that writes tess
+         * factors into a ring whose base register was never programmed faults
+         * on any patch draw at any tessellation level - including a
+         * zero-level patch, because the control half still writes the factors
+         * before the patch is discarded.
+         *
+         * The values follow the pinned emitter (ac_cmdbuf_cp.c, the GFX7+
+         * branch): SIZE is the factor ring in DWORDS, then the off-chip
+         * parameter, then the factor ring base >> 8, then its high bits
+         * >> 40. S_03093C: OFFCHIP_BUFFERING_GFX103(workgroups-1) in bits
+         * 0..9 and the 8K-dword granularity enum 0 in bits 10..11. */
+        pair->tess_ring_state[0]=(ps5_agc_register){
+            PS5VK_UC_OFFSET(0x030938u),           /* VGT_TF_RING_SIZE */
+            (PS5VK_TESS_FACTOR_BYTES/4u)&0x1ffffu};
+        pair->tess_ring_state[1]=(ps5_agc_register){
+            PS5VK_UC_OFFSET(0x03093Cu),           /* VGT_HS_OFFCHIP_PARAM */
             (PS5VK_TESS_OFFCHIP_WORKGROUPS-1u)&1023u};
-        pair->tess_ring_state[2]=(ps5_agc_register){0x30940,
+        pair->tess_ring_state[2]=(ps5_agc_register){
+            PS5VK_UC_OFFSET(0x030940u),           /* VGT_TF_MEMORY_BASE */
             (uint32_t)(tf_va>>8)};
-        pair->tess_ring_state[3]=(ps5_agc_register){0x30984,
+        pair->tess_ring_state[3]=(ps5_agc_register){
+            PS5VK_UC_OFFSET(0x030984u),           /* VGT_TF_MEMORY_BASE_HI */
             (uint32_t)((tf_va>>40)&255u)};
         rc=p->memory.flush(p->memory.context,p->rings_backing,0,PS5VK_TESS_RING_BYTES);
         if(rc!=VK_SUCCESS)goto failed;
