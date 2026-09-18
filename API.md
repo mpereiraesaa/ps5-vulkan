@@ -128,9 +128,12 @@ reporting `maxViewports` 1. They are gated rather than shipped because no
 upstream CTS leaf is applicable to them yet - the candidate families and their
 exact blocking reasons are in [UPSTREAM_CTS.md](UPSTREAM_CTS.md) - and because
 the first hardware run of their own witnesses leaves six of thirty-one raster
-cases unverified and the shader-selected viewport path blocked on compiler
-metadata, as recorded in
+cases unverified, as recorded in
 [VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses).
+The shader-selected viewport path itself is now measured - a geometry stage
+routing sixteen primitives to sixteen banks through `gl_ViewportIndex` - so
+`multiViewport` is held back by the missing upstream leaf and the six cases
+rather than by the driver.
 Nothing here should be read as these features being usable by an application
 today.
 
