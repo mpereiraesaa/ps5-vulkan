@@ -2705,10 +2705,56 @@ static void geometry_probe(VkDevice d)
             vkCmdEndRenderPass(coord_cb);
             CHECK(vkEndCommandBuffer(coord_cb));
             tess_receipt(PS5VK_TESS_CONTROL_NAME,coord_native,3u);
+            /* A BOUNDED wait, not vkQueueWaitIdle.
+             *
+             * The patch draw does not fault, it HANGS: the process logs its
+             * suspend point, goes quiet for about a second and a half and is
+             * then killed by a watchdog, where a clean run goes quiet for
+             * seven milliseconds and exits. Waiting forever means the payload
+             * never survives to report anything, so every question about what
+             * the hull actually did has had to be asked from outside the
+             * process - and the external debugger cannot reach the rings,
+             * which live in direct memory outside the process map.
+             *
+             * Waiting on a fence with a timeout keeps the payload alive. If
+             * the draw retires, everything proceeds exactly as before. If it
+             * stalls, the harness says so and then reads the TESSELLATION
+             * FACTOR RING, whose address it takes from the ring table's own
+             * entry 5 rather than from a constant, and reports its first
+             * words. The ring is zeroed at create, so any non-zero value is
+             * unambiguous evidence that the control half executed and wrote
+             * its levels; all zeros says the waves never got that far. That
+             * single question has been assumed in both directions all
+             * session and never measured. */
+            VkFence coord_fence=VK_NULL_HANDLE;
+            VkFenceCreateInfo coord_fi={.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+            CHECK(vkCreateFence(d,&coord_fi,NULL,&coord_fence));
             VkSubmitInfo coord_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
                 .commandBufferCount=1,.pCommandBuffers=&coord_cb};
-            CHECK(vkQueueSubmit(queue,1,&coord_submit,VK_NULL_HANDLE));
-            CHECK(vkQueueWaitIdle(queue));
+            CHECK(vkQueueSubmit(queue,1,&coord_submit,coord_fence));
+            const VkResult coord_wait=
+                vkWaitForFences(d,1,&coord_fence,VK_TRUE,300000000ull);
+            if(coord_wait!=VK_SUCCESS) {
+                const uint32_t *coord_table=
+                    (const uint32_t *)coord_native->pair->tess_rings;
+                const uint64_t factor_va=
+                    ((uint64_t)coord_table[21]<<32)|coord_table[20];
+                const volatile uint32_t *factors=
+                    (const volatile uint32_t *)(uintptr_t)factor_va;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_STALL variant=%s wait=%d factor_va=%08x%08x "
+                    "f0=%08x f1=%08x f2=%08x f3=%08x f4=%08x f5=%08x "
+                    "f6=%08x f7=%08x",
+                    PS5VK_TESS_CONTROL_NAME,(int)coord_wait,
+                    coord_table[21],coord_table[20],
+                    factors[0],factors[1],factors[2],factors[3],
+                    factors[4],factors[5],factors[6],factors[7]);
+                vkDestroyFence(d,coord_fence,NULL);
+                vkDestroyPipeline(d,coord_pipeline,NULL);
+                vkDestroyCommandPool(d,coord_pool,NULL);
+                goto coord_done;
+            }
+            vkDestroyFence(d,coord_fence,NULL);
             CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
                 .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
                 .offset=0,.size=VK_WHOLE_SIZE}));
