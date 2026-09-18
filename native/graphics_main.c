@@ -2646,7 +2646,6 @@ static void geometry_probe(VkDevice d)
         }
     }
     for(unsigned i=0;i<4;++i)vkDestroyShaderModule(d,tess_modules[i],NULL);
-tess_done:
 #endif
 #if PS5VK_GEOMETRY_ORDER_PROBE
     if(restart_vertex_buffer)vkDestroyBuffer(d,restart_vertex_buffer,NULL);
