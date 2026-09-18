@@ -457,6 +457,15 @@ def main():
                 # cannot recover from - which no register experiment could
                 # show. Default 0 keeps the geometry table, whose 19/19 pass
                 # is also this probe's evidence that the device is healthy.
+                # Diagnostic bisect: set VGT_SHADER_STAGES_EN.GS_EN on a
+                # tessellation pipeline with no geometry shader. Not what radv
+                # does; it exists because ES_STAGE_DS with GS_EN=0 is the one
+                # stage combination no passing pipeline on this device has
+                # ever used. Default 0 is the shipped behaviour.
+                tess_gs_en = os.environ.get("PS5VK_TESS_GS_EN", "0")
+                if tess_gs_en not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_GS_EN must be 0 or 1")
+                common += ["-DPS5VK_TESS_GS_EN=" + tess_gs_en]
                 tess_only = os.environ.get("PS5VK_TESS_ONLY", "0")
                 if tess_only not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_ONLY must be 0 or 1")
@@ -493,7 +502,7 @@ def main():
                                          tess_no_tf_param + ":" +
                                          tess_link_prim + ":" +
                                          tess_high_levels + ":" +
-                                         tess_only) +
+                                         tess_only + ":" + tess_gs_en) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump

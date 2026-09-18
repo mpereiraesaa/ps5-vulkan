@@ -208,6 +208,22 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             (input->domain.metadata.linkage_stages_en.value & ~(3u<<3)) |
             (1u<<3) | /* V_028B54_ES_STAGE_DS: the tessellator feeds it */
             (1u<<0) | /* V_028B54_LS_STAGE_ON */
+#if defined(PS5VK_TESS_GS_EN) && PS5VK_TESS_GS_EN
+            /* DIAGNOSTIC BISECT, default off, and deliberately NOT what radv
+             * does: it sets GS_EN only for a real API geometry shader.
+             *
+             * It earns one run because of the one structural difference
+             * between this pipeline and every NGG pipeline that PASSES on
+             * this device. The geometry probe's merged pair runs with
+             * ES_EN = ES_STAGE_REAL and GS_EN = 1; its plain vertex cases run
+             * with ES_STAGE_REAL and GS_EN = 0. Ours is the only combination
+             * on this device that pairs ES_STAGE_DS with GS_EN = 0, and
+             * nothing here has ever exercised a tessellator-fed export stage
+             * before. If the geometry engine needs the GS stage enabled to
+             * schedule a DS-fed NGG subgroup, no value of any other register
+             * could show it. */
+            (1u<<5) | /* V_028B54_GS_STAGE_ON */
+#endif
             (1u<<2)}; /* V_028B54_HS_STAGE_ON */
         /* DIAGNOSTIC BISECT, not a promoted value. NUM_PATCHES is the
          * compiler's per-workgroup CAPACITY (64 for these fixtures) and the
