@@ -373,6 +373,12 @@ def main():
                 common += ["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
                 common += ["-DPS5VK_TESS_NO_DRAW=" +
                            os.environ.get("PS5VK_TESS_NO_DRAW", "0")]
+                # Diagnostic only: override VGT_LS_HS_CONFIG NUM_PATCHES to
+                # test whether the per-workgroup capacity, not the patch data,
+                # is what stalls a single-patch draw. Zero keeps the compiler's
+                # published capacity, which is the shipped behaviour.
+                common += ["-DPS5VK_TESS_PATCHES_PER_WG=" +
+                           os.environ.get("PS5VK_TESS_PATCHES_PER_WG", "0")]
                 # The source-candidate identity the payload logs before the
                 # submit. It digests exactly the source families the manifest
                 # already records plus the build inputs that change the

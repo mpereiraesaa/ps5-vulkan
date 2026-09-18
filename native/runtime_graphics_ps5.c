@@ -156,8 +156,21 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             input->domain.metadata.linkage_stages_en.value |
             (1u<<0) | /* V_028B54_LS_STAGE_ON */
             (1u<<2)}; /* V_028B54_HS_STAGE_ON */
+        /* DIAGNOSTIC BISECT, not a promoted value. NUM_PATCHES is the
+         * compiler's per-workgroup CAPACITY (64 for these fixtures) and the
+         * handoff froze it absent primary-source proof. The measured failure
+         * class has since changed from "fault" to "hang": the draw logs its
+         * suspend point, goes silent for ~1.5 s and is killed, which is a
+         * launch that never retires rather than a bad address. A workgroup
+         * sized for 64 patches fed a single patch is exactly that shape if the
+         * geometry engine batches patches before launching, so this switch
+         * lets one run test it. Default OFF: the shipped value is unchanged. */
+        uint32_t num_patches=input->hull.metadata.hull_num_patches_per_wg;
+#if defined(PS5VK_TESS_PATCHES_PER_WG) && PS5VK_TESS_PATCHES_PER_WG
+        num_patches=PS5VK_TESS_PATCHES_PER_WG;
+#endif
         pair->tess_state[1]=(ps5_agc_register){0x2d6,
-            (input->hull.metadata.hull_num_patches_per_wg&255u) |
+            (num_patches&255u) |
             ((input->patch_control_points&63u)<<8) |
             ((input->patch_control_points&63u)<<14)};
         /* The merged hull program is loaded here, so its ONE address register
