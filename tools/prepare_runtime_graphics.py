@@ -160,6 +160,12 @@ def main():
         # without a storage buffer whose own delivery cannot be validated.
         ("experiments/graphics/runtime_tess_spin.tese",
          "runtime_tess_spin.tese.spv", "tess_spin_evaluation"),
+        # The same witness on the ISOLINE domain: two outer levels instead of
+        # three plus inner, a two-dword factor layout instead of four, line
+        # output instead of triangles. A materially different tessellator
+        # configuration measured by the same descriptor-free mechanism.
+        ("experiments/graphics/runtime_tess_spin_iso.tese",
+         "runtime_tess_spin_iso.tese.spv", "tess_spin_iso_evaluation"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name

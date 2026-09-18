@@ -474,9 +474,13 @@ def main():
                 # half that spins instead of writing memory, so the bounded
                 # fence wait answers "did the domain run" with no storage
                 # buffer in the path. Default 0.
+                # 1 = the triangle domain, 2 = the isoline domain: a
+                # materially different tessellator configuration measured by
+                # the same descriptor-free mechanism.
                 tess_spin = os.environ.get("PS5VK_TESS_SPIN", "0")
-                if tess_spin not in ("0", "1"):
-                    raise SystemExit("PS5VK_TESS_SPIN must be 0 or 1")
+                if tess_spin not in ("0", "1", "2"):
+                    raise SystemExit(
+                        "PS5VK_TESS_SPIN is 0, 1 (triangles) or 2 (isolines)")
                 common += ["-DPS5VK_TESS_SPIN=" + tess_spin]
                 tess_max_vert_out = os.environ.get(
                     "PS5VK_TESS_GS_MAX_VERT_OUT", "0")
@@ -484,6 +488,15 @@ def main():
                     raise SystemExit(
                         "PS5VK_TESS_GS_MAX_VERT_OUT is 0..2047")
                 common += ["-DPS5VK_TESS_GS_MAX_VERT_OUT=" + tess_max_vert_out]
+                # Diagnostic bisect: VGT_SHADER_STAGES_EN.DYNAMIC_HS, the
+                # only bit in that register naming the HS dispatch mode rather
+                # than a stage enable, and the failure now sits exactly at the
+                # hull-to-tessellator handoff. No primary source; radv never
+                # sets it. Default 0 is the shipped behaviour.
+                tess_dynamic_hs = os.environ.get("PS5VK_TESS_DYNAMIC_HS", "0")
+                if tess_dynamic_hs not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_DYNAMIC_HS must be 0 or 1")
+                common += ["-DPS5VK_TESS_DYNAMIC_HS=" + tess_dynamic_hs]
                 tess_gs_en = os.environ.get("PS5VK_TESS_GS_EN", "0")
                 if tess_gs_en not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_GS_EN must be 0 or 1")
@@ -525,6 +538,7 @@ def main():
                                          tess_link_prim + ":" +
                                          tess_high_levels + ":" +
                                          tess_only + ":" + tess_gs_en + ":" +
+                                         tess_dynamic_hs + ":" +
                                          tess_max_vert_out + ":" + tess_spin) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant

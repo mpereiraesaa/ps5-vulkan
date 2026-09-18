@@ -2644,7 +2644,9 @@ static void geometry_probe(VkDevice d)
  * at once: whether the stage ran, how many vertices the tessellator produced,
  * and whether gl_TessCoord arrives with real values or as zeroes. */
 #define PS5VK_TESS_CONTROL_NAME "D-domain-exec-witness"
-#if defined(PS5VK_TESS_SPIN) && PS5VK_TESS_SPIN
+#if defined(PS5VK_TESS_SPIN) && PS5VK_TESS_SPIN==2
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_spin_iso_evaluation
+#elif defined(PS5VK_TESS_SPIN) && PS5VK_TESS_SPIN
 #define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_spin_evaluation
 #else
 #define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_witness_exec_evaluation

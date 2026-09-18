@@ -208,6 +208,22 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             (input->domain.metadata.linkage_stages_en.value & ~(3u<<3)) |
             (1u<<3) | /* V_028B54_ES_STAGE_DS: the tessellator feeds it */
             (1u<<0) | /* V_028B54_LS_STAGE_ON */
+#if defined(PS5VK_TESS_DYNAMIC_HS) && PS5VK_TESS_DYNAMIC_HS
+            /* DIAGNOSTIC BISECT, default off, no primary source: radv never
+             * sets DYNAMIC_HS and works on this generation under Linux, where
+             * the kernel's context initialisation owns whatever this field
+             * needs to be.
+             *
+             * It earns a run because of exactly where the failure now sits.
+             * The merged LS/HS program is proven to execute and store correct
+             * tessellation factors, for the triangle domain and the isoline
+             * domain alike, and the evaluation half is proven by two
+             * independent witnesses not to execute. So the geometry engine
+             * dispatches the hull and then does not run the tessellator, and
+             * this is the only bit left in VGT_SHADER_STAGES_EN that names
+             * the HS dispatch mode rather than a stage enable. */
+            (1u<<8) | /* DYNAMIC_HS */
+#endif
 #if defined(PS5VK_TESS_GS_EN) && PS5VK_TESS_GS_EN
             /* DIAGNOSTIC BISECT, default off, and deliberately NOT what radv
              * does: it sets GS_EN only for a real API geometry shader.
