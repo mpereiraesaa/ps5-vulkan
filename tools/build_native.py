@@ -67,13 +67,6 @@ def main():
     geometry_order_probe = os.environ.get("PS5VK_GEOMETRY_ORDER_PROBE", "0")
     if geometry_order_probe not in ("0", "1") or (geometry_order_probe == "1" and geometry_probe != "1"):
         raise SystemExit("PS5VK_GEOMETRY_ORDER_PROBE is a bounded geometry-probe diagnostic")
-    # The tessellation witness is its own bounded diagnostic: it creates the
-    # tessellation pipeline, draws two patches with different tessellation
-    # levels and reports the quantised-tessCoord oracle. Like the other
-    # optional-stage witnesses it skips the feature-negotiation gate.
-    tess_probe = os.environ.get("PS5VK_TESS_PROBE", "0")
-    if tess_probe not in ("0", "1") or (tess_probe == "1" and not graphics_api):
-        raise SystemExit("PS5VK_TESS_PROBE requires the graphics profile API and must be 0 or 1")
     # The six-view witness is the only consumer of the diagnostic gate, so it
     # requires both: a real view mask AND a runtime-compiled vertex stage that
     # reads gl_ViewIndex. It is a single bounded scene, never combined with the
@@ -323,11 +316,10 @@ def main():
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
             common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
-            common += ["-DPS5VK_TESS_PROBE=" + tess_probe]
             # Both optional-stage witnesses skip the feature-negotiation gate:
             # they exist to measure capabilities that are not advertised yet.
-            common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" +
-                       ("1" if (clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1") else "0")]
+            common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + 
+                       ("1" if (clip_cull_probe == "1" or geometry_probe == "1") else "0")]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]

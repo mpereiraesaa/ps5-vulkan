@@ -102,19 +102,6 @@ def main():
         ("experiments/graphics/runtime_geometry_output_components.frag",
          "runtime_geometry_output_components.frag.spv",
          "geometry_output_components_fragment"),
-        # The tessellation witness: two triangle patches, the left tessellated
-        # at level three and the right at level one, whose evaluation half
-        # paints the QUANTISED tessCoord field - the image names the
-        # sub-triangle it came from, which is what makes the tessellator's
-        # levels observable rather than only the patch's coverage.
-        ("experiments/graphics/runtime_tess_witness.vert",
-         "runtime_tess_witness.vert.spv", "tess_witness_vertex"),
-        ("experiments/graphics/runtime_tess_witness.tesc",
-         "runtime_tess_witness.tesc.spv", "tess_witness_control"),
-        ("experiments/graphics/runtime_tess_witness.tese",
-         "runtime_tess_witness.tese.spv", "tess_witness_evaluation"),
-        ("experiments/graphics/runtime_tess_witness.frag",
-         "runtime_tess_witness.frag.spv", "tess_witness_fragment"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
