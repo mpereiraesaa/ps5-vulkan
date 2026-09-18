@@ -2501,6 +2501,179 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,points_module,NULL);
     vkDestroyShaderModule(d,lines_module,NULL);
 #if PS5VK_TESS_PROBE
+    /* The TessCoord CONTROL draw, run FIRST: the same pipeline shape with an
+     * evaluation half whose position is a pure function of gl_TessCoord and a
+     * control half that writes only the levels - no off-chip reads anywhere.
+     * If this draw completes and reads back, the tessellator and the domain
+     * half's own launch state work, and the witness draw's fault is the ring
+     * delivery; if this draw faults too, the launch state before any off-chip
+     * read is the suspect. */
+    VkShaderModule coord_modules[4];
+    const struct { const uint32_t *code; size_t bytes; } coord_codes[4]={
+        {ps5vk_runtime_tess_coord_vertex,sizeof(ps5vk_runtime_tess_coord_vertex)},
+        {ps5vk_runtime_tess_coord_control,sizeof(ps5vk_runtime_tess_coord_control)},
+        {ps5vk_runtime_tess_coord_evaluation,sizeof(ps5vk_runtime_tess_coord_evaluation)},
+        {ps5vk_runtime_tess_coord_fragment,sizeof(ps5vk_runtime_tess_coord_fragment)}};
+    for(unsigned i=0;i<4;++i) {
+        VkShaderModuleCreateInfo mi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=coord_codes[i].bytes,.pCode=coord_codes[i].code};
+        CHECK(vkCreateShaderModule(d,&mi,NULL,&coord_modules[i]));
+    }
+    {
+        const VkShaderStageFlagBits coord_stages[4]={
+            VK_SHADER_STAGE_VERTEX_BIT,VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,VK_SHADER_STAGE_FRAGMENT_BIT};
+        VkPipelineShaderStageCreateInfo coord_stage_infos[4];
+        for(unsigned i=0;i<4;++i)
+            coord_stage_infos[i]=(VkPipelineShaderStageCreateInfo){
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage=coord_stages[i],.module=coord_modules[i],.pName="main"};
+        VkPipelineInputAssemblyStateCreateInfo coord_ia={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
+        VkPipelineTessellationStateCreateInfo coord_ts={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+            .patchControlPoints=3};
+        VkPipelineVertexInputStateCreateInfo coord_vi={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        VkPipelineRasterizationStateCreateInfo coord_raster={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
+        VkPipelineMultisampleStateCreateInfo coord_ms={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+        VkViewport coord_vp_v={0,0,(float)extent,(float)extent,0,1};
+        VkRect2D coord_vp_s={{0,0},{extent,extent}};
+        VkPipelineViewportStateCreateInfo coord_vp={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount=1,.pViewports=&coord_vp_v,.scissorCount=1,
+            .pScissors=&coord_vp_s};
+        VkPipelineColorBlendAttachmentState coord_blend_a={.colorWriteMask=15};
+        VkPipelineColorBlendStateCreateInfo coord_blend={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount=1,.pAttachments=&coord_blend_a};
+        VkGraphicsPipelineCreateInfo coord_pi={
+            .sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .layout=layout,.renderPass=pass,.stageCount=4,
+            .pStages=coord_stage_infos,.pVertexInputState=&coord_vi,
+            .pInputAssemblyState=&coord_ia,.pTessellationState=&coord_ts,
+            .pRasterizationState=&coord_raster,.pMultisampleState=&coord_ms,
+            .pViewportState=&coord_vp,.pColorBlendState=&coord_blend};
+        VkPipeline coord_pipeline;
+        const VkResult coord_rc=vkCreateGraphicsPipelines(d,0,1,&coord_pi,NULL,
+            &coord_pipeline);
+        if(coord_rc==VK_SUCCESS && coord_pipeline) {
+            const struct ps5vk_native_graphics_pipeline *coord_native=
+                coord_pipeline->graphics_state;
+            if(!coord_native || !coord_native->pair || !coord_native->pair->ready ||
+               !coord_native->pair->tessellation)
+                fail("tess-coord-pipeline",-1);
+            VkCommandPool coord_pool;
+            VkCommandPoolCreateInfo coord_pci={
+                .sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                .queueFamilyIndex=0};
+            CHECK(vkCreateCommandPool(d,&coord_pci,NULL,&coord_pool));
+            VkCommandBuffer coord_cb=VK_NULL_HANDLE;
+            VkCommandBufferAllocateInfo coord_cbi={
+                .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .commandPool=coord_pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount=1};
+            CHECK(vkAllocateCommandBuffers(d,&coord_cbi,&coord_cb));
+            VkCommandBufferBeginInfo coord_begin={
+                .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+            CHECK(vkBeginCommandBuffer(coord_cb,&coord_begin));
+            VkClearValue coord_clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
+            VkRenderPassBeginInfo coord_rbi={
+                .sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                .renderPass=pass,.framebuffer=fb,
+                .renderArea={{0,0},{extent,extent}},
+                .clearValueCount=1,.pClearValues=&coord_clear};
+            vkCmdBeginRenderPass(coord_cb,&coord_rbi,VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(coord_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,coord_pipeline);
+            vkCmdDraw(coord_cb,3,1,0,0);
+            vkCmdEndRenderPass(coord_cb);
+            CHECK(vkEndCommandBuffer(coord_cb));
+            /* The prepared launch state, logged before the submit: the
+             * LS_HS_CONFIG and the domain's stage enables are what the
+             * engine is about to run with. */
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_COORD_PREPARED di_patch=9 ls_hs_config=%08x "
+                "stages_en=%08x tf_param=%08x",
+                coord_native->pair->tess_state[1].value,
+                coord_native->pair->tess_state[0].value,
+                coord_native->pair->runtime_hull_hs.context[0].value);
+            VkSubmitInfo coord_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .commandBufferCount=1,.pCommandBuffers=&coord_cb};
+            CHECK(vkQueueSubmit(queue,1,&coord_submit,VK_NULL_HANDLE));
+            CHECK(vkQueueWaitIdle(queue));
+            CHECK(vkInvalidateMappedMemoryRanges(d,1,&(VkMappedMemoryRange){
+                .sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=memory,
+                .offset=0,.size=VK_WHOLE_SIZE}));
+            static uint8_t coord_detiled[PS5VK_GEOMETRY_EXTENT*PS5VK_GEOMETRY_EXTENT*4];
+            if(ps5vk_rgba8_64k_rx_detile(coord_detiled,sizeof(coord_detiled),map,
+                (size_t)stride,extent,extent))fail("tess-coord-detile",-1);
+            /* The oracle: level two splits every edge in half; the quantised
+             * coordinate field is exact. Coverage: the triangle's own area;
+             * colours: the quantised field per pixel. */
+            unsigned long long c_expected=0,c_covered=0,c_wrong=0;
+            for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x) {
+                const float px=(float)x+0.5f,py=(float)y+0.5f;
+                const float u=px/(float)extent;
+                const float v=1.0f-py/(float)extent;
+                /* The evaluation half's triangle: (-0.9,-0.9),(0.9,-0.9),
+                 * (0,0.9) in NDC. Barycentric against that triangle. */
+                const float denom=(-0.9f-0.9f)*(-0.9f-0.9f)+0.0f;
+                (void)denom;
+                const float ax=-0.9f,ay=-0.9f,bx=0.9f,by=-0.9f,cx2=0.0f,cy2=0.9f;
+                const float d=(by-cy2)*(ax-cx2)+(cx2-bx)*(ay-cy2);
+                if(d==0.0f)continue;
+                const float a=((by-cy2)*(u-cx2)+(cx2-bx)*(v-cy2))/d;
+                const float b=((cy2-ay)*(u-cx2)+(ax-cx2)*(v-cy2))/d;
+                const float c=1.0f-a-b;
+                const int inside=a>=-0.002f&&b>=-0.002f&&c>=-0.002f;
+                const uint8_t *pxb=coord_detiled+4*((size_t)y*extent+x);
+                const int is_ink=pxb[0]||pxb[1]||pxb[2];
+                if(!inside) {
+                    if(is_ink)++c_wrong;
+                    continue;
+                }
+                ++c_expected;
+                if(!is_ink)continue;
+                ++c_covered;
+                /* The evaluation half's quantised field, at level two: the
+                 * tessCoord components quantised to halves, blue half. */
+                const float tq[2]={a,b};
+                const float expect[3]={floorf(tq[0]*2.0f)/2.0f,
+                    floorf(tq[1]*2.0f)/2.0f,0.5f};
+                int wrong=0;
+                for(int ch=0;ch<3;++ch) {
+                    const unsigned got=pxb[ch];
+                    const unsigned want=(unsigned)(expect[2-ch]*255.0f+0.5f);
+                    const unsigned diff=got>want?got-want:want-got;
+                    if(diff>2)++wrong;
+                }
+                if(wrong)++c_wrong;
+            }
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_COORD expected=%llu covered=%llu wrong=%llu "
+                "digest=%016llx ls_hs_config=%08x tf_param=%08x verified=%d",
+                (unsigned long long)c_expected,(unsigned long long)c_covered,
+                (unsigned long long)c_wrong,
+                (unsigned long long)geometry_digest(coord_detiled,sizeof(coord_detiled)),
+                coord_native->pair->tess_state[1].value,
+                coord_native->pair->runtime_hull_hs.context[0].value,
+                (int)(c_wrong==0&&c_covered>0));
+            vkDestroyPipeline(d,coord_pipeline,NULL);
+            vkDestroyCommandPool(d,coord_pool,NULL);
+        } else {
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_COORD rc=%d created=0 site=%u",(int)coord_rc,
+                ps5vk_pipeline_refusal_site());
+        }
+    }
+    for(unsigned i=0;i<4;++i)vkDestroyShaderModule(d,coord_modules[i],NULL);
+#endif
+#if PS5VK_TESS_PROBE
     extern unsigned ps5vk_pipeline_refusal_site(void);
     /* Tessellation witness (report-only). Two triangle patches: the left
      * tessellated at level three, the right at level one. The evaluation half

@@ -115,6 +115,19 @@ def main():
          "runtime_tess_witness.tese.spv", "tess_witness_evaluation"),
         ("experiments/graphics/runtime_tess_witness.frag",
          "runtime_tess_witness.frag.spv", "tess_witness_fragment"),
+        # The TessCoord control: the same pipeline shape with an evaluation
+        # half whose position is a pure function of gl_TessCoord and a control
+        # half that writes only the levels - no off-chip reads at all, so the
+        # draw isolates the tessellator + the domain launch from the ring
+        # delivery.
+        ("experiments/graphics/runtime_tess_coord.vert",
+         "runtime_tess_coord.vert.spv", "tess_coord_vertex"),
+        ("experiments/graphics/runtime_tess_coord.tesc",
+         "runtime_tess_coord.tesc.spv", "tess_coord_control"),
+        ("experiments/graphics/runtime_tess_coord.tese",
+         "runtime_tess_coord.tese.spv", "tess_coord_evaluation"),
+        ("experiments/graphics/runtime_tess_coord.frag",
+         "runtime_tess_coord.frag.spv", "tess_coord_fragment"),
     )
     for source_name,binary_name,stage in modules:
         binary=args.out.parent/binary_name
