@@ -28,10 +28,12 @@ struct ps5vk_graphics_pair {
     struct ps5vk_runtime_shader runtime_hull;
     /* The driver-owned hull launch state, prepared at create from the hull
      * metadata's workgroup layout and the domain's linked stage enables:
-     * VGT_SHADER_STAGES_EN (0x2d5) with the LS/HS enables ORed in, and
+     * VGT_SHADER_STAGES_EN (0x2d5) with the LS/HS enables ORed in,
      * VGT_LS_HS_CONFIG (0x2d6) with the patch count per workgroup and the
-     * input/output control-point counts. */
-    ps5_agc_register tess_state[3];
+     * input/output control-point counts, VGT_TESS_DISTRIBUTION (0x2d4), and
+     * the hardware's tessellation-level CLAMPS at VGT_HOS_MAX_TESS_LEVEL
+     * (0x286) and VGT_HOS_MIN_TESS_LEVEL (0x287). */
+    ps5_agc_register tess_state[5];
     /* The tessellation ring configuration as user-config registers, prepared
      * at create from the rings this pipeline allocates: VGT_TF_RING_SIZE
      * (0x30938), VGT_HS_OFFCHIP_PARAM (0x3093c), VGT_TF_MEMORY_BASE (0x30940)

@@ -26,6 +26,9 @@
  * the register address and converting here keeps a raw address from being
  * mistaken for an offset, which is what silently dropped the tessellation
  * ring state. */
+#ifndef PS5VK_TESS_DISTRIBUTION_MODE
+#define PS5VK_TESS_DISTRIBUTION_MODE 3 /* V_028B6C_TRAPEZOIDS */
+#endif
 #define PS5VK_UC_OFFSET(address) ((uint16_t)(((address)-0x30000u)/4u))
 
 enum {
@@ -244,6 +247,35 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         pair->tess_state[2]=(ps5_agc_register){0x2d4,
             (32u&0xffu) | ((11u&0xffu)<<8) | ((11u&0xffu)<<16) |
             ((16u&0x1fu)<<24) | ((3u&0x7u)<<29)};
+        /* THE HARDWARE'S TESSELLATION-LEVEL CLAMPS, which this driver has
+         * never written at all.
+         *
+         * VGT_HOS_MAX_TESS_LEVEL and VGT_HOS_MIN_TESS_LEVEL bound every
+         * tessellation factor the geometry engine reads, as IEEE floats. The
+         * pinned emitter sets both as part of device initialisation - three
+         * separate init paths in ac_cmdbuf.c all write
+         * R_028A18_VGT_HOS_MAX_TESS_LEVEL = fui(64) and
+         * R_028A1C_VGT_HOS_MIN_TESS_LEVEL = fui(0) - and this driver performs
+         * no such initialisation, exactly as it performed none for
+         * VGT_TESS_DISTRIBUTION or the tessellation ring's user-config
+         * registers, both of which had to be added here for the same reason.
+         *
+         * The consequence if the maximum holds zero is total and silent: every
+         * factor the hull writes is clamped to 0.0, the tessellator generates
+         * nothing, no domain waves launch, no primitive reaches the rasteriser
+         * and the draw retires normally with an empty image. That is precisely
+         * the measured state - the hull proven to store outer 2.0, 2.0, 2.0 and
+         * inner 1.0, a witness reporting the evaluation half ran ZERO times,
+         * ink=0 and foreign=0, and a clean 0.168 s draw.
+         *
+         * Written with the rest of the tessellation context on every patch
+         * draw, so nothing depends on what another pipeline or the platform's
+         * own initialisation left behind. 64.0f is 0x42800000 and 0.0f is
+         * zero; they are spelled as the bit patterns the register takes rather
+         * than built through a float cast, so the emitted value is readable
+         * next to the pinned fui(64) it comes from. */
+        pair->tess_state[3]=(ps5_agc_register){0x286,0x42800000u};
+        pair->tess_state[4]=(ps5_agc_register){0x287,0x00000000u};
         /* VGT_TF_PARAM.DISTRIBUTION_MODE, paired with the register above.
          *
          * The accumulators this driver writes at 0x2d4 only mean anything
@@ -272,9 +304,21 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             unsigned patched_tf=0;
             for(unsigned i=0;i<pair->runtime_hull.header.num_cx_registers;++i)
                 if(pair->runtime_hull.context[i].offset==0x2db) {
+                    /* The distribution mode is a KNOB rather than a
+                     * constant, because its first measurement is not valid.
+                     * It was set to TRAPEZOIDS on a consistency argument -
+                     * radv runs this chip with the accumulators and a
+                     * non-zero mode - and measured to "change nothing", but
+                     * that run happened BEFORE the hull stopped storing
+                     * quad-shaped tessellation factors, so nothing downstream
+                     * could have worked whatever this field held. A null
+                     * result measured upstream of a known defect is not a
+                     * null result. Default 3 is the current shipped value;
+                     * 0 is V_028B6C_NO_DIST, what the compiler published
+                     * before this session touched it. */
                     pair->runtime_hull.context[i].value=
                         (pair->runtime_hull.context[i].value & ~(3u<<17)) |
-                        (3u<<17); /* V_028B6C_TRAPEZOIDS */
+                        ((PS5VK_TESS_DISTRIBUTION_MODE & 3u)<<17);
                     /* DIAGNOSTIC BISECT, not a promoted value. Default 0
                      * leaves the shipped behaviour untouched.
                      *
@@ -302,6 +346,32 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
                     pair->runtime_hull.context[i].value=
                         (pair->runtime_hull.context[i].value & ~(15u<<10)) |
                         ((PS5VK_TESS_DS_WAVES & 15u)<<10);
+#endif
+                    /* DIAGNOSTIC BISECT, default 0 (V_028B6C_VGT_POLICY_LRU,
+                     * the shipped behaviour).
+                     *
+                     * RDREQ_POLICY at bits 15..16 selects how the geometry
+                     * engine's tessellation-factor READS are cached, and this
+                     * driver zeroes it along with every other field it does
+                     * not derive. The pinned header names the alternatives:
+                     * VGT_POLICY_LRU 0, VGT_POLICY_STREAM 1 and
+                     * VGT_POLICY_BYPASS 2, the last valid on gfx10 and
+                     * gfx103.
+                     *
+                     * It earns a run because of what the measurements have
+                     * narrowed to. The hull writes outer 2.0, 2.0, 2.0 and
+                     * inner 1.0 and they are in memory, verified by reading
+                     * the ring. The domain never launches. And on this
+                     * generation DETECT_ZERO=0 means PRE_CLAMP_TF0 - the
+                     * hardware CULLS a patch whose tessellation factor reads
+                     * as zero, tested before clamping. Those three facts are
+                     * consistent if the VGT is not reading the bytes the hull
+                     * wrote, and BYPASS is the enumerant whose name is that
+                     * hypothesis rather than a numeric guess at it. */
+#if defined(PS5VK_TESS_TF_RDREQ) && PS5VK_TESS_TF_RDREQ
+                    pair->runtime_hull.context[i].value=
+                        (pair->runtime_hull.context[i].value & ~(3u<<15)) |
+                        ((PS5VK_TESS_TF_RDREQ & 3u)<<15);
 #endif
                     ++patched_tf;
                 }

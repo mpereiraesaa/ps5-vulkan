@@ -405,6 +405,34 @@ def main():
                     raise SystemExit(
                         "PS5VK_TESS_DS_WAVES is a 4-bit bisect: 0 to 15")
                 common += ["-DPS5VK_TESS_DS_WAVES=" + tess_ds_waves]
+                # Diagnostic bisect: compile the domain with NGG passthrough
+                # forced off, so the generated code and the published
+                # PRIMGEN_PASSTHRU_EN move together. Zero is radv's own
+                # decision and the shipped behaviour.
+                tess_no_passthru = os.environ.get("PS5VK_TESS_NO_PASSTHRU", "0")
+                if tess_no_passthru not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_NO_PASSTHRU must be 0 or 1")
+                common += ["-DPS5VK_TESS_NO_PASSTHRU=" + tess_no_passthru]
+                # Diagnostic bisect for VGT_TF_PARAM.RDREQ_POLICY, which this
+                # driver zeroes with the rest of the register's underived
+                # fields. 0 is VGT_POLICY_LRU and the shipped behaviour;
+                # 2 is VGT_POLICY_BYPASS.
+                tess_tf_rdreq = os.environ.get("PS5VK_TESS_TF_RDREQ", "0")
+                if tess_tf_rdreq not in ("0", "1", "2"):
+                    raise SystemExit(
+                        "PS5VK_TESS_TF_RDREQ is LRU 0, STREAM 1 or BYPASS 2")
+                common += ["-DPS5VK_TESS_TF_RDREQ=" + tess_tf_rdreq]
+                # VGT_TF_PARAM.DISTRIBUTION_MODE. 3 is TRAPEZOIDS, what radv
+                # runs this chip with and the current shipped value; 0 is
+                # NO_DIST, what the compiler published before. It is a knob
+                # because its first measurement was taken upstream of a known
+                # defect and therefore proves nothing.
+                tess_dist_mode = os.environ.get(
+                    "PS5VK_TESS_DISTRIBUTION_MODE", "3")
+                if tess_dist_mode not in ("0", "1", "2", "3"):
+                    raise SystemExit(
+                        "PS5VK_TESS_DISTRIBUTION_MODE is 0..3")
+                common += ["-DPS5VK_TESS_DISTRIBUTION_MODE=" + tess_dist_mode]
                 # The source-candidate identity the payload logs before the
                 # submit. It digests exactly the source families the manifest
                 # already records plus the build inputs that change the
@@ -418,7 +446,10 @@ def main():
                            tess_build_id(tess_probe, tess_variant,
                                          os.environ.get("PS5VK_TESS_NO_DRAW", "0"),
                                          tess_state_dump + ":" +
-                                         tess_ds_waves) +
+                                         tess_ds_waves + ":" +
+                                         tess_no_passthru + ":" +
+                                         tess_tf_rdreq + ":" +
+                                         tess_dist_mode) +
                            '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump

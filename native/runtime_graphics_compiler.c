@@ -562,7 +562,17 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
              * it reads all three at runtime from the tcs_offchip_layout user
              * SGPR, an ABI nothing here supplies. The patch size is what the
              * control half's patch-count derivation needs. */
-            .patch_control_points=key->patch_control_points};
+            .patch_control_points=key->patch_control_points,
+            /* DIAGNOSTIC BISECT, default off: the domain compiled with NGG
+             * passthrough forced off. Every passing NGG draw on this device
+             * is vertex-fed, so passthrough has never been exercised WITH a
+             * domain shader here, and the measurements now say the hull runs,
+             * its factors are correct, and the evaluation half never
+             * launches. */
+#if defined(PS5VK_TESS_NO_PASSTHRU) && PS5VK_TESS_NO_PASSTHRU
+            .ngg_no_passthrough=true,
+#endif
+            };
         if(!apply_parameters(&domain_options,&key->tess_eval,key,
                 VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))goto failed;
         result=psbc_compile_domain_pipeline(
