@@ -25,7 +25,9 @@
  *     declare, and it drops the unresolved tessellation-pipeline bit.
  *   - A stand-alone evaluation stage without the NGG option compiles to
  *     machine code but publishes NO register writes at all, so a driver
- *     cannot launch it from that metadata; the loadable form is the NGG one.
+ *     cannot launch it from that metadata; the loadable form is the NGG one,
+ *     which the driver-side loader packages as a pre-raster program, while
+ *     the hull half stays unpackagable (its launch state is the driver's).
  *   - Until that changes, native/runtime_shader.c must refuse to package the
  *     hull or the domain half: the load gate is the contract, not a bug.
  */
@@ -204,10 +206,9 @@ int main(void)
     assert(d->user_data_window_base==8);
     assert(d->ngg_lds_layout_valid && d->ngg_lds_layout<=UINT16_MAX);
     assert(d->output_semantic_count>=2);
-    /* The driver-side load gate keeps refusing the domain half until its own
-     * consumer learns the tessellation source stage: the package exists, the
-     * loader contract does not accept it yet. */
-    assert(ps5vk_runtime_shader_build(&arena,&domain)!=0);
+    /* The driver-side loader now packages the domain half as the pre-raster
+     * NGG program it is; the load gate's remaining refusal is the hull's. */
+    assert(ps5vk_runtime_shader_build(&arena,&domain)==0);
     psbc_free_output(&domain);
 
     /* The tessellation pipeline entry point is stage-checked: any other stage

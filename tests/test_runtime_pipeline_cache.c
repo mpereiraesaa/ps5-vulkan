@@ -252,11 +252,11 @@ int main(void)
          * (VK_ERROR_UNKNOWN from vkCreateComputePipelines) until the compute
          * adapter learned to ignore bits that belong to another stage. This
          * test is the guard that failed first for the geometry bit, so it is
-         * checked before the advertisement lands. The tessellation bit is NOT
-         * in this mask yet on purpose: its adapter path has not been plumbed,
-         * so the same check refuses it, and it joins this list in the slice
-         * that advertises tessellationShader - the guard is what will catch a
-         * forgotten step there. */
+         * checked before the advertisement lands. The tessellation bit IS in
+         * this mask now: its adapter path compiles the pair through the hull
+         * and domain programs, and the compute whitelist learned the bit in
+         * the same slice, so the guard checks the union rather than catching
+         * a forgotten step. */
         const uint32_t all_declared = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                       PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
                                       PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
@@ -264,7 +264,8 @@ int main(void)
                                       PS5VK_FEATURE_MULTIVIEW |
                                       PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
                                       PS5VK_FEATURE_SHADER_CULL_DISTANCE |
-                                      PS5VK_FEATURE_GEOMETRY_SHADER;
+                                      PS5VK_FEATURE_GEOMETRY_SHADER |
+                                      PS5VK_FEATURE_TESSELLATION_SHADER;
         VkPipeline with_all = VK_NULL_HANDLE;
         device->enabled_features = all_declared;
         assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
