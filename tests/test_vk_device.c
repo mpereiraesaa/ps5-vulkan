@@ -1510,9 +1510,55 @@ static void consumer_physical_queries(void)
     expect_consumer_rejection = 0;
     vkDestroyInstance(i, NULL);
 }
+static void tessellation_feature_negotiation(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    const uint32_t baseline = p->platform.supported_features;
+    assert(!(baseline & PS5VK_FEATURE_TESSELLATION_SHADER));
+    VkDeviceQueueCreateInfo q;
+    float priority;
+    VkDeviceCreateInfo info = device_info(&q, &priority);
+    for (unsigned supported = 0; supported != 2; ++supported) {
+        p->platform.supported_features = baseline |
+            (supported ? PS5VK_FEATURE_TESSELLATION_SHADER : 0);
+        VkPhysicalDeviceFeatures reported;
+        vkGetPhysicalDeviceFeatures(p, &reported);
+        assert(reported.tessellationShader == supported);
+        VkPhysicalDeviceFeatures2 reported2 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        vkGetPhysicalDeviceFeatures2KHR(p, &reported2);
+        assert(!memcmp(&reported, &reported2.features, sizeof(reported)));
+        for (unsigned chained = 0; chained != 2; ++chained) {
+            for (VkBool32 requested = 0; requested != 3; ++requested) {
+                VkPhysicalDeviceFeatures2 features = {
+                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                    .features.tessellationShader = requested};
+                info.pEnabledFeatures = chained ? NULL : &features.features;
+                info.pNext = chained ? &features : NULL;
+                const unsigned before = opened;
+                VkDevice d = (VkDevice)(uintptr_t)1;
+                VkResult expected = requested == 2 ? VK_ERROR_UNKNOWN :
+                    (requested && !supported ? VK_ERROR_FEATURE_NOT_PRESENT : VK_SUCCESS);
+                assert(vkCreateDevice(p, &info, NULL, &d) == expected);
+                if (expected == VK_SUCCESS) {
+                    assert(d && d->enabled_features ==
+                        (requested ? PS5VK_FEATURE_TESSELLATION_SHADER : 0));
+                    vkDestroyDevice(d, NULL);
+                } else {
+                    assert(!d && opened == before && !i->devices);
+                }
+            }
+        }
+    }
+    p->platform.supported_features = baseline;
+    vkDestroyInstance(i, NULL);
+}
+
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     consumer_physical_queries();
+    tessellation_feature_negotiation();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

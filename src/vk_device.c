@@ -60,6 +60,10 @@ static const struct core_feature_bit {
      * are reported at the Vulkan floor in src/graphics_limits.h. */
     {offsetof(VkPhysicalDeviceFeatures, geometryShader),
      PS5VK_FEATURE_GEOMETRY_SHADER},
+    /* Negotiation plumbing, not a capability promotion: the normal native
+     * platform still leaves this bit clear until tessellation is validated. */
+    {offsetof(VkPhysicalDeviceFeatures, tessellationShader),
+     PS5VK_FEATURE_TESSELLATION_SHADER},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,
