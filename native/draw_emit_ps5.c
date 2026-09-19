@@ -351,6 +351,15 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
         ps5vk_draw_base_vertex(op), ps5vk_draw_base_instance(op)};
     const uint32_t fragment[2]={global_table_low,texture_low?*texture_low:0};
     if(state->runtime.enabled) {
+#if defined(PS5VK_TESS_LEGACY_DOMAIN) && PS5VK_TESS_LEGACY_DOMAIN
+        /* DIAGNOSTIC: a legacy hardware VS loads its user data from
+         * SPI_SHADER_USER_DATA_VS_0 (sh 0x4c) with no system preamble, so the
+         * tessellation pipeline's pre-raster block is written there too. */
+        if(state->runtime.ring_table_valid &&
+           ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x4c,
+              runtime_vertex,state->runtime.vertex_count,sceAgcCbSetShRegisterRangeDirect))
+            return VK_ERROR_UNKNOWN;
+#endif
         if(ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x8c,
               runtime_vertex,state->runtime.vertex_count,sceAgcCbSetShRegisterRangeDirect) ||
            (state->runtime.fragment_count && ps5_agc_writer_set_sh_direct(&next,

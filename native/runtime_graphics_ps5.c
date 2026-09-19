@@ -113,8 +113,15 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         255u)&~(size_t)255u;
     /* One merged hull image, so one 256B-aligned slot for it. */
     size_t hull_at=(fs_at+input->fragment.machine_code_size+255u)&~(size_t)255u;
+    /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): one more 256B-aligned slot for
+     * the legacy hardware-VS image of the evaluation half. */
+    const int has_legacy=has_tessellation && input->domain_legacy_valid &&
+        input->domain_legacy.machine_code && input->domain_legacy.machine_code_size;
+    size_t legacy_at=(hull_at+(has_tessellation?input->hull.machine_code_size:0)+
+        255u)&~(size_t)255u;
     size_t table_at=(has_tessellation?
-        hull_at+input->hull.machine_code_size:fs_at+
+        (has_legacy?legacy_at+input->domain_legacy.machine_code_size:
+         hull_at+input->hull.machine_code_size):fs_at+
         input->fragment.machine_code_size+15u)&~(size_t)15u;
     struct ps5vk_native_graphics_pipeline *p=calloc(1,sizeof(*p));
     if(!p)return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -524,6 +531,47 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         }
         pair->runtime_hull.shader[0].value=(uint32_t)(hull_va>>8);
         pair->runtime_hull.shader[1].value=(uint32_t)((hull_va>>40)&255u);
+        /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): load the legacy hardware-VS
+         * image of the evaluation half, take its VS-block registers with the
+         * loaded address in PGM_LO/HI_VS (sh 0x48/0x49), its legacy context
+         * state, its stage enables VERBATIM (LS, HS, VS_STAGE_DS, DYNAMIC_HS -
+         * no ES, no primitive generator), and its own draw ABI so the user
+         * data block matches the program that actually launches. The NGG
+         * domain stays loaded and linked for the pixel interpolation; with
+         * its stage disabled its registers are latched and unused. */
+        if(has_legacy) {
+            const PsbcShaderMetadata *lm=&input->domain_legacy.metadata;
+            void *legacy_code=(unsigned char *)address+legacy_at;
+            memcpy(legacy_code,input->domain_legacy.machine_code,
+                input->domain_legacy.machine_code_size);
+            const uint64_t legacy_va=(uintptr_t)legacy_code;
+            if((legacy_va&255u) || lm->hardware_stage!=PSBC_HW_STAGE_VERTEX ||
+               !lm->linkage_valid || lm->shader_register_count>8 ||
+               lm->context_register_count>8) {
+                TESS_CREATE_FAIL("legacy-domain");
+                rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+            }
+            unsigned patched_lo=0;
+            for(uint32_t i=0;i<lm->shader_register_count;++i) {
+                ps5_agc_register r={(uint16_t)lm->shader_registers[i].offset,
+                    lm->shader_registers[i].value};
+                if(r.offset==0x48){r.value=(uint32_t)(legacy_va>>8);++patched_lo;}
+                if(r.offset==0x49)r.value=(uint32_t)((legacy_va>>40)&255u);
+                pair->legacy_sh[pair->legacy_sh_count++]=r;
+            }
+            for(uint32_t i=0;i<lm->context_register_count;++i)
+                pair->legacy_cx[pair->legacy_cx_count++]=(ps5_agc_register){
+                    (uint16_t)lm->context_registers[i].offset,
+                    lm->context_registers[i].value};
+            if(patched_lo!=1) {
+                TESS_CREATE_FAIL("legacy-pgm");
+                rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+            }
+            pair->tess_state[0]=(ps5_agc_register){0x2d5,
+                lm->linkage_stages_en.value};
+            pair->runtime_arguments=input->arguments_legacy;
+            pair->legacy_domain=1;
+        }
         /* The merged LS/HS workgroup's LDS allocation. The compiler CANNOT
          * publish it: the combined RSRC1/RSRC2 pair comes from the pinned
          * radv_shader_combine_cfg_vs_tcs(), which merges VGPR/SGPR counts and

@@ -34,7 +34,14 @@ DEPS = [
         # reads it. The pin is the whole
         # contract, so a different commit has to be pinned explicitly and the
         # driver cache key moves with the metadata version.
-        "pin": "79c4166b972f1a3ab4fbf6b2520c0091a1a013f9",
+        #
+        # DIAGNOSTIC CANDIDATE, unreviewed: branch codex/tess-legacy-domain,
+        # one commit past PR #19's head, lets the evaluation half compile as
+        # radv's "Tessellation Evaluation Shader as VS" - the domain on the VS
+        # hardware stage (VS_STAGE_DS, no NGG) - when the NGG option is off,
+        # for the PS5VK_TESS_LEGACY_DOMAIN experiment. The NGG path is
+        # unchanged; a standalone non-NGG evaluation half stays unresolved.
+        "pin": "d667739b7b6ac8ee74253c52a0ec644769b2b7f2",
     },
     {
         "name": "opengnm",

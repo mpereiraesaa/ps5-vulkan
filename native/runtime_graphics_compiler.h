@@ -14,6 +14,15 @@ struct ps5vk_runtime_graphics_program {
      * halves together, and the domain is the TES NGG package the evaluation
      * half compiles to. Both are zero for every earlier pipeline shape. */
     PsbcShaderOutput hull,domain;
+    /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN, default off): the evaluation half
+     * compiled a SECOND time as a legacy hardware vertex shader - VS_STAGE_DS,
+     * no NGG - with its own draw ABI, so the patch draw can launch that shape
+     * instead of the NGG one. The NGG domain above stays: it is what the
+     * platform's shader constructor and linker accept, so the linked pixel
+     * interpolation still comes from it. Zero unless the knob is on. */
+    PsbcShaderOutput domain_legacy;
+    struct ps5vk_runtime_draw_abi arguments_legacy;
+    uint32_t domain_legacy_valid;
     /* The pipeline's input patch control points, the tessellation launch
      * state's input/output control-point counts. Zero without the pair. */
     uint32_t patch_control_points;

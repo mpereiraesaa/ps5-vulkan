@@ -331,6 +331,20 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             result.sh[result.sh_count++]=(ps5_agc_register){
                 (uint16_t)(0x10c+pair->tess_ring_table_slot+1u),
                 pair->tess_ring_table_high};
+            /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): the legacy hardware-VS
+             * domain's registers, after everything the NGG domain published
+             * so the shared context registers take the legacy values. */
+            if(pair->legacy_domain) {
+                if(result.sh_count+pair->legacy_sh_count>PS5VK_DRAW_SH_CAPACITY ||
+                   result.cx_count+pair->legacy_cx_count>PS5VK_DRAW_CX_CAPACITY)
+                    return VK_ERROR_UNKNOWN;
+                memcpy(result.sh+result.sh_count,pair->legacy_sh,
+                    pair->legacy_sh_count*sizeof(*result.sh));
+                result.sh_count+=pair->legacy_sh_count;
+                memcpy(result.cx+result.cx_count,pair->legacy_cx,
+                    pair->legacy_cx_count*sizeof(*result.cx));
+                result.cx_count+=pair->legacy_cx_count;
+            }
         }
         result.runtime=pair->runtime_arguments;
         /* This is the lab's audited draw-auto command modifier, not compiler

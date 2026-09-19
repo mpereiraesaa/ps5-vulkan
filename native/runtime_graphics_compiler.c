@@ -55,7 +55,8 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
     struct ps5vk_runtime_graphics_program *p=(void *)data;
     if(!p)return;
     psbc_free_output(&p->vertex);psbc_free_output(&p->fragment);
-    psbc_free_output(&p->hull);psbc_free_output(&p->domain);free(p);
+    psbc_free_output(&p->hull);psbc_free_output(&p->domain);
+    psbc_free_output(&p->domain_legacy);free(p);
 }
 
 int ps5vk_runtime_graphics_distance_reads_described(const PsbcShaderMetadata *pre_raster,
@@ -619,6 +620,26 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
         if((declared_clip||declared_cull) &&
            !ps5vk_runtime_graphics_distance_reads_described(&p->domain.metadata,
                &p->fragment.metadata,declared_clip,declared_cull))goto failed;
+#if defined(PS5VK_TESS_LEGACY_DOMAIN) && PS5VK_TESS_LEGACY_DOMAIN
+        /* DIAGNOSTIC: the same evaluation half as a legacy hardware VS. Same
+         * link against the control half, same device facts (radv programs
+         * GE_PC_ALLOC for a legacy VS too), NGG off. Its ABI is built from ITS
+         * metadata: a hardware VS has no system-SGPR preamble, so its user
+         * data starts at SPI_SHADER_USER_DATA_VS_0 with window base zero. */
+        {
+            PsbcCompileOptions legacy_options=domain_options;
+            legacy_options.ngg=false;
+            legacy_options.ngg_no_passthrough=false;
+            result=psbc_compile_domain_pipeline(
+                key->tess_control.words,key->tess_control.word_count*4u,
+                key->tess_eval.words,key->tess_eval.word_count*4u,
+                &legacy_options,&p->domain_legacy);
+            if(result!=PSBC_RESULT_OK)goto failed;
+            if(ps5vk_runtime_draw_abi_build(&p->domain_legacy.metadata,
+                   &p->fragment.metadata,&p->arguments_legacy))goto failed;
+            p->domain_legacy_valid=1;
+        }
+#endif
         /* The domain half is packaged through the same runtime header the
          * vertex programs use - it is an NGG pre-raster program - and the draw
          * ABI is built from its metadata and the fragment's. The hull half is

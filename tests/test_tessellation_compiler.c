@@ -252,6 +252,55 @@ int main(void)
     assert(ps5vk_runtime_shader_build(&arena,&domain)==0);
     psbc_free_output(&domain);
 
+    /* The same evaluation half as a LEGACY hardware vertex shader - radv's
+     * "Tessellation Evaluation Shader as VS": linked against the control half
+     * like the NGG package, NGG off. The publication is the VS block with the
+     * gfx10 resource registers radv's preamble writes, the legacy vertex
+     * context state plus the three registers a legacy pipeline must clear,
+     * the stage enables of a legacy tessellation pipeline (LS, HS, the domain
+     * on the VS stage, DYNAMIC_HS, the gfx9+ primgroup bound; wave64 so no
+     * W32 bit), and a user-data window at zero: a hardware VS has no system
+     * SGPR preamble. radv_postprocess_config's TES-as-VS facts must be in the
+     * resource pair: OC_LDS_EN for the off-chip patch data, and at least two
+     * VGPR components for the tessellation coordinates. */
+    PsbcCompileOptions legacy_options=package_options;
+    legacy_options.ngg=false;
+    legacy_options.patch_control_points=options.patch_control_points;
+    PsbcShaderOutput legacy={0};
+    assert(psbc_compile_domain_pipeline(hs,hn*4,es,en*4,&legacy_options,&legacy)==
+        PSBC_RESULT_OK);
+    const PsbcShaderMetadata *l=&legacy.metadata;
+    assert(l->source_stage==PSBC_STAGE_TESS_EVAL);
+    assert(l->hardware_stage==PSBC_HW_STAGE_VERTEX);
+    assert(l->unresolved_fields==PSBC_UNRESOLVED_PROGRAM_CHECKSUM);
+    assert(legacy.machine_code && legacy.machine_code_size%4==0);
+    const PsbcRegisterWrite *ld_lo=find_register(l,l->shader_registers,l->shader_register_count,0x48);
+    const PsbcRegisterWrite *ld_hi=find_register(l,l->shader_registers,l->shader_register_count,0x49);
+    const PsbcRegisterWrite *ld_rsrc1=find_register(l,l->shader_registers,l->shader_register_count,0x4a);
+    const PsbcRegisterWrite *ld_rsrc2=find_register(l,l->shader_registers,l->shader_register_count,0x4b);
+    assert(ld_lo && ld_hi && !ld_lo->value && !ld_hi->value);
+    assert(ld_rsrc1 && ld_rsrc2 && ld_rsrc1->value && ld_rsrc2->value);
+    assert(((ld_rsrc1->value>>24)&3u)>=2u);       /* VGPR_COMP_CNT (bits 24..25): tess coords */
+    assert(ld_rsrc2->value&(1u<<7));              /* OC_LDS_EN */
+    assert(find_register(l,l->shader_registers,l->shader_register_count,0x46));
+    assert(find_register(l,l->shader_registers,l->shader_register_count,0x41));
+    assert(find_register(l,l->shader_registers,l->shader_register_count,0x47));
+    assert(!find_register(l,l->shader_registers,l->shader_register_count,0xc8));
+    assert(!find_register(l,l->shader_registers,l->shader_register_count,0x8a));
+    assert(l->linkage_valid);
+    assert(l->linkage_stages_en.offset==0x2d5);
+    assert(l->linkage_stages_en.value==0x10145u);
+    assert(l->linkage_ge_cntl.offset==0x25b);
+    static const unsigned legacy_cx[]={0x1b1u,0x1c3u,0x207u,0x290u,0x2adu,0x2a1u};
+    for(unsigned i=0;i<sizeof(legacy_cx)/sizeof(legacy_cx[0]);++i)
+        assert(find_register(l,l->context_registers,l->context_register_count,legacy_cx[i]));
+    assert(find_register(l,l->context_registers,l->context_register_count,0x290)->value==0);
+    assert(!find_register(l,l->context_registers,l->context_register_count,0x291));
+    assert(!l->user_data_window_base);
+    assert(!l->esgs_system_sgprs_valid && !l->ngg_lds_layout_valid);
+    assert(l->output_semantic_count>=2);
+    psbc_free_output(&legacy);
+
     /* The tessellation pipeline entry point is stage-checked: any other stage
      * option is refused before anything compiles. */
     PsbcCompileOptions wrong=options;

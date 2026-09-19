@@ -563,6 +563,13 @@ def main():
                     raise SystemExit(
                         "PS5VK_TESS_DIRECT_INDEXED is 0, 1 (plain SET) or 2 (indexed)")
                 common += ["-DPS5VK_TESS_DIRECT_INDEXED=" + tess_direct_indexed]
+                # Diagnostic: launch the evaluation half as a LEGACY hardware
+                # vertex shader (VS_STAGE_DS, no NGG) instead of an NGG stage.
+                # Needs the compiler's legacy-domain publication. Default 0.
+                tess_legacy_domain = os.environ.get("PS5VK_TESS_LEGACY_DOMAIN", "0")
+                if tess_legacy_domain not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_LEGACY_DOMAIN must be 0 or 1")
+                common += ["-DPS5VK_TESS_LEGACY_DOMAIN=" + tess_legacy_domain]
                 tess_only = os.environ.get("PS5VK_TESS_ONLY", "0")
                 if tess_only not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_ONLY must be 0 or 1")

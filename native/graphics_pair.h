@@ -41,6 +41,14 @@ struct ps5vk_graphics_pair {
      * at GE_PC_ALLOC (0x30980). Written on every patch draw with the rest of
      * the state, so nothing depends on a previous pipeline's rings. */
     ps5_agc_register tess_ring_state[5];
+    /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): the evaluation half's LEGACY
+     * hardware-VS program - its VS-block shader registers with the loaded
+     * code address, and the legacy context state - appended after the NGG
+     * domain's banks so the later writes win. legacy_domain is 1 when they
+     * apply; the stage enables then come from the legacy program verbatim. */
+    uint32_t legacy_domain;
+    ps5_agc_register legacy_sh[8]; uint32_t legacy_sh_count;
+    ps5_agc_register legacy_cx[8]; uint32_t legacy_cx_count;
     /* The ring descriptor table's address, split for the user-data bank:
      * the pipeline's ring block starts with the table (sixteen bytes per
      * ring, audited raw buffer SRDs), and the hull's ring-offsets dwords

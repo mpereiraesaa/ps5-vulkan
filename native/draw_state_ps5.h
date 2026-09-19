@@ -11,7 +11,7 @@
  * set, so the context capacity grows with the hull's own registers. The shader
  * bank carries both hull programs' register blocks behind the runtime pair's. */
 enum {
-    PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 15 + PS5_DEPTH_REGISTER_COUNT + 8 + 16,
+    PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 15 + PS5_DEPTH_REGISTER_COUNT + 8 + 24,
     PS5VK_DRAW_SH_CAPACITY = 32,
     PS5VK_DRAW_UC_CAPACITY = 12
 };
