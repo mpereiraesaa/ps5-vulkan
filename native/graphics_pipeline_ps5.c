@@ -1,5 +1,6 @@
 #include "graphics_pipeline_ps5.h"
 #include "graphics_program.h"
+#include "tess_shared_storage.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -60,7 +61,8 @@ void ps5vk_native_graphics_release(VkDevice d, void *state)
     if (!p) return;
     if (!d || p->device != d) { if (d) ++d->lifetime_errors; return; }
     /* Vulkan pipeline destruction has already enforced the pending-use guard. */
-    if (p->rings_backing) p->memory.release(p->memory.context, p->rings_backing);
+    if (p->shared_rings) ps5vk_tess_storage_release(&p->shared_rings);
+    else if (p->rings_backing) p->memory.release(p->memory.context, p->rings_backing);
     p->memory.release(p->memory.context, p->backing);
     free(p);
 }

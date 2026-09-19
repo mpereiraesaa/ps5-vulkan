@@ -132,7 +132,7 @@ def main():
         ]
         graphics_sources = (
             "native/graphics_pair.c", "src/shader_relocate.c",
-            "native/graphics_pipeline_ps5.c", "native/image_ps5.c",
+            "native/graphics_pipeline_ps5.c", "native/tess_shared_storage.c", "native/image_ps5.c",
             "src/depth_layout.c", "src/color_clear.c", "src/color_detile.c",
             "native/draw_prepare_ps5.c", "native/draw_emit_ps5.c", "native/index_emit_ps5.c",
             "native/input_attachment_gate.c",
