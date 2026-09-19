@@ -688,7 +688,8 @@ def main():
     run(linker, "-L" + str(sdk / "target/lib"), "-T", pie_ld, "--eh-frame-hdr",
         "--version-script", syms_map, "-e", "_start",
         "-o", out / "pie.elf", crt, *objects, *extra_libs, "--as-needed",
-        *sorted((sdk / "target/lib").glob("*.so")), stub, driver)
+        *sorted((sdk / "target/lib").glob("*.so")), stub, driver,
+        *(["--wrap=sceAgcInit"] if tess_probe == "1" else []))
     run(builder, "link", "--in", out / "pie.elf", "--out", out / "eboot.elf",
         "--stub-dir", sdk / "target/lib", "--module-sdk", "0x02000009",
         "--stub", stub, "--stub", driver, "--companion-sdk", "0x08050001", "--file-name", "eboot.elf")

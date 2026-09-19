@@ -37,6 +37,17 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+extern int32_t __real_sceAgcInit(uint32_t);
+int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
+{
+    (void)unused_state;
+    (void)unused_size;
+    const int32_t rc=__real_sceAgcInit(11);
+    ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_INIT_SCALAR value=11 rc=%d",rc);
+    return rc;
+}
+#endif
 #ifndef PS5VK_IMAGE_TARGET
 #define PS5VK_IMAGE_TARGET 0
 #endif
@@ -3025,6 +3036,9 @@ static void geometry_probe(VkDevice d)
                     (((uint64_t)pf_table[21]<<32)|pf_table[20]);
                 const uint32_t pf_words=pf_table[22]/4u;
                 for(uint32_t i=0;i<pf_words;++i)pf[i]=0x40000000u;
+                for(uintptr_t line=(uintptr_t)pf;line<(uintptr_t)pf+pf_words*4u;line+=64u)
+                    __asm__ volatile("clflush (%0)" : : "r"(line) : "memory");
+                __asm__ volatile("mfence" : : : "memory");
                 ps5log_printf(PS5LOG_MARK,
                     "PS5VK_TESS_PREFILL variant=%s words=%u value=40000000",
                     PS5VK_TESS_CONTROL_NAME,pf_words);
@@ -3120,6 +3134,10 @@ static void geometry_probe(VkDevice d)
             if(coord_wait!=VK_SUCCESS) {
                 const uint32_t *coord_table=
                     (const uint32_t *)coord_native->pair->tess_rings;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_GPU_REGS size=%08x offchip=%08x base=%08x hi=%08x stages=%08x config=%08x tf=%08x ge=%08x",
+                    coord_table[32],coord_table[33],coord_table[34],coord_table[35],
+                    coord_table[36],coord_table[37],coord_table[38],coord_table[39]);
                 const uint64_t factor_va=
                     ((uint64_t)coord_table[21]<<32)|coord_table[20];
                 const volatile uint32_t *factors=
@@ -3180,6 +3198,14 @@ static void geometry_probe(VkDevice d)
                  * entry 5 word 2 - cannot miss a store the way a fixed
                  * window can, and it reports WHERE the first ones landed so
                  * the offset itself becomes a measurement. */
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_GPU_REGS size=%08x offchip=%08x base=%08x hi=%08x stages=%08x config=%08x tf=%08x ge=%08x",
+                    coord_table[32],coord_table[33],coord_table[34],coord_table[35],
+                    coord_table[36],coord_table[37],coord_table[38],coord_table[39]);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_GPU_LAUNCH max=%08x min=%08x prim=%08x pc=%08x es=%08x gs1=%08x gs2=%08x ls=%08x",
+                    coord_table[40],coord_table[41],coord_table[42],coord_table[43],
+                    coord_table[44],coord_table[45],coord_table[46],coord_table[47]);
                 const uint32_t extent=coord_table[22];
                 const uint32_t words=extent/4u;
                 /* Every non-zero word, not the first four. Two runs of the

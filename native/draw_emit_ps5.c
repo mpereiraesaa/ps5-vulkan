@@ -237,6 +237,38 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
             mapping, mapping_bytes, sceAgcDcbSetUcRegistersIndirect) ||
         ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->sh, sh_count,
             mapping, mapping_bytes, sceAgcDcbSetShRegistersIndirect)) return VK_ERROR_UNKNOWN;
+#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+    /* Read the GPU register file, rather than the CPU's intended bank.
+     * COPY_DATA register source -> TC_L2 memory, with write confirmation.
+     * The upper half of the diagnostic ring table is unused by its two SRDs. */
+    if (state->runtime.ring_table_valid) {
+        if (end-next < 12) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        for (uint32_t i=0;i<state->uc_count;++i) {
+            const uint32_t reg=state->uc[i].offset;
+            if (reg==0x24e || reg==0x24f || reg==0x250 || reg==0x261) {
+                *next++=0xc0017900u;
+                *next++=reg;
+                *next++=state->uc[i].value;
+            }
+        }
+        const uint32_t regs[] = {0x30938,0x3093c,0x30940,0x30984,
+            0x28b54,0x28b58,0x28b6c,0x3096c,
+            0x28a18,0x28a1c,0x30908,0x30980,
+            0xb320,0xb228,0xb22c,0xb520};
+        const uint64_t table = ((uint64_t)state->runtime.ring_table_high<<32) |
+            state->runtime.ring_table_low;
+        if (end-next < 96) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        for (unsigned i=0;i<16;++i) {
+            const uint64_t dst=table+128+4*i;
+            *next++=0xc0044000u;
+            *next++=(2u<<8)|(1u<<20);
+            *next++=regs[i]>>2;
+            *next++=0;
+            *next++=(uint32_t)dst;
+            *next++=(uint32_t)(dst>>32);
+        }
+    }
+#endif
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
     VkResult scissor_rc=ps5vk_native_emit_scissor_replay(&next,(uint32_t)(end-next),state);
     if(scissor_rc!=VK_SUCCESS)return scissor_rc;
