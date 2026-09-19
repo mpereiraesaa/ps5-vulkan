@@ -17,14 +17,15 @@ DEPS = [
         # merged pair's system-SGPR indices and launch counts, the driver
         # user-data window base, the pixel stage's distance reads) under
         # metadata version 17, and it names the geometry stage's gl_ViewportIndex
-        # parameter export so a pair that selects a viewport no longer leaves the
-        # linkage unresolved. That last part is additive: a pipeline without the
+        # parameter export, and the packed register a fragment distance read
+        # actually targets (a fragment reading gl_ClipDistance[4] used to name
+        # the first register, so the pixel stage interpolated the wrong one). That last part is additive: a pipeline without the
         # export emits nothing, so the version stays 17 and no other consumer's
         # metadata changes - which is why the driver cache key does not move with
         # this pin. It is an audited dependency candidate, not a merge of the
-        # dependency's main (PR mpereiraesaa/opengnm-psbc#17): the pin is the
+        # dependency's main (PRs mpereiraesaa/opengnm-psbc#17 and #18): the pin is the
         # whole contract, so a different commit has to be pinned explicitly.
-        "pin": "b880c7e75d071d03d23fe687e027e5207dfbeabb",
+        "pin": "4d4a65aad8f178d2437df2ec97159392bae7f844",
     },
     {
         "name": "opengnm",
