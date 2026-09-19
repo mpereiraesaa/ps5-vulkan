@@ -162,8 +162,8 @@ static int slot_pair_ok(bool valid,uint32_t dword,uint32_t user_sgpr_count)
     return valid ? dword<user_sgpr_count : dword==0;
 }
 
-int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
-    const PsbcShaderMetadata *f,struct ps5vk_runtime_draw_abi *out)
+static int draw_abi_build(const PsbcShaderMetadata *v,
+    const PsbcShaderMetadata *f,struct ps5vk_runtime_draw_abi *out,int hull)
 {
     if(!v || !f || !out || v->version!=PSBC_SHADER_METADATA_VERSION || f->version!=PSBC_SHADER_METADATA_VERSION ||
        v->vertex_buffer_per_attribute || f->vertex_buffer_usage_mask || f->vertex_buffer_per_attribute ||
@@ -184,16 +184,19 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         * address the system block, so a pair that reports them inside the
         * window is a contract violation, not something to write. */
        v->user_data_window_base>16 ||
-       (v->user_data_window_base && v->user_data_window_base+v->user_sgpr_count>16) ||
+       (v->user_data_window_base && v->user_data_window_base+v->user_sgpr_count>(hull?24u:16u)) ||
        (v->esgs_system_sgprs_valid &&
         (!v->user_data_window_base ||
          v->esgs_gs_tg_info_sgpr>=v->user_data_window_base ||
          v->esgs_merged_wave_info_sgpr>=v->user_data_window_base ||
          v->esgs_gs_tg_info_sgpr==v->esgs_merged_wave_info_sgpr)) ||
-       (v->source_stage!=PSBC_STAGE_VERTEX && v->source_stage!=PSBC_STAGE_GEOMETRY &&
-        v->source_stage!=PSBC_STAGE_TESS_EVAL) ||
-       v->hardware_stage!=PSBC_HW_STAGE_NGG || f->source_stage!=PSBC_STAGE_FRAGMENT ||
-       f->hardware_stage!=PSBC_HW_STAGE_PIXEL || !v->ngg_lds_layout_valid ||
+       (hull ? (v->source_stage!=PSBC_STAGE_TESS_CTRL ||
+                v->hardware_stage!=PSBC_HW_STAGE_HULL || v->ngg_lds_layout_valid ||
+                !v->ps5_ring_table_valid || v->user_data_window_base!=8) :
+               ((v->source_stage!=PSBC_STAGE_VERTEX && v->source_stage!=PSBC_STAGE_GEOMETRY &&
+                 v->source_stage!=PSBC_STAGE_TESS_EVAL) ||
+                v->hardware_stage!=PSBC_HW_STAGE_NGG || !v->ngg_lds_layout_valid)) ||
+       f->source_stage!=PSBC_STAGE_FRAGMENT || f->hardware_stage!=PSBC_HW_STAGE_PIXEL ||
        v->output_semantic_count>PSBC_MAX_SEMANTICS || f->input_semantic_count>PSBC_MAX_SEMANTICS ||
        !descriptors_valid(v) || !descriptors_valid(f))
         return -1;
@@ -214,7 +217,8 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         .vertex_buffer_valid=v->vertex_buffer_table_valid,
         .vertex_buffer_slot=v->vertex_buffer_table_user_data_dword,
         .vertex_buffer_usage_mask=v->vertex_buffer_usage_mask,
-        .lds_slot=v->ngg_lds_layout_user_data_dword,.lds_value=v->ngg_lds_layout,
+        .lds_slot=hull?UINT32_MAX:v->ngg_lds_layout_user_data_dword,
+        .lds_value=hull?0:v->ngg_lds_layout,
         /* The pre-raster stage's ring descriptor table, when it declares one.
          * Only a tessellation DOMAIN does: the PS5 argument path declares the
          * table as a user SGPR pair for both tessellation stages because the
@@ -233,6 +237,7 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
          * the window is refused below instead of being written where the shader
          * will never look. */
         .window_base=v->user_data_window_base,
+        .hull=(uint32_t)hull,
         .esgs_described=v->esgs_system_sgprs_valid,
         .esgs_gs_tg_info_sgpr=v->esgs_gs_tg_info_sgpr,
         .esgs_merged_wave_info_sgpr=v->esgs_merged_wave_info_sgpr,
@@ -259,6 +264,23 @@ int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
         vertex,pixel))return -1;
     *out=abi;
     return 0;
+}
+
+int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *v,
+    const PsbcShaderMetadata *f,struct ps5vk_runtime_draw_abi *out)
+{
+    return draw_abi_build(v,f,out,0);
+}
+
+int ps5vk_runtime_hull_abi_build(const PsbcShaderMetadata *h,
+    struct ps5vk_runtime_draw_abi *out)
+{
+    /* No fragment consumer participates in LS/HS argument delivery. Reuse
+     * the slot/collision validator with an empty pixel bank, not by pretending
+     * that hull metadata describes an NGG shader or has an NGG LDS argument. */
+    const PsbcShaderMetadata empty_pixel={.version=PSBC_SHADER_METADATA_VERSION,
+        .source_stage=PSBC_STAGE_FRAGMENT,.hardware_stage=PSBC_HW_STAGE_PIXEL};
+    return draw_abi_build(h,&empty_pixel,out,1);
 }
 
 int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderOutput *c)
@@ -453,10 +475,11 @@ int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *hull,
     if (!find(m->context_registers,m->context_register_count,0x2db)) return -3;
     if (!registers_valid(m->context_registers,m->context_register_count,PSBC_MAX_CONTEXT_REGISTERS) ||
         !descriptors_valid(m)) return -4;
-    if (m->descriptor_set_valid[0] || m->descriptor_set_valid[1] ||
+    struct ps5vk_runtime_draw_abi hull_abi;
+    if (ps5vk_runtime_hull_abi_build(m,&hull_abi) ||
+        m->descriptor_set_valid[0] || m->descriptor_set_valid[1] ||
         m->descriptor_set_valid[2] || m->descriptor_set_valid[3] ||
-        m->push_constants_valid || m->push_constant_size ||
-        m->vertex_buffer_table_valid) return -5;
+        m->push_constants_valid || m->push_constant_size) return -5;
     memset(hull,0,sizeof(*hull));
     hull->header.file_header=0x34333231; hull->header.version=24;
     hull->header.header_size=sizeof(*hull);

@@ -35,6 +35,8 @@ struct ps5vk_runtime_draw_abi {
      * window-relative and a slot at or beyond window_base+count would run past
      * the block. */
     uint32_t window_base;
+    /* LS/HS has up to16 user dwords after its eight system SGPRs. */
+    uint32_t hull;
     /* A merged vertex+geometry program gates and sizes its halves from two
      * SYSTEM SGPRs, which were measured below the driver's user-data window on
      * three compiled programs: a merged pair and a clip/cull vertex program both
@@ -67,6 +69,10 @@ struct ps5vk_runtime_draw_abi {
      * beside the slot instead of through the value builder's parameters. */
     uint32_t ring_table_valid, ring_table_slot;
     uint32_t ring_table_low, ring_table_high;
+    /* DIAGNOSTIC (legacy hardware-VS launch): 1 when the pre-raster program
+     * that launches is a legacy hardware VS, whose user data lives at
+     * SPI_SHADER_USER_DATA_VS_0 with no system-SGPR preamble. */
+    uint32_t legacy_vs;
     uint32_t vertex_descriptor_valid[PS5VK_RUNTIME_DESCRIPTOR_SETS];
     uint32_t fragment_descriptor_valid[PS5VK_RUNTIME_DESCRIPTOR_SETS];
     uint32_t vertex_descriptor_slot[PS5VK_RUNTIME_DESCRIPTOR_SETS];
@@ -88,13 +94,17 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
     uint32_t vertex_out[16], uint32_t pixel_out[16])
 {
     if (!a || !descriptor_low || !vertex_out || !pixel_out || a->enabled!=1 || !a->vertex_count || a->vertex_count>16 ||
-        a->fragment_count>16 || a->lds_slot>=a->vertex_count || a->lds_value>UINT16_MAX)
+        a->fragment_count>16 ||
+        (a->lds_slot!=UINT32_MAX && a->lds_slot>=a->vertex_count) ||
+        (a->lds_slot==UINT32_MAX && a->lds_value) || a->lds_value>UINT16_MAX)
         return -1;
     /* The window base places the whole block: a block that cannot fit below
      * SGPR 16 is unusable, and the two system registers a merged pair gates on
      * must lie outside it. A pair that claims they are window-relative is
      * refused rather than written into user data the shader never reads. */
-    if(a->window_base && (a->window_base>16 || a->window_base+a->vertex_count>16)) return -1;
+    if(a->hull>1 || (a->hull && a->window_base!=8))return -1;
+    if(a->window_base && (a->window_base>16 ||
+        a->window_base+a->vertex_count>(a->hull?24u:16u))) return -1;
     if(a->esgs_described>1) return -1;
     if(a->esgs_described) {
         if(!a->window_base || a->esgs_gs_tg_info_sgpr>=a->window_base ||
@@ -140,7 +150,7 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
         if(!vertex_buffer_low || (vertex_buffer_low&15u))return -1;
         vertex[a->vertex_buffer_slot]=vertex_buffer_low;
     } else if(vertex_buffer_low)return -1;
-    vertex[a->lds_slot]=a->lds_value;
+    if(a->lds_slot!=UINT32_MAX)vertex[a->lds_slot]=a->lds_value;
     if(a->ring_table_valid) {
         vertex[a->ring_table_slot]=a->ring_table_low;
         vertex[a->ring_table_slot+1u]=a->ring_table_high;

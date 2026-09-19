@@ -29,6 +29,9 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *destination,
  * workgroup layout. */
 int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *hull,
     const PsbcShaderOutput *compiled);
+/* Independent LS/HS user-data block. No NGG LDS-layout slot or pixel bank. */
+int ps5vk_runtime_hull_abi_build(const PsbcShaderMetadata *hull,
+    struct ps5vk_runtime_draw_abi *out);
 int ps5vk_runtime_draw_abi_build(const PsbcShaderMetadata *vertex,
     const PsbcShaderMetadata *fragment,struct ps5vk_runtime_draw_abi *out);
 
