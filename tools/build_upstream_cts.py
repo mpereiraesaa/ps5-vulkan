@@ -26,6 +26,12 @@ DATASET_SHADER_SOURCES = (
     "vulkan/draw/VertexFetch.frag",
     "vulkan/draw/NegateData.comp",
 )
+# Upstream amber scripts the packaged cases parse from the same archive:
+# cts_amber::createAmberTestCase reads "vulkan/amber/<category>/<file>" at run
+# time, so the script has to sit beside eboot.bin like the shader sources.
+DATASET_AMBER_SCRIPTS = (
+    "vulkan/amber/rasterization/line_continuity/polygon-mode-lines.amber",
+)
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -804,6 +810,18 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationFragShaderSideEffectsTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationOrderAttachmentAccessTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/rasterization/vktShaderTileImageTests.cpp",
+        # Original fragment-operations module, registered whole under its own
+        # name in package_ps5.cpp because its scissor.multi_viewport family is
+        # the upstream oracle for multiViewport (a geometry stage routing one
+        # primitive per viewport through gl_ViewportIndex). createTests() calls
+        # the four sub-factories, so all six translation units are compiled;
+        # cases.txt selects only the multi_viewport leaves.
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsEarlyFragmentTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsOcclusionQueryTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsTransientAttachmentTests.cpp",
         # Original user-defined clip/cull distance module. The package registers
         # the module's own factory; none of its leaves is selected for strict
         # acceptance, because the feature flag that gates the whole family also
@@ -844,6 +862,10 @@ def main():
         # Indirect-draw module: original upstream multi-command, firstInstance
         # and instanced bodies over the same base class and image oracle.
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp",
+        # Scissor module: original upstream static/dynamic scissor bodies over
+        # the same base class; its multi-scissor leaves route through an
+        # instanced geometry stage and are a second multiViewport oracle.
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBaseClass.cpp",
         # The base class builds its buffers, images and render pass through the
         # module's own create-info and object helpers.
@@ -1036,11 +1058,12 @@ def main():
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
 
     # The packaged CTS reads its data archive from /app0 (the title directory),
-    # so the selected cases that load upstream shader sources need those files
-    # beside eboot.bin. Only the draw modules' sources are staged (the
-    # registered factories load them by name even for unselected leaves); the
-    # rest of the selection builds its shaders in code.
-    for relative in DATASET_SHADER_SOURCES:
+    # so the selected cases that load upstream shader sources or amber scripts
+    # need those files beside eboot.bin. Only the draw modules' sources and the
+    # one amber script the selection names are staged (the registered factories
+    # load them by name even for unselected leaves); the rest of the selection
+    # builds its shaders in code.
+    for relative in DATASET_SHADER_SOURCES + DATASET_AMBER_SCRIPTS:
         source = cts_root / "external/vulkancts/data" / relative
         if not source.is_file():
             raise SystemExit(f"missing upstream CTS data source {source}")

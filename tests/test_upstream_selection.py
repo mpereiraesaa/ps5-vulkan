@@ -73,10 +73,25 @@ class UpstreamSelectionTests(unittest.TestCase):
         geometry = [c for c in manifest["cases"]
                     if "geometryShader" in " ".join(c.get("features_required", []))]
         # 34 diagnostics plus the 28 rasterization culling leaves that are the
-        # oracle for fillModeNonSolid: they run and pass with the feature
-        # advertised and move to acceptance in the change that advertises it.
-        self.assertEqual((304, 62, 48),
+        # oracle for fillModeNonSolid (they run and pass with the feature
+        # advertised and move to acceptance in the change that advertises it),
+        # plus the 40 T05 entries of the complete eligibility pass: 25 applicable
+        # leaves held as t05-measurement-pending until one console window
+        # (2 clip_volume.depth_clamp triangles, 16 fragment_ops multi_viewport,
+        # 6 draw.renderpass.scissor multi-scissor, 1 line_continuity amber) and
+        # 15 same-family leaves that document a refusal or a capability gap.
+        self.assertEqual((304, 102, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
+        pending = [d for d in manifest["diagnostics"]
+                   if d["category"] == "t05-measurement-pending"]
+        self.assertEqual(25, len(pending))
+        self.assertTrue(all(d["expected_status"] == "Pass" for d in pending))
+        self.assertEqual(
+            {"dEQP-VK.clipping.clip_volume.depth_clamp",
+             "dEQP-VK.fragment_ops.scissor.multi_viewport",
+             "dEQP-VK.draw.renderpass.scissor",
+             "dEQP-VK.rasterization.line_continuity"},
+            {d["path"].rsplit(".", 1)[0] for d in pending})
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
         self.assertEqual(29, len(geometry))
         self.assertEqual(29, len({c["path"] for c in geometry}))
@@ -175,6 +190,64 @@ class UpstreamSelectionTests(unittest.TestCase):
             entry["resource_contract"] = contract
         manifest["cases"].append(entry)
         return self._gate_exit_code_for_manifest(manifest)
+
+    def test_t05_recognizers_are_bound_to_their_constructions(self):
+        """The three T05 name recognizers derive exactly the pinned factories'
+        leaves and nothing when the construction they were written against is
+        gone."""
+        fo = (UPSTREAM / "external/vulkancts/modules/vulkan/fragment_ops/"
+              "vktFragmentOperationsScissorMultiViewportTests.cpp").read_text()
+        names = self.gate._fragment_ops_multi_viewport_leaf_names(fo)
+        self.assertEqual({f"scissor_{n}" for n in range(1, 17)}, names)
+        self.assertEqual(set(), self.gate._fragment_ops_multi_viewport_leaf_names(
+            fo.replace("MIN_MAX_VIEWPORTS = 16", "MIN_MAX_VIEWPORTS = 64")))
+        self.assertEqual(set(), self.gate._fragment_ops_multi_viewport_leaf_names(
+            fo.replace('"scissor_" + de::toString(numViewports)', '"vp_" + name')))
+
+        clip = (UPSTREAM / "external/vulkancts/modules/vulkan/clipping/"
+                "vktClippingTests.cpp").read_text()
+        util = (UPSTREAM / self.gate.DRAW_UTIL_SOURCE).read_text()
+        names = self.gate._clip_volume_topology_leaf_names(clip, util)
+        self.assertEqual({"point_list", "line_list", "line_list_with_adjacency", "line_strip",
+                          "line_strip_with_adjacency", "triangle_list",
+                          "triangle_list_with_adjacency", "triangle_strip",
+                          "triangle_strip_with_adjacency", "triangle_fan"}, names)
+        self.assertEqual(set(), self.gate._clip_volume_topology_leaf_names(clip, ""))
+        self.assertEqual(set(), self.gate._clip_volume_topology_leaf_names(
+            clip.replace("getPrimitiveTopologyShortName(cases[caseNdx])", "name(caseNdx)"), util))
+
+        depth = (UPSTREAM / "external/vulkancts/modules/vulkan/draw/"
+                 "vktDrawDepthClampTests.cpp").read_text()
+        names = self.gate._draw_depth_clamp_leaf_names(depth)
+        self.assertIn("d32_sfloat", names)
+        self.assertIn("d32_sfloat_depth_bias_clamp_input_negative", names)
+        self.assertIn("d32_sfloat_clamp_four_viewports", names)
+        self.assertNotIn("d32_sfloat_bogus", names)
+        self.assertEqual(6 * 8, len(names))
+        self.assertEqual(set(), self.gate._draw_depth_clamp_leaf_names(
+            depth.replace("formatCaseName + params.testNameSuffix", "name")))
+
+    def test_t05_modules_are_registered_where_their_diagnostics_point(self):
+        """The fragment_ops and draw scissor factories the pending leaves need
+        are compiled and registered, the amber script they parse is staged, and
+        the families that are only documented as gaps are not registered."""
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn('vkt::FragmentOperations::createTests(m_testCtx, "fragment_ops")', package)
+        self.assertIn("vkt::Draw::createScissorTests(", package)
+        self.assertNotIn("createDepthClampTests", package)
+        self.assertNotIn("DynamicStateRSTests", package)
+        for unit in ("vktFragmentOperationsTests.cpp",
+                     "vktFragmentOperationsScissorTests.cpp",
+                     "vktFragmentOperationsScissorMultiViewportTests.cpp",
+                     "vktFragmentOperationsEarlyFragmentTests.cpp",
+                     "vktFragmentOperationsOcclusionQueryTests.cpp",
+                     "vktFragmentOperationsTransientAttachmentTests.cpp",
+                     "vktDrawScissorTests.cpp"):
+            self.assertIn(unit, builder)
+        self.assertIn("vulkan/amber/rasterization/line_continuity/polygon-mode-lines.amber", builder)
+        self.assertTrue((UPSTREAM / "external/vulkancts/data/vulkan/amber/rasterization/"
+                         "line_continuity/polygon-mode-lines.amber").is_file())
 
     def test_device_capabilities_come_from_the_device_sources(self):
         self.assertEqual([], self.capability_failures)
