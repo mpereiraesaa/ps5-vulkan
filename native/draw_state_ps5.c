@@ -278,7 +278,12 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
          * Mode 1 is PAL's rule. Mode 2 drops the vertex-grouping and
          * break-wave bits, the radeonsi form for a control shader that does
          * not read the primitive id, to separate the group size from the
-         * other two fields if mode 1 changes the result. */
+         * other two fields if mode 1 changes the result.
+         *
+         * MEASURED AND CLOSED, mode 1: the GPU-side readback of GE_CNTL
+         * returned 0x00060040 for this pipeline's 64 patches per workgroup,
+         * the draw completed, and the evaluation half still produced nothing
+         * (ink=0). Not what is missing. Stays default off. */
         {
             const uint32_t num_patches=pair->tess_state[1].value&255u;
             uint32_t prim_grp=num_patches?num_patches:4u;
