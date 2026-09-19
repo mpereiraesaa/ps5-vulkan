@@ -295,7 +295,16 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
      * count 1 - PAL notes gfx10 dropped the index field for
      * VGT_PRIMITIVE_TYPE. Mode 2 is Mesa's form on every GFX7+ part:
      * SET_UCONFIG_REG_INDEX with index 1 for the primitive type and the
-     * context write with index 2 in the offset dword for LS_HS_CONFIG. */
+     * context write with index 2 in the offset dword for LS_HS_CONFIG.
+     *
+     * MEASURED AND CLOSED, both modes: the packets reached the stream in the
+     * intended encodings (confirmed in the command-word dump), the draw
+     * completed, and the evaluation half still produced nothing. Also
+     * learned: VGT_PRIMITIVE_TYPE reads back zero through COPY_DATA even
+     * after a direct SET that provably landed, so it is not readable that
+     * way and its zero readback was never evidence of a missed load - the
+     * readback argument above is withdrawn; the PAL rule stood alone and
+     * failed too. Stays default off. */
     if (state->runtime.ring_table_valid) {
         uint32_t ls_hs=0,prim=0; int have_ls_hs=0,have_prim=0;
         for (uint32_t i=0;i<state->cx_count;++i)
