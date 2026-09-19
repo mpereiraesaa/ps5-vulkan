@@ -8,8 +8,8 @@
  * execution modes are read, the patch control points the pipeline states are
  * checked against the control stage's output vertex count, and two pipelines
  * that differ only in the pair or in that count are different programs. It says
- * nothing about compiling or executing them - the compiler adapter refuses the
- * pair, which is what makes tessellationShader stay false.
+ * nothing about compiling or executing them. Interface acceptance alone must
+ * never be used to promote the tessellationShader capability.
  *
  * The fixtures are the pinned front end's own output for the pair, and each
  * negative case changes exactly one word of it.
@@ -89,6 +89,19 @@ int main(void)
     assert(ps5vk_graphics_has_tessellation(&key));
     assert(ps5vk_graphics_tessellation_key_valid(&key));
     assert(ps5vk_spirv_graphics_interface(&key));
+
+    /* PrimitiveId is a patch index input in TCS, not a geometry-only input.
+     * Reuse the scalar input declaration, changing only its BuiltIn. */
+    struct ps5vk_graphics_module_key primitive=
+        read_module("build/runtime-graphics/tess.tesc.spv");
+    assert(patch_decoration(&primitive,11u,8u,7u));
+    struct ps5vk_graphics_key primitive_key=key;
+    primitive_key.tess_control=primitive;
+    assert(ps5vk_spirv_graphics_interface(&primitive_key));
+    /* A different, unsupported builtin must not be accepted by this change. */
+    assert(patch_decoration(&primitive,11u,7u,999u));
+    assert(!ps5vk_spirv_graphics_interface(&primitive_key));
+    free_module(&primitive);
 
     /* The pipeline's patch control points are the control stage's output vertex
      * count: a state that disagrees with the program would tessellate a patch

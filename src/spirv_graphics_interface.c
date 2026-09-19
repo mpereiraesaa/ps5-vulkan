@@ -357,15 +357,12 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                    type->count!=32)goto done;
                 continue;
             }
-            /* The geometry stage's per-primitive id: which primitive of the draw
-             * this invocation is processing. The hardware supplies it to the
-             * merged stage the same way it supplies the per-vertex offsets and
-             * the invocation id, and every applicable upstream geometry leaf
-             * declares it, so it is what the feature's conformance leaves need.
-             * It is a GEOMETRY input scalar with no location; the fragment
-             * stage's gl_PrimitiveID is a different interface and stays refused
-             * (the compiled pixel stage never receives it). */
-            if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_PRIMITIVE_ID) {
+            /* Geometry consumes the input primitive index; TCS consumes the
+             * input patch index. Both declarations are scalar stage inputs,
+             * not Patch-decorated outputs. The fragment-stage PrimitiveId
+             * varying is a separate interface and remains refused here. */
+            if((model==MODEL_GEOMETRY || model==MODEL_TESS_CTRL) &&
+               d->builtin==BUILTIN_PRIMITIVE_ID) {
                 if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
                    type->count!=32)goto done;
                 continue;
