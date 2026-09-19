@@ -89,6 +89,8 @@ int main(void)
     assert(ps5vk_graphics_has_tessellation(&key));
     assert(ps5vk_graphics_tessellation_key_valid(&key));
     assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_spirv_tess_output_points(&key.tess_control)==3);
+    assert(ps5vk_spirv_tess_output_points(&key.tess_eval)==0);
 
     /* PrimitiveId is a patch index input in TCS, not a geometry-only input.
      * Reuse the scalar input declaration, changing only its BuiltIn. */
@@ -98,19 +100,19 @@ int main(void)
     struct ps5vk_graphics_key primitive_key=key;
     primitive_key.tess_control=primitive;
     assert(ps5vk_spirv_graphics_interface(&primitive_key));
+    assert(patch_decoration(&primitive,11u,7u,14u));
+    assert(ps5vk_spirv_graphics_interface(&primitive_key));
     /* A different, unsupported builtin must not be accepted by this change. */
-    assert(patch_decoration(&primitive,11u,7u,999u));
+    assert(patch_decoration(&primitive,11u,14u,999u));
     assert(!ps5vk_spirv_graphics_interface(&primitive_key));
     free_module(&primitive);
 
-    /* The pipeline's patch control points are the control stage's output vertex
-     * count: a state that disagrees with the program would tessellate a patch
-     * the program was never compiled for. Out-of-range counts are refused by
-     * the key contract itself, before any interface work. */
+    /* Input assembly size and TCS output size are independent. Out-of-range
+     * input counts are still refused before interface work. */
     struct ps5vk_graphics_key wrong=key;
     wrong.patch_control_points=4;
     assert(ps5vk_graphics_tessellation_key_valid(&wrong));
-    assert(!ps5vk_spirv_graphics_interface(&wrong));
+    assert(ps5vk_spirv_graphics_interface(&wrong));
     wrong.patch_control_points=0;
     assert(!ps5vk_graphics_tessellation_key_valid(&wrong));
     assert(!ps5vk_spirv_graphics_interface(&wrong));
@@ -134,8 +136,8 @@ int main(void)
     swapped.tess_eval=key.tess_control;
     assert(!ps5vk_spirv_graphics_interface(&swapped));
 
-    /* The declared output vertex count is what the patch control points are
-     * checked against, so moving it moves the accepted state with it. */
+    /* Both expansion (3 -> 32) and equal sizes are valid interfaces. These
+     * reflected module mutations test declarations, not shader execution. */
     struct ps5vk_graphics_module_key widened=
         read_module("build/runtime-graphics/tess.tesc.spv");
     assert(patch_execution_mode(&widened,26,3,32));
@@ -144,6 +146,12 @@ int main(void)
     wide.patch_control_points=32;
     assert(ps5vk_spirv_graphics_interface(&wide));
     wide.patch_control_points=3;
+    assert(ps5vk_spirv_graphics_interface(&wide));
+    assert(ps5vk_spirv_tess_output_points(&wide.tess_control)==32);
+    assert(patch_execution_mode(&widened,26,32,0));
+    assert(!ps5vk_spirv_graphics_interface(&wide));
+    assert(ps5vk_spirv_tess_output_points(&wide.tess_control)==0);
+    assert(patch_execution_mode(&widened,26,0,33));
     assert(!ps5vk_spirv_graphics_interface(&wide));
     free_module(&widened);
 
