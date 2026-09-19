@@ -620,26 +620,6 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
         if((declared_clip||declared_cull) &&
            !ps5vk_runtime_graphics_distance_reads_described(&p->domain.metadata,
                &p->fragment.metadata,declared_clip,declared_cull))goto failed;
-#if defined(PS5VK_TESS_LEGACY_DOMAIN) && PS5VK_TESS_LEGACY_DOMAIN
-        /* DIAGNOSTIC: the same evaluation half as a legacy hardware VS. Same
-         * link against the control half, same device facts (radv programs
-         * GE_PC_ALLOC for a legacy VS too), NGG off. Its ABI is built from ITS
-         * metadata: a hardware VS has no system-SGPR preamble, so its user
-         * data starts at SPI_SHADER_USER_DATA_VS_0 with window base zero. */
-        {
-            PsbcCompileOptions legacy_options=domain_options;
-            legacy_options.ngg=false;
-            legacy_options.ngg_no_passthrough=false;
-            result=psbc_compile_domain_pipeline(
-                key->tess_control.words,key->tess_control.word_count*4u,
-                key->tess_eval.words,key->tess_eval.word_count*4u,
-                &legacy_options,&p->domain_legacy);
-            if(result!=PSBC_RESULT_OK)goto failed;
-            if(ps5vk_runtime_draw_abi_build(&p->domain_legacy.metadata,
-                   &p->fragment.metadata,&p->arguments_legacy))goto failed;
-            p->domain_legacy_valid=1;
-        }
-#endif
         /* The domain half is packaged through the same runtime header the
          * vertex programs use - it is an NGG pre-raster program - and the draw
          * ABI is built from its metadata and the fragment's. The hull half is
@@ -651,6 +631,78 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
            ps5vk_runtime_shader_build(&header,&p->fragment) ||
            ps5vk_runtime_draw_abi_build(&p->domain.metadata,&p->fragment.metadata,
                &p->arguments))goto failed;
+#if defined(PS5VK_TESS_LEGACY_DOMAIN) && PS5VK_TESS_LEGACY_DOMAIN
+        /* DIAGNOSTIC: the same evaluation half as a legacy hardware VS. Same
+         * link against the control half, same device facts (radv programs
+         * GE_PC_ALLOC for a legacy VS too), NGG off.
+         *
+         * Its draw ABI cannot come from ps5vk_runtime_draw_abi_build: that
+         * builder is NGG-only by contract (NGG hardware stage, NGG LDS
+         * layout). It is derived instead from the NGG domain's VALIDATED ABI,
+         * with every program-specific field replaced by the legacy program's:
+         * its user-SGPR count, a zero window base (a hardware VS has no
+         * system-SGPR preamble), no merged-pair system registers, no vertex
+         * draw parameters, its own ring-table and push/descriptor slots, and
+         * the LDS-layout word - meaningless to a legacy program - parked in
+         * the first user dword nothing else names, so the value builder's
+         * collision check stays honest. The result is run through the same
+         * value builder the NGG ABI passed. */
+        {
+            PsbcCompileOptions legacy_options=domain_options;
+            legacy_options.ngg=false;
+            legacy_options.ngg_no_passthrough=false;
+            result=psbc_compile_domain_pipeline(
+                key->tess_control.words,key->tess_control.word_count*4u,
+                key->tess_eval.words,key->tess_eval.word_count*4u,
+                &legacy_options,&p->domain_legacy);
+            if(result!=PSBC_RESULT_OK)goto failed;
+            const PsbcShaderMetadata *lm=&p->domain_legacy.metadata;
+            if(lm->hardware_stage!=PSBC_HW_STAGE_VERTEX || !lm->linkage_valid ||
+               !lm->user_sgpr_count || lm->user_sgpr_count>16 ||
+               lm->user_data_window_base)goto failed;
+            struct ps5vk_runtime_draw_abi legacy=p->arguments;
+            legacy.vertex_count=lm->user_sgpr_count;
+            legacy.window_base=0;
+            legacy.esgs_described=0;
+            legacy.esgs_gs_tg_info_sgpr=legacy.esgs_merged_wave_info_sgpr=0;
+            legacy.base_vertex_slot=legacy.start_instance_slot=UINT32_MAX;
+            legacy.draw_id_slot=legacy.view_index_slot=UINT32_MAX;
+            legacy.vertex_buffer_valid=0;legacy.vertex_buffer_slot=0;
+            legacy.vertex_buffer_usage_mask=0;
+            legacy.ring_table_valid=lm->ps5_ring_table_valid;
+            legacy.ring_table_slot=lm->ps5_ring_table_valid?
+                lm->ps5_ring_table_user_data_dword:0u;
+            legacy.ring_table_low=legacy.ring_table_high=0;
+            legacy.vertex_push_slot=lm->push_constants_valid?
+                lm->push_constants_user_data_dword:UINT32_MAX;
+            uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+            for(unsigned s=0;s<PS5VK_RUNTIME_DESCRIPTOR_SETS;++s) {
+                legacy.vertex_descriptor_valid[s]=lm->descriptor_set_valid[s];
+                legacy.vertex_descriptor_slot[s]=lm->descriptor_set_user_data_dword[s];
+                legacy.vertex_used_bindings[s]=lm->descriptor_used_binding_mask[s];
+                if(legacy.vertex_descriptor_valid[s] || legacy.fragment_descriptor_valid[s])
+                    tables[s]=16*(s+1);
+            }
+            uint32_t lds_slot=UINT32_MAX;
+            for(uint32_t d=0;d<legacy.vertex_count && lds_slot==UINT32_MAX;++d) {
+                int used=(legacy.ring_table_valid &&
+                    (d==legacy.ring_table_slot || d==legacy.ring_table_slot+1u)) ||
+                    d==legacy.vertex_push_slot;
+                for(unsigned s=0;s<PS5VK_RUNTIME_DESCRIPTOR_SETS;++s)
+                    used|=legacy.vertex_descriptor_valid[s] &&
+                        d==legacy.vertex_descriptor_slot[s];
+                if(!used)lds_slot=d;
+            }
+            if(lds_slot==UINT32_MAX)goto failed;
+            legacy.lds_slot=lds_slot;legacy.lds_value=0;
+            uint32_t check_vertex[16],check_pixel[16];
+            if(ps5vk_runtime_draw_values_sets(&legacy,0,0,0,0,0,
+                   legacy.push_constant_size?4:0,tables,check_vertex,check_pixel))
+                goto failed;
+            p->arguments_legacy=legacy;
+            p->domain_legacy_valid=1;
+        }
+#endif
         /* The draw's DI patch type was recorded when it was resolved. The
          * patch control points ride along for the launch state. */
         p->patch_control_points=key->patch_control_points;
