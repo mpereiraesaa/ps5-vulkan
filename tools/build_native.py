@@ -553,6 +553,16 @@ def main():
                     raise SystemExit(
                         "PS5VK_TESS_GE_CNTL is 0 (linked), 1 (PAL) or 2 (Mesa)")
                 common += ["-DPS5VK_TESS_GE_CNTL=" + tess_ge_cntl]
+                # Diagnostic: write VGT_PRIMITIVE_TYPE and VGT_LS_HS_CONFIG as
+                # individual SET packets after the bulk register loads, per
+                # PAL's rule that indexed registers are written alone.
+                # 1 = plain SET (PAL gfx10), 2 = Mesa's indexed form. Default 0.
+                tess_direct_indexed = os.environ.get(
+                    "PS5VK_TESS_DIRECT_INDEXED", "0")
+                if tess_direct_indexed not in ("0", "1", "2"):
+                    raise SystemExit(
+                        "PS5VK_TESS_DIRECT_INDEXED is 0, 1 (plain SET) or 2 (indexed)")
+                common += ["-DPS5VK_TESS_DIRECT_INDEXED=" + tess_direct_indexed]
                 tess_only = os.environ.get("PS5VK_TESS_ONLY", "0")
                 if tess_only not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_ONLY must be 0 or 1")

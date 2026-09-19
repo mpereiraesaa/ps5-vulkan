@@ -269,6 +269,61 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
         }
     }
 #endif
+#if defined(PS5VK_TESS_DIRECT_INDEXED) && PS5VK_TESS_DIRECT_INDEXED
+    /* DIAGNOSTIC, default off: write the two INDEXED registers of a patch
+     * draw as individual SET packets after the bulk loads.
+     *
+     * PAL's CmdUtil::IsIndexedRegister names VGT_LS_HS_CONFIG and
+     * VGT_PRIMITIVE_TYPE (with VGT_INDEX_TYPE, VGT_NUM_INSTANCES and the
+     * RSRC3/RSRC4 pairs) as registers the CP handles specially, and
+     * CmdStream::WriteRegisters says "indexed registers must be written
+     * individually with no other registers" - PAL never puts them in a
+     * multi-register sequence and never reaches them through a LOAD. This
+     * driver reaches both ONLY through LOAD_*_REG_INDEX pair-mode loads of
+     * 100 and 10 registers. The GPU-side readback after those loads returns
+     * the intended value for GE_CNTL but ZERO for VGT_PRIMITIVE_TYPE, so the
+     * bulk load demonstrably reaches ordinary uconfig state and demonstrably
+     * does not show up for this one.
+     *
+     * The mechanism fits everything measured: the LS/HS stage enables launch
+     * the hull regardless, and it stores its factors; if the engine still
+     * assembles TRIANGLES instead of PATCHES, or has a zero patch count in
+     * its own copy of LS_HS_CONFIG, there is nothing for the tessellator to
+     * tessellate and the evaluation half never launches, with no fault.
+     *
+     * Mode 1 is PAL's gfx10 form: plain SET_CONTEXT_REG / SET_UCONFIG_REG,
+     * count 1 - PAL notes gfx10 dropped the index field for
+     * VGT_PRIMITIVE_TYPE. Mode 2 is Mesa's form on every GFX7+ part:
+     * SET_UCONFIG_REG_INDEX with index 1 for the primitive type and the
+     * context write with index 2 in the offset dword for LS_HS_CONFIG. */
+    if (state->runtime.ring_table_valid) {
+        uint32_t ls_hs=0,prim=0; int have_ls_hs=0,have_prim=0;
+        for (uint32_t i=0;i<state->cx_count;++i)
+            if (state->cx[i].offset==0x2d6) { ls_hs=state->cx[i].value; have_ls_hs=1; }
+        for (uint32_t i=0;i<state->uc_count;++i)
+            if (state->uc[i].offset==0x242) { prim=state->uc[i].value; have_prim=1; }
+        if (end-next < 6) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        if (have_prim) {
+#if PS5VK_TESS_DIRECT_INDEXED==2
+            *next++=0xc0017a00u;              /* SET_UCONFIG_REG_INDEX */
+            *next++=0x242u|(1u<<28);          /* index 1: primitive type */
+#else
+            *next++=0xc0017900u;              /* SET_UCONFIG_REG */
+            *next++=0x242u;
+#endif
+            *next++=prim;
+        }
+        if (have_ls_hs) {
+            *next++=0xc0016900u;              /* SET_CONTEXT_REG */
+#if PS5VK_TESS_DIRECT_INDEXED==2
+            *next++=0x2d6u|(2u<<28);          /* index 2: LS_HS_CONFIG */
+#else
+            *next++=0x2d6u;
+#endif
+            *next++=ls_hs;
+        }
+    }
+#endif
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
     VkResult scissor_rc=ps5vk_native_emit_scissor_replay(&next,(uint32_t)(end-next),state);
     if(scissor_rc!=VK_SUCCESS)return scissor_rc;
