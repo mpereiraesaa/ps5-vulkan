@@ -1106,6 +1106,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
                                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT));
     if(readback)return
         ps5vk_color_discard_barrier(b) ||
+        ps5vk_color_readback_reuse_barrier(b) ||
         (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&

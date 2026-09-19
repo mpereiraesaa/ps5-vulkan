@@ -295,6 +295,28 @@ static void input_attachment_shape(void)
     pool = saved_pool;
 }
 
+static void readback_return_recording(void)
+{
+    VkImage image=make_image(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,NULL);
+    VkDeviceMemory memory=image->memory;
+    VkImageMemoryBarrier barrier=transfer_barrier(image,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_ACCESS_TRANSFER_READ_BIT,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+    for(unsigned invalid_scope=0;invalid_scope<2;++invalid_scope) {
+        VkCommandBuffer c=begin();
+        vkCmdPipelineBarrier(c,invalid_scope?VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT:
+            (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT),
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,0,0,NULL,0,NULL,1,&barrier);
+        assert(vkEndCommandBuffer(c)==(invalid_scope?VK_ERROR_UNKNOWN:VK_SUCCESS));
+        if(!invalid_scope)assert(c->operation_count==1 &&
+            c->operations[0].type==PS5VK_IMAGE_BARRIER);
+        vkFreeCommandBuffers(device,pool,1,&c);
+    }
+    vkDestroyImage(device,image,NULL);
+    vkFreeMemory(device,memory,NULL);
+}
+
 int main(void)
 {
     VkInstance instance;
@@ -314,6 +336,7 @@ int main(void)
     VkCommandPoolCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                    .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
     assert(vkCreateCommandPool(device, &pci, NULL, &pool) == VK_SUCCESS);
+    readback_return_recording();
 
     const VkImageUsageFlags transfer_usage =
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
