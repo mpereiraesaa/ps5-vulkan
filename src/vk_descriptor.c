@@ -431,15 +431,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(VkDevice d,
     for (uint32_t j = 0; j < info->setLayoutCount; ++j)
         layout->sets[j] = info->pSetLayouts[j]->signature;
     const VkShaderStageFlags supported = VK_SHADER_STAGE_COMPUTE_BIT |
-        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+        VK_SHADER_STAGE_GEOMETRY_BIT;
+    VkShaderStageFlags push_stages_seen = 0;
     for (uint32_t j = 0; j < info->pushConstantRangeCount; ++j) {
         const VkPushConstantRange *range = &info->pPushConstantRanges[j];
         if (!range->stageFlags || (range->stageFlags & ~supported) || !range->size ||
+            (range->stageFlags & push_stages_seen) ||
             (range->offset & 3u) || (range->size & 3u) ||
             range->offset >= PS5VK_MAX_PUSH_CONSTANT_BYTES ||
             range->size > PS5VK_MAX_PUSH_CONSTANT_BYTES - range->offset) {
             ps5vk_object_free(layout, &saved, custom); return INVALID;
         }
+        /* VUID00292 applies to stage membership, not byte-range overlap. */
+        push_stages_seen |= range->stageFlags;
         uint32_t first = range->offset / 4u, end = (range->offset + range->size) / 4u;
         for (uint32_t k = first; k < end; ++k) {
             if (layout->push_constant_stages[k] & range->stageFlags) {

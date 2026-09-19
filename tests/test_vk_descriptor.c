@@ -169,6 +169,26 @@ static void push_constant_layouts(void)
     for(unsigned i=4;i<8;++i)assert(layout->push_constant_stages[i]==
         (VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT));
     vkDestroyPipelineLayout(&d,layout,NULL);
+    /* VUID00292 forbids a stage appearing in two ranges even when their
+     * byte intervals are disjoint. Distinct stages may overlap instead. */
+    const VkShaderStageFlags stages[]={VK_SHADER_STAGE_VERTEX_BIT,
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,VK_SHADER_STAGE_GEOMETRY_BIT,
+        VK_SHADER_STAGE_FRAGMENT_BIT,VK_SHADER_STAGE_COMPUTE_BIT};
+    for(unsigned s=0;s<sizeof(stages)/sizeof(stages[0]);++s) {
+        ranges[0]=(VkPushConstantRange){stages[s],0,16};
+        ranges[1]=(VkPushConstantRange){stages[s],32,16};
+        layout=(VkPipelineLayout)(uintptr_t)1;
+        assert(vkCreatePipelineLayout(&d,&info,&poisoned,&layout)!=VK_SUCCESS && !layout);
+        assert(!d.descriptor_objects && !counts.live);
+        ranges[1].stageFlags=stages[(s+1)%6];
+        ranges[1].offset=0;
+        assert(vkCreatePipelineLayout(&d,&info,&poisoned,&layout)==VK_SUCCESS);
+        assert(layout->push_constant_stages[0]==(stages[s]|stages[(s+1)%6]));
+        vkDestroyPipelineLayout(&d,layout,&poisoned);
+        assert(!d.descriptor_objects && !counts.live);
+    }
+    ranges[0]=(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT,0,16};
     ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT,8,16};
     assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
     ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_FRAGMENT_BIT,2,4};
@@ -176,6 +196,15 @@ static void push_constant_layouts(void)
     ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_FRAGMENT_BIT,252,8};
     assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
     ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_GEOMETRY_BIT,16,4};
+    assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)==VK_SUCCESS);
+    vkDestroyPipelineLayout(&d,layout,NULL);
+    ranges[1]=(VkPushConstantRange){VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,8,16};
+    assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)==VK_SUCCESS);
+    assert(layout->push_constant_stages[2]==(VK_SHADER_STAGE_COMPUTE_BIT|
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT));
+    vkDestroyPipelineLayout(&d,layout,NULL);
+    ranges[1]=(VkPushConstantRange){(VkShaderStageFlags)0x80000000u,16,4};
     assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
     info.pPushConstantRanges=NULL;
     assert(vkCreatePipelineLayout(&d,&info,NULL,&layout)!=VK_SUCCESS && !layout);
