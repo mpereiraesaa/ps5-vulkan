@@ -295,7 +295,10 @@ int main(void)
     for(unsigned i=0;i<sizeof(legacy_cx)/sizeof(legacy_cx[0]);++i)
         assert(find_register(l,l->context_registers,l->context_register_count,legacy_cx[i]));
     assert(find_register(l,l->context_registers,l->context_register_count,0x290)->value==0);
-    assert(!find_register(l,l->context_registers,l->context_register_count,0x291));
+    /* radv's "required programming for tessellation (legacy pipeline only)":
+     * 250 ES vertices, 126 primitives and 126 instanced primitives per
+     * subgroup, an NGG-free register the legacy domain still needs. */
+    assert(find_register(l,l->context_registers,l->context_register_count,0x291)->value==0x1f83f0fau);
     assert(!l->user_data_window_base);
     assert(!l->esgs_system_sgprs_valid && !l->ngg_lds_layout_valid);
     assert(l->output_semantic_count>=2);

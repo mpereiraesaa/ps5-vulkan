@@ -36,12 +36,12 @@ DEPS = [
         # driver cache key moves with the metadata version.
         #
         # DIAGNOSTIC CANDIDATE, unreviewed: branch codex/tess-legacy-domain,
-        # one commit past PR #19's head, lets the evaluation half compile as
+        # two commits past PR #19's head (opengnm-psbc PR #20, draft), lets the evaluation half compile as
         # radv's "Tessellation Evaluation Shader as VS" - the domain on the VS
         # hardware stage (VS_STAGE_DS, no NGG) - when the NGG option is off,
         # for the PS5VK_TESS_LEGACY_DOMAIN experiment. The NGG path is
         # unchanged; a standalone non-NGG evaluation half stays unresolved.
-        "pin": "d667739b7b6ac8ee74253c52a0ec644769b2b7f2",
+        "pin": "5a155280ec313ba28fe9a38b60a72a70d040d8cf",
     },
     {
         "name": "opengnm",
