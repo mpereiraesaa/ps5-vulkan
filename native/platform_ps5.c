@@ -276,5 +276,24 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
 #endif
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
+#if defined(PS5VK_TESS_EXPERIMENTAL_API) && PS5VK_TESS_EXPERIMENTAL_API
+#if !PS5VK_RUNTIME_GRAPHICS || !PS5VK_GRAPHICS_DRAW || PS5VK_TESS_RING_QUERY != 4
+#error Experimental tessellation requires runtime graphics and queue-owned TF ring
+#endif
+    /* DEVELOPMENT PROFILE ONLY. These are the target core floors to exercise
+     * with original CTS, not a claim that their complete envelope is proven.
+     * No shipping build enables this switch; its artifacts must record it.
+     * Keep normal feature negotiation active: no optional-stage bypass. */
+    platform->supported_features |= PS5VK_FEATURE_TESSELLATION_SHADER;
+    VkPhysicalDeviceLimits *limits = &platform->properties.limits;
+    limits->maxTessellationGenerationLevel = 64;
+    limits->maxTessellationPatchSize = 32;
+    limits->maxTessellationControlPerVertexInputComponents = 128;
+    limits->maxTessellationControlPerVertexOutputComponents = 128;
+    limits->maxTessellationControlPerPatchOutputComponents = 120;
+    limits->maxTessellationControlTotalOutputComponents = 4096;
+    limits->maxTessellationEvaluationInputComponents = 128;
+    limits->maxTessellationEvaluationOutputComponents = 128;
+#endif
     return VK_SUCCESS;
 }

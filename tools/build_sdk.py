@@ -50,7 +50,26 @@ def get_ps5_toolchain():
     return None, None
 
 
+def tess_ring_flags(environment):
+    mode = environment.get("PS5VK_TESS_RING_QUERY", "0")
+    if mode not in ("0", "4"):
+        raise ValueError("SDK ring profile must be 0 (off) or 4 (queue-owned lifecycle)")
+    flags = ["-DPS5VK_TESS_RING_QUERY=4"] if mode == "4" else []
+    experimental = environment.get("PS5VK_TESS_EXPERIMENTAL_API", "0")
+    if experimental not in ("0", "1"):
+        raise ValueError("experimental tessellation API must be 0 or 1")
+    if experimental == "1":
+        if mode != "4":
+            raise ValueError("experimental tessellation API requires queue-owned ring mode4")
+        if any(environment.get(name, "0") not in ("", "0") for name in
+               ("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC", "PS5VK_TESS_PROBE")):
+            raise ValueError("public API experiment forbids feature/descriptor bypass probes")
+        flags.append("-DPS5VK_TESS_EXPERIMENTAL_API=1")
+    return flags
+
+
 def main():
+    ring_flags = tess_ring_flags(os.environ)
     include_dir = DIST_SDK / "include"
     lib_dir = DIST_SDK / "lib"
     for d in (include_dir / "ps5vk", include_dir / "vulkan", lib_dir):
@@ -132,7 +151,8 @@ def main():
         ]
         graphics_sources = (
             "native/graphics_pair.c", "src/shader_relocate.c",
-            "native/graphics_pipeline_ps5.c", "native/tess_shared_storage.c", "native/image_ps5.c",
+            "native/graphics_pipeline_ps5.c", "native/tess_shared_storage.c",
+            "native/tess_ring_lease.c", "native/image_ps5.c",
             "src/depth_layout.c", "src/color_clear.c", "src/color_detile.c",
             "native/draw_prepare_ps5.c", "native/draw_emit_ps5.c", "native/index_emit_ps5.c",
             "native/input_attachment_gate.c",
@@ -178,6 +198,10 @@ def main():
               if os.environ.get("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC") else []),
             *(["-DPS5VK_TESS_PROBE=" + os.environ["PS5VK_TESS_PROBE"]]
               if os.environ.get("PS5VK_TESS_PROBE") else []),
+            # Ring mode alone does not advertise tessellation. A separate,
+            # explicit development-only API profile permits CTS negotiation.
+            # Neither enables the system-table diagnostic.
+            *ring_flags,
             # The SDK build compiles the same sources, so it must select the
             # same single tessellation candidate the native build selected.
             *(["-DPS5VK_TESS_VARIANT=" + os.environ["PS5VK_TESS_VARIANT"]]
@@ -241,8 +265,12 @@ def main():
         subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c",
                         str(gears / "native/stubs/libSceAgcDriver.c"), "-o", str(driver_obj)],
                        env=env, check=True)
+        tess_driver_obj = obj_dir / "tess_driver_stub.o"
+        subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c",
+                        str(ROOT / "native/tess_driver_import_stub.c"), "-o", str(tess_driver_obj)],
+                       env=env, check=True)
         subprocess.run([str(linker), "--shared", "-soname", "libSceAgcDriver.prx",
-                        "-o", str(driver), str(driver_obj)], check=True)
+                        "-o", str(driver), str(driver_obj), str(tess_driver_obj)], check=True)
         compiler_source = ROOT / "build/libpsbc.ps5.a"
         expected_revision = subprocess.check_output(
             ["git", "-C", str(ROOT / "third_party/psbc-reference"),
