@@ -148,6 +148,10 @@ def acceptance(args: argparse.Namespace) -> Dict[str, Any]:
 
         receipt = dict(verification)
         receipt["source_log"] = str(log_path)
+        # A measurement manifest (tools/make_measurement_manifest.py) carries its
+        # derivation; copy it so the receipt can never be read as an acceptance
+        # run of the frozen selection.
+        receipt["measurement"] = manifest.get("measurement")
         receipt["expected_identity"] = {
             "selection_hash": expected_selection,
             "eboot_sha256": expected_eboot,

@@ -188,6 +188,32 @@ the deployed executable hash from its own package and reports them, and the
 verifier requires them to match the locally built package. A stale deployment
 therefore fails verification instead of being attributed to the current build.
 
+### Measurement selections
+
+Some diagnostics are leaves whose upstream oracle is expected to pass once a
+feature is advertised on a measurement build (`PS5VK_RASTER_DIAGNOSTIC=1`), and
+measuring them must not edit the frozen manifest by hand.
+`tools/make_measurement_manifest.py` derives a separate manifest that moves the
+diagnostics of the named categories into `cases` and records the derivation
+(base manifest, frozen selection hash, categories, count); only `Pass`-expected
+diagnostics may move. `tools/build_upstream_cts.py --manifest <file>` packages
+that selection and copies the record into the build manifest, and
+`tools/run_upstream_cts.py --manifest <file>` verifies against it and copies
+the record into the receipt, so a measurement receipt can never be read as an
+acceptance run of the frozen selection:
+
+```sh
+python3 tools/make_measurement_manifest.py \
+  --category rasterization-culling --category t05-measurement-pending \
+  -o build/measurement/manifest.json
+python3 tools/build_upstream_cts.py --manifest build/measurement/manifest.json
+python3 tools/run_upstream_cts.py --host <console> --runs-dir <runs> \
+  --manifest build/measurement/manifest.json --out-json <receipt>
+```
+
+Promotion still edits the frozen manifest in its own change; the measurement
+receipt is the evidence that change cites.
+
 ## Host checks versus hardware evidence
 
 `make check-upstream-cts` runs entirely on the host and needs no console. It
