@@ -48,11 +48,12 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 211 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 275 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
   image-copy, binding-model combined-sampler, multiview and indirect/indexed
-  draw cases). Only these
+  draw cases, plus the 64 user-defined clip/cull distance leaves promoted below).
+  Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
   and shipped in the packaged case list. The manifest also carries a
@@ -186,6 +187,32 @@ The run is tied to a build identity: the payload reads the selection hash and
 the deployed executable hash from its own package and reports them, and the
 verifier requires them to match the locally built package. A stale deployment
 therefore fails verification instead of being attributed to the current build.
+
+### Measurement selections
+
+Some diagnostics are leaves whose upstream oracle is expected to pass once a
+feature is advertised on a measurement build (`PS5VK_RASTER_DIAGNOSTIC=1`), and
+measuring them must not edit the frozen manifest by hand.
+`tools/make_measurement_manifest.py` derives a separate manifest that moves the
+diagnostics of the named categories into `cases` and records the derivation
+(base manifest, frozen selection hash, categories, count); only `Pass`-expected
+diagnostics may move. `tools/build_upstream_cts.py --manifest <file>` packages
+that selection and copies the record into the build manifest, and
+`tools/run_upstream_cts.py --manifest <file>` verifies against it and copies
+the record into the receipt, so a measurement receipt can never be read as an
+acceptance run of the frozen selection:
+
+```sh
+python3 tools/make_measurement_manifest.py \
+  --category rasterization-culling --category t05-measurement-pending \
+  -o build/measurement/manifest.json
+python3 tools/build_upstream_cts.py --manifest build/measurement/manifest.json
+python3 tools/run_upstream_cts.py --host <console> --runs-dir <runs> \
+  --manifest build/measurement/manifest.json --out-json <receipt>
+```
+
+Promotion still edits the frozen manifest in its own change; the measurement
+receipt is the evidence that change cites.
 
 ## Host checks versus hardware evidence
 
@@ -811,6 +838,151 @@ acceptance/diagnostic conflict, and regression tests fail if a promoted case is
 dropped, renamed, duplicated or replaced by a path the pinned sources do not
 produce.
 
+## User-defined clip and cull distance module (2026-09-17)
+
+The package now compiles and registers the original upstream clipping module
+(`external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp`) and the
+module's shared draw utility (`util/vktDrawUtil.cpp`). Registration adds the
+group; it does not add acceptance cases, so the strict acceptance selection was
+unchanged by that change (the 165 leaves it held then, 211 after T03's tranche)
+and the packaged case list grew by nothing.
+
+The module is registered because its factory is the oracle the profile's
+measured clip/cull subset belongs to, and because the leaves are needed the
+moment the feature can be advertised. Twenty-five of them are recorded as
+diagnostics instead:
+
+**Updated 2026-09-17: the family is promoted.** The fragment-stage read and the
+dynamically indexed write are implemented and hardware-witnessed, the device
+reports `shaderClipDistance` and `shaderCullDistance` true with the three
+distance limits at the Vulkan floor of eight, and 64 of the family's leaves are
+now *acceptance* cases: `clip_distance` and `clip_cull_distance`, each with and
+without `_dynamic_index`, for the vertex-only shader group, clip counts 1..8
+(the combined group adds the widest cull count that fits the eight-component
+budget) and both read variants. They passed **275/275** in selection
+`3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d` (eboot
+`b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7`, run
+`20260917T114927552Z_PPSA99994_upstream-cts_0x13a34bfa824d`); see
+[clip-cull native acceptance](VALIDATION.md#clip-cull-native-acceptance) for the
+native witness behind the read and the two gaps left inside the family.
+
+The remaining nine leaves are recorded as diagnostics:
+
+* `dEQP-VK.clipping.user_defined.clip_distance.vert.1..8`
+* `dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7 .. 8`
+* `dEQP-VK.clipping.user_defined.complementarity.1..8`
+* `dEQP-VK.clipping.user_defined.misc.negative_and_non_negative_cull_distance`
+
+These nine are the leaves the pinned binary does not report when they are
+filtered by the name the module's construction implies: two full runs (284 and
+275 packaged names, both with the leaf present in the deployed `cases.txt`)
+reported every other clipping leaf and none of these - they are absent from both
+the `ps5log/1` transcript and the QPA - so they stay diagnostics rather than
+being claimed as covered. The other sixteen entries that used to be diagnostics
+(`clip_distance.vert.1..8` and `clip_cull_distance.vert.1_7 .. 8`) are now
+acceptance cases together with their `_dynamic_index` and
+`_fragmentshader_read` variants.
+
+Each entry carries `expected_status: "NotSupported"` and the exact gate that
+makes it so: `testClipDistance` calls
+`requireFeatures(FEATURE_SHADER_CLIP_DISTANCE)` or
+`requireFeatures(FEATURE_SHADER_CULL_DISTANCE)`, the profile reports both
+features false, and the same two flags also gate the
+`*_fragmentshader_read` and `*_dynamic_index` variants the profile refuses. The
+diagnostic therefore documents a bounded, hardware-measured subset that cannot
+be selected for strict acceptance; see
+[clip-cull native acceptance](VALIDATION.md#clip-cull-native-acceptance).
+
+Diagnostics are not part of the packaged case list and do not affect the strict
+verdict. The selection gate derives the composed combined-group leaf names from
+the pinned factory construction, so a renamed or removed leaf fails the gate
+instead of silently disappearing.
+
+### The geometry family, promoted (2026-09-17)
+
+The geometry module is registered in this package: its source list and the
+package's own `createChildren` call include it, and its shader and reference-image
+data are compiled and decoded at build time (73 RGBA8 references, cross-checked
+byte for byte against the pinned assets). A leaf can only be selected once the
+package actually builds its module, which is why this had to happen inside the
+promotion slice rather than before it.
+
+With `geometryShader` advertised by the graphics build, the promotion run
+measured every leaf the module produces:
+
+| family | leaves | measured |
+| --- | --- | --- |
+| `dEQP-VK.geometry.input.basic_primitive.triangles`, its two conversions, six `output_<n>`, `output_vary_by_attribute` and its instancing variant | 11 | **Pass** - acceptance cases |
+| `output_vary_by_{uniform,texture}` and their instancing variants | 4 | **Pass** - acceptance cases once the geometry-stage descriptor binding is carried end to end (see below) |
+| `varying.vertex_{no_op,out_0,out_0,out_1}_geometry_out_{1,1,2,2}` | 4 | **Pass** - acceptance once the profile carried primitive restart for strips |
+| the point/line/triangle-strip input families, their four remaining conversions and both `primitive_id_in` leaves | 10 | **Pass** - acceptance cases once the stage was bound by its declared input mode and unused attributes were allowed |
+| adjacency, `triangle_fan`, `point_size`, fragment `primitive_id` and the varying drop | 20 | still refused or unmeasured, kept as diagnostics |
+
+**The geometry-stage descriptor path.** The pinned module binds its uniform
+buffer and its combined image sampler to the GEOMETRY stage alone, which two
+separate gates refused. The compiler profile now admits a binding whose
+visibility names that stage when - and only when - the key carries it (the
+merged pre-raster program is what executes it), and the draw path's descriptor
+plan carries the table for that program when the native create recorded the
+geometry pre-raster pair on it; without that flag the same declaration is still
+refused, because the stage projection would have dropped the binding. The run
+that measured it went from `vk.queueSubmit(...): VK_ERROR_FEATURE_NOT_PRESENT`
+on all four leaves to **Pass** on all four.
+
+The four strip-topology leaves were held as measured diagnostics until the cause
+was fixed rather than inferred: the pinned
+geometry builder enables **primitive restart** for strip topologies
+(`vktGeometryTestsUtil.cpp:153-172` sets `primitiveRestartEnable = VK_TRUE` for
+`LINE_STRIP` and `TRIANGLE_STRIP` and `VK_FALSE` for every list), these four
+leaves are the only ones built with `TRIANGLE_STRIP`, and this profile refuses
+that input-assembly state, so the refusal happens before the adapter is asked
+(the same run shows every runtime-cache acquire at rc=0 and no adapter rejection).
+Rather than accept the state without programming the cut, the profile now carries
+it: pipeline creation accepts `primitiveRestartEnable` for the two strips and
+refuses it for lists, and the draw path programs the same pair RADV programs on
+gfx10 - the enable in the user-config register `VGT_MULTI_PRIM_IB_RESET_EN`
+(0x3092c), the index in the context register `VGT_MULTI_PRIM_IB_RESET_INDX`
+(0x2840c, 0xffff for 16-bit indices and 0xffffffff for 32-bit), and the
+`SQ_NON_EVENT` workaround the GFX10 synchronisation bug requires before the
+update. The witness measures it end to end: the same indexed strip whose index
+list carries a restart index between two quads draws **foreign=0** with the cut
+(and 72 foreign pixels without it, which is the bridging primitive a missing cut
+threads across).
+
+**Binding the stage by its input mode.** A geometry stage that reads nothing
+per-vertex declares no `gl_in` array at all: the pinned `primitive_id_in` leaves
+are exactly that shape, and their vertex shaders drop the unused `a_color` while
+the pipeline still declares it, which Vulkan permits. The policy now binds the
+stage to the pipeline's topology through the input primitive its execution mode
+states - points, lines or triangles - cross-checks the array length only when the
+stage declares one, and drops an attribute no shader input consumes instead of
+refusing it. The reverse, a shader input with no attribute to feed it, is still
+refused.
+
+The accepted set is therefore 304 leaves (211 + 64 clipping + 29
+geometry), and the frozen selection re-run passes **304/304** with zero `Fail`,
+zero `NotSupported`, no missing or unexpected cases, and the title confirmed
+stopped:
+
+- selection SHA-256 `7406de91ef883de7c1dd8522926773b72c846834fde37b45f686ff5994c8601b`;
+- eboot SHA-256 `afe1755291ef231f6f7c3e730abcd062f3a57618e879c758a1f0a89a42c207aa`.
+
+The preceding runs are retained privately with their QPA: the promotion run
+(selection
+`a72b2564647758cca982b23110da0b0da9d23509dbcba3c4bca9eea2d0324091`) measured
+the eight failures, and the descriptor run
+(`a7333a1d501408e67975abbe591a84d9758f326f20c900ac3b229adfe7e14679` before the
+fix) localized them to the submit.
+
+### Why the tessellation family is not listed yet
+
+Tessellation is still absent, and the reason is the same packaging one: its module
+is not registered, no leaf of it can be traced by the selection gate, and naming
+one today would be exactly the invented selection the gate rejects. Registering
+it belongs to that feature's promotion slice, which cannot happen while
+`tessellationShader` is false - the factory gates every leaf on
+`requireFeatures(FEATURE_TESSELLATION_SHADER)`, so they would all report
+`NotSupported` the way the clip/cull leaves did before that promotion.
 ## Indirect and indexed draw expansion (2026-09-16)
 
 DXVK262-T03 adds 46 original upstream leaves from two draw modules, both
@@ -870,3 +1042,171 @@ QPA `de55e1c79828b06a9e50ccff5628c546c61e3daf16c518b57576548411c98b17`,
 the same selection is also recorded there: every draw leaf passed while the
 compute leaves failed at pipeline creation because the compute compiler adapter
 did not yet accept the three newly reported graphics-only feature bits.
+
+## Integrated acceptance run (2026-09-17)
+
+The T03 integration head (`t04-final` after the `t03-final` merge) rebuilt the
+payload from the merged manifest and passed the whole canonical selection
+unchanged: **211/211 `Pass`**, zero `Fail`, zero `NotSupported`, no missing,
+unexpected or duplicate cases, exit status 0, a complete `ps5log/1` transport
+and a verified Close Game of the exact title (`strict_verified` and
+`lifecycle_ok` both true).
+
+- selection SHA-256
+  `266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`
+  (211 acceptance leaves, the same selection T03 validated from its own branch)
+- deployed SELF SHA-256
+  `1b2164811cf90fb9e2cce567acdb56d54366fe5e34debe2bb236980860ab461a`,
+  read back exactly through FTP before launch
+- run `20260917T022854608Z_PPSA99994_upstream-cts_0x158fe3a13085d`, log SHA-256
+  `f757ca6739a83df308b83c2430966abef818d3d3466db8fdb58e6253475aa747`, QPA
+  SHA-256 `4fa9cf9651f0fcfe25c0b97591de245c8ce0f39cf8405d8bc9680de65f8b8cdc`
+
+The integrated selection is the original 165 leaves (the 48 multiview leaves
+among them), T03's 46 indirect/indexed draw leaves and the 30 diagnostics T04
+records - the 25 user-defined clip/cull distance leaves are among those
+diagnostics because the two distance features are not advertised. This run is
+evidence for the selected leaves only: no clipping, geometry or tessellation
+pipeline executes in it, none of those features is advertised, and it is not a
+
+### Re-run on the synced tree (2026-09-17, after main carried T03)
+
+The same selection was run again on the integration after `main` (with T03 and
+its two review fixes) was merged into `t04-final` - i.e. the tree the final pull
+request proposes. It passed unchanged: **211/211 `Pass`**, `fail_count` 0,
+`not_supported_count` 0, no missing, unexpected or duplicate cases, exit status
+0, and the title closed and confirmed stopped after the run.
+
+- selection SHA-256
+  `266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`
+- deployed SELF SHA-256
+  `8c3a4a5614703cb4f9bb0abda6cbc923ef797edad227e876b15aead972701983`,
+  read back exactly through FTP before launch
+- run `20260917T073014110Z_PPSA99994_upstream-cts_0x57e06d347b9`, reassembled
+  report 28,417,865 bytes, SHA-256
+  `24af364c39c204f97bd3f5e1a6dd77b044c0be00d2a940c92d9f83153ed80a6f`,
+  `strict_verified` and `lifecycle_ok` both true
+
+This is the T02 + T03 regression on the integrated tree: the 48 multiview leaves
+and the 46 indirect/indexed draw leaves are both inside the 211 and both pass.
+The clip/cull witness run recorded in
+[VALIDATION.md#clip-cull-native-acceptance](VALIDATION.md#clip-cull-native-acceptance)
+was taken in the same console window, on its own payload; the geometry witness
+was taken there too. None of those optional-stage runs is part of this selection,
+and no feature is advertised by them.
+Vulkan conformance claim.
+
+## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18, eligibility completed 2026-09-19)
+
+The four T05 requirements are implemented and measured through the public ABI
+(the consumer's raster and viewport witnesses in
+[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses)),
+and **nothing is advertised yet**: the frozen acceptance selection is unchanged
+at 304 cases, and every T05 leaf below is a diagnostic in
+`cts/upstream/manifest.json`. What changed since the first measurement is the
+inventory: the pinned checkout `a0270c1897597e6c77679870e10415398a13001c` was
+read for every source and amber script that names one of the four features,
+not only for the `draw.renderpass.depth_clamp` family, and the package now
+registers the modules the applicable leaves live in.
+
+### Registered for T05
+
+* `rasterization` (whole module, registered unmodified): the only family that
+  exercises LINE and POINT polygon rasterization on a colour attachment. Its
+  28 `culling` leaves ran with `fillModeNonSolid` on the measurement mask and
+  passed 28/28 (run `20260918T141136767Z`, payload eboot `d9875f9c...`); they
+  found and fixed two driver defects on the way (the unconditional
+  `VkPipelineRasterizationLineStateCreateInfoEXT` chain in `pNext`, and the
+  vertex descriptor window for a structure-of-arrays attribute layout). Its
+  `line_continuity.polygon-mode-lines` leaf is the second `fillModeNonSolid`
+  oracle: an amber script (`data/vulkan/amber/rasterization/line_continuity/`,
+  `DEVICE_FEATURE fillModeNonSolid`) that draws triangles in LINE mode and
+  verifies continuity with a compute pass. `tools/build_upstream_cts.py` stages
+  that script beside `eboot.bin` (`DATASET_AMBER_SCRIPTS`); it is the first
+  amber-backed leaf of this profile, so a failure inside the amber engine path
+  is a packaging diagnostic, not a driver verdict.
+* `fragment_ops` (whole module, registered unmodified): its
+  `scissor.multi_viewport.scissor_1..16` family is the upstream oracle for
+  `multiViewport` - `checkSupport` requires `geometryShader`, `multiViewport`
+  and `maxViewports >= 16`, and the geometry stage writes
+  `gl_ViewportIndex = gl_PrimitiveIDIn` for one full-screen quad per viewport
+  (`vktFragmentOperationsScissorMultiViewportTests.cpp:199-260,433-448`). This
+  is the routing shape the consumer's 16-tile geometry witness measured.
+* `draw.renderpass.scissor` (the module's scissor factory under the same
+  render-pass group parameters as the other draw families): six of its leaves
+  (`two_static_scissors_one_quad`, `16_static_scissors`,
+  `dynamic_scissor_updates_between_draws`, `dynamic_scissor_out_of_order_updates`,
+  `16_dynamic_scissors`, `dynamic_scissor_mix`) require `geometryShader` and
+  `multiViewport` and route through an instanced geometry stage
+  (`layout(invocations = N)`, `gl_ViewportIndex = gl_InvocationID`,
+  `vktDrawScissorTests.cpp:346-406`), so they cover the static and dynamic
+  scissor banks and per-index updates the multi_viewport family does not. The
+  other sixteen scissor leaves have no feature gate and are not selected.
+* `clipping` was already registered for the user-defined distance families;
+  its `clip_volume.depth_clamp` group is the upstream oracle for `depthClamp`:
+  `testPrimitivesDepthClamp` (`vktClippingTests.cpp:565-660`) requires the
+  feature, draws primitives that cross the near and far planes with clamp off
+  and on, and counts coloured pixels. It has **no depth attachment**
+  (`util/vktDrawUtil.hpp:50`), so the depth readback this driver lacks is not
+  involved. Only `triangle_list` and `triangle_strip` are runnable here: this
+  profile resolves point and line topologies only as geometry input
+  (`src/vk_graphics_pipeline.c:181-185`) and refuses fans and adjacency at the
+  resolver (`src/graphics_program.h:96-97`), so the group's other eight leaves
+  fail at pipeline creation and are recorded as such.
+
+Leaf names in these families are composed at run time (a prefix plus a loop
+index, a topology enum lowercased without its prefix, a format name plus a
+suffix), so `tools/check_upstream_selection.py` carries one bounded recognizer
+per construction and derives nothing when the construction it was written
+against is gone (`tests/test_upstream_selection.py`).
+
+### The T05 diagnostics, by requirement
+
+| Requirement | Leaves | Category | Status |
+|---|---|---|---|
+| `fillModeNonSolid` | `rasterization.culling.*` (28, 16 of them `_line`/`_point`) | `rasterization-culling` | measured 28/28 Pass, held until the shipping bit lands |
+| `fillModeNonSolid` | `rasterization.line_continuity.polygon-mode-lines` | `t05-measurement-pending` | applicable, unmeasured |
+| `multiViewport` | `fragment_ops.scissor.multi_viewport.scissor_1..16` | `t05-measurement-pending` | applicable, unmeasured |
+| `multiViewport` | `draw.renderpass.scissor.{six multi-scissor leaves}` | `t05-measurement-pending` | applicable, unmeasured |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.{triangle_list,triangle_strip}` | `t05-measurement-pending` | applicable, unmeasured |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.{point_list,line_list,line_strip}` | `plain-point-line-pipeline-refused` | Fail at creation (profile rule, not a T05 gap) |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.*_with_adjacency`, `.triangle_fan` | `primitive-topology-refused` | Fail at creation (resolver, not a T05 gap) |
+| `depthClamp`, `depthBiasClamp` | `draw.renderpass.depth_clamp.d32_sfloat{,_clamp_input_*,_depth_bias_clamp_input_*,_clamp_four_viewports}` | `depth-aspect-readback-gap` | blocked: `readDepth` over `VK_IMAGE_ASPECT_DEPTH_BIT` (`vktDrawDepthClampTests.cpp:554-555`); every copy path in `src/vk_image_transfer.c` validates `VK_IMAGE_ASPECT_COLOR_BIT` and `src/depth_layout.h:9-10` states the 64KB_Z_X pixel addressing is not supplied |
+| `depthBiasClamp` | `dynamic_state.monolithic.rs_state.depth_bias_clamp` | `depth-stencil-format-gap` | NotSupported: needs `D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT` as attachment (`vktDynamicStateRSTests.cpp:133-150`); the profile offers only `D32_SFLOAT` (`src/texture_format.c:183`) |
+
+Families examined and found not applicable, recorded so they are not
+re-derived: `draw.renderpass.inverted_depth_ranges.*` (D16_UNORM attachment and
+DEPTH-aspect readback), `draw.depth_bias.*` (D16_UNORM scripts),
+`rs_state.nonzero_depth_bias_clamp` (D16_UNORM), `rasterization.depth_bias.d32_sfloat*`
+(samples the depth image; `D32_SFLOAT` has no sampled role), `glsl.builtin_var.fragdepth.*`
+(DEPTH-aspect readback), `amber.depth.*_clamp` (`VK_EXT_depth_clamp_zero_one`),
+`pipeline.*.depth_range_unrestricted.*` (`VK_EXT_depth_range_unrestricted`),
+`clipping.clip_volume.depth_clip.*` (`VK_EXT_depth_clip_enable`),
+`rasterization.*polygon_as_points*` and `polygon_as_large_points.*`
+(`VK_KHR_maintenance5`), `draw.renderpass.shader_viewport_index.*`
+(`VK_EXT_shader_viewport_index_layer`), `tessellation.misc_draw.*`
+(tessellation tranche). In roughly eighty other files `depthBiasClamp` is only
+a create-info field set to zero, not a gate.
+
+### What promotion needs
+
+The reporting matrix (`tools/check_reporting_matrix.py`, `ADVERTISED_FEATURES`)
+requires each true feature bit to cite its code path **and** at least one
+accepted upstream leaf, and the DXVK profile matrix marks a row ready only with
+`cts-pass`. Against that rule:
+
+* `fillModeNonSolid`: ready to promote once the acceptance run is green
+  (328 of 332 passed in the last measurement; the four
+  `clipping.user_defined.*.vert.8_fragmentshader_read` failures are a compiler
+  defect fixed in the pinned compiler `4d4a65a`, unverified on hardware).
+* `multiViewport` and `depthClamp`: promotable after one measurement window
+  reports Pass on the 25 `t05-measurement-pending` leaves; the driver side of
+  both is already measured by the consumer witnesses.
+* `depthBiasClamp`: **no applicable upstream leaf exists on this profile
+  today.** The nearest are the two `draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_*`
+  leaves, which need a DEPTH-aspect image-to-buffer copy for `D32_SFLOAT`, and
+  `rs_state.depth_bias_clamp`, which needs a depth-stencil attachment format.
+  Either is a capability outside this tranche's requirements; until one lands
+  or the policy is changed deliberately, the feature stays unadvertised with
+  its consumer-witness evidence recorded, and the profile matrix keeps its row
+  as a blocker.

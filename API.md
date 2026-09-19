@@ -31,6 +31,26 @@ mean the driver advertises them; the reported device version remains Vulkan
   use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
   the bound buffer span. This is the implementation basis for the feature, not
   an inference from the GPU name.
+- `shaderClipDistance` and `shaderCullDistance` are reported true by the
+  graphics build and refused by the compute-only build, together with
+  `maxClipDistances` = `maxCullDistances` = `maxCombinedClipAndCullDistances` =
+  8: the two packed position registers after POS0 hold eight float components,
+  clip first and cull continuing immediately after them, and the stage-interface
+  policy bounds a declaration against exactly that width. A pre-raster stage
+  exports the distances (static or dynamically indexed) and a fragment stage
+  reads the interpolated values; the compiler describes the distance registers
+  on both sides and the driver refuses a pair whose read the metadata does not
+  describe. `geometryShader` is reported true by the graphics build, with the
+  five mandatory limits at the Vulkan floor it measured - 256 output vertices,
+  32 invocations, 64 input components, 64 output components and 1024 total
+  output components - because the merged vertex+geometry pre-raster program
+  runs: the ES->GS input handoff, the point, line and triangle input families,
+  `gl_InvocationID`, `gl_PrimitiveIDIn` and each of those five minima are
+  hardware-witnessed, and the leaves of the pinned geometry module that pass
+  their own upstream oracles are acceptance cases. `tessellationShader` remains
+  reported false: the pinned compiler publishes no loadable hull package and no
+  hull/domain pipeline state is programmed.
+  See [clip-cull native acceptance](VALIDATION.md#clip-cull-native-acceptance).
 - The focused suite contains the original upstream
   `device_mandatory_features` oracle plus 12 executable compute scalar
   `R32_UINT` robustness cases: UBO/SSBO OOB reads and SSBO OOB writes over
@@ -98,6 +118,24 @@ consume them. Recording therefore establishes a real, non-interfering state
 contract without claiming dynamic blending, stencil, depth bounds or depth
 bias execution. Viewport and scissor remain the only dynamic states consumed by
 draws.
+
+The DXVK262-T05 rasterization and viewport states - `depthBiasClamp`,
+`depthClamp`, `fillModeNonSolid` and `multiViewport` - are implemented end to
+end behind a build-time measurement gate (`PS5VK_RASTER_DIAGNOSTIC`) and are
+**not advertised**: the shipping platform mask sets none of the four bits, a
+request for one is still rejected before device creation, and the profile keeps
+reporting `maxViewports` 1. They are gated rather than shipped because no
+upstream CTS leaf is applicable to them yet - the candidate families and their
+exact blocking reasons are in [UPSTREAM_CTS.md](UPSTREAM_CTS.md) - and because
+the first hardware run of their own witnesses leaves six of thirty-one raster
+cases unverified, as recorded in
+[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses).
+The shader-selected viewport path itself is now measured - a geometry stage
+routing sixteen primitives to sixteen banks through `gl_ViewportIndex` - so
+`multiViewport` is held back by the missing upstream leaf and the six cases
+rather than by the driver.
+Nothing here should be read as these features being usable by an application
+today.
 
 ## Images and sampling
 

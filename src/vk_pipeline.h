@@ -1,6 +1,7 @@
 #ifndef PS5VK_PIPELINE_H
 #define PS5VK_PIPELINE_H
 #include "vk_descriptor.h"
+#include "graphics_limits.h"
 
 struct ps5vk_program_descriptor {
     uint32_t set, binding, element, table_dword;
@@ -39,6 +40,31 @@ struct VkShaderModule_T {
     uint32_t words[];
 };
 VkBool32 ps5vk_shader_entry(VkShaderModule, VkShaderStageFlagBits, const char *, uint32_t *id);
+/* Viewport/scissor array capacity of the pipeline, command-buffer and draw
+ * snapshot storage, and the maxViewports the multiViewport feature would
+ * report (the Vulkan floor for that feature is 16). The native encoder has one
+ * register bank per index (PA_CL_VPORT_*, PA_SC_VPORT_ZMIN/ZMAX,
+ * PA_SC_VPORT_SCISSOR) for exactly this many; the reported limit stays at one
+ * until the feature is promoted. */
+enum { PS5VK_MAX_VIEWPORTS = PS5VK_MULTI_VIEWPORT_COUNT };
+/* Rasterization state a draw executes with. A pipeline holds its static values;
+ * a recorded draw holds a BY-VALUE copy resolved at record time (the pipeline's
+ * value, or the command buffer's current dynamic value where the pipeline
+ * declared that state dynamic), so a later setter or a later pipeline cannot
+ * reach a draw that was already recorded. The native encoder consumes exactly
+ * this snapshot. depth_bias_enable is kept apart from the factors: Vulkan
+ * ignores the factors while the enable is false, and an enabled zero bias is a
+ * different state from a disabled one only in the enable bits it programs. */
+struct ps5vk_raster_state {
+    VkBool32 depth_bias_enable;
+    float depth_bias_constant, depth_bias_clamp, depth_bias_slope;
+    /* depthClampEnable: near/far clipping is replaced by clamping z_f to the
+     * viewport's [min(n,f), max(n,f)]. Static in this profile. */
+    VkBool32 depth_clamp;
+    /* VK_POLYGON_MODE_FILL, _LINE or _POINT (fillModeNonSolid for the last
+     * two). Static in this profile. */
+    VkPolygonMode polygon_mode;
+};
 struct VkPipeline_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
@@ -58,11 +84,31 @@ struct VkPipeline_T {
     uint32_t subpass;
     void *graphics_state;
     void (*graphics_release)(VkDevice, void *);
-    VkViewport viewport;
-    VkRect2D scissor;
+    /* Viewport/scissor arrays, viewport_count of each (1..PS5VK_MAX_VIEWPORTS;
+     * Vulkan requires the two counts to match). The single-element names alias
+     * index zero, the viewport every draw without a ViewportIndex output uses.
+     * Dynamic arrays leave these unused and take the command buffer's. */
+    uint32_t viewport_count;
+    union {
+        VkViewport viewport; /* viewports[0] */
+        VkViewport viewports[PS5VK_MAX_VIEWPORTS];
+    };
+    union {
+        VkRect2D scissor; /* scissors[0] */
+        VkRect2D scissors[PS5VK_MAX_VIEWPORTS];
+    };
     VkBool32 dynamic_viewport, dynamic_scissor;
+    /* Static rasterization state, and whether VK_DYNAMIC_STATE_DEPTH_BIAS was
+     * declared: when it was, the three factors here are unused and a draw
+     * takes them from the command buffer instead. */
+    struct ps5vk_raster_state raster;
+    VkBool32 dynamic_depth_bias;
     VkCullModeFlags cull_mode;
     VkFrontFace front_face;
+    /* Input-assembly state, not a shader capability: the fixed-function front
+     * end cuts a strip where an index matches the reset index. Accepted for the
+     * strip topologies this profile carries and refused everywhere else. */
+    VkBool32 primitive_restart;
     VkBool32 depth_test, depth_write;
     VkCompareOp depth_compare;
     VkFormat color_format, depth_format;

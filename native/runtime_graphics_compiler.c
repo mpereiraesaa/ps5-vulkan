@@ -57,12 +57,87 @@ void ps5vk_runtime_graphics_free(void *context,const void *data)
     psbc_free_output(&p->vertex);psbc_free_output(&p->fragment);free(p);
 }
 
+int ps5vk_runtime_graphics_distance_reads_described(const PsbcShaderMetadata *pre_raster,
+    const PsbcShaderMetadata *fragment,unsigned declared_clip,unsigned declared_cull)
+{
+    if(!pre_raster || !fragment || declared_clip>8u || declared_cull>8u)return 0;
+    if(!declared_clip && !declared_cull)return 1;
+    /* The pixel stage's own report must agree with what the module declares. */
+    if(fragment->ps_clip_distance_reads!=declared_clip ||
+       fragment->ps_cull_distance_reads!=declared_cull)return 0;
+    /* The pre-raster stage must export every component the pixel stage reads.
+     * The masks are packed: the clip components occupy the low bits and the cull
+     * components continue immediately after them, so the cull field starts at
+     * the clip count. */
+    if((pre_raster->clip_distance_mask&((1u<<declared_clip)-1u))!=
+           ((1u<<declared_clip)-1u) ||
+       (pre_raster->cull_distance_mask&(((1u<<declared_cull)-1u)<<declared_clip))!=
+           (((1u<<declared_cull)-1u)<<declared_clip))return 0;
+    /* ... and every register the pixel stage NAMES must exist on the export
+     * side, exactly once: the producer word carries the register's parameter
+     * index, the consumer word names the register it reads, and the AGC linker
+     * pairs them on that private key. The pixel stage only names the registers
+     * it actually reads - a shader that reads gl_ClipDistance[4] and nothing
+     * else names the second register and not the first - so the producer may
+     * describe registers the consumer does not mention, and the other way round
+     * is what would be wrong. */
+    const unsigned registers=(declared_clip+declared_cull+3u)/4u;
+    if(!registers || registers>2u)return 0;
+    unsigned named=0;
+    for(uint32_t i=0;i<fragment->input_semantic_count;++i) {
+        const uint32_t key=fragment->input_semantics[i]&255u;
+        if(key<PSBC_SEMANTIC_DISTANCE_REGISTER ||
+           key>=PSBC_SEMANTIC_DISTANCE_REGISTER+registers)continue;
+        unsigned described_out=0;
+        for(uint32_t j=0;j<pre_raster->output_semantic_count;++j)
+            described_out+=(pre_raster->output_semantics[j]&255u)==key;
+        if(described_out!=1)return 0;
+        ++named;
+    }
+    return named!=0;
+}
+
+int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
+    const PsbcShaderMetadata *fragment,uint32_t feature_mask)
+{
+    if(!pre_raster || !fragment)return 0;
+#if PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
+    /* The witness builds exist to measure these capabilities before any of them
+     * is advertised, so they skip the negotiation gate the shipping build
+     * enforces on every acquisition. */
+    (void)feature_mask;
+    return 1;
+#else
+    if(pre_raster->clip_distance_mask &&
+       !(feature_mask & PS5VK_FEATURE_SHADER_CLIP_DISTANCE))return 0;
+    if(pre_raster->cull_distance_mask &&
+       !(feature_mask & PS5VK_FEATURE_SHADER_CULL_DISTANCE))return 0;
+    /* A merged pre-raster stage that reports the geometry source stage is a
+     * geometry pipeline, and it needs the feature like any other stage. */
+    if(pre_raster->source_stage==PSBC_STAGE_GEOMETRY &&
+       !(feature_mask & PS5VK_FEATURE_GEOMETRY_SHADER))return 0;
+    if(pre_raster->source_stage==PSBC_STAGE_TESS_EVAL &&
+       !(feature_mask & PS5VK_FEATURE_TESSELLATION_SHADER))return 0;
+    return 1;
+#endif
+}
+
 static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
 {
     struct ps5vk_descriptor_table_layout tables;
     if (ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
             key->descriptor_sets,&tables)!=VK_SUCCESS) return 0;
     if(tables.binding_count>PSBC_MAX_DESCRIPTOR_BINDINGS)return 0;
+    /* The visibility a binding may name: the two standalone stages plus the
+     * geometry stage, which exists only as the second half of the merged
+     * pre-raster program. A layout that declares a resource for the geometry
+     * stage on a pipeline without one would have that binding dropped by the
+     * stage projection, so it is refused here instead of being silently
+     * discarded - the same rule the input attachment follows from the other
+     * side. */
+    const VkShaderStageFlags visible=VK_SHADER_STAGE_VERTEX_BIT|
+        VK_SHADER_STAGE_FRAGMENT_BIT|
+        (ps5vk_graphics_has_geometry(key)?VK_SHADER_STAGE_GEOMETRY_BIT:0);
     for(unsigned s=0;s<key->descriptor_set_count;++s)
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             const struct ps5vk_set_signature *set=&key->descriptor_sets[s];
@@ -76,7 +151,7 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
              * that cannot read it. Every other descriptor type stays outside the
              * profile instead of being half-delivered. */
             if(set->binding[b].count &&
-                (!(set->binding[b].stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)) ||
+                (!(set->binding[b].stages&visible) ||
                 (set->type[b]!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
                  set->type[b]!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
@@ -88,32 +163,113 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
     return 1;
 }
 
+/* Diagnostic rejection codes. When PS5VK_GEOMETRY_KEY_DIAG is defined (the SDK
+ * build of a diagnostic CTS payload) a refused key is logged field by field, so
+ * a console run names the condition and the shape instead of only reporting
+ * VK_ERROR_FEATURE_NOT_PRESENT. The shipping build defines nothing and never
+ * reads the code. */
+unsigned ps5vk_runtime_graphics_diag_site;
+int ps5vk_runtime_graphics_diag_result;
+#if defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG
+#include "ps5log.h"
+#endif
+static int ps5vk_reject(const struct ps5vk_graphics_key *key,unsigned site){
+    ps5vk_runtime_graphics_diag_site=site;
+#if defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GEOMETRY_KEY site=%u topology=%u bindings=%u attributes=%u "
+        "format0=%u location0=%u format1=%u location1=%u colour=%u samples=%u "
+        "mask=%u blend=%u sets=%u push=%u geometry=%u tessellation=%u features=0x%x",
+        site,(unsigned)key->topology,key->vertex_binding_count,key->vertex_attribute_count,
+        key->vertex_attribute_count>0u?(unsigned)key->vertex_attributes[0].format:0u,
+        key->vertex_attribute_count>0u?key->vertex_attributes[0].location:0u,
+        key->vertex_attribute_count>1u?(unsigned)key->vertex_attributes[1].format:0u,
+        key->vertex_attribute_count>1u?key->vertex_attributes[1].location:0u,
+        (unsigned)key->color_format,(unsigned)key->samples,(unsigned)key->color_write_mask,
+        (unsigned)key->blend_enable,key->descriptor_set_count,key->push_constant_size,
+        (unsigned)ps5vk_graphics_has_geometry(key),
+        (unsigned)ps5vk_graphics_has_tessellation(key),key->feature_mask);
+#else
+    (void)key;
+#endif
+    return 0;
+}
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key || key->vertex.specialization_count>64 || key->fragment.specialization_count>64 ||
-       key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return 0;
+       key->push_constant_size>PS5VK_MAX_PUSH_CONSTANT_BYTES)return ps5vk_reject(key,1);
+    /* The tessellation pair now has an identity and an interface policy, but no
+     * loadable package and no programming path: the pinned compiler emits ISA
+     * for both stages while declaring the tessellation pipeline state missing.
+     * The pair is therefore refused here, before anything else could screen it
+     * as a vertex+fragment pipeline and silently drop the tessellator. The two
+     * modules still go through the same structural screening and the interface
+     * chain is still checked, so a caller can tell a malformed pair from a pair
+     * this profile simply cannot program yet. */
+    if(ps5vk_graphics_has_tessellation(key)) {
+        if(!ps5vk_graphics_tessellation_key_valid(key))return ps5vk_reject(key,2);
+        if(!module_supported(&key->tess_control,1) || !module_supported(&key->tess_eval,2))return ps5vk_reject(key,3);
+        if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,4);
+        return ps5vk_reject(key,5);
+    }
+    /* A geometry stage is compiled through the merged entry point, so its own
+     * module passes the same structural screening as the other two. The merged
+     * program IS accepted now: the ES->GS input handoff was the one thing that
+     * made it unsafe, and it is fixed and witnessed on hardware - the hardware
+     * scales the per-vertex offsets it hands the geometry half by
+     * VGT_ESGS_RING_ITEMSIZE, next-gen geometry keeps that at one so the offsets
+     * stay item indices, and the driver now programs it that way instead of with
+     * the compiler's legacy item size (which scaled them twice: the geometry half
+     * read item 5k where it must read item k, so only the first vertex of each
+     * primitive ever came back right). The whole witness table, including a
+     * per-item readback of what the stage read, verifies on the console with this
+     * path. What remains before the FEATURE can be advertised is the applicable
+     * conformance selection, not this adapter. */
+    if(ps5vk_graphics_has_geometry(key)) {
+        if(!module_supported(&key->geometry,3))return ps5vk_reject(key,6);
+        /* A geometry stage that writes gl_ViewportIndex selects among the
+         * viewport banks the pipeline programs, and this profile programs one
+         * bank unless the logical device enabled multiViewport. Accepting the
+         * declaration while the feature is off would run a draw whose routing
+         * silently collapses to viewport zero, so it is refused here on the
+         * enabled mask - the same mask, and the same place, every cached pair is
+         * re-checked against on acquisition. */
+        if(ps5vk_spirv_stage_viewport_index(&key->geometry) &&
+           !(key->feature_mask & PS5VK_FEATURE_MULTI_VIEWPORT))return ps5vk_reject(key,14);
+    }
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
-        if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return 0;
+        if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return ps5vk_reject(key,7);
     if(key->vertex_binding_count>16 || key->vertex_attribute_count>PSBC_MAX_VERTEX_ATTRIBUTES ||
        (key->vertex_binding_count && !key->vertex_bindings) ||
-       (key->vertex_attribute_count && !key->vertex_attributes))return 0;
+       (key->vertex_attribute_count && !key->vertex_attributes))return ps5vk_reject(key,8);
     for(uint32_t i=0;i<key->vertex_binding_count;++i) {
         const VkVertexInputBindingDescription *b=&key->vertex_bindings[i];
         if(b->binding>=16 || b->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
-           !b->stride || b->stride>0x3fff)return 0;
-        for(uint32_t j=0;j<i;++j)if(key->vertex_bindings[j].binding==b->binding)return 0;
+           !b->stride || b->stride>0x3fff)return ps5vk_reject(key,9);
+        for(uint32_t j=0;j<i;++j)if(key->vertex_bindings[j].binding==b->binding)return ps5vk_reject(key,10);
     }
     for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
         const VkVertexInputAttributeDescription *a=&key->vertex_attributes[i];
-        if(a->binding>=16 || a->location>=PSBC_MAX_VERTEX_ATTRIBUTES)return 0;
+        if(a->binding>=16 || a->location>=PSBC_MAX_VERTEX_ATTRIBUTES)return ps5vk_reject(key,11);
         unsigned found=0;
         for(uint32_t j=0;j<key->vertex_binding_count;++j)found|=key->vertex_bindings[j].binding==a->binding;
-        if(!found)return 0;
-        for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return 0;
+        if(!found)return ps5vk_reject(key,12);
+        for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return ps5vk_reject(key,13);
     }
     uint32_t primitive_type=0;
+    /* A fragment stage that READS gl_ClipDistance/gl_CullDistance is not
+     * screened out here: whether this profile can deliver the read is a fact
+     * about the compiled metadata - does the pixel input list name the packed
+     * distance registers, and does the pre-raster stage describe the same ones -
+     * and that is decided where the metadata exists (see the delivery check in
+     * ps5vk_runtime_graphics_compile). The declaration itself is already
+     * bounded by the interface chain above. */
     return module_supported(&key->vertex,0) && module_supported(&key->fragment,4) &&
         !ps5vk_agc_primitive_type(key->topology,&primitive_type) &&
+        /* A point or line input primitive is accepted only when there is a
+         * geometry stage to feed it: that is the shape the native witness
+         * measures, and a plain point/line pipeline stays fail-closed. */
+        (ps5vk_graphics_has_geometry(key) || !ps5vk_agc_primitive_needs_geometry(primitive_type)) &&
         (key->color_format==VK_FORMAT_B8G8R8A8_UNORM ||
          key->color_format==VK_FORMAT_R8G8B8A8_UNORM) && key->samples==VK_SAMPLE_COUNT_1_BIT &&
         key->color_write_mask==15 && !key->blend_enable &&
@@ -178,10 +334,14 @@ static PsbcVertexFormat vertex_format(VkFormat format)
 }
 
 VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_key *key,
-    VkShaderStageFlagBits stage,PsbcCompileOptions *options)
+    VkShaderStageFlags stages,PsbcCompileOptions *options)
 {
-    if(!key || !options || (stage!=VK_SHADER_STAGE_VERTEX_BIT &&
-            stage!=VK_SHADER_STAGE_FRAGMENT_BIT))return VK_ERROR_UNKNOWN;
+    /* `stages` is the set of stages whose bindings the table must carry: a
+     * single stage for a standalone compilation, and every stage of the merged
+     * pre-raster program when the compiler links a vertex+geometry pair. */
+    if(!key || !options || !(stages&(VK_SHADER_STAGE_VERTEX_BIT|
+            VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
+        return VK_ERROR_UNKNOWN;
     struct ps5vk_descriptor_table_layout tables;
     VkResult rc=ps5vk_descriptor_table_layout_build(key->descriptor_set_count,
         key->descriptor_sets,&tables);
@@ -200,7 +360,7 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
                key->descriptor_sets[s].type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
                source->stages!=VK_SHADER_STAGE_FRAGMENT_BIT)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
-            if(!source->count || !(source->stages&stage))continue;
+            if(!source->count || !(source->stages&stages))continue;
             if(count==PSBC_MAX_DESCRIPTOR_BINDINGS)return VK_ERROR_FEATURE_NOT_PRESENT;
             PsbcDescriptorType type;
             switch(key->descriptor_sets[s].type[b]) {
@@ -232,7 +392,7 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
 
 static int apply_parameters(PsbcCompileOptions *options,
                             const struct ps5vk_graphics_module_key *module,
-                            const struct ps5vk_graphics_key *key,VkShaderStageFlagBits stage)
+                            const struct ps5vk_graphics_key *key,VkShaderStageFlags stages)
 {
     options->specialization_constant_count=module->specialization_count;
     for(uint32_t i=0;i<module->specialization_count;++i) {
@@ -246,10 +406,10 @@ static int apply_parameters(PsbcCompileOptions *options,
             if(module->specializations[i].constant_id==module->specializations[j].constant_id)return 0;
     options->force_indirect_push_constants=false;
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
-        if(key->push_constant_stages[i]&stage)options->force_indirect_push_constants=true;
+        if(key->push_constant_stages[i]&stages)options->force_indirect_push_constants=true;
     options->vertex_attribute_count=0;
-    if(ps5vk_runtime_graphics_descriptor_options(key,stage,options)!=VK_SUCCESS)return 0;
-    if(stage==VK_SHADER_STAGE_VERTEX_BIT) {
+    if(ps5vk_runtime_graphics_descriptor_options(key,stages,options)!=VK_SUCCESS)return 0;
+    if(stages&VK_SHADER_STAGE_VERTEX_BIT) {
         for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
             const VkVertexInputAttributeDescription *source=&key->vertex_attributes[i];
             const VkVertexInputBindingDescription *binding=NULL;
@@ -301,13 +461,66 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     if(p->fragment.metadata.input_semantic_count>PSBC_MAX_SEMANTICS)goto failed;
     for(unsigned i=0;i<p->fragment.metadata.input_semantic_count;++i)
         if((p->fragment.metadata.input_semantics[i]&255u)==PSBC_SEMANTIC_PRIMITIVE_ID)goto failed;
-    options.stage=PSBC_STAGE_VERTEX;options.ngg=true;
+    options.ngg=true;
     options.entrypoint=key->vertex.entry;options.omit_implicit_primitive_id=true;
     if(!apply_parameters(&options,&key->vertex,key,VK_SHADER_STAGE_VERTEX_BIT))goto failed;
-    result=psbc_compile_shader(key->vertex.words,key->vertex.word_count*4u,&options,&p->vertex);
+    if(ps5vk_graphics_has_geometry(key)) {
+        /* A geometry pipeline's pre-raster stage is the merged vertex+geometry
+         * program: the compiler links the pair, so the compiled metadata
+         * describes the last programmable stage the hardware runs before
+         * rasterization. The geometry stage's own entry point and descriptors
+         * come from its module key. */
+        options.stage=PSBC_STAGE_GEOMETRY;
+        options.entrypoint=key->geometry.entry;
+        /* One merged shader carries one specialization map. The module that has
+         * constants supplies it; a pipeline that specializes both halves is
+         * refused instead of silently keeping one of the two maps. */
+        if(key->geometry.specialization_count && key->vertex.specialization_count)goto failed;
+        const struct ps5vk_graphics_module_key *specialized=
+            key->geometry.specialization_count?&key->geometry:&key->vertex;
+        if(!apply_parameters(&options,specialized,key,
+                VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT))goto failed;
+        result=psbc_compile_geometry_pipeline(key->vertex.words,key->vertex.word_count*4u,
+            key->geometry.words,key->geometry.word_count*4u,&options,&p->vertex);
+    } else {
+        options.stage=PSBC_STAGE_VERTEX;
+        result=psbc_compile_shader(key->vertex.words,key->vertex.word_count*4u,&options,&p->vertex);
+    }
     if(result!=PSBC_RESULT_OK)goto failed;
-    if(!push_metadata_supported(&p->vertex.metadata,key,VK_SHADER_STAGE_VERTEX_BIT) ||
+    if(!push_metadata_supported(&p->vertex.metadata,key,
+            ps5vk_graphics_has_geometry(key)?VK_SHADER_STAGE_GEOMETRY_BIT:VK_SHADER_STAGE_VERTEX_BIT) ||
        !push_metadata_supported(&p->fragment.metadata,key,VK_SHADER_STAGE_FRAGMENT_BIT))goto failed;
+    /* The compiled stages are the usage evidence: refuse a pair that really
+     * consumes a capability the application never enabled. */
+    if(!ps5vk_runtime_graphics_feature_use_ok(&p->vertex.metadata,&p->fragment.metadata,
+        key->feature_mask))goto failed;
+    /* The pixel end of the clip/cull interface is delivered only when the
+     * compiled metadata describes it end to end: the pre-raster stage names each
+     * packed distance register it exports (parameter index included) and the
+     * pixel stage names the same registers as inputs, which is what the AGC
+     * linker turns into the pixel-input control. A module that reads a distance
+     * while either list is incomplete is refused here - the attributes would be
+     * interpolated from registers nothing names. The shipping profile also
+     * requires native evidence for the read before it runs one, exactly like the
+     * geometry path: the witness measures it under the diagnostic profile. */
+    {
+        unsigned declared_clip=0,declared_cull=0;
+        if(!ps5vk_spirv_stage_distance_reads(&key->fragment,&declared_clip,&declared_cull))goto failed;
+        if((declared_clip||declared_cull) &&
+           !ps5vk_runtime_graphics_distance_reads_described(&p->vertex.metadata,
+               &p->fragment.metadata,declared_clip,declared_cull))goto failed;
+        /* A described read is delivered in every profile, including the shipping
+         * one: the rasterizer handing the interpolated distance to the pixel
+         * stage is measured, not assumed. Two runs of the eleven-case clip/cull
+         * witness, on two different builds, verify case 10 (the fragment stage
+         * reading gl_ClipDistance[0]) with expected=4096 covered=4096
+         * foreign=0 wrong_color=0 and digest f50dd9368fee6cc9, and the
+         * acceptance run is strict_verified with the pixel-read digest differing
+         * from the control's. What this does NOT do is advertise the feature:
+         * the device reports it false until its own obligations and the
+         * applicable CTS acceptance are complete, and a pair that uses a
+         * distance still needs the application to enable it (feature_use_ok). */
+    }
     struct ps5vk_runtime_shader header;
     if(ps5vk_runtime_shader_build(&header,&p->vertex) ||
        ps5vk_runtime_shader_build(&header,&p->fragment) ||
@@ -319,6 +532,7 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     *out=p;
     return VK_SUCCESS;
 failed:
+    ps5vk_runtime_graphics_diag_result=(int)result;
     if(result==PSBC_RESULT_OUT_OF_MEMORY)failure=VK_ERROR_OUT_OF_HOST_MEMORY;
     ps5vk_runtime_graphics_free(NULL,p);
     return failure;

@@ -142,7 +142,8 @@ def main():
             "native/graphics_queue_ps5.c", "native/draw_state_ps5.c", "native/viewport_ps5.c",
             "native/targets_ps5.c", "native/runtime_shader.c", "native/runtime_graphics_compiler.c",
             "native/runtime_graphics_cache.c", "native/runtime_graphics_ps5.c",
-            "src/spirv_graphics_interface.c")
+            "src/spirv_graphics_interface.c", "src/clip_cull_witness.c",
+            "src/geometry_witness.c")
         native_sources += [(ROOT / source, []) for source in graphics_sources]
         native_sources += [(gears / "src" / source, []) for source in (
             "ps5_shader_header.c", "ps5_pipeline.c", "ps5_color_target.c", "ps5_depth_target.c")]
@@ -167,6 +168,25 @@ def main():
             "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
             "-DPS5VK_RUNTIME_GRAPHICS=1", "-DPS5VK_NO_OFFLINE_LIBRARY=1",
         ]
+        # Private measurement build (DXVK262-T05): report and enable the four
+        # rasterization/viewport features so the consumer witness can
+        # negotiate them before a shipping platform advertises them. Off by
+        # default; a staged SDK built with it is a diagnostic artifact and the
+        # consumer manifest records it as such.
+        raster_diagnostic = os.environ.get("PS5VK_RASTER_DIAGNOSTIC", "0")
+        if raster_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_RASTER_DIAGNOSTIC must be 0 or 1")
+        if raster_diagnostic == "1":
+            native_cflags.append("-DPS5VK_RASTER_DIAGNOSTIC=1")
+        # Private diagnostic build (DXVK262-T04): make the graphics adapter log
+        # the pipeline key field by field when it refuses a pipeline, so one
+        # CTS run names the refused condition. Same shape as the switch above:
+        # off by default, and the logging does not exist without the define.
+        geometry_key_diag = os.environ.get("PS5VK_GEOMETRY_KEY_DIAG", "0")
+        if geometry_key_diag not in ("0", "1"):
+            raise SystemExit("PS5VK_GEOMETRY_KEY_DIAG must be 0 or 1")
+        if geometry_key_diag == "1":
+            native_cflags.append("-DPS5VK_GEOMETRY_KEY_DIAG=1")
 
         obj_dir = ROOT / "build/sdk-objs-native"
         obj_dir.mkdir(parents=True, exist_ok=True)

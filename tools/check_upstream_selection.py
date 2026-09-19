@@ -34,6 +34,8 @@ MULTIVIEW_UTIL_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
                          "vktMultiViewRenderUtil.cpp")
 MULTIVIEW_TEST_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
                          "vktMultiViewRenderTests.cpp")
+# The shared draw utility that names the clipping module's clip_volume leaves.
+DRAW_UTIL_SOURCE = "external/vulkancts/modules/vulkan/util/vktDrawUtil.cpp"
 # The exact execution requirements a contract must name. Every key is required
 # and must be a real boolean; anything else - a missing key, an unknown one, a
 # non-boolean value - fails closed rather than being ignored, because the
@@ -126,6 +128,122 @@ def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
     type_names = re.findall(r"\{+\s*\"([a-z0-9_]+)\"\s*,", function_text)
     return {f"{capability}_{type_name}"
             for capability in capabilities for type_name in type_names}
+
+
+def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]:
+    """Leaves of the rasterization module's culling family.
+
+    The factory composes every leaf name from four tables in the same function -
+    a cull-mode prefix, a primitive-type name, a front-face postfix and a
+    polygon-mode suffix - and omits the combinations that cull both faces while
+    asking for a polygon mode other than FILL. The recognizer reads those tables
+    and applies that one omission, and it refuses to derive anything unless the
+    construction it was written against is still there, so a rewritten factory
+    stops matching instead of yielding invented names. Bounded to the exact
+    initializer shapes in this one pinned module.
+    """
+    # The cited line is inside the registration loop, so the brace-matched slice
+    # starts after the tables; the module text is what carries them. The bound is
+    # the construction itself: every table shape and the one omission must be
+    # present, and the citation must still point at the registration.
+    if ("CullingTestCase" not in function_text or
+            not re.search(r"culling->addChild\(new CullingTestCase\(", text)):
+        return set()
+    if not re.search(
+            r"cullModes\[cullModeNdx\]\.mode\s*==\s*VK_CULL_MODE_FRONT_AND_BACK\s*&&\s*"
+            r"polygonModes\[polygonModeNdx\]\.mode\s*!=\s*VK_POLYGON_MODE_FILL",
+            text):
+        return set()
+
+    def entries(name: str) -> list[tuple[str, str]]:
+        match = re.search(rf"\b{name}\[\]\s*=\s*\{{(.*?)\n\s*\}};", text, re.DOTALL)
+        if not match:
+            return []
+        return re.findall(r"\{\s*(VK_[A-Z_]+)\s*,\s*\"([a-z_]*)\"\s*\}", match.group(1))
+
+    culls = entries("cullModes")
+    primitives = entries("primitiveTypes")
+    faces = entries("frontOrders")
+    modes = entries("polygonModes")
+    if not (culls and primitives and faces and modes):
+        return set()
+    both = [index for index, (token, _) in enumerate(culls)
+            if token == "VK_CULL_MODE_FRONT_AND_BACK"]
+    fill = [index for index, (token, _) in enumerate(modes)
+            if token == "VK_POLYGON_MODE_FILL"]
+    if len(both) != 1 or len(fill) != 1:
+        return set()
+    names: set[str] = set()
+    for cull_index, (_, prefix) in enumerate(culls):
+        for _, primitive in primitives:
+            for _, postfix in faces:
+                for mode_index, (_, suffix) in enumerate(modes):
+                    if cull_index == both[0] and mode_index != fill[0]:
+                        continue
+                    names.add(f"{prefix}{primitive}{postfix}{suffix}")
+    return names
+
+
+def _fragment_ops_multi_viewport_leaf_names(text: str) -> set[str]:
+    """Leaf names of the fragment_ops module's scissor.multi_viewport family.
+
+    The factory names each leaf "scissor_" + de::toString(numViewports) for
+    numViewports 1..MIN_MAX_VIEWPORTS, so every name is a literal prefix plus a
+    loop index. Bounded to that exact construction - the prefix literal joined
+    to the loop variable, the loop with its inclusive bound and the constant the
+    bound names - so a renamed prefix or a different bound derives nothing.
+    """
+    prefix = re.search(r'"(scissor_)"\s*\+\s*de::toString\(numViewports\)', text)
+    loop = re.search(
+        r'for\s*\(\s*int\s+numViewports\s*=\s*1\s*;\s*numViewports\s*<=\s*MIN_MAX_VIEWPORTS\s*;',
+        text)
+    bound = re.search(r'\bMIN_MAX_VIEWPORTS\s*=\s*(\d+)', text)
+    if not prefix or not loop or not bound or int(bound.group(1)) > 32:
+        return set()
+    return {f"{prefix.group(1)}{n}" for n in range(1, int(bound.group(1)) + 1)}
+
+
+def _clip_volume_topology_leaf_names(text: str, util_text: str) -> set[str]:
+    """Leaf names of the clipping module's clip_volume groups.
+
+    Each leaf is named by getPrimitiveTopologyShortName over the module's one
+    static topology table: the shared draw utility lowercases the enum name
+    without its 22-character VK_PRIMITIVE_TOPOLOGY_ prefix. Bounded to the
+    table, the call that names a leaf from it and the utility's exact
+    substring, so a different table or helper derives nothing.
+    """
+    if not re.search(r'getPrimitiveTopologyShortName\(cases\[caseNdx\]\)', text):
+        return set()
+    if 'return de::toLower(name.substr(22));' not in util_text:
+        return set()
+    tables = re.findall(
+        r'static const VkPrimitiveTopology cases\[\]\s*=\s*\{(.*?)\};', text, re.DOTALL)
+    if len(tables) != 1:
+        return set()
+    tokens = re.findall(r'\bVK_PRIMITIVE_TOPOLOGY_([A-Z_]+)\b', tables[0])
+    return {token.lower() for token in tokens}
+
+
+def _draw_depth_clamp_leaf_names(text: str) -> set[str]:
+    """Leaf names of the draw module's depth_clamp family.
+
+    The factory names each leaf getFormatCaseName(format) + testNameSuffix: the
+    lowercased VK_FORMAT_ enum name without its 10-character prefix, followed by
+    one suffix per entry of the clear-value table. Bounded to the format table,
+    the suffix fields and the exact concatenation and helper.
+    """
+    if ('const auto testCaseName = formatCaseName + params.testNameSuffix;' not in text or
+            'return de::toLower(de::toString(getFormatStr(format)).substr(10));' not in text):
+        return set()
+    table = re.search(
+        r'const VkFormat depthStencilImageFormatsToTest\[\]\s*=\s*\{(.*?)\};', text, re.DOTALL)
+    if not table:
+        return set()
+    formats = re.findall(r'\bVK_FORMAT_([A-Z0-9_]+)\b', table.group(1))
+    suffixes = re.findall(r'"(_?[a-z0-9_]*)",\s*// testNameSuffix', text)
+    if not formats or not suffixes:
+        return set()
+    return {f"{fmt.lower()}{suffix}" for fmt in formats for suffix in suffixes}
 
 
 def _mapping_group_segment(text: str, segment: str) -> bool:
@@ -301,6 +419,121 @@ def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dic
                     "required": list(required), "max_views": limit_leaf_depth,
                     "family": family, "test_type": test_type}
     return leaves
+
+
+def _clip_distance_generated_segments(text: str) -> set[str]:
+    """Group segments the pinned clipping factory composes at run time.
+
+    The user-defined distance factory registers each case group twice: under its
+    literal name and under that name with `_dynamic_index` appended for the
+    non-constant write. The suffixed names therefore never appear as literals in
+    the module, and accepting them requires the exact composition expression to
+    be present together with both literal group names.
+    """
+    if not ('const std::string mainGroupName =' in text and
+            'de::toString(caseGroups[groupNdx].groupName) + (dynamicIndexing ? "_dynamic_index" : "")'
+            in text and
+            '{"clip_distance", false},' in text and
+            '{"clip_cull_distance", true},' in text):
+        return set()
+    return {"clip_distance_dynamic_index", "clip_cull_distance_dynamic_index"}
+
+
+def _geometry_adjacency_leaf_names(text: str) -> set[str]:
+    """Leaf names the pinned geometry input factory composes at run time.
+
+    The triangle-strip-adjacency group names each leaf after the vertex count it
+    iterates, so the name is a literal prefix plus the loop index. Bounded to that
+    factory's exact construction - the prefix literal, de::toString of the loop
+    variable, and the loop's inclusive bound - so a renamed prefix or a different
+    bound derives nothing rather than a wrong list.
+    """
+    match = re.search(
+        r'const string name\s*=\s*"([a-z_]+)"\s*\+\s*de::toString\(vertexCount\)', text)
+    loop = re.search(
+        r'for\s*\(\s*int\s+vertexCount\s*=\s*0\s*;\s*vertexCount\s*<=\s*(\d+)\s*;', text)
+    if not match or not loop or int(loop.group(1)) > 32:
+        return set()
+    return {f"{match.group(1)}{n}" for n in range(int(loop.group(1)) + 1)}
+
+
+def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
+    """Derive the user-defined clip/cull leaf names of the pinned clipping module.
+
+    The factory registers one leaf per clip count, named from the count and - in
+    the combined group - from the widest cull count that still fits the combined
+    ceiling: `numClipPlanes` plus, when the group uses cull distances,
+    `"_" + min(MAX_CULL_DISTANCES, MAX_COMBINED - numClipPlanes)`. Accept a name
+    only when the module still contains that exact construction, the group and
+    shader segments name the static-index vertex-only variants, and the ceiling
+    constants are the ones the module declares.
+    """
+    construction = (
+        'const std::string caseName =' in text and
+        'de::toString(numClipPlanes) +' in text and
+        'de::toString(numCullPlanes)' in text and
+        '{"clip_distance", false},' in text and
+        '{"clip_cull_distance", true},' in text and
+        'const uint32_t flagTessellation = 1u << 0;' in text and
+        'const uint32_t flagGeometry     = 1u << 1;' in text
+    )
+    if not construction:
+        return set()
+    def constant(name: str) -> int:
+        match = re.search(rf"\b{name}\s*=\s*(\d+)", text)
+        return int(match.group(1)) if match else 0
+    max_clip = constant("MAX_CLIP_DISTANCES")
+    max_cull = constant("MAX_CULL_DISTANCES")
+    max_combined = constant("MAX_COMBINED_CLIP_AND_CULL_DISTANCES")
+    if not max_clip or not max_cull or not max_combined:
+        return set()
+    # The same factory registers the leaves a second time under a
+    # `_dynamic_index` main group (the non-constant write) and appends
+    # `_fragmentshader_read` to the case name for the variant the fragment stage
+    # reads. Both constructions have to be present in the pinned module, exactly
+    # like the static one above, or neither suffix is accepted.
+    construction_reads = (
+        '{"", false}, {"_fragmentshader_read", true}};' in text and
+        'fragmentShaderReads[fragmentShaderReadNdx].name' in text and
+        'readInFragmentShader' in text
+    )
+    construction_dynamic = (
+        'const std::string mainGroupName =' in text and
+        'de::toString(caseGroups[groupNdx].groupName) + (dynamicIndexing ? "_dynamic_index" : "")' in text
+    )
+    segments = path.split(".")
+    if len(segments) != 6 or segments[1] != "clipping" or segments[2] != "user_defined":
+        return set()
+    group = segments[3]
+    shader = segments[4]
+    leaf = segments[5]
+    if shader != "vert":
+        return set()
+    read_suffix = ""
+    if leaf.endswith("_fragmentshader_read"):
+        if not construction_reads:
+            return set()
+        read_suffix = "_fragmentshader_read"
+        leaf = leaf[: -len(read_suffix)]
+    dynamic = False
+    if group.endswith("_dynamic_index"):
+        if not construction_dynamic:
+            return set()
+        dynamic = True
+        group = group[: -len("_dynamic_index")]
+    names: set[str] = set()
+    for clip in range(1, max_clip + 1):
+        # The combined group adds the widest cull count that still fits.
+        if group == "clip_cull_distance":
+            cull = min(max_cull, max_combined - clip)
+            names.add(f"{clip}_{cull}" if cull else str(clip))
+        elif group == "clip_distance":
+            names.add(str(clip))
+    # `dynamic` selects which main group the leaf belongs to; the name set is
+    # the same because the factory builds both groups from the same loop, and the
+    # read suffix is already reflected in `leaf`.
+    assert dynamic in (False, True)
+    return {name + read_suffix for name in names}
 
 
 def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
@@ -1039,6 +1272,9 @@ def main() -> int:
     manifest_families: set[str] = set()
     manifest_contract_ids: set[str] = set()
     integration_text = INTEGRATION_SOURCE.read_text(encoding="utf-8")
+    draw_util_path = UPSTREAM / DRAW_UTIL_SOURCE
+    draw_util_text = (draw_util_path.read_text(encoding="utf-8", errors="replace")
+                      if draw_util_path.is_file() else "")
 
     for case in cases:
         path = case["path"]
@@ -1074,7 +1310,9 @@ def main() -> int:
             _dynamic_state_compute_generated_segments(text)
             if source_path.name == "vktDynamicStateComputeTests.cpp" else
             _indirect_draw_generated_segments(text)
-            if source_path.name == "vktDrawIndirectTest.cpp" else set()
+            if source_path.name == "vktDrawIndirectTest.cpp" else
+            _clip_distance_generated_segments(text)
+            if source_path.name == "vktClippingTests.cpp" else set()
         )
         for segment in segments[1:-1]:
             if (not re.search(r'"' + re.escape(segment) + r'"', searchable) and
@@ -1152,6 +1390,30 @@ def main() -> int:
             continue
         if leaf in _table_composed_leaf_names(text, function_text):
             continue
+        # The rasterization module's culling family composes its names from four
+        # tables inside the cited factory, with one combination omitted. Bounded
+        # to that factory's exact construction expressions and to this module.
+        if (source_path.name == "vktRasterizationTests.cpp" and
+                leaf in _rasterization_culling_leaf_names(text, function_text)):
+            continue
+        # The fragment_ops multi-viewport family, the clipping clip_volume groups
+        # and the draw depth_clamp family compose their names from a prefix or a
+        # format plus a bounded table; each recognizer is bound to its module.
+        if (source_path.name == "vktFragmentOperationsScissorMultiViewportTests.cpp" and
+                leaf in _fragment_ops_multi_viewport_leaf_names(text)):
+            continue
+        if (source_path.name == "vktClippingTests.cpp" and
+                leaf in _clip_volume_topology_leaf_names(text, draw_util_text)):
+            continue
+        if (source_path.name == "vktDrawDepthClampTests.cpp" and
+                leaf in _draw_depth_clamp_leaf_names(text)):
+            continue
+        # The geometry input factory names its triangle-strip-adjacency leaves
+        # after the vertex count it iterates, so only the prefix is a literal.
+        # Bounded to that factory's exact construction expression.
+        if (source_path.name == "vktGeometryInputGeometryShaderTests.cpp" and
+                leaf in _geometry_adjacency_leaf_names(text)):
+            continue
         # This factory's manifest citations point at individual registration
         # blocks inside one function, so the generic forward-only extractor
         # cannot recover the enclosing function. The recognizer itself is
@@ -1172,6 +1434,12 @@ def main() -> int:
         # construction and to the cited group block. Applied to this one module.
         if (source_path.name == "vktDrawShaderDrawParametersTests.cpp" and
                 leaf in _draw_shader_draw_parameters_leaf_names(text, function_text)):
+            continue
+        # The clip/cull distance factory composes its combined-group leaf names
+        # from the clip count and the widest cull count that fits the combined
+        # ceiling. Bounded to that factory's exact construction expressions.
+        if (source_path.name == "vktClippingTests.cpp" and
+                leaf in _clip_distance_leaf_names(path, text)):
             continue
         if leaf.isdigit():
             continue

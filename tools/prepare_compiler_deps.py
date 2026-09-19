@@ -12,7 +12,20 @@ DEPS = [
         "name": "opengnm-psbc",
         "dest": ROOT / "third_party/psbc-reference",
         "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
-        "pin": "c96cb63ba2c3b65b22ae76457e726dde7aeb2ace",
+        # The published T04 candidate plus the T05 viewport-index export, pinned
+        # by exact commit. It carries the metadata this integration reads (the
+        # merged pair's system-SGPR indices and launch counts, the driver
+        # user-data window base, the pixel stage's distance reads) under
+        # metadata version 17, and it names the geometry stage's gl_ViewportIndex
+        # parameter export, and the packed register a fragment distance read
+        # actually targets (a fragment reading gl_ClipDistance[4] used to name
+        # the first register, so the pixel stage interpolated the wrong one). That last part is additive: a pipeline without the
+        # export emits nothing, so the version stays 17 and no other consumer's
+        # metadata changes - which is why the driver cache key does not move with
+        # this pin. It is an audited dependency candidate, not a merge of the
+        # dependency's main (PRs mpereiraesaa/opengnm-psbc#17 and #18): the pin is the
+        # whole contract, so a different commit has to be pinned explicitly.
+        "pin": "4d4a65aad8f178d2437df2ec97159392bae7f844",
     },
     {
         "name": "opengnm",

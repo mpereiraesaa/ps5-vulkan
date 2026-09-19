@@ -20,6 +20,11 @@
 #include "vktDrawShaderDrawParametersTests.hpp"
 #include "vktDrawIndirectTest.hpp"
 #include "vktMultiViewTests.hpp"
+#include "vktClippingTests.hpp"
+#include "vktGeometryTests.hpp"
+#include "vktRasterizationTests.hpp"
+#include "vktDrawScissorTests.hpp"
+#include "vktFragmentOperationsTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -173,6 +178,22 @@ void FocusedVkTestPackage::init(void)
                 false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
                 false, // nestedSecondaryCmdBuffer
             })));
+        // draw.renderpass.scissor: the original upstream scissor module under
+        // the same render-pass group parameters. Six of its leaves are an
+        // upstream oracle for multiViewport by a second route - an instanced
+        // geometry stage writing gl_ViewportIndex = gl_InvocationID over up to
+        // sixteen static or dynamic scissors - and the rest are single-scissor
+        // state coverage. cases.txt remains the leaf filter: every leaf is a
+        // diagnostic in cts/upstream/manifest.json until its acceptance run is
+        // green, and the dynamic-rendering variants are not registered.
+        renderPassGroup->addChild(vkt::Draw::createScissorTests(
+            m_testCtx,
+            vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
+                false, // useDynamicRendering
+                false, // useSecondaryCmdBuffer
+                false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
+                false, // nestedSecondaryCmdBuffer
+            })));
         drawGroup->addChild(renderPassGroup.release());
         addChild(drawGroup.release());
     }
@@ -184,6 +205,46 @@ void FocusedVkTestPackage::init(void)
     // families - and nothing else. Its own support gate and per-view oracle are
     // untouched.
     addChild(vkt::MultiView::createTests(m_testCtx, "multiview"));
+
+    // clipping group: the original upstream user-defined clip/cull distance
+    // module, registered whole under its own name. Both features are advertised
+    // (the export, the dynamically indexed write and the fragment-stage read are
+    // implemented and hardware-witnessed), so the family's vertex-only,
+    // static-index and dynamic-index leaves, with and without the fragment read,
+    // are acceptance cases in cts/upstream/manifest.json. Only the
+    // complementarity and misc leaves stay diagnostics: the pinned binary does
+    // not report them when they are filtered by the name the module's
+    // construction implies.
+    addChild(vkt::clipping::createTests(m_testCtx, "clipping"));
+
+    // geometry group: the original upstream geometry shader module, registered
+    // whole under its own name. Its reference images are embedded at build time
+    // (tools/embed_cts_reference_images.py, served by cts/upstream/image_io_ps5.cpp),
+    // so the leaves whose input primitive, built-ins and envelope this profile
+    // compiles are acceptance cases in cts/upstream/manifest.json and every other
+    // leaf stays a diagnostic there with the gate that refuses it.
+    addChild(vkt::geometry::createTests(m_testCtx, "geometry"));
+
+    // rasterization group: the original upstream rasterization module, registered
+    // whole under its own name, because it is the only module that covers the
+    // polygon modes fillModeNonSolid turns on - every other family that exercises
+    // LINE or POINT polygon rasterization either needs a D16_UNORM depth
+    // attachment this profile does not offer or needs depth-image sampling it
+    // does not claim. The factory is registered unmodified and cases.txt remains
+    // the only execution filter, so only the culling leaves this profile can run
+    // are selected; the rest stay diagnostics in cts/upstream/manifest.json.
+    addChild(vkt::rasterization::createTests(m_testCtx, "rasterization"));
+
+    // fragment_ops group: the original upstream fragment-operations module,
+    // registered whole under its own name, because its
+    // scissor.multi_viewport.scissor_1..16 family is the upstream oracle for
+    // multiViewport: a geometry stage routing one primitive per viewport
+    // through gl_ViewportIndex, the shape the consumer witness measured on
+    // hardware. The factory is registered unmodified and cases.txt remains the
+    // only execution filter; the sixteen leaves are diagnostics in
+    // cts/upstream/manifest.json until their acceptance run is green, and no
+    // other leaf of the module is selected.
+    addChild(vkt::FragmentOperations::createTests(m_testCtx, "fragment_ops"));
 
     // compute.basic group
     {

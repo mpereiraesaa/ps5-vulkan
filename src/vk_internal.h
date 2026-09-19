@@ -3,12 +3,21 @@
 
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
+#include "graphics_limits.h"
 
 /* Legacy private diagnostic override, OFF unless a probe asks for it.
  * It changes no public query. Normal builds use the platform capability and
  * the feature enabled on the device, rather than this measurement override. */
 #ifndef PS5VK_MULTIVIEW_DIAGNOSTIC
 #define PS5VK_MULTIVIEW_DIAGNOSTIC 0
+#endif
+/* Private diagnostic gate for the optional-stage witnesses (geometry,
+ * tessellation and the clip/cull distances they export). The shipping path
+ * requires the logical device to have enabled the feature; only a build that
+ * exists to measure the hardware skips that negotiation, exactly as the
+ * multiview witness build does. */
+#ifndef PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
+#define PS5VK_OPTIONAL_STAGE_DIAGNOSTIC 0
 #endif
 /* The widest mask the diagnostic build validates against, and therefore the most
  * layers the framebuffer rule below has to be able to serve. */
@@ -68,6 +77,30 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_MULTI_DRAW_INDIRECT = 1u << 6,
     /* The full 32-bit range of VK_INDEX_TYPE_UINT32 indices. */
     PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 = 1u << 7,
+    /* Optional graphics stages (DXVK262-T04), which start after the indirect
+     * draw tranche. Each bit means "this device can and does deliver the
+     * capability", and the shipping gates refuse a shader that uses a feature
+     * whose bit the logical device did not enable. */
+    PS5VK_FEATURE_SHADER_CLIP_DISTANCE = 1u << 8,
+    PS5VK_FEATURE_SHADER_CULL_DISTANCE = 1u << 9,
+    PS5VK_FEATURE_GEOMETRY_SHADER = 1u << 10,
+    PS5VK_FEATURE_TESSELLATION_SHADER = 1u << 11,
+    /* Rasterization and viewport state (DXVK262-T05), which start after the
+     * optional-stage tranche so the two integrations union without renumbering.
+     * Each bit is set by a platform only when the native path behind it
+     * programs the state and was measured; the logical device carries the bits
+     * the application enabled and the pipeline/command frontends consult
+     * THOSE. No shipping profile sets any of them yet, and the private
+     * diagnostic guard in the native platform is what lets the T05 witness
+     * negotiate them before anything is advertised. */
+    /* depthBiasClamp: a non-zero clamp in static or dynamic depth bias. */
+    PS5VK_FEATURE_DEPTH_BIAS_CLAMP = 1u << 12,
+    /* depthClamp: depthClampEnable replaces near/far clipping by clamping. */
+    PS5VK_FEATURE_DEPTH_CLAMP = 1u << 13,
+    /* fillModeNonSolid: VK_POLYGON_MODE_LINE and VK_POLYGON_MODE_POINT. */
+    PS5VK_FEATURE_FILL_MODE_NON_SOLID = 1u << 14,
+    /* multiViewport: viewport/scissor arrays up to maxViewports. */
+    PS5VK_FEATURE_MULTI_VIEWPORT = 1u << 15,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table
@@ -79,6 +112,16 @@ static inline uint32_t ps5vk_platform_max_draw_indirect_count(uint32_t supported
 {
     return (supported_features & PS5VK_FEATURE_MULTI_DRAW_INDIRECT) ?
         (uint32_t)PS5VK_MULTI_DRAW_INDIRECT_COUNT : 1u;
+}
+
+/* The maxViewports a platform mask commits to: the pinned core table requires
+ * 16 once multiViewport is supported and allows exactly 1 otherwise. One helper
+ * decides it so the physical limit, the pipeline's array capacity and the
+ * setters' range checks cannot disagree (DXVK262-T05). */
+static inline uint32_t ps5vk_platform_max_viewports(uint32_t supported_features)
+{
+    return (supported_features & PS5VK_FEATURE_MULTI_VIEWPORT) ?
+        (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT : 1u;
 }
 
 /* The measured multiview floors: six views rendered into six ordered array

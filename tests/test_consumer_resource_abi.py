@@ -11,6 +11,8 @@ from tools.verify_consumer_resource_abi import (
     DRAW_PARAMETER_CASES, DRAW_PARAMETER_COVERED_MINIMUM,
     INDIRECT_CASES, INDIRECT_CLEAR_WORD, INDIRECT_EXPANSIONS, INDIRECT_EXTENT,
     INDIRECT_MAX_COMMANDS,
+    RASTER_CASES, RASTER_CLEAR_WORD, RASTER_EXTENT, RASTER_FLOOR_WORD, RASTER_PROBE_WORD,
+    RASTER_TEST_WORD,
     DRAW_PARAMETER_DST_CLEAR_WORD, DRAW_PARAMETER_DST_UPLOAD_WORD,
     DRAW_PARAMETER_EXTENT, DRAW_PARAMETER_UPLOAD_EDGE,
     TWO_SUBPASS_CHANGED, TWO_SUBPASS_FIRST_HASH, TWO_SUBPASS_HASH,
@@ -21,6 +23,33 @@ DRAW_PARAMETER_VERT_SHA256 = "1" * 64
 DRAW_PARAMETER_FRAG_SHA256 = "2" * 64
 INDIRECT_VERT_SHA256 = "3" * 64
 INDIRECT_COMP_SHA256 = "4" * 64
+RASTER_VERT_SHA256 = "5" * 64
+RASTER_GEOM_SHA256 = "6" * 64
+RASTER_GS_FEATURES_ROW = "PS5VK_CONSUMER_RASTER_GS_FEATURES geometryShader=1 multiViewport=1 maxViewports=16"
+
+
+def raster_gs_messages(first_serial=60):
+    """The geometry-routed viewport-index witness rows: one transfer prelude,
+    one graphics frame with one draw, one verdict row."""
+    return [
+        RASTER_GS_FEATURES_ROW,
+        f"PS5VK_CONSUMER_RASTER_GS_START cases=1 extent={RASTER_EXTENT} tiles=16 "
+        f"clear_word={RASTER_CLEAR_WORD:08x}",
+        "PS5VK_QUEUE_PREPARED serial=203 dispatches=0",
+        "PS5VK_GRAPHICS_SUBMIT serial=203 rc=0",
+        "PS5VK_GRAPHICS_SUSPEND_POINT serial=203 rc=0",
+        "PS5VK_GRAPHICS_COMPLETED serial=203 image_bytes=0",
+        f"PS5VK_CONSUMER_RASTER_GS_TARGET layout=general clear_word={RASTER_CLEAR_WORD:08x} prelude=1",
+        "PS5VK_CONSUMER_RASTER_GS_PIPELINE stages=3 viewports=16 created=1",
+        f"PS5VK_GRAPHICS_PREPARED serial={first_serial} draws=1 words=512",
+        f"PS5VK_GRAPHICS_SUBMIT serial={first_serial} rc=0",
+        f"PS5VK_GRAPHICS_SUSPEND_POINT serial={first_serial} rc=0",
+        f"PS5VK_GRAPHICS_COMPLETED serial={first_serial} image_bytes=16384",
+        f"PS5VK_CONSUMER_RASTER_GS case=viewport_index_routing tiles=16 "
+        f"matched={RASTER_EXTENT * RASTER_EXTENT} foreign=0 clear=0 other=0 valid=1",
+        "PS5VK_CONSUMER_RASTER_GS_RESULT cases=1 witnessed=1 valid=1",
+        "PS5VK_CONSUMER_RASTER_GS_RETIRED cases=1 witnessed=1",
+    ]
 # The arena chain the 65535-command case reports in the synthetic run.
 INDIRECT_MAX_ARENAS = 61
 
@@ -133,6 +162,52 @@ def draw_parameter_messages(first_serial=13,
     rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_RESULT cases=6 witnessed=6 valid=1")
     rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_STAGING_RESULT cases=6 witnessed=6 valid=1")
     rows.append("PS5VK_CONSUMER_DRAW_PARAMETERS_RETIRED cases=6 witnessed=6")
+    return rows
+
+
+RASTER_FEATURES_ROW = ("PS5VK_CONSUMER_RASTER_FEATURES depthBiasClamp=1 depthClamp=1 "
+                       "fillModeNonSolid=1 multiViewport=1 maxViewports=16")
+
+
+def raster_messages(first_serial=29):
+    """The rasterization-state witness rows as the hardware emits them.
+
+    One transfer prelude (the colour target's GENERAL transition, prepared
+    with no dispatch), then one graphics frame per case carrying the case's
+    draw count, each followed by its host-side staging readback (frontend
+    work, no queue record) and its verdict row whose counts sum to the frame.
+    """
+    pixels = RASTER_EXTENT * RASTER_EXTENT
+    rows = [
+        RASTER_FEATURES_ROW,
+        f"PS5VK_CONSUMER_RASTER_START cases={len(RASTER_CASES)} extent={RASTER_EXTENT} "
+        f"clear_word={RASTER_CLEAR_WORD:08x} floor_word={RASTER_FLOOR_WORD:08x} "
+        f"test_word={RASTER_TEST_WORD:08x} probe_word={RASTER_PROBE_WORD:08x}",
+        "PS5VK_QUEUE_PREPARED serial=202 dispatches=0",
+        "PS5VK_GRAPHICS_SUBMIT serial=202 rc=0",
+        "PS5VK_GRAPHICS_SUSPEND_POINT serial=202 rc=0",
+        "PS5VK_GRAPHICS_COMPLETED serial=202 image_bytes=0",
+        f"PS5VK_CONSUMER_RASTER_TARGET layout=general clear_word={RASTER_CLEAR_WORD:08x} prelude=1",
+        "PS5VK_CONSUMER_RASTER_PIPELINE role=floor depth=less_write created=1",
+    ]
+    serial = first_serial
+    for name, draws in RASTER_CASES:
+        if name == "viewport_static_bank0_of_two":
+            rows.append("PS5VK_CONSUMER_RASTER_PIPELINE role=two_viewports created=1")
+        rows.extend([
+            f"PS5VK_GRAPHICS_PREPARED serial={serial} draws={draws} words=512",
+            f"PS5VK_GRAPHICS_SUBMIT serial={serial} rc=0",
+            f"PS5VK_GRAPHICS_SUSPEND_POINT serial={serial} rc=0",
+            f"PS5VK_GRAPHICS_COMPLETED serial={serial} image_bytes=16384",
+            f"PS5VK_CONSUMER_RASTER case={name} floor=1024 test=2048 probe=0 "
+            f"clear={pixels - 3072} other=0 test_left=1024 test_top=1024 "
+            f"expected=synthetic valid=1",
+        ])
+        serial += 1
+    rows.append(f"PS5VK_CONSUMER_RASTER_RESULT cases={len(RASTER_CASES)} "
+                f"witnessed={len(RASTER_CASES)} valid=1")
+    rows.append(f"PS5VK_CONSUMER_RASTER_RETIRED cases={len(RASTER_CASES)} "
+                f"witnessed={len(RASTER_CASES)}")
     return rows
 
 
@@ -275,7 +350,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
     def fixture(self, edit=None, sampled=False, shared=False, visibility=None,
                 single=False, mixed=False, secondary=False, inpass=False,
                 texel_formats=False, two_subpass=False, draw_parameters=False,
-                indirect=False):
+                indirect=False, raster=False, raster_skipped=False, raster_gs=False,
+                raster_gs_skipped=False):
         sampled = sampled or shared or single or mixed
         messages = list(MESSAGES)
         if draw_parameters:
@@ -313,6 +389,47 @@ class ConsumerResourceAbiTests(unittest.TestCase):
             messages.insert(negotiated + 1,
                             "PS5VK_CONSUMER_INDIRECT_NEGOTIATED multiDrawIndirect=1 "
                             "drawIndirectFirstInstance=1 fullDrawIndexUint32=1 enabled=core_features2")
+        if raster:
+            # The raster witness runs after the indirect witness and before the
+            # presentation block: its frames take the next serials there, so
+            # the rows from the presentation block onwards shift by the case
+            # count (after the shifts above).
+            at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
+            for index in range(at, len(messages)):
+                message = messages[index]
+                if message.startswith("PS5VK_GRAPHICS_") and " serial=" in message:
+                    prefix, rest = message.split(" serial=")
+                    serial, tail = rest.split(" ", 1)
+                    messages[index] = f"{prefix} serial={int(serial) + len(RASTER_CASES)} {tail}"
+            messages[at:at] = raster_messages(
+                first_serial=13 + (len(DRAW_PARAMETER_CASES) if draw_parameters else 0) +
+                (11 if indirect else 0))
+        elif raster_skipped:
+            at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
+            messages[at:at] = [
+                "PS5VK_CONSUMER_RASTER_FEATURES depthBiasClamp=0 depthClamp=0 "
+                "fillModeNonSolid=0 multiViewport=0 maxViewports=1",
+                "PS5VK_CONSUMER_RASTER_SKIPPED reason=features_not_reported",
+            ]
+        if raster_gs:
+            # Runs right after the raster witness, before the presentation
+            # block: one more graphics serial shifts the rows after it.
+            at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
+            for index in range(at, len(messages)):
+                message = messages[index]
+                if message.startswith("PS5VK_GRAPHICS_") and " serial=" in message:
+                    prefix, rest = message.split(" serial=")
+                    serial, tail = rest.split(" ", 1)
+                    messages[index] = f"{prefix} serial={int(serial) + 1} {tail}"
+            messages[at:at] = raster_gs_messages(
+                first_serial=13 + (len(DRAW_PARAMETER_CASES) if draw_parameters else 0) +
+                (11 if indirect else 0) + (len(RASTER_CASES) if raster else 0))
+        elif raster_gs_skipped:
+            at = messages.index("PS5VK_CONSUMER_GRAPHICS_START mode=finite")
+            messages[at:at] = [
+                "PS5VK_CONSUMER_RASTER_GS_FEATURES geometryShader=0 multiViewport=1 maxViewports=16",
+                "PS5VK_CONSUMER_RASTER_GS_SKIPPED reason=features_not_reported",
+            ]
         if inpass:
             # The scenario runs after the last finite frame and before the
             # surface is destroyed, and costs exactly two extra graphics
@@ -454,6 +571,22 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                 "max_commands": INDIRECT_MAX_COMMANDS,
                 "vertex_shader_sha256": INDIRECT_VERT_SHA256,
                 "compute_shader_sha256": INDIRECT_COMP_SHA256,
+                "fragment_shader_sha256": DRAW_PARAMETER_FRAG_SHA256,
+            },
+            "raster_state": {
+                "features": ["depthBiasClamp", "depthClamp", "fillModeNonSolid",
+                             "multiViewport"],
+                "cases": [case[0] for case in RASTER_CASES],
+                "extent": RASTER_EXTENT,
+                "vertex_shader_sha256": RASTER_VERT_SHA256,
+                "fragment_shader_sha256": DRAW_PARAMETER_FRAG_SHA256,
+            },
+            "raster_viewport_index": {
+                "features": ["geometryShader", "multiViewport"],
+                "cases": ["viewport_index_routing"],
+                "extent": RASTER_EXTENT, "tiles": 16,
+                "vertex_shader_sha256": RASTER_VERT_SHA256,
+                "geometry_shader_sha256": RASTER_GEOM_SHA256,
                 "fragment_shader_sha256": DRAW_PARAMETER_FRAG_SHA256,
             },
             "buffer_transfer": {
@@ -933,7 +1066,127 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate(*self.fixture(indirect=True, edit=drop_negotiated))
 
-    def test_draw_parameter_witness_is_accepted_and_reported(self):
+    def test_raster_witness_is_accepted_reported_or_skipped(self):
+        for indirect in (False, True):
+            with self.subTest(indirect=indirect):
+                result = validate(*self.fixture(raster=True, indirect=indirect,
+                                                draw_parameters=indirect))
+                self.assertEqual(result["raster_cases"], len(RASTER_CASES))
+        self.assertEqual(validate(*self.fixture())["raster_cases"], 0)
+        # A device that does not report the four features skips the witness
+        # and says so; the feature line alone, without the skip, is a failure.
+        self.assertEqual(validate(*self.fixture(raster_skipped=True))["raster_cases"], 0)
+        def drop_skipped(messages):
+            messages.remove("PS5VK_CONSUMER_RASTER_SKIPPED reason=features_not_reported")
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(raster_skipped=True, edit=drop_skipped))
+
+    def test_raster_witness_pins_every_case_and_the_frame_draws(self):
+        rows = raster_messages()
+
+        def rewrite(row, field, value):
+            def edit(messages):
+                index = messages.index(row)
+                messages[index] = " ".join(
+                    f"{field}={value}" if part.startswith(f"{field}=") else part
+                    for part in messages[index].split())
+            return edit
+
+        case_rows = [row for row in rows if row.startswith("PS5VK_CONSUMER_RASTER case=")]
+        self.assertEqual(len(case_rows), len(RASTER_CASES))
+        mutations = []
+        for row in case_rows:
+            mutations += [(row, "valid", "0"), (row, "other", "1"), (row, "clear", "0"),
+                          (row, "case", "renamed_case")]
+        mutations += [(RASTER_FEATURES_ROW, "maxViewports", "1"),
+                      (RASTER_FEATURES_ROW, "depthClamp", "0"),
+                      (RASTER_FEATURES_ROW, "fillModeNonSolid", "0")]
+        prepared_rows = [row for row in rows if row.startswith("PS5VK_GRAPHICS_PREPARED ")]
+        self.assertEqual(len(prepared_rows), len(RASTER_CASES))
+        # Every frame records exactly the case's draws: a floor that was not
+        # drawn, or an extra draw, is a different frame.
+        for row, (_, draws) in zip(prepared_rows, RASTER_CASES):
+            mutations.append((row, "draws", str(draws + 1)))
+        result_row = rows[-2]
+        mutations += [(result_row, "witnessed", str(len(RASTER_CASES) - 1)), (result_row, "valid", "0")]
+        for row, field, value in mutations:
+            with self.subTest(row=row.split()[0] + " " + row.split()[1], field=field, value=value), \
+                    self.assertRaises(ValueError):
+                validate(*self.fixture(raster=True, edit=rewrite(row, field, value)))
+
+    def test_raster_witness_requires_every_row_and_the_manifest(self):
+        rows = raster_messages()
+        for row in rows:
+            def drop(messages, row=row):
+                messages.remove(row)
+            with self.subTest(row=row[:60]), self.assertRaises(ValueError):
+                validate(*self.fixture(raster=True, edit=drop))
+        def swap_cases(messages):
+            first = messages.index(next(m for m in messages if m.startswith("PS5VK_CONSUMER_RASTER case=")))
+            second = messages.index(next(m for m in messages[first + 1:]
+                                         if m.startswith("PS5VK_CONSUMER_RASTER case=")))
+            messages[first], messages[second] = messages[second], messages[first]
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(raster=True, edit=swap_cases))
+        for mutate in (
+                lambda a: a.__delitem__("raster_state"),
+                lambda a: a["raster_state"].update(extent=32),
+                lambda a: a["raster_state"].update(cases=a["raster_state"]["cases"][:-1]),
+                lambda a: a["raster_state"].update(vertex_shader_sha256="z" * 64),
+                lambda a: a["raster_state"].update(features=["depthClamp"])):
+            log, receipt, artifact = self.fixture(raster=True)
+            mutate(artifact)
+            with self.assertRaises(ValueError):
+                validate(log, receipt, artifact)
+
+    def test_viewport_index_witness_is_accepted_skipped_or_pinned(self):
+        for raster in (False, True):
+            with self.subTest(raster=raster):
+                result = validate(*self.fixture(raster_gs=True, raster=raster))
+                self.assertEqual(result["raster_viewport_index_cases"], 1)
+        self.assertEqual(validate(*self.fixture())["raster_viewport_index_cases"], 0)
+        self.assertEqual(validate(*self.fixture(raster_gs_skipped=True))["raster_viewport_index_cases"], 0)
+        def drop_skipped(messages):
+            messages.remove("PS5VK_CONSUMER_RASTER_GS_SKIPPED reason=features_not_reported")
+        with self.assertRaises(ValueError):
+            validate(*self.fixture(raster_gs_skipped=True, edit=drop_skipped))
+        rows = raster_gs_messages()
+
+        def rewrite(row, field, value):
+            def edit(messages):
+                index = messages.index(row)
+                messages[index] = " ".join(
+                    f"{field}={value}" if part.startswith(f"{field}=") else part
+                    for part in messages[index].split())
+            return edit
+
+        case_row = next(row for row in rows if row.startswith("PS5VK_CONSUMER_RASTER_GS case="))
+        prepared_row = next(row for row in rows if row.startswith("PS5VK_GRAPHICS_PREPARED "))
+        for row, field, value in (
+                (case_row, "matched", str(RASTER_EXTENT * RASTER_EXTENT - 1)),
+                (case_row, "foreign", "256"), (case_row, "clear", "16"), (case_row, "valid", "0"),
+                (RASTER_GS_FEATURES_ROW, "maxViewports", "1"),
+                (RASTER_GS_FEATURES_ROW, "geometryShader", "0"),
+                (prepared_row, "draws", "2"), (rows[-2], "valid", "0"), (rows[-1], "witnessed", "0")):
+            with self.subTest(row=row.split()[0], field=field, value=value), \
+                    self.assertRaises(ValueError):
+                validate(*self.fixture(raster_gs=True, edit=rewrite(row, field, value)))
+        for row in rows:
+            def drop(messages, row=row):
+                messages.remove(row)
+            with self.subTest(row=row[:60]), self.assertRaises(ValueError):
+                validate(*self.fixture(raster_gs=True, edit=drop))
+        for mutate in (
+                lambda a: a.__delitem__("raster_viewport_index"),
+                lambda a: a["raster_viewport_index"].update(tiles=4),
+                lambda a: a["raster_viewport_index"].update(geometry_shader_sha256="z" * 64),
+                lambda a: a["raster_viewport_index"].update(features=["multiViewport"])):
+            log, receipt, artifact = self.fixture(raster_gs=True)
+            mutate(artifact)
+            with self.assertRaises(ValueError):
+                validate(log, receipt, artifact)
+
+
         result = validate(*self.fixture(draw_parameters=True))
         self.assertEqual(result["draw_parameter_cases"], len(DRAW_PARAMETER_CASES))
 

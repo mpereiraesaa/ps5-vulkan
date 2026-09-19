@@ -31,7 +31,13 @@ enum {
      * implemented capacity of one set and of one stage is PS5VK_MAX_DESCRIPTORS
      * records (vk_descriptor.h), which is what the validation bounds. */
     PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS = 16,
-    PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS = 96
+    PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS = 96,
+    /* The maxViewports a platform that carries PS5VK_FEATURE_MULTI_VIEWPORT
+     * reports: the Vulkan floor for that feature, and exactly the number of
+     * viewport/scissor banks the pipeline, command-buffer and draw snapshots
+     * hold and the native encoder programs (vk_pipeline.h ties its capacity
+     * to this constant). Without the feature the report stays at one. */
+    PS5VK_MULTI_VIEWPORT_COUNT = 16
 };
 /* Diagnostic consumers ask whether their workload fits, not whether a device
  * still reports the historical ceiling. Hardware-limit policy lives below. */
@@ -84,5 +90,19 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->subPixelPrecisionBits=PS5VK_SUBPIXEL_BITS;
     limits->maxSamplerLodBias=(float)PS5VK_MAX_SAMPLER_LOD_BIAS;
     limits->maxSamplerAnisotropy=1.0f;
+    /* The geometry stage's five mandatory minima, each one measured on the
+     * console before it is reported rather than copied from a hardware name
+     * (private-captures/t04): the envelope case emits the 256 output vertices
+     * and carries 1024 position components in total, the invocations case runs
+     * 32 invocations per primitive, and the components case reads 64 input
+     * components and writes 64 that the pixel half consumes and folds into the
+     * image. The profile reports the Vulkan floor, which is what those cases
+     * exercised; a larger number would be a claim nothing has measured. The
+     * tessellation limits stay at zero while that feature stays unadvertised. */
+    limits->maxGeometryShaderInvocations=32;
+    limits->maxGeometryInputComponents=64;
+    limits->maxGeometryOutputComponents=64;
+    limits->maxGeometryOutputVertices=256;
+    limits->maxGeometryTotalOutputComponents=1024;
 }
 #endif

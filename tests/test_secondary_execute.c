@@ -432,7 +432,7 @@ int main(void)
         .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkFramebuffer_T other_fb = fb;
-    struct VkPipeline_T graphics = {.device = &d, .graphics = VK_TRUE,
+    struct VkPipeline_T graphics = {.device = &d, .graphics = VK_TRUE, .viewport_count = 1,
         .graphics_state = &graphics, .color_format = VK_FORMAT_B8G8R8A8_UNORM};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = &pass, .framebuffer = &fb, .renderArea = {.extent = {4,4}}};
@@ -451,6 +451,28 @@ int main(void)
      * it would in a primary, and a command that may only run OUTSIDE a pass is
      * refused here for the same reason it would be there. */
     assert(inside->render_pass == &twin && inside->render_pass_inherited);
+    /* Dynamic state is the secondary's own: a pipeline with dynamic depth bias
+     * needs the setter in THIS buffer before its draw, and the draw snapshots
+     * exactly what this buffer set. */
+    struct VkPipeline_T dynamic_graphics = graphics;
+    dynamic_graphics.dynamic_depth_bias = VK_TRUE;
+    dynamic_graphics.raster.depth_bias_enable = VK_TRUE;
+    vkCmdBindPipeline(inside, VK_PIPELINE_BIND_POINT_GRAPHICS, &dynamic_graphics);
+    vkCmdDraw(inside, 3, 1, 0, 0);
+    assert(inside->state == PS5VK_INVALID);
+    assert(vkBeginCommandBuffer(inside, &continue_begin) == VK_SUCCESS);
+    vkCmdBindPipeline(inside, VK_PIPELINE_BIND_POINT_GRAPHICS, &dynamic_graphics);
+    vkCmdSetDepthBias(inside, 3.0f, 0.0f, -0.5f);
+    vkCmdDraw(inside, 3, 1, 0, 0);
+    assert(inside->state == PS5VK_RECORDING && inside->operation_count == 1);
+    assert(inside->operations[0].raster.depth_bias_enable &&
+           inside->operations[0].raster.depth_bias_constant == 3.0f &&
+           inside->operations[0].raster.depth_bias_slope == -0.5f &&
+           inside->operations[0].viewport_count == 1);
+    /* The submitted recording below uses the shared static pipeline, whose
+     * pending count the submission checks own. */
+    assert(vkEndCommandBuffer(inside) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(inside, &continue_begin) == VK_SUCCESS);
     vkCmdBindPipeline(inside, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics);
     vkCmdDraw(inside, 3, 1, 0, 0);
     assert(inside->state == PS5VK_RECORDING && inside->operation_count == 1);
