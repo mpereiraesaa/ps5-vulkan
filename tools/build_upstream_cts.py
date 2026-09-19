@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build and package genuine upstream VK-GL-CTS for native PS5 execution."""
+import argparse
 import concurrent.futures
 import hashlib
 import json
@@ -319,7 +320,19 @@ def compile_worker(task):
     except Exception as e:
         return src.name, False, str(e)
 
-def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Build and package the upstream VK-GL-CTS payload for the PS5 title.")
+    parser.add_argument(
+        "--manifest", type=Path, default=SELECTION_MANIFEST,
+        help="selection manifest to package (default: the frozen acceptance selection; "
+             "a measurement manifest from tools/make_measurement_manifest.py is recorded "
+             "as such in the build manifest and in the receipt)")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk_env = os.environ.get("PS5_PAYLOAD_SDK")
@@ -341,7 +354,15 @@ def main():
     spirv_tools_root = cts_root / "external/spirv-tools/src"
     spirv_headers_root = cts_root / "external/spirv-headers/src"
 
-    selection_manifest = json.loads(SELECTION_MANIFEST.read_text())
+    selection_manifest_path = args.manifest.resolve()
+    selection_manifest = json.loads(selection_manifest_path.read_text())
+    measurement = selection_manifest.get("measurement")
+    if measurement:
+        # Not the frozen acceptance selection: say so at the top of the log, so
+        # the run that follows is never mistaken for an acceptance run.
+        print(f"[build_upstream_cts] MEASUREMENT selection from {selection_manifest_path}: "
+              f"{measurement.get('moved')} leaves moved from {measurement.get('categories')}; "
+              f"frozen selection {str(measurement.get('base_selection_hash'))[:16]}...")
     cts_pin = selection_manifest["cts_pin"]
     cts_state = verify_cts_checkout(cts_root, cts_pin["commit"], cts_pin.get("tag"))
     check_external_pins(selection_manifest.get("external_pins", {}), {
@@ -1120,6 +1141,13 @@ def main():
         },
         "selection_hash": selection_hash,
         "selected_cases": manifest_cases,
+        # Which manifest the case list came from. The frozen acceptance
+        # selection is the default; a measurement manifest carries its own
+        # derivation record and is copied here so the receipt can tell them apart.
+        "selection_manifest": (str(selection_manifest_path.relative_to(ROOT))
+                               if selection_manifest_path.is_relative_to(ROOT)
+                               else str(selection_manifest_path)),
+        "measurement": measurement,
         "eboot_sha256": sha256_file(eboot_bin),
         "map_file": str(map_file.relative_to(ROOT)),
         "total_objects_linked": len(all_objects),
