@@ -3611,6 +3611,432 @@
         "core:fillModeNonSolid"
       ],
       "rationale": "MEASURED AND PASSING, HELD AS DIAGNOSTIC: this leaf is the upstream oracle for fillModeNonSolid (the two non-FILL polygon modes), it runs and passes on hardware with the feature advertised - 28 of 28 culling leaves passed in run 20260918T141136767Z on payload eboot d9875f9c, after two driver defects it found were fixed (the unconditional VkPipelineRasterizationLineStateCreateInfoEXT chain in pNext, and the vertex buffer descriptor window for a structure-of-arrays attribute layout). It moves to acceptance in the same change that puts PS5VK_FEATURE_FILL_MODE_NON_SOLID in the shipping platform mask, and that change waits for a green acceptance run: the four dEQP-VK.clipping.user_defined.*.vert.8_fragmentshader_read leaves fail today for their own, unrelated reason."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_list",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "rationale": "UNMEASURED, applicable: testPrimitivesDepthClamp (vktClippingTests.cpp:565-660) requires depthClamp, draws VS+FS primitives crossing the near and far planes with depth clamp off and on, and counts coloured pixels - no depth attachment (util/vktDrawUtil.hpp:50 leaves depthFormat UNDEFINED), so the readback the driver lacks is not involved. This is the upstream oracle for depthClamp. It moves to acceptance when one measurement window (PS5VK_RASTER_DIAGNOSTIC=1) reports Pass and the change that puts PS5VK_FEATURE_DEPTH_CLAMP in the shipping mask lands."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_strip",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "rationale": "UNMEASURED, applicable: testPrimitivesDepthClamp (vktClippingTests.cpp:565-660) requires depthClamp, draws VS+FS primitives crossing the near and far planes with depth clamp off and on, and counts coloured pixels - no depth attachment (util/vktDrawUtil.hpp:50 leaves depthFormat UNDEFINED), so the readback the driver lacks is not involved. This is the upstream oracle for depthClamp. It moves to acceptance when one measurement window (PS5VK_RASTER_DIAGNOSTIC=1) reports Pass and the change that puts PS5VK_FEATURE_DEPTH_CLAMP in the shipping mask lands."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.point_list",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_list",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_strip",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_list_with_adjacency",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader"
+      ],
+      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_strip_with_adjacency",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader"
+      ],
+      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_list_with_adjacency",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader"
+      ],
+      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_strip_with_adjacency",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader"
+      ],
+      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap."
+    },
+    {
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_fan",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812",
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "rationale": "Same depthClamp oracle over TRIANGLE_FAN, which the resolver refuses (src/graphics_program.h:96-97); the leaf fails at pipeline creation. Not a T05 gap."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_1",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 1 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_2",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 2 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_3",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 3 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_4",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 4 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_5",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 5 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_6",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 6 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_7",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 7 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_8",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 8 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_9",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 9 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_10",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 10 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_11",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 11 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_12",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 12 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_13",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 13 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_14",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 14 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_15",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 15 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_16",
+      "source": "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp:447",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: checkSupport (:433-437) requires geometryShader, multiViewport and maxViewports >= 16; the geometry stage takes points and writes gl_ViewportIndex = gl_PrimitiveIDIn for one full-screen quad per viewport (:199-260), 16 viewport(s) each with its own scissor, and the colour image is compared against a reference grid. This is the upstream oracle for multiViewport and the same routing shape the consumer's 16-tile geometry witness measured (VALIDATION.md). The module is registered by this change; the leaf moves to acceptance when one measurement window reports Pass and PS5VK_FEATURE_MULTI_VIEWPORT enters the shipping mask."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.scissor.two_static_scissors_one_quad",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp:799",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: usesMultipleScissors (vktDrawScissorTests.cpp:346-371) requires geometryShader and multiViewport; the pipeline carries one viewport per scissor and an instanced geometry stage (layout(invocations = N), N <= 16 within the reported maxGeometryShaderInvocations = 32) writes gl_ViewportIndex = gl_InvocationID (:376-406), so every scissor of the bank is exercised by the same draw; static and dynamic scissor state, out-of-order per-index updates and a mixed static/dynamic set are covered across the six leaves. Second upstream oracle for multiViewport; registered under draw.renderpass by this change; moves to acceptance with the multi_viewport family."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.scissor.16_static_scissors",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp:852",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: usesMultipleScissors (vktDrawScissorTests.cpp:346-371) requires geometryShader and multiViewport; the pipeline carries one viewport per scissor and an instanced geometry stage (layout(invocations = N), N <= 16 within the reported maxGeometryShaderInvocations = 32) writes gl_ViewportIndex = gl_InvocationID (:376-406), so every scissor of the bank is exercised by the same draw; static and dynamic scissor state, out-of-order per-index updates and a mixed static/dynamic set are covered across the six leaves. Second upstream oracle for multiViewport; registered under draw.renderpass by this change; moves to acceptance with the multi_viewport family."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.scissor.dynamic_scissor_updates_between_draws",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp:917",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: usesMultipleScissors (vktDrawScissorTests.cpp:346-371) requires geometryShader and multiViewport; the pipeline carries one viewport per scissor and an instanced geometry stage (layout(invocations = N), N <= 16 within the reported maxGeometryShaderInvocations = 32) writes gl_ViewportIndex = gl_InvocationID (:376-406), so every scissor of the bank is exercised by the same draw; static and dynamic scissor state, out-of-order per-index updates and a mixed static/dynamic set are covered across the six leaves. Second upstream oracle for multiViewport; registered under draw.renderpass by this change; moves to acceptance with the multi_viewport family."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.scissor.dynamic_scissor_out_of_order_updates",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp:949",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: usesMultipleScissors (vktDrawScissorTests.cpp:346-371) requires geometryShader and multiViewport; the pipeline carries one viewport per scissor and an instanced geometry stage (layout(invocations = N), N <= 16 within the reported maxGeometryShaderInvocations = 32) writes gl_ViewportIndex = gl_InvocationID (:376-406), so every scissor of the bank is exercised by the same draw; static and dynamic scissor state, out-of-order per-index updates and a mixed static/dynamic set are covered across the six leaves. Second upstream oracle for multiViewport; registered under draw.renderpass by this change; moves to acceptance with the multi_viewport family."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.scissor.16_dynamic_scissors",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp:1008",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: usesMultipleScissors (vktDrawScissorTests.cpp:346-371) requires geometryShader and multiViewport; the pipeline carries one viewport per scissor and an instanced geometry stage (layout(invocations = N), N <= 16 within the reported maxGeometryShaderInvocations = 32) writes gl_ViewportIndex = gl_InvocationID (:376-406), so every scissor of the bank is exercised by the same draw; static and dynamic scissor state, out-of-order per-index updates and a mixed static/dynamic set are covered across the six leaves. Second upstream oracle for multiViewport; registered under draw.renderpass by this change; moves to acceptance with the multi_viewport family."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.scissor.dynamic_scissor_mix",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp:1042",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "UNMEASURED, applicable: usesMultipleScissors (vktDrawScissorTests.cpp:346-371) requires geometryShader and multiViewport; the pipeline carries one viewport per scissor and an instanced geometry stage (layout(invocations = N), N <= 16 within the reported maxGeometryShaderInvocations = 32) writes gl_ViewportIndex = gl_InvocationID (:376-406), so every scissor of the bank is exercised by the same draw; static and dynamic scissor state, out-of-order per-index updates and a mixed static/dynamic set are covered across the six leaves. Second upstream oracle for multiViewport; registered under draw.renderpass by this change; moves to acceptance with the multi_viewport family."
+    },
+    {
+      "path": "dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
+      "source": "external/vulkancts/modules/vulkan/rasterization/vktRasterizationTests.cpp:9274",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:fillModeNonSolid"
+      ],
+      "rationale": "UNMEASURED, applicable: the amber script (data/vulkan/amber/rasterization/line_continuity/polygon-mode-lines.amber) declares DEVICE_FEATURE fillModeNonSolid, draws triangles with POLYGON_MODE line into a B8G8R8A8_UNORM framebuffer and verifies continuity with a compute pass; registered with addRequirement(Features.fillModeNonSolid) (:9244-9275). The script is staged into /app0 by tools/build_upstream_cts.py (DATASET_AMBER_SCRIPTS). First amber-backed leaf of this profile: a failure inside the amber engine path is a packaging diagnostic, not a driver verdict, and is to be read as such."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
+      "category": "depth-aspect-readback-gap",
+      "expected_status": "Fail",
+      "features_required": [],
+      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. "
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_input_negative",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
+      "category": "depth-aspect-readback-gap",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. "
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_input_positive",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
+      "category": "depth-aspect-readback-gap",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. "
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_negative",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
+      "category": "depth-aspect-readback-gap",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthBiasClamp"
+      ],
+      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. These two leaves are the only upstream depthBiasClamp oracles whose attachment format this profile offers (D32_SFLOAT); a DEPTH-aspect D32 copy would make them selectable."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_positive",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
+      "category": "depth-aspect-readback-gap",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthBiasClamp"
+      ],
+      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. These two leaves are the only upstream depthBiasClamp oracles whose attachment format this profile offers (D32_SFLOAT); a DEPTH-aspect D32 copy would make them selectable."
+    },
+    {
+      "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_four_viewports",
+      "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
+      "category": "depth-aspect-readback-gap",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader",
+        "core:multiViewport"
+      ],
+      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. Also the only upstream leaf that exercises depth clamp on four viewports at once."
+    },
+    {
+      "path": "dEQP-VK.dynamic_state.monolithic.rs_state.depth_bias_clamp",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateRSTests.cpp:1299",
+      "category": "depth-stencil-format-gap",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:depthBiasClamp"
+      ],
+      "rationale": "BLOCKED by a format, not by T05: DepthBiasBaseCase::initialize needs VK_FORMAT_D24_UNORM_S8_UINT or VK_FORMAT_D32_SFLOAT_S8_UINT as a depth-stencil attachment and throws NotSupported otherwise (vktDynamicStateRSTests.cpp:133-150); this profile offers only VK_FORMAT_D32_SFLOAT (src/texture_format.c:183). The oracle itself is a colour comparison and requires depthBiasClamp (:1224), so a D32_SFLOAT_S8_UINT attachment would make it the upstream depthBiasClamp oracle. The rs_state group is not registered in the package (only the module's compute subgroup is)."
     }
   ]
 }

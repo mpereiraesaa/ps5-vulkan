@@ -1070,40 +1070,117 @@ was taken there too. None of those optional-stage runs is part of this selection
 and no feature is advertised by them.
 Vulkan conformance claim.
 
-## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18)
+## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18, eligibility completed 2026-09-19)
 
-The four T05 requirements are implemented and measured through the public ABI,
-but **no leaf is promoted for any of them, because no candidate family is
-applicable to this profile today**. The frozen selection is therefore unchanged
-at 304 acceptance cases and 34 diagnostics, and nothing is advertised. The
-candidates were re-derived in the pinned checkout
-`a0270c1897597e6c77679870e10415398a13001c` rather than carried over:
+The four T05 requirements are implemented and measured through the public ABI
+(the consumer's raster and viewport witnesses in
+[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses)),
+and **nothing is advertised yet**: the frozen acceptance selection is unchanged
+at 304 cases, and every T05 leaf below is a diagnostic in
+`cts/upstream/manifest.json`. What changed since the first measurement is the
+inventory: the pinned checkout `a0270c1897597e6c77679870e10415398a13001c` was
+read for every source and amber script that names one of the four features,
+not only for the `draw.renderpass.depth_clamp` family, and the package now
+registers the modules the applicable leaves live in.
 
-| Requirement | Candidate leaves | Why they cannot be selected yet |
-|---|---|---|
-| `depthBiasClamp` | `dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_{negative,positive}` | Both read the depth attachment back with `readDepth(...)` over `VK_IMAGE_ASPECT_DEPTH_BIT` (`external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:554-555`). Every copy path in `src/vk_image_transfer.c` validates `VK_IMAGE_ASPECT_COLOR_BIT` (`:63,197-198,237-238,525-526,627-628`), the only DEPTH-aspect path is the whole-subresource clear (`:355,:374`), and `src/depth_layout.h:9-10` states the GFX10 64KB_Z_X pixel addressing is not supplied. |
-| `depthClamp` | the same family, plus `..._clamp_four_viewports` | Same depth readback; the four-viewport leaf additionally needs a geometry stage and `multiViewport`. |
-| `fillModeNonSolid` | `dEQP-VK.rasterization.culling.*_{line,point}` for the list and strip topologies | The rasterization module is not registered in `cts/upstream/package_ps5.cpp` (the registered roots are api, binding_model, clipping, compute, draw, dynamic_state, geometry, info, memory, multiview, pipeline, robustness, spirv_assembly and synchronization), so these leaves are absent from the built payload rather than failing on the device. Registering a new module is a package change this tranche did not make. |
-| `multiViewport` | `dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_1..16` | Needs the `fragment_ops` module registered in the package; the geometry side that this used to depend on is done and measured (a geometry stage writing `gl_ViewportIndex` through sixteen banks, VALIDATION.md). |
+### Registered for T05
 
-Two further applicability facts, recorded so the next attempt does not re-derive
-them. `dEQP-VK.draw.depth_bias.*` is D16_UNORM in every script
-(`external/vulkancts/data/vulkan/amber/draw/depth_bias/*.amber:19`, family
-declared in `modules/vulkan/draw/vktDrawDepthBiasTests.cpp:43,52-56`), so it is
-out of scope for a profile that does not offer D16. And
-`dEQP-VK.rasterization.depth_bias.d32_sfloat*` **is** format-applicable - it is
-registered at `modules/vulkan/rasterization/vktRasterizationTests.cpp:9282-9305`
-over `data/vulkan/amber/rasterization/depth_bias/` and carries four D32_SFLOAT
-leaves - but its oracle samples the depth image as a combined image sampler
-(`d32_sfloat.amber:106`, the `depthdump` pipeline at `:150-153`), and
-`src/texture_format.c:183` gives `VK_FORMAT_D32_SFLOAT` only `CAP_DEPTH|CAP_DST`
-with no sampled role, for the same missing-pixel-addressing reason. That family
-is therefore blocked by a capability, not by registration.
+* `rasterization` (whole module, registered unmodified): the only family that
+  exercises LINE and POINT polygon rasterization on a colour attachment. Its
+  28 `culling` leaves ran with `fillModeNonSolid` on the measurement mask and
+  passed 28/28 (run `20260918T141136767Z`, payload eboot `d9875f9c...`); they
+  found and fixed two driver defects on the way (the unconditional
+  `VkPipelineRasterizationLineStateCreateInfoEXT` chain in `pNext`, and the
+  vertex descriptor window for a structure-of-arrays attribute layout). Its
+  `line_continuity.polygon-mode-lines` leaf is the second `fillModeNonSolid`
+  oracle: an amber script (`data/vulkan/amber/rasterization/line_continuity/`,
+  `DEVICE_FEATURE fillModeNonSolid`) that draws triangles in LINE mode and
+  verifies continuity with a compute pass. `tools/build_upstream_cts.py` stages
+  that script beside `eboot.bin` (`DATASET_AMBER_SCRIPTS`); it is the first
+  amber-backed leaf of this profile, so a failure inside the amber engine path
+  is a packaging diagnostic, not a driver verdict.
+* `fragment_ops` (whole module, registered unmodified): its
+  `scissor.multi_viewport.scissor_1..16` family is the upstream oracle for
+  `multiViewport` - `checkSupport` requires `geometryShader`, `multiViewport`
+  and `maxViewports >= 16`, and the geometry stage writes
+  `gl_ViewportIndex = gl_PrimitiveIDIn` for one full-screen quad per viewport
+  (`vktFragmentOperationsScissorMultiViewportTests.cpp:199-260,433-448`). This
+  is the routing shape the consumer's 16-tile geometry witness measured.
+* `draw.renderpass.scissor` (the module's scissor factory under the same
+  render-pass group parameters as the other draw families): six of its leaves
+  (`two_static_scissors_one_quad`, `16_static_scissors`,
+  `dynamic_scissor_updates_between_draws`, `dynamic_scissor_out_of_order_updates`,
+  `16_dynamic_scissors`, `dynamic_scissor_mix`) require `geometryShader` and
+  `multiViewport` and route through an instanced geometry stage
+  (`layout(invocations = N)`, `gl_ViewportIndex = gl_InvocationID`,
+  `vktDrawScissorTests.cpp:346-406`), so they cover the static and dynamic
+  scissor banks and per-index updates the multi_viewport family does not. The
+  other sixteen scissor leaves have no feature gate and are not selected.
+* `clipping` was already registered for the user-defined distance families;
+  its `clip_volume.depth_clamp` group is the upstream oracle for `depthClamp`:
+  `testPrimitivesDepthClamp` (`vktClippingTests.cpp:565-660`) requires the
+  feature, draws primitives that cross the near and far planes with clamp off
+  and on, and counts coloured pixels. It has **no depth attachment**
+  (`util/vktDrawUtil.hpp:50`), so the depth readback this driver lacks is not
+  involved. Only `triangle_list` and `triangle_strip` are runnable here: this
+  profile resolves point and line topologies only as geometry input
+  (`src/vk_graphics_pipeline.c:181-185`) and refuses fans and adjacency at the
+  resolver (`src/graphics_program.h:96-97`), so the group's other eight leaves
+  fail at pipeline creation and are recorded as such.
 
-The consequence is stated plainly rather than worked around: T05 has hardware
-evidence for the four features - the consumer's raster and viewport witnesses in
-[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses) -
-and no upstream acceptance to attach to it. Promoting a feature without an
-applicable upstream leaf would violate the selection policy above, so the
-platform mask is untouched and the DXVK profile matrix keeps all four rows as
-blockers.
+Leaf names in these families are composed at run time (a prefix plus a loop
+index, a topology enum lowercased without its prefix, a format name plus a
+suffix), so `tools/check_upstream_selection.py` carries one bounded recognizer
+per construction and derives nothing when the construction it was written
+against is gone (`tests/test_upstream_selection.py`).
+
+### The T05 diagnostics, by requirement
+
+| Requirement | Leaves | Category | Status |
+|---|---|---|---|
+| `fillModeNonSolid` | `rasterization.culling.*` (28, 16 of them `_line`/`_point`) | `rasterization-culling` | measured 28/28 Pass, held until the shipping bit lands |
+| `fillModeNonSolid` | `rasterization.line_continuity.polygon-mode-lines` | `t05-measurement-pending` | applicable, unmeasured |
+| `multiViewport` | `fragment_ops.scissor.multi_viewport.scissor_1..16` | `t05-measurement-pending` | applicable, unmeasured |
+| `multiViewport` | `draw.renderpass.scissor.{six multi-scissor leaves}` | `t05-measurement-pending` | applicable, unmeasured |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.{triangle_list,triangle_strip}` | `t05-measurement-pending` | applicable, unmeasured |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.{point_list,line_list,line_strip}` | `plain-point-line-pipeline-refused` | Fail at creation (profile rule, not a T05 gap) |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.*_with_adjacency`, `.triangle_fan` | `primitive-topology-refused` | Fail at creation (resolver, not a T05 gap) |
+| `depthClamp`, `depthBiasClamp` | `draw.renderpass.depth_clamp.d32_sfloat{,_clamp_input_*,_depth_bias_clamp_input_*,_clamp_four_viewports}` | `depth-aspect-readback-gap` | blocked: `readDepth` over `VK_IMAGE_ASPECT_DEPTH_BIT` (`vktDrawDepthClampTests.cpp:554-555`); every copy path in `src/vk_image_transfer.c` validates `VK_IMAGE_ASPECT_COLOR_BIT` and `src/depth_layout.h:9-10` states the 64KB_Z_X pixel addressing is not supplied |
+| `depthBiasClamp` | `dynamic_state.monolithic.rs_state.depth_bias_clamp` | `depth-stencil-format-gap` | NotSupported: needs `D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT` as attachment (`vktDynamicStateRSTests.cpp:133-150`); the profile offers only `D32_SFLOAT` (`src/texture_format.c:183`) |
+
+Families examined and found not applicable, recorded so they are not
+re-derived: `draw.renderpass.inverted_depth_ranges.*` (D16_UNORM attachment and
+DEPTH-aspect readback), `draw.depth_bias.*` (D16_UNORM scripts),
+`rs_state.nonzero_depth_bias_clamp` (D16_UNORM), `rasterization.depth_bias.d32_sfloat*`
+(samples the depth image; `D32_SFLOAT` has no sampled role), `glsl.builtin_var.fragdepth.*`
+(DEPTH-aspect readback), `amber.depth.*_clamp` (`VK_EXT_depth_clamp_zero_one`),
+`pipeline.*.depth_range_unrestricted.*` (`VK_EXT_depth_range_unrestricted`),
+`clipping.clip_volume.depth_clip.*` (`VK_EXT_depth_clip_enable`),
+`rasterization.*polygon_as_points*` and `polygon_as_large_points.*`
+(`VK_KHR_maintenance5`), `draw.renderpass.shader_viewport_index.*`
+(`VK_EXT_shader_viewport_index_layer`), `tessellation.misc_draw.*`
+(tessellation tranche). In roughly eighty other files `depthBiasClamp` is only
+a create-info field set to zero, not a gate.
+
+### What promotion needs
+
+The reporting matrix (`tools/check_reporting_matrix.py`, `ADVERTISED_FEATURES`)
+requires each true feature bit to cite its code path **and** at least one
+accepted upstream leaf, and the DXVK profile matrix marks a row ready only with
+`cts-pass`. Against that rule:
+
+* `fillModeNonSolid`: ready to promote once the acceptance run is green
+  (328 of 332 passed in the last measurement; the four
+  `clipping.user_defined.*.vert.8_fragmentshader_read` failures are a compiler
+  defect fixed in the pinned compiler `4d4a65a`, unverified on hardware).
+* `multiViewport` and `depthClamp`: promotable after one measurement window
+  reports Pass on the 25 `t05-measurement-pending` leaves; the driver side of
+  both is already measured by the consumer witnesses.
+* `depthBiasClamp`: **no applicable upstream leaf exists on this profile
+  today.** The nearest are the two `draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_*`
+  leaves, which need a DEPTH-aspect image-to-buffer copy for `D32_SFLOAT`, and
+  `rs_state.depth_bias_clamp`, which needs a depth-stencil attachment format.
+  Either is a capability outside this tranche's requirements; until one lands
+  or the policy is changed deliberately, the feature stays unadvertised with
+  its consumer-witness evidence recorded, and the profile matrix keeps its row
+  as a blocker.

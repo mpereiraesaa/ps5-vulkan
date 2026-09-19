@@ -34,6 +34,8 @@ MULTIVIEW_UTIL_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
                          "vktMultiViewRenderUtil.cpp")
 MULTIVIEW_TEST_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
                          "vktMultiViewRenderTests.cpp")
+# The shared draw utility that names the clipping module's clip_volume leaves.
+DRAW_UTIL_SOURCE = "external/vulkancts/modules/vulkan/util/vktDrawUtil.cpp"
 # The exact execution requirements a contract must name. Every key is required
 # and must be a real boolean; anything else - a missing key, an unknown one, a
 # non-boolean value - fails closed rather than being ignored, because the
@@ -180,6 +182,68 @@ def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]
                         continue
                     names.add(f"{prefix}{primitive}{postfix}{suffix}")
     return names
+
+
+def _fragment_ops_multi_viewport_leaf_names(text: str) -> set[str]:
+    """Leaf names of the fragment_ops module's scissor.multi_viewport family.
+
+    The factory names each leaf "scissor_" + de::toString(numViewports) for
+    numViewports 1..MIN_MAX_VIEWPORTS, so every name is a literal prefix plus a
+    loop index. Bounded to that exact construction - the prefix literal joined
+    to the loop variable, the loop with its inclusive bound and the constant the
+    bound names - so a renamed prefix or a different bound derives nothing.
+    """
+    prefix = re.search(r'"(scissor_)"\s*\+\s*de::toString\(numViewports\)', text)
+    loop = re.search(
+        r'for\s*\(\s*int\s+numViewports\s*=\s*1\s*;\s*numViewports\s*<=\s*MIN_MAX_VIEWPORTS\s*;',
+        text)
+    bound = re.search(r'\bMIN_MAX_VIEWPORTS\s*=\s*(\d+)', text)
+    if not prefix or not loop or not bound or int(bound.group(1)) > 32:
+        return set()
+    return {f"{prefix.group(1)}{n}" for n in range(1, int(bound.group(1)) + 1)}
+
+
+def _clip_volume_topology_leaf_names(text: str, util_text: str) -> set[str]:
+    """Leaf names of the clipping module's clip_volume groups.
+
+    Each leaf is named by getPrimitiveTopologyShortName over the module's one
+    static topology table: the shared draw utility lowercases the enum name
+    without its 22-character VK_PRIMITIVE_TOPOLOGY_ prefix. Bounded to the
+    table, the call that names a leaf from it and the utility's exact
+    substring, so a different table or helper derives nothing.
+    """
+    if not re.search(r'getPrimitiveTopologyShortName\(cases\[caseNdx\]\)', text):
+        return set()
+    if 'return de::toLower(name.substr(22));' not in util_text:
+        return set()
+    tables = re.findall(
+        r'static const VkPrimitiveTopology cases\[\]\s*=\s*\{(.*?)\};', text, re.DOTALL)
+    if len(tables) != 1:
+        return set()
+    tokens = re.findall(r'\bVK_PRIMITIVE_TOPOLOGY_([A-Z_]+)\b', tables[0])
+    return {token.lower() for token in tokens}
+
+
+def _draw_depth_clamp_leaf_names(text: str) -> set[str]:
+    """Leaf names of the draw module's depth_clamp family.
+
+    The factory names each leaf getFormatCaseName(format) + testNameSuffix: the
+    lowercased VK_FORMAT_ enum name without its 10-character prefix, followed by
+    one suffix per entry of the clear-value table. Bounded to the format table,
+    the suffix fields and the exact concatenation and helper.
+    """
+    if ('const auto testCaseName = formatCaseName + params.testNameSuffix;' not in text or
+            'return de::toLower(de::toString(getFormatStr(format)).substr(10));' not in text):
+        return set()
+    table = re.search(
+        r'const VkFormat depthStencilImageFormatsToTest\[\]\s*=\s*\{(.*?)\};', text, re.DOTALL)
+    if not table:
+        return set()
+    formats = re.findall(r'\bVK_FORMAT_([A-Z0-9_]+)\b', table.group(1))
+    suffixes = re.findall(r'"(_?[a-z0-9_]*)",\s*// testNameSuffix', text)
+    if not formats or not suffixes:
+        return set()
+    return {f"{fmt.lower()}{suffix}" for fmt in formats for suffix in suffixes}
 
 
 def _mapping_group_segment(text: str, segment: str) -> bool:
@@ -1208,6 +1272,9 @@ def main() -> int:
     manifest_families: set[str] = set()
     manifest_contract_ids: set[str] = set()
     integration_text = INTEGRATION_SOURCE.read_text(encoding="utf-8")
+    draw_util_path = UPSTREAM / DRAW_UTIL_SOURCE
+    draw_util_text = (draw_util_path.read_text(encoding="utf-8", errors="replace")
+                      if draw_util_path.is_file() else "")
 
     for case in cases:
         path = case["path"]
@@ -1328,6 +1395,18 @@ def main() -> int:
         # to that factory's exact construction expressions and to this module.
         if (source_path.name == "vktRasterizationTests.cpp" and
                 leaf in _rasterization_culling_leaf_names(text, function_text)):
+            continue
+        # The fragment_ops multi-viewport family, the clipping clip_volume groups
+        # and the draw depth_clamp family compose their names from a prefix or a
+        # format plus a bounded table; each recognizer is bound to its module.
+        if (source_path.name == "vktFragmentOperationsScissorMultiViewportTests.cpp" and
+                leaf in _fragment_ops_multi_viewport_leaf_names(text)):
+            continue
+        if (source_path.name == "vktClippingTests.cpp" and
+                leaf in _clip_volume_topology_leaf_names(text, draw_util_text)):
+            continue
+        if (source_path.name == "vktDrawDepthClampTests.cpp" and
+                leaf in _draw_depth_clamp_leaf_names(text)):
             continue
         # The geometry input factory names its triangle-strip-adjacency leaves
         # after the vertex count it iterates, so only the prefix is a literal.
