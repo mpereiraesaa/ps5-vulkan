@@ -543,6 +543,16 @@ def main():
                 if tess_gs_en not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_GS_EN must be 0 or 1")
                 common += ["-DPS5VK_TESS_GS_EN=" + tess_gs_en]
+                # Diagnostic: GE_CNTL programmed for a TESSELLATION draw instead
+                # of the linked NGG-vertex value. 1 = PAL's gfx10 rule (patches
+                # per workgroup, vertex grouping disabled, BREAK_WAVE_AT_EOI),
+                # 2 = the same group size with the other two fields clear.
+                # Default 0 keeps the linked value, the shipped behaviour.
+                tess_ge_cntl = os.environ.get("PS5VK_TESS_GE_CNTL", "0")
+                if tess_ge_cntl not in ("0", "1", "2"):
+                    raise SystemExit(
+                        "PS5VK_TESS_GE_CNTL is 0 (linked), 1 (PAL) or 2 (Mesa)")
+                common += ["-DPS5VK_TESS_GE_CNTL=" + tess_ge_cntl]
                 tess_only = os.environ.get("PS5VK_TESS_ONLY", "0")
                 if tess_only not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_ONLY must be 0 or 1")

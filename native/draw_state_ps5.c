@@ -250,6 +250,47 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
                 sizeof(pair->tess_ring_state));
             result.uc_count+=ring_state_count;
         }
+#if defined(PS5VK_TESS_GE_CNTL) && PS5VK_TESS_GE_CNTL
+        /* DIAGNOSTIC, default off: GE_CNTL programmed the way a TESSELLATION
+         * draw programs it, appended after the linked value so the later write
+         * wins exactly as the context bank's second VGT_SHADER_STAGES_EN does.
+         *
+         * The linked GE_CNTL (0x00010080 here) is the NGG VERTEX pipeline's
+         * value: PRIM_GRP_SIZE = the NGG program's max primitives per subgroup
+         * and VERT_GRP_SIZE = its max vertices, which is what the pinned
+         * radv_shader.c publishes for an NGG stage. Both open gfx10 drivers
+         * REPLACE that at draw time when a control shader is bound. PAL,
+         * gfx9UniversalCmdBuffer.cpp CalcGeCntl: under tessellation
+         * PRIM_GRP_SIZE = IA_MULTI_VGT_PARAM.PRIMGROUP_SIZE + 1, where
+         * gfx9GraphicsPipeline.cpp SetupIaMultiVgtParam says "the hardware
+         * requires that the primgroup size matches the number of HS
+         * patches-per-thread-group when tessellation is enabled"
+         * (gfx9Device.cpp ComputeTessPrimGroupSize: a multiple of the patch
+         * count, at least 4, even on more than two shader engines);
+         * VERT_GRP_SIZE = 256, the documented way to disable vertex grouping;
+         * and BREAK_WAVE_AT_EOI = 1 for every tessellation draw, quoting the
+         * hardware team that "every DS requires a valid PatchId".
+         *
+         * This register was cleared earlier as "byte-identical to a passing
+         * draw". The passing draw was a vertex NGG pipeline, for which that
+         * value is correct, so it was never a control for a patch draw.
+         *
+         * Mode 1 is PAL's rule. Mode 2 drops the vertex-grouping and
+         * break-wave bits, the radeonsi form for a control shader that does
+         * not read the primitive id, to separate the group size from the
+         * other two fields if mode 1 changes the result. */
+        {
+            const uint32_t num_patches=pair->tess_state[1].value&255u;
+            uint32_t prim_grp=num_patches?num_patches:4u;
+            while(prim_grp<4u)prim_grp+=num_patches;
+            uint32_t ge_cntl=prim_grp&0x1ffu;
+#if PS5VK_TESS_GE_CNTL==1
+            ge_cntl|=(256u<<9)|(1u<<18);
+#endif
+            if(result.uc_count+1>PS5VK_DRAW_UC_CAPACITY)return VK_ERROR_UNKNOWN;
+            result.uc[result.uc_count++]=(ps5_agc_register){0x25b,ge_cntl};
+        }
+#endif
     }
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {
