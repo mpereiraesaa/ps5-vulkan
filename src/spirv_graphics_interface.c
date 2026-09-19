@@ -677,12 +677,19 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * gl_MaxPatchVertices; the patch count is the execution mode checked
          * above against the pipeline state. */
         if(has_tessellation) {
-            if(vs.outputs[i].components!=tcs.inputs[i].components ||
-               vs.outputs[i].numeric!=tcs.inputs[i].numeric)return 0;
-            if(tcs.outputs[i].components!=tes.inputs[i].components ||
-               tcs.outputs[i].numeric!=tes.inputs[i].numeric)return 0;
-            if(tcs.patch_outputs[i].components!=tes.patch_inputs[i].components ||
-               tcs.patch_outputs[i].numeric!=tes.patch_inputs[i].numeric)return 0;
+            /* Interface matching is consumer-directed. In particular, a TCS
+             * may use outputs for cross-invocation communication without the
+             * TES declaring them. Every declared input still needs a producer.
+             * Vulkan Shader Interfaces, "Interface Matching". */
+            if(tcs.inputs[i].components &&
+               (vs.outputs[i].components!=tcs.inputs[i].components ||
+                vs.outputs[i].numeric!=tcs.inputs[i].numeric))return 0;
+            if(tes.inputs[i].components &&
+               (tcs.outputs[i].components!=tes.inputs[i].components ||
+                tcs.outputs[i].numeric!=tes.inputs[i].numeric))return 0;
+            if(tes.patch_inputs[i].components &&
+               (tcs.patch_outputs[i].components!=tes.patch_inputs[i].components ||
+                tcs.patch_outputs[i].numeric!=tes.patch_inputs[i].numeric))return 0;
         }
     }
     return 1;
