@@ -31,6 +31,32 @@ mean the driver advertises them; the reported device version remains Vulkan
   use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
   the bound buffer span. This is the implementation basis for the feature, not
   an inference from the GPU name.
+- `shaderClipDistance` and `shaderCullDistance` are reported true by the
+  graphics build and refused by the compute-only build, together with
+  `maxClipDistances` = `maxCullDistances` = `maxCombinedClipAndCullDistances` =
+  8: the two packed position registers after POS0 hold eight float components,
+  clip first and cull continuing immediately after them, and the stage-interface
+  policy bounds a declaration against exactly that width. A pre-raster stage
+  exports the distances (static or dynamically indexed) and a fragment stage
+  reads the interpolated values; the compiler describes the distance registers
+  on both sides and the driver refuses a pair whose read the metadata does not
+  describe. `geometryShader` is reported true by the graphics build, with the
+  five mandatory limits at the Vulkan floor it measured - 256 output vertices,
+  32 invocations, 64 input components, 64 output components and 1024 total
+  output components - because the merged vertex+geometry pre-raster program
+  runs: the ES->GS input handoff, the point, line and triangle input families,
+  `gl_InvocationID`, `gl_PrimitiveIDIn` and each of those five minima are
+  hardware-witnessed, and the leaves of the pinned geometry module that pass
+  their own upstream oracles are acceptance cases. `tessellationShader` is
+  reported true by the native runtime-graphics build, with linked LS/HS and
+  TES (including TES/GS) execution. Compute-only and offline graphics builds
+  do not gain this feature. The eight tessellation limits are generation level
+  64, patch size 32, control per-vertex input/output 128/128 components,
+  control per-patch output 120, control total output 4096, and evaluation
+  input/output 128/128. See [tessellation status](TESSELLATION_STATUS.md) for
+  native witnesses, the focused 403-case upstream result and release status;
+  this is not full CTS conformance or DXVK compatibility.
+  See [clip-cull native acceptance](VALIDATION.md#clip-cull-native-acceptance).
 - The focused suite contains the original upstream
   `device_mandatory_features` oracle plus 12 executable compute scalar
   `R32_UINT` robustness cases: UBO/SSBO OOB reads and SSBO OOB writes over

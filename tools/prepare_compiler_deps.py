@@ -12,7 +12,13 @@ DEPS = [
         "name": "opengnm-psbc",
         "dest": ROOT / "third_party/psbc-reference",
         "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
-        "pin": "c96cb63ba2c3b65b22ae76457e726dde7aeb2ace",
+        # Metadata21 candidate: linked-stage resource/entrypoint identity,
+        # TES-fed geometry, merged LS/HS argument delivery, packed fragment
+        # distances and precise push-constant member ranges. The cache ABI
+        # and native loader must agree with this exact dependency.
+        # Published in opengnm-psbc PR22 (depends on PR21 and the preceding
+        # tessellation compiler series); review is pending, not merged main.
+        "pin": "7e00345f04982b51eacbad63a0412f3c8b4b90a9",
     },
     {
         "name": "opengnm",

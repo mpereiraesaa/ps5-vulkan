@@ -3,6 +3,409 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Current tessellation candidate (2026-09-20)
+
+The default native runtime-graphics candidate passes 403/403 unchanged upstream
+CTS cases: 304 regression cases and 99 tessellation, clip/cull and resource
+cases. Strict artifact/report verification and clean application closure pass.
+Experimental tessellation flags and shader/probe bypasses are off. A separately
+built public SDK consumer verifies feature advertisement and the intended limits.
+See [tessellation status](TESSELLATION_STATUS.md) for the scope and additional
+native witnesses. This is focused validation, not complete CTS or conformance;
+release review remains pending.
+
+The integrated receipt identifies:
+
+- SELF SHA-256: `2e0fc22b7de6401f7d12f2f6359efc14a223b4917100acad4c98edecf726d45c`.
+- QPA SHA-256: `4a81d0f27f374fa3dae7fd4be7ebb15237d08ffbb874325ca4df2b85a49a4218`.
+- Selection SHA-256: `6098db45ae68a487ea2fba5438b6d31e9b152217c2c3f6f8eb1eb985702c02e1`.
+- Upstream CTS commit: `a0270c1897597e6c77679870e10415398a13001c`.
+
+Dated sections below retain earlier measurements, including failed candidates.
+Their unadvertised-feature statements describe those historical artifacts, not
+the current runtime. No historical receipt has been relabelled as this run.
+
+## Clip-cull native acceptance
+
+The packed pre-raster distance export is implemented and measured, and
+`shaderClipDistance` and `shaderCullDistance` are deliberately **not
+advertised**. This section records what the profile does, what was measured on
+hardware, and the normative reason the two features stay false.
+
+### Implemented coverage
+
+The pre-raster stage may declare `gl_ClipDistance` and `gl_CullDistance` with
+static constant indices inside the ceilings of `src/graphics_stages.h`
+(8 clip, 8 cull, 8 combined), and `src/spirv_graphics_interface.c` validates the
+`gl_PerVertex` members, the array sizes and the combined ceiling before the
+program is compiled. The runtime adapter (`native/runtime_shader.c`) packages a
+distance export only when the compiled masks agree with the register state the
+pinned compiler emitted (`PA_CL_VS_OUT_CNTL`, `SPI_SHADER_POS_FORMAT`,
+`SPI_VS_OUT_CONFIG`), and the resulting unresolved `AGC_LINKAGE` slot is accepted
+only for that verified shape. A single-word mutation of any of those registers
+is refused.
+
+The private coverage witness (`src/clip_cull_witness.c`, enabled by
+`PS5VK_CLIP_CULL_PROBE`, judged by `tools/verify_clip_cull.py`) draws one
+bounded scene per case and reads the colour and depth footprint back. Two
+deployments of the exact package were run on the console and both verified
+strictly, with a clean `ps5log/1` receipt and a confirmed Close Game:
+
+* a single clip half-space produced exactly one cleared 2048-pixel half;
+* a two-distance quadrant case produced exactly 1024 cleared pixels;
+* a partially clipped primitive left the untouched half unchanged;
+* a primitive whose cull half-space was negative at every vertex was discarded,
+  and a mixed negative/non-negative primitive was not.
+
+Pulling the distances out of the shader, or corrupting the packed masks,
+fails the witness: the pixels are the oracle, so the measured result is the
+rasterizer, not the metadata.
+
+### Why the feature is not advertised
+
+The upstream module that owns these built-ins, `vktClippingTests.cpp`, gates
+**all** of its user-defined distance leaves on the same two features through
+`requireFeatures(FEATURE_SHADER_CLIP_DISTANCE)` and
+`requireFeatures(FEATURE_SHADER_CULL_DISTANCE)` in `testClipDistance`, and its
+factory registers two variants of every leaf:
+
+* `*_fragmentshader_read` declares the distance arrays as fragment-shader
+  inputs and reads them (`fragmentShaderReads`), and
+* `*_dynamic_index` writes them through a loop with a non-constant index
+  (`indexingMode`).
+
+The measured support is narrower than the family in exactly one place. Dynamic
+indexing is **not** refused: a pre-raster module that redeclares
+`out float gl_ClipDistance[2]` and writes both elements through a loop is
+compiled by the pinned compiler with the full-width mask
+(`clip_distance_mask=0x03`, the same value the equivalent static-index module
+reports) and is accepted by the native header builder
+(`tools/inspect_graphics_compiler.c`, which now prints the masks:
+`distances clip_mask=00000003 cull_mask=00000000`, `native_header_result=0`).
+That variant now has its own witness case: the probe writes both clip distances
+through a loop whose index is not a literal (the loop permutes it by the vertex
+index, so each element is written exactly once per vertex), and the verdict is
+that the rendered image must be **byte-identical** to the statically indexed
+quadrant - both at the oracle, which judges every pixel, and at the native
+digest relation, which refuses a run where the two differ. Writing the
+distances dynamically and getting the static image back is the whole content of
+the variant; the witness's own module is accepted by the host compiler with the
+full-width masks (`clip_mask=00000003 cull_mask=0000000c`,
+`native_header_result=0`), so the case is not refused before it can run. The
+native result is now taken: the nine-case witness run
+`20260917T072542029Z_PPSA99994_ps5vk_0x53eadab9451` (eboot
+`f02fcf3dadfbe2f19ef360af2964b7ca18060801912bc54d0477577230f69b04`) reports
+`cases=9 clip_mask=03 cull_mask=0c strict_verified=1` with every case
+`missing=0 foreign=0 wrong_color=0 verified=1`, and the dynamically indexed
+write hashes **exactly** like the statically indexed quadrant
+(`digest_dynamic_index = digest_clip_quadrant = 85679b0d4edbc725`). So the
+compile-time full-width mask the host measured is what the hardware executed,
+and the variant's whole content - writing the distances through a non-constant
+index and getting the static image back - holds on the console. None of the nine
+cases faulted.
+
+The same witness now also carries the **T03 cross-regression**: a tenth case
+draws the quadrant program through `vkCmdDrawIndirect`, and the run
+`20260917T083050864Z_PPSA99994_ps5vk_0x8ccc37d94b6` (eboot
+`27f43ae6ec047dad6823f0ce7ff68505f650034096c5ce590562867a283ebed4`) is
+`strict_verified` with `cases=10`. The evidence parser requires the split
+explicitly, so the run cannot earn the relation on the direct path: case 9 logs
+`indirect=1` and every other case logs `indirect=0`, and case 9's image is
+byte-identical to the direct quadrant's
+(`digest_indirect_quadrant = digest_clip_quadrant = 85679b0d4edbc725`,
+`expected=1024 covered=1024 missing=0 foreign=0 wrong_color=0 verified=1`). Every
+other case's digest is unchanged from the direct run, so the indirect path is the
+only variable. The packed distance export, the register state the adapter
+requires and the clipping result therefore hold through T03's indirect command
+path, not only through direct draws.
+### What promoted the two features (2026-09-17)
+
+The fragment read that used to be refused is now implemented, measured and part
+of the canonical acceptance selection, so `shaderClipDistance` and
+`shaderCullDistance` are reported true by the graphics build.
+
+**The compiler describes both ends of the interface.** The merged pre-raster
+stage publishes one semantic word per packed distance register it exports (low
+byte `PSBC_SEMANTIC_DISTANCE_REGISTER + register`, parameter index above it,
+emitted after the described varyings), and the pixel stage publishes the same
+key for the register it reads. The register a read lands in comes from the
+read's position in the packed builtin space - the linker already places a
+`gl_ClipDistance[4]` read in the second slot with component 0, and a cull array
+that starts after a one-component clip array in the second slot as well - so the
+compiler derives it from that slot and component, not from the attribute index,
+which the linker numbers densely. Measured on the pinned fixtures: the vertex
+exporting two clip components and one varying reports output semantics
+`[15 param0, 48 param1]`, the fragment reading `clip[0]` reports `[48 attr0,
+15 attr1]`, a fragment reading only `clip[4]` reports `[49]`, and a combined
+1-clip/7-cull pair reports `[48, 49]` - with `PSBC_UNRESOLVED_AGC_LINKAGE` gone
+in every case.
+
+**The driver delivers a described read.** `distances_valid` now requires one
+described word per exported register and counts the parameter exports from that
+description; `ps5vk_runtime_graphics_distance_reads_described()` checks the
+pixel stage's read report against the producer's packed masks (clip low bits,
+cull immediately after) and requires every register the pixel stage names to
+exist once on the export side; and the pipeline gate refuses a pair whose read
+is not described end to end. The profile delivers such a pair in the shipping
+build, not only in the diagnostic one.
+
+**The limits are reported at the Vulkan floor.** `maxClipDistances` and
+`maxCullDistances` are 8 and `maxCombinedClipAndCullDistances` is 8: the two
+packed position registers after POS0 hold eight float components, clip
+components first and cull continuing immediately after them, so either feature
+may use all eight and the combined budget is eight. The stage-interface policy
+bounds a declaration against exactly that width (a 4-clip/4-cull module is
+accepted, an 8-clip/8-cull module is refused), which is what makes the reported
+numbers executable rather than merely the floor.
+
+**Acceptance, frozen and run.** The canonical selection is now 275 acceptance
+leaves (211 + 64 clipping leaves: clip counts 1..8 for the combined family with
+one cull count each, both indexing modes and the fragment-stage read) with 14
+diagnostics. One strict run of
+`build/upstream-cts` passed **275/275** (selection hash
+`3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d`, eboot sha256
+`b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7`, run
+`20260917T114927552Z_PPSA99994_upstream-cts_0x13a34bfa824d`, Close Game verified and the title
+stopped). The clipping family is what validates the reported limits: the leaves
+step through every clip count up to eight and the combined clip+cull budget.
+
+**Two honest gaps remain inside the family.** The `complementarity.{1..8}` and
+`misc.negative_and_non_negative_cull_distance` leaves stay diagnostics
+(`expected_status` `NotSupported`): the pinned binary does not report them when
+they are filtered by the name the module's construction implies - they are
+absent from both the `ps5log/1` transcript and the QPA in two full runs, while
+every other clipping leaf reports - so they are not claimed as covered. The
+tessellation and geometry variants of the family are outside this profile's
+advertised features and stay unselected.
+
+The native witness behind the fragment read is the eleven-case clip/cull
+package: case 10 (the pixel stage reading `gl_ClipDistance[0]`) verifies with
+`expected=4096 covered=4096 missing=0 foreign=0 wrong_color=0`, digest
+`f50dd9368fee6cc9`, in the acceptance run
+`20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65` (eboot
+`e1cc2681…`), and the read digest differs from the control's as the verifier
+requires; an earlier run on a pre-promotion build measured the same digests,
+which is what makes the result reproducible rather than a single sample. The
+witness package is the diagnostic profile; the shipping profile is covered by
+the upstream run above, whose 16 fragment-read leaves execute the read through
+the ordinary pipeline gate.
+
+### What this does and does not establish
+
+It establishes the vertex-stage clip/cull contract, the packed register state
+the pinned compiler emits for it, the per-half-space culling rule and the
+hardware clipping result for the measured shapes, the compiler and adapter
+behaviour of a dynamically indexed declaration and the witness case that
+requires it to reproduce the static image, and - since the promotion above - the
+fragment stage's read of the interpolated distances, which is what the
+promotion section records: the compiler describes the distance registers on both
+sides, the driver requires that description before it delivers, and the 64
+selected upstream clipping leaves pass inside a 275/275 acceptance run on the
+shipping profile. It does not establish the tessellation or geometry variants of
+the family (their features are not advertised), the two `complementarity`/`misc`
+leaves the pinned binary does not enumerate under their implied names, any
+distance width beyond the reported eight components, or Vulkan conformance; it is
+not a conformance claim, and the features are advertised only for the graphics
+execution path this repository builds.
+
+## Historical optional stage blockers: geometry and tessellation (2026-09-17)
+
+At this historical checkpoint both stages were unadvertised, with the reason measured
+rather than inferred. These measurements were taken with the driver built
+against an isolated PSBC candidate (the merged-geometry identification plus the
+hull-packaging entry point, delivered as dependency pull requests that are
+**not** merged), so they are provisional in that sense; only derived facts and
+identities are published here, and the raw captures stay private.
+
+**Geometry.** The compiler emits a self-consistent merged program for the
+witness's vertex+geometry pair - one ACO program
+(`SW (VS+GS+), HW (NEXT_GEN_GEOMETRY_SHADER)`) - and the two halves agree on the
+exchange layout it uses: the vertex half stores each vertex's 9-dword (36-byte)
+ring item to shared memory and the geometry half reads the same dwords back
+(position in dwords 0-3, the varying in 4-6, bookkeeping in 7-8), with the same
+per-item stride the package publishes as the ES item size and programs into
+`VGT_ESGS_RING_ITEMSIZE`. Positions therefore arrive: the passthrough case covers
+exactly the pixels the control covers. **That sentence is withdrawn** - see the
+measurement below: it came from reading the oracle's expected-coverage count
+(4096, a property of the predicate) as if it were the image's coverage, and the
+image is in fact empty. What the varying does is not the only failure either: in
+a single diagnostic run the same read path produced the empty image for some
+cases and a drawn image for others, and the same case has produced both in
+different runs. Concretely, the SUPPRESS case emits nothing by construction and
+its own verdict certifies its image as the cleared target (`6927fac75e74a325`);
+in the same run PASSTHROUGH and the SENTINEL carry exactly that digest (they drew
+nothing) while SHRINK, RECOLOR and AMPLIFY drew something - and in an earlier run
+RECOLOR carried the cleared digest. A handoff that sometimes sees the vertex data
+and sometimes reads zeros is a *race*, not a constant offset, which is what a
+missing visibility or ordering guarantee between the two halves of the merged
+program looks like; the host-side A/B already ruled out a fixed wrong base, item
+size or stride. The candidate's merged identification and ES-half sizes are
+bookkeeping for the driver, not the fix. The
+exchange is an LDS ring rather than an SPI parameter-export stream, so the export
+configuration is not the path under question. What remains open is the item-index
+mapping (the vertex half indexes by its lane id, the geometry half by the
+per-vertex offsets the hardware hands it) and whether the ring's LDS region is
+allocated and visible between the two phases. The same path also faults: a
+geometry program that reads `gl_in[i]` in a loop over the input array loses the
+device (the submission never completes) whether it runs before or after the
+other modes, so the fault follows that program rather than its surroundings, and
+the loss was reproduced again in the table run below. `geometryShader` therefore
+stays false.
+
+The table run in question
+(`20260917T075403021Z_PPSA99994_ps5vk_0x6cab7462e29`, eboot
+`ae239b852a70e0a68516e0fb4e0e947ebd430a51bbf036148e5d88370844ca07`) reports every
+case in one log: control and constant emission verify, SUPPRESS verifies once its
+input-less fragment stage is present, the sentinel, passthrough and shrink
+fail, recolor and amplify draw something other than the cleared target, and
+POSITIONS then loses the device (`vkQueueWaitIdle` `rc=-4`). The first attempt at
+this run died entering SUPPRESS with `vkCreateGraphicsPipelines` `rc=-8`
+(`VK_ERROR_FEATURE_NOT_PRESENT`): this branch never carried the synthetic
+input-less fragment stage, so a geometry program that emits nothing was refused
+for an input its pre-raster stage cannot export. That is why the witness now has
+a table mode (`PS5VK_GEOMETRY_ORDER_PROBE`) as well: the shipping build is
+fail-fast and stopped at the sentinel, so it never reached the case that was
+broken on this tree.
+
+That reading is not an inference from mixed builds. The same payload
+(`ae239b852a70e0a68516e0fb4e0e947ebd430a51bbf036148e5d88370844ca07`, verified by
+hash on the console before the pair of runs) was run twice through the table
+mode, and the two logs differ exactly on the cases that read the ring:
+control (`aa3cf584`), constant emission (`aa7d3f82`) and suppression
+(`6927fac7`) are bit-identical between the runs and verified both times, while
+the sentinel (`6927fac7` then `38d61b94`), passthrough (`6927fac7` then
+`0a4ac999`), shrink (`93df309c` then `02ad379e`), recolor (`38bcd39e` then
+`e0e55980`) and amplify (`fc3e50b7` then `45abe76c`) each produce a different
+image, and the loop case loses the device in both (`vkQueueWaitIdle` `rc=-4`).
+Runs `20260917T075403021Z_PPSA99994_ps5vk_0x6cab7462e29` and
+`20260917T080954327Z_PPSA99994_ps5vk_0x7a8352a45b2`. The register state for the
+ring is published by the merged program and programmed by the driver
+(`VGT_GS_ONCHIP_CNTL`, `VGT_GS_OUT_PRIM_TYPE`, `VGT_ESGS_RING_ITEMSIZE`,
+`VGT_GS_MAX_VERT_OUT`, `GE_NGG_SUBGRP_CNTL`), so what remains open is whether the
+values describe the launch the hardware performs - not whether the registers are
+there.
+
+The witness also carries an observable sentinel for exactly that question: the
+input triangle emitted unchanged with the colour computed from the position the
+geometry half read (`x*0.5+0.5`, `y*0.5+0.5`, `0.25`), so the verdict asserts the
+value the read produced instead of only the coverage. A zero read collapses the
+triangle and a shifted item moves or reshapes it, while the control's own image
+is refused because the sentinel's blue differs. Its stated limit is that
+exchanging the two structurally identical input triangles wholesale maps the
+image onto itself, so it separates correct, zero, garbage and shifted reads, not
+that exchange. The first run to use it
+(`20260917T072649435Z_PPSA99994_ps5vk_0x54e5f74a004`, eboot
+`7f1523a9157bec7eeed7ceeaaf8bf25646ef9364cb52d2a4124ed7c9df0f9ed3`) reports
+control `verified=1`, constant emission `verified=1`, and the sentinel
+`verified=0` with `expected=4096 covered=0 wrong_color=4096` - the image carries
+none of the expected per-pixel colour, the first value-level judgement of this
+path rather than another coverage check. What image it produced instead is not
+stable: that run hashed `436f0a07`, the first table run hashed the cleared target
+`6927fac7`, and the second hashed `38d61b94` - three different images for the
+same case, which is the non-determinism measured below and not a constant zero.
+The shape's own limit is that the render pass clears to opaque black, so a log
+alone does not separate "the read returned zero for the colour computation" from
+"the read returned zero everywhere and the triangle collapsed"; comparing the
+digest against the suppression case's does, and the constant-emission case
+passing in the same run shows the stage draws and the fragment path works.
+The harness is fail-fast in the shipping profile, so the POSITIONS case did not
+execute after the failing verdict in that run and the device did not fault
+there - it faults whenever it is reached, as the table runs show.
+
+**Tessellation.** The isolated compiler candidate does produce a two-program
+hull buffer for a real vertex+control pair - the control half and the vertex half
+in one buffer, with the vertex half's program and resource registers published -
+but the same metadata declares the package unresolved because the hull/domain
+pipeline state is not part of it. At that checkpoint the driver had no executable
+tessellation path: pipeline creation refused it before any
+compile. `tessellationShader` therefore stayed false, and the remaining work was
+driver-side assembly plus the hull pipeline state - the same class of
+vendor-side question as geometry.
+
+## Geometry promotion (2026-09-17, later window)
+
+The two defects the section above was opened for are fixed and measured, and the
+feature is advertised on the graphics path.
+
+**The ES->GS read.** Every NGG pre-raster program now has
+`VGT_ESGS_RING_ITEMSIZE` programmed to **1** instead of the compiler's legacy
+**5**: the hardware scales the per-vertex offsets it hands the geometry half by
+that value, so the stage read item `5k` where it had to read item `k` and only
+the first vertex of each primitive came back right. The regression in
+`tests/test_runtime_shader.c` fails before the change and passes after it. The
+device loss in the POSITIONS case was the witness's own loop missing `++i`, so it
+emitted past `max_vertices` forever; with the loop fixed the case runs.
+
+**Determinism.** The same payload run twice now produces byte-identical images
+for **all nineteen** cases - control `aa3cf584`, constant `aa7d3f82`,
+suppression `6927fac7`, sentinel, the three readbacks, the envelope, the
+invocations, the components and both input families - where the pre-fix table
+above showed the ring-reading cases drifting between runs. Runs
+`20260917T180918672Z_PPSA99994_ps5vk_0x285db17d6406` and
+`20260917T180931272Z_PPSA99994_ps5vk_0x2860a07ed6b2`, eboot
+`14478e545d4ab6cc2bc815f4c0d4987d358f2be211434f263669c5bd607284c8`.
+
+**What the stage is measured to do.** The nineteen-case witness verifies
+strictly in both its table and its shipping fail-fast payload
+(`20260917T180945535Z_PPSA99994_ps5vk_0x2863f2ad4767`, eboot
+`ae9e32761215bb845a81d991033b84d86742a001973958153d92c92929493663`): the two
+triangle tiles, the shrink, the suppression, the varying rewrite, the
+amplification, the sentinel value, the raw readback of an indexed vertex, the
+per-primitive id, the **point** and **line** input families under their own input
+assemblies (218/218 with digest `ebb18b9b90df07ca` and 467/467 with
+`deab7726a7ac7625`), 32 invocations, 256 emitted vertices, 64 input components
+and 64 output components that the pixel half consumes and folds into the colour
+(`expected=1024 covered=1024`, centre `808024ff`). The five mandatory limits are
+therefore reported at the Vulkan floor they exercised - 256, 32, 64, 64 and
+1024 - and `geometryShader` is reported true by the graphics build
+(`core_feature_bits` in `src/vk_device.c`, the platform mask in
+`native/platform_ps5.c`, the limits in `src/graphics_limits.h`).
+
+**Conformance.** The promotion run measured the pinned geometry module's leaves
+with the feature advertised: 294 selected leaves, **286 Pass and 8 Fail**. The
+eleven leaves whose own upstream oracles passed are now acceptance cases
+(`dEQP-VK.geometry.input.basic_primitive.triangles` and its two conversions, the
+six `output_<n>` leaves, `output_vary_by_attribute`, and its instancing variant).
+Four of the eight failures were the geometry stage's uniform-buffer, sampled-image
+and instancing descriptor variants, and they are now acceptance too: the pinned
+module binds those resources to the GEOMETRY stage alone, which the compiler
+profile now admits when - and only when - the pipeline carries that stage, and
+which the draw path's descriptor plan now carries for the merged pre-raster
+program once the native create records the geometry pair on it (a host regression
+checks both directions). The four strip-topology leaves that remained were
+blocked on one measured fact: the pinned geometry builder enables primitive
+restart for strips (`vktGeometryTestsUtil.cpp:153-172`), they are the only leaves
+built with `TRIANGLE_STRIP`, and the profile refused that input-assembly state
+before the adapter was asked. It now carries it: pipeline creation accepts the
+state for `LINE_STRIP`/`TRIANGLE_STRIP` and refuses it for lists, and the draw
+path programs the pair RADV programs on gfx10 - the enable in the user-config
+`VGT_MULTI_PRIM_IB_RESET_EN` (0x3092c), the index in the context
+`VGT_MULTI_PRIM_IB_RESET_INDX` (0x2840c, 0xffff / 0xffffffff by index width) and
+the `SQ_NON_EVENT` workaround the GFX10 synchronisation bug needs. The witness
+measures it end to end: the indexed strip with a restart index between two quads
+draws **foreign=0** with the cut, and 72 foreign pixels without it - the bridging
+primitive a missing cut threads across. The frozen
+selection re-run is **304/304 Pass, zero Fail, no NotSupported, title closed**
+(selection
+`7406de91ef883de7c1dd8522926773b72c846834fde37b45f686ff5994c8601b`, eboot
+`afe1755291ef231f6f7c3e730abcd062f3a57618e879c758a1f0a89a42c207aa`), with all
+twenty-nine geometry leaves the module produces for a device that advertises the
+feature passing their own upstream oracles - the input families, the conversions,
+the output-count and varying families, the descriptor variants, the strip
+restart family and both per-primitive-id leaves. A geometry stage that reads
+nothing per-vertex declares no gl_in array at all, so the policy binds it to the
+pipeline's topology through the input primitive its execution mode states and
+drops a declared attribute no shader input consumes, which Vulkan permits.
+
+**Probe.** The DXVK 2.6.2 capability probe was re-measured against the advertised
+profile and verifies strictly: `geometryShader` observed **1**, 10 of 62
+requirements satisfied, 52 blockers. The matrix keeps that row as a blocker
+because the probe executes capability queries, not geometry draws.
+
+Tessellation was still unadvertised in this geometry-promotion receipt because
+that compiler pin had no loadable hull package. The later tessellation candidate
+and its separate evidence are documented at the top of this page.
+
 ## Multiview native acceptance
 
 On 2026-09-16 the original 48 multiview leaves (masks, rectangular clears,
@@ -80,6 +483,22 @@ closed on any enabled device feature it does not list and the CTS enables the
 three newly reported core features. The adapter now lists the three
 graphics-only bits, a real-compiler regression test pins a full graphics
 device mask, and the run above is the clean repeat.
+
+## Integrated acceptance on the synced tree (2026-09-17)
+
+After `main` (with T03 and its two review fixes) was merged into `t04-final`,
+the same frozen selection was run again on the tree this pull request proposes:
+**211/211 `Pass`**, zero `Fail`, zero `NotSupported`, no missing, unexpected or
+duplicate case, exit status 0, and the title closed and confirmed stopped.
+Deployed SELF SHA-256
+`8c3a4a5614703cb4f9bb0abda6cbc923ef797edad227e876b15aead972701983` (read back
+through FTP before launch), selection SHA-256
+`266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`, run
+`20260917T073014110Z_PPSA99994_upstream-cts_0x57e06d347b9`, reassembled report
+28,417,865 bytes with SHA-256
+`24af364c39c204f97bd3f5e1a6dd77b044c0be00d2a940c92d9f83153ed80a6f`. This is
+the T02 + T03 regression on the integrated tree; nothing optional runs inside
+that selection, and no feature is advertised by it.
 
 **Public-SDK indirect witness**, run
 `20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a`, SELF

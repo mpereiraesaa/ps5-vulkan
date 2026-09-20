@@ -185,6 +185,15 @@ check-sanitize:
 	./build/tests/test_vk_queue_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache_sanitized
 	./build/tests/test_compilation_cache_sanitized
+	$(MAKE) graphics-stage-shaders
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/spirv_graphics_interface.c src/texture_format.c tests/test_graphics_stages.c -o build/tests/test_graphics_stages_sanitized
+	./build/tests/test_graphics_stages_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/spirv_graphics_interface.c src/texture_format.c tests/test_tessellation_stage.c -o build/tests/test_tessellation_stage_sanitized
+	./build/tests/test_tessellation_stage_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -Isrc src/clip_cull_witness.c tests/test_clip_cull_witness.c -o build/tests/test_clip_cull_witness_sanitized
+	./build/tests/test_clip_cull_witness_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -Isrc src/geometry_witness.c tests/test_geometry_witness.c -o build/tests/test_geometry_witness_sanitized
+	./build/tests/test_geometry_witness_sanitized
 check:
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc tests/test_descriptor_table_layout.c -o build/tests/test_descriptor_table_layout
@@ -262,7 +271,7 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/viewport_ps5.c tests/test_viewport_ps5.c -o build/tests/test_viewport_ps5
 	./build/tests/test_viewport_ps5
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/graphics_pipeline_ps5.c tests/test_graphics_pipeline_backend.c -o build/tests/test_graphics_pipeline_backend
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/graphics_pipeline_ps5.c native/tess_shared_storage.c tests/test_graphics_pipeline_backend.c -pthread -o build/tests/test_graphics_pipeline_backend
 	./build/tests/test_graphics_pipeline_backend
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_PIPELINE_SOURCES) src/vk_graphics_pipeline.c src/graphics_program.c tests/test_vk_graphics_pipeline.c -o build/tests/test_vk_graphics_pipeline
 	./build/tests/test_vk_graphics_pipeline
@@ -360,9 +369,14 @@ check:
 	./build/tests/test_vk_queue
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache
 	./build/tests/test_compilation_cache
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/clip_cull_witness.c tests/test_clip_cull_witness.c -o build/tests/test_clip_cull_witness
+	./build/tests/test_clip_cull_witness
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/geometry_witness.c tests/test_geometry_witness.c -o build/tests/test_geometry_witness
+	./build/tests/test_geometry_witness
 	$(PYTHON) tools/build_sdk.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host
+	$(MAKE) check-graphics-stages
 	$(MAKE) check-upstream-cts
 	@if [ -d third_party/psbc-reference ]; then \
 		$(MAKE) test-compiler; \
@@ -372,15 +386,23 @@ check:
 build/libpsbc.host.a:
 	$(PYTHON) tools/build_psbc.py --host
 .PHONY: test-runtime-header
+.PHONY: test-tessellation-compiler
+# The tessellation compiler contract asserts what the pinned dependency really
+# produces for the pinned tessellation fixtures; it needs the compiler, not the
+# native payload, and is wired into the dependency-gated chain below.
+test-tessellation-compiler: build/libpsbc.host.a graphics-stage-shaders
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -Ithird_party/psbc-reference native/runtime_shader.c tests/test_tessellation_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_tessellation_compiler
+	./build/tests/test_tessellation_compiler
 .PHONY: test-runtime-graphics-compiler
-test-runtime-graphics-compiler: inspect-graphics-compiler
+test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
 	./build/tests/test_runtime_graphics_compiler
 .PHONY: test-runtime-graphics-native
 test-runtime-graphics-native:
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c native/tess_shared_storage.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
 	./build/tests/test_runtime_graphics_native
 test-runtime-header:
 	mkdir -p build/tests
@@ -388,6 +410,7 @@ test-runtime-header:
 	./build/tests/test_runtime_shader
 test-compiler: build/libpsbc.host.a test-shaders
 	$(MAKE) test-runtime-header
+	$(MAKE) test-tessellation-compiler
 	$(MAKE) test-runtime-graphics-compiler
 	$(MAKE) test-runtime-graphics-native
 	mkdir -p build/tests
@@ -401,6 +424,53 @@ compiler-control:
 	$(PYTHON) tools/compile_control.py
 native-bootstrap:
 	$(PYTHON) tools/build_native.py
+# Clip/cull distance declarations are an interface-policy contract: the
+# fixtures need the pinned front end and the pinned headers, not PSBC, so this
+# gate runs with the host contracts instead of the compiler integration tests.
+.PHONY: check-graphics-stages graphics-stage-shaders
+graphics-stage-shaders:
+	mkdir -p build/runtime-graphics
+	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_clip_distance.vert -o build/runtime-graphics/clip_distance.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_cull_distance.vert -o build/runtime-graphics/cull_distance.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_distance.vert -o build/runtime-graphics/clip_cull_distance.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_clip_distance_read.frag -o build/runtime-graphics/clip_distance_read.frag.spv
+	$(GLSLANG) -V -DWITH_DISTANCES=1 experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_probe.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_control.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_geometry_probe.vert -o build/runtime-graphics/geometry_probe.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_geometry_identity.vert -o build/runtime-graphics/geometry_identity.vert.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_probe.geom -o build/runtime-graphics/geometry_probe.geom.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_envelope.geom -o build/runtime-graphics/geometry_envelope.geom.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_invocations.geom -o build/runtime-graphics/geometry_invocations.geom.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_primitive_id.geom -o build/runtime-graphics/geometry_primitive_id.geom.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_points.geom -o build/runtime-graphics/geometry_points.geom.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_lines.geom -o build/runtime-graphics/geometry_lines.geom.spv
+	$(GLSLANG) -V experiments/graphics/runtime_primitive_restart.vert -o build/runtime-graphics/primitive_restart.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_primitive_restart.frag -o build/runtime-graphics/primitive_restart.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_geometry_family.vert -o build/runtime-graphics/geometry_family.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_geometry_components.vert -o build/runtime-graphics/geometry_components.vert.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_components.geom -o build/runtime-graphics/geometry_components.geom.spv
+	$(GLSLANG) -V experiments/graphics/runtime_geometry_output_components.frag -o build/runtime-graphics/geometry_output_components.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_geometry_uniform.vert -o build/runtime-graphics/geometry_uniform.vert.spv
+	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_uniform.geom -o build/runtime-graphics/geometry_uniform.geom.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess.vert -o build/runtime-graphics/tess.vert.spv
+	$(GLSLANG) -V -S tesc experiments/graphics/runtime_tess.tesc -o build/runtime-graphics/tess.tesc.spv
+	$(GLSLANG) -V -S tese experiments/graphics/runtime_tess.tese -o build/runtime-graphics/tess.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_output_envelope.tese -o build/runtime-graphics/tess_output_envelope.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_output_envelope.frag -o build/runtime-graphics/tess_output_envelope.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_quad.tesc -o build/runtime-graphics/tess_quad.tesc.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_coord.vert -o build/runtime-graphics/tess_coord.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_coord.frag -o build/runtime-graphics/tess_coord.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_points.tese -o build/runtime-graphics/tess_points.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_points.geom -o build/runtime-graphics/tess_points.geom.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess.frag -o build/runtime-graphics/tess.frag.spv
+check-graphics-stages: graphics-stage-shaders
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/spirv_graphics_interface.c src/texture_format.c tests/test_graphics_stages.c -o build/tests/test_graphics_stages
+	./build/tests/test_graphics_stages
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/spirv_graphics_interface.c src/texture_format.c tests/test_tessellation_stage.c -o build/tests/test_tessellation_stage
+	./build/tests/test_tessellation_stage
 # Genuine upstream VK-GL-CTS: cross-compile the focused native payload.
 # Host-only contract checks for the upstream CTS selection and verifier. These
 # never require the console, so CI can run them.

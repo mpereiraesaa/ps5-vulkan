@@ -15,6 +15,28 @@ int main(void)
     struct ps5vk_graphics_key key=programs[0].key;
     const struct ps5vk_graphics_program *out;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS && out==programs);
+    /* No alias between distinct enabled blend contracts; ignored disabled
+     * state must not make a formerly matching library record disappear. */
+    key.src_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
+    key.blend_constants[0]=0.5f;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS);
+    key=programs[0].key;key.blend_enable=VK_TRUE;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    programs[0].key.blend_enable=VK_TRUE;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS);
+#define CHECK_BLEND_FIELD(field,value) do { \
+    key=programs[0].key; key.field=(value); \
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out); \
+} while(0)
+    CHECK_BLEND_FIELD(src_color_blend_factor,VK_BLEND_FACTOR_SRC_ALPHA);
+    CHECK_BLEND_FIELD(dst_color_blend_factor,VK_BLEND_FACTOR_ONE);
+    CHECK_BLEND_FIELD(color_blend_op,VK_BLEND_OP_SUBTRACT);
+    CHECK_BLEND_FIELD(src_alpha_blend_factor,VK_BLEND_FACTOR_SRC_ALPHA);
+    CHECK_BLEND_FIELD(dst_alpha_blend_factor,VK_BLEND_FACTOR_ONE);
+    CHECK_BLEND_FIELD(alpha_blend_op,VK_BLEND_OP_MAX);
+    for(unsigned i=0;i<4;++i) CHECK_BLEND_FIELD(blend_constants[i],0.5f);
+#undef CHECK_BLEND_FIELD
+    programs[0].key.blend_enable=VK_FALSE;key=programs[0].key;
     uint32_t changed[5]={0x07230203,4,5,7,0}; key.fragment.words=changed;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     key=programs[0].key; key.color_format=VK_FORMAT_R8G8B8A8_UNORM;
@@ -75,5 +97,29 @@ int main(void)
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT);
     key.descriptor_set_count=0;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT);
+    /* The tessellation pair belongs to the identity, together with the patch
+     * control points the pair was compiled for: a record without a pair must
+     * never satisfy a pipeline that asks for one, the pair's own modules are
+     * compared rather than merely present, and two runs that differ only in the
+     * patch count are different programs. */
+    library.count=1;
+    uint32_t tcs[5]={0x07230203,7,8,9,0}, tes[5]={0x07230203,10,11,12,0};
+    uint32_t other_tes[5]={0x07230203,10,11,13,0};
+    programs[0].key.tess_control=(struct ps5vk_graphics_module_key){
+        .words=tcs,.word_count=5,.entry="main"};
+    programs[0].key.tess_eval=(struct ps5vk_graphics_module_key){
+        .words=tes,.word_count=5,.entry="main"};
+    programs[0].key.patch_control_points=3;
+    key=programs[0].key;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS && out==programs);
+    key.patch_control_points=4;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    key=programs[0].key;key.tess_eval.words=other_tes;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    key=programs[0].key;
+    key.tess_control=(struct ps5vk_graphics_module_key){0};
+    key.tess_eval=(struct ps5vk_graphics_module_key){0};
+    key.patch_control_points=0;
+    assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     puts("Graphics library exact-pair resolution: structural host fixtures only");
 }

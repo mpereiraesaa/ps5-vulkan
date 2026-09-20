@@ -244,12 +244,28 @@ int main(void)
         /* The same pipeline with every currently declared capability bit set:
          * the two narrow-storage bits are mapped into compiler options and the
          * rest are irrelevant to this shader, so the combined mask must still
-         * compile rather than trip the unknown-bit check. */
+         * compile rather than trip the unknown-bit check. The optional-stage
+         * bits are in the mask on purpose: the pinned CTS
+         * enables every feature the device reports before it creates anything,
+         * so as soon as one of them is advertised it arrives here on compute
+         * pipelines too, and refusing it failed every compute lead on hardware
+         * (VK_ERROR_UNKNOWN from vkCreateComputePipelines) until the compute
+         * adapter learned to ignore bits that belong to another stage. This
+         * test is the guard that failed first for the geometry bit, so it is
+         * checked before the advertisement lands. The tessellation bit IS in
+         * this mask now: its adapter path compiles the pair through the hull
+         * and domain programs, and the compute whitelist learned the bit in
+         * the same slice, so the guard checks the union rather than catching
+         * a forgotten step. */
         const uint32_t all_declared = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                       PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
                                       PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
                                       PS5VK_FEATURE_SHADER_DRAW_PARAMETERS |
-                                      PS5VK_FEATURE_MULTIVIEW;
+                                      PS5VK_FEATURE_MULTIVIEW |
+                                      PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
+                                      PS5VK_FEATURE_SHADER_CULL_DISTANCE |
+                                      PS5VK_FEATURE_GEOMETRY_SHADER |
+                                      PS5VK_FEATURE_TESSELLATION_SHADER;
         VkPipeline with_all = VK_NULL_HANDLE;
         device->enabled_features = all_declared;
         assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,

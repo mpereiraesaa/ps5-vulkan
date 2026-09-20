@@ -39,6 +39,31 @@ static const struct core_feature_bit {
      PS5VK_FEATURE_MULTI_DRAW_INDIRECT},
     {offsetof(VkPhysicalDeviceFeatures, drawIndirectFirstInstance),
      PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE},
+    /* User-defined distances: the pre-raster stage exports them through the
+     * packed position registers and the fragment stage reads them back. Both
+     * halves run on the graphics path and both are native-witnessed (the
+     * eleven-case clip/cull witness verifies the export, the dynamically
+     * indexed write and the pixel read), so the two members carry the platform
+     * bits the graphics build sets - see src/device_profile_report.h for the
+     * three distance limits, which the profile reports at the Vulkan floor of
+     * eight because that is the width the two registers hold. */
+    {offsetof(VkPhysicalDeviceFeatures, shaderClipDistance),
+     PS5VK_FEATURE_SHADER_CLIP_DISTANCE},
+    {offsetof(VkPhysicalDeviceFeatures, shaderCullDistance),
+     PS5VK_FEATURE_SHADER_CULL_DISTANCE},
+    /* The optional geometry stage. The graphics path compiles the merged
+     * vertex+geometry pre-raster program, packages it, and runs it: the ES->GS
+     * input handoff, the point and line input families, the per-primitive id,
+     * gl_InvocationID and the five mandatory minima are all hardware-witnessed
+     * on exactly this build (private-captures/t04), so the platform bit the
+     * graphics build sets is what makes the member report true. Its five limits
+     * are reported at the Vulkan floor in src/graphics_limits.h. */
+    {offsetof(VkPhysicalDeviceFeatures, geometryShader),
+     PS5VK_FEATURE_GEOMETRY_SHADER},
+    /* Negotiation plumbing, not a capability promotion: the normal native
+     * platform still leaves this bit clear until tessellation is validated. */
+    {offsetof(VkPhysicalDeviceFeatures, tessellationShader),
+     PS5VK_FEATURE_TESSELLATION_SHADER},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,

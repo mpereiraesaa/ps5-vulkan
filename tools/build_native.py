@@ -15,6 +15,32 @@ def run(*args, env=None):
     subprocess.run(list(map(str, args)), check=True, cwd=ROOT, env=env)
 
 
+def tess_build_id(probe, variant, no_draw, state_dump="0"):
+    """A stable 16-hex-digit identity for the exact tessellation candidate.
+
+    Digests the source families the manifest already hashes (the same set, so
+    the two agree by construction) together with the build switches that
+    change the emitted code. Deliberately excludes dev.conf and anything else
+    private: this value is printed in telemetry.
+    """
+    digest = hashlib.sha256()
+    digest.update(b"ps5vk-tess-candidate/1\n")
+    for key, value in (("probe", probe), ("variant", variant),
+                       ("no_draw", no_draw), ("state_dump", state_dump)):
+        digest.update(f"{key}={value}\n".encode())
+    paths = [ROOT / "Makefile"]
+    for folder in ("src", "native", "tools", "experiments/graphics"):
+        paths += [p for p in (ROOT / folder).rglob("*")
+                  if p.is_file() and p.suffix in (".c", ".h", ".py", ".vert",
+                                                  ".frag", ".tesc", ".tese",
+                                                  ".geom")]
+    for path in sorted(paths):
+        digest.update(str(path.relative_to(ROOT)).encode())
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()[:16]
+
+
 def main():
     compute = os.environ.get("PS5VK_COMPUTE") == "1"
     graphics = os.environ.get("PS5VK_GRAPHICS_LINK")
@@ -53,6 +79,53 @@ def main():
     multiview_diagnostic = os.environ.get("PS5VK_MULTIVIEW_DIAGNOSTIC", "0")
     if multiview_diagnostic not in ("0", "1") or (multiview_diagnostic == "1" and not graphics_api):
         raise SystemExit("PS5VK_MULTIVIEW_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
+    clip_cull_probe = os.environ.get("PS5VK_CLIP_CULL_PROBE", "0")
+    if clip_cull_probe not in ("0", "1") or (clip_cull_probe == "1" and not graphics_api):
+        raise SystemExit("PS5VK_CLIP_CULL_PROBE requires the graphics profile API and must be 0 or 1")
+    geometry_probe = os.environ.get("PS5VK_GEOMETRY_PROBE", "0")
+    if geometry_probe not in ("0", "1") or (geometry_probe == "1" and not graphics_api):
+        raise SystemExit("PS5VK_GEOMETRY_PROBE requires the graphics profile API and must be 0 or 1")
+    # Bounded diagnostic table mode for that witness: report every case in one
+    # run instead of stopping at the first failing verdict, so the run that shows
+    # the value verdict also shows the case that has lost the device before. It
+    # is meaningless without the witness, and the shipping build keeps the
+    # fail-fast behaviour.
+    geometry_order_probe = os.environ.get("PS5VK_GEOMETRY_ORDER_PROBE", "0")
+    if geometry_order_probe not in ("0", "1") or (geometry_order_probe == "1" and geometry_probe != "1"):
+        raise SystemExit("PS5VK_GEOMETRY_ORDER_PROBE is a bounded geometry-probe diagnostic")
+    # The tessellation witness is its own bounded diagnostic: it creates the
+    # tessellation pipeline, draws two patches with different tessellation
+    # levels and reports the quantised-tessCoord oracle. Like the other
+    # optional-stage witnesses it skips the feature-negotiation gate.
+    tess_probe = os.environ.get("PS5VK_TESS_PROBE", "0")
+    if tess_probe not in ("0", "1") or (tess_probe == "1" and not graphics_api):
+        raise SystemExit("PS5VK_TESS_PROBE requires the graphics profile API and must be 0 or 1")
+    tess_offchip_bind = os.environ.get("PS5VK_TESS_OFFCHIP_BIND", "0")
+    tess_offchip_capacity = os.environ.get("PS5VK_TESS_OFFCHIP_CAPACITY_WG", "256")
+    if tess_offchip_bind not in ("0", "1") or (tess_offchip_bind == "1" and tess_probe != "1"):
+        raise SystemExit("native offchip binding requires a tessellation probe")
+    if not tess_offchip_capacity.isdigit() or not 1 <= int(tess_offchip_capacity) <= 65536:
+        raise SystemExit("native offchip capacity must be 1..65536 workgroups")
+    # ONE materially distinct tessellation candidate per executable. A faulting
+    # draw leaves engine state that invalidates whatever runs after it in the
+    # same process, so the variant is a build input and the artifact IS the
+    # variant: 1 = control A (legal nonzero levels, no off-chip reads),
+    # 2 = control B (legal zero outer levels, patch discarded), 3 = witness C
+    # (off-chip per-vertex/per-patch readback), 4 = witness D (control A's
+    # pipeline with an evaluation half that also writes a storage buffer, so
+    # the run answers whether the DOMAIN EXECUTES at all - the one question no
+    # register can answer once the image is empty and the hull is proven to
+    # store correct factors). There is deliberately no knob
+    # for a stage-disabled or triangle-list-drawn tessellation pipeline: those
+    # are invalid hardware combinations that can never establish Vulkan
+    # behaviour, and a build knob is how such a run becomes acceptance
+    # evidence by accident.
+    tess_variant = os.environ.get("PS5VK_TESS_VARIANT", "3")
+    if tess_variant not in tuple(str(i) for i in range(1,57)):
+        raise SystemExit(
+            "PS5VK_TESS_VARIANT selects one candidate: 1 through 56")
+    if tess_variant != "3" and tess_probe != "1":
+        raise SystemExit("PS5VK_TESS_VARIANT requires PS5VK_TESS_PROBE=1")
     # The six-view witness is the only consumer of the diagnostic gate, so it
     # requires both: a real view mask AND a runtime-compiled vertex stage that
     # reads gl_ViewIndex. It is a single bounded scene, never combined with the
@@ -87,6 +160,22 @@ def main():
             scissor_probe != "0" or witnesses != "0" or continuous == "1" or
             observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
         raise SystemExit("PS5VK_INPUT_ATTACHMENT_PROBE is a bounded standalone scene")
+    if clip_cull_probe == "1" and (not graphics_api or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_CLIP_CULL_PROBE requires graphics API, runtime graphics and draw")
+    if clip_cull_probe == "1" and (multiview_view_probe == "1" or input_attachment_probe == "1" or
+            geometry_probe == "1" or scissor_probe != "0" or witnesses != "0" or continuous == "1" or
+            observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
+        raise SystemExit("PS5VK_CLIP_CULL_PROBE is a bounded standalone scene")
+    if geometry_probe == "1" and (not graphics_api or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_GEOMETRY_PROBE requires graphics API, runtime graphics and draw")
+    if geometry_probe == "1" and (multiview_view_probe == "1" or input_attachment_probe == "1" or
+            scissor_probe != "0" or witnesses != "0" or continuous == "1" or
+            observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
+        raise SystemExit("PS5VK_GEOMETRY_PROBE is a bounded standalone scene")
     if scene_split == "1" and int(scissor_probe) >= 3:
         raise SystemExit("Planar triangle diagnostic cannot split the cube draw")
     shell_close = os.environ.get("PS5VK_SHELL_CLOSE") == "1"
@@ -171,6 +260,9 @@ def main():
               "-DPS5VK_DMA_ONLY=" + ("1" if os.environ.get("PS5VK_DMA_ONLY") == "1" else "0"),
               "-DPS5VK_INSPECT=" + ("1" if os.environ.get("PS5VK_INSPECT") == "1" else "0")]
     objects = []
+    if tess_offchip_bind == "1":
+        common += ["-DPS5VK_TESS_OFFCHIP_BIND=1",
+                   "-DPS5VK_TESS_OFFCHIP_CAPACITY_WG=" + tess_offchip_capacity]
     sources = [
         ("main", ROOT / "native/main.c", []),
         ("check", ROOT / "src/compute_check.c", []),
@@ -283,6 +375,285 @@ def main():
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
+            common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
+            common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
+            common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
+            common += ["-DPS5VK_TESS_PROBE=" + tess_probe]
+            common += ["-DPS5VK_TESS_VARIANT=" + tess_variant]
+            # The tessellation witness runs with the key-rejection diagnostic
+            # on, so a refused pipeline names its rejection site in the log
+            # instead of only reporting the Vulkan error code.
+            if tess_probe == "1":
+                common += ["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
+                common += ["-DPS5VK_TESS_NO_DRAW=" +
+                           os.environ.get("PS5VK_TESS_NO_DRAW", "0")]
+                # Diagnostic only: override VGT_LS_HS_CONFIG NUM_PATCHES to
+                # test whether the per-workgroup capacity, not the patch data,
+                # is what stalls a single-patch draw. Zero keeps the compiler's
+                # published capacity, which is the shipped behaviour.
+                common += ["-DPS5VK_TESS_PATCHES_PER_WG=" +
+                           os.environ.get("PS5VK_TESS_PATCHES_PER_WG", "0")]
+                # Diagnostic only: log the COMPLETE register stream a patch
+                # draw emits, in emission order, once per process. Every
+                # candidate so far was argued from one register read out of
+                # the object holding it, which cannot see a register the
+                # pipeline never writes or one written twice where the later
+                # write wins. Default off: it costs log records and says
+                # nothing a shipped build needs.
+                tess_state_dump = os.environ.get("PS5VK_TESS_STATE_DUMP", "0")
+                if tess_state_dump not in ("0", "1"):
+                    raise SystemExit(
+                        "PS5VK_TESS_STATE_DUMP must be 0 or 1")
+                common += ["-DPS5VK_TESS_STATE_DUMP=" + tess_state_dump]
+                # Diagnostic bisect for VGT_TF_PARAM.NUM_DS_WAVES_PER_SIMD,
+                # which this driver zeroes because it writes the whole
+                # register from a value derived only from the control half's
+                # declared interface. Zero keeps the shipped behaviour.
+                tess_ds_waves = os.environ.get("PS5VK_TESS_DS_WAVES", "0")
+                if not tess_ds_waves.isdigit() or int(tess_ds_waves) > 15:
+                    raise SystemExit(
+                        "PS5VK_TESS_DS_WAVES is a 4-bit bisect: 0 to 15")
+                common += ["-DPS5VK_TESS_DS_WAVES=" + tess_ds_waves]
+                # Diagnostic bisect: compile the domain with NGG passthrough
+                # forced off, so the generated code and the published
+                # PRIMGEN_PASSTHRU_EN move together. Zero is radv's own
+                # decision and the shipped behaviour.
+                tess_no_passthru = os.environ.get("PS5VK_TESS_NO_PASSTHRU", "0")
+                if tess_no_passthru not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_NO_PASSTHRU must be 0 or 1")
+                common += ["-DPS5VK_TESS_NO_PASSTHRU=" + tess_no_passthru]
+                # Diagnostic bisect for VGT_TF_PARAM.RDREQ_POLICY, which this
+                # driver zeroes with the rest of the register's underived
+                # fields. 0 is VGT_POLICY_LRU and the shipped behaviour;
+                # 2 is VGT_POLICY_BYPASS.
+                tess_tf_rdreq = os.environ.get("PS5VK_TESS_TF_RDREQ", "0")
+                if tess_tf_rdreq not in ("0", "1", "2"):
+                    raise SystemExit(
+                        "PS5VK_TESS_TF_RDREQ is LRU 0, STREAM 1 or BYPASS 2")
+                common += ["-DPS5VK_TESS_TF_RDREQ=" + tess_tf_rdreq]
+                # VGT_TF_PARAM.DISTRIBUTION_MODE. 3 is TRAPEZOIDS, what radv
+                # runs this chip with and the current shipped value; 0 is
+                # NO_DIST, what the compiler published before. It is a knob
+                # because its first measurement was taken upstream of a known
+                # defect and therefore proves nothing.
+                tess_dist_mode = os.environ.get(
+                    "PS5VK_TESS_DISTRIBUTION_MODE", "3")
+                if tess_dist_mode not in ("0", "1", "2", "3"):
+                    raise SystemExit(
+                        "PS5VK_TESS_DISTRIBUTION_MODE is 0..3")
+                common += ["-DPS5VK_TESS_DISTRIBUTION_MODE=" + tess_dist_mode]
+                # Diagnostic: omit VGT_TF_PARAM entirely, to ask whether
+                # zeroing the fields this driver cannot derive is what stops
+                # the tessellator. Default 0 writes it as usual.
+                tess_no_tf_param = os.environ.get("PS5VK_TESS_NO_TF_PARAM", "0")
+                if tess_no_tf_param not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_NO_TF_PARAM must be 0 or 1")
+                common += ["-DPS5VK_TESS_NO_TF_PARAM=" + tess_no_tf_param]
+                # What sceAgcLinkShaders is TOLD a tessellation pipeline
+                # draws. The default is the shipped TRIANGLE_LIST; "patch"
+                # passes PS5VK_AGC_PRIMITIVE_TYPE_PATCH instead, which is the
+                # honest argument for a patch draw and lets the link derive
+                # its whole state from it rather than having one register
+                # corrected afterwards.
+                # Diagnostic: draw the patch with tessellation levels of 16
+                # instead of 2 and 1, so the tessellated work is hundreds of
+                # triangles instead of four. Tests whether the domain fails to
+                # launch below a batching threshold rather than because of a
+                # misconfiguration. Default 0 keeps the shipped fixture.
+                # Diagnostic: skip the geometry cases so the tessellation
+                # draw is the first and only draw in the process. Tests
+                # whether nineteen preceding draws leave state a patch draw
+                # cannot recover from - which no register experiment could
+                # show. Default 0 keeps the geometry table, whose 19/19 pass
+                # is also this probe's evidence that the device is healthy.
+                # Diagnostic bisect: set VGT_SHADER_STAGES_EN.GS_EN on a
+                # tessellation pipeline with no geometry shader. Not what radv
+                # does; it exists because ES_STAGE_DS with GS_EN=0 is the one
+                # stage combination no passing pipeline on this device has
+                # ever used. Default 0 is the shipped behaviour.
+                # Diagnostic bisect: VGT_GS_MAX_VERT_OUT for the domain,
+                # which psbc publishes as zero for any non-geometry stage. A
+                # zero output bound costs a vertex-fed NGG pipeline nothing
+                # because the engine knows the count from the draw; a
+                # tessellator-fed one gets its count from the tessellator.
+                # 0 keeps the compiler's value, which is the shipped
+                # behaviour; 128 is the subgroup limit this pipeline already
+                # publishes at GE_MAX_OUTPUT_PER_SUBGROUP.
+                # The descriptor-free domain-execution witness: an evaluation
+                # half that spins instead of writing memory, so the bounded
+                # fence wait answers "did the domain run" with no storage
+                # buffer in the path. Default 0.
+                # 1 = the triangle domain, 2 = the isoline domain: a
+                # materially different tessellator configuration measured by
+                # the same descriptor-free mechanism.
+                # The POSITIVE CONTROL for the spin witness: the same loop
+                # in the CONTROL half, which is proven to execute because its
+                # factors are in the ring. Reading "no stall" as "did not
+                # execute" is only sound if a stage that does execute
+                # produces one.
+                # Fill the whole tessellation factor ring with a legal level
+                # before the draw, so the engine finds one wherever it reads.
+                # Separates "the hull writes where the engine does not read"
+                # from "the engine does not read this ring at all". Default 0.
+                # Emit the pinned tree's own guard for updating VGT ring
+                # pointers - VS_PARTIAL_FLUSH then VGT_FLUSH - before a patch
+                # draw's register banks. This driver rewrites the tessellation
+                # ring registers on every draw and emits no events at all.
+                # Read-only enumeration of AGC's register-defaults library.
+                # The driver uses exactly one of its 137 keyed blocks; this
+                # asks whether any of the others carries tessellation context
+                # registers the platform expects a title to apply.
+                tess_defaults_dump = os.environ.get(
+                    "PS5VK_TESS_DEFAULTS_DUMP", "0")
+                if tess_defaults_dump not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_DEFAULTS_DUMP must be 0 or 1")
+                common += ["-DPS5VK_TESS_DEFAULTS_DUMP=" + tess_defaults_dump]
+                tess_vgt_flush = os.environ.get("PS5VK_TESS_VGT_FLUSH", "0")
+                if tess_vgt_flush not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_VGT_FLUSH must be 0 or 1")
+                common += ["-DPS5VK_TESS_VGT_FLUSH=" + tess_vgt_flush]
+                tess_prefill = os.environ.get("PS5VK_TESS_PREFILL", "0")
+                if tess_prefill not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_PREFILL must be 0 or 1")
+                common += ["-DPS5VK_TESS_PREFILL=" + tess_prefill]
+                tess_spin_hull = os.environ.get("PS5VK_TESS_SPIN_HULL", "0")
+                if tess_spin_hull not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_SPIN_HULL must be 0 or 1")
+                common += ["-DPS5VK_TESS_SPIN_HULL=" + tess_spin_hull]
+                tess_spin = os.environ.get("PS5VK_TESS_SPIN", "0")
+                if tess_spin not in ("0", "1", "2"):
+                    raise SystemExit(
+                        "PS5VK_TESS_SPIN is 0, 1 (triangles) or 2 (isolines)")
+                common += ["-DPS5VK_TESS_SPIN=" + tess_spin]
+                tess_max_vert_out = os.environ.get(
+                    "PS5VK_TESS_GS_MAX_VERT_OUT", "0")
+                if not tess_max_vert_out.isdigit() or int(tess_max_vert_out) > 2047:
+                    raise SystemExit(
+                        "PS5VK_TESS_GS_MAX_VERT_OUT is 0..2047")
+                common += ["-DPS5VK_TESS_GS_MAX_VERT_OUT=" + tess_max_vert_out]
+                # Diagnostic bisect: VGT_SHADER_STAGES_EN.DYNAMIC_HS, the
+                # only bit in that register naming the HS dispatch mode rather
+                # than a stage enable, and the failure now sits exactly at the
+                # hull-to-tessellator handoff. No primary source; radv never
+                # sets it. Default 0 is the shipped behaviour.
+                # Diagnostic bisect: VGT_SHADER_STAGES_EN.VS_EN =
+                # V_028B54_VS_STAGE_DS. The other "fed by the tessellator"
+                # enumerant in the same register, parallel to ES_EN, which was
+                # a real defect here. Never varied in 58 runs. Default 0.
+                tess_vs_en_ds = os.environ.get("PS5VK_TESS_VS_EN_DS", "0")
+                if tess_vs_en_ds not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_VS_EN_DS must be 0 or 1")
+                common += ["-DPS5VK_TESS_VS_EN_DS=" + tess_vs_en_ds]
+                tess_dynamic_hs = os.environ.get("PS5VK_TESS_DYNAMIC_HS", "0")
+                if tess_dynamic_hs not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_DYNAMIC_HS must be 0 or 1")
+                common += ["-DPS5VK_TESS_DYNAMIC_HS=" + tess_dynamic_hs]
+                tess_gs_en = os.environ.get("PS5VK_TESS_GS_EN", "0")
+                if tess_gs_en not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_GS_EN must be 0 or 1")
+                common += ["-DPS5VK_TESS_GS_EN=" + tess_gs_en]
+                # Diagnostic: GE_CNTL programmed for a TESSELLATION draw instead
+                # of the linked NGG-vertex value. 1 = PAL's gfx10 rule (patches
+                # per workgroup, vertex grouping disabled, BREAK_WAVE_AT_EOI),
+                # 2 = the same group size with the other two fields clear.
+                # Default 0 keeps the linked value, the shipped behaviour.
+                tess_ge_cntl = os.environ.get("PS5VK_TESS_GE_CNTL", "0")
+                if tess_ge_cntl not in ("0", "1", "2"):
+                    raise SystemExit(
+                        "PS5VK_TESS_GE_CNTL is 0 (linked), 1 (PAL) or 2 (Mesa)")
+                common += ["-DPS5VK_TESS_GE_CNTL=" + tess_ge_cntl]
+                # Diagnostic: write VGT_PRIMITIVE_TYPE and VGT_LS_HS_CONFIG as
+                # individual SET packets after the bulk register loads, per
+                # PAL's rule that indexed registers are written alone.
+                # 1 = plain SET (PAL gfx10), 2 = Mesa's indexed form. Default 0.
+                tess_direct_indexed = os.environ.get(
+                    "PS5VK_TESS_DIRECT_INDEXED", "0")
+                if tess_direct_indexed not in ("0", "1", "2"):
+                    raise SystemExit(
+                        "PS5VK_TESS_DIRECT_INDEXED is 0, 1 (plain SET) or 2 (indexed)")
+                common += ["-DPS5VK_TESS_DIRECT_INDEXED=" + tess_direct_indexed]
+                # Diagnostic: launch the evaluation half as a LEGACY hardware
+                # vertex shader (VS_STAGE_DS, no NGG) instead of an NGG stage.
+                # Needs the compiler's legacy-domain publication. Default 0.
+                tess_legacy_domain = os.environ.get("PS5VK_TESS_LEGACY_DOMAIN", "0")
+                if tess_legacy_domain not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_LEGACY_DOMAIN must be 0 or 1")
+                common += ["-DPS5VK_TESS_LEGACY_DOMAIN=" + tess_legacy_domain]
+                # Diagnostic, the positive control for the legacy-domain
+                # experiment: plain vertex pipelines launched as a LEGACY
+                # hardware VS. Default 0.
+                tess_legacy_vs = os.environ.get("PS5VK_TESS_LEGACY_VS_CONTROL", "0")
+                if tess_legacy_vs not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_LEGACY_VS_CONTROL must be 0 or 1")
+                common += ["-DPS5VK_TESS_LEGACY_VS_CONTROL=" + tess_legacy_vs]
+                tess_entry = os.environ.get("PS5VK_TESS_ENTRY_WITNESS", "0")
+                if tess_entry not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_ENTRY_WITNESS must be 0 or 1")
+                common += ["-DPS5VK_TESS_ENTRY_WITNESS=" + tess_entry]
+                tess_system_table = os.environ.get("PS5VK_TESS_SYSTEM_TABLE", "0")
+                # Pointer delivery is required state, not instrumentation.
+                # Permit ordinary shaders without the SGPR-store prefix.
+                if tess_system_table not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_SYSTEM_TABLE must be 0 or 1")
+                common += ["-DPS5VK_TESS_SYSTEM_TABLE=" + tess_system_table]
+                tess_ring_query = os.environ.get("PS5VK_TESS_RING_QUERY", "0")
+                if tess_ring_query not in ("0", "1", "2", "3", "4"):
+                    raise SystemExit("PS5VK_TESS_RING_QUERY must be 0..4 (3 harness, 4 queue binding)")
+                common += ["-DPS5VK_TESS_RING_QUERY=" + tess_ring_query]
+                tess_only = os.environ.get("PS5VK_TESS_ONLY", "0")
+                if tess_only not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_ONLY must be 0 or 1")
+                common += ["-DPS5VK_TESS_ONLY=" + tess_only]
+                tess_high_levels = os.environ.get("PS5VK_TESS_HIGH_LEVELS", "0")
+                if tess_high_levels not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_HIGH_LEVELS must be 0 or 1")
+                common += ["-DPS5VK_TESS_HIGH_LEVELS=" + tess_high_levels]
+                tess_link_prim = os.environ.get("PS5VK_TESS_LINK_PRIM", "tri")
+                if tess_link_prim not in ("tri", "patch"):
+                    raise SystemExit(
+                        "PS5VK_TESS_LINK_PRIM is 'tri' or 'patch'")
+                common += ["-DPS5VK_TESS_LINK_PRIMITIVE=" +
+                           ("PS5VK_AGC_PRIMITIVE_TYPE_PATCH"
+                            if tess_link_prim == "patch"
+                            else "PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST")]
+                # The source-candidate identity the payload logs before the
+                # submit. It digests exactly the source families the manifest
+                # already records plus the build inputs that change the
+                # generated code, so a receipt line names the tree that
+                # produced the package. This is the SOURCE half of the
+                # identity chain; the ARTIFACT half is the deployed eboot's
+                # own sha256, verified against the built one by reading the
+                # file back after the transfer and the mount refresh. Neither
+                # is a log boot id, which is only a process token.
+                tess_candidate_id = tess_build_id(tess_probe, tess_variant,
+                                         os.environ.get("PS5VK_TESS_NO_DRAW", "0"),
+                                         tess_state_dump + ":" +
+                                         tess_ds_waves + ":" +
+                                         tess_no_passthru + ":" +
+                                         tess_tf_rdreq + ":" +
+                                         tess_dist_mode + ":" +
+                                         tess_no_tf_param + ":" +
+                                         tess_link_prim + ":" +
+                                         tess_high_levels + ":" +
+                                         tess_only + ":" + tess_gs_en + ":" +
+                                         tess_dynamic_hs + ":" +
+                                         tess_vs_en_ds + ":" +
+                                         tess_max_vert_out + ":" + tess_spin +
+                                         ":" + tess_spin_hull + ":" +
+                                         tess_prefill + ":" + tess_vgt_flush +
+                                         ":" + tess_defaults_dump + ":entry=" + tess_entry +
+                                         ":system=" + tess_system_table + ":query=" + tess_ring_query)
+                common += ['-DPS5VK_TESS_BUILD_ID="' + tess_candidate_id + '"']
+                os.environ["PS5VK_TESS_VARIANT"] = tess_variant
+                os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump
+            # Both optional-stage witnesses skip the feature-negotiation gate:
+            # they exist to measure capabilities that are not advertised yet.
+            # Exported, because the SDK build compiles the same sources.
+            optional_stage_diagnostic = "1" if (clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1") else "0"
+            os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"] = optional_stage_diagnostic
+            if tess_probe == "1":
+                os.environ["PS5VK_GEOMETRY_KEY_DIAG"] = "1"
+            common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + optional_stage_diagnostic]
             common += ["-DPS5VK_GRAPHICS_SCENE=" + ("1" if scene else "0")]
             common += ["-DPS5VK_EXIT_CONTROL=" + str(exit_control)]
             common += ["-DPS5VK_SHELL_CLOSE=" + str(int(shell_close))]
@@ -297,6 +668,8 @@ def main():
                 # classifier the host regressions exercise decides the verdict
                 # on the console, so the readback is judged by proven code.
                 ROOT / "src/multiview_witness.c",
+                ROOT / "src/clip_cull_witness.c",
+                ROOT / "src/geometry_witness.c",
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
                 ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
@@ -309,7 +682,7 @@ def main():
                 ROOT / "native/graphics_queue_ps5.c",
                 ROOT / "native/present_ps5.c", gears / "src/ps5_videoout.c",
                 gears / "src/ps5_present.c", gears / "src/ps5_event_adapter.c", gears / "src/ps5_frame_completion.c",
-                ROOT / "native/draw_state_ps5.c", ROOT / "native/viewport_ps5.c", ROOT / "native/targets_ps5.c",
+                ROOT / "native/draw_state_ps5.c", ROOT / "native/tess_ring_lease.c", ROOT / "native/tess_shared_storage.c", ROOT / "native/viewport_ps5.c", ROOT / "native/targets_ps5.c",
                 gears / "src/ps5_pipeline.c", gears / "src/ps5_color_target.c", gears / "src/ps5_depth_target.c",
                 gears / "src/ps5_agc_writer.c", gears / "src/ps5_gpu_span.c",
                 ROOT / "src/graphics_program.c", ROOT / "src/compute_commands.c",
@@ -351,7 +724,8 @@ def main():
     driver = out / "stubs/libSceAgcDriver.so"
     run(*cc, "-fPIC", "-I" + str(gears / "include"), "-c",
         gears / "native/stubs/libSceAgcDriver.c", "-o", out / "driver.o", env=env)
-    run(linker, "--shared", "-soname", "libSceAgcDriver.prx", "-o", driver, out / "driver.o")
+    run(*cc, "-fPIC", "-c", ROOT / "native/tess_driver_import_stub.c", "-o", out / "tess_driver.o", env=env)
+    run(linker, "--shared", "-soname", "libSceAgcDriver.prx", "-o", driver, out / "driver.o", out / "tess_driver.o")
     extra_libs = []
     if use_runtime_sdk:
         extra_libs.append(str(ROOT / "dist-sdk/lib/libps5vk.a"))
@@ -372,7 +746,8 @@ def main():
     run(linker, "-L" + str(sdk / "target/lib"), "-T", pie_ld, "--eh-frame-hdr",
         "--version-script", syms_map, "-e", "_start",
         "-o", out / "pie.elf", crt, *objects, *extra_libs, "--as-needed",
-        *sorted((sdk / "target/lib").glob("*.so")), stub, driver)
+        *sorted((sdk / "target/lib").glob("*.so")), stub, driver,
+        *(["--wrap=sceAgcInit"] if tess_probe == "1" else []))
     run(builder, "link", "--in", out / "pie.elf", "--out", out / "eboot.elf",
         "--stub-dir", sdk / "target/lib", "--module-sdk", "0x02000009",
         "--stub", stub, "--stub", driver, "--companion-sdk", "0x08050001", "--file-name", "eboot.elf")
@@ -439,6 +814,32 @@ def main():
                             scene_draw_partition="two-36-index-draws" if scene_split == "1" else "single-draw",
                             exit_control=exit_control, keep_agc_module=keep_agc_module,
                             termination="os-close-during-render" if continuous == "1" else ("shell-close-after-cleanup" if shell_close else "return-main"))
+            if clip_cull_probe == "1":
+                # The dynamic-index case is part of the drawn set: it is the
+                # variant the upstream family registers separately, and the
+                # parser checks the manifest's count against its own table.
+                manifest.update(scene=None,
+                                geometry_fixture="clip-cull-distance-coverage",
+                                sample_count=1, clip_cull_probe=1,
+                                clip_cull_extent=64, clip_cull_cases=11)
+            if geometry_probe == "1":
+                # The sentinel and the raw readback are part of the drawn set:
+                # they are the cases whose oracle asserts a value the geometry
+                # stage read rather than only coverage, and they have to be in
+                # the manifest the parser checks against.
+                manifest.update(scene=None,
+                                geometry_fixture="geometry-stage-coverage",
+                                sample_count=1, geometry_probe=1,
+                                geometry_extent=64, geometry_cases=19)
+            if tess_probe == "1":
+                manifest["tessellation_witness"] = {
+                    "offchip_bind": int(tess_offchip_bind),
+                    "offchip_capacity_workgroups": int(tess_offchip_capacity),
+                    "variant": int(tess_variant), "build_id": tess_candidate_id,
+                    "ring_mode": int(tess_ring_query),
+                    "shared_pipelines": 2 if tess_ring_query == "4" else 0,
+                    "no_draw": int(os.environ.get("PS5VK_TESS_NO_DRAW", "0")),
+                }
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")
@@ -453,6 +854,15 @@ def main():
                         graphics_shader_source="owned-runtime-vertex-formats" if vertex_probe else "owned-runtime-triangle",
                         graphics_offline_library_role="negative-lookup-control-only")
         runtime_inputs = (("vertex", "runtime_triangle.vert"), ("fragment", "runtime_triangle.frag"))
+        if clip_cull_probe == "1":
+            # The one scene whose pre-raster stage exports clip and cull
+            # distances: recorded in the manifest so the artifact identity
+            # covers the shader that produced the readback.
+            manifest["graphics_shader_source"] = "owned-runtime-clip-cull-distances"
+        if geometry_probe == "1":
+            # The one scene whose pre-raster stage is a merged vertex+geometry
+            # program.
+            manifest["graphics_shader_source"] = "owned-runtime-geometry-stage"
         if multiview_view_probe == "1":
             # The one scene whose vertex stage reads gl_ViewIndex, and the only
             # place the diagnostic gate is exercised. Recorded in the manifest so

@@ -4,38 +4,62 @@
 #include "texture_descriptor.h"
 #include "descriptor_table_layout.h"
 #include "descriptor_encode.h"
+#include "graphics_pipeline_ps5.h"
+#include "runtime_resource_use.h"
+#include "graphics_descriptor_profile.h"
 #include <string.h>
 
-/* The runtime graphics profile delivers combined image samplers, resource-only
- * input attachments and mandatory uniform buffers from the same per-set table.
- * Every other descriptor type stays out of the profile rather than being
- * silently accepted. */
 static int graphics_descriptor_type(VkDescriptorType type)
 {
-    return type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
-        type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
-        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    return ps5vk_graphics_descriptor_type(type);
 }
 
 static int graphics_buffer_type(VkDescriptorType type)
 {
-    return type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    return ps5vk_graphics_buffer_type(type);
 }
 
 static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
-    const struct ps5vk_runtime_draw_abi *runtime,struct ps5vk_descriptor_table_layout *tables,
+    const struct ps5vk_runtime_draw_abi *runtime,const struct ps5vk_runtime_draw_abi *hull,
+    struct ps5vk_descriptor_table_layout *tables,
     uint32_t *mask)
 {
     VkPipeline p=op->pipeline;
     VkResult rc=ps5vk_descriptor_table_layout_build(p->set_count,p->sets,tables);
     if(rc!=VK_SUCCESS)return rc;
+    /* The visibility a binding may name, exactly as the compiler profile decides
+     * it: the two standalone stages, plus the geometry stage when the pipeline's
+     * pre-raster program is the merged vertex+geometry pair (the pinned
+     * conformance module binds its uniform buffer and its sampled image to that
+     * stage alone). A binding the pipeline would not execute is still refused,
+     * and the flag comes from the built pair rather than from a second reading
+     * of the compiler metadata, which no longer exists at draw time. */
+    VkShaderStageFlags visible=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+    {
+        const struct ps5vk_native_graphics_pipeline *native=
+            p->graphics_state?(const struct ps5vk_native_graphics_pipeline *)p->graphics_state:NULL;
+        if(native && native->pair && native->pair->ready && native->pair->geometry_preraster)
+            visible|=VK_SHADER_STAGE_GEOMETRY_BIT;
+        /* And the tessellation pair's two stages when the pipeline carries
+         * it, for the same reason and from the same source.
+         *
+         * They were missing, and the two profiles disagreed because of it:
+         * descriptor_profile_supported() admits a binding named for a
+         * tessellation stage whenever the pipeline has tessellation, so such a
+         * pipeline is CREATED, and this mask then refused it at submit with
+         * VK_ERROR_FEATURE_NOT_PRESENT. A descriptor bound to either
+         * tessellation stage - a uniform buffer as much as anything else -
+         * could therefore never be drawn with, and the failure appeared only
+         * at vkQueueSubmit, which is the worst place to learn it. */
+        if(native && native->pair && native->pair->ready && native->pair->tessellation)
+            visible|=VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
+                     VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+    }
     *mask=0;
     if(runtime->enabled) {
         for(unsigned s=0;s<PS5VK_MAX_SETS;++s) {
             /* One canonical table per set, shared by every using stage. */
-            if(runtime->vertex_descriptor_valid[s] || runtime->fragment_descriptor_valid[s])*mask|=1u<<s;
+            if(ps5vk_runtime_resource_bindings(runtime,hull,s))*mask|=1u<<s;
         }
     } else if(p->set_count) {
         if(p->set_count!=1 || p->sets[0].count!=1 || p->sets[0].binding[0].count!=1)
@@ -51,7 +75,7 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
             const struct ps5vk_binding *binding=&set->signature.binding[b];
             if(!binding->count)continue;
             if(!graphics_descriptor_type(set->signature.type[b]) ||
-               !(binding->stages&(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT)))
+               !(binding->stages&visible))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             /* An input attachment is fragment-visible resource-only image data.
              * vkCreateDescriptorSetLayout admits only the fragment stage for
@@ -64,8 +88,7 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
              * requirement: it needs no defined descriptor. A set the compiler
              * could not name (zero mask on both stages) keeps its whole
              * declaration so an unknown entry can never look unused. */
-            const uint64_t used=runtime->vertex_used_bindings[s]|
-                runtime->fragment_used_bindings[s];
+            const uint64_t used=ps5vk_runtime_resource_bindings(runtime,hull,s);
             if(runtime->enabled && used && !(used&(UINT64_C(1)<<b)))continue;
             for(unsigned e=0;e<binding->count;++e) {
                 unsigned index=binding->first+e;
@@ -118,13 +141,20 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         if (rc != VK_SUCCESS) return rc;
     }
     struct ps5vk_draw_state plan;
+    /* The index width the draw's bound index buffer declares, or zero for a
+     * non-indexed draw. The direct and indirect indexed ops both carry the
+     * binding vkCmdBindIndexBuffer recorded, and the hardware needs the width to
+     * compare the right reset value. */
+    const unsigned index_width =
+        (op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_DRAW_INDEXED_INDIRECT) ?
+        (op->indices.type == VK_INDEX_TYPE_UINT16 ? 2u : 4u) : 0u;
     rc = ps5vk_native_draw_state(op->pipeline, &op->viewport, &op->scissor,
         &color, has_depth ? &depth : NULL, area,
-        fb->width, fb->height, &plan);
+        fb->width, fb->height, index_width, &plan);
     if (rc != VK_SUCCESS) return rc;
     struct ps5vk_descriptor_table_layout tables;
     uint32_t set_mask=0;
-    rc=descriptor_plan(d,op,&plan.runtime,&tables,&set_mask);
+    rc=descriptor_plan(d,op,&plan.runtime,&plan.hull_runtime,&tables,&set_mask);
     if(rc!=VK_SUCCESS)return rc;
     struct ps5vk_prepared_draw result = {.memory = d->memory, .bytes = sizeof(plan)};
     size_t table_offset=(sizeof(plan)+15u)&~(size_t)15u;
@@ -138,10 +168,10 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         result.bytes+=tables.set_bytes[s];
     }
     size_t push_offset=result.bytes;
-    if(plan.runtime.push_constant_size) {
-        if(op->push_constant_size!=plan.runtime.push_constant_size)return VK_ERROR_UNKNOWN;
-        result.bytes+=plan.runtime.push_constant_size;
-    } else if(op->push_constant_size)return VK_ERROR_UNKNOWN;
+    uint32_t push_bytes=0;
+    if(ps5vk_runtime_push_bytes(&plan.runtime,&plan.hull_runtime,
+            op->push_constant_size,&push_bytes))return VK_ERROR_UNKNOWN;
+    result.bytes+=push_bytes;
     size_t bounce_offsets[PS5VK_MAX_VERTEX_BINDINGS]={0};
     for(uint32_t i=0;vertices && i<vertices->count;++i) {
         const struct ps5vk_vertex_fetch *vertex=&vertices->bindings[i];
@@ -160,12 +190,12 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         ps5vk_native_release_draw(&result); return VK_ERROR_MEMORY_MAP_FAILED;
     }
     result.state = address; memcpy(result.state, &plan, sizeof(plan));
-    if(plan.runtime.push_constant_size) {
+    if(push_bytes) {
         void *push=(unsigned char *)address+push_offset;
         if(((uintptr_t)push>>32)!=2) {
             ps5vk_native_release_draw(&result);return VK_ERROR_MEMORY_MAP_FAILED;
         }
-        memcpy(push,op->push_constants,plan.runtime.push_constant_size);
+        memcpy(push,op->push_constants,push_bytes);
         result.state->push_constant_low=(uint32_t)(uintptr_t)push;
     }
     if(vertices) {
@@ -205,8 +235,8 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
             /* An unused declared binding keeps its zeroed record and is never
              * encoded, so it cannot require a view, a sampler or a descriptor. */
             if(plan.runtime.enabled) {
-                const uint64_t used=plan.runtime.vertex_used_bindings[s]|
-                    plan.runtime.fragment_used_bindings[s];
+                const uint64_t used=ps5vk_runtime_resource_bindings(
+                    &plan.runtime,&plan.hull_runtime,s);
                 if(used && binding->count && !(used&(UINT64_C(1)<<b)))continue;
             }
             for(unsigned e=0;e<binding->count;++e) {
@@ -215,7 +245,7 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
                     e*tables.binding[s][b].byte_stride)/4;
                 if(graphics_buffer_type(set->signature.type[b])) {
                     VkDeviceSize dynamic=ps5vk_dynamic_descriptor_type(
-                        set->signature.type[b])?op->descriptor_dynamic_offsets[index]:0;
+                        set->signature.type[b])?op->graphics_dynamic_offsets[s][index]:0;
                     rc=ps5vk_buffer_descriptor(d,&set->buffers[index],dynamic,words);
                 } else if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) {
                     /* Resource-only image data: the encoder writes the eight

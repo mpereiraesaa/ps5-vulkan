@@ -5,6 +5,12 @@
 #include <stdlib.h>
 static unsigned created, released;
 static unsigned acquired, compiled_released, compile_fail, backend_fail;
+static unsigned expect_five_stages;
+static unsigned expect_blend_state;
+static uint32_t reported_set_mask;
+static VkResult usage_result;
+static VkResult used_sets(VkDevice d,const void *state,uint32_t *mask)
+{ assert(d && state && mask);*mask=reported_set_mask;return usage_result; }
 static uint32_t expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
 static VkResult backend(VkDevice d,const void *data,uint32_t primitive_type,void **out)
 { (void)d; assert(data); assert(primitive_type==expected_primitive); ++created; *out=malloc(1); return backend_fail?VK_ERROR_UNKNOWN:(*out ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY); }
@@ -12,6 +18,20 @@ static void release(VkDevice d,void *data) { (void)d; ++released; free(data); }
 static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const void **out)
 {
     assert(context==&acquired && key->vertex.word_count==10 && key->fragment.word_count==10);
+    if(expect_blend_state) {
+        assert(key->blend_enable==VK_TRUE);
+        assert(key->src_color_blend_factor==VK_BLEND_FACTOR_SRC_ALPHA);
+        assert(key->dst_color_blend_factor==VK_BLEND_FACTOR_ONE);
+        assert(key->color_blend_op==VK_BLEND_OP_ADD);
+        assert(key->src_alpha_blend_factor==VK_BLEND_FACTOR_CONSTANT_ALPHA);
+        assert(key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+        assert(key->alpha_blend_op==VK_BLEND_OP_REVERSE_SUBTRACT);
+        for(unsigned i=0;i<4;++i) assert(key->blend_constants[i]==(float)i/4.0f);
+    }
+    if(expect_five_stages) {
+        assert(key->tess_control.word_count==10 && key->tess_eval.word_count==10 &&
+               key->geometry.word_count==10 && key->patch_control_points==3);
+    }
     ++acquired;*out=malloc(1);assert(*out);
     return compile_fail?VK_ERROR_FEATURE_NOT_PRESENT:VK_SUCCESS;
 }
@@ -166,6 +186,47 @@ int main(void)
     assert(acquired==3);
     d.graphics_compiled_release=compiled_release;
     {
+        unsigned a=acquired,built=created,freed=released,leases=compiled_released;
+        d.graphics_used_sets=used_sets;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
+        assert(runtime->graphics_usage_known && !runtime->graphics_used_set_mask);
+        vkDestroyPipeline(&d,runtime,NULL);
+        reported_set_mask=1; /* outside this empty layout */
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)!=VK_SUCCESS && !runtime);
+        reported_set_mask=0;usage_result=VK_ERROR_UNKNOWN;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_UNKNOWN && !runtime);
+        assert(created-built==3 && released-freed==3 && compiled_released-leases==3);
+        usage_result=VK_SUCCESS;d.graphics_used_sets=NULL;
+        acquired=a;created=built;released=freed;compiled_released=leases;
+    }
+    {
+        /* This mock validates transmission only, not hardware blend support. */
+        unsigned saved_a=acquired,saved_c=compiled_released;
+        unsigned saved_created=created,saved_released=released;
+        color.blendEnable=VK_TRUE;
+        color.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;
+        color.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;
+        color.srcAlphaBlendFactor=VK_BLEND_FACTOR_CONSTANT_ALPHA;
+        color.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        color.alphaBlendOp=VK_BLEND_OP_REVERSE_SUBTRACT;
+        for(unsigned i=0;i<4;++i) b.blendConstants[i]=(float)i/4.0f;
+        expect_blend_state=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
+        assert(runtime->color_blend.blendEnable==VK_TRUE &&
+            runtime->color_blend.srcColorBlendFactor==VK_BLEND_FACTOR_SRC_ALPHA &&
+            runtime->color_blend.dstColorBlendFactor==VK_BLEND_FACTOR_ONE &&
+            runtime->color_blend.srcAlphaBlendFactor==VK_BLEND_FACTOR_CONSTANT_ALPHA &&
+            runtime->color_blend.dstAlphaBlendFactor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
+            runtime->color_blend.alphaBlendOp==VK_BLEND_OP_REVERSE_SUBTRACT);
+        for(unsigned i=0;i<4;++i) assert(runtime->blend_constants[i]==(float)i/4.0f);
+        vkDestroyPipeline(&d,runtime,NULL);
+        expect_blend_state=0;
+        color=(VkPipelineColorBlendAttachmentState){.colorWriteMask=15};
+        for(unsigned i=0;i<4;++i) b.blendConstants[i]=0;
+        acquired=saved_a;compiled_released=saved_c;
+        created=saved_created;released=saved_released;
+    }
+    {
         /* Topology selects the primitive the backend links. Both accepted
          * topologies reach the backend with their pinned GFX1013 value, and an
          * unsupported topology is refused before any backend work happens.
@@ -183,7 +244,7 @@ int main(void)
             VK_PRIMITIVE_TOPOLOGY_POINT_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
             VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
             VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
-        const unsigned before_created=created;
+        unsigned before_created=created;
         for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
             ia.topology=unsupported_topologies[i];
             assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==
@@ -193,6 +254,25 @@ int main(void)
         expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS);
         vkDestroyPipeline(&d,topo,NULL);
+        /* Primitive restart is input-assembly state the front end can only act
+         * on across a strip, and the pinned conformance geometry module declares
+         * it exactly for the strips (vktGeometryTestsUtil.cpp:153-172). It is
+         * accepted on a strip - and recorded on the pipeline, because the draw
+         * path programs the cut from that flag and the draw's index width - and
+         * refused on a list, where a restart index could not do what the caller
+         * declared. */
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+        expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;
+        ia.primitiveRestartEnable=VK_TRUE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS && topo->graphics);
+        assert(topo->primitive_restart==VK_TRUE);
+        vkDestroyPipeline(&d,topo,NULL);
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
+        before_created=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !topo && created==before_created);
+        ia.primitiveRestartEnable=VK_FALSE;
         created=saved_created;released=saved_released;
         acquired=saved_acquired;compiled_released=saved_compiled;
     }
@@ -223,7 +303,148 @@ int main(void)
     layout.sets[3].binding[7].count=23;
     assert(runtime->sets[3].binding[7].count==24); /* pipeline owns its signature */
     vkDestroyPipeline(&d,runtime,NULL);layout.set_count=0;
-    d.graphics_acquire=NULL;d.graphics_library=&library;
+    d.graphics_acquire=NULL;d.graphics_compiled_release=NULL;
+    d.graphics_compiler_context=NULL;d.graphics_library=&library;
+    /* The optional geometry stage: refused unless the logical device enabled the
+     * feature, and then matched against a record that carries the same geometry
+     * module, so a two-stage program can never satisfy a three-stage pipeline. */
+    {
+        uint32_t gs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,3,1,0x6e69616d,0};
+        VkShaderModule geometry_module;
+        VkShaderModuleCreateInfo gmi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(gs),.pCode=gs};
+        assert(vkCreateShaderModule(&d,&gmi,NULL,&geometry_module)==VK_SUCCESS);
+        VkPipelineShaderStageCreateInfo geometry_stages[3]={
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=modules[0],.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=geometry_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=modules[1],.pName="main"}};
+        VkGraphicsPipelineCreateInfo geometry_info=info;
+        geometry_info.stageCount=3;geometry_info.pStages=geometry_stages;
+        VkPipeline geometry_pipeline;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&geometry_info,NULL,&geometry_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        d.enabled_features|=PS5VK_FEATURE_GEOMETRY_SHADER;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&geometry_info,NULL,&geometry_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        struct ps5vk_graphics_program geometry_program=program;
+        geometry_program.key.geometry=(struct ps5vk_graphics_module_key){
+            .words=gs,.word_count=10,.entry="main"};
+        struct ps5vk_graphics_library geometry_library={&geometry_program,1};
+        d.graphics_library=&geometry_library;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&geometry_info,NULL,&geometry_pipeline)==
+               VK_SUCCESS && geometry_pipeline->graphics);
+        vkDestroyPipeline(&d,geometry_pipeline,NULL);
+        /* A two-stage pipeline still matches only the record without a geometry
+         * module: the optional stage is part of the program identity. */
+        d.graphics_library=&library;
+        VkPipeline two_stage;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&two_stage)==VK_SUCCESS);
+        vkDestroyPipeline(&d,two_stage,NULL);
+        d.enabled_features&=~PS5VK_FEATURE_GEOMETRY_SHADER;
+        vkDestroyShaderModule(&d,geometry_module,NULL);
+    }
+    /* The tessellation contract: the control and evaluation stages are
+     * described and validated, and the pipeline is then refused because the
+     * pinned compiler emits no loadable package for them. PATCH_LIST without
+     * them, a missing or out-of-range patchControlPoints, and the stages
+     * without PATCH_LIST are all refused. */
+    {
+        uint32_t tcs_words[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,1,1,0x6e69616d,0};
+        uint32_t tes_words[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,2,1,0x6e69616d,0};
+        VkShaderModule tcs_module,tes_module;
+        VkShaderModuleCreateInfo tcs_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(tcs_words),.pCode=tcs_words};
+        VkShaderModuleCreateInfo tes_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(tes_words),.pCode=tes_words};
+        assert(vkCreateShaderModule(&d,&tcs_info,NULL,&tcs_module)==VK_SUCCESS);
+        assert(vkCreateShaderModule(&d,&tes_info,NULL,&tes_module)==VK_SUCCESS);
+        VkPipelineShaderStageCreateInfo tess_stages[4]={
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_VERTEX_BIT,.module=modules[0],.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,.module=tcs_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,.module=tes_module,.pName="main"},
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_FRAGMENT_BIT,.module=modules[1],.pName="main"}};
+        VkPipelineTessellationStateCreateInfo tessellation={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+            .patchControlPoints=3};
+        VkGraphicsPipelineCreateInfo tess_info=info;
+        tess_info.stageCount=4;tess_info.pStages=tess_stages;
+        tess_info.pTessellationState=&tessellation;
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+        tess_info.pInputAssemblyState=&ia;
+        VkPipeline tess_pipeline;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        {
+            uint32_t gs_words[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,3,1,0x6e69616d,0};
+            VkShaderModule gs_module;
+            VkShaderModuleCreateInfo mi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .codeSize=sizeof(gs_words),.pCode=gs_words};
+            assert(vkCreateShaderModule(&d,&mi,NULL,&gs_module)==VK_SUCCESS);
+            VkPipelineShaderStageCreateInfo five[5];
+            for(unsigned i=0;i<4;++i)five[i]=tess_stages[i];
+            five[4]=(VkPipelineShaderStageCreateInfo){
+                .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=gs_module,.pName="main"};
+            tess_info.stageCount=5;tess_info.pStages=five;
+            const uint64_t saved_features=d.enabled_features;
+            d.graphics_acquire=acquire;d.graphics_compiled_release=compiled_release;
+            d.graphics_compiler_context=&acquired;
+            expect_five_stages=1;expected_primitive=9u;
+            const uint64_t required=PS5VK_FEATURE_GEOMETRY_SHADER|PS5VK_FEATURE_TESSELLATION_SHADER;
+            d.enabled_features=saved_features|required;
+            assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==VK_SUCCESS);
+            vkDestroyPipeline(&d,tess_pipeline,NULL);
+            for(unsigned i=0;i<2;++i) {
+                d.enabled_features=(saved_features|required)&~(i?PS5VK_FEATURE_GEOMETRY_SHADER:PS5VK_FEATURE_TESSELLATION_SHADER);
+                unsigned calls=acquired;tess_pipeline=(void *)(uintptr_t)1;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==VK_ERROR_FEATURE_NOT_PRESENT);
+                assert(!tess_pipeline && acquired==calls);
+            }
+            d.enabled_features=saved_features|required;
+            five[4]=five[0];
+            assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)!=VK_SUCCESS);
+            d.enabled_features=saved_features;expect_five_stages=0;
+            expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
+            d.graphics_acquire=NULL;d.graphics_compiled_release=NULL;d.graphics_compiler_context=NULL;
+            tess_info.stageCount=4;tess_info.pStages=tess_stages;
+            vkDestroyShaderModule(&d,gs_module,NULL);
+        }
+        /* The evaluation stage alone, and a patch list without them, are not a
+         * tessellation pipeline either. */
+        tess_info.stageCount=3;
+        tess_info.pStages=&tess_stages[1];
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)!=
+               VK_SUCCESS);
+        tess_info.stageCount=4;tess_info.pStages=tess_stages;
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+        VkPipelineTessellationStateCreateInfo bad=tessellation;
+        bad.patchControlPoints=0;
+        tess_info.pTessellationState=&bad;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        bad.patchControlPoints=PS5VK_MAX_PATCH_CONTROL_POINTS+1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        tess_info.pTessellationState=&tessellation;
+        tess_info.pTessellationState=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&tess_pipeline)==VK_SUCCESS);
+        vkDestroyPipeline(&d,tess_pipeline,NULL);
+        vkDestroyShaderModule(&d,tcs_module,NULL);
+        vkDestroyShaderModule(&d,tes_module,NULL);
+    }
     created=1;released=0;
     vkDestroyShaderModule(&d,modules[0],NULL); vkDestroyShaderModule(&d,modules[1],NULL);
     p->pending=1; vkDestroyPipeline(&d,p,NULL); assert(!released);

@@ -15,6 +15,34 @@ sys.path.insert(0, str(ROOT / "tools"))
 from lab import lab_root
 
 SELECTION_MANIFEST = ROOT / "cts/upstream/manifest.json"
+
+def tessellation_build_profile(environment):
+    """Record build controls, never infer hardware validation from them.
+
+    Only these non-secret SDK switches are captured. Even a ring-only build
+    differs from the default runtime and must not masquerade as its evidence.
+    Values remain strings, exactly as passed to the SDK compiler invocation.
+    """
+    switches = {
+        name: environment.get(name) or "0"
+        for name in (
+            "PS5VK_TESS_RING_QUERY", "PS5VK_OPTIONAL_STAGE_DIAGNOSTIC",
+            "PS5VK_TESS_PROBE", "PS5VK_TESS_VARIANT",
+            "PS5VK_TESS_STATE_DUMP", "PS5VK_GEOMETRY_KEY_DIAG",
+            "PS5VK_TESS_EXPERIMENTAL_API",
+            "PS5VK_TESS_OFFCHIP_CAPACITY_WG",
+            "PS5VK_TESS_GE_CNTL",
+            "PS5VK_TESS_END_VS_FLUSH",
+            "PS5VK_TESS_HULL_TRACE",
+            "PS5VK_TESS_OFFCHIP_BIND",
+        )
+    }
+    return {
+        "experimental": any(value != "0" for value in switches.values()),
+        "switches": switches,
+        "capability_validation": "not-implied-by-build",
+    }
+
 # Upstream shader sources the packaged cases load from the /app0 data archive.
 DATASET_SHADER_SOURCES = (
     "vulkan/draw/VertexFetchShaderDrawParameters.vert",
@@ -791,6 +819,43 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderPassUtil.cpp",
+        # Original user-defined clip/cull distance module. The package registers
+        # the module's own factory; none of its leaves is selected for strict
+        # acceptance, because the feature flag that gates the whole family also
+        # gates the fragment-shader-read and dynamic-index variants this profile
+        # refuses. The measured static-index vertex-only subset stays diagnostic
+        # in cts/upstream/manifest.json. The module compiles its shaders through
+        # its own runtime glslang path, so no dataset binary is added.
+        cts_root / "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp",
+        # The shared draw utility the clipping module renders and reads back
+        # through (vkt::drawutil::VulkanDrawContext and its pipeline state).
+        cts_root / "external/vulkancts/modules/vulkan/util/vktDrawUtil.cpp",
+        # Original geometry shader module, registered whole under its own name.
+        # The module's own factory builds the leaves and its shaders go through
+        # its runtime glslang path; the reference images it compares against are
+        # embedded at build time (see tools/embed_cts_reference_images.py) and
+        # served by cts/upstream/image_io_ps5.cpp. cases.txt selects only the
+        # leaves whose input primitive, built-ins and envelope this profile
+        # compiles and has measured; the rest stay diagnostics in
+        # cts/upstream/manifest.json with the gate that refuses them.
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicClass.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryBasicGeometryShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryEmitGeometryShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryInstancedRenderingTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryLayeredRenderingTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryTestsUtil.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp",
+        # Unmodified upstream tessellation winding factory and its utility.
+        # Merely linking these does not promote any case or feature support.
+        cts_root / "external/vulkancts/modules/vulkan/tessellation/vktTessellationWindingTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/tessellation/vktTessellationShaderInputOutputTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/tessellation/vktTessellationMiscDrawTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/tessellation/vktTessellationPrimitiveDiscardTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/tessellation/vktTessellationGeometryPassthroughTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/tessellation/vktTessellationCommonEdgeTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/tessellation/vktTessellationUtil.cpp",
         # Original Vulkan 1.0 robustBufferAccess bodies and oracles, with only
         # registration pruned to compute/scalar_copy/R32_UINT.
         focused_sources / "vktRobustnessBufferAccessTests.cpp",
@@ -835,6 +900,34 @@ def main():
         compile_tasks.append((cxx_flags + [str(src), "-o", str(obj)], src, obj, env))
 
     # 9. PS5 custom files
+    # The reference images the packaged modules compare against are decoded from
+    # the pinned upstream assets at build time, because this integration carries
+    # no PNG decoder; cts/upstream/image_io_ps5.cpp serves the bytes back through
+    # the same tcu::ImageIO::loadPNG the modules call.
+    reference_images = obj_dir.parent / "geometry_reference_images.cpp"
+    tess_reference_args = []
+    for name in ("patch_vertices_5_in_10_out_ref", "patch_vertices_10_in_5_out_ref",
+                 "primitive_id_tcs_ref", "primitive_id_tes_ref",
+                 "gl_position_ref", "barrier_ref"):
+        tess_reference_args += ["--extra", str(cts_root /
+            "external/vulkancts/data/vulkan/data/tessellation" / (name + ".png"))]
+    # Original misc_draw fill-cover oracles: three level vectors per case.
+    for primitive in ("triangles", "quads"):
+        for spacing in ("equal_spacing", "fractional_even_spacing", "fractional_odd_spacing"):
+            for level in range(3):
+                name = f"fill_cover_{primitive}_{spacing}_ref_{level}.png"
+                tess_reference_args += ["--extra", str(cts_root /
+                    "external/vulkancts/data/vulkan/data/tessellation" / name)]
+    # Original isoline oracles exercise line output and TES resource reads.
+    for spacing in ("equal_spacing", "fractional_even_spacing", "fractional_odd_spacing"):
+        for level in range(3):
+            name = f"isolines_{spacing}_ref_{level}.png"
+            tess_reference_args += ["--extra", str(cts_root /
+                "external/vulkancts/data/vulkan/data/tessellation" / name)]
+    subprocess.run([sys.executable, str(ROOT / "tools/embed_cts_reference_images.py"),
+                    "--source", str(cts_root / "external/vulkancts/data/vulkan/data/geometry"),
+                    *tess_reference_args,
+                    "--out", str(reference_images)], check=True, cwd=ROOT)
     ps5_custom = [
         ROOT / "cts/upstream/thread_atexit_ps5.cpp",
         ROOT / "cts/upstream/dladdr_ps5.cpp",
@@ -842,6 +935,8 @@ def main():
         ROOT / "cts/upstream/log_sink_ps5.cpp",
         ROOT / "cts/upstream/package_ps5.cpp",
         ROOT / "cts/upstream/main_ps5.cpp",
+        ROOT / "cts/upstream/image_io_ps5.cpp",
+        reference_images,
     ]
     for src in ps5_custom:
         obj = obj_dir / "ps5" / (src.stem + ".o")
@@ -889,12 +984,11 @@ def main():
         subprocess.run([str(linker), "--shared", "-soname", "libSceAgc.prx", "-o", str(stub),
                         str(out / "agc.o"), str(out / "agc_index.o")], check=True)
 
-    driver = out / "stubs/libSceAgcDriver.so"
+    # The SDK was freshly staged above. Reuse its exact driver import facade
+    # instead of a stale cached copy missing newer runtime imports (TF ring).
+    driver = ROOT / "dist-sdk/lib/libSceAgcDriver.so"
     if not driver.is_file():
-        subprocess.run(["sh", str(clang_sh), "-fPIC", "-I" + str(gears / "include"), "-c",
-                        str(gears / "native/stubs/libSceAgcDriver.c"), "-o", str(out / "driver.o")], check=True, env=env)
-        subprocess.run([str(linker), "--shared", "-soname", "libSceAgcDriver.prx", "-o", str(driver),
-                        str(out / "driver.o")], check=True)
+        raise SystemExit("fresh SDK driver import facade is missing")
 
     # 12. Link PIE ELF with map file
     print("[build_upstream_cts] Linking pie.elf and generating upstream_cts.map...")
@@ -1021,6 +1115,7 @@ def main():
     build_manifest = {
         "title": "PPSA99994",
         "type": "upstream_cts_native",
+        "tessellation_build_profile": tessellation_build_profile(os.environ),
         "target": "x86_64-sie-ps5",
         "toolchain": {
             "clang": clang_version,

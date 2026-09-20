@@ -59,9 +59,29 @@ class UpstreamSelectionTests(unittest.TestCase):
         manifest = self.current_manifest
         leaves = [c for c in manifest["cases"]
                   if c["path"].startswith(MULTIVIEW_FAMILIES)]
-        self.assertEqual((211, 5, 48),
+        # 211 + the 64 promoted clipping leaves + the 11 geometry leaves whose own
+        # upstream oracles passed on hardware when the feature was advertised
+        # (promotion run 20260917T190009Z: 286 acceptance leaves, 286 Pass, zero
+        # Fail, title closed). The diagnostics are the earlier 14 plus the 49
+        # geometry leaves this slice started from, of which 11 are now acceptance:
+        # 30 are still refused by a gate this profile documents (a non-triangle
+        # input primitive the policy does not carry, an undelivered built-in, or
+        # an adjacency input) and 8 were MEASURED as Fail in the promotion run
+        # (the geometry stage's uniform/sampled descriptor variants and the
+        # varying crosses), so they stay diagnostics with expected_status Fail
+        # instead of being claimed as coverage.
+        geometry = [c for c in manifest["cases"]
+                    if "geometryShader" in " ".join(c.get("features_required", []))]
+        self.assertEqual((304, 34, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
+        self.assertEqual(29, len(geometry))
+        self.assertEqual(29, len({c["path"] for c in geometry}))
+        self.assertTrue(all(c["expected_status"] == "Pass" for c in geometry))
+        # The four strip-topology leaves that were blocked on primitive restart
+        # are acceptance now: the profile carries the state and programs the cut.
+        self.assertFalse([d for d in manifest["diagnostics"]
+                          if d.get("category") == "primitive-restart-unsupported"])
         self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
         broken = copy.deepcopy(manifest)
         contract = broken["resource_contracts"][MV_CONTRACT]
@@ -482,11 +502,12 @@ class UpstreamSelectionTests(unittest.TestCase):
                       "compiler_lowering", "gpu_subpass_readback",
                       "sole remaining requirement", "48 leaves stay diagnostics"):
             self.assertIn(named, blocker)
-        # The selection itself is unchanged: the same 163 acceptance cases (the
-        # canonical 211 minus the 48 multiview leaves demoted by this fixture)
-        # and the same 53 diagnostics, 48 of which are the blocked family.
+        # The selection itself is unchanged: the same acceptance cases minus the
+        # 48 multiview leaves this fixture demotes, and the same diagnostics plus
+        # those 48 demoted leaves.
         self.assertEqual(len(self.current_manifest["cases"]) - 48, len(self.manifest["cases"]))
-        self.assertEqual(53, len(self.manifest["diagnostics"]))
+        self.assertEqual(len(self.current_manifest["diagnostics"]) + 48,
+                         len(self.manifest["diagnostics"]))
         self.assertEqual(48, len([case for case in self.manifest["diagnostics"]
                                   if case["path"].startswith(MULTIVIEW_FAMILIES)]))
         # The derived verdict agrees with the ledger: not eligible, no failure,

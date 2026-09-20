@@ -21,6 +21,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Model the default native runtime-graphics profile using its actual overlay,
+ * not a second copy of the eight tessellation limits. This host executable
+ * reports the profile; it does not provide GPU execution evidence. */
+#define PS5VK_GRAPHICS_API 1
+#define PS5VK_GRAPHICS_DRAW 1
+#define PS5VK_RUNTIME_COMPILER 1
+#define PS5VK_RUNTIME_GRAPHICS 1
+#include "../native/tess_profile.h"
+
 static int graphics_objects = 1;
 static int graphics_submit = 1;
 static VkPhysicalDevice dump_physical;
@@ -65,10 +74,25 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         platform->supported_features |= PS5VK_FEATURE_MULTIVIEW |
                                         PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE |
                                         PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
-                                        PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
+                                        PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 |
+                                        /* Mirrors native/platform_ps5.c: the
+                                         * distance features belong to the
+                                         * graphics path, which is the only one
+                                         * that can export or read them. */
+                                        PS5VK_FEATURE_SHADER_CLIP_DISTANCE |
+                                        PS5VK_FEATURE_SHADER_CULL_DISTANCE |
+                                        /* The optional geometry stage belongs to
+                                         * the graphics submit path too, and to
+                                         * the same measured build the witness
+                                         * ran on; this dump mirrors the console
+                                         * platform's initializer so the
+                                         * published matrix is the console's. */
+                                        PS5VK_FEATURE_GEOMETRY_SHADER;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
+    if (graphics_submit)
+        ps5vk_native_tess_profile(platform);
     return VK_SUCCESS;
 }
 

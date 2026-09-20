@@ -607,7 +607,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants(VkCommandBuffer c, VkPipelineLayou
     VkShaderStageFlags stages, uint32_t offset, uint32_t size, const void *values)
 {
     const VkShaderStageFlags supported = VK_SHADER_STAGE_COMPUTE_BIT |
-        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+        VK_SHADER_STAGE_GEOMETRY_BIT;
     if (!c || c->state != PS5VK_RECORDING || !layout ||
         layout->device != c->pool->device || !stages || (stages & ~supported) ||
         !size || !values || (offset & 3u) || (size & 3u) ||
@@ -615,7 +617,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants(VkCommandBuffer c, VkPipelineLayou
         size > PS5VK_MAX_PUSH_CONSTANT_BYTES - offset) { invalid(c); return; }
     uint32_t first=offset/4u,end=(offset+size)/4u;
     for(uint32_t j=first;j<end;++j)
-        if((layout->push_constant_stages[j]&stages)!=stages){invalid(c);return;}
+        /* 01795: every requested stage covers the byte. 01796: the update
+         * also includes every stage of each range overlapping that byte. */
+        if(layout->push_constant_stages[j]!=stages){invalid(c);return;}
     memcpy(c->push_constants+offset,values,size);
     memcpy(c->push_constant_stages,layout->push_constant_stages,
            sizeof(c->push_constant_stages));
@@ -893,7 +897,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
         memcmp(p->push_constant_stages,c->push_constant_stages,
                sizeof(c->push_constant_stages)))) {invalid(c);return;}
     if(p->set_count>PS5VK_MAX_SETS){invalid(c);return;}
-    for(unsigned s=0;s<p->set_count;++s)if(p->sets[s].count &&
+    for(unsigned s=0;s<p->set_count;++s)if(ps5vk_graphics_set_required(p,s) &&
         (!c->graphics_sets[s] ||
          memcmp(&p->sets[s],&c->graphics_set_signatures[s],sizeof(p->sets[s])))) {invalid(c);return;}
     VkRenderPass pass = c->render_pass;
@@ -921,9 +925,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     memcpy(op->vertices,c->vertices,sizeof(c->vertices));
     op->push_constant_size=p->push_constant_size;
     if(p->push_constant_size)memcpy(op->push_constants,c->push_constants,p->push_constant_size);
-    for(unsigned s=0;s<p->set_count;++s)if(p->sets[s].count) {
+    for(unsigned s=0;s<p->set_count;++s)if(ps5vk_graphics_set_required(p,s)) {
         op->sets[s]=c->graphics_sets[s];
         op->generations[s]=c->graphics_sets[s]->generation;
+        memcpy(op->graphics_dynamic_offsets[s],c->graphics_set_dynamic_offsets[s],
+            sizeof(op->graphics_dynamic_offsets[s]));
     }
     for(uint32_t j=0;j<p->program.descriptor_count;++j) {
         const struct ps5vk_program_descriptor *binding=&p->program.descriptors[j];
@@ -1106,6 +1112,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
                                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT));
     if(readback)return
         ps5vk_color_discard_barrier(b) ||
+        ps5vk_color_readback_reuse_barrier(b) ||
         (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&

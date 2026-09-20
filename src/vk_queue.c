@@ -225,7 +225,7 @@ static int draw_operation_valid(VkDevice d, const struct ps5vk_operation *op)
         ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
     if (op->pipeline->set_count > PS5VK_MAX_SETS) return 0;
     for (unsigned set = 0; set < op->pipeline->set_count; ++set)
-        if (op->pipeline->sets[set].count &&
+        if (ps5vk_graphics_set_required(op->pipeline,set) &&
             (!op->sets[set] || !op->sets[set]->pool || op->sets[set]->pool->device != d ||
              op->generations[set] != op->sets[set]->generation ||
              memcmp(&op->sets[set]->signature, &op->pipeline->sets[set],

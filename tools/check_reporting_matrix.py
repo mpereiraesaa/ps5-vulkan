@@ -58,12 +58,6 @@ FEATURE_GATES = {
                        "only 2D images are created"),
     "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount != 1",
                          "one color attachment per pipeline"),
-    "geometryShader": ("src/vk_graphics_pipeline.c",
-                       "if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;",
-                       "only vertex and fragment stages are accepted"),
-    "tessellationShader": ("src/vk_graphics_pipeline.c",
-                           "if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;",
-                           "only vertex and fragment stages are accepted"),
     "sampleRateShading": ("src/vk_graphics_pipeline.c", "m->sampleShadingEnable",
                           "sample shading state is rejected"),
     "logicOp": ("src/vk_graphics_pipeline.c", "b->logicOpEnable",
@@ -85,10 +79,37 @@ FEATURE_GATES = {
                           "anisotropyEnable is rejected"),
     "pipelineStatisticsQuery": ("src/vk_query_pool.c", "pipelineStatisticsQuery is reported false.",
                                 "pipeline statistics query pools are rejected"),
-    "shaderClipDistance": ("src/spirv_graphics_interface.c", "d->builtin!=42",
-                           "only the FragCoord builtin is accepted"),
-    "shaderCullDistance": ("src/spirv_graphics_interface.c", "d->builtin!=42",
-                           "only the FragCoord builtin is accepted"),
+    # Both halves of the distance interface are implemented and hardware-
+    # witnessed: the pre-raster export (static and dynamically indexed), and now
+    # the pixel stage reading the interpolated distance - the eleven-case witness
+    # verifies case 10 with expected=4096 covered=4096 foreign=0 wrong_color=0 and
+    # digest f50dd9368fee6cc9, and a described read is delivered in the shipping
+    # profile as well. The features stay unreported because their remaining
+    # obligations are not complete: the advertised distance limits and the
+    # negotiation row, and the CTS leaves that exercise the pixel read inside an
+    # acceptance run (the pinned upstream clipping module gates the
+    # fragment-shader-read variant on these same two features,
+    # vktClippingTests.cpp requireFeatures()).
+    "shaderClipDistance": ("native/runtime_graphics_compiler.c",
+                           "!ps5vk_runtime_graphics_distance_reads_described(",
+                           "the pre-raster export is implemented and hardware-witnessed for static "
+                           "indices, and the dynamically indexed write is measured on hardware "
+                           "(its image is byte-identical to the statically indexed quadrant); the "
+                           "fragment stage's read of the same distances is verified on hardware too "
+                           "(eleven-case witness, expected=4096 covered=4096 foreign=0 wrong_color=0, "
+                           "digest f50dd9368fee6cc9) and the shipping profile delivers it; the "
+                           "feature stays unreported until its distance limits and the applicable CTS "
+                           "acceptance are published"),
+    "shaderCullDistance": ("native/runtime_graphics_compiler.c",
+                           "!ps5vk_runtime_graphics_distance_reads_described(",
+                           "the pre-raster export is implemented and hardware-witnessed for static "
+                           "indices, and the dynamically indexed write is measured on hardware "
+                           "(its image is byte-identical to the statically indexed quadrant); the "
+                           "fragment stage's read of the same distances is verified on hardware too "
+                           "(eleven-case witness, expected=4096 covered=4096 foreign=0 wrong_color=0, "
+                           "digest f50dd9368fee6cc9) and the shipping profile delivers it; the "
+                           "feature stays unreported until its distance limits and the applicable CTS "
+                           "acceptance are published"),
     "shaderResourceResidency": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
                                 "no queue advertises sparse binding"),
     "sparseBinding": ("src/vk_queue.c", "VK_QUEUE_SPARSE_BINDING_BIT",
@@ -178,6 +199,121 @@ ADVERTISED_FEATURES = {
                    "and maxDrawIndexedIndexValue reports 2^32-1"),
         "cts": ("dEQP-VK.info.device_mandatory_features",),
     },
+}
+
+# DXVK262-T04. The applicable upstream oracle for both distance features is the
+# pinned clipping module's user-defined family, which the frozen selection lists
+# in full for the shapes this device can run: vertex-only, the two indexing modes
+# and the fragment-stage read, with the clip counts reaching the reported
+# maxClipDistances of eight. These names are generated the same way the factory
+# composes them, so the matrix and cts/upstream/manifest.json cannot drift.
+def _clip_distance_cts_paths() -> tuple[str, ...]:
+    paths: list[str] = []
+    for group in ("clip_distance", "clip_cull_distance"):
+        for suffix in ("", "_dynamic_index"):
+            for clip in range(1, 9):
+                if group == "clip_cull_distance":
+                    cull = min(8, 8 - clip)
+                    leaf = f"{clip}_{cull}" if cull else str(clip)
+                else:
+                    leaf = str(clip)
+                for read in ("", "_fragmentshader_read"):
+                    paths.append(f"dEQP-VK.clipping.user_defined.{group}{suffix}.vert."
+                                 f"{leaf}{read}")
+    # The complementarity and misc leaves are NOT listed: the pinned binary does
+    # not report them when they are filtered by the name the module's
+    # construction implies (measured twice - absent from both the ps5log
+    # transcript and the QPA), so they stay diagnostics in the selection and are
+    # not claimed as evidence for the feature.
+    return tuple(sorted(paths))
+
+
+_CLIP_DISTANCE_CTS = _clip_distance_cts_paths()
+_CLIP_DISTANCE_CITATIONS = (
+    ("native/runtime_graphics_compiler.c",
+     "ps5vk_runtime_graphics_distance_reads_described(&p->vertex.metadata,"),
+    ("src/spirv_graphics_interface.c", "fs.clip_distance_reads>previous->clip_distances"),
+    ("src/physical_device_profile.h",
+     "limits->maxClipDistances = PS5VK_REQUIRED_CLIP_DISTANCES;"),
+    ("native/platform_ps5.c", "PS5VK_FEATURE_SHADER_CLIP_DISTANCE |"),
+    ("tests/test_clip_cull_witness.c", "PS5VK_CLIP_CULL_PIXEL_READ"),
+)
+def _geometry_cts_paths() -> tuple[str, ...]:
+    """The geometry leaves the frozen selection accepts.
+
+    Read from the manifest rather than listed twice: the matrix's
+    applicable-CTS column has to be the same selection the payload runs, and a
+    leaf that is demoted back to a diagnostic must disappear from the feature's
+    evidence at the same time.
+    """
+    manifest = json.loads(MANIFEST.read_text())
+    return tuple(sorted(case["path"] for case in manifest["cases"]
+                        if "geometryShader" in " ".join(case.get("features_required", []))))
+
+
+def _geometry_citations() -> tuple:
+    return (
+        ("src/vk_device.c", "PS5VK_FEATURE_GEOMETRY_SHADER"),
+        ("native/platform_ps5.c", "PS5VK_FEATURE_GEOMETRY_SHADER"),
+        ("src/graphics_program.h", "ps5vk_agc_primitive_needs_geometry"),
+        ("src/spirv_graphics_interface.c", "ps5vk_topology_input_vertices"),
+        ("src/graphics_limits.h", "limits->maxGeometryOutputVertices=256;"),
+        ("native/runtime_graphics_compiler.c", "ps5vk_graphics_has_geometry(key)"),
+        ("tests/test_geometry_witness.c", "PS5VK_GEOMETRY_LINES"),
+    )
+
+
+ADVERTISED_FEATURES["geometryShader"] = {
+    "profiles": ("graphics",),
+    "citations": _geometry_citations(),
+    "detail": ("the merged vertex+geometry pre-raster program is compiled, packaged and run "
+               "on the graphics path: the ES->GS input handoff it reads, the triangle, point "
+               "and line input families under their own input assemblies, gl_InvocationID, "
+               "gl_PrimitiveIDIn and the five mandatory minima are hardware-witnessed by the "
+               "nineteen-case geometry witness (shipping-mode run 20260917T183522678Z, "
+               "strict_verified, cases=19, gpu_readback, lifecycle_ok, including case 15 with "
+               "expected=1024 covered=1024 and the points/lines cases at 218/218 and 467/467), "
+               "and the profile reports the five geometry limits at the Vulkan floor this "
+               "profile exercised in src/graphics_limits.h"),
+    "cts": _geometry_cts_paths(),
+}
+ADVERTISED_FEATURES["tessellationShader"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/tess_profile.h", "PS5VK_FEATURE_TESSELLATION_SHADER"),
+        ("native/platform_ps5.c", "ps5vk_native_tess_profile("),
+        ("tools/dump_device_reporting.c", "ps5vk_native_tess_profile(platform)"),
+    ),
+    "detail": ("default native runtime-graphics profile: linked LS/HS and TES/TES+GS "
+               "execution and eight limits are independently hardware-witnessed; "
+               "the default integrated candidate passes 403 original upstream cases "
+               "with strict identity and clean closure (TESSELLATION_STATUS.md). "
+               "This host query is not GPU evidence or Vulkan conformance."),
+    # The integrated receipt is documented separately; do not pretend it is
+    # already part of the historical frozen canonical selection.
+    "cts": (),
+}
+ADVERTISED_FEATURES["shaderClipDistance"] = {
+    "profiles": ("graphics",),
+    "citations": _CLIP_DISTANCE_CITATIONS,
+    "detail": ("the pre-raster stage exports its clip distances through the packed position "
+               "registers and the fragment stage reads the interpolated value; both halves are "
+               "implemented, bounded by the two registers (maxClipDistances, maxCullDistances and "
+               "maxCombinedClipAndCullDistances are reported at the Vulkan floor of eight) and "
+               "measured on hardware by the eleven-case clip/cull witness, whose pixel-read case "
+               "verifies expected=4096 covered=4096 foreign=0 wrong_color=0 with digest "
+               "f50dd9368fee6cc9"),
+    "cts": _CLIP_DISTANCE_CTS,
+}
+ADVERTISED_FEATURES["shaderCullDistance"] = {
+    "profiles": ("graphics",),
+    "citations": _CLIP_DISTANCE_CITATIONS,
+    "detail": ("the same export and pixel-read path carries the cull distances, and the cull rule "
+               "is per half-space rather than per vertex - the witness's cull cases prove a "
+               "primitive is discarded only when a half-space is negative at every vertex, and "
+               "the combined budget (maxCombinedClipAndCullDistances) is the same eight "
+               "components"),
+    "cts": _CLIP_DISTANCE_CTS,
 }
 
 # Every non-advertised VkPhysicalDeviceFeatures member shares one fail-closed
@@ -751,6 +887,7 @@ def main() -> int:
         "reported_source": {
             "tool": "tools/dump_device_reporting.c",
             "profile_initializer": "src/device_profile_report.h",
+            "native_graphics_overlay": "native/tess_profile.h",
             "native_consumer": "native/platform_ps5.c",
         },
         "normative_source": {

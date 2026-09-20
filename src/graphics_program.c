@@ -93,10 +93,34 @@ VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
         if (!program->backend_data || !valid_sets(p) || !equal_sets(p,key) || !valid_vertex_layout(p) || !equal_vertex_layout(p,key) ||
             p->topology != key->topology || p->color_format != key->color_format || p->samples != key->samples ||
             p->color_write_mask != key->color_write_mask || p->blend_enable != key->blend_enable ||
+            (key->blend_enable && (
+                p->src_color_blend_factor != key->src_color_blend_factor ||
+                p->dst_color_blend_factor != key->dst_color_blend_factor ||
+                p->color_blend_op != key->color_blend_op ||
+                p->src_alpha_blend_factor != key->src_alpha_blend_factor ||
+                p->dst_alpha_blend_factor != key->dst_alpha_blend_factor ||
+                p->alpha_blend_op != key->alpha_blend_op ||
+                memcmp(p->blend_constants,key->blend_constants,sizeof(p->blend_constants)))) ||
             p->push_constant_size!=key->push_constant_size ||
             memcmp(p->push_constant_stages,key->push_constant_stages,
                    sizeof(p->push_constant_stages)) ||
             !equal_module(&p->vertex, &key->vertex) || !equal_module(&p->fragment, &key->fragment)) continue;
+        /* A record with a geometry stage matches only a key with the same
+         * geometry module: a two-stage program must never satisfy a three-stage
+         * pipeline by accident, and vice versa. */
+        if ((p->geometry.words!=NULL) != (key->geometry.words!=NULL)) continue;
+        if (key->geometry.words && !equal_module(&p->geometry, &key->geometry)) continue;
+        /* The tessellation pair is part of the identity for the same reason,
+         * and it carries one extra input: the patch control points the control
+         * stage's output vertex count and the evaluation stage's input arrays
+         * are derived from. A record whose patches were compiled for a
+         * different count is a different program. */
+        const int p_tess=p->tess_control.words!=NULL, key_tess=key->tess_control.words!=NULL;
+        if (p_tess!=key_tess || p->patch_control_points!=key->patch_control_points) continue;
+        if (key_tess) {
+            if (!equal_module(&p->tess_control, &key->tess_control) ||
+                !equal_module(&p->tess_eval, &key->tess_eval)) continue;
+        } else if (p->tess_eval.words || key->tess_eval.words) continue;
         /* Multiple matching records are an ambiguous compiler library, not
          * permission to choose the first potentially different backend object. */
         if (*out) { *out = NULL; return VK_ERROR_UNKNOWN; }

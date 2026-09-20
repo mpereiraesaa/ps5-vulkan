@@ -92,6 +92,7 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  !(op->dst_stage & ~(VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
                                                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT))) ||
                 ((!color || b->image==color) && ps5vk_color_discard_barrier(b)) ||
+                ((!color || b->image==color) && ps5vk_color_readback_reuse_barrier(b)) ||
                 ps5vk_array_color_barrier(b)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);
