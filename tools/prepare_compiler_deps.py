@@ -12,36 +12,13 @@ DEPS = [
         "name": "opengnm-psbc",
         "dest": ROOT / "third_party/psbc-reference",
         "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
-        # The published T04 candidate, pinned by exact commit: it carries the
-        # metadata this integration reads (the merged pair's system-SGPR indices
-        # and launch counts, the driver user-data window base, the pixel stage's
-        # distance reads, the tessellation evaluation half's loadable NGG
-        # package and the hull's tessellation workgroup layout) under metadata
-        # version 17. That dependency review is explicitly pending; this pin
-        # is the reproducible candidate the tessellation work builds against,
-        # not a claim that dependency main contains it. It now carries the
-        # cross-stage tessellation linkage as well (branch
-        # codex/tess-merged-lshs, opengnm-psbc PR #19, also open and
-        # unreviewed): the hull compiled as ONE merged LS/HS program so the
-        # vertex half is a real LS, and the domain linked against the control
-        # half so its patch count, attribute stride and tess-factor read flag
-        # stay compile-time constants. PR #16's TESS_EVAL package is included
-        # by history. The pin now also carries the link in the OTHER direction
-        # - the evaluation half linked into the hull compile - without which
-        # the control half reports TESS_PRIMITIVE_UNSPECIFIED and stores
-        # QUAD-shaped tessellation factors for a triangle domain, measured on
-        # hardware as inner[0] landing one dword past where the tessellator
-        # reads it. The pin is the whole
-        # contract, so a different commit has to be pinned explicitly and the
-        # driver cache key moves with the metadata version.
-        #
-        # DIAGNOSTIC CANDIDATE, unreviewed: branch codex/tess-legacy-domain,
-        # two commits past PR #19's head (opengnm-psbc PR #20, draft), lets the evaluation half compile as
-        # radv's "Tessellation Evaluation Shader as VS" - the domain on the VS
-        # hardware stage (VS_STAGE_DS, no NGG) - when the NGG option is off,
-        # for the PS5VK_TESS_LEGACY_DOMAIN experiment. The NGG path is
-        # unchanged; a standalone non-NGG evaluation half stays unresolved.
-        "pin": "5a155280ec313ba28fe9a38b60a72a70d040d8cf",
+        # Metadata21 candidate: linked-stage resource/entrypoint identity,
+        # TES-fed geometry, merged LS/HS argument delivery, packed fragment
+        # distances and precise push-constant member ranges. The cache ABI
+        # and native loader must agree with this exact dependency.
+        # Published in opengnm-psbc PR22 (depends on PR21 and the preceding
+        # tessellation compiler series); review is pending, not merged main.
+        "pin": "7e00345f04982b51eacbad63a0412f3c8b4b90a9",
     },
     {
         "name": "opengnm",

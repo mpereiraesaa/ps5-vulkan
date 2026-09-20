@@ -65,10 +65,12 @@ int main(void)
         static const unsigned geometry_registers[]={0x1ffu,0x291u,0x29bu,0x2abu,0x2ceu,0x2d3u};
         g->version=PSBC_SHADER_METADATA_VERSION;g->target=PSBC_TARGET_PS5;
         g->source_stage=PSBC_STAGE_GEOMETRY;g->hardware_stage=PSBC_HW_STAGE_NGG;
+        g->merged_geometry=true;g->merged_es_source_stage=PSBC_STAGE_VERTEX;
         g->address32_hi=2;g->user_sgpr_count=2;g->ngg_lds_layout_valid=true;
         g->ngg_lds_layout_user_data_dword=1;g->ngg_lds_layout=1680;
         g->linkage_valid=true;
         g->linkage_ge_cntl.offset=0x25b;g->linkage_stages_en.offset=0x2d5;
+        g->linkage_stages_en.value=2u<<3;
         g->linkage_user_vgpr_en.offset=0x262;
         g->user_data_window_base=8;g->esgs_system_sgprs_valid=true;
         g->esgs_gs_tg_info_sgpr=2;g->esgs_merged_wave_info_sgpr=3;
@@ -82,6 +84,20 @@ int main(void)
         g->shader_registers[2].offset=0x8a;g->shader_registers[3].offset=0x8b;
         g->output_semantic_count=1;g->output_semantics[0]=15;
         struct ps5vk_runtime_shader merged;
+        assert(!ps5vk_runtime_shader_build(&merged,&pair));
+        const struct ps5vk_runtime_shader unchanged=merged;
+        g->merged_es_source_stage=PSBC_STAGE_NONE;
+        assert(ps5vk_runtime_shader_build(&merged,&pair));
+        assert(!memcmp(&merged,&unchanged,sizeof(merged)));
+        g->merged_es_source_stage=PSBC_STAGE_TESS_EVAL;
+        assert(ps5vk_runtime_shader_build(&merged,&pair));
+        g->merged_es_source_stage=PSBC_STAGE_VERTEX;
+        g->linkage_stages_en.value=1u<<3;
+        assert(ps5vk_runtime_shader_build(&merged,&pair));
+        g->linkage_stages_en.value=2u<<3;
+        g->ps5_ring_table_valid=true;
+        assert(ps5vk_runtime_shader_build(&merged,&pair));
+        g->ps5_ring_table_valid=false;
         assert(!ps5vk_runtime_shader_build(&merged,&pair));
         unsigned seen=0;
         for(unsigned i=0;i<merged.header.num_cx_registers;++i) {

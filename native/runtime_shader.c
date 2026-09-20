@@ -162,10 +162,27 @@ static int slot_pair_ok(bool valid,uint32_t dword,uint32_t user_sgpr_count)
     return valid ? dword<user_sgpr_count : dword==0;
 }
 
+static int merged_source_valid(const PsbcShaderMetadata *m)
+{
+    if(!m->merged_geometry)
+        return m->merged_es_source_stage==PSBC_STAGE_NONE &&
+            m->source_stage!=PSBC_STAGE_GEOMETRY;
+    if(m->source_stage!=PSBC_STAGE_GEOMETRY || !m->linkage_valid)return 0;
+    const unsigned es=(m->linkage_stages_en.value>>3)&3u;
+    if(m->merged_es_source_stage==PSBC_STAGE_VERTEX)
+        return es==2u && !m->ps5_ring_table_valid;
+    if(m->merged_es_source_stage==PSBC_STAGE_TESS_EVAL)
+        return es==1u && m->ps5_ring_table_valid &&
+            !m->vertex_buffer_table_valid && !m->base_vertex_valid &&
+            !m->start_instance_valid && !m->draw_id_valid;
+    return 0;
+}
+
 static int draw_abi_build(const PsbcShaderMetadata *v,
     const PsbcShaderMetadata *f,struct ps5vk_runtime_draw_abi *out,int hull)
 {
     if(!v || !f || !out || v->version!=PSBC_SHADER_METADATA_VERSION || f->version!=PSBC_SHADER_METADATA_VERSION ||
+       !merged_source_valid(v) || !merged_source_valid(f) ||
        v->vertex_buffer_per_attribute || f->vertex_buffer_usage_mask || f->vertex_buffer_per_attribute ||
        /* Draw parameters are vertex-only; ViewIndex has independently
         * declared vertex and fragment slots. Absent pairs must be zero. */
@@ -298,6 +315,7 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
         m->hardware_stage==PSBC_HW_STAGE_NGG;
     int fs=m->source_stage==PSBC_STAGE_FRAGMENT && m->hardware_stage==PSBC_HW_STAGE_PIXEL;
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
+        !merged_source_valid(m) ||
         m->address32_hi!=2 || m->user_sgpr_count>16 || m->scratch_valid ||
         m->scratch_bytes_per_wave || m->scratch_size_per_thread || m->streamout_valid ||
         m->input_semantic_count>PSBC_MAX_SEMANTICS || m->output_semantic_count>PSBC_MAX_SEMANTICS ||
@@ -476,10 +494,13 @@ int ps5vk_runtime_hull_build(struct ps5vk_runtime_shader *hull,
     if (!registers_valid(m->context_registers,m->context_register_count,PSBC_MAX_CONTEXT_REGISTERS) ||
         !descriptors_valid(m)) return -4;
     struct ps5vk_runtime_draw_abi hull_abi;
-    if (ps5vk_runtime_hull_abi_build(m,&hull_abi) ||
-        m->descriptor_set_valid[0] || m->descriptor_set_valid[1] ||
-        m->descriptor_set_valid[2] || m->descriptor_set_valid[3] ||
-        m->push_constants_valid || m->push_constant_size) return -5;
+    if (m->push_constants_valid ?
+        (!m->push_constant_size || m->push_constant_size>256 ||
+         m->push_constants_user_data_dword>=m->user_sgpr_count) :
+        (m->push_constant_size || m->push_constants_user_data_dword))return -5;
+    /* Resource pointers use the same checked HS window as fetch/draw args.
+     * Allocation and per-stage layout visibility remain pipeline/queue duties. */
+    if (ps5vk_runtime_hull_abi_build(m,&hull_abi))return -5;
     memset(hull,0,sizeof(*hull));
     hull->header.file_header=0x34333231; hull->header.version=24;
     hull->header.header_size=sizeof(*hull);
