@@ -11,6 +11,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeDiagnosticOptions(unittest.TestCase):
+    def test_t06_diagnostic_is_private_and_independent(self):
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        builder = (ROOT / "tools/build_sdk.py").read_text()
+        self.assertIn("PS5VK_T06_DIAGNOSTIC", platform)
+        self.assertIn("PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS", platform)
+        self.assertIn('os.environ.get("PS5VK_T06_DIAGNOSTIC", "0")', builder)
+        self.assertIn('native_cflags.append("-DPS5VK_T06_DIAGNOSTIC=1")', builder)
+        self.assertIn("PS5VK_T06_DIAGNOSTIC must be 0 or 1", builder)
+        for public in (ROOT / "include").rglob("*.h"):
+            self.assertNotIn("PS5VK_T06_DIAGNOSTIC", public.read_text(),
+                             f"{public} must not expose a measurement switch")
+
     def test_binding_diagnostic_uses_tested_workload_capacity_gate(self):
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("ps5vk_graphics_vertex_bindings_available(&device_props.limits,", source)

@@ -257,6 +257,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                     PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                                     PS5VK_FEATURE_MULTI_VIEWPORT;
 #endif
+    /* Private DXVK262-T06 measurement profile.  This is deliberately a
+     * separate switch from the T05 raster profile: a payload can negotiate
+     * fragmentStoresAndAtomics only when its exact artifact was built to run
+     * the bounded storage-side-effect witness.  Shipping builds leave it off
+     * until native readback and focused upstream CTS both support promotion. */
+#if defined(PS5VK_T06_DIAGNOSTIC) && PS5VK_T06_DIAGNOSTIC
+    platform->supported_features |= PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
+#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

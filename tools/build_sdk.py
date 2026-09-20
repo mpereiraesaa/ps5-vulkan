@@ -236,6 +236,15 @@ def main():
             raise SystemExit("PS5VK_RASTER_DIAGNOSTIC must be 0 or 1")
         if raster_diagnostic == "1":
             native_cflags.append("-DPS5VK_RASTER_DIAGNOSTIC=1")
+        # Private measurement build (DXVK262-T06): expose only the fragment
+        # storage/atomic feature needed by the bounded native witness.  This is
+        # intentionally independent of the T05 raster diagnostic so neither
+        # artifact can silently inherit the other's unpromoted capabilities.
+        t06_diagnostic = os.environ.get("PS5VK_T06_DIAGNOSTIC", "0")
+        if t06_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_T06_DIAGNOSTIC must be 0 or 1")
+        if t06_diagnostic == "1":
+            native_cflags.append("-DPS5VK_T06_DIAGNOSTIC=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:
