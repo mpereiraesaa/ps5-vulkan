@@ -38,6 +38,19 @@ static int patch_builtin(struct ps5vk_graphics_module_key *m, uint32_t from, uin
     }
     return 0;
 }
+static int patch_member_builtin(struct ps5vk_graphics_module_key *m,
+                                uint32_t from, uint32_t to)
+{
+    uint32_t *words=(uint32_t *)m->words;
+    for(size_t at=5;at<m->word_count;at+=words[at]>>16) {
+        if((words[at]&65535u)==72u && (words[at]>>16)==5u &&
+           words[at+3]==11u && words[at+4]==from) {
+            words[at+4]=to;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
@@ -1541,6 +1554,37 @@ static void check_fragment_store_atomic_contract(void)
     assert(!ps5vk_runtime_graphics_feature_use_ok(&candidate_vs,&candidate_fs,
         PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS));
     ps5vk_runtime_graphics_free(NULL,compiled);
+
+    /* The focused upstream frag_side_effects leaves index the SSBO with
+     * gl_FragCoord and then discard.  FragCoord is a rasterizer-provided vec4
+     * fragment input: it must pass the interface policy without pretending to
+     * be a vertex varying, and the exact store/kill shape must compile with the
+     * negotiated feature. */
+    free((void *)key.fragment.words);
+    key.fragment=read_module("build/runtime-graphics/fragment_coord_store.frag.spv");
+    compiled=NULL;
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    program=compiled;
+    assert(program->fragment.metadata.hardware_stage==PSBC_HW_STAGE_PIXEL);
+    assert(program->fragment.metadata.descriptor_used_binding_mask[0]==UINT64_C(1));
+    ps5vk_runtime_graphics_free(NULL,compiled);
+
+    /* Keep the admission fail-closed: the same module with an unknown
+     * fragment built-in is refused, as is FragCoord masquerading as a vertex
+     * output.  These mutations are made on fresh private module copies. */
+    assert(patch_builtin(&key.fragment,15u,UINT32_C(0x7ffffff0)));
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    free((void *)key.fragment.words);
+    key.fragment=read_module("build/runtime-graphics/fragment_coord_store.frag.spv");
+    struct ps5vk_graphics_module_key wrong_vertex=
+        read_module("build/runtime-graphics/triangle.vert.spv");
+    assert(patch_member_builtin(&wrong_vertex,0u,15u));
+    struct ps5vk_graphics_module_key saved_vertex=key.vertex;
+    key.vertex=wrong_vertex;
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    free((void *)key.vertex.words);
+    key.vertex=saved_vertex;
 
     /* Same layout, no store: the compiler removes the unused declaration,
      * leaves the DB writes-memory bits clear and needs no feature or descriptor
