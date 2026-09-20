@@ -30,6 +30,7 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V --target-env vulkan1.1 experiments/graphics/runtime_view_index.frag -o build/runtime-graphics/view_index.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_descriptor_arrays.frag -o build/runtime-graphics/descriptor_arrays.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_fragment_store.frag -o build/runtime-graphics/fragment_store.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_fragment_coord_store.frag -o build/runtime-graphics/fragment_coord_store.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_input_attachment.frag -o build/runtime-graphics/input_attachment.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_input_attachment.vert -o build/runtime-graphics/input_attachment_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_input_attachment_pattern.frag -o build/runtime-graphics/input_attachment_pattern.frag.spv
