@@ -28,7 +28,8 @@ enum { MODE_SPACING_EQUAL=1, MODE_SPACING_FRACTIONAL_EVEN=2,
        MODE_OUTPUT_VERTICES=26, MODE_OUTPUT_POINTS=27, MODE_OUTPUT_LINE_STRIP=28,
        MODE_OUTPUT_TRIANGLE_STRIP=29 };
 struct id_info {
-    unsigned op, type, count, signedness, storage, location, builtin, forbidden, selected, flat, patch;
+    unsigned op, type, count, signedness, storage, location, builtin, index,
+        index_set, forbidden, selected, flat, patch;
     /* OpTypeStruct member type ids, for the bounded built-in block below. */
     unsigned member_types[BLOCK_MEMBERS];
 };
@@ -40,6 +41,10 @@ struct interface {
      * the primitive the pipeline assembles. */
     unsigned input_primitive;
     struct interface_slot inputs[LOCATIONS], outputs[LOCATIONS];
+    /* Fragment Location 0, Index 1 is the secondary source for MRT0 rather
+     * than MRT1.  Keep it in a distinct namespace so ordinary location
+     * collision checks remain strict and no other indexed output is widened. */
+    struct interface_slot secondary_outputs[LOCATIONS];
     /* Per-patch interface: a variable or built-in that carries the Patch
      * decoration. It lives at the same locations as the per-vertex interface,
      * so it needs its own slots to be describable at all. SPIRV-Tools #5654
@@ -325,14 +330,17 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                 unsigned *field=w[2]==30?&d->location:&d->builtin;
                 if(*field!=~0u)goto done;
                 *field=w[3];
+            } else if(w[2]==32) { /* Index */
+                if(n!=4 || d->index_set || w[3]>1u)goto done;
+                d->index=w[3];d->index_set=1;
             } else if(w[2]==14) {
                 if(n!=3)goto done;
                 d->flat=1;
             } else if(w[2]==DECORATION_PATCH) {
                 if(n!=3)goto done;
                 d->patch=1;
-            } else if(w[2]==13 || w[2]==16 || w[2]==17 ||
-                      w[2]==31 || w[2]==32) d->forbidden=1;
+            } else if(w[2]==13 || w[2]==16 || w[2]==17 || w[2]==31)
+                d->forbidden=1;
         } else if(op==43) {
             /* OpConstant: result id in operand 1, literal in operand 2. Only the
              * declared distance array length consumes one. */
@@ -580,7 +588,16 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
         if(d->patch && model==MODEL_TESS_CTRL && d->storage==1)goto done;
         if(d->location>=LOCATIONS || occupied_count>LOCATIONS-d->location)goto done;
         struct interface_slot *locations;
-        if(d->patch)locations=d->storage==1?out->patch_inputs:out->patch_outputs;
+        if(d->index_set) {
+            /* Vulkan's dual-source form is exactly one fragment Output at
+             * Location 0, Index 1.  An explicit Index 0 is the primary source;
+             * Index on inputs, pre-raster stages, patch variables or a value
+             * spanning multiple locations remains outside this profile. */
+            if(model!=MODEL_FRAGMENT || d->storage!=3 || d->patch ||
+               d->location!=0 || occupied_count!=1)goto done;
+            locations=d->index?out->secondary_outputs:out->outputs;
+        } else if(d->patch)
+            locations=d->storage==1?out->patch_inputs:out->patch_outputs;
         else locations=d->storage==1?out->inputs:out->outputs;
         for(unsigned slot=0;slot<occupied_count;++slot) {
             if(locations[d->location+slot].components)goto done;
@@ -723,6 +740,9 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
     }
     if(fs.outputs[0].components!=4 ||
        fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
+    if(fs.secondary_outputs[0].components &&
+       (fs.secondary_outputs[0].components!=4 ||
+        fs.secondary_outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT))return 0;
     /* The stage the fragment stage reads is the last pre-raster stage that runs
      * before it, and the stage a geometry stage reads is the one before that. */
     const struct interface *previous=has_geometry?&gs:(has_tessellation?&tes:&vs);
@@ -759,7 +779,7 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * vertex input actually reads, so an unused declaration is dropped
          * rather than fetched against a table nothing names. */
         if(vs.inputs[i].components && matched!=1)return 0;
-        if(i && fs.outputs[i].components)return 0;
+        if(i && (fs.outputs[i].components || fs.secondary_outputs[i].components))return 0;
         if(fs.inputs[i].components &&
            (fs.inputs[i].components!=previous->outputs[i].components ||
             fs.inputs[i].numeric!=previous->outputs[i].numeric))return 0;

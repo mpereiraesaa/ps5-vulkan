@@ -44,6 +44,8 @@ static int patch_builtin(struct ps5vk_graphics_module_key *m, uint32_t from, uin
 #define PS5VK_TEST_POS_Z_FLOAT_ENA      (1u << 10)
 #define PS5VK_TEST_POS_XYZW_FLOAT_ENA   (0xfu << 8)
 #define PS5VK_TEST_LAUNCH_VGPR_ENA      (0xffu)
+#define PS5VK_TEST_SPI_SHADER_COL_FORMAT_OFFSET ((uint16_t)0x1c5u)
+#define PS5VK_TEST_CB_SHADER_MASK_OFFSET        ((uint16_t)0x08fu)
 
 static uint32_t published_context_register(const void *pair, uint16_t offset, int *found)
 {
@@ -98,6 +100,71 @@ static void check_fragment_position(void)
         .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
     assert(!ps5vk_spirv_graphics_interface(&invalid_key));
     free((void *)invalid_key.vertex.words);free((void *)invalid_key.fragment.words);
+}
+
+/* A second fragment output at Location 0, Index 1 is not another MRT.  The
+ * pinned PSBC/ACO epilogue must package both values as the two sources of MRT0:
+ * one FP16_ABGR export nibble per source and one RGBA write mask per source.
+ * These exact registers are the compiler half of the dualSrcBlend contract;
+ * they do not authorize the draw path or advertise the device feature. */
+static void check_dual_source_exports(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/dual_source.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .blend_enable=VK_TRUE,
+        .src_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA,
+        .dst_color_blend_factor=VK_BLEND_FACTOR_ONE,
+        .color_blend_op=VK_BLEND_OP_ADD,
+        .src_alpha_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA,
+        .dst_alpha_blend_factor=VK_BLEND_FACTOR_ONE,
+        .alpha_blend_op=VK_BLEND_OP_ADD};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
+        .entrypoint="main",.optimise=true,.address32_hi=2,
+        .rasterization_samples=1,.spi_shader_col_format=4};
+    PsbcShaderOutput compiled={0};
+    assert(psbc_compile_shader(key.fragment.words,key.fragment.word_count*4u,
+        &options,&compiled)==PSBC_RESULT_OK);
+    int found_format=0,found_mask=0;
+    uint32_t spi_format=0,shader_mask=0;
+    for(unsigned i=0;i<compiled.metadata.context_register_count;++i) {
+        const PsbcRegisterWrite *reg=&compiled.metadata.context_registers[i];
+        if(reg->offset==PS5VK_TEST_SPI_SHADER_COL_FORMAT_OFFSET) {
+            spi_format=reg->value;found_format=1;
+        }
+        if(reg->offset==PS5VK_TEST_CB_SHADER_MASK_OFFSET) {
+            shader_mask=reg->value;found_mask=1;
+        }
+    }
+    assert(spi_format==UINT32_C(0x44));
+    assert(shader_mask==UINT32_C(0xff));
+    assert(found_format && found_mask);
+    psbc_free_output(&compiled);
+
+    free((void *)key.fragment.words);
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    compiled=(PsbcShaderOutput){0};found_format=found_mask=0;
+    assert(psbc_compile_shader(key.fragment.words,key.fragment.word_count*4u,
+        &options,&compiled)==PSBC_RESULT_OK);
+    spi_format=shader_mask=0;
+    for(unsigned i=0;i<compiled.metadata.context_register_count;++i) {
+        const PsbcRegisterWrite *reg=&compiled.metadata.context_registers[i];
+        if(reg->offset==PS5VK_TEST_SPI_SHADER_COL_FORMAT_OFFSET) {
+            spi_format=reg->value;found_format=1;
+        }
+        if(reg->offset==PS5VK_TEST_CB_SHADER_MASK_OFFSET) {
+            shader_mask=reg->value;found_mask=1;
+        }
+    }
+    assert(spi_format==UINT32_C(4));
+    assert(shader_mask==UINT32_C(15));
+    assert(found_format && found_mask);
+    psbc_free_output(&compiled);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
 /* ViewIndex is delivered to both stages through independently declared slots.
@@ -1671,6 +1738,7 @@ int main(void)
     check_clip_cull_distances();
     check_fragment_distance_read();
     check_fragment_position();
+    check_dual_source_exports();
     check_geometry_stage();
     check_viewport_index_routing();
     check_geometry_output_components();
