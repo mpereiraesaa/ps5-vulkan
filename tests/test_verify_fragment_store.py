@@ -30,7 +30,8 @@ class Fixture:
         self.manifest = root / "manifest.json"
         self.manifest.write_text(json.dumps({
             "stage": "graphics-api-offscreen-draw", "submit_enabled": True,
-            "runtime_graphics": True, "termination": "return-main",
+            "runtime_graphics": True,
+            "termination": "shell-close-after-cleanup",
             "fragment_store_probe": 1, "t06_diagnostic_features": True,
             "graphics_shader_source": "owned-runtime-fragment-storage-atomic",
             "fragment_store_witness": verifier.EXPECTED_WITNESS,
@@ -109,6 +110,13 @@ class FragmentStoreVerifierTests(unittest.TestCase):
         receipt["clean"] = False
         self.fixture.run.with_suffix(".json").write_text(json.dumps(receipt))
         self.assertRaises(ValueError, self.fixture.validate)
+
+    def test_rejects_return_main_instead_of_supervised_shell_close(self):
+        manifest = json.loads(self.fixture.manifest.read_text())
+        manifest["termination"] = "return-main"
+        self.fixture.manifest.write_text(json.dumps(manifest))
+        self.assertRaisesRegex(ValueError, "manifest termination",
+                               self.fixture.validate)
 
 
 if __name__ == "__main__":

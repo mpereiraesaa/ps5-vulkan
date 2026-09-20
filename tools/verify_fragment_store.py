@@ -81,7 +81,8 @@ def validate_artifact(manifest_path, artifact_path):
             "owned-runtime-fragment-storage-atomic", "manifest shader source")
     require(manifest.get("fragment_store_witness") == EXPECTED_WITNESS,
             "manifest witness")
-    require(manifest.get("termination") == "return-main", "manifest termination")
+    require(manifest.get("termination") == "shell-close-after-cleanup",
+            "manifest termination")
     digest = hashlib.sha256(Path(artifact_path).read_bytes()).hexdigest()
     require(manifest.get("files", {}).get("eboot.bin") == digest,
             "artifact does not match manifest")
