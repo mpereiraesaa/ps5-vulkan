@@ -160,6 +160,11 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
            has_tessellation?&input->domain.metadata:&input->vertex.metadata,
            &input->fragment.metadata,&arguments))
         {TESS_CREATE_FAIL("abi");return VK_ERROR_FEATURE_NOT_PRESENT;}
+    const int fragment_export=ps5vk_runtime_fragment_export(&input->fragment.metadata);
+    if(fragment_export<0 || input->dual_source_export>1u ||
+       input->dual_source_export!=(uint32_t)
+           (fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if(has_tessellation && ps5vk_runtime_hull_build(&hull,&input->hull))
         {TESS_CREATE_FAIL("hull");return VK_ERROR_FEATURE_NOT_PRESENT;}
     size_t vs_at=(sizeof(struct ps5vk_graphics_pair)+255u)&~(size_t)255u;
@@ -199,6 +204,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
     struct ps5vk_graphics_pair *pair=p->pair;
     pair->runtime_arguments=arguments;
     pair->hull_arguments=input->hull_arguments;
+    pair->dual_source_export=input->dual_source_export;
     if(ps5vk_runtime_shader_build(&pair->runtime_vertex,
            has_tessellation?&input->domain:&input->vertex) ||
        ps5vk_runtime_shader_build(&pair->runtime_fragment,&input->fragment)) {
