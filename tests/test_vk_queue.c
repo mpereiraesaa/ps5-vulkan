@@ -459,6 +459,22 @@ int main(void)
     assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
     assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && !image->pending);
 
+    /* The layout remains compatible, but an executable using no descriptors
+     * needs none bound. Unknown or actually-used sets are still mandatory. */
+    for(unsigned s=0;s<4;++s) {
+        c->operations[1].sets[s]=c->operations[2].sets[s]=NULL;
+    }
+    pipeline.graphics_usage_known=VK_TRUE;pipeline.graphics_used_set_mask=0;
+    assert(vkQueueSubmit(&d.queue,1,&submit,NULL)==VK_SUCCESS);
+    assert(vkQueueWaitIdle(&d.queue)==VK_SUCCESS);
+    for(unsigned s=0;s<4;++s)assert(!sampled_sets[s].pending);
+    pipeline.graphics_used_set_mask=1;
+    assert(vkQueueSubmit(&d.queue,1,&submit,NULL)!=VK_SUCCESS && !d.submission);
+    pipeline.graphics_usage_known=VK_FALSE;
+    assert(vkQueueSubmit(&d.queue,1,&submit,NULL)!=VK_SUCCESS && !d.submission);
+    pipeline.graphics_used_set_mask=0;
+    for(unsigned s=0;s<4;++s)c->operations[1].sets[s]=c->operations[2].sets[s]=&sampled_sets[s];
+
     /* The bounded two-subpass shared-role shape reaches the backend. The
      * immutable stream must retain both draws and the exact transition. */
     {

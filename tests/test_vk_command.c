@@ -581,7 +581,15 @@ static void graphics_recording(void)
     }
     vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&graphics_layout,3,1,extra_handles+2,0,NULL);
     vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&graphics_layout,1,2,extra_handles,0,NULL);
+    /* Exercise the runtime-table snapshot independently of the precompiled
+     * descriptor list (empty in runtime graphics pipelines). */
+    assert(pipeline.program.descriptor_count==0);
+    for(unsigned s=0;s<4;++s)c->graphics_set_dynamic_offsets[s][0]=256u*(s+1u);
     vkCmdDraw(c, 3, 1, 2, 4);
+    for(unsigned s=0;s<4;++s) {
+        c->graphics_set_dynamic_offsets[s][0]=0;
+        assert(c->operations[1].graphics_dynamic_offsets[s][0]==256u*(s+1u));
+    }
     assert(c->operations[1].sets[0]==graphics_handle && c->operations[1].generations[0]==9);
     for(unsigned s=1;s<4;++s)assert(c->operations[1].sets[s]==extra_handles[s-1] &&
         c->operations[1].generations[s]==9+s);
@@ -599,6 +607,24 @@ static void graphics_recording(void)
     assert(d.invalidate(&d, VK_OBJECT_TYPE_IMAGE_VIEW, &view) && c->state == PS5VK_INVALID);
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS && !c->graphics_pipeline && !c->graphics_sets[0]);
     pipeline.set_count=0;
+    {
+        struct VkPipeline_T unused=pipeline;
+        unused.set_count=1;unused.sets[0]=graphics_set.signature;
+        for(unsigned mode=0;mode<3;++mode) {
+            unused.graphics_usage_known=mode!=0;
+            unused.graphics_used_set_mask=mode==1?1u:0u;
+            if(mode)assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+            vkCmdBindPipeline(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&unused);
+            vkCmdBeginRenderPass(c,&ri,VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdDraw(c,3,1,0,0);
+            if(mode<2)assert(c->state==PS5VK_INVALID);
+            else {
+                assert(c->state==PS5VK_RECORDING && !c->operations[1].sets[0]);
+                vkCmdEndRenderPass(c);assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+            }
+        }
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    }
     ri.clearValueCount = 0;
     vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
     assert(c->state == PS5VK_INVALID && !c->operation_count);
@@ -943,6 +969,32 @@ static void push_constant_recording(void)
     vkCmdDispatch(c,1,1,1);
     assert(c->state==PS5VK_INVALID && !c->operation_count);
     vkDestroyPipelineLayout(&d,incompatible,NULL);
+    const VkShaderStageFlags optional_stages[]={VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,VK_SHADER_STAGE_GEOMETRY_BIT};
+    for(unsigned i=0;i<3;++i) {
+        range=(VkPushConstantRange){optional_stages[i],16,16};
+        VkPipelineLayout optional;
+        assert(vkCreatePipelineLayout(&d,&li,NULL,&optional)==VK_SUCCESS);
+        assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+        vkCmdPushConstants(c,optional,optional_stages[i],16,sizeof(values),values);
+        assert(c->state==PS5VK_RECORDING && c->push_constants_valid);
+        assert(!memcmp(c->push_constants+16,values,sizeof(values)));
+        vkCmdPushConstants(c,optional,optional_stages[i],12,4,values);
+        assert(c->state==PS5VK_INVALID);
+        vkDestroyPipelineLayout(&d,optional,NULL);
+    }
+    range=(VkPushConstantRange){VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,0,16};
+    VkPipelineLayout overlap;
+    assert(vkCreatePipelineLayout(&d,&li,NULL,&overlap)==VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdPushConstants(c,overlap,range.stageFlags,0,16,values);
+    assert(c->state==PS5VK_RECORDING);
+    unsigned char saved_push[16];memcpy(saved_push,c->push_constants,16);
+    uint32_t forbidden=0xbadc0deu;
+    vkCmdPushConstants(c,overlap,VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,0,4,&forbidden);
+    assert(c->state==PS5VK_INVALID && !memcmp(saved_push,c->push_constants,16));
+    vkDestroyPipelineLayout(&d,overlap,NULL);
     vkDestroyPipelineLayout(&d,layout,NULL);vkDestroyCommandPool(&d,p,NULL);
 }
 static void core_dynamic_state_recording(void)
