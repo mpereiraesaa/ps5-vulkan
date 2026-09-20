@@ -53,14 +53,14 @@ def get_ps5_toolchain():
 def tess_ring_flags(environment):
     mode = environment.get("PS5VK_TESS_RING_QUERY", "0")
     if mode not in ("0", "4"):
-        raise ValueError("SDK ring profile must be 0 (off) or 4 (queue-owned lifecycle)")
+        raise ValueError("SDK ring diagnostics must be 0 (off) or 4 (extended records)")
     flags = ["-DPS5VK_TESS_RING_QUERY=4"] if mode == "4" else []
     experimental = environment.get("PS5VK_TESS_EXPERIMENTAL_API", "0")
     if experimental not in ("0", "1"):
         raise ValueError("experimental tessellation API must be 0 or 1")
     if experimental == "1":
-        if mode != "4":
-            raise ValueError("experimental tessellation API requires queue-owned ring mode4")
+        # TF/offchip ownership is unconditional in the native queue now.
+        # Diagnostic logging must not enable/disable required GPU lifecycle.
         if any(environment.get(name, "0") not in ("", "0") for name in
                ("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC", "PS5VK_TESS_PROBE")):
             raise ValueError("public API experiment forbids feature/descriptor bypass probes")
@@ -198,9 +198,9 @@ def main():
               if os.environ.get("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC") else []),
             *(["-DPS5VK_TESS_PROBE=" + os.environ["PS5VK_TESS_PROBE"]]
               if os.environ.get("PS5VK_TESS_PROBE") else []),
-            # Ring mode alone does not advertise tessellation. A separate,
-            # explicit development-only API profile permits CTS negotiation.
-            # Neither enables the system-table diagnostic.
+            # Legacy experiment flags remain attributable in old build recipes.
+            # Default native feature eligibility is in tess_profile.h; neither
+            # ring logging nor the old experiment enables a probe bypass.
             *ring_flags,
             # The SDK build compiles the same sources, so it must select the
             # same single tessellation candidate the native build selected.
@@ -214,6 +214,17 @@ def main():
               if os.environ.get("PS5VK_TESS_STATE_DUMP") else []),
             *(["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
               if os.environ.get("PS5VK_GEOMETRY_KEY_DIAG") == "1" else []),
+            *(["-DPS5VK_TESS_OFFCHIP_CAPACITY_WG=" +
+               os.environ["PS5VK_TESS_OFFCHIP_CAPACITY_WG"]]
+              if os.environ.get("PS5VK_TESS_OFFCHIP_CAPACITY_WG") else []),
+            *(["-DPS5VK_TESS_GE_CNTL=" + os.environ["PS5VK_TESS_GE_CNTL"]]
+              if os.environ.get("PS5VK_TESS_GE_CNTL") else []),
+            *(["-DPS5VK_TESS_END_VS_FLUSH=1"]
+              if os.environ.get("PS5VK_TESS_END_VS_FLUSH") == "1" else []),
+            *(["-DPS5VK_TESS_HULL_TRACE=1"]
+              if os.environ.get("PS5VK_TESS_HULL_TRACE") == "1" else []),
+            *(["-DPS5VK_TESS_OFFCHIP_BIND=1"]
+              if os.environ.get("PS5VK_TESS_OFFCHIP_BIND") == "1" else []),
         ]
 
         obj_dir = ROOT / "build/sdk-objs-native"

@@ -11,6 +11,7 @@ static struct ps5vk_program_library ps5vk_compiled_library={0};
 #include "graphics_formats.h"
 #include "physical_device_profile.h"
 #include "device_profile_report.h"
+#include "tess_profile.h"
 #include "vk_queue.h"
 #include <string.h>
 #include <stdatomic.h>
@@ -178,6 +179,7 @@ static void configure(VkDevice d)
     d->graphics_acquire=acquire_graphics;
     d->graphics_compiled_release=ps5vk_runtime_graphics_cached_release;
     d->graphics_create=ps5vk_native_runtime_graphics_create;
+    d->graphics_used_sets=ps5vk_native_graphics_used_sets;
 #else
     d->graphics_library = &graphics_library;
     d->graphics_create = ps5vk_native_graphics_create;
@@ -276,24 +278,6 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
 #endif
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
-#if defined(PS5VK_TESS_EXPERIMENTAL_API) && PS5VK_TESS_EXPERIMENTAL_API
-#if !PS5VK_RUNTIME_GRAPHICS || !PS5VK_GRAPHICS_DRAW || PS5VK_TESS_RING_QUERY != 4
-#error Experimental tessellation requires runtime graphics and queue-owned TF ring
-#endif
-    /* DEVELOPMENT PROFILE ONLY. These are the target core floors to exercise
-     * with original CTS, not a claim that their complete envelope is proven.
-     * No shipping build enables this switch; its artifacts must record it.
-     * Keep normal feature negotiation active: no optional-stage bypass. */
-    platform->supported_features |= PS5VK_FEATURE_TESSELLATION_SHADER;
-    VkPhysicalDeviceLimits *limits = &platform->properties.limits;
-    limits->maxTessellationGenerationLevel = 64;
-    limits->maxTessellationPatchSize = 32;
-    limits->maxTessellationControlPerVertexInputComponents = 128;
-    limits->maxTessellationControlPerVertexOutputComponents = 128;
-    limits->maxTessellationControlPerPatchOutputComponents = 120;
-    limits->maxTessellationControlTotalOutputComponents = 4096;
-    limits->maxTessellationEvaluationInputComponents = 128;
-    limits->maxTessellationEvaluationOutputComponents = 128;
-#endif
+    ps5vk_native_tess_profile(platform);
     return VK_SUCCESS;
 }
