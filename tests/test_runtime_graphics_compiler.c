@@ -39,6 +39,67 @@ static int patch_builtin(struct ps5vk_graphics_module_key *m, uint32_t from, uin
     return 0;
 }
 
+#define PS5VK_TEST_PS_INPUT_ENA_OFFSET  ((uint16_t)((0x0286CCu - 0x00028000u) / 4u))
+#define PS5VK_TEST_PS_INPUT_ADDR_OFFSET ((uint16_t)((0x0286D0u - 0x00028000u) / 4u))
+#define PS5VK_TEST_POS_Z_FLOAT_ENA      (1u << 10)
+#define PS5VK_TEST_POS_XYZW_FLOAT_ENA   (0xfu << 8)
+#define PS5VK_TEST_LAUNCH_VGPR_ENA      (0xffu)
+
+static uint32_t published_context_register(const void *pair, uint16_t offset, int *found)
+{
+    const struct ps5vk_runtime_graphics_program *program=pair;
+    *found=0;
+    for(unsigned i=0;i<program->fragment.metadata.context_register_count;++i)
+        if(program->fragment.metadata.context_registers[i].offset==offset) {
+            *found=1;
+            return program->fragment.metadata.context_registers[i].value;
+        }
+    return 0;
+}
+
+static uint32_t compiled_ps_input_ena(const char *fragment_path)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module(fragment_path),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *pair=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&pair)==VK_SUCCESS && pair);
+    int found_ena=0,found_addr=0;
+    const uint32_t ena=published_context_register(pair,PS5VK_TEST_PS_INPUT_ENA_OFFSET,&found_ena);
+    const uint32_t addr=published_context_register(pair,PS5VK_TEST_PS_INPUT_ADDR_OFFSET,&found_addr);
+    assert(found_ena && found_addr && (ena&addr)==ena);
+    ps5vk_runtime_graphics_free(NULL,pair);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    return ena;
+}
+
+static void check_fragment_position(void)
+{
+    const uint32_t plain=compiled_ps_input_ena("build/runtime-graphics/triangle.frag.spv");
+    assert(!(plain&PS5VK_TEST_POS_XYZW_FLOAT_ENA));
+    assert(plain&PS5VK_TEST_LAUNCH_VGPR_ENA);
+    const uint32_t position=compiled_ps_input_ena("build/runtime-graphics/frag_coord.frag.spv");
+    assert(position&PS5VK_TEST_POS_Z_FLOAT_ENA);
+    assert(position&PS5VK_TEST_LAUNCH_VGPR_ENA);
+    assert(position!=plain);
+
+    struct ps5vk_graphics_module_key invalid=
+        read_module("build/runtime-graphics/frag_coord.frag.spv");
+    assert(patch_builtin(&invalid,15u,UINT32_C(0x7ffffff0)));
+    struct ps5vk_graphics_key invalid_key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=invalid,.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(!ps5vk_spirv_graphics_interface(&invalid_key));
+    free((void *)invalid_key.vertex.words);free((void *)invalid_key.fragment.words);
+}
+
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
 /* Clip and cull distances leave the pre-raster stage through the packed
@@ -1443,6 +1504,7 @@ int main(void)
     check_view_index_builtin();
     check_clip_cull_distances();
     check_fragment_distance_read();
+    check_fragment_position();
     check_geometry_stage();
     check_geometry_output_components();
     check_geometry_stage_descriptor_visibility();
