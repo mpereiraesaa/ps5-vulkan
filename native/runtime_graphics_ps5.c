@@ -1,6 +1,8 @@
 #include "runtime_graphics_compiler.h"
 #include "graphics_pipeline_ps5.h"
 #include "graphics_program.h"
+#include "tess_entry_witness.h"
+#include "tess_shared_storage.h"
 #include <stdlib.h>
 #include <string.h>
 #if defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG
@@ -17,9 +19,13 @@
  * array. The offchip workgroup allocation is the 8K-dword granularity the
  * hardware names, the workgroup count the OFFCHIP_BUFFERING field bounds at
  * 128 per engine, and the tess-factor ring the typical full-triangle factor
- * size per workgroup times three workgroups per CU. The patch draw writes the
- * whole set as explicit UC state, so a stale ring config from another queue
- * cannot leak in. The ring block backs the offchip workgroups first and the
+ * size per workgroup times three workgroups per CU. Emitted UC state alone
+ * did not bind the ring consumed by the native tessellator: the successful
+ * diagnostic also binds it with sceAgcDriverSetTFRing and verifies the getter.
+ * The queue owns binding and shares storage across pipelines independently
+ * of diagnostic logging switches.
+ * General capability promotion remains pending. The block backs
+ * the offchip workgroups first and the
  * tess-factor ring behind them, and the TF ring base follows the offchip ring
  * exactly as the pinned emitter computes it (ac_cmdbuf_cp.c). */
 /* The user-config bank addresses registers by (address - 0x30000)/4. Naming
@@ -33,13 +39,24 @@
 #define PS5VK_TESS_DISTRIBUTION_MODE 3 /* V_028B6C_TRAPEZOIDS */
 #endif
 #define PS5VK_UC_OFFSET(address) ((uint16_t)(((address)-0x30000u)/4u))
+#ifndef PS5VK_TESS_OFFCHIP_CAPACITY_WG
+#define PS5VK_TESS_OFFCHIP_CAPACITY_WG 256u
+#endif
+/* Default to the native-witnessed256 workgroups. An explicit diagnostic
+ * capacity changes allocation, emitted bounds and checked native binding
+ * together. Never infer existing driver state from this requested capacity. */
+_Static_assert(PS5VK_TESS_OFFCHIP_CAPACITY_WG>=144u &&
+    PS5VK_TESS_OFFCHIP_CAPACITY_WG<=256u,"bounded tess offchip capacity");
 
 enum {
-    PS5VK_TESS_OFFCHIP_WORKGROUPS = 144u,
+    PS5VK_TESS_OFFCHIP_WORKGROUPS = PS5VK_TESS_OFFCHIP_CAPACITY_WG,
     PS5VK_TESS_OFFCHIP_WORKGROUP_DWORDS = 8192u,
     PS5VK_TESS_OFFCHIP_BYTES =
-        PS5VK_TESS_OFFCHIP_WORKGROUPS*PS5VK_TESS_OFFCHIP_WORKGROUP_DWORDS*4u,
-    PS5VK_TESS_FACTOR_BYTES = (192u/3u)*16u*3u*18u*2u,
+        PS5VK_TESS_OFFCHIP_CAPACITY_WG*PS5VK_TESS_OFFCHIP_WORKGROUP_DWORDS*4u,
+    /* Native getter/setter size remains opaque; the measured raw value65536
+     * is backed conservatively in bytes or dwords. Always pair this storage
+     * with checked queue binding, independently of diagnostic logging. */
+    PS5VK_TESS_FACTOR_BYTES = 65536u*4u,
     /* The ring descriptor table the tessellation shaders dereference:
      * sixteen bytes per ring entry, holding an audited raw buffer SRD (the
      * descriptor encoder's byte-addressed word set: base low/high, byte
@@ -56,6 +73,40 @@ enum {
     PS5VK_TESS_RING_BYTES =
         (PS5VK_TESS_FACTOR_OFFSET+PS5VK_TESS_FACTOR_BYTES+0xffffu)&~0xffffu
 };
+
+static VkResult initialize_tess_storage(const struct ps5vk_memory_backend *memory,
+    void *address, void *backing, VkDeviceSize bytes)
+{
+    const uint64_t base=(uintptr_t)address;
+    /* Check the RING extent, not the unrelated shader allocation size. */
+    if(!address || !backing || (base&255u) || (base>>32)!=2 ||
+       bytes!=PS5VK_TESS_RING_BYTES || bytes>UINT64_C(0x300000000)-base)
+        return VK_ERROR_MEMORY_MAP_FAILED;
+    memset(address,0,(size_t)bytes);
+#if defined(PS5VK_TESS_ENTRY_WITNESS) && PS5VK_TESS_ENTRY_WITNESS
+    for(unsigned i=48;i<56;++i)((uint32_t *)address)[i]=0xcdcdcdcdu;
+#endif
+    const uint64_t bases[2]={base+PS5VK_TESS_FACTOR_OFFSET,
+                            base+PS5VK_TESS_OFFCHIP_OFFSET};
+    const uint32_t extents[2]={PS5VK_TESS_FACTOR_BYTES,PS5VK_TESS_OFFCHIP_BYTES};
+    const unsigned indices[2]={PS5VK_TESS_RING_INDEX_HS_TESS_FACTOR,
+                              PS5VK_TESS_RING_INDEX_HS_TESS_OFFCHIP};
+    for(unsigned r=0;r<2;++r) {
+        uint32_t *entry=(uint32_t *)address+indices[r]*4;
+        entry[0]=(uint32_t)bases[r];entry[1]=(uint32_t)(bases[r]>>32);
+        entry[2]=extents[r];entry[3]=PS5VK_TESS_RING_SRD_FORMAT;
+    }
+#if defined(PS5VK_TESS_HULL_TRACE) && PS5VK_TESS_HULL_TRACE
+    /* Use alignment padding AFTER both rings, never an active factor region. */
+    const uint64_t trace=base+PS5VK_TESS_FACTOR_OFFSET+PS5VK_TESS_FACTOR_BYTES;
+    _Static_assert(PS5VK_TESS_RING_BYTES-PS5VK_TESS_FACTOR_OFFSET-
+                   PS5VK_TESS_FACTOR_BYTES>=8192u,"owned hull trace extent");
+    uint32_t *trace_entry=(uint32_t *)address+28;
+    trace_entry[0]=(uint32_t)trace;trace_entry[1]=(uint32_t)(trace>>32);
+    trace_entry[2]=8192u;
+#endif
+    return memory->flush(memory->context,backing,0,bytes);
+}
 
 /* VGT_TF_PARAM as the control stage published it: the tessellator's domain,
  * partitioning and output topology, which the hull metadata carries in its
@@ -87,6 +138,9 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
      * producer the tessellator's output topology generates and overrides the
      * linked UC primitive afterwards. */
     const int has_tessellation=input->hull.machine_code!=NULL;
+    if(has_tessellation && (!input->patch_control_points ||
+       input->patch_control_points>32u || !input->tess_output_points ||
+       input->tess_output_points>32u))return VK_ERROR_FEATURE_NOT_PRESENT;
     if(primitive_type!=input->primitive_type ||
         (has_tessellation ?
             (primitive_type!=9u || !input->domain.machine_code) :
@@ -113,15 +167,22 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         255u)&~(size_t)255u;
     /* One merged hull image, so one 256B-aligned slot for it. */
     size_t hull_at=(fs_at+input->fragment.machine_code_size+255u)&~(size_t)255u;
+    size_t hull_prefix_bytes=0;
+#if defined(PS5VK_TESS_ENTRY_WITNESS) && PS5VK_TESS_ENTRY_WITNESS
+    if(has_tessellation) hull_prefix_bytes=PS5VK_TESS_ENTRY_PREFIX_BYTES;
+#endif
+#if defined(PS5VK_TESS_HULL_TRACE) && PS5VK_TESS_HULL_TRACE
+    if(has_tessellation) hull_prefix_bytes=PS5VK_TESS_ENTRY_PREFIX_BYTES;
+#endif
     /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): one more 256B-aligned slot for
      * the legacy hardware-VS image of the evaluation half. */
-    const int has_legacy=has_tessellation && input->domain_legacy_valid &&
+    const int has_legacy=input->domain_legacy_valid &&
         input->domain_legacy.machine_code && input->domain_legacy.machine_code_size;
-    size_t legacy_at=(hull_at+(has_tessellation?input->hull.machine_code_size:0)+
+    size_t legacy_at=(hull_at+hull_prefix_bytes+(has_tessellation?input->hull.machine_code_size:0)+
         255u)&~(size_t)255u;
     size_t table_at=(has_tessellation?
         (has_legacy?legacy_at+input->domain_legacy.machine_code_size:
-         hull_at+input->hull.machine_code_size):fs_at+
+         hull_at+hull_prefix_bytes+input->hull.machine_code_size):fs_at+
         input->fragment.machine_code_size+15u)&~(size_t)15u;
     struct ps5vk_native_graphics_pipeline *p=calloc(1,sizeof(*p));
     if(!p)return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -137,6 +198,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
     p->pair=address;p->global_table=(uint32_t *)((unsigned char *)address+table_at);
     struct ps5vk_graphics_pair *pair=p->pair;
     pair->runtime_arguments=arguments;
+    pair->hull_arguments=input->hull_arguments;
     if(ps5vk_runtime_shader_build(&pair->runtime_vertex,
            has_tessellation?&input->domain:&input->vertex) ||
        ps5vk_runtime_shader_build(&pair->runtime_fragment,&input->fragment)) {
@@ -192,7 +254,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
          * hull launch state joins the context block: the stage enables gain
          * the LS/HS halves (the domain's linked value carries ES/PRIMGEN) and
          * the LS_HS_CONFIG carries the compiler's patch-per-workgroup count
-         * with the input/output control-point counts the pipeline stated. */
+         * with independent pipeline input and TCS output control-point counts. */
         pair->uc.vgt_primitive_type.value=9u;
         pair->tessellation=1;
         /* VGT_SHADER_STAGES_EN for a tessellation pipeline.
@@ -300,7 +362,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         pair->tess_state[1]=(ps5_agc_register){0x2d6,
             (num_patches&255u) |
             ((input->patch_control_points&63u)<<8) |
-            ((input->patch_control_points&63u)<<14)};
+            ((input->tess_output_points&63u)<<14)};
         /* VGT_GS_OUT_PRIM_TYPE, corrected for the tessellator.
          *
          * The linked value comes from the domain compiled as a STANDALONE NGG
@@ -323,6 +385,21 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
             uint32_t out_prim=2u;                 /* V_028A6C_TRISTRIP */
             if(tf_topology==0u)out_prim=0u;       /* OUTPUT_POINT */
             else if(tf_type==0u)out_prim=1u;      /* TESS_ISOLINE */
+            /* TES determines the GS input, not its output. With a merged
+             * TES+GS program the compiler's GS declaration is authoritative;
+             * AGC's generic patch linking must not replace it with TES type. */
+            if(input->domain.metadata.source_stage==PSBC_STAGE_GEOMETRY) {
+                unsigned found=0;
+                for(unsigned i=0;i<input->domain.metadata.context_register_count;++i)
+                    if(input->domain.metadata.context_registers[i].offset==0x29b) {
+                        out_prim=input->domain.metadata.context_registers[i].value;
+                        ++found;
+                    }
+                if(found!=1 || out_prim>2u) {
+                    TESS_CREATE_FAIL("domain-geometry-output-primitive");
+                    rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+                }
+            }
             pair->cx.vgt_gs_out_prim_type=
                 (ps5_agc_register){0x29b,out_prim};
         }
@@ -521,7 +598,21 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
          * radv_get_shader_regs(); the loader already refused a package that
          * published the pre-GFX9 HS address register instead. */
         void *hull_code=(unsigned char *)address+hull_at;
-        memcpy(hull_code,input->hull.machine_code,input->hull.machine_code_size);
+#if defined(PS5VK_TESS_HULL_TRACE) && PS5VK_TESS_HULL_TRACE
+        if(hull_prefix_bytes && ps5vk_tess_hull_trace_prefix(hull_code,hull_prefix_bytes,
+                input->hull.metadata.ps5_ring_table_user_data_dword,
+                input->hull.metadata.user_sgpr_count)) {
+#else
+        if(hull_prefix_bytes && ps5vk_tess_entry_prefix(hull_code,hull_prefix_bytes,
+                input->hull.metadata.ps5_ring_table_user_data_dword,
+                input->hull.metadata.user_sgpr_count)) {
+#endif
+            TESS_CREATE_FAIL("entry-witness-slot");
+            rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+        }
+        memcpy((unsigned char *)hull_code+hull_prefix_bytes,
+            input->hull.machine_code,input->hull.machine_code_size);
+        pair->runtime_hull.header.shader_size+=hull_prefix_bytes;
         const uint64_t hull_va=(uintptr_t)hull_code;
         if(hull_va&255u){rc=VK_ERROR_MEMORY_MAP_FAILED;goto failed;}
         if(pair->runtime_hull.shader[0].offset!=0x148 ||
@@ -531,47 +622,6 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         }
         pair->runtime_hull.shader[0].value=(uint32_t)(hull_va>>8);
         pair->runtime_hull.shader[1].value=(uint32_t)((hull_va>>40)&255u);
-        /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): load the legacy hardware-VS
-         * image of the evaluation half, take its VS-block registers with the
-         * loaded address in PGM_LO/HI_VS (sh 0x48/0x49), its legacy context
-         * state, its stage enables VERBATIM (LS, HS, VS_STAGE_DS, DYNAMIC_HS -
-         * no ES, no primitive generator), and its own draw ABI so the user
-         * data block matches the program that actually launches. The NGG
-         * domain stays loaded and linked for the pixel interpolation; with
-         * its stage disabled its registers are latched and unused. */
-        if(has_legacy) {
-            const PsbcShaderMetadata *lm=&input->domain_legacy.metadata;
-            void *legacy_code=(unsigned char *)address+legacy_at;
-            memcpy(legacy_code,input->domain_legacy.machine_code,
-                input->domain_legacy.machine_code_size);
-            const uint64_t legacy_va=(uintptr_t)legacy_code;
-            if((legacy_va&255u) || lm->hardware_stage!=PSBC_HW_STAGE_VERTEX ||
-               !lm->linkage_valid || lm->shader_register_count>8 ||
-               lm->context_register_count>8) {
-                TESS_CREATE_FAIL("legacy-domain");
-                rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
-            }
-            unsigned patched_lo=0;
-            for(uint32_t i=0;i<lm->shader_register_count;++i) {
-                ps5_agc_register r={(uint16_t)lm->shader_registers[i].offset,
-                    lm->shader_registers[i].value};
-                if(r.offset==0x48){r.value=(uint32_t)(legacy_va>>8);++patched_lo;}
-                if(r.offset==0x49)r.value=(uint32_t)((legacy_va>>40)&255u);
-                pair->legacy_sh[pair->legacy_sh_count++]=r;
-            }
-            for(uint32_t i=0;i<lm->context_register_count;++i)
-                pair->legacy_cx[pair->legacy_cx_count++]=(ps5_agc_register){
-                    (uint16_t)lm->context_registers[i].offset,
-                    lm->context_registers[i].value};
-            if(patched_lo!=1) {
-                TESS_CREATE_FAIL("legacy-pgm");
-                rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
-            }
-            pair->tess_state[0]=(ps5_agc_register){0x2d5,
-                lm->linkage_stages_en.value};
-            pair->runtime_arguments=input->arguments_legacy;
-            pair->legacy_domain=1;
-        }
         /* The merged LS/HS workgroup's LDS allocation. The compiler CANNOT
          * publish it: the combined RSRC1/RSRC2 pair comes from the pinned
          * radv_shader_combine_cfg_vs_tcs(), which merges VGPR/SGPR counts and
@@ -614,40 +664,16 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
                 rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
             }
         }
-        /* The tessellation rings: one bounded block backing the offchip
-         * workgroups and the tess-factor ring behind them, owned by the
-         * pipeline and programmed as device state on every patch draw. */
-        rc=p->memory.allocate(p->memory.context,PS5VK_TESS_RING_BYTES,
-            &pair->tess_rings,&p->rings_backing);
+        /* Sharing is per device, with references retained by pipelines. The
+         * pending-use guard forbids their destruction before GPU completion.
+         * Never clear/flush an existing ring when a second pipeline is made. */
+        rc=ps5vk_tess_storage_acquire(d,&p->memory,PS5VK_TESS_RING_BYTES,
+            initialize_tess_storage,&p->shared_rings);
         if(rc!=VK_SUCCESS)goto failed;
-        if(!pair->tess_rings || !p->rings_backing ||
-           ((uintptr_t)pair->tess_rings&255u) ||
-           ((uintptr_t)pair->tess_rings>>32)!=2 ||
-           p->allocation_bytes>UINT64_C(0x300000000)-(uintptr_t)pair->tess_rings) {
-            rc=VK_ERROR_MEMORY_MAP_FAILED;goto failed;
-        }
-        memset(pair->tess_rings,0,PS5VK_TESS_RING_BYTES);
-        /* The ring descriptor table: every entry zeroed, then the two rings
-         * the tessellation stages read get their audited raw buffer SRDs
-         * with the exact base and byte extent. */
+        pair->tess_rings=ps5vk_tess_storage_address(p->shared_rings);
+        p->rings_backing=ps5vk_tess_storage_backing(p->shared_rings);
         const uint64_t rings_va=(uintptr_t)pair->tess_rings;
-        const uint64_t offchip_va=rings_va+PS5VK_TESS_OFFCHIP_OFFSET;
         const uint64_t tf_va=rings_va+PS5VK_TESS_FACTOR_OFFSET;
-        {
-            const uint64_t bases[2]={tf_va,offchip_va};
-            const uint32_t extents[2]={PS5VK_TESS_FACTOR_BYTES,
-                PS5VK_TESS_OFFCHIP_BYTES};
-            const unsigned indices[2]={PS5VK_TESS_RING_INDEX_HS_TESS_FACTOR,
-                PS5VK_TESS_RING_INDEX_HS_TESS_OFFCHIP};
-            uint32_t *ring_table=(uint32_t *)pair->tess_rings;
-            for(unsigned r=0;r<2;++r) {
-                uint32_t *entry=ring_table+indices[r]*4;
-                entry[0]=(uint32_t)bases[r];
-                entry[1]=(uint32_t)(bases[r]>>32);
-                entry[2]=extents[r];
-                entry[3]=PS5VK_TESS_RING_SRD_FORMAT;
-            }
-        }
         /* The table's address, and the hull user-data dword that carries it.
          * The hull dereferences the table (its first memory operation is an
          * SMEM load of the tess-factor ring descriptor at table + 5*16), and
@@ -656,6 +682,10 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
          * window and nothing here configures a global ring table. */
         pair->tess_ring_table_low=(uint32_t)rings_va;
         pair->tess_ring_table_high=(uint32_t)(rings_va>>32);
+        if(pair->hull_arguments.enabled) {
+            pair->hull_arguments.ring_table_low=(uint32_t)rings_va;
+            pair->hull_arguments.ring_table_high=(uint32_t)(rings_va>>32);
+        }
         /* The DOMAIN half's copy of the same pointer. Its metadata declares
          * the table at a window-relative dword and the draw path writes the
          * pre-raster user-data block from these fields, which could not be
@@ -724,19 +754,75 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
         pair->tess_ring_state[4]=(ps5_agc_register){
             input->domain.metadata.linkage_ge_pc_alloc.offset,
             input->domain.metadata.linkage_ge_pc_alloc.value};
-        rc=p->memory.flush(p->memory.context,p->rings_backing,0,PS5VK_TESS_RING_BYTES);
-        if(rc!=VK_SUCCESS)goto failed;
+    }
+/* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN / PS5VK_TESS_LEGACY_VS_CONTROL): load the legacy hardware-VS
+     * image of the evaluation half, take its VS-block registers with the
+     * loaded address in PGM_LO/HI_VS (sh 0x48/0x49), its legacy context
+     * state, its stage enables VERBATIM (LS, HS, VS_STAGE_DS, DYNAMIC_HS -
+     * no ES, no primitive generator), and its own draw ABI so the user
+     * data block matches the program that actually launches. The NGG
+     * domain stays loaded and linked for the pixel interpolation; with
+     * its stage disabled its registers are latched and unused. */
+    if(has_legacy) {
+        const PsbcShaderMetadata *lm=&input->domain_legacy.metadata;
+        void *legacy_code=(unsigned char *)address+legacy_at;
+        memcpy(legacy_code,input->domain_legacy.machine_code,
+            input->domain_legacy.machine_code_size);
+        const uint64_t legacy_va=(uintptr_t)legacy_code;
+        if((legacy_va&255u) || lm->hardware_stage!=PSBC_HW_STAGE_VERTEX ||
+           !lm->linkage_valid || lm->shader_register_count>8 ||
+           lm->context_register_count>8) {
+            TESS_CREATE_FAIL("legacy-domain");
+            rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+        }
+        unsigned patched_lo=0;
+        for(uint32_t i=0;i<lm->shader_register_count;++i) {
+            ps5_agc_register r={(uint16_t)lm->shader_registers[i].offset,
+                lm->shader_registers[i].value};
+            if(r.offset==0x48){r.value=(uint32_t)(legacy_va>>8);++patched_lo;}
+            if(r.offset==0x49)r.value=(uint32_t)((legacy_va>>40)&255u);
+            pair->legacy_sh[pair->legacy_sh_count++]=r;
+        }
+        for(uint32_t i=0;i<lm->context_register_count;++i)
+            pair->legacy_cx[pair->legacy_cx_count++]=(ps5_agc_register){
+                (uint16_t)lm->context_registers[i].offset,
+                lm->context_registers[i].value};
+        if(patched_lo!=1) {
+            TESS_CREATE_FAIL("legacy-pgm");
+            rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+        }
+        /* The stage enables VERBATIM from the legacy program, appended to
+         * its context list so they win over the linked NGG value on every
+         * pipeline shape; a tessellation pair also carries them in its
+         * launch state. */
+        if(pair->legacy_cx_count>=8) {
+            TESS_CREATE_FAIL("legacy-cx");
+            rc=VK_ERROR_INITIALIZATION_FAILED;goto failed;
+        }
+        pair->legacy_cx[pair->legacy_cx_count++]=(ps5_agc_register){0x2d5,
+            lm->linkage_stages_en.value};
+        if(has_tessellation)
+            pair->tess_state[0]=(ps5_agc_register){0x2d5,
+                lm->linkage_stages_en.value};
+        pair->runtime_arguments=input->arguments_legacy;
+        if(pair->runtime_arguments.ring_table_valid) {
+            pair->runtime_arguments.ring_table_low=pair->tess_ring_table_low;
+            pair->runtime_arguments.ring_table_high=pair->tess_ring_table_high;
+        }
+        pair->legacy_domain=1;
     }
     pair->vertex_quantization=0x2d;pair->ready=1;
     /* Recorded from the compiled pre-raster program rather than re-derived at
      * draw time: the metadata is freed with the program, and the draw path needs
      * the same fact the descriptor profile used to accept the binding. */
-    pair->geometry_preraster=!has_tessellation &&
-        input->vertex.metadata.source_stage==PSBC_STAGE_GEOMETRY;
+    pair->geometry_preraster=(has_tessellation?input->domain.metadata.source_stage:
+        input->vertex.metadata.source_stage)==PSBC_STAGE_GEOMETRY;
     rc=p->memory.flush(p->memory.context,p->backing,0,p->allocation_bytes);
     if(rc!=VK_SUCCESS)goto failed;
     *out=p;return VK_SUCCESS;
 failed:
+    if(p->shared_rings)ps5vk_tess_storage_release(&p->shared_rings);
+    else if(p->rings_backing)p->memory.release(p->memory.context,p->rings_backing);
     if(p->backing)p->memory.release(p->memory.context,p->backing);
     free(p);return rc;
 }

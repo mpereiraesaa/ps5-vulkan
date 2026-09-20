@@ -9,3 +9,5 @@ int32_t sceAgcDriverGetTFRing(uint64_t *address, uint32_t *size)
 { (void)address; (void)size; return -1; }
 int32_t sceAgcDriverGetHsOffchipParam(uint16_t *first, uint16_t *second)
 { (void)first; (void)second; return -1; }
+int32_t sceAgcDriverSetHsOffchipParam(uint16_t first, uint16_t second)
+{ (void)first; (void)second; return -1; }
