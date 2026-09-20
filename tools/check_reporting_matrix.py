@@ -58,11 +58,6 @@ FEATURE_GATES = {
                        "only 2D images are created"),
     "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount != 1",
                          "one color attachment per pipeline"),
-    "tessellationShader": ("src/vk_graphics_pipeline.c",
-                           "else if (s->stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT && !tcs) tcs=s;",
-                           "the control/evaluation pair is described, validated against the patch "
-                           "state and refused: the pinned compiler produces no loadable hull package "
-                           "and the hull/domain pipeline state is not programmed"),
     "sampleRateShading": ("src/vk_graphics_pipeline.c", "m->sampleShadingEnable",
                           "sample shading state is rejected"),
     "logicOp": ("src/vk_graphics_pipeline.c", "b->logicOpEnable",
@@ -281,6 +276,22 @@ ADVERTISED_FEATURES["geometryShader"] = {
                "and the profile reports the five geometry limits at the Vulkan floor this "
                "profile exercised in src/graphics_limits.h"),
     "cts": _geometry_cts_paths(),
+}
+ADVERTISED_FEATURES["tessellationShader"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/tess_profile.h", "PS5VK_FEATURE_TESSELLATION_SHADER"),
+        ("native/platform_ps5.c", "ps5vk_native_tess_profile("),
+        ("tools/dump_device_reporting.c", "ps5vk_native_tess_profile(platform)"),
+    ),
+    "detail": ("default native runtime-graphics profile: linked LS/HS and TES/TES+GS "
+               "execution and eight limits are independently hardware-witnessed; "
+               "the default integrated candidate passes 403 original upstream cases "
+               "with strict identity and clean closure (TESSELLATION_STATUS.md). "
+               "This host query is not GPU evidence or Vulkan conformance."),
+    # The integrated receipt is documented separately; do not pretend it is
+    # already part of the historical frozen canonical selection.
+    "cts": (),
 }
 ADVERTISED_FEATURES["shaderClipDistance"] = {
     "profiles": ("graphics",),
@@ -876,6 +887,7 @@ def main() -> int:
         "reported_source": {
             "tool": "tools/dump_device_reporting.c",
             "profile_initializer": "src/device_profile_report.h",
+            "native_graphics_overlay": "native/tess_profile.h",
             "native_consumer": "native/platform_ps5.c",
         },
         "normative_source": {

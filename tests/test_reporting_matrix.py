@@ -172,6 +172,30 @@ class TestReportingMatrix(unittest.TestCase):
         self.assertIn(gate_token, (ROOT / gate_file).read_text())
         self.assertIn(test_token, (ROOT / test_file).read_text())
 
+    def test_tessellation_profile_matches_native_overlay(self):
+        graphics = matrix.load_dump("graphics")
+        compute = matrix.load_dump("compute")
+        self.assertTrue(graphics["features"]["tessellationShader"])
+        self.assertFalse(compute["features"]["tessellationShader"])
+        self.assertEqual(matrix.evaluate_feature("tessellationShader", True)[0],
+                         "satisfied")
+        self.assertEqual(matrix.evaluate_feature("tessellationShader", False)[0],
+                         "violation")
+        self.assertEqual(matrix.evaluate_feature("tessellationShader", False, "compute")[0],
+                         "satisfied")
+        limits = {
+            "maxTessellationGenerationLevel": 64, "maxTessellationPatchSize": 32,
+            "maxTessellationControlPerVertexInputComponents": 128,
+            "maxTessellationControlPerVertexOutputComponents": 128,
+            "maxTessellationControlPerPatchOutputComponents": 120,
+            "maxTessellationControlTotalOutputComponents": 4096,
+            "maxTessellationEvaluationInputComponents": 128,
+            "maxTessellationEvaluationOutputComponents": 128,
+        }
+        for name, expected in limits.items():
+            self.assertEqual(graphics["limits"][name], expected, name)
+            self.assertEqual(compute["limits"][name], 0, name)
+
     def test_every_false_core_feature_has_a_fail_closed_negotiation_gate(self):
         """A compiler-side feature needs no invented object gate, but it must not enable."""
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
