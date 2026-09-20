@@ -101,6 +101,17 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_FILL_MODE_NON_SOLID = 1u << 14,
     /* multiViewport: viewport/scissor arrays up to maxViewports. */
     PS5VK_FEATURE_MULTI_VIEWPORT = 1u << 15,
+    /* Fragment output, blending and multisampling (DXVK262-T06). These bits
+     * describe four independent contracts. A platform advertises one only
+     * after its complete native path has been measured; until then the core
+     * feature table reports false and device creation refuses the request.
+     * Keeping them separate is important: supporting ordinary per-target
+     * blending does not imply a second fragment output, and accepting a
+     * multisample create-info does not prove per-sample shader execution. */
+    PS5VK_FEATURE_INDEPENDENT_BLEND = 1u << 16,
+    PS5VK_FEATURE_DUAL_SRC_BLEND = 1u << 17,
+    PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS = 1u << 18,
+    PS5VK_FEATURE_SAMPLE_RATE_SHADING = 1u << 19,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

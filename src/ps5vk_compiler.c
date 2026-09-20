@@ -126,7 +126,16 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
                           PS5VK_FEATURE_DEPTH_CLAMP |
                           PS5VK_FEATURE_FILL_MODE_NON_SOLID |
-                          PS5VK_FEATURE_MULTI_VIEWPORT))
+                          PS5VK_FEATURE_MULTI_VIEWPORT |
+                          /* The four DXVK262-T06 bits govern fragment and
+                          * fixed-function graphics behaviour. A compute
+                          * pipeline created on the same logical device must
+                          * ignore them, while every unknown bit outside this
+                          * explicit list remains fail-closed. */
+                          PS5VK_FEATURE_INDEPENDENT_BLEND |
+                          PS5VK_FEATURE_DUAL_SRC_BLEND |
+                          PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
+                          PS5VK_FEATURE_SAMPLE_RATE_SHADING))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
