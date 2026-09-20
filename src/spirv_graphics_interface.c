@@ -11,7 +11,7 @@ enum { MODEL_VERTEX=0, MODEL_TESS_CTRL=1, MODEL_TESS_EVAL=2, MODEL_GEOMETRY=3,
 enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
        BUILTIN_CULL_DISTANCE=4, BUILTIN_VERTEX_INDEX=42, BUILTIN_INSTANCE_INDEX=43,
        BUILTIN_BASE_VERTEX=4424, BUILTIN_BASE_INSTANCE=4425, BUILTIN_DRAW_INDEX=4426,
-       BUILTIN_VIEW_INDEX=4440 };
+       BUILTIN_VIEW_INDEX=4440, BUILTIN_FRAG_COORD=15 };
 /* The tessellation built-ins the two stages exchange with the tessellator, and
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
@@ -412,6 +412,16 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                d->builtin==BUILTIN_PATCH_VERTICES) {
                 if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
                    type->count!=32)goto done;
+                continue;
+            }
+            /* FragCoord is supplied by the rasterizer to the fragment stage,
+             * not linked as a varying.  Admit only its exact Vulkan shape:
+             * an undecorated float32 vec4 Input variable. */
+            if(d->builtin==BUILTIN_FRAG_COORD) {
+                if(model!=MODEL_FRAGMENT || d->location!=~0u || d->storage!=1u ||
+                   d->patch || type->op!=23 || type->count!=4 || !type->type ||
+                   type->type>=bound || ids[type->type].op!=22 ||
+                   ids[type->type].count!=32)goto done;
                 continue;
             }
             if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) &&
