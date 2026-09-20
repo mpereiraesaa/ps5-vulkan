@@ -1,5 +1,6 @@
 #include "draw_state_ps5.h"
 #include "viewport_ps5.h"
+#include "blend_ps5.h"
 #include <string.h>
 #if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
 #include "ps5log.h"
@@ -280,10 +281,12 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
          * not read the primitive id, to separate the group size from the
          * other two fields if mode 1 changes the result.
          *
-         * MEASURED AND CLOSED, mode 1: the GPU-side readback of GE_CNTL
+         * HISTORICAL, BEFORE WORKING NATIVE RING BINDING: mode 1 readback of GE_CNTL
          * returned 0x00060040 for this pipeline's 64 patches per workgroup,
          * the draw completed, and the evaluation half still produced nothing
-         * (ink=0). Not what is missing. Stays default off. */
+         * (ink=0). That empty-draw result does not rule out a grouping defect
+         * once tessellation runs. Reopened for the current cross-invocation
+         * missing-patch investigation; remains diagnostic/default off. */
         {
             const uint32_t num_patches=pair->tess_state[1].value&255u;
             uint32_t prim_grp=num_patches?num_patches:4u;
@@ -331,27 +334,58 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             result.sh[result.sh_count++]=(ps5_agc_register){
                 (uint16_t)(0x10c+pair->tess_ring_table_slot+1u),
                 pair->tess_ring_table_high};
-            /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): the legacy hardware-VS
-             * domain's registers, after everything the NGG domain published
-             * so the shared context registers take the legacy values. */
-            if(pair->legacy_domain) {
-                if(result.sh_count+pair->legacy_sh_count>PS5VK_DRAW_SH_CAPACITY ||
-                   result.cx_count+pair->legacy_cx_count>PS5VK_DRAW_CX_CAPACITY)
-                    return VK_ERROR_UNKNOWN;
-                memcpy(result.sh+result.sh_count,pair->legacy_sh,
-                    pair->legacy_sh_count*sizeof(*result.sh));
-                result.sh_count+=pair->legacy_sh_count;
-                memcpy(result.cx+result.cx_count,pair->legacy_cx,
-                    pair->legacy_cx_count*sizeof(*result.cx));
-                result.cx_count+=pair->legacy_cx_count;
-            }
+#if defined(PS5VK_TESS_SYSTEM_TABLE) && PS5VK_TESS_SYSTEM_TABLE
+            /* Diagnostic own-memory system table, not part of the compiler's
+             * four-register hull package. Preserve its strict contract. */
+            if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
+            result.sh[result.sh_count++]=(ps5_agc_register){0x102,pair->tess_ring_table_low};
+            result.sh[result.sh_count++]=(ps5_agc_register){0x103,pair->tess_ring_table_high};
+#endif
+        }
+        /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): the legacy hardware-VS
+         * domain's registers, after everything the NGG domain published
+         * so the shared context registers take the legacy values. */
+        if(pair->legacy_domain) {
+            if(result.sh_count+pair->legacy_sh_count>PS5VK_DRAW_SH_CAPACITY ||
+               result.cx_count+pair->legacy_cx_count>PS5VK_DRAW_CX_CAPACITY)
+                return VK_ERROR_UNKNOWN;
+            memcpy(result.sh+result.sh_count,pair->legacy_sh,
+                pair->legacy_sh_count*sizeof(*result.sh));
+            result.sh_count+=pair->legacy_sh_count;
+            memcpy(result.cx+result.cx_count,pair->legacy_cx,
+                pair->legacy_cx_count*sizeof(*result.cx));
+            result.cx_count+=pair->legacy_cx_count;
         }
         result.runtime=pair->runtime_arguments;
+        result.hull_runtime=pair->hull_arguments;
         /* This is the lab's audited draw-auto command modifier, not compiler
          * metadata. PSBC headers do not populate the legacy PAL field. */
         result.modifier=5;
     }
     if (!result.modifier) return VK_ERROR_UNKNOWN;
+    /* Last fixed-state writes win over inherited/linked defaults. Explicitly
+     * disable blending on subsequent non-blended draws, rather than retaining
+     * the previous pipeline's state. Runtime acceptance is gated separately. */
+    struct ps5vk_blend_words blend;
+    if(!ps5vk_blend_encode(&p->color_blend,p->blend_constants,&blend))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(result.cx_count+6u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
+    result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend.control};
+    result.cx[result.cx_count++]=(ps5_agc_register){0x1d8,blend.optimization};
+    for(unsigned i=0;i<4;++i)
+        result.cx[result.cx_count++]=(ps5_agc_register){0x105+i,blend.constants[i]};
+    if(runtime) {
+        uint32_t spi_format=0,conversion[3];
+        for(unsigned i=0;i<fs->header.num_cx_registers;++i)
+            if(fs->context[i].offset==0x1c5)spi_format=fs->context[i].value;
+        if(!ps5vk_color_export_state(p->color_format,spi_format,
+            p->color_blend.blendEnable,conversion))return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
+        /* Emit for unblended draws too: a previous FP16 blended draw must not
+         * leave its downconversion active for the 32-bit export path. */
+        for(unsigned i=0;i<3;++i)
+            result.cx[result.cx_count++]=(ps5_agc_register){0x1d5+i,conversion[i]};
+    }
 #if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
     /* One patch draw and one ORDINARY runtime draw, so the two can be
      * diffed against each other.

@@ -64,6 +64,7 @@ struct ps5vk_graphics_pair {
     void *tess_rings;
     struct ps5vk_runtime_shader runtime_vertex,runtime_fragment;
     struct ps5vk_runtime_draw_abi runtime_arguments;
+    struct ps5vk_runtime_draw_abi hull_arguments;
 };
 struct ps5vk_graphics_stage_extent { uint32_t offset, isa_bytes; };
 struct ps5vk_graphics_pair_input {

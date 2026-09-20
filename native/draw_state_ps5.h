@@ -11,7 +11,7 @@
  * set, so the context capacity grows with the hull's own registers. The shader
  * bank carries both hull programs' register blocks behind the runtime pair's. */
 enum {
-    PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 15 + PS5_DEPTH_REGISTER_COUNT + 8 + 24,
+    PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 15 + PS5_DEPTH_REGISTER_COUNT + 8 + 24 + 9,
     PS5VK_DRAW_SH_CAPACITY = 32,
     PS5VK_DRAW_UC_CAPACITY = 12
 };
@@ -29,6 +29,7 @@ struct ps5vk_draw_state {
     uint64_t modifier;
     uint32_t push_constant_low;
     struct ps5vk_runtime_draw_abi runtime;
+    struct ps5vk_runtime_draw_abi hull_runtime;
 };
 /* Caller must keep the resulting register block in published GPU-visible
  * storage through retirement. No init-context, clear, cache or draw emitted. */
