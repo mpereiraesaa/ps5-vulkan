@@ -171,6 +171,7 @@ int main(void)
     pair.runtime_fragment.header.num_cx_registers=9;
     p.color_format=VK_FORMAT_R8G8B8A8_UNORM;
     pair.runtime_fragment.context[0]=(ps5_agc_register){0x1c5,9};
+    pair.runtime_fragment.context[1]=(ps5_agc_register){0x08f,15};
     pair.runtime_vertex.header.num_sh_registers=6;
     pair.runtime_fragment.header.num_sh_registers=4;
     pair.runtime_vertex.context[10]=(ps5_agc_register){0x2ab,1};
@@ -194,6 +195,26 @@ int main(void)
     pair.runtime_fragment.context[0].value=9;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1e0)==0 && last_cx(&out,0x1d5)==1 && last_cx(&out,0x1d6)==0 && last_cx(&out,0x1d7)==0);
+    /* A fragment stage with an SSBO side effect before OpKill can have no
+     * reachable colour export.  The compiler contract is the paired zero
+     * values, not either register in isolation; blending remains impossible
+     * without a source export. */
+    pair.runtime_fragment.context[0].value=0;
+    pair.runtime_fragment.context[1].value=0;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(last_cx(&out,0x1d5)==0 && last_cx(&out,0x1d6)==0 && last_cx(&out,0x1d7)==0);
+    pair.runtime_fragment.context[1].value=15;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.runtime_fragment.context[0].value=9;
+    pair.runtime_fragment.context[1].value=0;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.runtime_fragment.context[0].value=0;
+    p.color_blend.blendEnable=VK_TRUE;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    p.color_blend.blendEnable=VK_FALSE;
+    pair.runtime_fragment.context[0].value=9;
+    pair.runtime_fragment.context[1].value=15;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     /* The runtime path appends the same polygon-offset block after 0x2f9. */
     assert(out.cx[114].offset==0x2f9 && out.cx[115].offset==0x2de && out.cx[120].offset==0x2e3);
     assert(out.cx[121].offset==0x280 && out.cx[124].offset==0x2f7);

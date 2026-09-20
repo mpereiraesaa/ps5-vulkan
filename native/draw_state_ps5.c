@@ -455,10 +455,12 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     for(unsigned i=0;i<4;++i)
         result.cx[result.cx_count++]=(ps5_agc_register){0x105+i,blend.constants[i]};
     if(runtime) {
-        uint32_t spi_format=0,conversion[3];
-        for(unsigned i=0;i<fs->header.num_cx_registers;++i)
+        uint32_t spi_format=UINT32_MAX,shader_mask=UINT32_MAX,conversion[3];
+        for(unsigned i=0;i<fs->header.num_cx_registers;++i) {
             if(fs->context[i].offset==0x1c5)spi_format=fs->context[i].value;
-        if(!ps5vk_color_export_state(p->color_format,spi_format,
+            if(fs->context[i].offset==0x08f)shader_mask=fs->context[i].value;
+        }
+        if(!ps5vk_color_export_state(p->color_format,spi_format,shader_mask,
             p->color_blend.blendEnable,conversion))return VK_ERROR_FEATURE_NOT_PRESENT;
         if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
         /* Emit for unblended draws too: a previous FP16 blended draw must not
