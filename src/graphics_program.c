@@ -93,6 +93,14 @@ VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
         if (!program->backend_data || !valid_sets(p) || !equal_sets(p,key) || !valid_vertex_layout(p) || !equal_vertex_layout(p,key) ||
             p->topology != key->topology || p->color_format != key->color_format || p->samples != key->samples ||
             p->color_write_mask != key->color_write_mask || p->blend_enable != key->blend_enable ||
+            (key->blend_enable && (
+                p->src_color_blend_factor != key->src_color_blend_factor ||
+                p->dst_color_blend_factor != key->dst_color_blend_factor ||
+                p->color_blend_op != key->color_blend_op ||
+                p->src_alpha_blend_factor != key->src_alpha_blend_factor ||
+                p->dst_alpha_blend_factor != key->dst_alpha_blend_factor ||
+                p->alpha_blend_op != key->alpha_blend_op ||
+                memcmp(p->blend_constants,key->blend_constants,sizeof(p->blend_constants)))) ||
             p->push_constant_size!=key->push_constant_size ||
             memcmp(p->push_constant_stages,key->push_constant_stages,
                    sizeof(p->push_constant_stages)) ||

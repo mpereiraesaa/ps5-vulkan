@@ -7,20 +7,36 @@
 #include <string.h>
 #include <sys/mman.h>
 
-static size_t mapping_bytes;
+static struct { void *address; size_t bytes; } mappings[16];
+static uintptr_t next_address=UINT64_C(0x200000000);
 static unsigned allocations,releases,agc_calls,fail_agc,fail_flush;
 static uint32_t linked_primitive;
 static VkResult allocate(void *ctx,VkDeviceSize size,void **address,void **backing)
 {
-    (void)ctx;mapping_bytes=((size_t)size+4095u)&~(size_t)4095u;
-    void *p=mmap((void *)UINT64_C(0x200000000),mapping_bytes,PROT_READ|PROT_WRITE,
+    (void)ctx;size_t mapping_bytes=((size_t)size+4095u)&~(size_t)4095u;
+    unsigned slot=0;while(slot<16 && mappings[slot].address)++slot;assert(slot<16);
+    assert(next_address+mapping_bytes<UINT64_C(0x300000000));
+    void *p=mmap((void *)next_address,mapping_bytes,PROT_READ|PROT_WRITE,
         MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE,-1,0);
-    assert(p!=MAP_FAILED);*address=*backing=p;++allocations;return VK_SUCCESS;
+    assert(p!=MAP_FAILED);next_address+=mapping_bytes;
+    mappings[slot].address=p;mappings[slot].bytes=mapping_bytes;
+    *address=*backing=p;++allocations;return VK_SUCCESS;
 }
 static void release_memory(void *ctx,void *backing)
-{ (void)ctx;assert(!munmap(backing,mapping_bytes));++releases; }
+{
+    (void)ctx;unsigned slot=0;
+    while(slot<16 && mappings[slot].address!=backing)++slot;
+    assert(slot<16);
+    assert(!munmap(backing,mappings[slot].bytes));mappings[slot].address=NULL;++releases;
+}
 static VkResult flush(void *ctx,void *backing,VkDeviceSize offset,VkDeviceSize bytes)
-{ (void)ctx;assert(backing && !offset && bytes<=mapping_bytes);return fail_flush?VK_ERROR_UNKNOWN:VK_SUCCESS; }
+{
+    (void)ctx;unsigned slot=0;
+    while(slot<16 && mappings[slot].address!=backing)++slot;
+    assert(slot<16);
+    assert(backing && offset<=mappings[slot].bytes && bytes<=mappings[slot].bytes-offset);
+    return fail_flush?VK_ERROR_UNKNOWN:VK_SUCCESS;
+}
 int32_t sceAgcCreateShader(void **out,void *storage,void *code)
 {
     if(++agc_calls==fail_agc)return -1;
@@ -68,6 +84,19 @@ int main(void)
     struct ps5vk_native_graphics_pipeline *p=state;
     const struct ps5vk_runtime_graphics_program *source=compiled;
     assert(p->pair->ready && p->pair->runtime_arguments.enabled);
+    {
+        uint32_t mask=~0u;
+        assert(ps5vk_native_graphics_used_sets(&device,state,&mask)==VK_SUCCESS && !mask);
+        p->pair->hull_arguments.enabled=1;
+        p->pair->hull_arguments.vertex_descriptor_valid[2]=1;
+        assert(ps5vk_native_graphics_used_sets(&device,state,&mask)==VK_SUCCESS && mask==4);
+        p->pair->hull_arguments.vertex_used_bindings[2]=1;
+        p->pair->runtime_arguments.fragment_descriptor_valid[1]=1;
+        assert(ps5vk_native_graphics_used_sets(&device,state,&mask)==VK_SUCCESS && mask==6);
+        p->pair->runtime_arguments.fragment_descriptor_valid[1]=0;
+        memset(&p->pair->hull_arguments,0,sizeof(p->pair->hull_arguments));
+        assert(ps5vk_native_graphics_used_sets(NULL,state,&mask)!=VK_SUCCESS && !mask);
+    }
     assert(!memcmp(p->pair->runtime_vertex.header.code,source->vertex.machine_code,source->vertex.machine_code_size));
     assert(!memcmp(p->pair->runtime_fragment.header.code,source->fragment.machine_code,source->fragment.machine_code_size));
     ps5vk_runtime_graphics_free(NULL,compiled);
@@ -107,6 +136,121 @@ int main(void)
         VK_ERROR_FEATURE_NOT_PRESENT && !strip_state && allocations==before);
     ps5vk_runtime_graphics_free(NULL,strip_compiled);
     ps5vk_runtime_graphics_free(NULL,list_compiled);
+    struct ps5vk_graphics_key tess={
+        .vertex=read_module("build/runtime-graphics/tess.vert.spv"),
+        .tess_control=read_module("build/runtime-graphics/tess.tesc.spv"),
+        .tess_eval=read_module("build/runtime-graphics/tess.tese.spv"),
+        .geometry=read_module("build/runtime-graphics/geometry_probe.geom.spv"),
+        .fragment=read_module("build/runtime-graphics/tess.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.patch_control_points=3,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
+        .color_write_mask=15,.feature_mask=PS5VK_FEATURE_TESSELLATION_SHADER|
+            PS5VK_FEATURE_GEOMETRY_SHADER};
+    const void *tess_program=NULL;void *tess_first=NULL,*tess_second=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&tess,&tess_program)==VK_SUCCESS);
+    for(fail_agc=1;fail_agc<=3;++fail_agc) {
+        agc_calls=0;
+        assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_first)!=VK_SUCCESS);
+        assert(!tess_first && allocations==releases);
+    }
+    fail_agc=0;fail_flush=1;
+    assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_first)!=VK_SUCCESS);
+    assert(!tess_first && allocations==releases);fail_flush=0;
+    assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_first)==VK_SUCCESS);
+    struct ps5vk_native_graphics_pipeline *first=tess_first;
+    assert(first->pair->tessellation && first->pair->runtime_arguments.ring_table_valid);
+    assert(first->shared_rings && first->pair->tess_rings);
+    /* Default build, without diagnostic ring/offchip switches: the storage
+     * and emitted bounds must match the checked native lifecycle. */
+    const uint32_t *ring_table=first->pair->tess_rings;
+    assert(ring_table[22]==65536u*4u);
+    assert(ring_table[26]==256u*32768u);
+    assert(first->pair->tess_ring_state[0].value==65536u);
+    assert(first->pair->tess_ring_state[1].value==255u);
+    assert(first->pair->geometry_preraster);
+    ((unsigned char *)first->pair->tess_rings)[0]=0x5a;
+    const unsigned live_before=allocations-releases;
+    fail_flush=1;
+    assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_second)!=VK_SUCCESS);
+    assert(!tess_second && allocations-releases==live_before);
+    assert(((unsigned char *)first->pair->tess_rings)[0]==0x5a);fail_flush=0;
+    assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_second)==VK_SUCCESS);
+    struct ps5vk_native_graphics_pipeline *second=tess_second;
+    assert(first->shared_rings==second->shared_rings &&
+        first->pair->tess_rings==second->pair->tess_rings);
+    assert(((unsigned char *)second->pair->tess_rings)[0]==0x5a);
+    assert((second->pair->tess_state[0].value&(1u<<5))!=0); /* GS_EN preserved. */
+    assert(((second->pair->tess_state[0].value>>3)&3u)==1u); /* TES-fed ES. */
+    ps5vk_runtime_graphics_free(NULL,tess_program);
+    ps5vk_native_graphics_release(&device,tess_first);
+    assert(((unsigned char *)second->pair->tess_rings)[0]==0x5a);
+    ps5vk_native_graphics_release(&device,tess_second);assert(allocations==releases);
+    /* A GS may emit points even though TES supplies triangles. Mutate only
+     * OutputTriangleStrip (29) to OutputPoints (27), preserving executable
+     * instructions; compiling the resulting legal module supplies real ABI. */
+    uint32_t *gs_words=(uint32_t *)tess.geometry.words;
+    unsigned changed=0;
+    for(size_t at=5;at<tess.geometry.word_count;at+=gs_words[at]>>16) {
+        if((gs_words[at]&65535u)==16u && (gs_words[at]>>16)==3 &&
+           gs_words[at+2]==29u) {gs_words[at+2]=27u;++changed;}
+    }
+    assert(changed==1);
+    tess_program=NULL;tess_first=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&tess,&tess_program)==VK_SUCCESS);
+    const struct ps5vk_runtime_graphics_program *point_program=tess_program;
+    unsigned output_registers=0;
+    for(unsigned i=0;i<point_program->domain.metadata.context_register_count;++i)
+        if(point_program->domain.metadata.context_registers[i].offset==0x29b) {
+            assert(point_program->domain.metadata.context_registers[i].value==0);
+            ++output_registers;
+        }
+    assert(output_registers==1);
+    assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_first)==VK_SUCCESS);
+    first=tess_first;
+    assert(first->pair->cx.vgt_gs_out_prim_type.offset==0x29b);
+    assert(first->pair->cx.vgt_gs_out_prim_type.value==0);
+    ps5vk_native_graphics_release(&device,tess_first);assert(allocations==releases);
+    /* Corrupt the retained compiler contract, not executable shader bytes.
+     * Native construction must reject instead of reverting to TES topology. */
+    struct ps5vk_runtime_graphics_program *mutable_point=(void *)tess_program;
+    for(unsigned i=0;i<mutable_point->domain.metadata.context_register_count;++i)
+        if(mutable_point->domain.metadata.context_registers[i].offset==0x29b) {
+            mutable_point->domain.metadata.context_registers[i].value=3;
+            tess_first=(void *)(uintptr_t)1;
+            assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_first)!=VK_SUCCESS);
+            assert(!tess_first && allocations==releases);
+            mutable_point->domain.metadata.context_registers[i].value=0;
+            mutable_point->domain.metadata.context_registers[i].offset=0x29c;
+            tess_first=(void *)(uintptr_t)1;
+            assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_first)!=VK_SUCCESS);
+            assert(!tess_first && allocations==releases);
+            mutable_point->domain.metadata.context_registers[i].offset=0x29b;
+            break;
+        }
+    tess_first=NULL;
+    assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_first)==VK_SUCCESS);
+    ps5vk_native_graphics_release(&device,tess_first);assert(allocations==releases);
+    ps5vk_runtime_graphics_free(NULL,tess_program);
+    free((void *)tess.vertex.words);free((void *)tess.tess_control.words);
+    free((void *)tess.tess_eval.words);free((void *)tess.geometry.words);free((void *)tess.fragment.words);
+    /* Exact shader combination used by native variant16: quad point TES feeds
+     * a real point-input GS which moves and recolours the domain outputs. */
+    tess.vertex=read_module("build/runtime-graphics/tess_coord.vert.spv");
+    tess.tess_control=read_module("build/runtime-graphics/tess_quad.tesc.spv");
+    tess.tess_eval=read_module("build/runtime-graphics/tess_points.tese.spv");
+    tess.geometry=read_module("build/runtime-graphics/tess_points.geom.spv");
+    tess.fragment=read_module("build/runtime-graphics/tess_coord.frag.spv");
+    tess_program=NULL;tess_first=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&tess,&tess_program)==VK_SUCCESS);
+    assert(ps5vk_native_runtime_graphics_create(&device,tess_program,9u,&tess_first)==VK_SUCCESS);
+    first=tess_first;
+    assert(first->pair->tessellation && first->pair->geometry_preraster);
+    assert(first->pair->cx.vgt_gs_out_prim_type.value==0);
+    assert(first->pair->runtime_arguments.ring_table_valid);
+    ps5vk_native_graphics_release(&device,tess_first);assert(allocations==releases);
+    ps5vk_runtime_graphics_free(NULL,tess_program);
+    free((void *)tess.vertex.words);free((void *)tess.tess_control.words);
+    free((void *)tess.tess_eval.words);free((void *)tess.geometry.words);free((void *)tess.fragment.words);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
     puts("Runtime graphics native preparation: pass (mock AGC, copied ownership, rollback)");
 }

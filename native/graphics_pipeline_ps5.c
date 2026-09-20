@@ -1,8 +1,23 @@
 #include "graphics_pipeline_ps5.h"
 #include "graphics_program.h"
+#include "tess_shared_storage.h"
+#include "runtime_resource_use.h"
 #include <stdlib.h>
 #include <string.h>
 
+VkResult ps5vk_native_graphics_used_sets(VkDevice d,const void *state,uint32_t *out)
+{
+    if(!out)return VK_ERROR_UNKNOWN;
+    *out=0;
+    const struct ps5vk_native_graphics_pipeline *p=state;
+    if(!d || !p || p->device!=d || !p->pair || !p->pair->ready ||
+       !p->pair->runtime_arguments.enabled)return VK_ERROR_UNKNOWN;
+    uint32_t mask=0;
+    for(unsigned s=0;s<PS5VK_MAX_SETS;++s)
+        if(ps5vk_runtime_resource_bindings(&p->pair->runtime_arguments,
+            &p->pair->hull_arguments,s))mask|=1u<<s;
+    *out=mask;return VK_SUCCESS;
+}
 VkResult ps5vk_native_graphics_create(VkDevice d, const void *data,
     uint32_t primitive_type, void **out)
 {
@@ -60,6 +75,8 @@ void ps5vk_native_graphics_release(VkDevice d, void *state)
     if (!p) return;
     if (!d || p->device != d) { if (d) ++d->lifetime_errors; return; }
     /* Vulkan pipeline destruction has already enforced the pending-use guard. */
+    if (p->shared_rings) ps5vk_tess_storage_release(&p->shared_rings);
+    else if (p->rings_backing) p->memory.release(p->memory.context, p->rings_backing);
     p->memory.release(p->memory.context, p->backing);
     free(p);
 }

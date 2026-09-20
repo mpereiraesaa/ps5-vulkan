@@ -47,9 +47,15 @@ mean the driver advertises them; the reported device version remains Vulkan
   runs: the ES->GS input handoff, the point, line and triangle input families,
   `gl_InvocationID`, `gl_PrimitiveIDIn` and each of those five minima are
   hardware-witnessed, and the leaves of the pinned geometry module that pass
-  their own upstream oracles are acceptance cases. `tessellationShader` remains
-  reported false: the pinned compiler publishes no loadable hull package and no
-  hull/domain pipeline state is programmed.
+  their own upstream oracles are acceptance cases. `tessellationShader` is
+  reported true by the native runtime-graphics build, with linked LS/HS and
+  TES (including TES/GS) execution. Compute-only and offline graphics builds
+  do not gain this feature. The eight tessellation limits are generation level
+  64, patch size 32, control per-vertex input/output 128/128 components,
+  control per-patch output 120, control total output 4096, and evaluation
+  input/output 128/128. See [tessellation status](TESSELLATION_STATUS.md) for
+  native witnesses, the focused 403-case upstream result and release status;
+  this is not full CTS conformance or DXVK compatibility.
   See [clip-cull native acceptance](VALIDATION.md#clip-cull-native-acceptance).
 - The focused suite contains the original upstream
   `device_mandatory_features` oracle plus 12 executable compute scalar

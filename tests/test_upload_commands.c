@@ -111,6 +111,25 @@ int main(void)
     assert(ps5vk_upload_commands(&device,&color,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
     assert(cursor==words && !layouts.count);
 
+    /* Upstream winding re-records the same buffer for opposite culling after
+     * reading its first image. The return transition must not be a discard. */
+    image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    image.layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    color.image_barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    color.image_barrier.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+    color.src_stage=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT;
+    color.dst_stage=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&color,1,&image,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
+    assert(cursor-words==PS5VK_GRAPHICS_ACQUIRE_WORDS);
+    assert(image.layout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    assert(ps5vk_layout_require(&layouts,&image,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)==VK_SUCCESS);
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    image.layout=VK_IMAGE_LAYOUT_UNDEFINED;
+    assert(ps5vk_upload_commands(&device,&color,1,&image,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    color.image_barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+    assert(!ps5vk_color_readback_reuse_barrier(&color.image_barrier));
+
     /* --- the pinned draw case's prelude -----------------------------------
      * The eight selected upstream draw cases initialise their colour target
      * with UNDEFINED -> GENERAL for a transfer write (TOP_OF_PIPE -> TRANSFER)

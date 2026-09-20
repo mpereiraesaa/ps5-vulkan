@@ -6,6 +6,11 @@
  * scalar/vector varyings at whole locations and the bounded clip/cull distance
  * declarations of graphics_stages.h; rejects unsupported interfaces. */
 int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *);
+/* Validated TCS entrypoint OutputVertices; zero on unsupported/malformed input.
+ * Independent of the pipeline input patchControlPoints. */
+unsigned ps5vk_spirv_tess_output_points(const struct ps5vk_graphics_module_key *);
+/* Resolved stage-pair output count; rejects missing/conflicting execution modes. */
+unsigned ps5vk_spirv_tess_pair_output_points(const struct ps5vk_graphics_key *);
 /* Declared component widths of the gl_ClipDistance (built-in 3) and
  * gl_CullDistance (built-in 4) arrays in one pre-raster module's entry point
  * interface; zero for a built-in the stage does not declare at all.

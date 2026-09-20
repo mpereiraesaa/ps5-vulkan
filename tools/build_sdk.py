@@ -50,7 +50,26 @@ def get_ps5_toolchain():
     return None, None
 
 
+def tess_ring_flags(environment):
+    mode = environment.get("PS5VK_TESS_RING_QUERY", "0")
+    if mode not in ("0", "4"):
+        raise ValueError("SDK ring diagnostics must be 0 (off) or 4 (extended records)")
+    flags = ["-DPS5VK_TESS_RING_QUERY=4"] if mode == "4" else []
+    experimental = environment.get("PS5VK_TESS_EXPERIMENTAL_API", "0")
+    if experimental not in ("0", "1"):
+        raise ValueError("experimental tessellation API must be 0 or 1")
+    if experimental == "1":
+        # TF/offchip ownership is unconditional in the native queue now.
+        # Diagnostic logging must not enable/disable required GPU lifecycle.
+        if any(environment.get(name, "0") not in ("", "0") for name in
+               ("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC", "PS5VK_TESS_PROBE")):
+            raise ValueError("public API experiment forbids feature/descriptor bypass probes")
+        flags.append("-DPS5VK_TESS_EXPERIMENTAL_API=1")
+    return flags
+
+
 def main():
+    ring_flags = tess_ring_flags(os.environ)
     include_dir = DIST_SDK / "include"
     lib_dir = DIST_SDK / "lib"
     for d in (include_dir / "ps5vk", include_dir / "vulkan", lib_dir):
@@ -132,7 +151,8 @@ def main():
         ]
         graphics_sources = (
             "native/graphics_pair.c", "src/shader_relocate.c",
-            "native/graphics_pipeline_ps5.c", "native/image_ps5.c",
+            "native/graphics_pipeline_ps5.c", "native/tess_shared_storage.c",
+            "native/tess_ring_lease.c", "native/image_ps5.c",
             "src/depth_layout.c", "src/color_clear.c", "src/color_detile.c",
             "native/draw_prepare_ps5.c", "native/draw_emit_ps5.c", "native/index_emit_ps5.c",
             "native/input_attachment_gate.c",
@@ -167,6 +187,44 @@ def main():
             "-DPS5VK_TARGET_PS5=1",
             "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
             "-DPS5VK_RUNTIME_GRAPHICS=1", "-DPS5VK_NO_OFFLINE_LIBRARY=1",
+            # The diagnostic probes are environment-declared for the whole
+            # payload: the runtime library the SDK builds compiles the same
+            # sources the native build does, so the optional-stage negotiation
+            # gate must see the same diagnostic decision. The value is passed
+            # through from the caller (build_native.py sets it for its probe
+            # builds); the shipping default stays zero.
+            *(["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" +
+               os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"]]
+              if os.environ.get("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC") else []),
+            *(["-DPS5VK_TESS_PROBE=" + os.environ["PS5VK_TESS_PROBE"]]
+              if os.environ.get("PS5VK_TESS_PROBE") else []),
+            # Legacy experiment flags remain attributable in old build recipes.
+            # Default native feature eligibility is in tess_profile.h; neither
+            # ring logging nor the old experiment enables a probe bypass.
+            *ring_flags,
+            # The SDK build compiles the same sources, so it must select the
+            # same single tessellation candidate the native build selected.
+            *(["-DPS5VK_TESS_VARIANT=" + os.environ["PS5VK_TESS_VARIANT"]]
+              if os.environ.get("PS5VK_TESS_VARIANT") else []),
+            # The register-stream dump lives in the runtime draw path, which
+            # the SDK build compiles, so the switch has to reach here too or
+            # the dump silently does not exist in the deployed payload.
+            *(["-DPS5VK_TESS_STATE_DUMP=" +
+               os.environ["PS5VK_TESS_STATE_DUMP"]]
+              if os.environ.get("PS5VK_TESS_STATE_DUMP") else []),
+            *(["-DPS5VK_GEOMETRY_KEY_DIAG=1"]
+              if os.environ.get("PS5VK_GEOMETRY_KEY_DIAG") == "1" else []),
+            *(["-DPS5VK_TESS_OFFCHIP_CAPACITY_WG=" +
+               os.environ["PS5VK_TESS_OFFCHIP_CAPACITY_WG"]]
+              if os.environ.get("PS5VK_TESS_OFFCHIP_CAPACITY_WG") else []),
+            *(["-DPS5VK_TESS_GE_CNTL=" + os.environ["PS5VK_TESS_GE_CNTL"]]
+              if os.environ.get("PS5VK_TESS_GE_CNTL") else []),
+            *(["-DPS5VK_TESS_END_VS_FLUSH=1"]
+              if os.environ.get("PS5VK_TESS_END_VS_FLUSH") == "1" else []),
+            *(["-DPS5VK_TESS_HULL_TRACE=1"]
+              if os.environ.get("PS5VK_TESS_HULL_TRACE") == "1" else []),
+            *(["-DPS5VK_TESS_OFFCHIP_BIND=1"]
+              if os.environ.get("PS5VK_TESS_OFFCHIP_BIND") == "1" else []),
         ]
 
         obj_dir = ROOT / "build/sdk-objs-native"
@@ -218,8 +276,12 @@ def main():
         subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c",
                         str(gears / "native/stubs/libSceAgcDriver.c"), "-o", str(driver_obj)],
                        env=env, check=True)
+        tess_driver_obj = obj_dir / "tess_driver_stub.o"
+        subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c",
+                        str(ROOT / "native/tess_driver_import_stub.c"), "-o", str(tess_driver_obj)],
+                       env=env, check=True)
         subprocess.run([str(linker), "--shared", "-soname", "libSceAgcDriver.prx",
-                        "-o", str(driver), str(driver_obj)], check=True)
+                        "-o", str(driver), str(driver_obj), str(tess_driver_obj)], check=True)
         compiler_source = ROOT / "build/libpsbc.ps5.a"
         expected_revision = subprocess.check_output(
             ["git", "-C", str(ROOT / "third_party/psbc-reference"),

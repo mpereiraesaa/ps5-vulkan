@@ -16,7 +16,7 @@ enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
 enum { BUILTIN_PRIMITIVE_ID=7, BUILTIN_INVOCATION_ID=8, BUILTIN_TESS_LEVEL_OUTER=11,
-       BUILTIN_TESS_LEVEL_INNER=12, BUILTIN_TESS_COORD=13 };
+       BUILTIN_TESS_LEVEL_INNER=12, BUILTIN_TESS_COORD=13, BUILTIN_PATCH_VERTICES=14 };
 enum { DECORATION_PATCH=15 };
 enum { MODE_SPACING_EQUAL=1, MODE_SPACING_FRACTIONAL_EVEN=2,
        MODE_SPACING_FRACTIONAL_ODD=3, MODE_VERTEX_ORDER_CW=4,
@@ -42,7 +42,9 @@ struct interface {
     struct interface_slot inputs[LOCATIONS], outputs[LOCATIONS];
     /* Per-patch interface: a variable or built-in that carries the Patch
      * decoration. It lives at the same locations as the per-vertex interface,
-     * so it needs its own slots to be describable at all. */
+     * so it needs its own slots to be describable at all. SPIRV-Tools #5654
+     * explicitly separates Patch and non-Patch location conflict checks;
+     * GLSL frontend rejection alone must not narrow the SPIR-V contract. */
     struct interface_slot patch_inputs[LOCATIONS], patch_outputs[LOCATIONS];
     /* Declared gl_ClipDistance/gl_CullDistance array lengths, in components.
      * They start at zero and are set at most once per stage. */
@@ -85,6 +87,45 @@ static int declared_array(const struct id_info *ids,unsigned bound,unsigned type
     if(!constant->count)return 0;
     *length=constant->count;
     *element=array->type;
+    return 1;
+}
+
+/* Flatten a location-qualified 32-bit interface into occupied locations.
+ * Arrays repeat the complete element span; matrices occupy one location per
+ * column. Bound both recursion and output so malformed cyclic/huge types fail
+ * before any unbounded work. The outer per-vertex array is removed by caller. */
+static int interface_locations(const struct id_info *ids,unsigned bound,unsigned id,
+                               struct interface_slot *slots,unsigned *count,
+                               unsigned depth)
+{
+    if(!id || id>=bound || depth>=LOCATIONS || *count>=LOCATIONS)return 0;
+    const struct id_info *type=&ids[id];
+    if(type->op==28 || type->op==24) {
+        unsigned length=type->count,element=type->type;
+        if(type->op==28) {
+            if(!declared_array(ids,bound,id,&length,&element))return 0;
+        } else {
+            if(length<2 || length>4 || !element || element>=bound ||
+               ids[element].op!=23 || !ids[element].type ||
+               ids[element].type>=bound || ids[ids[element].type].op!=22)return 0;
+        }
+        if(!length || length>LOCATIONS-*count)return 0;
+        for(unsigned i=0;i<length;++i)
+            if(!interface_locations(ids,bound,element,slots,count,depth+1))return 0;
+        return 1;
+    }
+    unsigned components=1;
+    if(type->op==23) {
+        components=type->count;
+        if(components<2 || components>4 || !type->type || type->type>=bound)return 0;
+        type=&ids[type->type];
+    }
+    unsigned numeric=PS5VK_VERTEX_NUMERIC_NONE;
+    if(type->op==22 && type->count==32)numeric=PS5VK_VERTEX_NUMERIC_FLOAT;
+    else if(type->op==21 && type->count==32)
+        numeric=type->signedness?PS5VK_VERTEX_NUMERIC_SINT:PS5VK_VERTEX_NUMERIC_UINT;
+    else return 0;
+    slots[(*count)++]=(struct interface_slot){components,numeric};
     return 1;
 }
 
@@ -222,7 +263,7 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
              * count and its strip topology. */
             if(!entry_id || n<3 || w[1]!=entry_id)goto done;
             const unsigned mode=w[2];
-            if(model==MODEL_TESS_CTRL && mode==MODE_OUTPUT_VERTICES) {
+            if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) && mode==MODE_OUTPUT_VERTICES) {
                 unsigned value=0;
                 if(op==16) {
                     if(n!=4)goto done;
@@ -244,7 +285,7 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                  * model above, so the two cannot be confused. */
                 if(n!=3 || out->input_primitive)goto done;
                 out->input_primitive=mode;
-            } else if(model==MODEL_TESS_EVAL &&
+            } else if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) &&
                       (mode==MODE_DOMAIN_TRIANGLES || mode==MODE_DOMAIN_QUADS ||
                        mode==MODE_DOMAIN_ISOLINES || mode==MODE_SPACING_EQUAL ||
                        mode==MODE_SPACING_FRACTIONAL_EVEN ||
@@ -290,7 +331,7 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
              * declared distance array length consumes one. */
             if(n<4 || !w[1] || w[1]>=bound || !w[2] || w[2]>=bound || ids[w[2]].op)goto done;
             struct id_info *d=&ids[w[2]];d->op=op;d->type=w[1];d->count=w[3];
-        } else if(op==21 || op==22 || op==23 || op==28 || op==30 || op==32 || op==59) {
+        } else if(op==21 || op==22 || op==23 || op==24 || op==28 || op==30 || op==32 || op==59) {
             unsigned id=op==59?(n>=3?w[2]:0):(n>=2?w[1]:0);
             if(!id || id>=bound || ids[id].op)goto done;
             struct id_info *d=&ids[id];d->op=op;
@@ -301,9 +342,9 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                     if(w[3]>1)goto done;
                     d->signedness=w[3];
                 }
-            } else if(op==23 || op==32) {
+            } else if(op==23 || op==24 || op==32) {
                 if(n!=4)goto done;
-                d->type=op==23?w[2]:w[3];
+                d->type=op==32?w[3]:w[2];
                 d->count=w[3];d->storage=w[2];
             } else if(op==28) {
                 /* OpTypeArray: element type, then the length constant. */
@@ -357,24 +398,27 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                    type->count!=32)goto done;
                 continue;
             }
-            /* The geometry stage's per-primitive id: which primitive of the draw
-             * this invocation is processing. The hardware supplies it to the
-             * merged stage the same way it supplies the per-vertex offsets and
-             * the invocation id, and every applicable upstream geometry leaf
-             * declares it, so it is what the feature's conformance leaves need.
-             * It is a GEOMETRY input scalar with no location; the fragment
-             * stage's gl_PrimitiveID is a different interface and stays refused
-             * (the compiled pixel stage never receives it). */
-            if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_PRIMITIVE_ID) {
+            /* Geometry consumes the input primitive index; TCS consumes the
+             * input patch index. Both declarations are scalar stage inputs,
+             * not Patch-decorated outputs. The fragment-stage PrimitiveId
+             * varying is a separate interface and remains refused here. */
+            if((model==MODEL_GEOMETRY || model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) &&
+               d->builtin==BUILTIN_PRIMITIVE_ID) {
                 if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
                    type->count!=32)goto done;
                 continue;
             }
-            if(model==MODEL_TESS_CTRL &&
+            if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) &&
+               d->builtin==BUILTIN_PATCH_VERTICES) {
+                if(d->location!=~0u || d->storage!=1 || d->patch || type->op!=21 ||
+                   type->count!=32)goto done;
+                continue;
+            }
+            if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) &&
                (d->builtin==BUILTIN_TESS_LEVEL_OUTER || d->builtin==BUILTIN_TESS_LEVEL_INNER)) {
                 unsigned length=0,element=0;
                 const unsigned want=d->builtin==BUILTIN_TESS_LEVEL_OUTER?4u:2u;
-                if(d->location!=~0u || d->storage!=3 || !d->patch ||
+                if(d->location!=~0u || d->storage!=(model==MODEL_TESS_CTRL?3u:1u) || !d->patch ||
                    !declared_array(ids,bound,ptr->type,&length,&element) ||
                    length!=want || !element || element>=bound)goto done;
                 if(ids[element].op!=22 || ids[element].count!=32)goto done;
@@ -451,7 +495,8 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
          * is what has to match the neighbouring stage in every case. */
         const int per_vertex_array=type->op==28 &&
             ((model==MODEL_GEOMETRY && d->storage==1) ||
-             ((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) && !d->patch));
+             ((model==MODEL_TESS_CTRL ||
+               (model==MODEL_TESS_EVAL && d->storage==1)) && !d->patch));
         if(per_vertex_array) {
             unsigned length=0,element=0;
             if(!declared_array(ids,bound,ptr->type,&length,&element) ||
@@ -485,50 +530,34 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
             } else if(!builtin_block(m,ids,bound,ptr->type,type->count,NULL,NULL))goto done;
             continue;
         }
-        unsigned components=1;
-        if(type->op==23) {
-            components=type->count;
-            if(components<2 || components>4 || !type->type || type->type>=bound)goto done;
-            type=&ids[type->type];
-        }
-        unsigned numeric=PS5VK_VERTEX_NUMERIC_NONE;
-        if(type->op==22 && type->count==32)numeric=PS5VK_VERTEX_NUMERIC_FLOAT;
-        else if(type->op==21 && type->count==32)
-            numeric=type->signedness?PS5VK_VERTEX_NUMERIC_SINT:PS5VK_VERTEX_NUMERIC_UINT;
-        else goto done;
+        struct interface_slot occupied[LOCATIONS];
+        unsigned occupied_count=0;
+        if(!interface_locations(ids,bound,(unsigned)(type-ids),occupied,&occupied_count,0))goto done;
         /* Integer FS inputs are not interpolatable. Flat floats are also
          * valid; their PSBC semantic bit is preserved by the native header.
          * Interpolation decorations need not match VS output decorations. */
         /* Integer outputs cannot be interpolated: both the fragment stage and a
          * geometry stage's per-vertex inputs must be flat for them. */
-        if((model==MODEL_FRAGMENT || model==MODEL_GEOMETRY) && d->storage==1 &&
-           numeric!=PS5VK_VERTEX_NUMERIC_FLOAT && !d->flat)
-            goto done;
+        if((model==MODEL_FRAGMENT || model==MODEL_GEOMETRY) && d->storage==1 && !d->flat)
+            for(unsigned slot=0;slot<occupied_count;++slot)
+                if(occupied[slot].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)goto done;
         /* A Patch-decorated variable is the per-patch interface; it exists only
          * between the control and evaluation stages. */
         if(d->patch && model!=MODEL_TESS_CTRL && model!=MODEL_TESS_EVAL)goto done;
         if(d->patch && model==MODEL_TESS_CTRL && d->storage==1)goto done;
-        if(d->location>=LOCATIONS)goto done;
+        if(d->location>=LOCATIONS || occupied_count>LOCATIONS-d->location)goto done;
         struct interface_slot *locations;
         if(d->patch)locations=d->storage==1?out->patch_inputs:out->patch_outputs;
         else locations=d->storage==1?out->inputs:out->outputs;
-        if(locations[d->location].components)goto done;
-        locations[d->location]=(struct interface_slot){components,numeric};
+        for(unsigned slot=0;slot<occupied_count;++slot) {
+            if(locations[d->location+slot].components)goto done;
+            locations[d->location+slot]=occupied[slot];
+        }
     }
     /* Each feature has its own floor and the exported registers are shared, so
      * a declaration that fits one bound may still not fit the stage. */
-    /* The tessellation stages are described by their execution modes, so a
-     * stage that is missing the one that defines its patch is refused here
-     * rather than reaching a pipeline that would have to guess it: the control
-     * stage must publish its output vertex count, and the evaluation stage must
-     * state its domain, its vertex order and - for the domains the tessellator
-     * spaces - its spacing. */
-    if(model==MODEL_TESS_CTRL && !out->control_points)goto done;
-    if(model==MODEL_TESS_EVAL) {
-        if(!out->domain || !out->winding)goto done;
-        if((out->domain==MODE_DOMAIN_TRIANGLES || out->domain==MODE_DOMAIN_QUADS) &&
-           !out->spacing)goto done;
-    }
+    /* Tessellation modes may reside in either stage. Validate completeness
+     * and cross-stage agreement only after resolving the pair below. */
     /* Exports and reads share the two packed distance registers, so both are
      * budgeted against the same per-feature and combined ceilings. A stage
      * declares one built-in once and is either pre-raster or fragment, so the
@@ -584,6 +613,34 @@ int ps5vk_spirv_stage_distance_reads(const struct ps5vk_graphics_module_key *mod
     return 1;
 }
 
+unsigned ps5vk_spirv_tess_output_points(const struct ps5vk_graphics_module_key *module)
+{
+    struct interface stage={0};
+    return reflect(module,MODEL_TESS_CTRL,&stage)?stage.control_points:0;
+}
+
+static int resolve_tess_modes(struct interface *control,struct interface *evaluation)
+{
+    unsigned *a[]={&control->control_points,&control->domain,&control->spacing,&control->winding};
+    unsigned *b[]={&evaluation->control_points,&evaluation->domain,&evaluation->spacing,&evaluation->winding};
+    for(unsigned i=0;i<4;++i) {
+        if(*a[i] && *b[i] && *a[i]!=*b[i])return 0;
+        const unsigned resolved=*a[i]?*a[i]:*b[i];
+        if(!resolved)return 0;
+        *a[i]=*b[i]=resolved;
+    }
+    control->point_mode=evaluation->point_mode=control->point_mode|evaluation->point_mode;
+    return 1;
+}
+
+unsigned ps5vk_spirv_tess_pair_output_points(const struct ps5vk_graphics_key *key)
+{
+    struct interface control={0},evaluation={0};
+    return key && reflect(&key->tess_control,MODEL_TESS_CTRL,&control) &&
+        reflect(&key->tess_eval,MODEL_TESS_EVAL,&evaluation) &&
+        resolve_tess_modes(&control,&evaluation)?control.control_points:0;
+}
+
 int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
 {
     struct interface vs={0},fs={0},gs={0},tcs={0},tes={0};
@@ -592,14 +649,13 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
     const int has_tessellation=ps5vk_graphics_has_tessellation(key);
     const int has_geometry=ps5vk_graphics_has_geometry(key);
     if(has_tessellation) {
-        /* The pair is one program's two halves: both are required, and the
-         * control stage's output vertex count must be the patch control points
-         * the pipeline state declares, or the program would tessellate a patch
-         * the pipeline never asked for. */
+        /* patchControlPoints assembles the INPUT patch. OutputVertices declares
+         * the independent TCS OUTPUT patch size. Both must be in range, but
+         * need not be equal; reflection validates the latter separately. */
         if(!ps5vk_graphics_tessellation_key_valid(key))return 0;
         if(!reflect(&key->tess_control,MODEL_TESS_CTRL,&tcs) ||
-           !reflect(&key->tess_eval,MODEL_TESS_EVAL,&tes))return 0;
-        if(tcs.control_points!=key->patch_control_points)return 0;
+           !reflect(&key->tess_eval,MODEL_TESS_EVAL,&tes) ||
+           !resolve_tess_modes(&tcs,&tes))return 0;
     }
     if(has_geometry) {
         if(!reflect(&key->geometry,MODEL_GEOMETRY,&gs))return 0;
@@ -613,8 +669,16 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * points, 56 for lines). Adjacency topologies report zero here and stay
          * refused until the front end is measured to accept their four- and
          * six-vertex inputs. */
-        const unsigned input_vertices=ps5vk_topology_input_vertices(key->topology);
-        const unsigned input_mode=ps5vk_topology_input_mode(key->topology);
+        /* With tessellation, PATCH_LIST describes input control points, not
+         * the primitives delivered to GS. TES point mode overrides its domain;
+         * quads are tessellated to triangles, never GS InputQuads. */
+        const unsigned input_vertices=has_tessellation?
+            (tes.point_mode?1u:tes.domain==MODE_DOMAIN_ISOLINES?2u:3u):
+            ps5vk_topology_input_vertices(key->topology);
+        const unsigned input_mode=has_tessellation?
+            (tes.point_mode?MODE_INPUT_POINTS:
+             tes.domain==MODE_DOMAIN_ISOLINES?MODE_INPUT_LINES:MODE_TRIANGLES):
+            ps5vk_topology_input_mode(key->topology);
         /* The stage's declared input primitive is what binds it to the topology
          * the pipeline assembles: a stage that never reads gl_in declares no
          * per-vertex array, so requiring the array's length would refuse a legal
@@ -680,12 +744,19 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * gl_MaxPatchVertices; the patch count is the execution mode checked
          * above against the pipeline state. */
         if(has_tessellation) {
-            if(vs.outputs[i].components!=tcs.inputs[i].components ||
-               vs.outputs[i].numeric!=tcs.inputs[i].numeric)return 0;
-            if(tcs.outputs[i].components!=tes.inputs[i].components ||
-               tcs.outputs[i].numeric!=tes.inputs[i].numeric)return 0;
-            if(tcs.patch_outputs[i].components!=tes.patch_inputs[i].components ||
-               tcs.patch_outputs[i].numeric!=tes.patch_inputs[i].numeric)return 0;
+            /* Interface matching is consumer-directed. In particular, a TCS
+             * may use outputs for cross-invocation communication without the
+             * TES declaring them. Every declared input still needs a producer.
+             * Vulkan Shader Interfaces, "Interface Matching". */
+            if(tcs.inputs[i].components &&
+               (vs.outputs[i].components!=tcs.inputs[i].components ||
+                vs.outputs[i].numeric!=tcs.inputs[i].numeric))return 0;
+            if(tes.inputs[i].components &&
+               (tcs.outputs[i].components!=tes.inputs[i].components ||
+                tcs.outputs[i].numeric!=tes.inputs[i].numeric))return 0;
+            if(tes.patch_inputs[i].components &&
+               (tcs.patch_outputs[i].components!=tes.patch_inputs[i].components ||
+                tcs.patch_outputs[i].numeric!=tes.patch_inputs[i].numeric))return 0;
         }
     }
     return 1;

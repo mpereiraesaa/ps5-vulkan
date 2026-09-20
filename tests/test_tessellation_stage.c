@@ -8,8 +8,8 @@
  * execution modes are read, the patch control points the pipeline states are
  * checked against the control stage's output vertex count, and two pipelines
  * that differ only in the pair or in that count are different programs. It says
- * nothing about compiling or executing them - the compiler adapter refuses the
- * pair, which is what makes tessellationShader stay false.
+ * nothing about compiling or executing them. Interface acceptance alone must
+ * never be used to promote the tessellationShader capability.
  *
  * The fixtures are the pinned front end's own output for the pair, and each
  * negative case changes exactly one word of it.
@@ -81,6 +81,16 @@ static void free_key(struct ps5vk_graphics_key *key)
 
 int main(void)
 {
+    /* TES outputs have no implicit outer per-vertex array. All31 vec4
+     * locations must reach FS; stripping the array formerly left only loc0. */
+    struct ps5vk_graphics_key envelope=tessellation_key();
+    free_module(&envelope.tess_eval);free_module(&envelope.fragment);
+    envelope.tess_eval=read_module("build/runtime-graphics/tess_output_envelope.tese.spv");
+    envelope.fragment=read_module("build/runtime-graphics/tess_output_envelope.frag.spv");
+    assert(ps5vk_spirv_graphics_interface(&envelope));
+    assert(patch_decoration(&envelope.tess_eval,30,0,1));
+    assert(!ps5vk_spirv_graphics_interface(&envelope));
+    free_key(&envelope);
     /* The pair the front end emits for a three-control-point patch: the control
      * stage declares OutputVertices 3, the evaluation stage declares its
      * domain, spacing and winding, and the per-patch value crosses through the
@@ -89,15 +99,61 @@ int main(void)
     assert(ps5vk_graphics_has_tessellation(&key));
     assert(ps5vk_graphics_tessellation_key_valid(&key));
     assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_spirv_tess_output_points(&key.tess_control)==3);
+    assert(ps5vk_spirv_tess_output_points(&key.tess_eval)==0);
 
-    /* The pipeline's patch control points are the control stage's output vertex
-     * count: a state that disagrees with the program would tessellate a patch
-     * the program was never compiled for. Out-of-range counts are refused by
-     * the key contract itself, before any interface work. */
+    /* Reflection-only execution-mode mutations: verify the primitive boundary
+     * for every TES domain, including point-mode precedence. Not GPU evidence. */
+    const unsigned domains[]={22,24,25};
+    const char *geometry_paths[]={"build/runtime-graphics/geometry_points.geom.spv",
+        "build/runtime-graphics/geometry_lines.geom.spv",
+        "build/runtime-graphics/geometry_probe.geom.spv"};
+    for(unsigned domain=0;domain<3;++domain)for(unsigned point=0;point<2;++point) {
+        struct ps5vk_graphics_module_key eval=read_module("build/runtime-graphics/tess.tese.spv");
+        uint32_t *words=(uint32_t *)eval.words,entry=0;
+        for(size_t at=5;at<eval.word_count;at+=words[at]>>16) {
+            if((words[at]&65535u)==16u && (words[at]>>16)==3u && words[at+2]==22) {
+                words[at+2]=domains[domain];entry=words[at+1];
+            }
+        }
+        assert(entry);
+        if(point) {
+            words=realloc(words,(eval.word_count+3)*sizeof(*words));assert(words);
+            words[eval.word_count++]=(3u<<16)|16u;
+            words[eval.word_count++]=entry;words[eval.word_count++]=10u;
+            eval.words=words;
+        }
+        for(unsigned primitive=0;primitive<3;++primitive) {
+            struct ps5vk_graphics_module_key geom=read_module(geometry_paths[primitive]);
+            struct ps5vk_graphics_key five=key;five.tess_eval=eval;five.geometry=geom;
+            const unsigned expected=point?0u:domain==2?1u:2u;
+            assert(!!ps5vk_spirv_graphics_interface(&five)==(primitive==expected));
+            free_module(&geom);
+        }
+        free_module(&eval);
+    }
+
+    /* PrimitiveId is a patch index input in TCS, not a geometry-only input.
+     * Reuse the scalar input declaration, changing only its BuiltIn. */
+    struct ps5vk_graphics_module_key primitive=
+        read_module("build/runtime-graphics/tess.tesc.spv");
+    assert(patch_decoration(&primitive,11u,8u,7u));
+    struct ps5vk_graphics_key primitive_key=key;
+    primitive_key.tess_control=primitive;
+    assert(ps5vk_spirv_graphics_interface(&primitive_key));
+    assert(patch_decoration(&primitive,11u,7u,14u));
+    assert(ps5vk_spirv_graphics_interface(&primitive_key));
+    /* A different, unsupported builtin must not be accepted by this change. */
+    assert(patch_decoration(&primitive,11u,14u,999u));
+    assert(!ps5vk_spirv_graphics_interface(&primitive_key));
+    free_module(&primitive);
+
+    /* Input assembly size and TCS output size are independent. Out-of-range
+     * input counts are still refused before interface work. */
     struct ps5vk_graphics_key wrong=key;
     wrong.patch_control_points=4;
     assert(ps5vk_graphics_tessellation_key_valid(&wrong));
-    assert(!ps5vk_spirv_graphics_interface(&wrong));
+    assert(ps5vk_spirv_graphics_interface(&wrong));
     wrong.patch_control_points=0;
     assert(!ps5vk_graphics_tessellation_key_valid(&wrong));
     assert(!ps5vk_spirv_graphics_interface(&wrong));
@@ -121,8 +177,8 @@ int main(void)
     swapped.tess_eval=key.tess_control;
     assert(!ps5vk_spirv_graphics_interface(&swapped));
 
-    /* The declared output vertex count is what the patch control points are
-     * checked against, so moving it moves the accepted state with it. */
+    /* Both expansion (3 -> 32) and equal sizes are valid interfaces. These
+     * reflected module mutations test declarations, not shader execution. */
     struct ps5vk_graphics_module_key widened=
         read_module("build/runtime-graphics/tess.tesc.spv");
     assert(patch_execution_mode(&widened,26,3,32));
@@ -131,6 +187,12 @@ int main(void)
     wide.patch_control_points=32;
     assert(ps5vk_spirv_graphics_interface(&wide));
     wide.patch_control_points=3;
+    assert(ps5vk_spirv_graphics_interface(&wide));
+    assert(ps5vk_spirv_tess_output_points(&wide.tess_control)==32);
+    assert(patch_execution_mode(&widened,26,32,0));
+    assert(!ps5vk_spirv_graphics_interface(&wide));
+    assert(ps5vk_spirv_tess_output_points(&wide.tess_control)==0);
+    assert(patch_execution_mode(&widened,26,0,33));
     assert(!ps5vk_spirv_graphics_interface(&wide));
     free_module(&widened);
 
@@ -161,6 +223,26 @@ int main(void)
     moved_key.tess_control=moved;
     assert(!ps5vk_spirv_graphics_interface(&moved_key));
     free_module(&moved);
+
+    /* SPIRV-Tools #5654: Patch/non-Patch locations are independent. Start
+     * from actual frontend modules and relocate only the patch variables;
+     * our GLSL frontend cannot express this alias directly. Reflection-only,
+     * not a claim that this mutated shader was validated on hardware. */
+    struct ps5vk_graphics_module_key alias_control=
+        read_module("build/runtime-graphics/tess.tesc.spv");
+    struct ps5vk_graphics_module_key alias_eval=
+        read_module("build/runtime-graphics/tess.tese.spv");
+    assert(patch_decoration(&alias_control,30,1,0));
+    assert(patch_decoration(&alias_eval,30,1,0));
+    struct ps5vk_graphics_key alias_key=key;
+    alias_key.tess_control=alias_control;
+    alias_key.tess_eval=alias_eval;
+    assert(ps5vk_spirv_graphics_interface(&alias_key));
+    /* Independence is not permission to drop producer/consumer matching. */
+    alias_key.tess_eval=key.tess_eval;
+    assert(!ps5vk_spirv_graphics_interface(&alias_key));
+    free_module(&alias_control);
+    free_module(&alias_eval);
 
     /* Distances are a pre-raster export, and with a tessellation pair the last
      * pre-raster stage is one of its halves: the declaration bound has to read

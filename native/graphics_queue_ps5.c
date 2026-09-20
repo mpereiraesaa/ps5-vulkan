@@ -1,6 +1,9 @@
 #include "vk_queue.h"
 #include "vk_indirect.h"
 #include "draw_prepare_ps5.h"
+#include "runtime_resource_use.h"
+#include "graphics_descriptor_profile.h"
+#include "readback_content.h"
 #include "input_attachment_gate.h"
 #include "command_arena_ps5.h"
 #include "draw_batch_ps5.h"
@@ -23,6 +26,24 @@
 #include <time.h>
 #include <unistd.h>
 #include <string.h>
+#include "tess_ring_lease.h"
+extern int32_t sceAgcDriverGetTFRing(uint64_t *,uint32_t *);
+extern int32_t sceAgcDriverSetTFRing(uint64_t,uint32_t);
+extern int32_t sceAgcDriverGetHsOffchipParam(uint16_t *,uint16_t *);
+static int ring_get(void *unused,uint64_t *address,uint32_t *size)
+{ (void)unused;return sceAgcDriverGetTFRing(address,size); }
+static int ring_set(void *unused,uint64_t address,uint32_t size)
+{ (void)unused;return sceAgcDriverSetTFRing(address,size); }
+#include "tess_offchip_lease.h"
+extern int32_t sceAgcDriverSetHsOffchipParam(uint16_t,uint16_t);
+static int offchip_get(void *unused,uint16_t *a,uint16_t *b)
+{ (void)unused;return sceAgcDriverGetHsOffchipParam(a,b); }
+static int offchip_set(void *unused,uint16_t a,uint16_t b)
+{ (void)unused;return sceAgcDriverSetHsOffchipParam(a,b); }
+/* One process-global lease, not one per command buffer.
+ * Tess pipelines share per-device storage. Reject conflicting addresses rather
+ * than silently rebinding an inconsistent job. No feature promotion here. */
+static void *ring_owner;
 /* Same FW ABI as the independently validated Xash3D native renderer. */
 extern uint32_t *sceAgcDcbDrawIndex(void *,uint32_t,const void *,uint64_t);
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
@@ -38,6 +59,13 @@ enum { PS5VK_OCCLUSION_PROBE_PAIRS = 64,
        PS5VK_OCCLUSION_PROBE_BYTES = PS5VK_OCCLUSION_PROBE_PAIRS * 16 };
 #endif
 struct graphics_job {
+    struct ps5vk_tess_ring_lease ring;
+    uint64_t ring_address;
+    uint32_t offchip_bytes;
+    struct ps5vk_hs_lease offchip;
+#if defined(PS5VK_TESS_HULL_TRACE) && PS5VK_TESS_HULL_TRACE
+    uint32_t *hull_trace;
+#endif
     /* The ordered arena chain that holds this submission (draw_batch_ps5.h):
      * one arena for the ordinary pass, more when a multi-draw expansion or a
      * long pass outgrows one. `launched` counts the arenas already handed to
@@ -68,6 +96,8 @@ static void release(VkDevice d,void *opaque)
 {
     (void)d; struct graphics_job *j=opaque;
     if(j->attempted && !j->complete)retain("inflight-release");
+    if(j->ring.state!=PS5VK_TF_IDLE)retain("ring-release-unresolved");
+    if(j->offchip.state!=PS5VK_HS_IDLE)retain("offchip-release-unresolved");
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active && ps5vk_command_arena_release(&j->slot)!=VK_SUCCESS)
         retain("occlusion-slot-release");
@@ -123,6 +153,12 @@ fail:
 static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 {
     const char *phase="shape";
+    /* Which refusal inside the draw phase fired. Every one of them returns the
+     * same error code from a different line, so a failure reports "phase=draw"
+     * and nothing else - which cost a window per gate while opening the
+     * descriptor profile for a diagnostic. Numbering them makes one run name
+     * the line. Zero means the failure was not one of the numbered sites. */
+    unsigned draw_site=0;
     *out=NULL;
     /* One color pass, optional D32 and texture-upload prelude.  LOAD preserves
      * an attachment only when its tracked initial layout matches.  CLEAR is
@@ -367,7 +403,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
         size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),(uint64_t)(uintptr_t)j->slot.address);
-        if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+        if(!n){rc=VK_ERROR_UNKNOWN;draw_site=1;goto fail;}cursor+=n;
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_OCCLUSION_PROBE_BEGIN serial=%llu base=%llx pairs=%u",
             (unsigned long long)j->serial,(unsigned long long)(uintptr_t)j->slot.address,
@@ -379,7 +415,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         const struct ps5vk_operation *recorded=body[i];
         if(recorded->type==PS5VK_CLEAR_ATTACHMENT) {
             if(recorded->subpass!=subpass_index || !ps5vk_clear_attachment_valid(recorded)) {
-                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=2;goto fail;
             }
             VkImageView view=recorded->framebuffer->attachments[
                 ps5vk_render_pass_subpass(pass,subpass_index)->color.attachment];
@@ -388,7 +424,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(rc!=VK_SUCCESS)goto fail;
             rc=ps5vk_native_layer_footprint(d,view->image,&stride);
             if(rc!=VK_SUCCESS || !stride || stride>bytes/view->image->info.arrayLayers) {
-                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=3;goto fail;
             }
             /* The final reserved tail word of the arena that EXECUTES this
              * clear is a private intra-submission token, never the label that
@@ -398,18 +434,18 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u);
             size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
                 (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),i+1u);
-            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=4;goto fail;}cursor+=n;
             n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=5;goto fail;}cursor+=n;
             VkDeviceSize offset=(VkDeviceSize)view->range.baseArrayLayer*stride;
             n=ps5vk_color_rect_clear(cursor,(size_t)(end-cursor),
                 (uintptr_t)address+offset,bytes-offset,(size_t)stride,
                 view->image->info.extent.width,view->image->info.extent.height,
                 view->range.layerCount,multiview->present?multiview->view_masks[subpass_index]:0,
                 recorded->clear_rect.rect,recorded->clear_word);
-            if(!n){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}cursor+=n;
+            if(!n){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=6;goto fail;}cursor+=n;
             n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-            if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=7;goto fail;}cursor+=n;
             continue;
         }
         if(recorded->type==PS5VK_NEXT_SUBPASS) {
@@ -421,7 +457,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
              * refused before anything is read. */
             if(recorded->subpass!=subpass_index+1u ||
                recorded->subpass>=pass->subpass_count) {
-                rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=8;goto fail;
             }
             subpass_index=recorded->subpass;
             BATCH_RESERVE(PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WORDS+PS5VK_GRAPHICS_ACQUIRE_WORDS);
@@ -430,14 +466,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(next_subpass->input_count || pass->dependency_count) {
                 size_t color_barrier=ps5vk_graphics_color_to_texture(
                     cursor,(size_t)(end-cursor));
-                if(!color_barrier){rc=VK_ERROR_UNKNOWN;goto fail;}
+                if(!color_barrier){rc=VK_ERROR_UNKNOWN;draw_site=9;goto fail;}
                 cursor+=color_barrier;
                 ps5log_printf(PS5LOG_MARK,
                     "PS5VK_COLOR_TO_TEXTURE_BARRIER serial=%llu subpass=%u words=%zu",
                     (unsigned long long)j->serial,recorded->subpass,color_barrier);
             }
             size_t boundary=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-            if(!boundary){rc=VK_ERROR_UNKNOWN;goto fail;}
+            if(!boundary){rc=VK_ERROR_UNKNOWN;draw_site=10;goto fail;}
             cursor+=boundary;
             ps5log_printf(PS5LOG_MARK,
                 "PS5VK_SUBPASS_BOUNDARY serial=%llu subpass=%u words=%zu",
@@ -473,10 +509,38 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         }
         struct ps5vk_prepared_draw *draw=&j->draws[j->count];
         struct ps5vk_native_graphics_pipeline *p=op->pipeline->graphics_state;
-        if(!p || !p->pair || !p->pair->ready){rc=VK_ERROR_UNKNOWN;goto fail;}
+        if(!p || !p->pair || !p->pair->ready){rc=VK_ERROR_UNKNOWN;draw_site=11;goto fail;}
+        if(p->pair->tess_rings) {
+            const uint32_t *table=p->pair->tess_rings;
+            uint64_t address=((uint64_t)table[21]<<32)|table[20];
+            if(!address || (address&255u) || table[22]<65536u*4u ||
+                (j->ring_address && j->ring_address!=address)) {
+                ps5log_printf(PS5LOG_ERR,"PS5VK_TESS_RING_PREPARE_INVALID serial=%llu present=%u aligned=%u bytes=%u consistent=%u",
+                    (unsigned long long)j->serial,(unsigned)(address!=0),
+                    (unsigned)((address&255u)==0),table[22],
+                    (unsigned)(!j->ring_address || j->ring_address==address));
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=30;goto fail;
+            }
+            j->ring_address=address;
+            /* Validate the owned offchip allocation described by our
+             * table, bounded strictly before the owned factor ring. */
+            uint64_t offchip=((uint64_t)table[25]<<32)|table[24];
+            if(offchip==(uint64_t)(uintptr_t)table+256u &&
+               offchip<address && table[26]==address-offchip) {
+                j->offchip_bytes=table[26];
+            }
+#if defined(PS5VK_TESS_HULL_TRACE) && PS5VK_TESS_HULL_TRACE
+            uint64_t trace=((uint64_t)table[29]<<32)|table[28];
+            if(trace!=address+table[22] || table[30]!=8192u ||
+               (j->hull_trace && (uintptr_t)j->hull_trace!=trace)) {
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=30;goto fail;
+            }
+            j->hull_trace=(uint32_t *)(uintptr_t)trace;
+#endif
+        }
         /* Check each sampled resource, not just element zero of set zero.
          * Preparation validates generations and copies exactly these tables. */
-        if(op->pipeline->set_count>PS5VK_MAX_SETS){rc=VK_ERROR_UNKNOWN;goto fail;}
+        if(op->pipeline->set_count>PS5VK_MAX_SETS){rc=VK_ERROR_UNKNOWN;draw_site=12;goto fail;}
         /* The one-input profile: how many input-attachment bindings the whole
          * pipeline declares. The gate refuses anything but exactly one, so a
          * second attachment can never be half-served. */
@@ -489,43 +553,41 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                         ++input_bindings;
         for(unsigned set_index=0;set_index<op->pipeline->set_count;++set_index) {
             if(p->pair->runtime_arguments.enabled &&
-               !p->pair->runtime_arguments.fragment_descriptor_valid[set_index] &&
-               !p->pair->runtime_arguments.vertex_descriptor_valid[set_index])continue;
+               !ps5vk_runtime_resource_bindings(&p->pair->runtime_arguments,
+                   &p->pair->hull_arguments,set_index))continue;
             VkDescriptorSet set=op->sets[set_index];
             if(!set || !set->pool || set->pool->device!=d ||
                set->generation!=op->generations[set_index] ||
                memcmp(&set->signature,&op->pipeline->sets[set_index],sizeof(set->signature))) {
-                rc=VK_ERROR_UNKNOWN;goto fail;
+                rc=VK_ERROR_UNKNOWN;draw_site=13;goto fail;
             }
             for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
                 const struct ps5vk_binding *binding=&set->signature.binding[b];
                 const VkDescriptorType type=set->signature.type[b];
-                const int buffer_type=type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-                    type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                const int buffer_type=ps5vk_graphics_buffer_type(type);
                 const int input_type=type==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
                 if(binding->count && type!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
                    !buffer_type && !input_type) {
-                    rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                    rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=14;goto fail;
                 }
                 if(binding->first>PS5VK_MAX_DESCRIPTORS ||
-                   binding->count>PS5VK_MAX_DESCRIPTORS-binding->first){rc=VK_ERROR_UNKNOWN;goto fail;}
+                   binding->count>PS5VK_MAX_DESCRIPTORS-binding->first){rc=VK_ERROR_UNKNOWN;draw_site=15;goto fail;}
                 /* Only the bindings the compiled stages dereference are a
                  * requirement; the table is shared, so the two stage masks are
                  * ORed. A zero mask keeps the whole declaration (fail closed). */
                 if(p->pair->runtime_arguments.enabled) {
-                    const uint64_t used=
-                        p->pair->runtime_arguments.vertex_used_bindings[set_index]|
-                        p->pair->runtime_arguments.fragment_used_bindings[set_index];
+                    const uint64_t used=ps5vk_runtime_resource_bindings(
+                        &p->pair->runtime_arguments,&p->pair->hull_arguments,set_index);
                     if(used && binding->count && !(used&(UINT64_C(1)<<b)))continue;
                 }
                 for(unsigned e=0;e<binding->count;++e) {
                     unsigned index=binding->first+e;
-                    if(!set->defined[index]){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+                    if(!set->defined[index]){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=16;goto fail;}
                     if(buffer_type) {
                         /* The encoder resolves and validates the base address;
                          * a null handle must never be encoded. */
                         if(!set->buffers[index].buffer) {
-                            rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                            rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=17;goto fail;
                         }
                         continue;
                     }
@@ -543,7 +605,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                     }
                     if(!set->image_resources[index] ||
                        set->images[index].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-                        rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;
+                        rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=18;goto fail;
                     }
                     rc=ps5vk_layout_require(&j->layouts,set->image_resources[index],set->images[index].imageLayout);
                     if(rc!=VK_SUCCESS)goto fail;
@@ -552,11 +614,17 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         }
         struct ps5vk_index_fetch indices={0};
         if(op->type==PS5VK_DRAW_INDEXED) {
-            if(!op->pipeline->vertex_binding_count){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+            /* Runtime shaders can generate positions from gl_VertexIndex
+             * without vertex attributes. Index fetch and LS baseVertex are
+             * independent of a vertex-buffer table. Keep the legacy gate. */
+            if(!op->pipeline->vertex_binding_count && !p->pair->runtime_arguments.enabled) {
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=19;goto fail;
+            }
             rc=ps5vk_index_fetch_prepare(d,op,&indices);if(rc!=VK_SUCCESS)goto fail;
         }
         const uint32_t vertex_usage=p->pair->runtime_arguments.enabled?
-            p->pair->runtime_arguments.vertex_buffer_usage_mask:
+            (p->pair->runtime_arguments.vertex_buffer_usage_mask |
+             p->pair->hull_arguments.vertex_buffer_usage_mask):
             (op->pipeline->vertex_binding_count?1u:0u);
         const struct ps5vk_graphics_key key={.vertex_binding_count=op->pipeline->vertex_binding_count,
             .vertex_attribute_count=op->pipeline->vertex_attribute_count,
@@ -565,8 +633,29 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             rc=ps5vk_native_prepare_vertex_draw_masked(d,op,&begin->render_area,defaults,&key,
                 (uintptr_t)p->pair,vertex_usage,draw);
         } else rc=ps5vk_native_prepare_resource_draw(d,op,&begin->render_area,defaults,(uintptr_t)p->pair,draw);
-        if(rc!=VK_SUCCESS)goto fail;
+        if(rc!=VK_SUCCESS) {
+            ps5log_printf(PS5LOG_ERR,"PS5VK_DRAW_RESOURCE_PREPARE_FAILED serial=%llu vertex_mask=%x bindings=%u attributes=%u rc=%d",
+                (unsigned long long)j->serial,vertex_usage,key.vertex_binding_count,
+                key.vertex_attribute_count,(int)rc);
+            draw_site=31;goto fail;
+        }
         ++j->count;
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 4
+        if(j->serial==17 && draw->vertex_table && vertex_usage==1u &&
+           op->type==PS5VK_DRAW && op->vertex_count==80u &&
+           key.vertex_binding_count==1u && key.vertex_bindings[0].stride==4u) {
+            void *input=NULL;VkDeviceSize input_bytes=0;
+            if(ps5vk_buffer_span(d,op->vertices[0].buffer,op->vertices[0].offset,
+                    VK_WHOLE_SIZE,&input,&input_bytes)==VK_SUCCESS && input_bytes>=320u) {
+                uint32_t v[80];memcpy(v,input,sizeof(v));
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_VERTEX_SOURCE serial=17 bytes=%llu first=%u table=%08x,%08x,%08x,%08x x=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+                    (unsigned long long)input_bytes,op->first_vertex,
+                    draw->vertex_table[0],draw->vertex_table[1],draw->vertex_table[2],draw->vertex_table[3],
+                    v[0],v[10],v[20],v[30],v[40],v[50],v[60],v[70]);
+            }
+        }
+#endif
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
         if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)
             ps5log_printf(PS5LOG_MARK,"PS5VK_BINDINGS_PREPARED serial=%llu mask=%04x copied_bytes=%zu",
@@ -585,7 +674,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 (unsigned long long)j->serial,j->count-1,k,
                 draw->state->sh[k].offset,draw->state->sh[k].value);
 #endif
-        if(!p->global_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+        if(!p->global_table){rc=VK_ERROR_UNKNOWN;draw_site=20;goto fail;}
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
         if(draw->texture_table)
             for(unsigned k=0;k<12;++k)
@@ -612,7 +701,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
              * profile cannot tell whether a stage reads the built-in and has no
              * slot to deliver the value through, so a multiview subpass runs on
              * the metadata ABI or it does not run. */
-            if(!p->pair->runtime_arguments.enabled){rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+            if(!p->pair->runtime_arguments.enabled){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=21;goto fail;}
             uint32_t view_indices[PS5VK_MAX_VIEW_MASK_VIEWS],view_count=0;
             rc=ps5vk_native_view_expand(view_mask,view_indices,PS5VK_MAX_VIEW_MASK_VIEWS,&view_count);
             if(rc!=VK_SUCCESS)goto fail;
@@ -684,9 +773,9 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                             view_mask?&view_emit[v]:NULL,
                             op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
                     } else if(vertex_usage) {
-                        if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+                        if(!draw->vertex_table){rc=VK_ERROR_UNKNOWN;draw_site=22;goto fail;}
                         if(op->pipeline->set_count) {
-                            if(!draw->texture_table){rc=VK_ERROR_UNKNOWN;goto fail;}
+                            if(!draw->texture_table){rc=VK_ERROR_UNKNOWN;draw_site=23;goto fail;}
                             rc=ps5vk_native_emit_textured_draw(&cursor,(uint32_t)(end-cursor),draw->state,draw->state,draw->bytes,op,
                                 (uint32_t)(uintptr_t)p->global_table,(uint32_t)(uintptr_t)draw->vertex_table,
                                 (uint32_t)(uintptr_t)draw->texture_table,op->type==PS5VK_DRAW_INDEXED?&indices:NULL,sceAgcDcbDrawIndex);
@@ -726,12 +815,12 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     /* A pass must have reached its last subpass: recording refuses to end one
      * early and the submission layer refuses it independently, so a body that
      * never entered the last subpass cannot be executed without dropping it. */
-    if(subpass_index+1u!=pass->subpass_count) {rc=VK_ERROR_FEATURE_NOT_PRESENT;goto fail;}
+    if(subpass_index+1u!=pass->subpass_count) {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=24;goto fail;}
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
         size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),
             (uint64_t)(uintptr_t)j->slot.address+8);
-        if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
+        if(!n){rc=VK_ERROR_UNKNOWN;draw_site=25;goto fail;}cursor+=n;
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_OCCLUSION_PROBE_END serial=%llu base_plus_8=%llx",
             (unsigned long long)j->serial,(unsigned long long)(uintptr_t)j->slot.address+8);
@@ -764,12 +853,59 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(!probe_words){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=probe_words;
 #endif
     phase="release-packet";
+#if defined(PS5VK_TESS_END_VS_FLUSH) && PS5VK_TESS_END_VS_FLUSH
+    /* Diagnostic only: wait for pre-raster shader work before the ordinary
+     * release/label and native ring restoration. This tests ordering, not a
+     * claim that every tessellation draw requires this extra event. */
+    BATCH_RESERVE(2u);
+    *cursor++=0xc0004600u;
+    *cursor++=0x0000040fu; /* VS_PARTIAL_FLUSH, event index4 */
+#endif
     j->chain.cursor=cursor;
     rc=ps5vk_draw_batch_close(&j->chain);
     if(rc!=VK_SUCCESS)goto fail;
 #undef BATCH_RESERVE
     j->words=0;
     for(unsigned b=0;b<j->chain.count;++b)j->words+=j->chain.words[b];
+#if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
+    /* The COMMAND WORDS of a patch submission, which is the last stream in
+     * this driver that has never been read.
+     *
+     * Dumping the built register banks found a register the pipeline never
+     * emitted; the banks are still one level above what the GPU executes.
+     * These words are the packets themselves - the register writes the banks
+     * turn into, their counts, and the draw packet - so a register that the
+     * bank carries but the encoder drops, or a draw packet with the wrong
+     * count, is visible here and nowhere else.
+     *
+     * Gated on a patch draw rather than on every job: a tessellation draw
+     * emits VGT_LS_HS_CONFIG at cx 0x2d6 and nothing else in this profile
+     * does, so the nineteen geometry submissions in the same process stay
+     * silent and the record count stays bounded. */
+    {
+        unsigned patch=0;
+        for(unsigned k=0;k<j->count && !patch;++k) {
+            const struct ps5vk_draw_state *st=j->draws[k].state;
+            if(!st)continue;
+            for(unsigned i=0;i<st->cx_count;++i)
+                if(st->cx[i].offset==0x2d6u){patch=1;break;}
+        }
+        if(patch) {
+            for(unsigned b=0;b<j->chain.count;++b) {
+                const uint32_t *w=(const uint32_t *)j->chain.arenas[b].address;
+                const uint32_t n=j->chain.words[b];
+                if(!w)continue;
+                for(uint32_t i=0;i<n;i+=4)
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_TESS_PM4 serial=%llu arena=%u at=%u of=%u "
+                        "%08x %08x %08x %08x",
+                        (unsigned long long)j->serial,b,i,n,
+                        w[i],i+1<n?w[i+1]:0u,i+2<n?w[i+2]:0u,
+                        i+3<n?w[i+3]:0u);
+            }
+        }
+    }
+#endif
     *out=j;
     ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_PREPARED serial=%llu draws=%u words=%u",(unsigned long long)j->serial,j->count,j->words);
     if(j->chain.count>1u)
@@ -777,8 +913,9 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             (unsigned long long)j->serial,j->chain.count,j->words);
     return VK_SUCCESS;
 fail:
-    ps5log_printf(PS5LOG_ERR,"PS5VK_GRAPHICS_PREPARE_FAILED serial=%llu phase=%s rc=%d",
-        (unsigned long long)j->serial,phase,rc);
+    ps5log_printf(PS5LOG_ERR,
+        "PS5VK_GRAPHICS_PREPARE_FAILED serial=%llu phase=%s site=%u rc=%d",
+        (unsigned long long)j->serial,phase,draw_site,rc);
     release(d,j);return rc;
 }
 /* Submit arena `index` of the chain. The first arena keeps the historic
@@ -792,6 +929,50 @@ static VkResult launch_batch(struct graphics_job *j,unsigned index)
     cache(a->address,PS5VK_COMMAND_ARENA_BYTES);
     struct ps5_agc_submit packet={a->address,j->chain.words[index],0,{0,0,0}};
     j->start=now(NULL); if(!j->start)return VK_ERROR_DEVICE_LOST;
+    if(!index && j->ring_address) {
+        void *expected=NULL;
+        if(!__atomic_compare_exchange_n(&ring_owner,&expected,j,0,
+                __ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE))return VK_ERROR_DEVICE_LOST;
+        const struct ps5vk_tess_ring_ops ops={NULL,ring_get,ring_set};
+        int rc=ps5vk_tess_ring_bind(&j->ring,&ops,j->ring_address,65536u);
+        /* Private diagnostic: report kernel-owned state separately from PM4
+         * intent. Raw getter fields have no inferred units or semantics. */
+        uint16_t offchip_first=UINT16_MAX,offchip_second=UINT16_MAX;
+        int offchip_rc=sceAgcDriverGetHsOffchipParam(&offchip_first,&offchip_second);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_TESS_QUEUE_RING_STATE serial=%llu previous=%llx previous_raw_size=%u requested=%llx requested_raw_size=65536 offchip_rc=%d offchip_first=%u offchip_second=%u",
+            (unsigned long long)j->serial,(unsigned long long)j->ring.previous_address,
+            j->ring.previous_size,(unsigned long long)j->ring_address,
+            offchip_rc,(unsigned)offchip_first,(unsigned)offchip_second);
+        ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_QUEUE_RING_BOUND serial=%llu rc=%d state=%u",
+            (unsigned long long)j->serial,rc,(unsigned)j->ring.state);
+        if(rc) {
+            if(j->ring.state!=PS5VK_TF_IDLE)retain("ring-bind-unresolved");
+            __atomic_store_n(&ring_owner,NULL,__ATOMIC_RELEASE);
+            return VK_ERROR_DEVICE_LOST;
+        }
+        const struct ps5vk_hs_ops hs_ops={NULL,offchip_get,offchip_set};
+        int hs_rc=ps5vk_hs_bind(&j->offchip,&hs_ops,j->offchip_bytes);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_TESS_OFFCHIP_BOUND serial=%llu rc=%d previous=%u,%u bytes=%u requested=0,%u state=%u",
+            (unsigned long long)j->serial,hs_rc,j->offchip.previous_first,
+            j->offchip.previous_second,j->offchip_bytes,
+            j->offchip_bytes/32768u-1u,(unsigned)j->offchip.state);
+        if(hs_rc) {
+            if(j->offchip.state!=PS5VK_HS_IDLE)retain("offchip-bind-unresolved");
+            if(ps5vk_tess_ring_restore(&j->ring))retain("ring-bind-rollback-unresolved");
+            __atomic_store_n(&ring_owner,NULL,__ATOMIC_RELEASE);
+            return VK_ERROR_DEVICE_LOST;
+        }
+        if(ps5vk_hs_submitting(&j->offchip))retain("offchip-submit-state");
+        if(ps5vk_tess_ring_submitting(&j->ring))retain("ring-submit-state");
+#if defined(PS5VK_TESS_HULL_TRACE) && PS5VK_TESS_HULL_TRACE
+        if(j->hull_trace) {
+            memset(j->hull_trace,0,8192u);
+            cache(j->hull_trace,8192u);
+        }
+#endif
+    }
     j->attempted=1;
     struct ps5vk_submit_result result=ps5vk_submit_suspend(&packet);
     int rc=result.submit_rc;
@@ -813,6 +994,7 @@ static VkResult launch(VkDevice d,void *opaque)
 static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
 {
     struct graphics_job *j=opaque;*completed=0;
+    if(j->complete){*completed=j->serial;return VK_SUCCESS;}
     if(!j->launched || j->launched>j->chain.count)return VK_ERROR_DEVICE_LOST;
     volatile uint64_t *label=ps5vk_command_arena_label(&j->chain.arenas[j->launched-1]);
     if(!label)return VK_ERROR_DEVICE_LOST;
@@ -825,6 +1007,35 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
         return launch_batch(j,j->launched);
     }
     if(value==j->serial) {
+        if(j->ring_address) {
+            if(ps5vk_tess_ring_completed(&j->ring))retain("ring-completion-state");
+            int rc=ps5vk_tess_ring_restore(&j->ring);
+            ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_QUEUE_RING_RESTORED serial=%llu rc=%d state=%u",
+                (unsigned long long)j->serial,rc,(unsigned)j->ring.state);
+            if(rc)retain("ring-restore-unresolved");
+            if(ps5vk_hs_completed(&j->offchip))retain("offchip-completion-state");
+            int hs_rc=ps5vk_hs_restore(&j->offchip);
+            ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_OFFCHIP_RESTORED serial=%llu rc=%d state=%u",
+                (unsigned long long)j->serial,hs_rc,(unsigned)j->offchip.state);
+            if(hs_rc)retain("offchip-restore-unresolved");
+#if defined(PS5VK_TESS_HULL_TRACE) && PS5VK_TESS_HULL_TRACE
+            if(j->hull_trace && j->serial==17) {
+                cache(j->hull_trace,8192u);
+                for(unsigned slot=0;slot<128;++slot) {
+                    const uint32_t *w=j->hull_trace+slot*16u;
+                    if(w[3])ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_TESS_HULL_TRACE serial=17 slot=%u s=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x v=%08x,%08x,%08x,%08x",
+                        slot,w[0],w[1],w[2],w[3],w[4],w[5],w[6],w[7],
+                        w[8],w[9],w[10],w[11]);
+                }
+            }
+#endif
+            /* Offchip is GPU scratch, not a host readback. Completion and
+             * checked lease restoration above establish retirement; scanning
+             * its entire contents here was a private investigation aid, not
+             * a visibility dependency or an application result. */
+            __atomic_store_n(&ring_owner,NULL,__ATOMIC_RELEASE);
+        }
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
         volatile uint32_t *probe=(volatile uint32_t *)(label+1);
         cache((const void *)probe,PS5VK_GRAPHICS_PROBE_REGISTERS*4);
@@ -853,6 +1064,22 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
                 "PS5VK_GRAPHICS_READBACK serial=%llu width=%u height=%u bytes=%llu mode=cpu-detile-after-gpu",
                 (unsigned long long)j->serial,image->info.extent.width,image->info.extent.height,
                 (unsigned long long)destination_bytes);
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 4
+            /* Private diagnostic only. Never change pixels or upstream's
+             * comparator; count just the exact single-layer packed image. */
+            if((image->info.format==VK_FORMAT_R8G8B8A8_UNORM ||
+                image->info.format==VK_FORMAT_B8G8R8A8_UNORM) &&
+               image->info.arrayLayers==1 && image->info.extent.depth==1 &&
+               destination_bytes==(uint64_t)image->info.extent.width*image->info.extent.height*4u) {
+                struct ps5vk_readback_content content;
+                if(!ps5vk_readback_content(destination,(size_t)destination_bytes,&content))
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_READBACK_CONTENT serial=%llu pixels=%llu nonblack=%llu opaque=%llu gray128=%llu hash=%08x",
+                        (unsigned long long)j->serial,(unsigned long long)content.pixels,
+                        (unsigned long long)content.nonblack,(unsigned long long)content.opaque,
+                        (unsigned long long)content.gray128,content.hash);
+            }
+#endif
         }
         if(ps5vk_layout_commit(&j->layouts)!=VK_SUCCESS)return VK_ERROR_DEVICE_LOST;
         j->complete=1;*completed=j->serial;

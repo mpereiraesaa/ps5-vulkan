@@ -75,6 +75,17 @@ static int run_dxvk262_capability_probe(void)
 
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physical, &properties);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_TESSELLATION_LIMITS generation=%u patch=%u control_input=%u "
+        "control_output=%u patch_output=%u total_output=%u evaluation_input=%u evaluation_output=%u",
+        properties.limits.maxTessellationGenerationLevel,
+        properties.limits.maxTessellationPatchSize,
+        properties.limits.maxTessellationControlPerVertexInputComponents,
+        properties.limits.maxTessellationControlPerVertexOutputComponents,
+        properties.limits.maxTessellationControlPerPatchOutputComponents,
+        properties.limits.maxTessellationControlTotalOutputComponents,
+        properties.limits.maxTessellationEvaluationInputComponents,
+        properties.limits.maxTessellationEvaluationOutputComponents);
 
     VkPhysicalDeviceTransformFeedbackFeaturesEXT transform_feedback = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT,

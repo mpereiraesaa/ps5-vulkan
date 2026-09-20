@@ -157,9 +157,29 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     /* Vulkan zero-count draws have no rasterization side effects. */
     if (!(indices?op->index_count:op->vertex_count) || !op->instance_count) return VK_SUCCESS;
     uint32_t runtime_vertex[16],runtime_pixel[16];
+    uint32_t runtime_hull[16],unused_pixel[16];
     uint32_t sh_count=state->sh_count?state->sh_count:12;
-    if(sh_count>16)return VK_ERROR_UNKNOWN;
+    if(sh_count>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
     const uint32_t single_table[PS5VK_RUNTIME_DESCRIPTOR_SETS]={texture_low?*texture_low:0,0,0,0};
+    const uint32_t *tables=descriptor_tables?descriptor_tables:single_table;
+    uint32_t raster_tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+    uint32_t hull_tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+    if(state->hull_runtime.enabled) {
+        /* One allocation per set, but independent user-SGPR windows. Do not
+         * pass HS-only pointers to the TES/PS ABI (or the reverse): the value
+         * builder intentionally rejects pointers that its stages do not use. */
+        for(unsigned s=0;s<PS5VK_RUNTIME_DESCRIPTOR_SETS;++s) {
+            const int raster=state->runtime.vertex_descriptor_valid[s] ||
+                state->runtime.fragment_descriptor_valid[s];
+            const int hull=state->hull_runtime.vertex_descriptor_valid[s] ||
+                state->hull_runtime.fragment_descriptor_valid[s];
+            if(tables[s] && !raster && !hull)return VK_ERROR_FEATURE_NOT_PRESENT;
+            if(raster)raster_tables[s]=tables[s];
+            if(hull)hull_tables[s]=tables[s];
+        }
+        if(state->push_constant_low && !state->runtime.push_constant_size &&
+           !state->hull_runtime.push_constant_size)return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     /* The runtime ABI describes how the compiled stages receive their user
      * SGPRs; it is orthogonal to how vertices are addressed. An indexed draw
      * runs through the same prepared vertex table and the same
@@ -172,10 +192,20 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
         ps5vk_runtime_draw_values_sets(&state->runtime,ps5vk_draw_base_vertex(op),
             ps5vk_draw_base_instance(op),ps5vk_draw_index_value(op),
             view?view->view_index:ps5vk_draw_view_index_value(op),
-            vertex_input?vertex_table_low:0,state->push_constant_low,
-            descriptor_tables?descriptor_tables:single_table,
+            vertex_input && state->runtime.vertex_buffer_valid?vertex_table_low:0,
+            !state->hull_runtime.enabled || state->runtime.push_constant_size?state->push_constant_low:0,
+            state->hull_runtime.enabled?raster_tables:tables,
             runtime_vertex,runtime_pixel))
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(state->hull_runtime.enabled) {
+        if(!state->hull_runtime.hull ||
+            ps5vk_runtime_draw_values_sets(&state->hull_runtime,ps5vk_draw_base_vertex(op),
+                ps5vk_draw_base_instance(op),ps5vk_draw_index_value(op),
+                view?view->view_index:ps5vk_draw_view_index_value(op),
+                vertex_input && state->hull_runtime.vertex_buffer_valid?vertex_table_low:0,
+                state->hull_runtime.push_constant_size?state->push_constant_low:0,
+                hull_tables,runtime_hull,unused_pixel))return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     ps5_agc_register view_changed[PS5_COLOR_REGISTER_COUNT + PS5_DEPTH_REGISTER_COUNT];
     uint32_t view_changed_count=0,view_words=0;
     if(view) {
@@ -189,14 +219,150 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
      * Those may leave bytes in this unsubmitted scratch - the documented
      * contract is that the caller's cursor does not advance and the whole job is
      * discarded - so no stronger promise is made or needed here. */
-    if (capacity < 13u + view_words) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (capacity < 17u + view_words) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t *next = *cursor, *end = next + capacity;
+#if defined(PS5VK_TESS_VGT_FLUSH) && PS5VK_TESS_VGT_FLUSH
+    /* WAIT FOR IDLE AND RESET THE VGT's POINTERS BEFORE UPDATING ITS RING
+     * STATE, which this driver has never done.
+     *
+     * A patch draw rewrites VGT_TF_RING_SIZE, VGT_HS_OFFCHIP_PARAM,
+     * VGT_TF_MEMORY_BASE and its high word on EVERY draw, because the
+     * tessellation rings belong to the pipeline rather than to a device
+     * initialisation this driver does not perform.
+     *
+     * THE CITATION IS NARROWER THAN IT FIRST LOOKS, and the distinction
+     * matters: the sequence below is quoted verbatim from ac_shadowed_regs.c,
+     * but it lives in ac_build_load_reg(), which builds the REGISTER-SHADOW
+     * LOAD preamble - not a general per-draw guard for updating ring
+     * registers. The comments are the pinned tree's own and they describe
+     * what the events do; they do not establish that a driver must emit them
+     * before every ring update. This is therefore a diagnostic, default off,
+     * and it stays one. In the pinned tree's words:
+     *
+     *   "Wait for idle, because we'll update VGT ring pointers."
+     *     EVENT_WRITE(VS_PARTIAL_FLUSH, EVENT_INDEX(4))
+     *   "VGT_FLUSH is required even if VGT is idle. It resets VGT pointers."
+     *     EVENT_WRITE(VGT_FLUSH, EVENT_INDEX(0))
+     *
+     * Our command stream contains no events at all - the dump of a whole
+     * patch submission is three indirect register packets, two direct shader
+     * writes, NUM_INSTANCES and the draw. So the geometry engine is told
+     * where the tessellation factor ring lives without ever being made to
+     * re-read it, and a stale internal pointer would explain the one result
+     * nothing else does: pre-filling this driver's entire factor ring with a
+     * legal level changed nothing, which is what you would expect if the
+     * engine is reading a different ring altogether.
+     *
+     * Emitted before the register banks, in the pinned order: idle first,
+     * then the pointer reset, then the new values. */
+    if (end - next < 4) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    *next++ = 0xc0004600u;  /* PKT3(PKT3_EVENT_WRITE, 0, 0) */
+    *next++ = 0x0000040fu;  /* VS_PARTIAL_FLUSH, EVENT_INDEX(4) */
+    *next++ = 0xc0004600u;
+    *next++ = 0x00000024u;  /* VGT_FLUSH, EVENT_INDEX(0) */
+#endif
     if (ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->cx, state->cx_count,
             mapping, mapping_bytes, sceAgcDcbSetCxRegistersIndirect) ||
         ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->uc, state->uc_count,
             mapping, mapping_bytes, sceAgcDcbSetUcRegistersIndirect) ||
         ps5_agc_writer_set_indirect(&next, (uint32_t)(end-next), state->sh, sh_count,
             mapping, mapping_bytes, sceAgcDcbSetShRegistersIndirect)) return VK_ERROR_UNKNOWN;
+#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+    /* Read the GPU register file, rather than the CPU's intended bank.
+     * COPY_DATA register source -> TC_L2 memory, with write confirmation.
+     * The upper half of the diagnostic ring table is unused by its two SRDs. */
+    if (state->runtime.ring_table_valid) {
+        if (end-next < 12) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        for (uint32_t i=0;i<state->uc_count;++i) {
+            const uint32_t reg=state->uc[i].offset;
+            if (reg==0x24e || reg==0x24f || reg==0x250 || reg==0x261) {
+                *next++=0xc0017900u;
+                *next++=reg;
+                *next++=state->uc[i].value;
+            }
+        }
+        const uint32_t regs[] = {0x30938,0x3093c,0x30940,0x30984,
+            0x28b54,0x28b58,0x28b6c,0x3096c,
+            0x28a18,0x28a1c,0x30908,0x30980,
+            0xb320,0xb228,0xb22c,0xb520};
+        const uint64_t table = ((uint64_t)state->runtime.ring_table_high<<32) |
+            state->runtime.ring_table_low;
+        if (end-next < 96) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        for (unsigned i=0;i<16;++i) {
+            const uint64_t dst=table+128+4*i;
+            *next++=0xc0044000u;
+            *next++=(2u<<8)|(1u<<20);
+            *next++=regs[i]>>2;
+            *next++=0;
+            *next++=(uint32_t)dst;
+            *next++=(uint32_t)(dst>>32);
+        }
+    }
+#endif
+#if defined(PS5VK_TESS_DIRECT_INDEXED) && PS5VK_TESS_DIRECT_INDEXED
+    /* DIAGNOSTIC, default off: write the two INDEXED registers of a patch
+     * draw as individual SET packets after the bulk loads.
+     *
+     * PAL's CmdUtil::IsIndexedRegister names VGT_LS_HS_CONFIG and
+     * VGT_PRIMITIVE_TYPE (with VGT_INDEX_TYPE, VGT_NUM_INSTANCES and the
+     * RSRC3/RSRC4 pairs) as registers the CP handles specially, and
+     * CmdStream::WriteRegisters says "indexed registers must be written
+     * individually with no other registers" - PAL never puts them in a
+     * multi-register sequence and never reaches them through a LOAD. This
+     * driver reaches both ONLY through LOAD_*_REG_INDEX pair-mode loads of
+     * 100 and 10 registers. The GPU-side readback after those loads returns
+     * the intended value for GE_CNTL but ZERO for VGT_PRIMITIVE_TYPE, so the
+     * bulk load demonstrably reaches ordinary uconfig state and demonstrably
+     * does not show up for this one.
+     *
+     * The mechanism fits everything measured: the LS/HS stage enables launch
+     * the hull regardless, and it stores its factors; if the engine still
+     * assembles TRIANGLES instead of PATCHES, or has a zero patch count in
+     * its own copy of LS_HS_CONFIG, there is nothing for the tessellator to
+     * tessellate and the evaluation half never launches, with no fault.
+     *
+     * Mode 1 is PAL's gfx10 form: plain SET_CONTEXT_REG / SET_UCONFIG_REG,
+     * count 1 - PAL notes gfx10 dropped the index field for
+     * VGT_PRIMITIVE_TYPE. Mode 2 is Mesa's form on every GFX7+ part:
+     * SET_UCONFIG_REG_INDEX with index 1 for the primitive type and the
+     * context write with index 2 in the offset dword for LS_HS_CONFIG.
+     *
+     * MEASURED AND CLOSED, both modes: the packets reached the stream in the
+     * intended encodings (confirmed in the command-word dump), the draw
+     * completed, and the evaluation half still produced nothing. Also
+     * learned: VGT_PRIMITIVE_TYPE reads back zero through COPY_DATA even
+     * after a direct SET that provably landed, so it is not readable that
+     * way and its zero readback was never evidence of a missed load - the
+     * readback argument above is withdrawn; the PAL rule stood alone and
+     * failed too. Stays default off. */
+    if (state->runtime.ring_table_valid) {
+        uint32_t ls_hs=0,prim=0; int have_ls_hs=0,have_prim=0;
+        for (uint32_t i=0;i<state->cx_count;++i)
+            if (state->cx[i].offset==0x2d6) { ls_hs=state->cx[i].value; have_ls_hs=1; }
+        for (uint32_t i=0;i<state->uc_count;++i)
+            if (state->uc[i].offset==0x242) { prim=state->uc[i].value; have_prim=1; }
+        if (end-next < 6) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        if (have_prim) {
+#if PS5VK_TESS_DIRECT_INDEXED==2
+            *next++=0xc0017a00u;              /* SET_UCONFIG_REG_INDEX */
+            *next++=0x242u|(1u<<28);          /* index 1: primitive type */
+#else
+            *next++=0xc0017900u;              /* SET_UCONFIG_REG */
+            *next++=0x242u;
+#endif
+            *next++=prim;
+        }
+        if (have_ls_hs) {
+            *next++=0xc0016900u;              /* SET_CONTEXT_REG */
+#if PS5VK_TESS_DIRECT_INDEXED==2
+            *next++=0x2d6u|(2u<<28);          /* index 2: LS_HS_CONFIG */
+#else
+            *next++=0x2d6u;
+#endif
+            *next++=ls_hs;
+        }
+    }
+#endif
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE
     VkResult scissor_rc=ps5vk_native_emit_scissor_replay(&next,(uint32_t)(end-next),state);
     if(scissor_rc!=VK_SUCCESS)return scissor_rc;
@@ -214,7 +380,21 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     const uint32_t vertex[4] = {global_table_low, vertex_table_low,
         ps5vk_draw_base_vertex(op), ps5vk_draw_base_instance(op)};
     const uint32_t fragment[2]={global_table_low,texture_low?*texture_low:0};
+    if(state->hull_runtime.enabled &&
+       ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x10c,
+           runtime_hull,state->hull_runtime.vertex_count,sceAgcCbSetShRegisterRangeDirect))
+        return VK_ERROR_UNKNOWN;
     if(state->runtime.enabled) {
+#if (defined(PS5VK_TESS_LEGACY_DOMAIN) && PS5VK_TESS_LEGACY_DOMAIN) || \
+    (defined(PS5VK_TESS_LEGACY_VS_CONTROL) && PS5VK_TESS_LEGACY_VS_CONTROL)
+        /* DIAGNOSTIC: a legacy hardware VS loads its user data from
+         * SPI_SHADER_USER_DATA_VS_0 (sh 0x4c) with no system preamble, so the
+         * tessellation pipeline's pre-raster block is written there too. */
+        if(state->runtime.legacy_vs &&
+           ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x4c,
+              runtime_vertex,state->runtime.vertex_count,sceAgcCbSetShRegisterRangeDirect))
+            return VK_ERROR_UNKNOWN;
+#endif
         if(ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x8c,
               runtime_vertex,state->runtime.vertex_count,sceAgcCbSetShRegisterRangeDirect) ||
            (state->runtime.fragment_count && ps5_agc_writer_set_sh_direct(&next,
@@ -279,5 +459,6 @@ VkResult ps5vk_native_emit_runtime_draw(uint32_t **cursor,uint32_t capacity,
     if(!state || !state->runtime.enabled || !tables || vertex%16 || (indices && !emit))
         return VK_ERROR_UNKNOWN;
     return emit_draw(cursor,capacity,state,mapping,bytes,op,0,vertex,
-        state->runtime.vertex_buffer_valid,indices,emit,NULL,tables,view);
+        state->runtime.vertex_buffer_valid || state->hull_runtime.vertex_buffer_valid,
+        indices,emit,NULL,tables,view);
 }

@@ -12,14 +12,13 @@ DEPS = [
         "name": "opengnm-psbc",
         "dest": ROOT / "third_party/psbc-reference",
         "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
-        # The published T04 candidate, pinned by exact commit: it carries the
-        # metadata this integration reads (the merged pair's system-SGPR indices
-        # and launch counts, the driver user-data window base, the pixel stage's
-        # distance reads) under metadata version 17. It is an audited dependency
-        # candidate, not a merge of the dependency's main: the pin is the whole
-        # contract, so a different commit has to be pinned explicitly and the
-        # driver cache key moves with the metadata version.
-        "pin": "cce48c6cc49b5d4ad24de2bf587fa4f3b63a326a",
+        # Metadata21 candidate: linked-stage resource/entrypoint identity,
+        # TES-fed geometry, merged LS/HS argument delivery, packed fragment
+        # distances and precise push-constant member ranges. The cache ABI
+        # and native loader must agree with this exact dependency.
+        # Published in opengnm-psbc PR22 (depends on PR21 and the preceding
+        # tessellation compiler series); review is pending, not merged main.
+        "pin": "7e00345f04982b51eacbad63a0412f3c8b4b90a9",
     },
     {
         "name": "opengnm",

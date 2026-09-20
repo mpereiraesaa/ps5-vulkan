@@ -224,6 +224,9 @@ struct VkDevice_T {
     VkResult (*graphics_create)(VkDevice, const void *program_data,
         uint32_t primitive_type, void **owned_state);
     void (*graphics_release)(VkDevice, void *owned_state);
+    /* Optional immutable executable-usage summary after native creation.
+     * Absence means unknown: all nonempty layout sets remain required. */
+    VkResult (*graphics_used_sets)(VkDevice, const void *owned_state, uint32_t *mask);
     VkResult (*image_requirements)(VkDevice, const VkImageCreateInfo *, VkMemoryRequirements *);
     struct VkImage_T *images;
     struct ps5vk_compiler compiler;

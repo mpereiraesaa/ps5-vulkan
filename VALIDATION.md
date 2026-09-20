@@ -3,6 +3,28 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
+## Current tessellation candidate (2026-09-20)
+
+The default native runtime-graphics candidate passes 403/403 unchanged upstream
+CTS cases: 304 regression cases and 99 tessellation, clip/cull and resource
+cases. Strict artifact/report verification and clean application closure pass.
+Experimental tessellation flags and shader/probe bypasses are off. A separately
+built public SDK consumer verifies feature advertisement and the intended limits.
+See [tessellation status](TESSELLATION_STATUS.md) for the scope and additional
+native witnesses. This is focused validation, not complete CTS or conformance;
+release review remains pending.
+
+The integrated receipt identifies:
+
+- SELF SHA-256: `2e0fc22b7de6401f7d12f2f6359efc14a223b4917100acad4c98edecf726d45c`.
+- QPA SHA-256: `4a81d0f27f374fa3dae7fd4be7ebb15237d08ffbb874325ca4df2b85a49a4218`.
+- Selection SHA-256: `6098db45ae68a487ea2fba5438b6d31e9b152217c2c3f6f8eb1eb985702c02e1`.
+- Upstream CTS commit: `a0270c1897597e6c77679870e10415398a13001c`.
+
+Dated sections below retain earlier measurements, including failed candidates.
+Their unadvertised-feature statements describe those historical artifacts, not
+the current runtime. No historical receipt has been relabelled as this run.
+
 ## Clip-cull native acceptance
 
 The packed pre-raster distance export is implemented and measured, and
@@ -186,9 +208,9 @@ distance width beyond the reported eight components, or Vulkan conformance; it i
 not a conformance claim, and the features are advertised only for the graphics
 execution path this repository builds.
 
-## Optional stage blockers: geometry and tessellation (2026-09-17)
+## Historical optional stage blockers: geometry and tessellation (2026-09-17)
 
-Both remaining T04 stages stay unadvertised, and the reason is now measured
+At this historical checkpoint both stages were unadvertised, with the reason measured
 rather than inferred. These measurements were taken with the driver built
 against an isolated PSBC candidate (the merged-geometry identification plus the
 hull-packaging entry point, delivered as dependency pull requests that are
@@ -294,9 +316,9 @@ there - it faults whenever it is reached, as the table runs show.
 hull buffer for a real vertex+control pair - the control half and the vertex half
 in one buffer, with the vertex half's program and resource registers published -
 but the same metadata declares the package unresolved because the hull/domain
-pipeline state is not part of it. The driver has no tessellation path at all
-today: pipeline creation validates the contract and refuses it before any
-compile. `tessellationShader` therefore stays false, and the remaining work is
+pipeline state is not part of it. At that checkpoint the driver had no executable
+tessellation path: pipeline creation refused it before any
+compile. `tessellationShader` therefore stayed false, and the remaining work was
 driver-side assembly plus the hull pipeline state - the same class of
 vendor-side question as geometry.
 
@@ -380,8 +402,9 @@ profile and verifies strictly: `geometryShader` observed **1**, 10 of 62
 requirements satisfied, 52 blockers. The matrix keeps that row as a blocker
 because the probe executes capability queries, not geometry draws.
 
-Tessellation remains unadvertised: the pinned compiler publishes no loadable hull
-package.
+Tessellation was still unadvertised in this geometry-promotion receipt because
+that compiler pin had no loadable hull package. The later tessellation candidate
+and its separate evidence are documented at the top of this page.
 
 ## Multiview native acceptance
 

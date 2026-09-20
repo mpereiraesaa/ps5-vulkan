@@ -1,6 +1,37 @@
 #include "draw_state_ps5.h"
 #include "viewport_ps5.h"
+#include "blend_ps5.h"
 #include <string.h>
+#if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
+#include "ps5log.h"
+/* The complete register set a patch draw actually emits, logged once.
+ *
+ * Every tessellation candidate so far has been argued from ONE register read
+ * out of the object that holds it. That cannot see the two failure modes the
+ * emitted stream can still have after every individual value is right: a
+ * register the pipeline never writes at all, and a register written TWICE
+ * where the later write wins. The banks are emitted in order and the last
+ * write for an offset is the one the engine sees, so printing the stream in
+ * emission order is the only way to read either off. Four registers per
+ * record, with no string formatting of its own, so the dump cannot itself
+ * fail on a buffer bound. */
+static void tess_dump_bank(const char *bank,const ps5_agc_register *regs,
+    unsigned count)
+{
+    for(unsigned i=0;i<count;i+=4) {
+        const ps5_agc_register zero={0xfff,0};
+        const ps5_agc_register *a=&regs[i];
+        const ps5_agc_register *b=i+1<count?&regs[i+1]:&zero;
+        const ps5_agc_register *c=i+2<count?&regs[i+2]:&zero;
+        const ps5_agc_register *d=i+3<count?&regs[i+3]:&zero;
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_TESS_EMIT bank=%s at=%u of=%u %03x=%08x %03x=%08x "
+            "%03x=%08x %03x=%08x",bank,i,count,
+            (unsigned)a->offset,a->value,(unsigned)b->offset,b->value,
+            (unsigned)c->offset,c->value,(unsigned)d->offset,d->value);
+    }
+}
+#endif
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     const VkRect2D *scissor_state, const struct ps5vk_target_registers *color,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
@@ -23,12 +54,20 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (native->device != p->device || !native->pair || !native->pair->ready) return VK_ERROR_UNKNOWN;
     struct ps5vk_graphics_pair *pair = native->pair;
     int runtime=pair->runtime_arguments.enabled!=0;
+    /* A tessellation pipeline's pre-raster bank is the domain half's, and its
+     * draw is a patch list; anything else is a broken pair. */
+    const int has_tessellation=pair->tessellation!=0;
+    if(has_tessellation && !runtime)return VK_ERROR_UNKNOWN;
     const struct ps5vk_runtime_shader *vs=&pair->runtime_vertex,*fs=&pair->runtime_fragment;
     if(runtime && (vs->header.num_cx_registers>PS5VK_RUNTIME_CX_MAX ||
         fs->header.num_cx_registers>PS5VK_RUNTIME_CX_MAX ||
         !vs->header.num_sh_registers || !fs->header.num_sh_registers ||
         vs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX ||
-        fs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX))return VK_ERROR_UNKNOWN;
+        fs->header.num_sh_registers>PS5VK_RUNTIME_SH_MAX ||
+        (has_tessellation &&
+            (pair->runtime_hull.header.num_sh_registers>4 ||
+             pair->runtime_hull.header.num_cx_registers>PS5VK_RUNTIME_CX_MAX))))
+        return VK_ERROR_UNKNOWN;
     if (pair->vertex_quantization != 0x2d) return VK_ERROR_FEATURE_NOT_PRESENT;
     ps5_agc_register viewport[PS5VK_VIEWPORT_REGISTERS];
     VkResult rc = ps5vk_native_viewport(viewport_state, scissor_state, area, viewport);
@@ -57,6 +96,87 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (depth) {
         memcpy(result.cx + result.cx_count, depth->registers, depth->count * sizeof(ps5_agc_register));
         result.cx_count += depth->count;
+    }
+    /* The tessellation pair's hull launch state and the hull programs' own
+     * register blocks join the context/shader banks: the stage enables and the
+     * LS_HS_CONFIG the driver derived at create, the hull HS's context block
+     * (which carries VGT_TF_PARAM) and both programs' shader blocks. The
+     * context registers carry VGT_TF_PARAM; the ring configuration is
+     * program-referenced state below. */
+    if (has_tessellation) {
+        if (result.cx_count+(unsigned)(sizeof(pair->tess_state)/
+                sizeof(pair->tess_state[0]))+
+            pair->runtime_hull.header.num_cx_registers >
+            PS5VK_DRAW_CX_CAPACITY)
+            return VK_ERROR_UNKNOWN;
+        memcpy(result.cx+result.cx_count,pair->tess_state,
+            sizeof(pair->tess_state));
+        result.cx_count+=(unsigned)(sizeof(pair->tess_state)/
+            sizeof(pair->tess_state[0]));
+        /* DIAGNOSTIC, default off: omit the hull's own context block, which
+         * on this profile is exactly VGT_TF_PARAM.
+         *
+         * This driver writes that register WHOLE, from a value psbc derives
+         * from the control half's declared interface alone - domain, spacing,
+         * topology - so DISABLE_DONUTS, DETECT_ONE, DETECT_ZERO and MTYPE are
+         * all zeroed every patch draw. Whether that matters was a theory
+         * until run 42 turned it into a mechanism: the tessellation-level
+         * clamps at cx 0x286/0x287 had never been written by this driver and
+         * turned out to already hold sane values, which proves the platform
+         * DOES leave context registers initialised and that zeroing a field
+         * destroys something real.
+         *
+         * Omitting the write is the only way to ask the question, because
+         * there is no read-modify-write for these banks. The domain type may
+         * then be wrong - but the witness measures whether the evaluation
+         * half EXECUTES, not whether it produces the right picture, so a
+         * wrong tessellator configuration still answers it. */
+#if !(defined(PS5VK_TESS_NO_TF_PARAM) && PS5VK_TESS_NO_TF_PARAM)
+        memcpy(result.cx+result.cx_count,pair->runtime_hull.context,
+            pair->runtime_hull.header.num_cx_registers*sizeof(*result.cx));
+        result.cx_count+=pair->runtime_hull.header.num_cx_registers;
+#endif
+        /* The ring descriptor table, delivered as USER DATA.
+         *
+         * The hull's first memory operation is an SMEM load of a buffer
+         * descriptor from this table (entry 5, the tess-factor ring), so a
+         * patch draw faults at any tessellation level without it. The
+         * compiler assigns the window-relative dword and the driver writes
+         * the 64-bit address there; the hull's user-data window on gfx10 is
+         * SPI_SHADER_USER_DATA_HS_0, sh offset 0x10c.
+         *
+         * It is written with the SHADER bank below, not here. This block
+         * runs before the shader bank exists: the runtime path assigns
+         * result.sh_count from the pre-raster and fragment counts and
+         * memcpy()s both programs over result.sh[0..], so two entries
+         * written here were overwritten by the vertex program and the count
+         * that would have carried them was reset to zero. The registers
+         * were individually correct and simply never reached the engine -
+         * measured, not reasoned: the full emitted stream showed the shader
+         * bank holding exactly fourteen entries, the domain's six, the
+         * fragment's four and the hull's four, with 0x112 and 0x113 absent.
+         *
+         * What is NOT written with it, deliberately.
+         *
+         * An earlier version wrote the ring descriptor table's address into
+         * the hull's user-data window at sh 0x10c/0x10d, intending to reach
+         * the hull's ring_offsets. The register mapping was right - 0x10c
+         * really is SPI_SHADER_USER_DATA_HS_0 - but the DELIVERY MODEL was
+         * wrong, and measurably so. The merged hull's own argument layout
+         * says:
+         *
+         *   ring_offsets   SGPR 0-2   (system block, below the user-data
+         *                              window base of 8: hardware-supplied)
+         *   ud[18] AC_UD_DYNAMIC_DESCRIPTORS             SGPR 8
+         *   ud[19] AC_UD_DYNAMIC_DESCRIPTORS_OFFSET_ADDR SGPR 9
+         *
+         * User-data dwords 0 and 1 ARE SGPRs 8 and 9, so that write never
+         * reached ring_offsets at all - it overwrote the hull's two
+         * dynamic-descriptor pointers. ring_offsets is supplied by the
+         * hardware from the device's global ring configuration, which is why
+         * every working vertex/NGG path on this device needs no such write
+         * either. The rings themselves are still bound, through the VGT
+         * registers the create path programs in the user-config bank. */
     }
     /* Override the depth builder's Gears policy. Vulkan disables writes when
      * depth testing is disabled, even if depthWriteEnable was specified. */
@@ -117,16 +237,180 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * VGT_MULTI_PRIM_IB_RESET_EN there, reached with the same index space the
      * linked UC block and the index-type packet use, (address - 0x30000)/4. */
     result.uc[result.uc_count++]=(ps5_agc_register){0x24b,restart_enable};
+    /* The tessellation rings are program-referenced device state: the whole
+     * configuration is written on every patch draw so nothing depends on what
+     * another pipeline left configured. */
+    if(has_tessellation) {
+        {
+            const unsigned ring_state_count=
+                (unsigned)(sizeof(pair->tess_ring_state)/
+                    sizeof(pair->tess_ring_state[0]));
+            if(result.uc_count+ring_state_count>PS5VK_DRAW_UC_CAPACITY)
+                return VK_ERROR_UNKNOWN;
+            memcpy(result.uc+result.uc_count,pair->tess_ring_state,
+                sizeof(pair->tess_ring_state));
+            result.uc_count+=ring_state_count;
+        }
+#if defined(PS5VK_TESS_GE_CNTL) && PS5VK_TESS_GE_CNTL
+        /* DIAGNOSTIC, default off: GE_CNTL programmed the way a TESSELLATION
+         * draw programs it, appended after the linked value so the later write
+         * wins exactly as the context bank's second VGT_SHADER_STAGES_EN does.
+         *
+         * The linked GE_CNTL (0x00010080 here) is the NGG VERTEX pipeline's
+         * value: PRIM_GRP_SIZE = the NGG program's max primitives per subgroup
+         * and VERT_GRP_SIZE = its max vertices, which is what the pinned
+         * radv_shader.c publishes for an NGG stage. Both open gfx10 drivers
+         * REPLACE that at draw time when a control shader is bound. PAL,
+         * gfx9UniversalCmdBuffer.cpp CalcGeCntl: under tessellation
+         * PRIM_GRP_SIZE = IA_MULTI_VGT_PARAM.PRIMGROUP_SIZE + 1, where
+         * gfx9GraphicsPipeline.cpp SetupIaMultiVgtParam says "the hardware
+         * requires that the primgroup size matches the number of HS
+         * patches-per-thread-group when tessellation is enabled"
+         * (gfx9Device.cpp ComputeTessPrimGroupSize: a multiple of the patch
+         * count, at least 4, even on more than two shader engines);
+         * VERT_GRP_SIZE = 256, the documented way to disable vertex grouping;
+         * and BREAK_WAVE_AT_EOI = 1 for every tessellation draw, quoting the
+         * hardware team that "every DS requires a valid PatchId".
+         *
+         * This register was cleared earlier as "byte-identical to a passing
+         * draw". The passing draw was a vertex NGG pipeline, for which that
+         * value is correct, so it was never a control for a patch draw.
+         *
+         * Mode 1 is PAL's rule. Mode 2 drops the vertex-grouping and
+         * break-wave bits, the radeonsi form for a control shader that does
+         * not read the primitive id, to separate the group size from the
+         * other two fields if mode 1 changes the result.
+         *
+         * HISTORICAL, BEFORE WORKING NATIVE RING BINDING: mode 1 readback of GE_CNTL
+         * returned 0x00060040 for this pipeline's 64 patches per workgroup,
+         * the draw completed, and the evaluation half still produced nothing
+         * (ink=0). That empty-draw result does not rule out a grouping defect
+         * once tessellation runs. Reopened for the current cross-invocation
+         * missing-patch investigation; remains diagnostic/default off. */
+        {
+            const uint32_t num_patches=pair->tess_state[1].value&255u;
+            uint32_t prim_grp=num_patches?num_patches:4u;
+            while(prim_grp<4u)prim_grp+=num_patches;
+            uint32_t ge_cntl=prim_grp&0x1ffu;
+#if PS5VK_TESS_GE_CNTL==1
+            ge_cntl|=(256u<<9)|(1u<<18);
+#endif
+            if(result.uc_count+1>PS5VK_DRAW_UC_CAPACITY)return VK_ERROR_UNKNOWN;
+            result.uc[result.uc_count++]=(ps5_agc_register){0x25b,ge_cntl};
+        }
+#endif
+    }
     result.modifier = pair->gs.specials.draw_modifier;
     if(runtime) {
         result.sh_count=vs->header.num_sh_registers+fs->header.num_sh_registers;
         memcpy(result.sh,vs->shader,vs->header.num_sh_registers*sizeof(*result.sh));
         memcpy(result.sh+vs->header.num_sh_registers,fs->shader,fs->header.num_sh_registers*sizeof(*result.sh));
+        /* The merged hull program's one shader block follows the runtime
+         * pair's: its address register at the LS block and its resource pair
+         * at the HS block, with the create-path address. Its VGT_TF_PARAM
+         * context block went into the context bank. */
+        if(has_tessellation) {
+            if(result.sh_count+pair->runtime_hull.header.num_sh_registers>
+                PS5VK_DRAW_SH_CAPACITY)
+                return VK_ERROR_UNKNOWN;
+            memcpy(result.sh+result.sh_count,pair->runtime_hull.shader,
+                pair->runtime_hull.header.num_sh_registers*sizeof(*result.sh));
+            result.sh_count+=pair->runtime_hull.header.num_sh_registers;
+            /* The ring descriptor table's address, as USER DATA, appended to
+             * the bank that actually reaches the engine. The hull's first
+             * memory operation is an SMEM load of a buffer descriptor from
+             * this table (entry 5, the tess-factor ring), so without it the
+             * merged LS/HS program has no ring to write its tessellation
+             * factors into and the patch draw never retires at any
+             * tessellation level. The compiler assigns the window-relative
+             * dword; the hull's user-data window on gfx10 is
+             * SPI_SHADER_USER_DATA_HS_0 at sh offset 0x10c, whose dword N is
+             * SGPR 8+N for a merged program. */
+            if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)
+                return VK_ERROR_UNKNOWN;
+            result.sh[result.sh_count++]=(ps5_agc_register){
+                (uint16_t)(0x10c+pair->tess_ring_table_slot),
+                pair->tess_ring_table_low};
+            result.sh[result.sh_count++]=(ps5_agc_register){
+                (uint16_t)(0x10c+pair->tess_ring_table_slot+1u),
+                pair->tess_ring_table_high};
+#if defined(PS5VK_TESS_SYSTEM_TABLE) && PS5VK_TESS_SYSTEM_TABLE
+            /* Diagnostic own-memory system table, not part of the compiler's
+             * four-register hull package. Preserve its strict contract. */
+            if(result.sh_count+2>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
+            result.sh[result.sh_count++]=(ps5_agc_register){0x102,pair->tess_ring_table_low};
+            result.sh[result.sh_count++]=(ps5_agc_register){0x103,pair->tess_ring_table_high};
+#endif
+        }
+        /* DIAGNOSTIC (PS5VK_TESS_LEGACY_DOMAIN): the legacy hardware-VS
+         * domain's registers, after everything the NGG domain published
+         * so the shared context registers take the legacy values. */
+        if(pair->legacy_domain) {
+            if(result.sh_count+pair->legacy_sh_count>PS5VK_DRAW_SH_CAPACITY ||
+               result.cx_count+pair->legacy_cx_count>PS5VK_DRAW_CX_CAPACITY)
+                return VK_ERROR_UNKNOWN;
+            memcpy(result.sh+result.sh_count,pair->legacy_sh,
+                pair->legacy_sh_count*sizeof(*result.sh));
+            result.sh_count+=pair->legacy_sh_count;
+            memcpy(result.cx+result.cx_count,pair->legacy_cx,
+                pair->legacy_cx_count*sizeof(*result.cx));
+            result.cx_count+=pair->legacy_cx_count;
+        }
         result.runtime=pair->runtime_arguments;
+        result.hull_runtime=pair->hull_arguments;
         /* This is the lab's audited draw-auto command modifier, not compiler
          * metadata. PSBC headers do not populate the legacy PAL field. */
         result.modifier=5;
     }
     if (!result.modifier) return VK_ERROR_UNKNOWN;
+    /* Last fixed-state writes win over inherited/linked defaults. Explicitly
+     * disable blending on subsequent non-blended draws, rather than retaining
+     * the previous pipeline's state. Runtime acceptance is gated separately. */
+    struct ps5vk_blend_words blend;
+    if(!ps5vk_blend_encode(&p->color_blend,p->blend_constants,&blend))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(result.cx_count+6u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
+    result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend.control};
+    result.cx[result.cx_count++]=(ps5_agc_register){0x1d8,blend.optimization};
+    for(unsigned i=0;i<4;++i)
+        result.cx[result.cx_count++]=(ps5_agc_register){0x105+i,blend.constants[i]};
+    if(runtime) {
+        uint32_t spi_format=0,conversion[3];
+        for(unsigned i=0;i<fs->header.num_cx_registers;++i)
+            if(fs->context[i].offset==0x1c5)spi_format=fs->context[i].value;
+        if(!ps5vk_color_export_state(p->color_format,spi_format,
+            p->color_blend.blendEnable,conversion))return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
+        /* Emit for unblended draws too: a previous FP16 blended draw must not
+         * leave its downconversion active for the 32-bit export path. */
+        for(unsigned i=0;i<3;++i)
+            result.cx[result.cx_count++]=(ps5_agc_register){0x1d5+i,conversion[i]};
+    }
+#if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
+    /* One patch draw and one ORDINARY runtime draw, so the two can be
+     * diffed against each other.
+     *
+     * The tessellation pipeline's pre-raster stage is an NGG program and so
+     * is the geometry probe's, and the geometry probe passes every case in
+     * the same process on the same device through the same encoder. That
+     * makes its emitted banks a real working control for every pre-raster
+     * register the patch draw also programs - strictly more than a
+     * host-compiled comparison, which can only see what the compiler
+     * publishes and not the linked AGC block, the target state or anything
+     * else the driver adds. Whatever the two share is not the defect;
+     * whatever only the patch draw sets, or only the working draw sets, is
+     * the entire remaining candidate list. */
+    {
+        static unsigned dumped_patch,dumped_plain;
+        unsigned *once=has_tessellation?&dumped_patch:&dumped_plain;
+        if(!*once && (has_tessellation || runtime)) {
+            const char *tag=has_tessellation?"cx":"gcx";
+            ++*once;
+            tess_dump_bank(tag,result.cx,result.cx_count);
+            tess_dump_bank(has_tessellation?"sh":"gsh",result.sh,result.sh_count);
+            tess_dump_bank(has_tessellation?"uc":"guc",result.uc,result.uc_count);
+        }
+    }
+#endif
     *out = result; return VK_SUCCESS;
 }

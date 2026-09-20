@@ -271,7 +271,7 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/viewport_ps5.c tests/test_viewport_ps5.c -o build/tests/test_viewport_ps5
 	./build/tests/test_viewport_ps5
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/graphics_pipeline_ps5.c tests/test_graphics_pipeline_backend.c -o build/tests/test_graphics_pipeline_backend
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/graphics_pipeline_ps5.c native/tess_shared_storage.c tests/test_graphics_pipeline_backend.c -pthread -o build/tests/test_graphics_pipeline_backend
 	./build/tests/test_graphics_pipeline_backend
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_PIPELINE_SOURCES) src/vk_graphics_pipeline.c src/graphics_program.c tests/test_vk_graphics_pipeline.c -o build/tests/test_vk_graphics_pipeline
 	./build/tests/test_vk_graphics_pipeline
@@ -386,6 +386,14 @@ check:
 build/libpsbc.host.a:
 	$(PYTHON) tools/build_psbc.py --host
 .PHONY: test-runtime-header
+.PHONY: test-tessellation-compiler
+# The tessellation compiler contract asserts what the pinned dependency really
+# produces for the pinned tessellation fixtures; it needs the compiler, not the
+# native payload, and is wired into the dependency-gated chain below.
+test-tessellation-compiler: build/libpsbc.host.a graphics-stage-shaders
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -Ithird_party/psbc-reference native/runtime_shader.c tests/test_tessellation_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_tessellation_compiler
+	./build/tests/test_tessellation_compiler
 .PHONY: test-runtime-graphics-compiler
 test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 	mkdir -p build/tests
@@ -394,7 +402,7 @@ test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 .PHONY: test-runtime-graphics-native
 test-runtime-graphics-native:
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c native/tess_shared_storage.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
 	./build/tests/test_runtime_graphics_native
 test-runtime-header:
 	mkdir -p build/tests
@@ -402,6 +410,7 @@ test-runtime-header:
 	./build/tests/test_runtime_shader
 test-compiler: build/libpsbc.host.a test-shaders
 	$(MAKE) test-runtime-header
+	$(MAKE) test-tessellation-compiler
 	$(MAKE) test-runtime-graphics-compiler
 	$(MAKE) test-runtime-graphics-native
 	mkdir -p build/tests
@@ -448,6 +457,13 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_tess.vert -o build/runtime-graphics/tess.vert.spv
 	$(GLSLANG) -V -S tesc experiments/graphics/runtime_tess.tesc -o build/runtime-graphics/tess.tesc.spv
 	$(GLSLANG) -V -S tese experiments/graphics/runtime_tess.tese -o build/runtime-graphics/tess.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_output_envelope.tese -o build/runtime-graphics/tess_output_envelope.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_output_envelope.frag -o build/runtime-graphics/tess_output_envelope.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_quad.tesc -o build/runtime-graphics/tess_quad.tesc.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_coord.vert -o build/runtime-graphics/tess_coord.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_coord.frag -o build/runtime-graphics/tess_coord.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_points.tese -o build/runtime-graphics/tess_points.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_points.geom -o build/runtime-graphics/tess_points.geom.spv
 	$(GLSLANG) -V experiments/graphics/runtime_tess.frag -o build/runtime-graphics/tess.frag.spv
 check-graphics-stages: graphics-stage-shaders
 	mkdir -p build/tests

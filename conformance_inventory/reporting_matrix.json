@@ -1148,11 +1148,11 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the control/evaluation pair is described, validated against the patch state and refused: the pinned compiler produces no loadable hull package and the hull/domain pipeline state is not programmed (src/vk_graphics_pipeline.c)",
+      "detail": "default native runtime-graphics profile: linked LS/HS and TES/TES+GS execution and eight limits are independently hardware-witnessed; the default integrated candidate passes 403 original upstream cases with strict identity and clean closure (TESSELLATION_STATUS.md). This host query is not GPU evidence or Vulkan conformance.",
       "feature": "tessellationShader",
       "kind": "feature",
       "profile": "graphics",
-      "reported": false,
+      "reported": true,
       "verdict": "satisfied"
     },
     {
@@ -2035,7 +2035,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "the control/evaluation pair is described, validated against the patch state and refused: the pinned compiler produces no loadable hull package and the hull/domain pipeline state is not programmed (src/vk_graphics_pipeline.c)",
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "tessellationShader",
       "kind": "feature",
       "profile": "compute",
@@ -21806,11 +21806,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
+      "detail": "untagged-core: reported 120 must be >= 120",
       "kind": "limit",
       "limit": "maxTessellationControlPerPatchOutputComponents",
       "profile": "graphics",
-      "reported": 0,
+      "reported": 120,
       "verdict": "satisfied"
     },
     {
@@ -21826,6 +21826,21 @@
       "limit": "maxTessellationControlPerPatchOutputComponents",
       "profile": "compute",
       "reported": 0,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [
+          "dEQP-VK.info.device_properties",
+          "dEQP-VK.info.device_memory_properties"
+        ],
+        "status": "diagnostic"
+      },
+      "detail": "untagged-core: reported 128 must be >= 64",
+      "kind": "limit",
+      "limit": "maxTessellationControlPerVertexInputComponents",
+      "profile": "graphics",
+      "reported": 128,
       "verdict": "satisfied"
     },
     {
@@ -21839,21 +21854,6 @@
       "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
       "kind": "limit",
       "limit": "maxTessellationControlPerVertexInputComponents",
-      "profile": "graphics",
-      "reported": 0,
-      "verdict": "satisfied"
-    },
-    {
-      "applicable_cts": {
-        "cases": [
-          "dEQP-VK.info.device_properties",
-          "dEQP-VK.info.device_memory_properties"
-        ],
-        "status": "diagnostic"
-      },
-      "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
-      "kind": "limit",
-      "limit": "maxTessellationControlPerVertexInputComponents",
       "profile": "compute",
       "reported": 0,
       "verdict": "satisfied"
@@ -21866,11 +21866,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
+      "detail": "untagged-core: reported 128 must be >= 64",
       "kind": "limit",
       "limit": "maxTessellationControlPerVertexOutputComponents",
       "profile": "graphics",
-      "reported": 0,
+      "reported": 128,
       "verdict": "satisfied"
     },
     {
@@ -21896,11 +21896,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
+      "detail": "untagged-core: reported 4096 must be >= 2048",
       "kind": "limit",
       "limit": "maxTessellationControlTotalOutputComponents",
       "profile": "graphics",
-      "reported": 0,
+      "reported": 4096,
       "verdict": "satisfied"
     },
     {
@@ -21916,6 +21916,21 @@
       "limit": "maxTessellationControlTotalOutputComponents",
       "profile": "compute",
       "reported": 0,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [
+          "dEQP-VK.info.device_properties",
+          "dEQP-VK.info.device_memory_properties"
+        ],
+        "status": "diagnostic"
+      },
+      "detail": "untagged-core: reported 128 must be >= 64",
+      "kind": "limit",
+      "limit": "maxTessellationEvaluationInputComponents",
+      "profile": "graphics",
+      "reported": 128,
       "verdict": "satisfied"
     },
     {
@@ -21929,21 +21944,6 @@
       "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
       "kind": "limit",
       "limit": "maxTessellationEvaluationInputComponents",
-      "profile": "graphics",
-      "reported": 0,
-      "verdict": "satisfied"
-    },
-    {
-      "applicable_cts": {
-        "cases": [
-          "dEQP-VK.info.device_properties",
-          "dEQP-VK.info.device_memory_properties"
-        ],
-        "status": "diagnostic"
-      },
-      "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
-      "kind": "limit",
-      "limit": "maxTessellationEvaluationInputComponents",
       "profile": "compute",
       "reported": 0,
       "verdict": "satisfied"
@@ -21956,11 +21956,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
+      "detail": "untagged-core: reported 128 must be >= 64",
       "kind": "limit",
       "limit": "maxTessellationEvaluationOutputComponents",
       "profile": "graphics",
-      "reported": 0,
+      "reported": 128,
       "verdict": "satisfied"
     },
     {
@@ -21986,11 +21986,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
+      "detail": "untagged-core: reported 64 must be >= 64",
       "kind": "limit",
       "limit": "maxTessellationGenerationLevel",
       "profile": "graphics",
-      "reported": 0,
+      "reported": 64,
       "verdict": "satisfied"
     },
     {
@@ -22016,11 +22016,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:tessellationShader: reported 0 must be >= 0",
+      "detail": "untagged-core: reported 32 must be >= 32",
       "kind": "limit",
       "limit": "maxTessellationPatchSize",
       "profile": "graphics",
-      "reported": 0,
+      "reported": 32,
       "verdict": "satisfied"
     },
     {
@@ -26332,6 +26332,7 @@
   },
   "reported_source": {
     "native_consumer": "native/platform_ps5.c",
+    "native_graphics_overlay": "native/tess_profile.h",
     "profile_initializer": "src/device_profile_report.h",
     "tool": "tools/dump_device_reporting.c"
   },

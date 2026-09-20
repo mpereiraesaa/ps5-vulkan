@@ -106,6 +106,9 @@ struct ps5vk_operation {
     /* Parallel to VkPipeline_T::program.descriptors.  Static descriptors carry
      * zero; dynamic buffer descriptors carry the offset captured at bind. */
     VkDeviceSize descriptor_dynamic_offsets[PS5VK_MAX_DESCRIPTORS];
+    /* Graphics runtime tables use set-local flattened elements, independently
+     * of the precompiled program's optional descriptor enumeration. */
+    VkDeviceSize graphics_dynamic_offsets[PS5VK_MAX_SETS][PS5VK_MAX_DESCRIPTORS];
     uint32_t groups[3];
     uint32_t push_constant_size;
     uint8_t push_constants[PS5VK_MAX_PUSH_CONSTANT_BYTES];

@@ -2,6 +2,44 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
+    "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+    "device_api": "1.0.0",
+    "device_extensions": 5,
+    "requirements": 62,
+    "satisfied_ids": [
+      "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+      "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+      "feature:VkPhysicalDeviceFeatures:geometryShader",
+      "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+      "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+      "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+      "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+      "feature:VkPhysicalDeviceFeatures:tessellationShader",
+      "feature:VkPhysicalDeviceVulkan11Features:multiview",
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+    ],
+    "runs": [
+      {
+        "id": "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2",
+        "log_sha256": "02d9105b99a6039b63fb43885d871fc47916d5aa738b1bfe8439644f9a796f15"
+      }
+    ],
+    "transport": "ps5log/1",
+    "verifier": "tools/verify_dxvk_probe.py",
+    "query_routes": [
+      {
+        "route": "VK_KHR_multiview",
+        "multiview": "1",
+        "maxMultiviewViewCount": "6",
+        "maxMultiviewInstanceIndex": "134217727"
+      }
+    ],
+    "source_matrix_sha256": "49f7fbf9719e1b70f22b09bce2bef58d856045daf16c86d2e354c81df0ba53df",
+    "satisfied": 11,
+    "blockers": 51
+  },
+  "historical_capability_probes": [{
     "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
     "device_api": "1.0.0",
     "device_extensions": 5,
@@ -37,7 +75,7 @@
     "source_matrix_sha256": "10da3d8a500250bd6197d4502dfa26419b45f6fcf8ab612bd10ed5b6e780ce4b",
     "satisfied": 10,
     "blockers": 52
-  },
+  }],
   "requirements": {
     "feature:VkPhysicalDeviceVulkan11Features:multiview": {
       "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",

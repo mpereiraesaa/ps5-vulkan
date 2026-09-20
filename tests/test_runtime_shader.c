@@ -65,10 +65,12 @@ int main(void)
         static const unsigned geometry_registers[]={0x1ffu,0x291u,0x29bu,0x2abu,0x2ceu,0x2d3u};
         g->version=PSBC_SHADER_METADATA_VERSION;g->target=PSBC_TARGET_PS5;
         g->source_stage=PSBC_STAGE_GEOMETRY;g->hardware_stage=PSBC_HW_STAGE_NGG;
+        g->merged_geometry=true;g->merged_es_source_stage=PSBC_STAGE_VERTEX;
         g->address32_hi=2;g->user_sgpr_count=2;g->ngg_lds_layout_valid=true;
         g->ngg_lds_layout_user_data_dword=1;g->ngg_lds_layout=1680;
         g->linkage_valid=true;
         g->linkage_ge_cntl.offset=0x25b;g->linkage_stages_en.offset=0x2d5;
+        g->linkage_stages_en.value=2u<<3;
         g->linkage_user_vgpr_en.offset=0x262;
         g->user_data_window_base=8;g->esgs_system_sgprs_valid=true;
         g->esgs_gs_tg_info_sgpr=2;g->esgs_merged_wave_info_sgpr=3;
@@ -82,6 +84,20 @@ int main(void)
         g->shader_registers[2].offset=0x8a;g->shader_registers[3].offset=0x8b;
         g->output_semantic_count=1;g->output_semantics[0]=15;
         struct ps5vk_runtime_shader merged;
+        assert(!ps5vk_runtime_shader_build(&merged,&pair));
+        const struct ps5vk_runtime_shader unchanged=merged;
+        g->merged_es_source_stage=PSBC_STAGE_NONE;
+        assert(ps5vk_runtime_shader_build(&merged,&pair));
+        assert(!memcmp(&merged,&unchanged,sizeof(merged)));
+        g->merged_es_source_stage=PSBC_STAGE_TESS_EVAL;
+        assert(ps5vk_runtime_shader_build(&merged,&pair));
+        g->merged_es_source_stage=PSBC_STAGE_VERTEX;
+        g->linkage_stages_en.value=1u<<3;
+        assert(ps5vk_runtime_shader_build(&merged,&pair));
+        g->linkage_stages_en.value=2u<<3;
+        g->ps5_ring_table_valid=true;
+        assert(ps5vk_runtime_shader_build(&merged,&pair));
+        g->ps5_ring_table_valid=false;
         assert(!ps5vk_runtime_shader_build(&merged,&pair));
         unsigned seen=0;
         for(unsigned i=0;i<merged.header.num_cx_registers;++i) {
@@ -352,6 +368,40 @@ int main(void)
         assert(ps5vk_runtime_draw_values_sets(&collided, 1, 0, 0, 0, 0, 0,
             tables_zero, vertex, pixel));
         *m = base_vertex; fragment = base_fragment;
+    }
+    {
+        PsbcShaderMetadata hull={.version=PSBC_SHADER_METADATA_VERSION,
+            .source_stage=PSBC_STAGE_TESS_CTRL,.hardware_stage=PSBC_HW_STAGE_HULL,
+            .user_sgpr_count=6,.user_data_window_base=8,
+            .base_vertex_valid=true,.base_vertex_user_data_dword=0,
+            .start_instance_valid=true,.start_instance_user_data_dword=1,
+            .vertex_buffer_table_valid=true,.vertex_buffer_table_user_data_dword=2,
+            .vertex_buffer_usage_mask=1,
+            .ps5_ring_table_valid=true,.ps5_ring_table_user_data_dword=4};
+        struct ps5vk_runtime_draw_abi hull_abi;
+        assert(!ps5vk_runtime_hull_abi_build(&hull,&hull_abi));
+        assert(hull_abi.vertex_buffer_valid && hull_abi.vertex_buffer_usage_mask==1);
+        assert(hull_abi.lds_slot==UINT32_MAX && !hull_abi.fragment_count);
+        hull_abi.ring_table_low=0x4000;hull_abi.ring_table_high=2;
+        uint32_t bank[16],pixel[16],tables[4]={0};
+        assert(!ps5vk_runtime_draw_values_sets(&hull_abi,7,9,0,0,0x2000,0,
+            tables,bank,pixel));
+        assert(bank[0]==7 && bank[1]==9 && bank[2]==0x2000 &&
+               bank[4]==0x4000 && bank[5]==2);
+        uint32_t saved_bank[16];memcpy(saved_bank,bank,sizeof(bank));
+        assert(ps5vk_runtime_draw_values_sets(&hull_abi,7,9,0,0,0,0,tables,bank,pixel));
+        assert(!memcmp(saved_bank,bank,sizeof(bank)));
+        const struct ps5vk_runtime_draw_abi saved=hull_abi;
+        hull.vertex_buffer_table_user_data_dword=4; /* collides with ring */
+        assert(ps5vk_runtime_hull_abi_build(&hull,&hull_abi));
+        assert(!memcmp(&saved,&hull_abi,sizeof(saved)));
+        hull.vertex_buffer_table_user_data_dword=2;
+        hull.user_data_window_base=0;
+        assert(ps5vk_runtime_hull_abi_build(&hull,&hull_abi));
+        hull.user_data_window_base=8;hull.ngg_lds_layout_valid=true;
+        assert(ps5vk_runtime_hull_abi_build(&hull,&hull_abi));
+        hull.ngg_lds_layout_valid=false;hull.ps5_ring_table_user_data_dword=5;
+        assert(ps5vk_runtime_hull_abi_build(&hull,&hull_abi));
     }
     puts("Runtime shader header: pass (11 registers, relative semantics, rejection without mutation)");
     return 0;
