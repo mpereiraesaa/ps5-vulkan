@@ -14,11 +14,14 @@
 #include "multiview_witness.h"
 #include "clip_cull_witness.h"
 #include "geometry_witness.h"
+#include "tess_point_matrix.h"
+#include "tess_discard_oracle.h"
 /* The private semantic keys the profile pairs producer and consumer words on
  * (the clip/cull distance registers among them). */
 #include "libpsbc/psbc_compile.h"
 #include "vk_render_pass.h"
 #include "color_detile.h"
+#include "compilation_cache.h"
 
 #include "vk_image_transfer.h"
 #include "texture_layout.h"
@@ -37,6 +40,18 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY
+extern int32_t sceAgcDriverGetTFRing(uint64_t *,uint32_t *);
+extern int32_t sceAgcDriverSetTFRing(uint64_t,uint32_t);
+extern int32_t sceAgcDriverGetHsOffchipParam(uint16_t *,uint16_t *);
+#endif
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 3
+#include "tess_ring_lease.h"
+static int tess_ring_get(void *unused,uint64_t *address,uint32_t *size)
+{ (void)unused;return sceAgcDriverGetTFRing(address,size); }
+static int tess_ring_set(void *unused,uint64_t address,uint32_t size)
+{ (void)unused;return sceAgcDriverSetTFRing(address,size); }
+#endif
 #if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
 extern int32_t __real_sceAgcInit(uint32_t);
 int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
@@ -2612,7 +2627,7 @@ static void geometry_probe(VkDevice d)
     vkDestroyShaderModule(d,family_vertex_module,NULL);
     vkDestroyShaderModule(d,points_module,NULL);
     vkDestroyShaderModule(d,lines_module,NULL);
-#if PS5VK_TESS_PROBE && (PS5VK_TESS_VARIANT==1 || PS5VK_TESS_VARIANT==2 || PS5VK_TESS_VARIANT==4)
+#if PS5VK_TESS_PROBE && (PS5VK_TESS_VARIANT==1 || PS5VK_TESS_VARIANT==2 || PS5VK_TESS_VARIANT>=4)
     extern unsigned ps5vk_pipeline_refusal_site(void);
     /* CONTROL A (PS5VK_TESS_VARIANT==1) and CONTROL B (==2). Exactly ONE of
      * them is compiled into an executable, and the executable draws it once:
@@ -2635,7 +2650,179 @@ static void geometry_probe(VkDevice d)
      * A fails -> generated primitive/domain launch and factor interpretation.
      * A and B both fail -> the common hull/domain launch state, the merged
      * program ABI and the VGT/GE programming. */
-#if PS5VK_TESS_VARIANT==1
+#if PS5VK_TESS_VARIANT==56
+#define PS5VK_TESS_CONTROL_NAME "AN-push-member"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_push_member_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_delivery_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_push_member_vertex
+#elif PS5VK_TESS_VARIANT==54 || PS5VK_TESS_VARIANT==55
+#if PS5VK_TESS_VARIANT==54
+#define PS5VK_TESS_CONTROL_NAME "AL-indexed-instance"
+#else
+#define PS5VK_TESS_CONTROL_NAME "AM-indexed-indirect-instance"
+#endif
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_delivery_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_delivery_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_indexed_instance_vertex
+#elif PS5VK_TESS_VARIANT==53
+#define PS5VK_TESS_CONTROL_NAME "AK-swapped-modes"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_swapped_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_swapped_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT>=44 && PS5VK_TESS_VARIANT<=52
+#define PS5VK_TESS_CONTROL_NAME "AJ-discard-matrix"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_discard_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_discard_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#define PS5VK_TESS_CONTROL_VERTICES 51u
+#elif PS5VK_TESS_VARIANT>=35 && PS5VK_TESS_VARIANT<=43
+#define PS5VK_TESS_CONTROL_NAME "AI-point-matrix"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_matrix_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_matrix_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==34
+#define PS5VK_TESS_CONTROL_NAME "AH-evaluation-outputs"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_output_envelope_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==33
+#define PS5VK_TESS_CONTROL_NAME "AG-dynamic-distance"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_mixed_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==32
+#define PS5VK_TESS_CONTROL_NAME "AF-mixed-distance"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_mixed_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==31
+#define PS5VK_TESS_CONTROL_NAME "AE-cull-only"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_cullonly_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==30
+#define PS5VK_TESS_CONTROL_NAME "AD-total-components"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_total_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_total_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_envelope_vertex
+#elif PS5VK_TESS_VARIANT==29
+#define PS5VK_TESS_CONTROL_NAME "AC-level64-points"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_level64_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_level64_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==28
+#define PS5VK_TESS_CONTROL_NAME "AB-joint-envelopes"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_joint_envelope_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_joint_envelope_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_joint_envelope_vertex
+#elif PS5VK_TESS_VARIANT==27
+#define PS5VK_TESS_CONTROL_NAME "AA-patch-envelope"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_patch_envelope_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_patch_envelope_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==26
+#define PS5VK_TESS_CONTROL_NAME "Z-component-envelope"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_envelope_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_envelope_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_envelope_vertex
+#elif PS5VK_TESS_VARIANT==24 || PS5VK_TESS_VARIANT==25
+#if PS5VK_TESS_VARIANT==25
+#define PS5VK_TESS_CONTROL_NAME "Y-indirect-instance"
+#else
+#define PS5VK_TESS_CONTROL_NAME "X-instance-delivery"
+#endif
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_delivery_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_delivery_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_instance_vertex
+#elif PS5VK_TESS_VARIANT==22 || PS5VK_TESS_VARIANT==23
+#if PS5VK_TESS_VARIANT==23
+#define PS5VK_TESS_CONTROL_NAME "W-indexed32-delivery"
+#else
+#define PS5VK_TESS_CONTROL_NAME "V-indexed-delivery"
+#endif
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_delivery_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_delivery_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_indexed_vertex
+#elif PS5VK_TESS_VARIANT>=18 && PS5VK_TESS_VARIANT<=21
+#if PS5VK_TESS_VARIANT==18
+#define PS5VK_TESS_CONTROL_NAME "R-dense-color"
+#elif PS5VK_TESS_VARIANT==21
+#define PS5VK_TESS_CONTROL_NAME "U-constant-blend"
+#elif PS5VK_TESS_VARIANT==20
+#define PS5VK_TESS_CONTROL_NAME "T-source-blend"
+#else
+#define PS5VK_TESS_CONTROL_NAME "S-dense-blend"
+#endif
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_quad_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_dense_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==16
+#define PS5VK_TESS_CONTROL_NAME "P-domain-geometry"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_quad_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_points_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==14 || PS5VK_TESS_VARIANT==15
+#if PS5VK_TESS_VARIANT==15
+#define PS5VK_TESS_CONTROL_NAME "O-cache-reuse"
+#else
+#define PS5VK_TESS_CONTROL_NAME "N-stage-specialization"
+#endif
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_spec_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_spec_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_spec_vertex
+#elif PS5VK_TESS_VARIANT==13 || PS5VK_TESS_VARIANT==17
+#if PS5VK_TESS_VARIANT==17
+#define PS5VK_TESS_CONTROL_NAME "Q-blend-overlap"
+#else
+#define PS5VK_TESS_CONTROL_NAME "M-quad-points"
+#endif
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_quad_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_points_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==12
+#define PS5VK_TESS_CONTROL_NAME "L-unused-vs-output"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_expand32_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_patch32_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_unused_output_vertex
+#elif PS5VK_TESS_VARIANT==11
+#define PS5VK_TESS_CONTROL_NAME "K-expand3-to32"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_expand32_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_patch32_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_patch32_vertex
+#elif PS5VK_TESS_VARIANT==10
+#define PS5VK_TESS_CONTROL_NAME "J-patch32-barrier"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_patch32_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_patch32_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_patch32_vertex
+#define PS5VK_TESS_CONTROL_VERTICES 32u
+#elif PS5VK_TESS_VARIANT==9
+#define PS5VK_TESS_CONTROL_NAME "I-isoline-linear"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_isoline_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_isoline_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==8
+#define PS5VK_TESS_CONTROL_NAME "H-quad-linear"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_quad_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_quad_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
+#elif PS5VK_TESS_VARIANT==7
+#define PS5VK_TESS_CONTROL_NAME "G-patch-data-linear"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_patch_data_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_patch_data_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_two_patch_vertex
+#define PS5VK_TESS_CONTROL_VERTICES 6u
+#elif PS5VK_TESS_VARIANT==6
+#define PS5VK_TESS_CONTROL_NAME "F-two-patch-linear"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_delivery_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_delivery_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_two_patch_vertex
+#define PS5VK_TESS_CONTROL_VERTICES 6u
+#elif PS5VK_TESS_VARIANT==5
+#define PS5VK_TESS_CONTROL_NAME "E-offchip-linear"
+#define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_delivery_control
+#define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_delivery_evaluation
+#define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_delivery_vertex
+#elif PS5VK_TESS_VARIANT==1
 #define PS5VK_TESS_CONTROL_NAME "A-tesscoord-nonzero"
 #define PS5VK_TESS_CONTROL_CODE ps5vk_runtime_tess_coord_control
 #define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_coord_evaluation
@@ -2677,34 +2864,67 @@ static void geometry_probe(VkDevice d)
 #define PS5VK_TESS_COORD_EVAL ps5vk_runtime_tess_coord_evaluation
 #define PS5VK_TESS_COORD_VERT ps5vk_runtime_tess_coord_vertex
 #endif
-    VkShaderModule coord_modules[4];
+    enum { coord_stage_count=PS5VK_TESS_VARIANT==16?5:4 };
+    VkShaderModule coord_modules[coord_stage_count];
     {
-    const struct { const uint32_t *code; size_t bytes; } coord_codes[4]={
+    const struct { const uint32_t *code; size_t bytes; } coord_codes[coord_stage_count]={
         {PS5VK_TESS_COORD_VERT,sizeof(PS5VK_TESS_COORD_VERT)},
         {PS5VK_TESS_CONTROL_CODE,sizeof(PS5VK_TESS_CONTROL_CODE)},
         {PS5VK_TESS_COORD_EVAL,sizeof(PS5VK_TESS_COORD_EVAL)},
-        {ps5vk_runtime_tess_coord_fragment,sizeof(ps5vk_runtime_tess_coord_fragment)}};
-    for(unsigned i=0;i<4;++i) {
+#if PS5VK_TESS_VARIANT==34 || PS5VK_TESS_VARIANT==53
+        {ps5vk_runtime_tess_output_envelope_fragment,sizeof(ps5vk_runtime_tess_output_envelope_fragment)}
+#elif PS5VK_TESS_VARIANT==33
+        {ps5vk_runtime_tess_dynamic_distance_fragment,sizeof(ps5vk_runtime_tess_dynamic_distance_fragment)}
+#elif PS5VK_TESS_VARIANT==32
+        {ps5vk_runtime_tess_mixed_fragment,sizeof(ps5vk_runtime_tess_mixed_fragment)}
+#elif PS5VK_TESS_VARIANT==31
+        {ps5vk_runtime_tess_cullonly_fragment,sizeof(ps5vk_runtime_tess_cullonly_fragment)}
+#elif PS5VK_TESS_VARIANT>=18 && PS5VK_TESS_VARIANT<=21
+        {ps5vk_runtime_tess_dense_fragment,sizeof(ps5vk_runtime_tess_dense_fragment)}
+#elif PS5VK_TESS_VARIANT==17
+        {ps5vk_runtime_tess_blend_fragment,sizeof(ps5vk_runtime_tess_blend_fragment)}
+#else
+        {ps5vk_runtime_tess_coord_fragment,sizeof(ps5vk_runtime_tess_coord_fragment)}
+#endif
+#if PS5VK_TESS_VARIANT==16
+        ,{ps5vk_runtime_tess_points_geometry,sizeof(ps5vk_runtime_tess_points_geometry)}
+#endif
+        };
+    for(unsigned i=0;i<coord_stage_count;++i) {
         VkShaderModuleCreateInfo mi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .codeSize=coord_codes[i].bytes,.pCode=coord_codes[i].code};
         CHECK(vkCreateShaderModule(d,&mi,NULL,&coord_modules[i]));
     }
     }
     {
-        const VkShaderStageFlagBits coord_stages[4]={
+        const VkShaderStageFlagBits coord_stages[coord_stage_count]={
             VK_SHADER_STAGE_VERTEX_BIT,VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
-            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,VK_SHADER_STAGE_FRAGMENT_BIT};
-        VkPipelineShaderStageCreateInfo coord_stage_infos[4];
-        for(unsigned i=0;i<4;++i)
+            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,VK_SHADER_STAGE_FRAGMENT_BIT
+#if PS5VK_TESS_VARIANT==16
+            ,VK_SHADER_STAGE_GEOMETRY_BIT
+#endif
+            };
+        VkPipelineShaderStageCreateInfo coord_stage_infos[coord_stage_count];
+        for(unsigned i=0;i<coord_stage_count;++i)
             coord_stage_infos[i]=(VkPipelineShaderStageCreateInfo){
                 .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage=coord_stages[i],.module=coord_modules[i],.pName="main"};
+#if PS5VK_TESS_VARIANT==14 || PS5VK_TESS_VARIANT==15
+        float coord_spec_values[3]={0.25f,0.5f,0.75f};
+        VkSpecializationMapEntry coord_spec_entry={.constantID=0,.offset=0,.size=4};
+        VkSpecializationInfo coord_specs[3];
+        for(unsigned s=0;s<3;++s) {
+            coord_specs[s]=(VkSpecializationInfo){.mapEntryCount=1,
+                .pMapEntries=&coord_spec_entry,.dataSize=4,.pData=&coord_spec_values[s]};
+            coord_stage_infos[s].pSpecializationInfo=&coord_specs[s];
+        }
+#endif
         VkPipelineInputAssemblyStateCreateInfo coord_ia={
             .sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
         VkPipelineTessellationStateCreateInfo coord_ts={
             .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
-            .patchControlPoints=3};
+            .patchControlPoints=PS5VK_TESS_VARIANT==10?32:3};
         VkPipelineVertexInputStateCreateInfo coord_vi={
             .sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         VkPipelineRasterizationStateCreateInfo coord_raster={
@@ -2718,10 +2938,31 @@ static void geometry_probe(VkDevice d)
             .sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
             .viewportCount=1,.pViewports=&coord_vp_v,.scissorCount=1,.pScissors=&coord_vp_s};
         VkPipelineColorBlendAttachmentState coord_blend_a={.colorWriteMask=15};
+#if PS5VK_TESS_VARIANT==17 || (PS5VK_TESS_VARIANT>=19 && PS5VK_TESS_VARIANT<=21)
+        coord_blend_a.blendEnable=VK_TRUE;
+        coord_blend_a.srcColorBlendFactor=coord_blend_a.srcAlphaBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;
+        coord_blend_a.dstColorBlendFactor=coord_blend_a.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;
+#if PS5VK_TESS_VARIANT==20 || PS5VK_TESS_VARIANT==21
+        coord_blend_a.dstColorBlendFactor=coord_blend_a.dstAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;
+#endif
+#endif
         VkPipelineColorBlendStateCreateInfo coord_blend={
             .sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .attachmentCount=1,.pAttachments=&coord_blend_a};
+#if PS5VK_TESS_VARIANT==21
+        coord_blend_a.srcColorBlendFactor=coord_blend_a.srcAlphaBlendFactor=VK_BLEND_FACTOR_CONSTANT_ALPHA;
+        coord_blend.blendConstants[3]=0.25f;
+#endif
         VkPipelineLayout coord_layout=layout;
+#if PS5VK_TESS_VARIANT==56
+        const VkPushConstantRange member_ranges[2]={
+            {VK_SHADER_STAGE_VERTEX_BIT,0,16},
+            {VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,16,68}};
+        const VkPipelineLayoutCreateInfo member_layout_info={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pushConstantRangeCount=2,.pPushConstantRanges=member_ranges};
+        CHECK(vkCreatePipelineLayout(d,&member_layout_info,NULL,&coord_layout));
+#endif
 #if PS5VK_TESS_VARIANT==4
         /* The witness storage buffer, its descriptor set and a pipeline
          * layout that names it. Host-visible and read straight back after the
@@ -2948,11 +3189,16 @@ static void geometry_probe(VkDevice d)
 #endif
         VkGraphicsPipelineCreateInfo coord_pi={
             .sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .layout=coord_layout,.renderPass=pass,.stageCount=4,
+            .layout=coord_layout,.renderPass=pass,.stageCount=coord_stage_count,
             .pStages=coord_stage_infos,.pVertexInputState=&coord_vi,
             .pInputAssemblyState=&coord_ia,.pTessellationState=&coord_ts,
             .pRasterizationState=&coord_raster,.pMultisampleState=&coord_ms,
             .pViewportState=&coord_vp,.pColorBlendState=&coord_blend};
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 4
+        /* Disjoint scissors make both draws necessary to complete the oracle;
+         * drawing the identical full image twice would not prove both ran. */
+        coord_vp_s.extent.width=extent/2;
+#endif
         VkPipeline coord_pipeline;
         const VkResult coord_rc=vkCreateGraphicsPipelines(d,0,1,&coord_pi,NULL,
             &coord_pipeline);
@@ -2962,6 +3208,12 @@ static void geometry_probe(VkDevice d)
             if(!coord_native || !coord_native->pair || !coord_native->pair->ready ||
                !coord_native->pair->tessellation)
                 fail("tess-coord-pipeline",-1);
+#if PS5VK_TESS_VARIANT==16
+            if(!coord_native->pair->geometry_preraster)
+                fail("tess-geometry-pipeline",-1);
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_GEOMETRY stages=5 shift_x=4 shift_y=-4 color=gbr");
+#endif
             VkCommandPool coord_pool;
             VkCommandPoolCreateInfo coord_pci={
                 .sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -2986,8 +3238,103 @@ static void geometry_probe(VkDevice d)
                 vkDestroyCommandPool(d,coord_pool,NULL);
                 goto coord_done;
             }
+            VkPipeline coord_shared_pipeline=VK_NULL_HANDLE;
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 4
+            coord_vp_s.offset.x=extent/2;
+            coord_vp_s.extent.width=extent-extent/2;
+#if PS5VK_TESS_VARIANT==14 || PS5VK_TESS_VARIANT==15
+            coord_spec_values[0]=0.75f;
+            coord_spec_values[1]=0.25f;
+            coord_spec_values[2]=0.5f;
+#endif
+            CHECK(vkCreateGraphicsPipelines(d,0,1,&coord_pi,NULL,&coord_shared_pipeline));
+#if PS5VK_TESS_VARIANT==15
+            /* Reconstruct from a cache lease, then retire the original owner
+             * before recording the draw. A compilation-only hit is insufficient. */
+            struct ps5vk_compilation_cache *coord_cache=d->graphics_compiler_context;
+            struct ps5vk_cache_stats before,after;
+            if(!coord_cache)fail("tess-cache-absent",-1);
+            ps5vk_compilation_cache_get_stats(coord_cache,&before);
+            VkPipeline warm_pipeline=VK_NULL_HANDLE;
+            CHECK(vkCreateGraphicsPipelines(d,0,1,&coord_pi,NULL,&warm_pipeline));
+            ps5vk_compilation_cache_get_stats(coord_cache,&after);
+            if(after.hits!=before.hits+1 || after.compiles!=before.compiles)
+                fail("tess-cache-reuse",-1);
+            vkDestroyPipeline(d,coord_shared_pipeline,NULL);
+            coord_shared_pipeline=warm_pipeline;
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_CACHE_REUSE hits_delta=%llu compiles_delta=%llu original_destroyed=1",
+                (unsigned long long)(after.hits-before.hits),
+                (unsigned long long)(after.compiles-before.compiles));
+#endif
+            const struct ps5vk_native_graphics_pipeline *shared_native=
+                coord_shared_pipeline->graphics_state;
+            if(!shared_native || !shared_native->pair ||
+               !coord_native->shared_rings ||
+               shared_native->shared_rings!=coord_native->shared_rings ||
+               shared_native->pair->tess_rings!=coord_native->pair->tess_rings)
+                fail("tess-shared-storage",-1);
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_SHARED_STORAGE pipelines=2 same_storage=1 split_scissors=1");
+#endif
             VkCommandBufferBeginInfo coord_begin={
                 .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
+            /* Nonzero offset and zero-instance decoy catch offset mistakes.
+             * This backend resolves arguments on the host at submission. */
+#if PS5VK_TESS_VARIANT==55
+            const VkDrawIndexedIndirectCommand coord_args[2]={{3,0,1,-65536,0},{3,2,1,-65536,3}};
+#else
+            const VkDrawIndirectCommand coord_args[2]={{3,0,0,0},{3,2,0,3}};
+#endif
+            VkBuffer coord_ab=VK_NULL_HANDLE;
+            VkDeviceMemory coord_am=VK_NULL_HANDLE;
+            VkBufferCreateInfo coord_abi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .size=sizeof(coord_args),.usage=VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT};
+            CHECK(vkCreateBuffer(d,&coord_abi,NULL,&coord_ab));
+            VkMemoryRequirements coord_ar;
+            vkGetBufferMemoryRequirements(d,coord_ab,&coord_ar);
+            VkMemoryAllocateInfo coord_ami={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize=coord_ar.size};
+            CHECK(vkAllocateMemory(d,&coord_ami,NULL,&coord_am));
+            CHECK(vkBindBufferMemory(d,coord_ab,coord_am,0));
+            void *coord_arg_map;
+            CHECK(vkMapMemory(d,coord_am,0,VK_WHOLE_SIZE,0,&coord_arg_map));
+            memcpy(coord_arg_map,coord_args,sizeof(coord_args));
+            VkMappedMemoryRange coord_af={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory=coord_am,.size=VK_WHOLE_SIZE};
+            CHECK(vkFlushMappedMemoryRanges(d,1,&coord_af));
+            vkUnmapMemory(d,coord_am);
+#endif
+#if PS5VK_TESS_VARIANT==22 || PS5VK_TESS_VARIANT==23 || PS5VK_TESS_VARIANT==54 || PS5VK_TESS_VARIANT==55
+#if PS5VK_TESS_VARIANT!=22
+            const uint32_t coord_indices[]={UINT32_MAX,UINT32_MAX,65541,65538,65543,UINT32_MAX};
+            const VkIndexType coord_index_type=VK_INDEX_TYPE_UINT32;
+            const int32_t coord_base_vertex=-65536;
+#else
+            const uint16_t coord_indices[]={0xffff,0xffff,4,1,6,0xffff};
+            const VkIndexType coord_index_type=VK_INDEX_TYPE_UINT16;
+            const int32_t coord_base_vertex=1;
+#endif
+            VkBuffer coord_ib=VK_NULL_HANDLE;
+            VkDeviceMemory coord_im=VK_NULL_HANDLE;
+            VkBufferCreateInfo coord_ibi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .size=sizeof(coord_indices),.usage=VK_BUFFER_USAGE_INDEX_BUFFER_BIT};
+            CHECK(vkCreateBuffer(d,&coord_ibi,NULL,&coord_ib));
+            VkMemoryRequirements coord_ir;
+            vkGetBufferMemoryRequirements(d,coord_ib,&coord_ir);
+            VkMemoryAllocateInfo coord_imi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize=coord_ir.size};
+            CHECK(vkAllocateMemory(d,&coord_imi,NULL,&coord_im));
+            CHECK(vkBindBufferMemory(d,coord_ib,coord_im,0));
+            void *coord_ix_map;
+            CHECK(vkMapMemory(d,coord_im,0,VK_WHOLE_SIZE,0,&coord_ix_map));
+            memcpy(coord_ix_map,coord_indices,sizeof(coord_indices));
+            VkMappedMemoryRange coord_flush={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory=coord_im,.size=VK_WHOLE_SIZE};
+            CHECK(vkFlushMappedMemoryRanges(d,1,&coord_flush));
+            vkUnmapMemory(d,coord_im);
+#endif
             CHECK(vkBeginCommandBuffer(coord_cb,&coord_begin));
             VkClearValue coord_clear={.color={.float32={0.0f,0.0f,0.0f,1.0f}}};
             VkRenderPassBeginInfo coord_rbi={
@@ -2997,12 +3344,89 @@ static void geometry_probe(VkDevice d)
                 .clearValueCount=1,.pClearValues=&coord_clear};
             vkCmdBeginRenderPass(coord_cb,&coord_rbi,VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(coord_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,coord_pipeline);
+#if PS5VK_TESS_VARIANT==56
+            const float vertex_push[4]={0.125f,0.25f,0.5f,0.0f};
+            struct {float hull[4][4];int32_t selected;} member_push={.selected=1};
+            for(unsigned i=0;i<4;++i)for(unsigned j=0;j<4;++j)
+                member_push.hull[i][j]=(float)(i+1)*0.0625f;
+            vkCmdPushConstants(coord_cb,coord_layout,VK_SHADER_STAGE_VERTEX_BIT,
+                0,sizeof(vertex_push),vertex_push);
+            vkCmdPushConstants(coord_cb,coord_layout,VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+                16,sizeof(member_push),&member_push);
+            ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_PUSH_MEMBER vertex=0:16 control=16:68 selected=1");
+#endif
 #if PS5VK_TESS_VARIANT==4
             vkCmdBindDescriptorSets(coord_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,
                 coord_layout,0,1,&coord_witness_set,0,NULL);
 #endif
             /* ONE patch, three control points. */
-            vkCmdDraw(coord_cb,3,1,0,0);
+#ifndef PS5VK_TESS_CONTROL_VERTICES
+#define PS5VK_TESS_CONTROL_VERTICES 3u
+#endif
+#if PS5VK_TESS_VARIANT==54 || PS5VK_TESS_VARIANT==55
+            vkCmdBindIndexBuffer(coord_cb,coord_ib,sizeof(coord_indices[0]),coord_index_type);
+#if PS5VK_TESS_VARIANT==55
+            (void)coord_base_vertex;
+            vkCmdDrawIndexedIndirect(coord_cb,coord_ab,sizeof(VkDrawIndexedIndirectCommand),1,0);
+#else
+            vkCmdDrawIndexed(coord_cb,3,2,1,coord_base_vertex,3);
+#endif
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_INDEXED_INSTANCE indirect=%u binding_offset=4 first_index=1 vertex_offset=-65536 instances=2 first_instance=3",
+                (unsigned)(PS5VK_TESS_VARIANT==55));
+#elif PS5VK_TESS_VARIANT==25
+            vkCmdDrawIndirect(coord_cb,coord_ab,sizeof(VkDrawIndirectCommand),1,0);
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_INDIRECT offset=16 count=1 vertices=3 instances=2 first_vertex=0 first_instance=3 resolver=host_submit");
+#elif PS5VK_TESS_VARIANT==24
+            vkCmdDraw(coord_cb,3,2,0,3);
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_INSTANCE count=2 first=3 expected_ids=3,4");
+#elif PS5VK_TESS_VARIANT==22 || PS5VK_TESS_VARIANT==23
+            vkCmdBindIndexBuffer(coord_cb,coord_ib,sizeof(coord_indices[0]),coord_index_type);
+            vkCmdDrawIndexed(coord_cb,3,1,1,coord_base_vertex,0);
+#if PS5VK_TESS_VARIANT==23
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_INDEXED type=uint32 binding_offset=4 first_index=1 vertex_offset=-65536 indices=65541,65538,65543");
+#else
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_INDEXED type=uint16 binding_offset=2 first_index=1 vertex_offset=1 indices=4,1,6");
+#endif
+#else
+            vkCmdDraw(coord_cb,PS5VK_TESS_CONTROL_VERTICES,1,0,0);
+#endif
+#if PS5VK_TESS_VARIANT==17 || (PS5VK_TESS_VARIANT>=19 && PS5VK_TESS_VARIANT<=21)
+            vkCmdDraw(coord_cb,PS5VK_TESS_CONTROL_VERTICES,1,0,0);
+            vkCmdDraw(coord_cb,PS5VK_TESS_CONTROL_VERTICES,1,0,0);
+#if PS5VK_TESS_VARIANT==21
+            ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_BLEND draws=3 alpha=0.25 src=CONSTANT_ALPHA dst=ZERO op=ADD");
+#elif PS5VK_TESS_VARIANT==20
+            ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_BLEND draws=3 alpha=0.25 src=SRC_ALPHA dst=ZERO op=ADD");
+#else
+            ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_BLEND draws=3 alpha=0.25 src=SRC_ALPHA dst=ONE op=ADD");
+#endif
+#endif
+            if(coord_shared_pipeline) {
+                vkCmdBindPipeline(coord_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    coord_shared_pipeline);
+#if PS5VK_TESS_VARIANT==55
+                vkCmdDrawIndexedIndirect(coord_cb,coord_ab,sizeof(VkDrawIndexedIndirectCommand),1,0);
+#elif PS5VK_TESS_VARIANT==54
+                vkCmdDrawIndexed(coord_cb,3,2,1,coord_base_vertex,3);
+#elif PS5VK_TESS_VARIANT==25
+                vkCmdDrawIndirect(coord_cb,coord_ab,sizeof(VkDrawIndirectCommand),1,0);
+#elif PS5VK_TESS_VARIANT==24
+                vkCmdDraw(coord_cb,3,2,0,3);
+#elif PS5VK_TESS_VARIANT==22 || PS5VK_TESS_VARIANT==23
+                vkCmdDrawIndexed(coord_cb,3,1,1,coord_base_vertex,0);
+#else
+                vkCmdDraw(coord_cb,PS5VK_TESS_CONTROL_VERTICES,1,0,0);
+#endif
+#if PS5VK_TESS_VARIANT==17 || (PS5VK_TESS_VARIANT>=19 && PS5VK_TESS_VARIANT<=21)
+                vkCmdDraw(coord_cb,PS5VK_TESS_CONTROL_VERTICES,1,0,0);
+                vkCmdDraw(coord_cb,PS5VK_TESS_CONTROL_VERTICES,1,0,0);
+#endif
+            }
             vkCmdEndRenderPass(coord_cb);
             CHECK(vkEndCommandBuffer(coord_cb));
 #if defined(PS5VK_TESS_PREFILL) && PS5VK_TESS_PREFILL
@@ -3101,36 +3525,99 @@ static void geometry_probe(VkDevice d)
                 }
             }
 #endif
-            tess_receipt(PS5VK_TESS_CONTROL_NAME,coord_native,3u);
-            /* A BOUNDED wait, not vkQueueWaitIdle.
-             *
-             * The patch draw does not fault, it HANGS: the process logs its
-             * suspend point, goes quiet for about a second and a half and is
-             * then killed by a watchdog, where a clean run goes quiet for
-             * seven milliseconds and exits. Waiting forever means the payload
-             * never survives to report anything, so every question about what
-             * the hull actually did has had to be asked from outside the
-             * process - and the external debugger cannot reach the rings,
-             * which live in direct memory outside the process map.
-             *
-             * Waiting on a fence with a timeout keeps the payload alive. If
-             * the draw retires, everything proceeds exactly as before. If it
-             * stalls, the harness says so and then reads the TESSELLATION
-             * FACTOR RING, whose address it takes from the ring table's own
-             * entry 5 rather than from a constant, and reports its first
-             * words. The ring is zeroed at create, so any non-zero value is
-             * unambiguous evidence that the control half executed and wrote
-             * its levels; all zeros says the waves never got that far. That
-             * single question has been assumed in both directions all
-             * session and never measured. */
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 3
+            struct ps5vk_tess_ring_lease tf_lease={0};
+#endif
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY
+            {
+                uint64_t ring_address=UINT64_MAX;
+                uint32_t ring_size=UINT32_MAX;
+                uint16_t first=UINT16_MAX,second=UINT16_MAX;
+                int32_t ring_rc=sceAgcDriverGetTFRing(&ring_address,&ring_size);
+                int32_t offchip_rc=sceAgcDriverGetHsOffchipParam(&first,&second);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_DRIVER_QUERY ring_rc=%d base=%08x%08x size_raw=%08x offchip_rc=%d first_raw=%04x second_raw=%04x",
+                    ring_rc,(uint32_t)(ring_address>>32),(uint32_t)ring_address,
+                    ring_size,offchip_rc,(unsigned)first,(unsigned)second);
+#if PS5VK_TESS_RING_QUERY == 3
+                if(ring_rc || ring_address==UINT64_MAX || ring_size==UINT32_MAX)
+                    fail("tess ring snapshot",VK_ERROR_UNKNOWN);
+                const uint32_t *table=(const uint32_t *)coord_native->pair->tess_rings;
+                const uint64_t own=((uint64_t)table[21]<<32)|table[20];
+                if((own&255u) || table[22]<65536u*4u)
+                    fail("tess bound ring bounds",VK_ERROR_UNKNOWN);
+                const struct ps5vk_tess_ring_ops ops={NULL,tess_ring_get,tess_ring_set};
+                int bind_rc=ps5vk_tess_ring_bind(&tf_lease,&ops,own,65536u);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_RING_BOUND rc=%d state=%u match=%u raw_size=%08x",
+                    bind_rc,(unsigned)tf_lease.state,(unsigned)(bind_rc==0),65536u);
+                if(bind_rc) {
+                    fail("tess ring bind",VK_ERROR_DEVICE_LOST);
+                }
+#elif PS5VK_TESS_RING_QUERY == 2
+                /* No GPU work between set/get/restore. Small raw size fits
+                 * this owned allocation whether the API counts bytes or
+                 * dwords. This experiment does NOT establish size units. */
+                if(ring_rc!=0 || ring_address==UINT64_MAX || ring_size==UINT32_MAX)
+                    fail("tess ring snapshot",VK_ERROR_UNKNOWN);
+                const uint32_t *table=(const uint32_t *)coord_native->pair->tess_rings;
+                const uint64_t own=((uint64_t)table[21]<<32)|table[20];
+                if((own&255u) || table[22]<4096u*4u)
+                    fail("tess ring roundtrip bounds",VK_ERROR_UNKNOWN);
+                uint64_t got=UINT64_MAX,restored=UINT64_MAX;
+                uint32_t got_size=UINT32_MAX,restored_size=UINT32_MAX;
+                int32_t set_rc=sceAgcDriverSetTFRing(own,4096u);
+                int32_t get_rc=sceAgcDriverGetTFRing(&got,&got_size);
+                /* Restore even when the attempted setter/getter failed. */
+                int32_t restore_rc=sceAgcDriverSetTFRing(ring_address,ring_size);
+                int32_t verify_rc=sceAgcDriverGetTFRing(&restored,&restored_size);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_RING_ROUNDTRIP set=%d get=%d match=%u size=%08x restore=%d verify=%d restored=%u",
+                    set_rc,get_rc,(unsigned)(got==own && got_size==4096u),got_size,
+                    restore_rc,verify_rc,(unsigned)(restored==ring_address && restored_size==ring_size));
+                if(restore_rc || verify_rc || restored!=ring_address || restored_size!=ring_size)
+                    fail("tess ring restore",VK_ERROR_UNKNOWN);
+#endif
+            }
+#endif
+            tess_receipt(PS5VK_TESS_CONTROL_NAME,coord_native,PS5VK_TESS_CONTROL_VERTICES);
+            /* Bound diagnostic waits so a stalled candidate cannot silently
+             * wait forever. Earlier candidates stalled; ring-bound controls
+             * now retire and pass their pixel oracle. Neither behavior is a
+             * guarantee for a new candidate. Unretired memory observations
+             * are diagnostics only: zero bytes do not prove non-execution,
+             * and sentinel/pre-filled bytes do not prove GPU writes. The
+             * bound-ring path below retains backing on unresolved work and
+             * restores prior device state only after successful completion. */
             VkFence coord_fence=VK_NULL_HANDLE;
             VkFenceCreateInfo coord_fi={.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
             CHECK(vkCreateFence(d,&coord_fi,NULL,&coord_fence));
             VkSubmitInfo coord_submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
                 .commandBufferCount=1,.pCommandBuffers=&coord_cb};
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 3
+            if(ps5vk_tess_ring_submitting(&tf_lease))
+                fail("tess ring submitting",VK_ERROR_DEVICE_LOST);
+#endif
             CHECK(vkQueueSubmit(queue,1,&coord_submit,coord_fence));
             const VkResult coord_wait=
                 vkWaitForFences(d,1,&coord_fence,VK_TRUE,300000000ull);
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY >= 3
+            /* An unresolved submission retains its backing until process
+             * closure; never destroy the pipeline or restore a live ring. */
+            if(coord_wait!=VK_SUCCESS)
+                fail("tess bound ring fence",VK_ERROR_DEVICE_LOST);
+#endif
+#if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 3
+            {
+                if(ps5vk_tess_ring_completed(&tf_lease))
+                    fail("tess ring completed",VK_ERROR_DEVICE_LOST);
+                int rc=ps5vk_tess_ring_restore(&tf_lease);
+                ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_RING_RESTORED rc=%d state=%u match=%u",
+                    rc,(unsigned)tf_lease.state,(unsigned)(rc==0));
+                if(rc)
+                    fail("tess bound ring restore",VK_ERROR_DEVICE_LOST);
+            }
+#endif
             if(coord_wait!=VK_SUCCESS) {
                 const uint32_t *coord_table=
                     (const uint32_t *)coord_native->pair->tess_rings;
@@ -3206,6 +3693,42 @@ static void geometry_probe(VkDevice d)
                     "PS5VK_TESS_GPU_LAUNCH max=%08x min=%08x prim=%08x pc=%08x es=%08x gs1=%08x gs2=%08x ls=%08x",
                     coord_table[40],coord_table[41],coord_table[42],coord_table[43],
                     coord_table[44],coord_table[45],coord_table[46],coord_table[47]);
+#if defined(PS5VK_TESS_ENTRY_WITNESS) && PS5VK_TESS_ENTRY_WITNESS
+                /* Read the witness only after the successful GPU fence.
+                 * Invalidate its cache line; never follow these pointers. */
+                __asm__ volatile("clflush (%0)"::"r"((const char *)coord_table+192):"memory");
+                __asm__ volatile("mfence":::"memory");
+                const volatile uint32_t *entry=coord_table+48;
+                ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_ENTRY_DEST table=%08x%08x",
+                    (uint32_t)((uintptr_t)coord_table>>32),(uint32_t)(uintptr_t)coord_table);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_TESS_ENTRY raw=1 s0=%08x s1=%08x s2=%08x s3=%08x s4=%08x s5=%08x s6=%08x s7=%08x",
+                    entry[0],entry[1],entry[2],entry[3],entry[4],entry[5],entry[6],entry[7]);
+#if PS5VK_TESS_VARIANT==5
+                /* Owned ring SRD, checked against allocation-relative layout;
+                 * inspect only after fence and invalidate before CPU reads. */
+                const uint64_t offchip_va=((uint64_t)coord_table[25]<<32)|coord_table[24];
+                const uint32_t offchip_bytes=coord_table[26];
+                const uint64_t owned_factor_va=((uint64_t)coord_table[21]<<32)|coord_table[20];
+                if(offchip_va!=(uintptr_t)coord_table+256u ||
+                   owned_factor_va<offchip_va || !offchip_bytes ||
+                   offchip_bytes>owned_factor_va-offchip_va)
+                    fail("offchip witness bounds",VK_ERROR_UNKNOWN);
+                const volatile uint32_t *offchip=(const volatile uint32_t *)(uintptr_t)offchip_va;
+                for(uint32_t i=0;i<offchip_bytes;i+=64)
+                    __asm__ volatile("clflush (%0)"::"r"((const char *)offchip+i):"memory");
+                __asm__ volatile("mfence":::"memory");
+                uint32_t count=0;
+                for(uint32_t i=0;i<offchip_bytes/4u;++i) {
+                    const uint32_t value=offchip[i];
+                    if(!value)continue;
+                    if(count<24u)ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_TESS_OFFCHIP_WORD index=%u value=%08x",i,value);
+                    ++count;
+                }
+                ps5log_printf(PS5LOG_MARK,"PS5VK_TESS_OFFCHIP bytes=%u nonzero=%u",offchip_bytes,count);
+#endif
+#endif
                 const uint32_t extent=coord_table[22];
                 const uint32_t words=extent/4u;
                 /* Every non-zero word, not the first four. Two runs of the
@@ -3265,6 +3788,9 @@ static void geometry_probe(VkDevice d)
                 c_foreign=0,c_wrong=0;
             unsigned first_wrong_x=0,first_wrong_y=0;
             uint8_t first_wrong[4]={0,0,0,0},first_want[3]={0,0,0};
+#if PS5VK_TESS_VARIANT==18
+            unsigned alpha_wrong=0,alpha_min=255,alpha_max=0;
+#endif
             /* The oracle, derived from the evaluation half's own math BEFORE
              * the run and independent of the image.
              *
@@ -3281,25 +3807,97 @@ static void geometry_probe(VkDevice d)
              * which is the inverse of the mapping the geometry witness's own
              * oracle uses (src/geometry_witness.c: pixel=(ndc+1)*0.5*extent).
              *
-             * Colour: at outer level 2 with inner level 1, equal_spacing on
-             * the triangle domain generates exactly the three corners and the
-             * three edge midpoints - every barycentric component lands in
-             * {0, 0.5, 1}. For those values floor(c*2)/2 == c exactly, so the
-             * evaluation half's quantised colour EQUALS gl_TessCoord at every
-             * generated vertex and the rasteriser's interpolation of it is
-             * exactly linear in (u,v). The per-pixel expectation is therefore
-             * closed form - (u, v, 0.5) - with no sub-triangle or
-             * interpolation modelling, and every component influences it. */
+             * Colour is linear TessCoord in the control TES, so interpolation
+             * is (u,v,0.5), independent of generated interior vertices and
+             * triangulation. Do not quantize the shader output: inner level1
+             * with outer levels>1 is treated as 1+epsilon by Vulkan and is
+             * subdivided; generated coordinates need not be multiples of0.5.
+             * A quantized shader requires a different, piecewise oracle. */
+#if PS5VK_TESS_VARIANT==6 || PS5VK_TESS_VARIANT==7 || PS5VK_TESS_VARIANT==24 || PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==54 || PS5VK_TESS_VARIANT==55
+            /* Two disjoint triangles; colour blue identifies which patch
+             * supplied the interpolated attributes. Invert each rectangle's
+             * affine map independently of GPU-produced coordinates. */
+            const float eps=1.5f*(2.0f/(float)extent)/0.8f;
+#else
             const float eps=1.5f*(2.0f/(float)extent)/1.8f;
+#endif
             for(unsigned y=0;y<extent;++y)for(unsigned x=0;x<extent;++x) {
                 const float ndc_x=2.0f*((float)x+0.5f)/(float)extent-1.0f;
                 const float ndc_y=2.0f*((float)y+0.5f)/(float)extent-1.0f;
+#if PS5VK_TESS_VARIANT>=44 && PS5VK_TESS_VARIANT<=52
+                if(extent!=64u)fail("discard oracle extent",-1);
+                const int discard_patch=ps5vk_tess_discard_pixel((PS5VK_TESS_VARIANT-44)/3,x,y);
+                const float u=(float)(discard_patch+1)/32.0f,v=1.0f,blue=0.5f;
+                (void)eps;(void)ndc_x;(void)ndc_y;
+#elif PS5VK_TESS_VARIANT>=35 && PS5VK_TESS_VARIANT<=43
+                if(extent!=64u)fail("point matrix oracle extent",-1);
+                const float u=((float)x-4.0f)/54.0f,v=((float)y-4.0f)/54.0f,blue=0.5f;
+                (void)eps;(void)ndc_x;(void)ndc_y;
+#elif PS5VK_TESS_VARIANT==29
+                if(extent!=64u)fail("level64 oracle extent",-1);
+                const float u=1.0f,v=0.0f,blue=0.0f;
+                (void)eps;(void)ndc_x;(void)ndc_y;
+#elif PS5VK_TESS_VARIANT==16
+                if(extent!=64u)fail("TES-GS oracle extent",-1);
+                const float u=(ndc_x+0.609375f)/1.5f;
+                const float v=(ndc_y+0.859375f)/1.5f,blue=0.5f;
+                (void)eps;
+#elif PS5VK_TESS_VARIANT==13 || PS5VK_TESS_VARIANT==14 || PS5VK_TESS_VARIANT==15 || PS5VK_TESS_VARIANT==17
+                if(extent!=64u)fail("point oracle extent",-1);
+                const float u=(ndc_x+0.734375f)/1.5f;
+                const float v=(ndc_y+0.734375f)/1.5f,blue=0.5f;
+                (void)eps;
+#elif PS5VK_TESS_VARIANT==9
+                if(extent!=64u)fail("isoline oracle extent",-1);
+                const float u=(ndc_x+0.734375f)/1.5f;
+                const float v=(ndc_y+0.484375f)/2.0f,blue=0.5f;
+                (void)eps;
+#elif PS5VK_TESS_VARIANT==6 || PS5VK_TESS_VARIANT==7 || PS5VK_TESS_VARIANT==24 || PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==54 || PS5VK_TESS_VARIANT==55
+                const unsigned patch=ndc_x>=0.0f;
+                const float u=(ndc_x+0.9f-(float)patch)/0.8f;
+                const float v=(ndc_y+0.9f)/1.8f;
+                const float blue=patch?0.75f:0.25f;
+#else
                 const float u=(ndc_x+0.9f)/1.8f,v=(ndc_y+0.9f)/1.8f;
+                const float blue=0.5f;
+#endif
                 const uint8_t *pxb=coord_detiled+4*((size_t)y*extent+x);
                 const int is_ink=pxb[0]||pxb[1]||pxb[2];
                 if(is_ink)++c_ink;
+#if PS5VK_TESS_VARIANT>=44 && PS5VK_TESS_VARIANT<=52
+                const int inside=discard_patch>=0;
+                const int outside=!inside;
+#elif PS5VK_TESS_VARIANT>=35 && PS5VK_TESS_VARIANT<=43
+                const int inside=ps5vk_tess_point_inside((PS5VK_TESS_VARIANT-35)/3,
+                    (PS5VK_TESS_VARIANT-35)%3,x,y);
+                const int outside=!inside;
+#elif PS5VK_TESS_VARIANT==29
+                /* Fixed 65-point atlas, independent of shader rounding.
+                 * Level32 misses 32 required pixels; judge every pixel. */
+                const int inside=(x>=7u&&x<=49u&&(x-7u)%6u==0u&&
+                                  y>=7u&&y<=49u&&(y-7u)%6u==0u)||
+                                 (x==7u&&y==55u);
+                const int outside=!inside;
+#elif PS5VK_TESS_VARIANT==16
+                const int inside=(x==12u||x==36u||x==60u)&&
+                                 (y==4u||y==28u||y==52u);
+                const int outside=!inside;
+#elif PS5VK_TESS_VARIANT==13 || PS5VK_TESS_VARIANT==14 || PS5VK_TESS_VARIANT==15 || PS5VK_TESS_VARIANT==17
+                /* All pixels are judged; no edge-tolerance band for points. */
+                const int inside=(x==8u||x==32u||x==56u)&&
+                                 (y==8u||y==32u||y==56u);
+                const int outside=!inside;
+#elif PS5VK_TESS_VARIANT==9
+                const int row=y==16u||y==48u;
+                const int inside=row&&x>=10u&&x<=54u;
+                const int outside=!(row&&x>=7u&&x<=58u);
+#elif PS5VK_TESS_VARIANT==8 || (PS5VK_TESS_VARIANT>=18 && PS5VK_TESS_VARIANT<=21)
+                const int inside=u>eps&&v>eps&&u<1.0f-eps&&v<1.0f-eps;
+                const int outside=u<-eps||v<-eps||u>1.0f+eps||v>1.0f+eps;
+#else
                 const int inside=u>eps&&v>eps&&(u+v)<1.0f-eps;
                 const int outside=u<-eps||v<-eps||(u+v)>1.0f+eps;
+#endif
                 if(outside) {
                     if(is_ink)++c_foreign;
                     continue;
@@ -3311,7 +3909,38 @@ static void geometry_probe(VkDevice d)
                 ++c_expected;
                 if(!is_ink){++c_missing;continue;}
                 ++c_covered;
-                const float expect[3]={u,v,0.5f};
+#if PS5VK_TESS_VARIANT==18
+                /* Independent alpha check: the RGB oracle alone cannot prove
+                 * delivery of the fourth component used by blending. */
+                const unsigned alpha=pxb[3];
+                if(alpha<alpha_min)alpha_min=alpha;
+                if(alpha>alpha_max)alpha_max=alpha;
+                if(alpha<61u||alpha>67u)++alpha_wrong;
+#endif
+#if PS5VK_TESS_VARIANT==14 || PS5VK_TESS_VARIANT==15
+                const float expect[3]={x<extent/2?0.25f:0.75f,
+                    x<extent/2?0.5f:0.25f,x<extent/2?0.75f:0.5f};
+                (void)u;(void)v;(void)blue;
+#else
+#if PS5VK_TESS_VARIANT==33
+                /* Interpolated u indexes four different distances.
+                 * Oracle selects their analytic u/v/half/one values directly. */
+                const float distances[4]={u,v,0.5f,1.0f};
+                const float expect[3]={distances[((unsigned)(u*4.0f))&3u],0.0f,0.0f};
+                (void)blue;
+#elif PS5VK_TESS_VARIANT==16
+                const float expect[3]={v,blue,u};
+#elif PS5VK_TESS_VARIANT==20 || PS5VK_TESS_VARIANT==21
+                /* Destination ZERO: each draw replaces with source*alpha. */
+                const float expect[3]={0.25f*u,0.25f*v,0.25f*blue};
+#elif PS5VK_TESS_VARIANT==17 || PS5VK_TESS_VARIANT==19
+                /* Three SRC_ALPHA/ONE blends, source alpha 1/4, black clear.
+                 * Disabled blending would return the full source, not 3/4. */
+                const float expect[3]={0.75f*u,0.75f*v,0.75f*blue};
+#else
+                const float expect[3]={u,v,blue};
+#endif
+#endif
                 int wrong=0;
                 for(int ch=0;ch<3;++ch) {
                     const unsigned got=pxb[ch];
@@ -3329,22 +3958,26 @@ static void geometry_probe(VkDevice d)
                     ++c_wrong;
                 }
             }
-#if PS5VK_TESS_VARIANT==1
+#if PS5VK_TESS_VARIANT==1 || PS5VK_TESS_VARIANT>=5
             /* A: the patch must appear, in the right place, with the right
              * field. */
             const int coord_verified=c_expected>0&&c_missing==0&&c_foreign==0&&
-                c_wrong==0;
+                c_wrong==0
+#if PS5VK_TESS_VARIANT==18
+                &&alpha_wrong==0
+#endif
+                ;
 #else
             /* B: zero outer levels discard the patch, so NOTHING may be
              * rasterised anywhere in the target. */
             const int coord_verified=c_ink==0;
 #endif
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_TESS_CONTROL variant=%s rc=%d created=1 vertices=3 "
+                "PS5VK_TESS_CONTROL variant=%s rc=%d created=1 vertices=%u "
                 "ink=%llu expected=%llu covered=%llu missing=%llu foreign=%llu "
                 "wrong_color=%llu digest=%016llx verified=%d "
                 "first_wrong=%02x%02x%02x%02x want=%02x%02x%02x at=%u,%u",
-                PS5VK_TESS_CONTROL_NAME,(int)coord_rc,
+                PS5VK_TESS_CONTROL_NAME,(int)coord_rc,PS5VK_TESS_CONTROL_VERTICES,
                 (unsigned long long)c_ink,(unsigned long long)c_expected,
                 (unsigned long long)c_covered,(unsigned long long)c_missing,
                 (unsigned long long)c_foreign,(unsigned long long)c_wrong,
@@ -3354,17 +3987,34 @@ static void geometry_probe(VkDevice d)
                 first_wrong[0],first_wrong[1],first_wrong[2],first_wrong[3],
                 first_want[0],first_want[1],first_want[2],
                 first_wrong_x,first_wrong_y);
+#if PS5VK_TESS_VARIANT==18
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_TESS_ALPHA expected=64 tolerance=3 samples=%llu wrong=%u min=%u max=%u",
+                (unsigned long long)c_covered,alpha_wrong,alpha_min,alpha_max);
+#endif
             vkDestroyPipeline(d,coord_pipeline,NULL);
+            if(coord_shared_pipeline)vkDestroyPipeline(d,coord_shared_pipeline,NULL);
             vkDestroyCommandPool(d,coord_pool,NULL);
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
+            vkDestroyBuffer(d,coord_ab,NULL);
+            vkFreeMemory(d,coord_am,NULL);
+#endif
+#if PS5VK_TESS_VARIANT==22 || PS5VK_TESS_VARIANT==23 || PS5VK_TESS_VARIANT==54 || PS5VK_TESS_VARIANT==55
+            vkDestroyBuffer(d,coord_ib,NULL);
+            vkFreeMemory(d,coord_im,NULL);
+#endif
         } else {
             ps5log_printf(PS5LOG_MARK,
                 "PS5VK_TESS_CONTROL variant=%s rc=%d created=0 site=%u",
                 PS5VK_TESS_CONTROL_NAME,(int)coord_rc,
                 ps5vk_pipeline_refusal_site());
         }
+#if PS5VK_TESS_VARIANT==56
+        vkDestroyPipelineLayout(d,coord_layout,NULL);
+#endif
     }
 coord_done:
-    for(unsigned i=0;i<4;++i)vkDestroyShaderModule(d,coord_modules[i],NULL);
+    for(unsigned i=0;i<coord_stage_count;++i)vkDestroyShaderModule(d,coord_modules[i],NULL);
 #undef PS5VK_TESS_CONTROL_NAME
 #undef PS5VK_TESS_CONTROL_CODE
 #endif
@@ -3755,6 +4405,10 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
+    VkPhysicalDeviceFeatures indirect_features={.drawIndirectFirstInstance=VK_TRUE};
+    di.pEnabledFeatures=&indirect_features;
+#endif
     VkDevice device; CHECK(vkCreateDevice(physical,&di,NULL,&device));
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_DEVICE_CREATED");
     if (PS5VK_EXIT_CONTROL == 2) {

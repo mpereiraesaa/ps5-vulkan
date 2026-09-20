@@ -100,6 +100,12 @@ def main():
     tess_probe = os.environ.get("PS5VK_TESS_PROBE", "0")
     if tess_probe not in ("0", "1") or (tess_probe == "1" and not graphics_api):
         raise SystemExit("PS5VK_TESS_PROBE requires the graphics profile API and must be 0 or 1")
+    tess_offchip_bind = os.environ.get("PS5VK_TESS_OFFCHIP_BIND", "0")
+    tess_offchip_capacity = os.environ.get("PS5VK_TESS_OFFCHIP_CAPACITY_WG", "256")
+    if tess_offchip_bind not in ("0", "1") or (tess_offchip_bind == "1" and tess_probe != "1"):
+        raise SystemExit("native offchip binding requires a tessellation probe")
+    if not tess_offchip_capacity.isdigit() or not 1 <= int(tess_offchip_capacity) <= 65536:
+        raise SystemExit("native offchip capacity must be 1..65536 workgroups")
     # ONE materially distinct tessellation candidate per executable. A faulting
     # draw leaves engine state that invalidates whatever runs after it in the
     # same process, so the variant is a build input and the artifact IS the
@@ -115,9 +121,9 @@ def main():
     # behaviour, and a build knob is how such a run becomes acceptance
     # evidence by accident.
     tess_variant = os.environ.get("PS5VK_TESS_VARIANT", "3")
-    if tess_variant not in ("1", "2", "3", "4"):
+    if tess_variant not in tuple(str(i) for i in range(1,57)):
         raise SystemExit(
-            "PS5VK_TESS_VARIANT selects one candidate: 1, 2, 3 or 4")
+            "PS5VK_TESS_VARIANT selects one candidate: 1 through 56")
     if tess_variant != "3" and tess_probe != "1":
         raise SystemExit("PS5VK_TESS_VARIANT requires PS5VK_TESS_PROBE=1")
     # The six-view witness is the only consumer of the diagnostic gate, so it
@@ -254,6 +260,9 @@ def main():
               "-DPS5VK_DMA_ONLY=" + ("1" if os.environ.get("PS5VK_DMA_ONLY") == "1" else "0"),
               "-DPS5VK_INSPECT=" + ("1" if os.environ.get("PS5VK_INSPECT") == "1" else "0")]
     objects = []
+    if tess_offchip_bind == "1":
+        common += ["-DPS5VK_TESS_OFFCHIP_BIND=1",
+                   "-DPS5VK_TESS_OFFCHIP_CAPACITY_WG=" + tess_offchip_capacity]
     sources = [
         ("main", ROOT / "native/main.c", []),
         ("check", ROOT / "src/compute_check.c", []),
@@ -570,6 +579,27 @@ def main():
                 if tess_legacy_domain not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_LEGACY_DOMAIN must be 0 or 1")
                 common += ["-DPS5VK_TESS_LEGACY_DOMAIN=" + tess_legacy_domain]
+                # Diagnostic, the positive control for the legacy-domain
+                # experiment: plain vertex pipelines launched as a LEGACY
+                # hardware VS. Default 0.
+                tess_legacy_vs = os.environ.get("PS5VK_TESS_LEGACY_VS_CONTROL", "0")
+                if tess_legacy_vs not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_LEGACY_VS_CONTROL must be 0 or 1")
+                common += ["-DPS5VK_TESS_LEGACY_VS_CONTROL=" + tess_legacy_vs]
+                tess_entry = os.environ.get("PS5VK_TESS_ENTRY_WITNESS", "0")
+                if tess_entry not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_ENTRY_WITNESS must be 0 or 1")
+                common += ["-DPS5VK_TESS_ENTRY_WITNESS=" + tess_entry]
+                tess_system_table = os.environ.get("PS5VK_TESS_SYSTEM_TABLE", "0")
+                # Pointer delivery is required state, not instrumentation.
+                # Permit ordinary shaders without the SGPR-store prefix.
+                if tess_system_table not in ("0", "1"):
+                    raise SystemExit("PS5VK_TESS_SYSTEM_TABLE must be 0 or 1")
+                common += ["-DPS5VK_TESS_SYSTEM_TABLE=" + tess_system_table]
+                tess_ring_query = os.environ.get("PS5VK_TESS_RING_QUERY", "0")
+                if tess_ring_query not in ("0", "1", "2", "3", "4"):
+                    raise SystemExit("PS5VK_TESS_RING_QUERY must be 0..4 (3 harness, 4 queue binding)")
+                common += ["-DPS5VK_TESS_RING_QUERY=" + tess_ring_query]
                 tess_only = os.environ.get("PS5VK_TESS_ONLY", "0")
                 if tess_only not in ("0", "1"):
                     raise SystemExit("PS5VK_TESS_ONLY must be 0 or 1")
@@ -595,8 +625,7 @@ def main():
                 # own sha256, verified against the built one by reading the
                 # file back after the transfer and the mount refresh. Neither
                 # is a log boot id, which is only a process token.
-                common += ['-DPS5VK_TESS_BUILD_ID="' +
-                           tess_build_id(tess_probe, tess_variant,
+                tess_candidate_id = tess_build_id(tess_probe, tess_variant,
                                          os.environ.get("PS5VK_TESS_NO_DRAW", "0"),
                                          tess_state_dump + ":" +
                                          tess_ds_waves + ":" +
@@ -612,8 +641,9 @@ def main():
                                          tess_max_vert_out + ":" + tess_spin +
                                          ":" + tess_spin_hull + ":" +
                                          tess_prefill + ":" + tess_vgt_flush +
-                                         ":" + tess_defaults_dump) +
-                           '"']
+                                         ":" + tess_defaults_dump + ":entry=" + tess_entry +
+                                         ":system=" + tess_system_table + ":query=" + tess_ring_query)
+                common += ['-DPS5VK_TESS_BUILD_ID="' + tess_candidate_id + '"']
                 os.environ["PS5VK_TESS_VARIANT"] = tess_variant
                 os.environ["PS5VK_TESS_STATE_DUMP"] = tess_state_dump
             # Both optional-stage witnesses skip the feature-negotiation gate:
@@ -652,7 +682,7 @@ def main():
                 ROOT / "native/graphics_queue_ps5.c",
                 ROOT / "native/present_ps5.c", gears / "src/ps5_videoout.c",
                 gears / "src/ps5_present.c", gears / "src/ps5_event_adapter.c", gears / "src/ps5_frame_completion.c",
-                ROOT / "native/draw_state_ps5.c", ROOT / "native/viewport_ps5.c", ROOT / "native/targets_ps5.c",
+                ROOT / "native/draw_state_ps5.c", ROOT / "native/tess_ring_lease.c", ROOT / "native/tess_shared_storage.c", ROOT / "native/viewport_ps5.c", ROOT / "native/targets_ps5.c",
                 gears / "src/ps5_pipeline.c", gears / "src/ps5_color_target.c", gears / "src/ps5_depth_target.c",
                 gears / "src/ps5_agc_writer.c", gears / "src/ps5_gpu_span.c",
                 ROOT / "src/graphics_program.c", ROOT / "src/compute_commands.c",
@@ -694,7 +724,8 @@ def main():
     driver = out / "stubs/libSceAgcDriver.so"
     run(*cc, "-fPIC", "-I" + str(gears / "include"), "-c",
         gears / "native/stubs/libSceAgcDriver.c", "-o", out / "driver.o", env=env)
-    run(linker, "--shared", "-soname", "libSceAgcDriver.prx", "-o", driver, out / "driver.o")
+    run(*cc, "-fPIC", "-c", ROOT / "native/tess_driver_import_stub.c", "-o", out / "tess_driver.o", env=env)
+    run(linker, "--shared", "-soname", "libSceAgcDriver.prx", "-o", driver, out / "driver.o", out / "tess_driver.o")
     extra_libs = []
     if use_runtime_sdk:
         extra_libs.append(str(ROOT / "dist-sdk/lib/libps5vk.a"))
@@ -800,6 +831,15 @@ def main():
                                 geometry_fixture="geometry-stage-coverage",
                                 sample_count=1, geometry_probe=1,
                                 geometry_extent=64, geometry_cases=19)
+            if tess_probe == "1":
+                manifest["tessellation_witness"] = {
+                    "offchip_bind": int(tess_offchip_bind),
+                    "offchip_capacity_workgroups": int(tess_offchip_capacity),
+                    "variant": int(tess_variant), "build_id": tess_candidate_id,
+                    "ring_mode": int(tess_ring_query),
+                    "shared_pipelines": 2 if tess_ring_query == "4" else 0,
+                    "no_draw": int(os.environ.get("PS5VK_TESS_NO_DRAW", "0")),
+                }
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")

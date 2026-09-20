@@ -12,6 +12,7 @@ from pathlib import Path
 
 from run_consumer import close_and_confirm, control, running, wait_for_log
 from verify_geometry import validate
+from verify_tessellation import validate as validate_tessellation
 
 
 def main():
@@ -32,7 +33,12 @@ def main():
         log = wait_for_log(args.runs_dir, known, args.timeout)
         receipt = json.loads(log.with_suffix(".json").read_text())
         artifact = json.loads(args.artifact.read_text())
-        result = validate(log.read_bytes(), receipt, artifact)
+        data = log.read_bytes()
+        # Legacy manifests omitted tess switches; their logs must not pass
+        # merely because the preceding geometry controls completed.
+        verifier = (validate_tessellation if "tessellation_witness" in artifact or
+                    b"PS5VK_TESS_" in data else validate)
+        result = verifier(data, receipt, artifact)
         result.update(source_log=str(log), strict_verified=True)
     finally:
         lifecycle_ok = close_and_confirm(args.host)
