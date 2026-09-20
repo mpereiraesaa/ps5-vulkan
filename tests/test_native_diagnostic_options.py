@@ -40,6 +40,14 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertIn("control_counter=%u candidate_counter=%u", source)
         self.assertIn("control_and_candidate_same_submit", builder)
 
+    def test_dual_source_fixture_is_owned_and_runtime_packaged(self):
+        generator = (ROOT / "tools/prepare_runtime_graphics.py").read_text()
+        self.assertIn('"experiments/graphics/runtime_dual_source.frag"', generator)
+        self.assertIn('"dual_source_fragment"', generator)
+        shader = (ROOT / "experiments/graphics/runtime_dual_source.frag").read_text()
+        self.assertIn("layout(location = 0, index = 0)", shader)
+        self.assertIn("layout(location = 0, index = 1)", shader)
+
     def test_binding_diagnostic_uses_tested_workload_capacity_gate(self):
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("ps5vk_graphics_vertex_bindings_available(&device_props.limits,", source)
