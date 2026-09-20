@@ -50,6 +50,13 @@ struct ps5vk_graphics_key {
     VkSampleCountFlagBits samples;
     VkColorComponentFlags color_write_mask;
     VkBool32 blend_enable;
+    /* Fixed attachment state; ignored/canonicalized to zero when disabled.
+     * Recording this contract does not imply native blend support. */
+    VkBlendFactor src_color_blend_factor, dst_color_blend_factor;
+    VkBlendOp color_blend_op;
+    VkBlendFactor src_alpha_blend_factor, dst_alpha_blend_factor;
+    VkBlendOp alpha_blend_op;
+    float blend_constants[4];
     uint32_t vertex_binding_count, vertex_attribute_count, descriptor_set_count;
     const VkVertexInputBindingDescription *vertex_bindings;
     const VkVertexInputAttributeDescription *vertex_attributes;
