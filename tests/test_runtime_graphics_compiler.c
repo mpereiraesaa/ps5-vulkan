@@ -1493,12 +1493,79 @@ static void check_input_attachment_probe_pipelines(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+static void check_fragment_store_atomic_contract(void)
+{
+    struct ps5vk_set_signature set={0};
+    set.count=1;
+    set.binding[0]=(struct ps5vk_binding){.count=1,.first=0,
+        .stages=VK_SHADER_STAGE_FRAGMENT_BIT};
+    set.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    for(unsigned binding=1;binding<PS5VK_MAX_BINDINGS;++binding)
+        set.binding[binding].first=1;
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/fragment_store.frag.spv"),
+        .descriptor_set_count=1,.descriptor_sets=&set,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    const void *compiled=NULL;
+
+    /* The descriptor profile can represent the resource, but shader side
+     * effects are a separate core feature.  The same candidate must fail
+     * before packaging until the logical device enabled it. */
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !compiled);
+    key.feature_mask=PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    const struct ps5vk_runtime_graphics_program *program=compiled;
+    assert(program->fragment.metadata.hardware_stage==PSBC_HW_STAGE_PIXEL);
+    assert(program->fragment.metadata.descriptor_binding_count==1);
+    assert(program->fragment.metadata.descriptor_used_binding_mask[0]==UINT64_C(1));
+    assert(program->arguments.fragment_descriptor_valid[0]);
+    assert(program->arguments.fragment_used_bindings[0]==UINT64_C(1));
+    PsbcShaderMetadata candidate_fs=program->fragment.metadata;
+    PsbcShaderMetadata candidate_vs=program->vertex.metadata;
+    PsbcRegisterWrite *db=context_register(&candidate_fs,0x203u);
+    assert(db && (db->value&UINT32_C(0x600))==UINT32_C(0x600));
+    struct ps5vk_runtime_shader header;
+    assert(!ps5vk_runtime_shader_build(&header,&program->fragment));
+    assert(ps5vk_runtime_graphics_feature_use_ok(&candidate_vs,&candidate_fs,
+        PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS));
+    assert(!ps5vk_runtime_graphics_feature_use_ok(&candidate_vs,&candidate_fs,0));
+    db->value&=~UINT32_C(0x200);
+    assert(!ps5vk_runtime_graphics_feature_use_ok(&candidate_vs,&candidate_fs,
+        PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS));
+    db->value|=UINT32_C(0x200);db->value&=~UINT32_C(0x400);
+    assert(!ps5vk_runtime_graphics_feature_use_ok(&candidate_vs,&candidate_fs,
+        PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS));
+    ps5vk_runtime_graphics_free(NULL,compiled);
+
+    /* Same layout, no store: the compiler removes the unused declaration,
+     * leaves the DB writes-memory bits clear and needs no feature or descriptor
+     * table.  This is the same-artifact negative control for the native slice. */
+    free((void *)key.fragment.words);
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    key.feature_mask=0;compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    program=compiled;
+    PsbcShaderMetadata control=program->fragment.metadata;
+    db=context_register(&control,0x203u);
+    assert(db && !(db->value&UINT32_C(0x600)));
+    assert(!program->arguments.fragment_descriptor_valid[0]);
+    assert(!program->arguments.fragment_used_bindings[0]);
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 int main(void)
 {
     check_flat_interfaces();
     check_descriptor_options();
     check_input_attachment_descriptors();
     check_input_attachment_probe_pipelines();
+    check_fragment_store_atomic_contract();
     check_sparse_layout_static_use();
     check_view_index_builtin();
     check_clip_cull_distances();

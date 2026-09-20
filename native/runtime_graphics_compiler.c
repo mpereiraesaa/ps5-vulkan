@@ -171,10 +171,36 @@ int ps5vk_runtime_graphics_distance_reads_described(const PsbcShaderMetadata *pr
     return named!=0;
 }
 
+static int fragment_memory_write_state(const PsbcShaderMetadata *fragment)
+{
+    /* GFX10.3 DB_SHADER_CONTROL.  PSBC derives these two bits from
+     * nir_shader::info.writes_memory: ordinary fragment shaders clear both,
+     * while a fragment store/atomic needs both EXEC_ON_HIER_FAIL and
+     * EXEC_ON_NOOP so helper/early-Z outcomes cannot suppress the side effect.
+     * A torn pair is neither contract and is refused rather than guessed. */
+    /* Pre-raster-only contract tests use an all-zero placeholder because they
+     * are checking a linked stage before a pixel half exists.  That is the one
+     * representation of "no fragment stage"; a real non-pixel or malformed
+     * pixel record still fails closed. */
+    if(!fragment->version && fragment->hardware_stage==PSBC_HW_STAGE_UNKNOWN)
+        return 0;
+    if(fragment->hardware_stage!=PSBC_HW_STAGE_PIXEL)return -1;
+    for(uint32_t i=0;i<fragment->context_register_count;++i) {
+        const PsbcRegisterWrite *reg=&fragment->context_registers[i];
+        if(reg->offset!=0x203u)continue;
+        const uint32_t execution=reg->value&UINT32_C(0x600);
+        if(!execution)return 0;
+        return execution==UINT32_C(0x600)?1:-1;
+    }
+    return -1;
+}
+
 int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
     const PsbcShaderMetadata *fragment,uint32_t feature_mask)
 {
     if(!pre_raster || !fragment)return 0;
+    const int fragment_writes=fragment_memory_write_state(fragment);
+    if(fragment_writes<0)return 0;
 #if PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
     /* The witness builds exist to measure these capabilities before any of them
      * is advertised, so they skip the negotiation gate the shipping build
@@ -201,6 +227,8 @@ int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
     if(pre_raster->merged_geometry &&
        pre_raster->merged_es_source_stage==PSBC_STAGE_TESS_EVAL &&
        !(feature_mask & PS5VK_FEATURE_TESSELLATION_SHADER))return 0;
+    if(fragment_writes &&
+       !(feature_mask & PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS))return 0;
     return 1;
 #endif
 }
