@@ -11,17 +11,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeDiagnosticOptions(unittest.TestCase):
-    def test_t06_diagnostic_is_private_and_independent(self):
+    def test_promoted_fragment_feature_has_no_diagnostic_switch(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
         builder = (ROOT / "tools/build_sdk.py").read_text()
-        self.assertIn("PS5VK_T06_DIAGNOSTIC", platform)
         self.assertIn("PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS", platform)
-        self.assertIn('os.environ.get("PS5VK_T06_DIAGNOSTIC", "0")', builder)
-        self.assertIn('native_cflags.append("-DPS5VK_T06_DIAGNOSTIC=1")', builder)
-        self.assertIn("PS5VK_T06_DIAGNOSTIC must be 0 or 1", builder)
+        self.assertNotIn("PS5VK_T06_DIAGNOSTIC", platform)
+        self.assertNotIn("PS5VK_T06_DIAGNOSTIC", builder)
+        self.assertNotIn("PS5VK_T06_DIAGNOSTIC",
+                         (ROOT / "tools/build_native.py").read_text())
         for public in (ROOT / "include").rglob("*.h"):
             self.assertNotIn("PS5VK_T06_DIAGNOSTIC", public.read_text(),
-                             f"{public} must not expose a measurement switch")
+                             f"{public} must not restore a retired measurement switch")
 
     def test_fragment_store_probe_is_bounded_and_private(self):
         self.rejected({"PS5VK_FRAGMENT_STORE_PROBE": "2"},
@@ -36,8 +36,7 @@ class NativeDiagnosticOptions(unittest.TestCase):
                       "bounded standalone scene")
         builder = (ROOT / "tools/build_native.py").read_text()
         source = (ROOT / "native/fragment_store_probe.c").read_text()
-        self.assertIn('os.environ["PS5VK_T06_DIAGNOSTIC"] = fragment_store_probe',
-                      builder)
+        self.assertNotIn("PS5VK_T06_DIAGNOSTIC", builder)
         self.assertIn("control_counter=%u candidate_counter=%u", source)
         self.assertIn("control_and_candidate_same_submit", builder)
 

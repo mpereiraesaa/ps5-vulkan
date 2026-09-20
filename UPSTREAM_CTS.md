@@ -983,6 +983,30 @@ it belongs to that feature's promotion slice, which cannot happen while
 `tessellationShader` is false - the factory gates every leaf on
 `requireFeatures(FEATURE_TESSELLATION_SHADER)`, so they would all report
 `NotSupported` the way the clip/cull leaves did before that promotion.
+## Fragment storage side effects (2026-09-20)
+
+The frozen acceptance selection now contains the two original upstream
+`rasterization.frag_side_effects` kill leaves. They are not synthetic contract
+tests: one writes the color output before the SSBO side effect and `OpKill`, the
+other places the color assignment after termination. Together their unchanged
+storage-buffer and color-image oracle checks that the side effect survives while
+the killed invocation contributes no color.
+
+Both leaves first passed in a measurement selection alongside all 304 existing
+acceptance cases. After promotion, the canonical shipping selection is **306
+cases**, and run
+`20260920T213224464Z_PPSA99994_upstream-cts_0x11f2fc5c6a394` passed **306/306**
+with zero `Fail`, zero `NotSupported`, no missing, unexpected or duplicate
+results, strict artifact/QPA identity and confirmed title closure. Its selection
+SHA-256 is
+`b456e3ca1a93119db27fd58bbf7659932d3d25cbc2e7c7336cf0bfdd58683f06` and
+its SELF SHA-256 is
+`03b52352f2ae3d073775a88b9734b8effca9538c991ce5335715bf809e79d356`.
+The native counter-and-guard witness and the public capability query are recorded
+separately in
+[VALIDATION.md](VALIDATION.md#fragment-stores-and-atomics-promotion-2026-09-20);
+the CTS run alone is not used to infer those two axes.
+
 ## Indirect and indexed draw expansion (2026-09-16)
 
 DXVK262-T03 adds 46 original upstream leaves from two draw modules, both

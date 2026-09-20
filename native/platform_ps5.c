@@ -257,14 +257,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                     PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                                     PS5VK_FEATURE_MULTI_VIEWPORT;
 #endif
-    /* Private DXVK262-T06 measurement profile.  This is deliberately a
-     * separate switch from the T05 raster profile: a payload can negotiate
-     * fragmentStoresAndAtomics only when its exact artifact was built to run
-     * the bounded storage-side-effect witness.  Shipping builds leave it off
-     * until native readback and focused upstream CTS both support promotion. */
-#if defined(PS5VK_T06_DIAGNOSTIC) && PS5VK_T06_DIAGNOSTIC
+    /* DXVK262-T06 fragment storage side effects.  The public-SDK witness
+     * distinguishes a zero-write control from exactly 4096 fragment writes,
+     * preserves 30 guard words and completes its fence.  The two unchanged
+     * upstream frag_side_effects kill leaves then pass in the same 306-case
+     * run as the frozen 304-case regression set.  This shipping bit is the
+     * evidence boundary: builds without this exact path still report false
+     * and vkCreateDevice rejects a request for the feature. */
     platform->supported_features |= PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
-#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

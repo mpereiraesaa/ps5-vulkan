@@ -3017,6 +3017,26 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Creates one fence with VK_FENCE_CREATE_SIGNALED_BIT and requires immediate signaled status and successful wait without a submission."
+    },
+    {
+      "path": "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+      "source": "external/vulkancts/modules/vulkan/rasterization/vktRasterizationFragShaderSideEffectsTests.cpp:684",
+      "category": "fragment-stores-and-atomics",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:fragmentStoresAndAtomics"
+      ],
+      "rationale": "Original upstream fragment shader writes its storage buffer and then executes OpKill; the unchanged host-readback and color-image oracle passed on the exact integrated artifact together with the frozen 304-case regression selection."
+    },
+    {
+      "path": "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill",
+      "source": "external/vulkancts/modules/vulkan/rasterization/vktRasterizationFragShaderSideEffectsTests.cpp:684",
+      "category": "fragment-stores-and-atomics",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:fragmentStoresAndAtomics"
+      ],
+      "rationale": "Original upstream variant places the fragment-output assignment after OpKill and independently proves that the storage side effect survives while the killed invocation contributes no color; it passed in the same exact 306/306 hardware run."
     }
   ],
   "diagnostics": [
@@ -4037,26 +4057,6 @@
         "core:depthBiasClamp"
       ],
       "rationale": "BLOCKED by a format, not by T05: DepthBiasBaseCase::initialize needs VK_FORMAT_D24_UNORM_S8_UINT or VK_FORMAT_D32_SFLOAT_S8_UINT as a depth-stencil attachment and throws NotSupported otherwise (vktDynamicStateRSTests.cpp:133-150); this profile offers only VK_FORMAT_D32_SFLOAT (src/texture_format.c:183). The oracle itself is a colour comparison and requires depthBiasClamp (:1224), so a D32_SFLOAT_S8_UINT attachment would make it the upstream depthBiasClamp oracle. The rs_state group is not registered in the package (only the module's compute subgroup is)."
-    },
-    {
-      "path": "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
-      "source": "external/vulkancts/modules/vulkan/rasterization/vktRasterizationFragShaderSideEffectsTests.cpp:684",
-      "category": "t06-fragment-stores-measurement-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:fragmentStoresAndAtomics"
-      ],
-      "rationale": "UNMEASURED, applicable: the unchanged upstream fragment shader writes its storage buffer and then executes OpKill; this color-at-beginning variant also assigns the fragment output before the side effect. The upstream host-readback and color-image oracle verifies the storage write and legal fragment termination semantics. The rasterization factory and source unit are already registered and compiled; this leaf remains diagnostic until one artifact-bound PS5 run passes with strict QPA identity and clean lifecycle."
-    },
-    {
-      "path": "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill",
-      "source": "external/vulkancts/modules/vulkan/rasterization/vktRasterizationFragShaderSideEffectsTests.cpp:684",
-      "category": "t06-fragment-stores-measurement-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:fragmentStoresAndAtomics"
-      ],
-      "rationale": "UNMEASURED, applicable: the unchanged upstream fragment shader writes its storage buffer and then executes OpKill; this color-at-end variant places the fragment-output assignment after the terminating instruction, independently checking that the storage side effect survives while the killed invocation contributes no color. The upstream host-readback and color-image oracle is unchanged. The leaf remains diagnostic until one artifact-bound PS5 run passes with strict QPA identity and clean lifecycle."
     }
   ]
 }
