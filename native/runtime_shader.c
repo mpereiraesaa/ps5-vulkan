@@ -384,7 +384,13 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if(fs) {
         const PsbcRegisterWrite *z=find(m->context_registers,m->context_register_count,0x1c4);
         const PsbcRegisterWrite *mask=find(m->context_registers,m->context_register_count,0x8f);
-        if(!z || z->value || !mask || mask->value!=15)return -3;
+        /* A fragment shader may legally export no colour. Glslang produces
+         * that exact form when every colour write is unreachable after
+         * OpKill, while a storage-buffer side effect before the kill remains.
+         * PSBC describes it with CB_SHADER_MASK=0; the ordinary single-target
+         * profile is 0xf. Accept exactly those two measured/defined shapes,
+         * not arbitrary masks or additional render targets. */
+        if(!z || z->value || !mask || (mask->value!=0 && mask->value!=15))return -3;
     }
     memset(d,0,sizeof(*d));
     d->header.file_header=0x34333231; d->header.version=24;

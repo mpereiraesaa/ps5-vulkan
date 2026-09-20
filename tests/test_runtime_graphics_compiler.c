@@ -1618,6 +1618,30 @@ static void check_fragment_store_atomic_contract(void)
     assert(program->arguments.fragment_descriptor_valid[0]);
     ps5vk_runtime_graphics_free(NULL,compiled);
 
+    /* The paired CTS leaf places its colour write after OpKill. Glslang keeps
+     * the output in OpEntryPoint but removes the unreachable store. The
+     * fragment side effect remains real and must compile with the same SSBO
+     * contract; an absent colour export is not grounds to reject the stage. */
+    free((void *)key.fragment.words);
+    key.fragment=read_module(
+        "build/runtime-graphics/fragment_coord_store_after_kill.frag.spv");
+    compiled=NULL;
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    program=compiled;
+    assert(program->fragment.metadata.hardware_stage==PSBC_HW_STAGE_PIXEL);
+    assert(program->fragment.metadata.descriptor_used_binding_mask[0]==UINT64_C(1));
+    assert(program->arguments.fragment_descriptor_valid[0]);
+    const PsbcRegisterWrite *color_mask=context_register(
+        (PsbcShaderMetadata *)&program->fragment.metadata,0x8fu);
+    assert(color_mask && color_mask->value==0);
+    PsbcShaderOutput malformed_fragment=program->fragment;
+    PsbcRegisterWrite *malformed_mask=context_register(
+        &malformed_fragment.metadata,0x8fu);
+    assert(malformed_mask);malformed_mask->value=1;
+    assert(ps5vk_runtime_shader_build(&header,&malformed_fragment)!=0);
+    ps5vk_runtime_graphics_free(NULL,compiled);
+
     /* Same layout, no store: the compiler removes the unused declaration,
      * leaves the DB writes-memory bits clear and needs no feature or descriptor
      * table.  This is the same-artifact negative control for the native slice. */
