@@ -34,6 +34,81 @@ static uint32_t *draw_index(void *opaque,uint32_t n,const void *address,uint64_t
 }
 int main(void)
 {
+    {
+        struct ps5vk_draw_state tess={.cx_count=1,.uc_count=1,.sh_count=1,.modifier=5,
+            .runtime={.enabled=1,.vertex_count=1,.lds_slot=0,
+                .base_vertex_slot=UINT32_MAX,.start_instance_slot=UINT32_MAX,
+                .draw_id_slot=UINT32_MAX,.view_index_slot=UINT32_MAX,
+                .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX},
+            .hull_runtime={.enabled=1,.hull=1,.window_base=8,.vertex_count=6,
+                .base_vertex_slot=0,.start_instance_slot=1,.draw_id_slot=UINT32_MAX,
+                .view_index_slot=UINT32_MAX,.vertex_buffer_valid=1,
+                .vertex_buffer_slot=2,.vertex_buffer_usage_mask=1,
+                .lds_slot=UINT32_MAX,.vertex_push_slot=UINT32_MAX,
+                .fragment_push_slot=UINT32_MAX,.ring_table_valid=1,.ring_table_slot=4,
+                .ring_table_low=0x4000,.ring_table_high=2}};
+        struct ps5vk_operation patch={.type=PS5VK_DRAW,.vertex_count=5,
+            .instance_count=1,.first_vertex=7,.first_instance=9};
+        uint32_t words[128]={0},*end=words;
+        const uint32_t no_tables[4]={0};
+        assert(ps5vk_native_emit_runtime_draw(&end,128,&tess,&tess,sizeof(tess),
+            &patch,0x2000,no_tables,NULL,NULL,NULL)==VK_SUCCESS);
+        unsigned found=0;
+        for(uint32_t *p=words;p+7<end;++p)if(p[0]==0x10c && p[1]==6) {
+            assert(p[2]==7 && p[3]==9 && p[4]==0x2000 && p[6]==0x4000 && p[7]==2);
+            ++found;
+        }
+        assert(found==1);
+        /* Split-patch diagnostic: every recorded draw must retain its own
+         * firstVertex and descriptor pointer after subsequent emissions.
+         * This checks host packet ownership, not hardware consumption. */
+        uint32_t batch[1024]={0},*batch_end=batch;
+        patch.vertex_count=10;
+        for(unsigned i=0;i<8;++i) {
+            patch.first_vertex=i*10;
+            assert(ps5vk_native_emit_runtime_draw(&batch_end,
+                (uint32_t)(batch+1024-batch_end),&tess,&tess,sizeof(tess),
+                &patch,0x2000+i*0x100,no_tables,NULL,NULL,NULL)==VK_SUCCESS);
+        }
+        found=0;
+        for(uint32_t *p=batch;p+7<batch_end;++p)if(p[0]==0x10c && p[1]==6) {
+            assert(found<8);
+            assert(p[2]==found*10 && p[3]==9);
+            assert(p[4]==0x2000+found*0x100 && p[6]==0x4000 && p[7]==2);
+            ++found;
+        }
+        assert(found==8);
+        end=words;
+        assert(ps5vk_native_emit_runtime_draw(&end,128,&tess,&tess,sizeof(tess),
+            &patch,0,no_tables,NULL,NULL,NULL)==VK_ERROR_FEATURE_NOT_PRESENT && end==words);
+        /* HS-only resources must reach HS without becoming spurious TES
+         * arguments. Distinct pointers/slots detect accidental stage reuse. */
+        tess.hull_runtime.vertex_count=8;
+        tess.hull_runtime.vertex_descriptor_valid[2]=1;
+        tess.hull_runtime.vertex_descriptor_slot[2]=6;
+        tess.hull_runtime.vertex_push_slot=7;
+        tess.hull_runtime.push_constant_size=16;
+        tess.push_constant_low=0x7000;
+        uint32_t tables[4]={0,0,0x6000,0};
+        end=words;
+        assert(ps5vk_native_emit_runtime_draw(&end,128,&tess,&tess,sizeof(tess),
+            &patch,0x2000,tables,NULL,NULL,NULL)==VK_SUCCESS);
+        found=0;
+        for(uint32_t *p=words;p+9<end;++p)if(p[0]==0x10c && p[1]==8) {
+            assert(p[8]==0x6000 && p[9]==0x7000);++found;
+        }
+        assert(found==1);
+        for(unsigned bad=0;bad<4;++bad) {
+            tables[2]=bad==0?0:bad==1?0x6001:0x6000;
+            tables[3]=bad==2?0x8000:0;
+            tess.push_constant_low=bad==3?0:0x7000;
+            end=words;calls=0;
+            assert(ps5vk_native_emit_runtime_draw(&end,128,&tess,&tess,sizeof(tess),
+                &patch,0x2000,tables,NULL,NULL,NULL)==VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(end==words && !calls);
+        }
+        calls=0;
+    }
     struct ps5vk_draw_state replay={.cx_count=3,.cx={{0x094,0x800003c0},{0x095,0x021c0780},{0x292,0x22}}};
     uint32_t packet[8]={0},*at=packet;
     assert(ps5vk_native_emit_scissor_replay(&at,6,&replay)==VK_ERROR_OUT_OF_HOST_MEMORY && at==packet && !packet[0]);
@@ -171,6 +246,15 @@ int main(void)
     assert(commands[13]==0xc0002f00 && commands[14]==1);
     assert(commands[15]==0xc0017a00 && commands[16]==0x20000243 && commands[17]==0);
     for(unsigned i=0;i<6;++i)assert(commands[18+i]==i);
+    /* A procedural runtime VS still consumes fetched indices and baseVertex,
+     * but has no vertex-buffer descriptor table. */
+    state.runtime.vertex_buffer_valid=0;
+    state.runtime.vertex_buffer_usage_mask=0;
+    cursor=commands;calls=0;index_calls=0;
+    assert(ps5vk_native_emit_runtime_draw(&cursor,64,&state,&state,sizeof(state),&op,
+        0,no_tables,NULL,&indices,draw_index)==VK_SUCCESS && index_calls==1);
+    assert(commands[5]==0 && commands[7]==UINT32_MAX-1 && commands[8]==3);
+    state.runtime=indexed_abi;
     /* Fail-closed fetch shapes. The batch is already several packets long when
      * the index emitter looks at the fetch, so the emitter's contract is the
      * one that matters: the caller's cursor only advances on full success (it

@@ -21,7 +21,7 @@ static VkResult buffer_rc;
 static VkBuffer buffer_fail;
 static VkDeviceSize last_buffer_dynamic, first_set_buffer_dynamic;
 static unsigned buffer_calls;
-static struct ps5vk_runtime_draw_abi runtime;
+static struct ps5vk_runtime_draw_abi runtime, hull_runtime;
 VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView v,VkSampler s,uint32_t out[12])
 {(void)d;(void)s;++texture_calls;for(unsigned i=0;i<12;++i)out[i]=100+i+256*(uintptr_t)v;
  return texture_fail_view && v==texture_fail_view?VK_ERROR_UNKNOWN:texture_rc;}
@@ -79,7 +79,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport,
     (void)index_width;
     assert(p && viewport->width == 4 && scissor->extent.width == 4 &&
         color->count == 16 && !depth && area->extent.width == 4 && width == 4 && height == 4);
-    *out = (struct ps5vk_draw_state){.cx_count = 87, .modifier = 5,.runtime=runtime}; return VK_SUCCESS;
+    *out = (struct ps5vk_draw_state){.cx_count = 87, .modifier = 5,
+        .runtime=runtime,.hull_runtime=hull_runtime}; return VK_SUCCESS;
 }
 int main(void)
 {
@@ -318,6 +319,26 @@ int main(void)
      * Actual PSBC currently conservatively reserves option-visible sets. */
     runtime.vertex_descriptor_valid[1]=0;
     runtime.fragment_descriptor_valid[1]=runtime.fragment_descriptor_valid[2]=0;
+    hull_runtime.enabled=1;hull_runtime.vertex_descriptor_valid[1]=1;
+    /* HS is the only user of set1. It must still be copied and validated. */
+    expected_bytes-=24*48;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)==VK_SUCCESS);
+    assert(prepared.descriptor_tables[1] && !prepared.descriptor_tables[2]);
+    assert(prepared.descriptor_tables[1][0]==100+256*25);
+    ps5vk_native_release_draw(&prepared);
+    allocated=allocations;op.sets[1]=NULL;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS);
+    assert(allocations==allocated && !prepared.backing);
+    op.sets[1]=sets+1;
+    /* A precise raster mask must not conceal HS's unknown binding use. */
+    runtime.vertex_descriptor_valid[1]=1;runtime.vertex_used_bindings[1]=UINT64_C(1)<<3;
+    sets[1].defined[23]=VK_FALSE;
+    assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)!=VK_SUCCESS);
+    assert(allocations==allocated && !prepared.backing);
+    sets[1].defined[23]=VK_TRUE;
+    runtime.vertex_descriptor_valid[1]=0;runtime.vertex_used_bindings[1]=0;
+    hull_runtime=(struct ps5vk_runtime_draw_abi){0};
+    expected_bytes+=24*48;
     op.sets[1]=op.sets[2]=NULL;expected_bytes-=2*24*48;
     assert(ps5vk_native_prepare_resource_draw(&d,&op,&area,NULL,shader_address,&prepared)==VK_SUCCESS);
     assert(!prepared.descriptor_tables[1] && !prepared.descriptor_tables[2] && prepared.descriptor_tables[3]);
@@ -391,7 +412,7 @@ int main(void)
         mixed[2].buffers[0].buffer=(VkBuffer)(uintptr_t)3;
         /* A descriptor type outside the bounded profile stays unsupported
          * rather than being half-delivered. */
-        mixed[1].signature.type[5]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        mixed[1].signature.type[5]=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         mixed_pipeline.sets[1]=mixed[1].signature;
         assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)==
             VK_ERROR_FEATURE_NOT_PRESENT && allocations==mixed_allocated && !prepared.backing);
@@ -406,12 +427,33 @@ int main(void)
         /* A dynamic uniform buffer adds its recorded offset to the record. */
         mixed[0].signature.type[5]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         mixed_pipeline.sets[0]=mixed[0].signature;
-        mixed_op.descriptor_dynamic_offsets[0]=256;
+        mixed_op.graphics_dynamic_offsets[0][0]=256;
+        /* This legacy index must not supply the runtime table offset. */
+        mixed_op.descriptor_dynamic_offsets[0]=768;
         assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)==
             VK_SUCCESS);
         assert(first_set_buffer_dynamic==256);
         for(unsigned w=0;w<4;++w)
             assert(prepared.descriptor_tables[0][w]==200+w+256*(unsigned)1);
+        ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+        /* Storage buffers use the same checked buffer encoder, not T#/S#.
+         * Static storage ignores a stale dynamic offset; dynamic storage uses it. */
+        for(unsigned dynamic=0;dynamic<2;++dynamic) {
+            mixed[0].signature.type[5]=dynamic?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            mixed_pipeline.sets[0]=mixed[0].signature;
+            assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)==VK_SUCCESS);
+            assert(first_set_buffer_dynamic==(dynamic?256u:0u));
+            for(unsigned w=0;w<4;++w)
+                assert(prepared.descriptor_tables[0][w]==200+w+256u);
+            ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+        }
+        /* Same local element in different sets must not alias its offset. */
+        mixed[3].signature.type[5]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        mixed_pipeline.sets[3]=mixed[3].signature;
+        mixed_op.graphics_dynamic_offsets[3][0]=512;
+        assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,&prepared)==VK_SUCCESS);
+        assert(first_set_buffer_dynamic==256 && last_buffer_dynamic==512);
         ps5vk_native_release_draw(&prepared);assert(allocations==releases);
         runtime.enabled=1;
     }

@@ -157,9 +157,29 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     /* Vulkan zero-count draws have no rasterization side effects. */
     if (!(indices?op->index_count:op->vertex_count) || !op->instance_count) return VK_SUCCESS;
     uint32_t runtime_vertex[16],runtime_pixel[16];
+    uint32_t runtime_hull[16],unused_pixel[16];
     uint32_t sh_count=state->sh_count?state->sh_count:12;
     if(sh_count>PS5VK_DRAW_SH_CAPACITY)return VK_ERROR_UNKNOWN;
     const uint32_t single_table[PS5VK_RUNTIME_DESCRIPTOR_SETS]={texture_low?*texture_low:0,0,0,0};
+    const uint32_t *tables=descriptor_tables?descriptor_tables:single_table;
+    uint32_t raster_tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+    uint32_t hull_tables[PS5VK_RUNTIME_DESCRIPTOR_SETS]={0};
+    if(state->hull_runtime.enabled) {
+        /* One allocation per set, but independent user-SGPR windows. Do not
+         * pass HS-only pointers to the TES/PS ABI (or the reverse): the value
+         * builder intentionally rejects pointers that its stages do not use. */
+        for(unsigned s=0;s<PS5VK_RUNTIME_DESCRIPTOR_SETS;++s) {
+            const int raster=state->runtime.vertex_descriptor_valid[s] ||
+                state->runtime.fragment_descriptor_valid[s];
+            const int hull=state->hull_runtime.vertex_descriptor_valid[s] ||
+                state->hull_runtime.fragment_descriptor_valid[s];
+            if(tables[s] && !raster && !hull)return VK_ERROR_FEATURE_NOT_PRESENT;
+            if(raster)raster_tables[s]=tables[s];
+            if(hull)hull_tables[s]=tables[s];
+        }
+        if(state->push_constant_low && !state->runtime.push_constant_size &&
+           !state->hull_runtime.push_constant_size)return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     /* The runtime ABI describes how the compiled stages receive their user
      * SGPRs; it is orthogonal to how vertices are addressed. An indexed draw
      * runs through the same prepared vertex table and the same
@@ -172,10 +192,20 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
         ps5vk_runtime_draw_values_sets(&state->runtime,ps5vk_draw_base_vertex(op),
             ps5vk_draw_base_instance(op),ps5vk_draw_index_value(op),
             view?view->view_index:ps5vk_draw_view_index_value(op),
-            vertex_input?vertex_table_low:0,state->push_constant_low,
-            descriptor_tables?descriptor_tables:single_table,
+            vertex_input && state->runtime.vertex_buffer_valid?vertex_table_low:0,
+            !state->hull_runtime.enabled || state->runtime.push_constant_size?state->push_constant_low:0,
+            state->hull_runtime.enabled?raster_tables:tables,
             runtime_vertex,runtime_pixel))
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(state->hull_runtime.enabled) {
+        if(!state->hull_runtime.hull ||
+            ps5vk_runtime_draw_values_sets(&state->hull_runtime,ps5vk_draw_base_vertex(op),
+                ps5vk_draw_base_instance(op),ps5vk_draw_index_value(op),
+                view?view->view_index:ps5vk_draw_view_index_value(op),
+                vertex_input && state->hull_runtime.vertex_buffer_valid?vertex_table_low:0,
+                state->hull_runtime.push_constant_size?state->push_constant_low:0,
+                hull_tables,runtime_hull,unused_pixel))return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     ps5_agc_register view_changed[PS5_COLOR_REGISTER_COUNT + PS5_DEPTH_REGISTER_COUNT];
     uint32_t view_changed_count=0,view_words=0;
     if(view) {
@@ -350,12 +380,17 @@ static VkResult emit_draw(uint32_t **cursor, uint32_t capacity,
     const uint32_t vertex[4] = {global_table_low, vertex_table_low,
         ps5vk_draw_base_vertex(op), ps5vk_draw_base_instance(op)};
     const uint32_t fragment[2]={global_table_low,texture_low?*texture_low:0};
+    if(state->hull_runtime.enabled &&
+       ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x10c,
+           runtime_hull,state->hull_runtime.vertex_count,sceAgcCbSetShRegisterRangeDirect))
+        return VK_ERROR_UNKNOWN;
     if(state->runtime.enabled) {
-#if defined(PS5VK_TESS_LEGACY_DOMAIN) && PS5VK_TESS_LEGACY_DOMAIN
+#if (defined(PS5VK_TESS_LEGACY_DOMAIN) && PS5VK_TESS_LEGACY_DOMAIN) || \
+    (defined(PS5VK_TESS_LEGACY_VS_CONTROL) && PS5VK_TESS_LEGACY_VS_CONTROL)
         /* DIAGNOSTIC: a legacy hardware VS loads its user data from
          * SPI_SHADER_USER_DATA_VS_0 (sh 0x4c) with no system preamble, so the
          * tessellation pipeline's pre-raster block is written there too. */
-        if(state->runtime.ring_table_valid &&
+        if(state->runtime.legacy_vs &&
            ps5_agc_writer_set_sh_direct(&next,(uint32_t)(end-next),0x4c,
               runtime_vertex,state->runtime.vertex_count,sceAgcCbSetShRegisterRangeDirect))
             return VK_ERROR_UNKNOWN;
@@ -424,5 +459,6 @@ VkResult ps5vk_native_emit_runtime_draw(uint32_t **cursor,uint32_t capacity,
     if(!state || !state->runtime.enabled || !tables || vertex%16 || (indices && !emit))
         return VK_ERROR_UNKNOWN;
     return emit_draw(cursor,capacity,state,mapping,bytes,op,0,vertex,
-        state->runtime.vertex_buffer_valid,indices,emit,NULL,tables,view);
+        state->runtime.vertex_buffer_valid || state->hull_runtime.vertex_buffer_valid,
+        indices,emit,NULL,tables,view);
 }

@@ -5,41 +5,23 @@
 #include "descriptor_table_layout.h"
 #include "descriptor_encode.h"
 #include "graphics_pipeline_ps5.h"
+#include "runtime_resource_use.h"
+#include "graphics_descriptor_profile.h"
 #include <string.h>
 
-/* The runtime graphics profile delivers combined image samplers, resource-only
- * input attachments and mandatory uniform buffers from the same per-set table.
- * Every other descriptor type stays out of the profile rather than being
- * silently accepted. */
-/* The storage-buffer arm is DIAGNOSTIC ONLY and matches the same condition in
- * descriptor_profile_supported() and in the queue's own predicate. This is the
- * THIRD place the profile is decided, and the three had to be opened one run
- * at a time because each refuses with the same error code from a different
- * file - which is the argument for having them agree by construction rather
- * than by three separate edits. The shipped build sees the original sets. */
-#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
-#define PS5VK_DIAGNOSTIC_STORAGE_BUFFER(t) ((t) == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-#else
-#define PS5VK_DIAGNOSTIC_STORAGE_BUFFER(t) (0)
-#endif
 static int graphics_descriptor_type(VkDescriptorType type)
 {
-    return type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
-        type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
-        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-        PS5VK_DIAGNOSTIC_STORAGE_BUFFER(type);
+    return ps5vk_graphics_descriptor_type(type);
 }
 
 static int graphics_buffer_type(VkDescriptorType type)
 {
-    return type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-        type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-        PS5VK_DIAGNOSTIC_STORAGE_BUFFER(type);
+    return ps5vk_graphics_buffer_type(type);
 }
 
 static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
-    const struct ps5vk_runtime_draw_abi *runtime,struct ps5vk_descriptor_table_layout *tables,
+    const struct ps5vk_runtime_draw_abi *runtime,const struct ps5vk_runtime_draw_abi *hull,
+    struct ps5vk_descriptor_table_layout *tables,
     uint32_t *mask)
 {
     VkPipeline p=op->pipeline;
@@ -77,7 +59,7 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
     if(runtime->enabled) {
         for(unsigned s=0;s<PS5VK_MAX_SETS;++s) {
             /* One canonical table per set, shared by every using stage. */
-            if(runtime->vertex_descriptor_valid[s] || runtime->fragment_descriptor_valid[s])*mask|=1u<<s;
+            if(ps5vk_runtime_resource_bindings(runtime,hull,s))*mask|=1u<<s;
         }
     } else if(p->set_count) {
         if(p->set_count!=1 || p->sets[0].count!=1 || p->sets[0].binding[0].count!=1)
@@ -106,8 +88,7 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
              * requirement: it needs no defined descriptor. A set the compiler
              * could not name (zero mask on both stages) keeps its whole
              * declaration so an unknown entry can never look unused. */
-            const uint64_t used=runtime->vertex_used_bindings[s]|
-                runtime->fragment_used_bindings[s];
+            const uint64_t used=ps5vk_runtime_resource_bindings(runtime,hull,s);
             if(runtime->enabled && used && !(used&(UINT64_C(1)<<b)))continue;
             for(unsigned e=0;e<binding->count;++e) {
                 unsigned index=binding->first+e;
@@ -173,7 +154,7 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
     if (rc != VK_SUCCESS) return rc;
     struct ps5vk_descriptor_table_layout tables;
     uint32_t set_mask=0;
-    rc=descriptor_plan(d,op,&plan.runtime,&tables,&set_mask);
+    rc=descriptor_plan(d,op,&plan.runtime,&plan.hull_runtime,&tables,&set_mask);
     if(rc!=VK_SUCCESS)return rc;
     struct ps5vk_prepared_draw result = {.memory = d->memory, .bytes = sizeof(plan)};
     size_t table_offset=(sizeof(plan)+15u)&~(size_t)15u;
@@ -187,10 +168,10 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         result.bytes+=tables.set_bytes[s];
     }
     size_t push_offset=result.bytes;
-    if(plan.runtime.push_constant_size) {
-        if(op->push_constant_size!=plan.runtime.push_constant_size)return VK_ERROR_UNKNOWN;
-        result.bytes+=plan.runtime.push_constant_size;
-    } else if(op->push_constant_size)return VK_ERROR_UNKNOWN;
+    uint32_t push_bytes=0;
+    if(ps5vk_runtime_push_bytes(&plan.runtime,&plan.hull_runtime,
+            op->push_constant_size,&push_bytes))return VK_ERROR_UNKNOWN;
+    result.bytes+=push_bytes;
     size_t bounce_offsets[PS5VK_MAX_VERTEX_BINDINGS]={0};
     for(uint32_t i=0;vertices && i<vertices->count;++i) {
         const struct ps5vk_vertex_fetch *vertex=&vertices->bindings[i];
@@ -209,12 +190,12 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         ps5vk_native_release_draw(&result); return VK_ERROR_MEMORY_MAP_FAILED;
     }
     result.state = address; memcpy(result.state, &plan, sizeof(plan));
-    if(plan.runtime.push_constant_size) {
+    if(push_bytes) {
         void *push=(unsigned char *)address+push_offset;
         if(((uintptr_t)push>>32)!=2) {
             ps5vk_native_release_draw(&result);return VK_ERROR_MEMORY_MAP_FAILED;
         }
-        memcpy(push,op->push_constants,plan.runtime.push_constant_size);
+        memcpy(push,op->push_constants,push_bytes);
         result.state->push_constant_low=(uint32_t)(uintptr_t)push;
     }
     if(vertices) {
@@ -254,8 +235,8 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
             /* An unused declared binding keeps its zeroed record and is never
              * encoded, so it cannot require a view, a sampler or a descriptor. */
             if(plan.runtime.enabled) {
-                const uint64_t used=plan.runtime.vertex_used_bindings[s]|
-                    plan.runtime.fragment_used_bindings[s];
+                const uint64_t used=ps5vk_runtime_resource_bindings(
+                    &plan.runtime,&plan.hull_runtime,s);
                 if(used && binding->count && !(used&(UINT64_C(1)<<b)))continue;
             }
             for(unsigned e=0;e<binding->count;++e) {
@@ -264,7 +245,7 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
                     e*tables.binding[s][b].byte_stride)/4;
                 if(graphics_buffer_type(set->signature.type[b])) {
                     VkDeviceSize dynamic=ps5vk_dynamic_descriptor_type(
-                        set->signature.type[b])?op->descriptor_dynamic_offsets[index]:0;
+                        set->signature.type[b])?op->graphics_dynamic_offsets[s][index]:0;
                     rc=ps5vk_buffer_descriptor(d,&set->buffers[index],dynamic,words);
                 } else if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) {
                     /* Resource-only image data: the encoder writes the eight
