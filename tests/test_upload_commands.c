@@ -92,11 +92,25 @@ int main(void)
         .src_access=VK_ACCESS_SHADER_WRITE_BIT,
         .dst_access=VK_ACCESS_HOST_READ_BIT,
         .buffer_barrier={.buffer=buffer,.offset=8,.size=64}};
+    struct ps5vk_operation fragment_host_pair[2]={fragment_host,
+        {.type=PS5VK_BARRIER,
+         .src_stage=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+         .dst_stage=VK_PIPELINE_STAGE_HOST_BIT}};
     cursor=words;flushes=0;flushed=NULL;flushed_bytes=0;
-    assert(ps5vk_upload_commands(&device,&fragment_host,1,NULL,&layouts,
+    assert(ps5vk_upload_commands(&device,fragment_host_pair,2,NULL,&layouts,
         &cursor,words+256,flush)==VK_SUCCESS);
-    assert(cursor-words==PS5VK_GRAPHICS_ACQUIRE_WORDS && flushes==1 &&
+    assert(cursor-words==2*PS5VK_GRAPHICS_ACQUIRE_WORDS && flushes==1 &&
         flushed==source+8 && flushed_bytes==64);
+    /* The zero-access aggregate is meaningful only directly after the exact
+     * validated buffer dependency.  Never admit it on its own or after a
+     * different stage/access pair. */
+    cursor=words;
+    assert(ps5vk_upload_commands(&device,&fragment_host_pair[1],1,NULL,&layouts,
+        &cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && cursor==words);
+    fragment_host_pair[0].src_access=VK_ACCESS_SHADER_READ_BIT;cursor=words;
+    assert(ps5vk_upload_commands(&device,fragment_host_pair,2,NULL,&layouts,
+        &cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && cursor==words);
+    fragment_host_pair[0]=fragment_host;
     fragment_host.dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT;cursor=words;
     assert(ps5vk_upload_commands(&device,&fragment_host,1,NULL,&layouts,
         &cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && cursor==words);

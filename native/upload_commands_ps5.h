@@ -44,6 +44,25 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 op->dst_stage==VK_PIPELINE_STAGE_HOST_BIT &&
                 op->src_access==VK_ACCESS_SHADER_WRITE_BIT &&
                 op->dst_access==VK_ACCESS_HOST_READ_BIT;
+            /* vkCmdPipelineBarrier records one aggregate dependency after
+             * every buffer-only call.  With no VkMemoryBarrier in that call,
+             * the aggregate intentionally carries zero access masks; the
+             * preceding per-buffer operation retains the actual scope and
+             * range.  Accept this otherwise resource-less operation only as
+             * the second half of the exact fragment SSBO -> host pair above.
+             * This keeps an isolated or differently scoped zero-access
+             * aggregate fail-closed. */
+            const struct ps5vk_operation *previous=i?&ops[i-1]:NULL;
+            const int fragment_host_aggregate=!op->buffer_barrier.buffer &&
+                op->src_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT &&
+                op->dst_stage==VK_PIPELINE_STAGE_HOST_BIT &&
+                !op->src_access && !op->dst_access && previous &&
+                previous->type==PS5VK_BARRIER &&
+                previous->buffer_barrier.buffer &&
+                previous->src_stage==op->src_stage &&
+                previous->dst_stage==op->dst_stage &&
+                previous->src_access==VK_ACCESS_SHADER_WRITE_BIT &&
+                previous->dst_access==VK_ACCESS_HOST_READ_BIT;
             /* The pinned upstream draw case orders the transfer write that
              * initialised and cleared its colour target against the
              * colour-attachment stages (vktDrawBaseClass.cpp:207-211). The
@@ -56,7 +75,8 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 op->src_access==VK_ACCESS_TRANSFER_WRITE_BIT &&
                 op->dst_access==(VkAccessFlags)(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|
                                                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-            if(!vertex && !upload && !color_prelude && !fragment_host)
+            if(!vertex && !upload && !color_prelude && !fragment_host &&
+               !fragment_host_aggregate)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             if(op->buffer_barrier.buffer) {
                 void *address;VkDeviceSize bytes;
