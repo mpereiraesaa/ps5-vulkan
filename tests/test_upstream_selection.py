@@ -79,8 +79,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # leaves held as t05-measurement-pending until one console window
         # (2 clip_volume.depth_clamp triangles, 16 fragment_ops multi_viewport,
         # 6 draw.renderpass.scissor multi-scissor, 1 line_continuity amber) and
-        # 15 same-family leaves that document a refusal or a capability gap.
-        self.assertEqual((304, 102, 48),
+        # 15 same-family leaves that document a refusal or a capability gap,
+        # plus two T06 fragment side-effect leaves held for their first exact
+        # artifact-bound hardware run.
+        self.assertEqual((304, 104, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
@@ -248,6 +250,34 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertIn("vulkan/amber/rasterization/line_continuity/polygon-mode-lines.amber", builder)
         self.assertTrue((UPSTREAM / "external/vulkancts/data/vulkan/amber/rasterization/"
                          "line_continuity/polygon-mode-lines.amber").is_file())
+
+    def test_t06_fragment_store_leaves_are_exact_unpromoted_upstream_oracles(self):
+        expected_paths = {
+            "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+            "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill",
+        }
+        selected = [case for case in self.current_manifest["diagnostics"]
+                    if case.get("category") == "t06-fragment-stores-measurement-pending"]
+        self.assertEqual(expected_paths, {case["path"] for case in selected})
+        self.assertEqual(set(), expected_paths & {
+            case["path"] for case in self.current_manifest["cases"]})
+        self.assertTrue(all(case["expected_status"] == "Pass" for case in selected))
+        self.assertTrue(all(case["features_required"] ==
+                            ["core:fragmentStoresAndAtomics"] for case in selected))
+        self.assertTrue(all(case["source"] ==
+                            "external/vulkancts/modules/vulkan/rasterization/"
+                            "vktRasterizationFragShaderSideEffectsTests.cpp:684"
+                            for case in selected))
+
+        source = (UPSTREAM / "external/vulkancts/modules/vulkan/rasterization/"
+                  "vktRasterizationFragShaderSideEffectsTests.cpp").read_text()
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn('new FragSideEffectsTestCase(testCtx, "kill", params)', source)
+        self.assertIn('{false, "color_at_beginning"}', source)
+        self.assertIn('{true, "color_at_end"}', source)
+        self.assertIn('vkt::rasterization::createTests(m_testCtx, "rasterization")', package)
+        self.assertIn("vktRasterizationFragShaderSideEffectsTests.cpp", builder)
 
     def test_device_capabilities_come_from_the_device_sources(self):
         self.assertEqual([], self.capability_failures)

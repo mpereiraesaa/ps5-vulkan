@@ -408,7 +408,9 @@
       "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_negative",
       "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_positive",
       "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_four_viewports",
-      "dEQP-VK.dynamic_state.monolithic.rs_state.depth_bias_clamp"
+      "dEQP-VK.dynamic_state.monolithic.rs_state.depth_bias_clamp",
+      "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+      "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill"
     ],
     "manifest": "cts/upstream/manifest.json",
     "note": "Only original upstream cases whose prerequisites the reported profile satisfies belong here; anything else stays a diagnostic."
