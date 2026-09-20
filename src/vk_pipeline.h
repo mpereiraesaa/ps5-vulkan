@@ -51,6 +51,8 @@ struct VkPipeline_T {
     struct ps5vk_compiled_program program;
     void *cache_entry;
     VkBool32 graphics;
+    VkBool32 graphics_usage_known;
+    uint32_t graphics_used_set_mask;
     /* The subpass this graphics pipeline was created against. A pipeline is
      * bound to ONE subpass of one render pass, so a draw recorded in a
      * different subpass is refused rather than executed with the state of the
@@ -70,6 +72,8 @@ struct VkPipeline_T {
     VkBool32 depth_test, depth_write;
     VkCompareOp depth_compare;
     VkFormat color_format, depth_format;
+    VkPipelineColorBlendAttachmentState color_blend;
+    float blend_constants[4];
     uint32_t vertex_binding_count, vertex_attribute_count;
     union {
         VkVertexInputBindingDescription vertex_binding; /* first description */
@@ -78,4 +82,9 @@ struct VkPipeline_T {
     VkVertexInputAttributeDescription vertex_attributes[32];
     uint32_t code[];
 };
+static inline int ps5vk_graphics_set_required(VkPipeline p,unsigned set)
+{
+    return p && set<p->set_count && set<PS5VK_MAX_SETS && p->sets[set].count &&
+        (!p->graphics_usage_known || (p->graphics_used_set_mask & (1u<<set)));
+}
 #endif

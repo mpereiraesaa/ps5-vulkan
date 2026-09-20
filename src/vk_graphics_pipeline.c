@@ -2,7 +2,8 @@
 #include "vk_render_pass.h"
 #include "graphics_program.h"
 #include "vk_pipeline_cache.h"
-#if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE
+#if (defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE) || (defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG)
+#define PS5VK_PIPELINE_DIAGNOSTICS 1
 #include "ps5log.h"
 #endif
 #include <float.h>
@@ -22,6 +23,9 @@ unsigned ps5vk_pipeline_refusal_site(void)
 static VkResult refuse(unsigned site)
 {
     ps5vk_pipeline_refusal_site_value=site;
+#ifdef PS5VK_PIPELINE_DIAGNOSTICS
+    ps5log_printf(PS5LOG_MARK,"PS5VK_PIPELINE_REFUSE site=%u",site);
+#endif
     return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
@@ -80,11 +84,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * names. A nonzero index is no longer refused outright: it identifies the
      * scope this pipeline may draw in. */
     /* Two stages are the vertex+fragment profile every earlier tranche used;
-     * three or four add the optional tessellation control/evaluation pair and
-     * the optional geometry stage between them. Nothing else is accepted, so a
+     * three through five add the optional tessellation control/evaluation pair
+     * and geometry after evaluation. Nothing else is accepted, so a
      * mesh or task stage still fails here. */
     if (in->pNext || in->flags || in->subpass >= in->renderPass->subpass_count ||
-        (in->stageCount != 2 && in->stageCount != 3 && in->stageCount != 4) || !in->pStages ||
+        (in->stageCount < 2 || in->stageCount > 5) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return refuse(2);
     VkBool32 dynamic_viewport,dynamic_scissor;
@@ -249,6 +253,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         .push_constant_size=in->layout->push_constant_size};
     memcpy(key.push_constant_stages,in->layout->push_constant_stages,
            sizeof(key.push_constant_stages));
+    if(key.blend_enable) {
+        const VkPipelineColorBlendAttachmentState *a=&b->pAttachments[0];
+        key.src_color_blend_factor=a->srcColorBlendFactor;
+        key.dst_color_blend_factor=a->dstColorBlendFactor;
+        key.color_blend_op=a->colorBlendOp;
+        key.src_alpha_blend_factor=a->srcAlphaBlendFactor;
+        key.dst_alpha_blend_factor=a->dstAlphaBlendFactor;
+        key.alpha_blend_op=a->alphaBlendOp;
+        memcpy(key.blend_constants,b->blendConstants,sizeof(key.blend_constants));
+    }
     if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
        !specialization_key(fs->pSpecializationInfo,&key.fragment) ||
        (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)) ||
@@ -260,7 +274,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     VkResult rc;
     if(d->graphics_acquire) {
         rc=d->graphics_acquire(d->graphics_compiler_context,&key,&data);
-#ifdef PS5VK_TESS_PROBE
+#ifdef PS5VK_PIPELINE_DIAGNOSTICS
         if(rc!=VK_SUCCESS)
             ps5log_printf(PS5LOG_MARK,"PS5VK_PIPELINE_ACQUIRE_FAIL rc=%d",(int)rc);
 #endif
@@ -282,11 +296,18 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     memset(p,0,sizeof(*p));
     rc=d->graphics_create(d,data,primitive_type,&p->graphics_state);
-#ifdef PS5VK_TESS_PROBE
+#ifdef PS5VK_PIPELINE_DIAGNOSTICS
     if(rc!=VK_SUCCESS)
         ps5log_printf(PS5LOG_MARK,"PS5VK_PIPELINE_NATIVE_CREATE_FAIL rc=%d",(int)rc);
 #endif
     if(d->graphics_acquire)d->graphics_compiled_release(d->graphics_compiler_context,data);
+    if(rc==VK_SUCCESS && p->graphics_state && d->graphics_used_sets) {
+        rc=d->graphics_used_sets(d,p->graphics_state,&p->graphics_used_set_mask);
+        if(rc==VK_SUCCESS &&
+           (p->graphics_used_set_mask & ~((1u<<in->layout->set_count)-1u)))
+            rc=VK_ERROR_INITIALIZATION_FAILED;
+        if(rc==VK_SUCCESS)p->graphics_usage_known=VK_TRUE;
+    }
     if (rc != VK_SUCCESS || !p->graphics_state) {
         if (p->graphics_state) d->graphics_release(d,p->graphics_state);
         ps5vk_object_free(p,&saved,custom);
@@ -305,6 +326,8 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
            sizeof(p->push_constant_stages));
     p->cull_mode=r->cullMode; p->front_face=r->frontFace; p->color_format=key.color_format;
     p->primitive_restart=ia->primitiveRestartEnable;
+    p->color_blend=*b->pAttachments;
+    memcpy(p->blend_constants,key.blend_constants,sizeof(p->blend_constants));
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
     if(key.vertex_binding_count)memcpy(p->vertex_bindings,key.vertex_bindings,
         key.vertex_binding_count*sizeof(*key.vertex_bindings));
