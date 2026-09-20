@@ -21,4 +21,5 @@ struct ps5vk_native_graphics_pipeline {
 VkResult ps5vk_native_graphics_create(VkDevice, const void *, uint32_t, void **);
 VkResult ps5vk_native_runtime_graphics_create(VkDevice,const void *,uint32_t,void **);
 void ps5vk_native_graphics_release(VkDevice, void *);
+VkResult ps5vk_native_graphics_used_sets(VkDevice,const void *,uint32_t *);
 #endif
