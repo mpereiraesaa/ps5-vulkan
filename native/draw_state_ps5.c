@@ -447,7 +447,10 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * disable blending on subsequent non-blended draws, rather than retaining
      * the previous pipeline's state. Runtime acceptance is gated separately. */
     struct ps5vk_blend_words blend;
-    if(!ps5vk_blend_encode(&p->color_blend,p->blend_constants,&blend))
+    /* The compiler/runtime pair does not yet publish a proven secondary
+     * fragment export.  Keep SRC1 factors unreachable until that metadata is
+     * carried by the pipeline and a native witness validates the handoff. */
+    if(!ps5vk_blend_encode(&p->color_blend,p->blend_constants,VK_FALSE,&blend))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if(result.cx_count+6u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
     result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend.control};

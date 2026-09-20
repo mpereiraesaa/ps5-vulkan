@@ -7,8 +7,9 @@
 /* GFX1013 encoding from the pinned Mesa src/amd/registers/gfx103.json:
  * CB_BLEND0_CONTROL, BlendOp, CombFunc and SX_MRT0_BLEND_OPT. These are
  * register words only, not evidence of hardware support or a feature gate.
- * Dual-source factors require an additional fragment export contract and
- * deliberately remain unsupported here. */
+ * The four SRC1 encodings are part of this register contract, but remain
+ * unreachable from a Vulkan pipeline until the compiler-produced secondary
+ * export and the dualSrcBlend device feature are both validated. */
 struct ps5vk_blend_words {
     uint32_t control, optimization, constants[4];
 };
@@ -51,6 +52,10 @@ static inline int ps5vk_blend_factor(VkBlendFactor f,uint32_t *out)
     case VK_BLEND_FACTOR_SRC_ALPHA_SATURATE:*out=10;break;
     case VK_BLEND_FACTOR_CONSTANT_COLOR:*out=13;break;
     case VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR:*out=14;break;
+    case VK_BLEND_FACTOR_SRC1_COLOR:*out=15;break;
+    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:*out=16;break;
+    case VK_BLEND_FACTOR_SRC1_ALPHA:*out=17;break;
+    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:*out=18;break;
     case VK_BLEND_FACTOR_CONSTANT_ALPHA:*out=19;break;
     case VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA:*out=20;break;
     default:return 0;
@@ -71,17 +76,29 @@ static inline int ps5vk_blend_equation(VkBlendOp op,VkBlendFactor src,
     }
     return ps5vk_blend_factor(src,s) && ps5vk_blend_factor(dst,d);
 }
+static inline int ps5vk_blend_factor_uses_src1(VkBlendFactor factor)
+{
+    return factor==VK_BLEND_FACTOR_SRC1_COLOR ||
+        factor==VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR ||
+        factor==VK_BLEND_FACTOR_SRC1_ALPHA ||
+        factor==VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
+}
 static inline int ps5vk_blend_encode(const VkPipelineColorBlendAttachmentState *a,
-    const float constants[4],struct ps5vk_blend_words *out)
+    const float constants[4],VkBool32 dual_source,struct ps5vk_blend_words *out)
 {
     if(!out)return 0;
     memset(out,0,sizeof(*out));
-    if(!a)return 0;
+    if(!a || (dual_source!=VK_FALSE && dual_source!=VK_TRUE))return 0;
     /* No RB+ algebraic shortcuts: preserve both operands, no combining
      * optimization. Emit explicitly even for disabled blending on switches. */
     struct ps5vk_blend_words w={.optimization=0x00770077u};
     if(!a->blendEnable){*out=w;return 1;}
     if(a->blendEnable!=VK_TRUE || !constants)return 0;
+    if(!dual_source &&
+       (ps5vk_blend_factor_uses_src1(a->srcColorBlendFactor) ||
+        ps5vk_blend_factor_uses_src1(a->dstColorBlendFactor) ||
+        ps5vk_blend_factor_uses_src1(a->srcAlphaBlendFactor) ||
+        ps5vk_blend_factor_uses_src1(a->dstAlphaBlendFactor)))return 0;
     uint32_t s,d,fn,sa,da,fna;
     if(!ps5vk_blend_equation(a->colorBlendOp,a->srcColorBlendFactor,
         a->dstColorBlendFactor,&s,&d,&fn) ||
