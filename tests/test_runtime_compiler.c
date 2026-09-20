@@ -236,10 +236,23 @@ int main(void)
             &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);
+        /* T06 adds four more graphics-only bits. They must not poison a
+         * compute pipeline on a device which enabled every reported core
+         * feature, while an unknown bit after the declared range is refused. */
+        const uint32_t t06_device_mask = t05_device_mask |
+            PS5VK_FEATURE_INDEPENDENT_BLEND | PS5VK_FEATURE_DUAL_SRC_BLEND |
+            PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
+            PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t06_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
         /* A bit above every known feature still fails closed. */
         graphics_device_code = NULL;
         assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
-            NULL, t05_device_mask | (1u << 16), &graphics_device_program,
+            NULL, t06_device_mask | (1u << 20), &graphics_device_program,
             &graphics_device_code) == VK_ERROR_FEATURE_NOT_PRESENT);
     }
 

@@ -1206,6 +1206,66 @@ static void negative(void)
         memset(&features, 0, sizeof(features));
         features.robustBufferAccess = VK_TRUE;
     }
+    /* T06 follows the same one-member/one-platform-bit contract. This test
+     * deliberately supplies the bits only through the host fixture: the host
+     * and PS5 platform defaults advertise none until native evidence promotes
+     * an individual capability. */
+    {
+        const struct { size_t offset; uint32_t bit; } t06[4] = {
+            {offsetof(VkPhysicalDeviceFeatures, independentBlend),
+             PS5VK_FEATURE_INDEPENDENT_BLEND},
+            {offsetof(VkPhysicalDeviceFeatures, dualSrcBlend),
+             PS5VK_FEATURE_DUAL_SRC_BLEND},
+            {offsetof(VkPhysicalDeviceFeatures, fragmentStoresAndAtomics),
+             PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS},
+            {offsetof(VkPhysicalDeviceFeatures, sampleRateShading),
+             PS5VK_FEATURE_SAMPLE_RATE_SHADING},
+        };
+        const uint32_t saved = p->platform.supported_features;
+        const VkBool32 yes = VK_TRUE;
+        VkPhysicalDeviceFeatures reported;
+        vkGetPhysicalDeviceFeatures(p, &reported);
+        assert(!reported.independentBlend && !reported.dualSrcBlend &&
+               !reported.fragmentStoresAndAtomics && !reported.sampleRateShading);
+        uint32_t all_bits = 0;
+        for (unsigned n = 0; n < 4; ++n) {
+            all_bits |= t06[n].bit;
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t06[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+
+            p->platform.supported_features = saved | t06[n].bit;
+            vkGetPhysicalDeviceFeatures(p, &reported);
+            for (unsigned other = 0; other < 4; ++other) {
+                VkBool32 value;
+                memcpy(&value, (unsigned char *)&reported + t06[other].offset, sizeof(value));
+                assert(value == (other == n ? VK_TRUE : VK_FALSE));
+            }
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t06[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == t06[n].bit);
+            vkDestroyDevice(d, NULL);
+            p->platform.supported_features = saved;
+        }
+
+        p->platform.supported_features = saved | all_bits;
+        VkPhysicalDeviceFeatures2 all = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        vkGetPhysicalDeviceFeatures2KHR(p, &all);
+        assert(all.features.independentBlend && all.features.dualSrcBlend &&
+               all.features.fragmentStoresAndAtomics && all.features.sampleRateShading);
+        VkDeviceCreateInfo chained = info;
+        chained.pEnabledFeatures = NULL; chained.pNext = &all;
+        d=(VkDevice)(uintptr_t)1;
+        assert(vkCreateDevice(p,&chained,NULL,&d)==VK_SUCCESS && d);
+        assert(d->enabled_features == (PS5VK_FEATURE_ROBUST_BUFFER_ACCESS | all_bits));
+        vkDestroyDevice(d, NULL);
+        p->platform.supported_features = saved;
+        memset(&features, 0, sizeof(features));
+        features.robustBufferAccess = VK_TRUE;
+    }
     info.pEnabledFeatures = NULL; priority = NAN;
     assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
     priority = 0.0f;
