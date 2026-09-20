@@ -31,6 +31,19 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
                 op->src_access==VK_ACCESS_HOST_WRITE_BIT &&
                 op->dst_access==VK_ACCESS_TRANSFER_READ_BIT;
+            /* A fragment shader may write an SSBO and expose it to the host
+             * after this submission completes.  The command-buffer frontend
+             * has already validated the exact buffer range and stage/access
+             * scopes.  Flush the host mapping before submit so stale CPU
+             * cache lines cannot overwrite the shader result; the job's
+             * final RELEASE_MEM performs the GPU writeback before completion
+             * is reported to the host.  Keep this deliberately narrower than
+             * a generic shader barrier: it is the measured CTS contract. */
+            const int fragment_host=op->buffer_barrier.buffer &&
+                op->src_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT &&
+                op->dst_stage==VK_PIPELINE_STAGE_HOST_BIT &&
+                op->src_access==VK_ACCESS_SHADER_WRITE_BIT &&
+                op->dst_access==VK_ACCESS_HOST_READ_BIT;
             /* The pinned upstream draw case orders the transfer write that
              * initialised and cleared its colour target against the
              * colour-attachment stages (vktDrawBaseClass.cpp:207-211). The
@@ -43,7 +56,8 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 op->src_access==VK_ACCESS_TRANSFER_WRITE_BIT &&
                 op->dst_access==(VkAccessFlags)(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|
                                                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-            if(!vertex && !upload && !color_prelude)return VK_ERROR_FEATURE_NOT_PRESENT;
+            if(!vertex && !upload && !color_prelude && !fragment_host)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
             if(op->buffer_barrier.buffer) {
                 void *address;VkDeviceSize bytes;
                 VkResult rc=ps5vk_buffer_span(d,op->buffer_barrier.buffer,

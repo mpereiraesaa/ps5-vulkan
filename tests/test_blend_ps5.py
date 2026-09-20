@@ -55,17 +55,22 @@ int main(void) {
     uint32_t sx[3];
     const VkFormat formats[]={VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM};
     for(unsigned i=0;i<2;++i) {
-        assert(ps5vk_color_export_state(formats[i],4,VK_TRUE,sx));
+        assert(ps5vk_color_export_state(formats[i],4,15,VK_TRUE,sx));
         assert(sx[0]==5 && sx[1]==6 && sx[2]==0);
-        assert(ps5vk_color_export_state(formats[i],9,VK_FALSE,sx));
+        assert(ps5vk_color_export_state(formats[i],9,15,VK_FALSE,sx));
         assert(sx[0]==1 && sx[1]==0 && sx[2]==0);
-        assert(!ps5vk_color_export_state(formats[i],9,VK_TRUE,sx));
+        assert(!ps5vk_color_export_state(formats[i],9,15,VK_TRUE,sx));
         assert(!sx[0] && !sx[1] && !sx[2]);
-        assert(!ps5vk_color_export_state(formats[i],0x44,VK_TRUE,sx));
+        assert(!ps5vk_color_export_state(formats[i],0x44,15,VK_TRUE,sx));
+        assert(ps5vk_color_export_state(formats[i],0,0,VK_FALSE,sx));
+        assert(!sx[0] && !sx[1] && !sx[2]);
+        assert(!ps5vk_color_export_state(formats[i],0,15,VK_FALSE,sx));
+        assert(!ps5vk_color_export_state(formats[i],9,0,VK_FALSE,sx));
+        assert(!ps5vk_color_export_state(formats[i],0,0,VK_TRUE,sx));
     }
-    assert(!ps5vk_color_export_state(VK_FORMAT_R32_UINT,4,VK_TRUE,sx));
-    assert(!ps5vk_color_export_state(formats[0],4,2,sx));
-    assert(!ps5vk_color_export_state(formats[0],4,VK_TRUE,0));
+    assert(!ps5vk_color_export_state(VK_FORMAT_R32_UINT,4,15,VK_TRUE,sx));
+    assert(!ps5vk_color_export_state(formats[0],4,15,2,sx));
+    assert(!ps5vk_color_export_state(formats[0],4,15,VK_TRUE,0));
     return 0;
 }
 '''
