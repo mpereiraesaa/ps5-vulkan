@@ -160,6 +160,20 @@ def main():
             scissor_probe != "0" or witnesses != "0" or continuous == "1" or
             observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
         raise SystemExit("PS5VK_INPUT_ATTACHMENT_PROBE is a bounded standalone scene")
+    fragment_store_probe = os.environ.get("PS5VK_FRAGMENT_STORE_PROBE", "0")
+    if fragment_store_probe not in ("0", "1"):
+        raise SystemExit("PS5VK_FRAGMENT_STORE_PROBE must be 0 or 1")
+    if fragment_store_probe == "1" and (not graphics_api or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_FRAGMENT_STORE_PROBE requires graphics API, runtime graphics and draw")
+    if fragment_store_probe == "1" and (multiview_view_probe == "1" or
+            input_attachment_probe == "1" or clip_cull_probe == "1" or
+            geometry_probe == "1" or tess_probe == "1" or
+            scissor_probe != "0" or witnesses != "0" or
+            continuous == "1" or observe_scene != "0" or scene_split == "1" or
+            layer_probe == "1"):
+        raise SystemExit("PS5VK_FRAGMENT_STORE_PROBE is a bounded standalone scene")
     if clip_cull_probe == "1" and (not graphics_api or
             os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
             os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
@@ -375,6 +389,8 @@ def main():
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
+            common += ["-DPS5VK_FRAGMENT_STORE_PROBE=" + fragment_store_probe]
+            common += ["-DPS5VK_T06_DIAGNOSTIC=" + fragment_store_probe]
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
             common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
@@ -651,6 +667,7 @@ def main():
             # Exported, because the SDK build compiles the same sources.
             optional_stage_diagnostic = "1" if (clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1") else "0"
             os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"] = optional_stage_diagnostic
+            os.environ["PS5VK_T06_DIAGNOSTIC"] = fragment_store_probe
             if tess_probe == "1":
                 os.environ["PS5VK_GEOMETRY_KEY_DIAG"] = "1"
             common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + optional_stage_diagnostic]
@@ -676,6 +693,7 @@ def main():
                 ROOT / "native/input_attachment_gate.c",
                 ROOT / "native/input_attachment_oracle.c",
                 ROOT / "native/input_attachment_probe.c",
+                ROOT / "native/fragment_store_probe.c",
                 ROOT / "native/command_arena_ps5.c", ROOT / "native/draw_batch_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
                 ROOT / "src/triangle_readback.c", ROOT / "src/texture_descriptor.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_dma.c", ROOT / "src/image_layout_state.c",
@@ -702,7 +720,7 @@ def main():
         # The harness can inspect internals, but cannot supply backend objects.
         application_sources = {"graphics_main", "compute_main", "scene_geometry",
                                "scene_region", "sampled_format_probe", "integer_sampled_probe", "vertex_format_probe",
-                               "triangle_readback"}
+                               "triangle_readback", "fragment_store_probe"}
         sources = [item for item in sources if item[0] in application_sources]
     source_names = [name for name, _, _ in sources]
     if len(source_names) != len(set(source_names)):
@@ -840,6 +858,12 @@ def main():
                     "shared_pipelines": 2 if tess_ring_query == "4" else 0,
                     "no_draw": int(os.environ.get("PS5VK_TESS_NO_DRAW", "0")),
                 }
+            if fragment_store_probe == "1":
+                manifest.update(scene=None,
+                                geometry_fixture="fragment-storage-atomic",
+                                sample_count=1, fragment_store_probe=1,
+                                fragment_store_extent=64,
+                                t06_diagnostic_features=True)
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")
@@ -889,6 +913,16 @@ def main():
             runtime_inputs = (("vertex", "runtime_input_attachment.vert"),
                               ("pattern", "runtime_input_attachment_pattern.frag"),
                               ("transform", "runtime_input_attachment_transform.frag"))
+        if fragment_store_probe == "1":
+            manifest["graphics_shader_source"] = "owned-runtime-fragment-storage-atomic"
+            manifest["fragment_store_witness"] = {
+                "extent": [64, 64], "expected_fragments": 4096,
+                "descriptor_set": 0, "binding": 0, "record_bytes": 16,
+                "control_compile_define": "CONTROL=1",
+                "control_and_candidate_same_submit": True,
+                "strict_readback": True}
+            runtime_inputs = (("vertex", "runtime_input_attachment.vert"),
+                              ("atomic", "runtime_fragment_store.frag"))
         if scissor_probe == "13":
             manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
             manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"

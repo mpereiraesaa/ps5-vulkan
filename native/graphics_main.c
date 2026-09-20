@@ -10,6 +10,7 @@
 #include "graphics_limits.h"
 #include "targets_ps5.h"
 #include "input_attachment_probe.h"
+#include "fragment_store_probe.h"
 #include "input_attachment_gate.h"
 #include "multiview_witness.h"
 #include "clip_cull_witness.h"
@@ -80,6 +81,9 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #endif
 #ifndef PS5VK_INPUT_ATTACHMENT_PROBE
 #define PS5VK_INPUT_ATTACHMENT_PROBE 0
+#endif
+#ifndef PS5VK_FRAGMENT_STORE_PROBE
+#define PS5VK_FRAGMENT_STORE_PROBE 0
 #endif
 #ifndef PS5VK_CLIP_CULL_PROBE
 #define PS5VK_CLIP_CULL_PROBE 0
@@ -4377,6 +4381,10 @@ int main(void)
      * otherwise. A report of one without the feature is the shipping state;
      * either value with the other feature state is a profile inconsistency. */
     VkPhysicalDeviceFeatures device_features;vkGetPhysicalDeviceFeatures(physical,&device_features);
+#if PS5VK_FRAGMENT_STORE_PROBE
+    if(!device_features.fragmentStoresAndAtomics)
+        fail("fragment-store-diagnostic-feature",-1);
+#endif
     const uint32_t expected_viewports=device_features.multiViewport?
         (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT:1u;
     if(device_props.limits.maxImageDimension1D<PS5VK_MAX_IMAGE_1D ||
@@ -4412,9 +4420,15 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE
+    VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
-    VkPhysicalDeviceFeatures indirect_features={.drawIndirectFirstInstance=VK_TRUE};
-    di.pEnabledFeatures=&indirect_features;
+    requested_features.drawIndirectFirstInstance=VK_TRUE;
+#endif
+#if PS5VK_FRAGMENT_STORE_PROBE
+    requested_features.fragmentStoresAndAtomics=VK_TRUE;
+#endif
+    di.pEnabledFeatures=&requested_features;
 #endif
     VkDevice device; CHECK(vkCreateDevice(physical,&di,NULL,&device));
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_DEVICE_CREATED");
@@ -4451,6 +4465,21 @@ int main(void)
         .transform_fragment = ps5vk_runtime_input_attachment_transform,
         .transform_fragment_words = sizeof(ps5vk_runtime_input_attachment_transform) / 4};
     CHECK(ps5vk_input_attachment_probe(device, &input_modules));
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_FRAGMENT_STORE_PROBE
+    const struct ps5vk_fragment_store_probe_modules fragment_store_modules = {
+        .vertex = ps5vk_runtime_input_attachment_vertex,
+        .vertex_words = sizeof(ps5vk_runtime_input_attachment_vertex) / 4,
+        .control_fragment = ps5vk_runtime_fragment_store_control,
+        .control_fragment_words = sizeof(ps5vk_runtime_fragment_store_control) / 4,
+        .atomic_fragment = ps5vk_runtime_fragment_store_atomic,
+        .atomic_fragment_words = sizeof(ps5vk_runtime_fragment_store_atomic) / 4};
+    CHECK(ps5vk_fragment_store_probe(device, &fragment_store_modules));
     vkDestroyDevice(device,NULL);
     vkDestroyInstance(instance,NULL);
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
