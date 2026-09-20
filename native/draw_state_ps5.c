@@ -80,6 +80,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (native->device != p->device || !native->pair || !native->pair->ready) return VK_ERROR_UNKNOWN;
     struct ps5vk_graphics_pair *pair = native->pair;
     int runtime=pair->runtime_arguments.enabled!=0;
+    if(pair->dual_source_export>1u || (pair->dual_source_export && !runtime))
+        return VK_ERROR_UNKNOWN;
     /* A tessellation pipeline's pre-raster bank is the domain half's, and its
      * draw is a patch list; anything else is a broken pair. */
     const int has_tessellation=pair->tessellation!=0;
@@ -447,10 +449,9 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * disable blending on subsequent non-blended draws, rather than retaining
      * the previous pipeline's state. Runtime acceptance is gated separately. */
     struct ps5vk_blend_words blend;
-    /* The compiler/runtime pair does not yet publish a proven secondary
-     * fragment export.  Keep SRC1 factors unreachable until that metadata is
-     * carried by the pipeline and a native witness validates the handoff. */
-    if(!ps5vk_blend_encode(&p->color_blend,p->blend_constants,VK_FALSE,&blend))
+    const VkBool32 dual_source=runtime && pair->dual_source_export?
+        VK_TRUE:VK_FALSE;
+    if(!ps5vk_blend_encode(&p->color_blend,p->blend_constants,dual_source,&blend))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if(result.cx_count+6u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
     result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend.control};
@@ -464,7 +465,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             if(fs->context[i].offset==0x08f)shader_mask=fs->context[i].value;
         }
         if(!ps5vk_color_export_state(p->color_format,spi_format,shader_mask,
-            p->color_blend.blendEnable,conversion))return VK_ERROR_FEATURE_NOT_PRESENT;
+            p->color_blend.blendEnable,dual_source,conversion))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
         if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
         /* Emit for unblended draws too: a previous FP16 blended draw must not
          * leave its downconversion active for the 32-bit export path. */

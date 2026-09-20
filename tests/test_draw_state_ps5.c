@@ -58,6 +58,9 @@ int main(void)
     assert(last_cx(&out,0x1e0)==0x40000104u && last_cx(&out,0x105)==0x3f000000u);
     p.color_blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.dual_source_export=1;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_ERROR_UNKNOWN && !out.cx_count);
+    pair.dual_source_export=0;
     p.color_blend.blendEnable=VK_FALSE;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1e0)==0 && last_cx(&out,0x105)==0);
@@ -191,6 +194,21 @@ int main(void)
     pair.runtime_fragment.context[0].value=4;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1d5)==5 && last_cx(&out,0x1d6)==6 && last_cx(&out,0x1d7)==0);
+    /* The pair flag and exact compiler registers must agree.  Neither side on
+     * its own can authorize a dual-source draw. */
+    p.color_blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
+    pair.dual_source_export=1;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.runtime_fragment.context[0].value=0x44;
+    pair.runtime_fragment.context[1].value=0xff;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(last_cx(&out,0x1e0)==0x6104010fu);
+    assert(last_cx(&out,0x1d5)==5 && last_cx(&out,0x1d6)==6);
+    pair.dual_source_export=0;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.runtime_fragment.context[0].value=4;
+    pair.runtime_fragment.context[1].value=15;
+    p.color_blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;
     p.color_blend.blendEnable=VK_FALSE;
     pair.runtime_fragment.context[0].value=9;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);

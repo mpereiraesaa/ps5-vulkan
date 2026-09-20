@@ -17,12 +17,13 @@ struct ps5vk_blend_words {
  * Mesa ac_choose_spi_color_formats and ac_set_sx_downconvert_state_for_mrt.
  * This profile has one RGBA8/BGRA8 UNORM target. Reject unknown contracts. */
 static inline int ps5vk_color_export_state(VkFormat format,uint32_t spi_format,
-    uint32_t shader_mask,VkBool32 blending,uint32_t words[3])
+    uint32_t shader_mask,VkBool32 blending,VkBool32 dual_source,uint32_t words[3])
 {
     if(!words)return 0;
     words[0]=words[1]=words[2]=0;
     if((format!=VK_FORMAT_R8G8B8A8_UNORM && format!=VK_FORMAT_B8G8R8A8_UNORM) ||
-       (blending!=VK_FALSE && blending!=VK_TRUE))return 0;
+       (blending!=VK_FALSE && blending!=VK_TRUE) ||
+       (dual_source!=VK_FALSE && dual_source!=VK_TRUE))return 0;
     /* A pixel shader whose only reachable side effect is an SSBO store may
      * legally export no colour (for example, a colour store after OpKill is
      * unreachable).  PSBC reports that exact shape as both
@@ -30,7 +31,14 @@ static inline int ps5vk_color_export_state(VkFormat format,uint32_t spi_format,
      * conversion, and blending cannot consume a missing source.  Require the
      * pair so neither an incomplete compiler package nor an arbitrary zero
      * register is accepted on its own. */
-    if(!spi_format && !shader_mask && !blending)return 1;
+    if(!spi_format && !shader_mask && !blending && !dual_source)return 1;
+    if(dual_source) {
+        /* Dual-source uses logical MRT0/MRT1 exports for one physical MRT0.
+         * The target's downconversion therefore remains the MRT0 RGBA8
+         * conversion; the compiler pair proves both source exports. */
+        if(spi_format!=0x44u || shader_mask!=0xffu)return 0;
+        words[0]=5;words[1]=6;return 1;
+    }
     if(shader_mask!=15)return 0;
     if(spi_format==4) {words[0]=5;words[1]=6;return 1;}
     if(spi_format==9 && !blending) {words[0]=1;return 1;}
