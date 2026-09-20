@@ -457,6 +457,13 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_tess.vert -o build/runtime-graphics/tess.vert.spv
 	$(GLSLANG) -V -S tesc experiments/graphics/runtime_tess.tesc -o build/runtime-graphics/tess.tesc.spv
 	$(GLSLANG) -V -S tese experiments/graphics/runtime_tess.tese -o build/runtime-graphics/tess.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_output_envelope.tese -o build/runtime-graphics/tess_output_envelope.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_output_envelope.frag -o build/runtime-graphics/tess_output_envelope.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_quad.tesc -o build/runtime-graphics/tess_quad.tesc.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_coord.vert -o build/runtime-graphics/tess_coord.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_coord.frag -o build/runtime-graphics/tess_coord.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_points.tese -o build/runtime-graphics/tess_points.tese.spv
+	$(GLSLANG) -V experiments/graphics/runtime_tess_points.geom -o build/runtime-graphics/tess_points.geom.spv
 	$(GLSLANG) -V experiments/graphics/runtime_tess.frag -o build/runtime-graphics/tess.frag.spv
 check-graphics-stages: graphics-stage-shaders
 	mkdir -p build/tests

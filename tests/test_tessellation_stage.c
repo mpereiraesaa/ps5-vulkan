@@ -81,6 +81,16 @@ static void free_key(struct ps5vk_graphics_key *key)
 
 int main(void)
 {
+    /* TES outputs have no implicit outer per-vertex array. All31 vec4
+     * locations must reach FS; stripping the array formerly left only loc0. */
+    struct ps5vk_graphics_key envelope=tessellation_key();
+    free_module(&envelope.tess_eval);free_module(&envelope.fragment);
+    envelope.tess_eval=read_module("build/runtime-graphics/tess_output_envelope.tese.spv");
+    envelope.fragment=read_module("build/runtime-graphics/tess_output_envelope.frag.spv");
+    assert(ps5vk_spirv_graphics_interface(&envelope));
+    assert(patch_decoration(&envelope.tess_eval,30,0,1));
+    assert(!ps5vk_spirv_graphics_interface(&envelope));
+    free_key(&envelope);
     /* The pair the front end emits for a three-control-point patch: the control
      * stage declares OutputVertices 3, the evaluation stage declares its
      * domain, spacing and winding, and the per-patch value crosses through the
@@ -91,6 +101,37 @@ int main(void)
     assert(ps5vk_spirv_graphics_interface(&key));
     assert(ps5vk_spirv_tess_output_points(&key.tess_control)==3);
     assert(ps5vk_spirv_tess_output_points(&key.tess_eval)==0);
+
+    /* Reflection-only execution-mode mutations: verify the primitive boundary
+     * for every TES domain, including point-mode precedence. Not GPU evidence. */
+    const unsigned domains[]={22,24,25};
+    const char *geometry_paths[]={"build/runtime-graphics/geometry_points.geom.spv",
+        "build/runtime-graphics/geometry_lines.geom.spv",
+        "build/runtime-graphics/geometry_probe.geom.spv"};
+    for(unsigned domain=0;domain<3;++domain)for(unsigned point=0;point<2;++point) {
+        struct ps5vk_graphics_module_key eval=read_module("build/runtime-graphics/tess.tese.spv");
+        uint32_t *words=(uint32_t *)eval.words,entry=0;
+        for(size_t at=5;at<eval.word_count;at+=words[at]>>16) {
+            if((words[at]&65535u)==16u && (words[at]>>16)==3u && words[at+2]==22) {
+                words[at+2]=domains[domain];entry=words[at+1];
+            }
+        }
+        assert(entry);
+        if(point) {
+            words=realloc(words,(eval.word_count+3)*sizeof(*words));assert(words);
+            words[eval.word_count++]=(3u<<16)|16u;
+            words[eval.word_count++]=entry;words[eval.word_count++]=10u;
+            eval.words=words;
+        }
+        for(unsigned primitive=0;primitive<3;++primitive) {
+            struct ps5vk_graphics_module_key geom=read_module(geometry_paths[primitive]);
+            struct ps5vk_graphics_key five=key;five.tess_eval=eval;five.geometry=geom;
+            const unsigned expected=point?0u:domain==2?1u:2u;
+            assert(!!ps5vk_spirv_graphics_interface(&five)==(primitive==expected));
+            free_module(&geom);
+        }
+        free_module(&eval);
+    }
 
     /* PrimitiveId is a patch index input in TCS, not a geometry-only input.
      * Reuse the scalar input declaration, changing only its BuiltIn. */
@@ -182,6 +223,26 @@ int main(void)
     moved_key.tess_control=moved;
     assert(!ps5vk_spirv_graphics_interface(&moved_key));
     free_module(&moved);
+
+    /* SPIRV-Tools #5654: Patch/non-Patch locations are independent. Start
+     * from actual frontend modules and relocate only the patch variables;
+     * our GLSL frontend cannot express this alias directly. Reflection-only,
+     * not a claim that this mutated shader was validated on hardware. */
+    struct ps5vk_graphics_module_key alias_control=
+        read_module("build/runtime-graphics/tess.tesc.spv");
+    struct ps5vk_graphics_module_key alias_eval=
+        read_module("build/runtime-graphics/tess.tese.spv");
+    assert(patch_decoration(&alias_control,30,1,0));
+    assert(patch_decoration(&alias_eval,30,1,0));
+    struct ps5vk_graphics_key alias_key=key;
+    alias_key.tess_control=alias_control;
+    alias_key.tess_eval=alias_eval;
+    assert(ps5vk_spirv_graphics_interface(&alias_key));
+    /* Independence is not permission to drop producer/consumer matching. */
+    alias_key.tess_eval=key.tess_eval;
+    assert(!ps5vk_spirv_graphics_interface(&alias_key));
+    free_module(&alias_control);
+    free_module(&alias_eval);
 
     /* Distances are a pre-raster export, and with a tessellation pair the last
      * pre-raster stage is one of its halves: the declaration bound has to read

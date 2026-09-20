@@ -42,7 +42,9 @@ struct interface {
     struct interface_slot inputs[LOCATIONS], outputs[LOCATIONS];
     /* Per-patch interface: a variable or built-in that carries the Patch
      * decoration. It lives at the same locations as the per-vertex interface,
-     * so it needs its own slots to be describable at all. */
+     * so it needs its own slots to be describable at all. SPIRV-Tools #5654
+     * explicitly separates Patch and non-Patch location conflict checks;
+     * GLSL frontend rejection alone must not narrow the SPIR-V contract. */
     struct interface_slot patch_inputs[LOCATIONS], patch_outputs[LOCATIONS];
     /* Declared gl_ClipDistance/gl_CullDistance array lengths, in components.
      * They start at zero and are set at most once per stage. */
@@ -261,7 +263,7 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
              * count and its strip topology. */
             if(!entry_id || n<3 || w[1]!=entry_id)goto done;
             const unsigned mode=w[2];
-            if(model==MODEL_TESS_CTRL && mode==MODE_OUTPUT_VERTICES) {
+            if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) && mode==MODE_OUTPUT_VERTICES) {
                 unsigned value=0;
                 if(op==16) {
                     if(n!=4)goto done;
@@ -283,7 +285,7 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                  * model above, so the two cannot be confused. */
                 if(n!=3 || out->input_primitive)goto done;
                 out->input_primitive=mode;
-            } else if(model==MODEL_TESS_EVAL &&
+            } else if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) &&
                       (mode==MODE_DOMAIN_TRIANGLES || mode==MODE_DOMAIN_QUADS ||
                        mode==MODE_DOMAIN_ISOLINES || mode==MODE_SPACING_EQUAL ||
                        mode==MODE_SPACING_FRACTIONAL_EVEN ||
@@ -493,7 +495,8 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
          * is what has to match the neighbouring stage in every case. */
         const int per_vertex_array=type->op==28 &&
             ((model==MODEL_GEOMETRY && d->storage==1) ||
-             ((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) && !d->patch));
+             ((model==MODEL_TESS_CTRL ||
+               (model==MODEL_TESS_EVAL && d->storage==1)) && !d->patch));
         if(per_vertex_array) {
             unsigned length=0,element=0;
             if(!declared_array(ids,bound,ptr->type,&length,&element) ||
@@ -553,18 +556,8 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
     }
     /* Each feature has its own floor and the exported registers are shared, so
      * a declaration that fits one bound may still not fit the stage. */
-    /* The tessellation stages are described by their execution modes, so a
-     * stage that is missing the one that defines its patch is refused here
-     * rather than reaching a pipeline that would have to guess it: the control
-     * stage must publish its output vertex count, and the evaluation stage must
-     * state its domain, its vertex order and - for the domains the tessellator
-     * spaces - its spacing. */
-    if(model==MODEL_TESS_CTRL && !out->control_points)goto done;
-    if(model==MODEL_TESS_EVAL) {
-        if(!out->domain || !out->winding)goto done;
-        if((out->domain==MODE_DOMAIN_TRIANGLES || out->domain==MODE_DOMAIN_QUADS) &&
-           !out->spacing)goto done;
-    }
+    /* Tessellation modes may reside in either stage. Validate completeness
+     * and cross-stage agreement only after resolving the pair below. */
     /* Exports and reads share the two packed distance registers, so both are
      * budgeted against the same per-feature and combined ceilings. A stage
      * declares one built-in once and is either pre-raster or fragment, so the
@@ -626,6 +619,28 @@ unsigned ps5vk_spirv_tess_output_points(const struct ps5vk_graphics_module_key *
     return reflect(module,MODEL_TESS_CTRL,&stage)?stage.control_points:0;
 }
 
+static int resolve_tess_modes(struct interface *control,struct interface *evaluation)
+{
+    unsigned *a[]={&control->control_points,&control->domain,&control->spacing,&control->winding};
+    unsigned *b[]={&evaluation->control_points,&evaluation->domain,&evaluation->spacing,&evaluation->winding};
+    for(unsigned i=0;i<4;++i) {
+        if(*a[i] && *b[i] && *a[i]!=*b[i])return 0;
+        const unsigned resolved=*a[i]?*a[i]:*b[i];
+        if(!resolved)return 0;
+        *a[i]=*b[i]=resolved;
+    }
+    control->point_mode=evaluation->point_mode=control->point_mode|evaluation->point_mode;
+    return 1;
+}
+
+unsigned ps5vk_spirv_tess_pair_output_points(const struct ps5vk_graphics_key *key)
+{
+    struct interface control={0},evaluation={0};
+    return key && reflect(&key->tess_control,MODEL_TESS_CTRL,&control) &&
+        reflect(&key->tess_eval,MODEL_TESS_EVAL,&evaluation) &&
+        resolve_tess_modes(&control,&evaluation)?control.control_points:0;
+}
+
 int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
 {
     struct interface vs={0},fs={0},gs={0},tcs={0},tes={0};
@@ -639,7 +654,8 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * need not be equal; reflection validates the latter separately. */
         if(!ps5vk_graphics_tessellation_key_valid(key))return 0;
         if(!reflect(&key->tess_control,MODEL_TESS_CTRL,&tcs) ||
-           !reflect(&key->tess_eval,MODEL_TESS_EVAL,&tes))return 0;
+           !reflect(&key->tess_eval,MODEL_TESS_EVAL,&tes) ||
+           !resolve_tess_modes(&tcs,&tes))return 0;
     }
     if(has_geometry) {
         if(!reflect(&key->geometry,MODEL_GEOMETRY,&gs))return 0;
@@ -653,8 +669,16 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * points, 56 for lines). Adjacency topologies report zero here and stay
          * refused until the front end is measured to accept their four- and
          * six-vertex inputs. */
-        const unsigned input_vertices=ps5vk_topology_input_vertices(key->topology);
-        const unsigned input_mode=ps5vk_topology_input_mode(key->topology);
+        /* With tessellation, PATCH_LIST describes input control points, not
+         * the primitives delivered to GS. TES point mode overrides its domain;
+         * quads are tessellated to triangles, never GS InputQuads. */
+        const unsigned input_vertices=has_tessellation?
+            (tes.point_mode?1u:tes.domain==MODE_DOMAIN_ISOLINES?2u:3u):
+            ps5vk_topology_input_vertices(key->topology);
+        const unsigned input_mode=has_tessellation?
+            (tes.point_mode?MODE_INPUT_POINTS:
+             tes.domain==MODE_DOMAIN_ISOLINES?MODE_INPUT_LINES:MODE_TRIANGLES):
+            ps5vk_topology_input_mode(key->topology);
         /* The stage's declared input primitive is what binds it to the topology
          * the pipeline assembles: a stage that never reads gl_in declares no
          * per-vertex array, so requiring the array's length would refuse a legal
