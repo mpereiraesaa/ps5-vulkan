@@ -84,12 +84,13 @@ class UpstreamSelectionTests(unittest.TestCase):
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
-        self.assertEqual(25, len(pending))
+        self.assertEqual(31, len(pending))
         self.assertTrue(all(d["expected_status"] == "Pass" for d in pending))
         self.assertEqual(
             {"dEQP-VK.clipping.clip_volume.depth_clamp",
              "dEQP-VK.fragment_ops.scissor.multi_viewport",
              "dEQP-VK.draw.renderpass.scissor",
+             "dEQP-VK.draw.renderpass.depth_clamp",
              "dEQP-VK.rasterization.line_continuity"},
             {d["path"].rsplit(".", 1)[0] for d in pending})
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
@@ -235,7 +236,13 @@ class UpstreamSelectionTests(unittest.TestCase):
         builder = (ROOT / "tools/build_upstream_cts.py").read_text()
         self.assertIn('vkt::FragmentOperations::createTests(m_testCtx, "fragment_ops")', package)
         self.assertIn("vkt::Draw::createScissorTests(", package)
-        self.assertNotIn("createDepthClampTests", package)
+        # The depth-clamp oracles became reachable when the depth readback was
+        # implemented, so their module is registered too.
+        self.assertIn("vkt::Draw::createDepthClampTests(", package)
+        self.assertIn("vktDrawDepthClampTests.cpp", builder)
+        # rs_state stays out: its depth_bias_clamp leaf needs a stencil-bearing
+        # attachment format this profile does not offer, which is a different
+        # capability from the depth readback.
         self.assertNotIn("DynamicStateRSTests", package)
         for unit in ("vktFragmentOperationsTests.cpp",
                      "vktFragmentOperationsScissorTests.cpp",

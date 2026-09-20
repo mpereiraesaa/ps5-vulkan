@@ -1040,6 +1040,23 @@ void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
         dist = REPO_ROOT / "dist-upstream-cts/PPSA99994"
         if not dist.is_dir():
             self.skipTest("payload not built; packaged case list not available")
+        # A payload may legitimately be packaged from a measurement selection
+        # (tools/make_measurement_manifest.py); the build manifest records that
+        # derivation. The invariant is the same in both cases - the packaged
+        # list and hash derive from the manifest the build was given - so read
+        # the selection the build actually used instead of assuming the frozen
+        # one, and keep the frozen expectation for an ordinary build.
+        build_manifest_path = dist / "build_manifest.json"
+        if build_manifest_path.is_file():
+            build_manifest = json.loads(build_manifest_path.read_text())
+            measurement = build_manifest.get("measurement")
+            if measurement:
+                self.assertEqual(expected_hash, measurement["base_selection_hash"],
+                                 "the measurement payload was derived from a different "
+                                 "frozen selection than the one in the tree")
+                expected = "\n".join(build_manifest["selected_cases"]) + "\n"
+                expected_hash = hashlib.sha256(expected.encode("utf-8")).hexdigest()
+                self.assertEqual(expected_hash, measurement["selection_hash"])
         self.assertEqual((dist / "cases.txt").read_text(encoding="utf-8"), expected)
         self.assertEqual((dist / "selection_hash.txt").read_text(encoding="utf-8").strip(),
                          expected_hash)

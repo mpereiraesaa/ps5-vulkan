@@ -203,6 +203,86 @@ static int patch_array_length(struct ps5vk_graphics_module_key *m,uint32_t from,
  * checks the description against the real compiled metadata, the refusal in the
  * shipping profile, and the description predicate's own negatives.
  */
+/* gl_FragCoord: the fragment position, and what the hardware has to be asked
+ * for so the pixel stage receives it.
+ *
+ * The built-in needs no export from the pre-raster stage and no feature. The
+ * pixel wave is launched with the position VGPRs when SPI_PS_INPUT_ENA asks
+ * for them, and the pinned compiler publishes that register with the rest of
+ * the pixel context, so the whole delivery is decided at compile time. This
+ * check reads the published register rather than trusting that, and pins the
+ * difference against the same pipeline whose fragment stage does not read the
+ * built-in.
+ *
+ * The profile refused the declaration outright until this slice, which is why
+ * the only applicable depthClamp leaves could not run: the fragment shader of
+ * dEQP-VK.clipping.clip_volume.depth_clamp.* colours with gl_FragCoord.z and
+ * the pair was refused at pipeline creation (two rc=-8 runtime-graphics cache
+ * entries in the 2026-09-20 measurement run, eboot 749756aa). */
+#define PS5VK_TEST_PS_INPUT_ENA_OFFSET  ((uint16_t)((0x0286CCu - 0x00028000u) / 4u))
+#define PS5VK_TEST_PS_INPUT_ADDR_OFFSET ((uint16_t)((0x0286D0u - 0x00028000u) / 4u))
+#define PS5VK_TEST_POS_Z_FLOAT_ENA      (1u << 10)   /* gfx10 SPI_PS_INPUT_ENA */
+#define PS5VK_TEST_POS_XYZW_FLOAT_ENA   (0xfu << 8)
+/* The launch-VGPR half of the register: PERSP_* (0xf) and LINEAR_* (0x70),
+ * which radv tests as 0x7f, plus LINE_STIPPLE_TEX (bit 7), which it tests
+ * separately; the hardware needs at least one of the eight. */
+#define PS5VK_TEST_LAUNCH_VGPR_ENA      (0xffu)
+
+static uint32_t published_context_register(const void *pair, uint16_t offset, int *found)
+{
+    const struct ps5vk_runtime_graphics_program *p=pair;
+    *found=0;
+    for(unsigned i=0;i<p->fragment.metadata.context_register_count;++i)
+        if(p->fragment.metadata.context_registers[i].offset==offset) {
+            *found=1;
+            return p->fragment.metadata.context_registers[i].value;
+        }
+    return 0;
+}
+
+static uint32_t compiled_ps_input_ena(const char *fragment_path)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module(fragment_path),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *pair=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&pair)==VK_SUCCESS && pair);
+    int found_ena=0,found_addr=0;
+    const uint32_t ena=published_context_register(pair,PS5VK_TEST_PS_INPUT_ENA_OFFSET,&found_ena);
+    const uint32_t addr=published_context_register(pair,PS5VK_TEST_PS_INPUT_ADDR_OFFSET,&found_addr);
+    assert(found_ena && found_addr);
+    /* Every VGPR the stage is initialised with must also be addressable. */
+    assert((ena & addr)==ena);
+    ps5vk_runtime_graphics_free(NULL,pair);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    return ena;
+}
+
+static void check_fragment_position(void)
+{
+    /* The same pipeline whose fragment stage reads nothing: no position VGPR
+     * is requested, and the stage is launched with one interpolation mode
+     * because the hardware needs at least one initialised VGPR. */
+    const uint32_t plain=compiled_ps_input_ena("build/runtime-graphics/triangle.frag.spv");
+    assert(!(plain & PS5VK_TEST_POS_XYZW_FLOAT_ENA));
+    assert(plain & PS5VK_TEST_LAUNCH_VGPR_ENA);
+
+    /* Reading gl_FragCoord.z asks for the Z position VGPR. The fixture
+     * interpolates nothing, so the compiler picks LINE_STIPPLE_TEX as the
+     * cheapest mandatory enable (radv_shader.c:3971-3984, "LINE_STIPPLE_TEX
+     * uses the least number of initialized VGPRs"), which is why the
+     * interpolation half of the register moves rather than staying at
+     * PERSP_CENTER. */
+    const uint32_t position=compiled_ps_input_ena("build/runtime-graphics/frag_coord.frag.spv");
+    assert(position & PS5VK_TEST_POS_Z_FLOAT_ENA);
+    assert(position & PS5VK_TEST_LAUNCH_VGPR_ENA);
+    assert(position!=plain);
+}
+
 static void check_fragment_distance_read(void)
 {
     struct ps5vk_graphics_key key={
@@ -1503,6 +1583,7 @@ int main(void)
     check_view_index_builtin();
     check_clip_cull_distances();
     check_fragment_distance_read();
+    check_fragment_position();
     check_geometry_stage();
     check_viewport_index_routing();
     check_geometry_output_components();

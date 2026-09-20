@@ -1141,6 +1141,28 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
      * vkCmdClearDepthStencilImage control a later depth-tested draw. Bounded to
      * exactly the write the clear performed and the access the fragment tests
      * perform; the image never becomes a transfer source or a sampled image. */
+    /* A depth attachment that also declares the transfer-source role is read
+     * back after rendering, so it takes the same two transitions the colour
+     * readback takes, in depth's own layouts. Bounded to the role predicate:
+     * a depth image without TRANSFER_SRC keeps only the clear transitions
+     * below. */
+    if(ps5vk_depth_readback_image(image)) {
+        if((b->oldLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+            b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+            b->srcAccessMask==VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT &&
+            b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT) ||
+           (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+            b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+            b->srcAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
+            b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) ||
+           (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+            b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+            !b->srcAccessMask &&
+            !(b->dstAccessMask & ~(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT))))
+            return 1;
+    }
     if(ps5vk_depth_clear_image(image))return
         (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
@@ -1165,7 +1187,26 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
     if(ps5vk_colour_transfer_image(image))return
         (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
          b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
-         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT);
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        /* The same image is a readback target whenever it also declares
+         * TRANSFER_SRC. The readback role above is written for an image that
+         * is only a colour attachment and a transfer source, so it excludes
+         * TRANSFER_DST; an upstream case that clears or uploads through the
+         * same image and then reads it back declares all three and fell
+         * through to the initialise-only rule, which refused the readback
+         * transition and invalidated the command buffer
+         * (measured: dEQP-VK.draw.renderpass.scissor.* -> vkEndCommandBuffer
+         * VK_ERROR_UNKNOWN in the 2026-09-20 measurement run). The transfer
+         * destination does not change what the readback transition means, so
+         * the same three barriers are accepted here, and only when the image
+         * really declares the transfer-source role. */
+        ((usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+         (ps5vk_color_discard_barrier(b) ||
+          ps5vk_color_readback_reuse_barrier(b) ||
+          (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+           b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+           b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+           b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT)));
     /* The linear staging image the pinned draw module reads back through gets
      * exactly the two transitions that module records
      * (vktDrawImageObjectUtil.cpp:415-443): UNDEFINED to GENERAL for the

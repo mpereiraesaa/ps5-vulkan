@@ -3971,62 +3971,62 @@
     {
       "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
-      "category": "depth-aspect-readback-gap",
-      "expected_status": "Fail",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
       "features_required": [],
-      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. "
+      "rationale": "UNMEASURED, applicable since the depth readback was implemented: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555), which this profile refused while it had no SW_64K_Z_X pixel addressing. src/depth_detile.c now carries that equation, derived from the gfx10 swizzle table and validated by the same table reproducing all three colour equations this driver measured on hardware (tests/test_depth_detile.c); D32_SFLOAT gains the transfer-source role, the depth readback image role, its recording gate and its attachment-to-transfer-source barrier. The module is registered by this change. These are the only upstream oracles this profile can run for depthBiasClamp, and a second independent oracle for depthClamp."
     },
     {
       "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_input_negative",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
-      "category": "depth-aspect-readback-gap",
-      "expected_status": "Fail",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
       "features_required": [
         "core:depthClamp"
       ],
-      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. "
+      "rationale": "UNMEASURED, applicable since the depth readback was implemented: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555), which this profile refused while it had no SW_64K_Z_X pixel addressing. src/depth_detile.c now carries that equation, derived from the gfx10 swizzle table and validated by the same table reproducing all three colour equations this driver measured on hardware (tests/test_depth_detile.c); D32_SFLOAT gains the transfer-source role, the depth readback image role, its recording gate and its attachment-to-transfer-source barrier. The module is registered by this change. These are the only upstream oracles this profile can run for depthBiasClamp, and a second independent oracle for depthClamp."
     },
     {
       "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_input_positive",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
-      "category": "depth-aspect-readback-gap",
-      "expected_status": "Fail",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
       "features_required": [
         "core:depthClamp"
       ],
-      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. "
+      "rationale": "UNMEASURED, applicable since the depth readback was implemented: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555), which this profile refused while it had no SW_64K_Z_X pixel addressing. src/depth_detile.c now carries that equation, derived from the gfx10 swizzle table and validated by the same table reproducing all three colour equations this driver measured on hardware (tests/test_depth_detile.c); D32_SFLOAT gains the transfer-source role, the depth readback image role, its recording gate and its attachment-to-transfer-source barrier. The module is registered by this change. These are the only upstream oracles this profile can run for depthBiasClamp, and a second independent oracle for depthClamp."
     },
     {
       "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_negative",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
-      "category": "depth-aspect-readback-gap",
-      "expected_status": "Fail",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
       "features_required": [
         "core:depthBiasClamp"
       ],
-      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. These two leaves are the only upstream depthBiasClamp oracles whose attachment format this profile offers (D32_SFLOAT); a DEPTH-aspect D32 copy would make them selectable."
+      "rationale": "UNMEASURED, applicable since the depth readback was implemented: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555), which this profile refused while it had no SW_64K_Z_X pixel addressing. src/depth_detile.c now carries that equation, derived from the gfx10 swizzle table and validated by the same table reproducing all three colour equations this driver measured on hardware (tests/test_depth_detile.c); D32_SFLOAT gains the transfer-source role, the depth readback image role, its recording gate and its attachment-to-transfer-source barrier. The module is registered by this change. These are the only upstream oracles this profile can run for depthBiasClamp, and a second independent oracle for depthClamp."
     },
     {
       "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_positive",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
-      "category": "depth-aspect-readback-gap",
-      "expected_status": "Fail",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
       "features_required": [
         "core:depthBiasClamp"
       ],
-      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. These two leaves are the only upstream depthBiasClamp oracles whose attachment format this profile offers (D32_SFLOAT); a DEPTH-aspect D32 copy would make them selectable."
+      "rationale": "UNMEASURED, applicable since the depth readback was implemented: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555), which this profile refused while it had no SW_64K_Z_X pixel addressing. src/depth_detile.c now carries that equation, derived from the gfx10 swizzle table and validated by the same table reproducing all three colour equations this driver measured on hardware (tests/test_depth_detile.c); D32_SFLOAT gains the transfer-source role, the depth readback image role, its recording gate and its attachment-to-transfer-source barrier. The module is registered by this change. These are the only upstream oracles this profile can run for depthBiasClamp, and a second independent oracle for depthClamp."
     },
     {
       "path": "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_four_viewports",
       "source": "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp:842",
-      "category": "depth-aspect-readback-gap",
-      "expected_status": "Fail",
+      "category": "t05-measurement-pending",
+      "expected_status": "Pass",
       "features_required": [
         "core:depthClamp",
         "core:geometryShader",
         "core:multiViewport"
       ],
-      "rationale": "BLOCKED by a capability, not by T05: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555); every image->buffer copy path in src/vk_image_transfer.c validates VK_IMAGE_ASPECT_COLOR_BIT and src/depth_layout.h:9-10 records that the GFX10 64KB_Z_X pixel addressing is not supplied, so the comparison runs against data the driver never wrote. The draw depth_clamp factory is not registered in the package. Also the only upstream leaf that exercises depth clamp on four viewports at once."
+      "rationale": "UNMEASURED, applicable since the depth readback was implemented: the oracle reads the depth attachment back with readDepth over VK_IMAGE_ASPECT_DEPTH_BIT (vktDrawDepthClampTests.cpp:554-555), which this profile refused while it had no SW_64K_Z_X pixel addressing. src/depth_detile.c now carries that equation, derived from the gfx10 swizzle table and validated by the same table reproducing all three colour equations this driver measured on hardware (tests/test_depth_detile.c); D32_SFLOAT gains the transfer-source role, the depth readback image role, its recording gate and its attachment-to-transfer-source barrier. The module is registered by this change. These are the only upstream oracles this profile can run for depthBiasClamp, and a second independent oracle for depthClamp."
     },
     {
       "path": "dEQP-VK.dynamic_state.monolithic.rs_state.depth_bias_clamp",
