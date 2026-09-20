@@ -320,6 +320,24 @@ ADVERTISED_FEATURES["shaderCullDistance"] = {
                "components"),
     "cts": _CLIP_DISTANCE_CTS,
 }
+ADVERTISED_FEATURES["fragmentStoresAndAtomics"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS"),
+        ("native/runtime_graphics_compiler.c", "fragment store/atomic needs both EXEC_ON_HIER_FAIL"),
+        ("native/upload_commands_ps5.h", "VK_ACCESS_SHADER_WRITE_BIT"),
+        ("native/fragment_store_probe.c", "PS5VK_FRAGMENT_STORE_READBACK"),
+    ),
+    "detail": ("fragment-stage storage writes and atomics are compiled and delivered through "
+               "the descriptor table; the deterministic native witness separates a zero-write "
+               "control from exactly 4096 fragment writes with 30 guard words intact, and both "
+               "unchanged upstream frag_side_effects kill oracles pass in the integrated "
+               "306-case hardware run"),
+    "cts": (
+        "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+        "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill",
+    ),
+}
 
 # Every non-advertised VkPhysicalDeviceFeatures member shares one fail-closed
 # device-negotiation gate.  Vulkan valid usage prevents an application from

@@ -87,7 +87,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                          * ran on; this dump mirrors the console
                                          * platform's initializer so the
                                          * published matrix is the console's. */
-                                        PS5VK_FEATURE_GEOMETRY_SHADER;
+                                        PS5VK_FEATURE_GEOMETRY_SHADER |
+                                        /* Fragment storage side effects are
+                                         * now part of the shipping graphics
+                                         * profile after the native readback
+                                         * and focused upstream oracles both
+                                         * passed on the integrated build. */
+                                        PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

@@ -390,7 +390,6 @@ def main():
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
             common += ["-DPS5VK_FRAGMENT_STORE_PROBE=" + fragment_store_probe]
-            common += ["-DPS5VK_T06_DIAGNOSTIC=" + fragment_store_probe]
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
             common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
@@ -667,7 +666,6 @@ def main():
             # Exported, because the SDK build compiles the same sources.
             optional_stage_diagnostic = "1" if (clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1") else "0"
             os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"] = optional_stage_diagnostic
-            os.environ["PS5VK_T06_DIAGNOSTIC"] = fragment_store_probe
             if tess_probe == "1":
                 os.environ["PS5VK_GEOMETRY_KEY_DIAG"] = "1"
             common += ["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" + optional_stage_diagnostic]

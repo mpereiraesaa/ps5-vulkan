@@ -9,8 +9,8 @@
       "VK_KHR_storage_buffer_storage_class"
     ],
     "native_probe": {
-      "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
-      "blockers": 51,
+      "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
+      "blockers": 50,
       "device_api": "1.0.0",
       "device_extensions": 5,
       "query_routes": [
@@ -24,14 +24,15 @@
       "requirements": 62,
       "runs": [
         {
-          "id": "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2",
-          "log_sha256": "02d9105b99a6039b63fb43885d871fc47916d5aa738b1bfe8439644f9a796f15"
+          "id": "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e",
+          "log_sha256": "e8f3b82d06ec392e60b89ecd948f43cf201f001daf0c1a901620763abdabb138"
         }
       ],
-      "satisfied": 11,
+      "satisfied": 12,
       "satisfied_ids": [
         "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
         "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
         "feature:VkPhysicalDeviceFeatures:geometryShader",
         "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
         "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
@@ -42,7 +43,7 @@
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
       ],
-      "source_matrix_sha256": "49f7fbf9719e1b70f22b09bce2bef58d856045daf16c86d2e354c81df0ba53df",
+      "source_matrix_sha256": "9df8043ba28d50f0187cea32a49f0d4262c55183ba14471baa839dc09b4aecbe",
       "transport": "ps5log/1",
       "verifier": "tools/verify_dxvk_probe.py"
     },
@@ -145,13 +146,13 @@
       "kind": "extension",
       "name": "VK_EXT_robustness2",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -187,13 +188,13 @@
       "kind": "extension",
       "name": "VK_EXT_transform_feedback",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -233,13 +234,13 @@
       "kind": "feature",
       "name": "depthBiasClamp",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -286,13 +287,13 @@
       "kind": "feature",
       "name": "depthClamp",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -410,13 +411,13 @@
       "kind": "feature",
       "name": "dualSrcBlend",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -453,13 +454,13 @@
       "kind": "feature",
       "name": "fillModeNonSolid",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -468,48 +469,55 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_level11_0"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+          "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill"
+        ],
         "mapped_cases": [
           "dEQP-VK.info.device_mandatory_features"
         ],
-        "refs": [],
+        "note": "Both unchanged upstream fragment-side-effect kill leaves pass on the exact integrated shipping candidate together with the frozen 304-case regression selection: 306/306 Pass, zero Fail or NotSupported, strict artifact and QPA identity, and clean title closure.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#fragment-stores-and-atomics-promotion-2026-09-20"
+        ],
         "related_requirement_ids": [
           "VK14-CORE-005",
           "VK14-INSTANCE-008"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
       "implementation": {
-        "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
+        "detail": "fragment-stage storage writes and atomics are compiled and delivered through the descriptor table; the deterministic native witness separates a zero-write control from exactly 4096 fragment writes with 30 guard words intact, and both unchanged upstream frag_side_effects kill oracles pass in the integrated 306-case hardware run",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "fragmentStoresAndAtomics",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "e83cac3dad67b48880409a4ba6874954e325881d71cc8ff835b06ca4a1b4b295",
+        "note": "Deterministic public-path SSBO witness: control_counter=0, candidate_counter=4096, 30 trailing guard words intact, fence success, strict_verified=1 and clean lifecycle. The separate public-ABI probe reports fragmentStoresAndAtomics=1 on the promotion candidate.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#fragment-stores-and-atomics-promotion-2026-09-20"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T181405989Z_PPSA99994_ps5vk_0x1145d7afedfdc"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -697,13 +705,13 @@
       "kind": "feature",
       "name": "imageCubeArray",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -745,13 +753,13 @@
       "kind": "feature",
       "name": "independentBlend",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -877,13 +885,13 @@
       "kind": "feature",
       "name": "multiViewport",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -920,13 +928,13 @@
       "kind": "feature",
       "name": "occlusionQueryPrecise",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1025,13 +1033,13 @@
       "kind": "feature",
       "name": "sampleRateShading",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1296,13 +1304,13 @@
       "kind": "feature",
       "name": "shaderImageGatherExtended",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1340,13 +1348,13 @@
       "kind": "feature",
       "name": "tessellationShader",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "The native query reports the requested value, but the probe does not execute the capability.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "reported-not-executed"
       },
@@ -1381,13 +1389,13 @@
       "kind": "feature",
       "name": "textureCompressionBC",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1426,13 +1434,13 @@
       "kind": "feature",
       "name": "nullDescriptor",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1471,13 +1479,13 @@
       "kind": "feature",
       "name": "robustBufferAccess2",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1513,13 +1521,13 @@
       "kind": "feature",
       "name": "geometryStreams",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1555,13 +1563,13 @@
       "kind": "feature",
       "name": "transformFeedback",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1765,13 +1773,13 @@
       "kind": "feature",
       "name": "bufferDeviceAddress",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1807,13 +1815,13 @@
       "kind": "feature",
       "name": "hostQueryReset",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1852,13 +1860,13 @@
       "kind": "feature",
       "name": "imagelessFramebuffer",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1900,13 +1908,13 @@
       "kind": "feature",
       "name": "samplerMirrorClampToEdge",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1942,13 +1950,13 @@
       "kind": "feature",
       "name": "separateDepthStencilLayouts",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -1984,13 +1992,13 @@
       "kind": "feature",
       "name": "shaderSubgroupExtendedTypes",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2026,13 +2034,13 @@
       "kind": "feature",
       "name": "subgroupBroadcastDynamicId",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2071,13 +2079,13 @@
       "kind": "feature",
       "name": "timelineSemaphore",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2113,13 +2121,13 @@
       "kind": "feature",
       "name": "uniformBufferStandardLayout",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2155,13 +2163,13 @@
       "kind": "feature",
       "name": "vulkanMemoryModel",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2197,13 +2205,13 @@
       "kind": "feature",
       "name": "vulkanMemoryModelDeviceScope",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2239,13 +2247,13 @@
       "kind": "feature",
       "name": "computeFullSubgroups",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2285,13 +2293,13 @@
       "kind": "feature",
       "name": "dynamicRendering",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2327,13 +2335,13 @@
       "kind": "feature",
       "name": "inlineUniformBlock",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2369,13 +2377,13 @@
       "kind": "feature",
       "name": "maintenance4",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2411,13 +2419,13 @@
       "kind": "feature",
       "name": "pipelineCreationCacheControl",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2456,13 +2464,13 @@
       "kind": "feature",
       "name": "robustImageAccess",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2498,13 +2506,13 @@
       "kind": "feature",
       "name": "shaderDemoteToHelperInvocation",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2540,13 +2548,13 @@
       "kind": "feature",
       "name": "shaderIntegerDotProduct",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2582,13 +2590,13 @@
       "kind": "feature",
       "name": "shaderTerminateInvocation",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2624,13 +2632,13 @@
       "kind": "feature",
       "name": "shaderZeroInitializeWorkgroupMemory",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2666,13 +2674,13 @@
       "kind": "feature",
       "name": "subgroupSizeControl",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2711,13 +2719,13 @@
       "kind": "feature",
       "name": "synchronization2",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2949,13 +2957,13 @@
       "kind": "property",
       "name": "maxTimelineSemaphoreValueDifference",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -2993,13 +3001,13 @@
       "kind": "property",
       "name": "maxBufferSize",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -3033,13 +3041,13 @@
       "kind": "property",
       "name": "maxDescriptorSetInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -3073,13 +3081,13 @@
       "kind": "property",
       "name": "maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -3113,13 +3121,13 @@
       "kind": "property",
       "name": "maxInlineUniformBlockSize",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -3153,13 +3161,13 @@
       "kind": "property",
       "name": "maxInlineUniformTotalSize",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -3193,13 +3201,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -3233,13 +3241,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+        "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2"
+          "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e"
         ],
         "state": "witnessed-blocker"
       },
@@ -3258,26 +3266,26 @@
     "tag_object": "e2373f9421f2c70583aea75c54219fbdcd67959c"
   },
   "summary": {
-    "blocker": 53,
+    "blocker": 52,
     "dimensions": {
       "api": {
-        "blocker": 51,
-        "satisfied": 11
+        "blocker": 50,
+        "satisfied": 12
       },
       "cts": {
-        "blocker": 51,
-        "satisfied": 11
+        "blocker": 50,
+        "satisfied": 12
       },
       "implementation": {
-        "blocker": 51,
-        "satisfied": 11
+        "blocker": 50,
+        "satisfied": 12
       },
       "native": {
-        "blocker": 52,
-        "satisfied": 10
+        "blocker": 51,
+        "satisfied": 11
       }
     },
     "requirements": 62,
-    "satisfied": 9
+    "satisfied": 10
   }
 }

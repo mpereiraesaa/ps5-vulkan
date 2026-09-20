@@ -2,13 +2,14 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+    "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
     "device_api": "1.0.0",
     "device_extensions": 5,
     "requirements": 62,
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
       "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+      "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
       "feature:VkPhysicalDeviceFeatures:geometryShader",
       "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
@@ -21,8 +22,8 @@
     ],
     "runs": [
       {
-        "id": "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2",
-        "log_sha256": "02d9105b99a6039b63fb43885d871fc47916d5aa738b1bfe8439644f9a796f15"
+        "id": "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e",
+        "log_sha256": "e8f3b82d06ec392e60b89ecd948f43cf201f001daf0c1a901620763abdabb138"
       }
     ],
     "transport": "ps5log/1",
@@ -35,9 +36,9 @@
         "maxMultiviewInstanceIndex": "134217727"
       }
     ],
-    "source_matrix_sha256": "49f7fbf9719e1b70f22b09bce2bef58d856045daf16c86d2e354c81df0ba53df",
-    "satisfied": 11,
-    "blockers": 51
+    "source_matrix_sha256": "9df8043ba28d50f0187cea32a49f0d4262c55183ba14471baa839dc09b4aecbe",
+    "satisfied": 12,
+    "blockers": 50
   },
   "historical_capability_probes": [{
     "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
@@ -75,6 +76,43 @@
     "source_matrix_sha256": "10da3d8a500250bd6197d4502dfa26419b45f6fcf8ab612bd10ed5b6e780ce4b",
     "satisfied": 10,
     "blockers": 52
+  }, {
+    "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+    "device_api": "1.0.0",
+    "device_extensions": 5,
+    "requirements": 62,
+    "satisfied_ids": [
+      "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+      "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+      "feature:VkPhysicalDeviceFeatures:geometryShader",
+      "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+      "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+      "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+      "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+      "feature:VkPhysicalDeviceFeatures:tessellationShader",
+      "feature:VkPhysicalDeviceVulkan11Features:multiview",
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+    ],
+    "runs": [
+      {
+        "id": "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2",
+        "log_sha256": "02d9105b99a6039b63fb43885d871fc47916d5aa738b1bfe8439644f9a796f15"
+      }
+    ],
+    "transport": "ps5log/1",
+    "verifier": "tools/verify_dxvk_probe.py",
+    "query_routes": [
+      {
+        "route": "VK_KHR_multiview",
+        "multiview": "1",
+        "maxMultiviewViewCount": "6",
+        "maxMultiviewInstanceIndex": "134217727"
+      }
+    ],
+    "source_matrix_sha256": "49f7fbf9719e1b70f22b09bce2bef58d856045daf16c86d2e354c81df0ba53df",
+    "satisfied": 11,
+    "blockers": 51
   }],
   "requirements": {
     "feature:VkPhysicalDeviceVulkan11Features:multiview": {
@@ -718,6 +756,31 @@
           "UPSTREAM_CTS.md"
         ],
         "note": "All 64 selected clipping leaves passed in the 275/275 acceptance run (selection hash 3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d, eboot b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7, title closed). The family exercises clip counts 1..8 (the reported maxClipDistances floor), the combined clip+cull budget, the non-constant write and the fragment-stage read. The complementarity and misc leaves stay diagnostics: the pinned binary does not report them when filtered by the name the module's construction implies, measured twice, so they are not claimed here."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+          "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill"
+        ],
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#fragment-stores-and-atomics-promotion-2026-09-20"
+        ],
+        "note": "Both unchanged upstream fragment-side-effect kill leaves pass on the exact integrated shipping candidate together with the frozen 304-case regression selection: 306/306 Pass, zero Fail or NotSupported, strict artifact and QPA identity, and clean title closure."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260920T181405989Z_PPSA99994_ps5vk_0x1145d7afedfdc"
+        ],
+        "artifact_sha256": "e83cac3dad67b48880409a4ba6874954e325881d71cc8ff835b06ca4a1b4b295",
+        "refs": [
+          "VALIDATION.md#fragment-stores-and-atomics-promotion-2026-09-20"
+        ],
+        "note": "Deterministic public-path SSBO witness: control_counter=0, candidate_counter=4096, 30 trailing guard words intact, fence success, strict_verified=1 and clean lifecycle. The separate public-ABI probe reports fragmentStoresAndAtomics=1 on the promotion candidate."
       }
     },
     "feature:VkPhysicalDeviceFeatures:geometryShader": {

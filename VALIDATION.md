@@ -406,6 +406,44 @@ Tessellation was still unadvertised in this geometry-promotion receipt because
 that compiler pin had no loadable hull package. The later tessellation candidate
 and its separate evidence are documented at the top of this page.
 
+## Fragment stores and atomics promotion (2026-09-20)
+
+`fragmentStoresAndAtomics` is now advertised by the shipping graphics profile.
+The promotion rests on two independent hardware oracles rather than on the
+feature query itself.
+
+The bounded native witness used one control draw and one candidate draw over a
+64x64 target. Its exact SELF SHA-256 was
+`e83cac3dad67b48880409a4ba6874954e325881d71cc8ff835b06ca4a1b4b295`;
+run `20260920T181405989Z_PPSA99994_ps5vk_0x1145d7afedfdc` reported
+`control_counter=0`, `candidate_counter=4096`, all 30 trailing guard words
+intact, fence success, zero tracked allocations after teardown and a complete
+`ps5log/1` BYE. This distinguishes a real fragment-stage SSBO write from a
+CPU-side initialization or a merely negotiated feature.
+
+The two unchanged upstream
+`dEQP-VK.rasterization.frag_side_effects.{color_at_beginning,color_at_end}.kill`
+oracles then ran with the frozen regression selection. The canonical shipping
+run `20260920T213224464Z_PPSA99994_upstream-cts_0x11f2fc5c6a394` passed
+**306/306**, with zero `Fail`, zero `NotSupported`, no missing or unexpected
+cases, selection SHA-256
+`b456e3ca1a93119db27fd58bbf7659932d3d25cbc2e7c7336cf0bfdd58683f06`,
+SELF SHA-256
+`03b52352f2ae3d073775a88b9734b8effca9538c991ce5335715bf809e79d356`
+and QPA SHA-256
+`44a0077b1a3c8ed3fa2b104ae406a6a7d2ac4f2ee141a9f01914a58dd2b04e82`.
+The supervised invocation confirmed `PPSA99994 stopped=True`; a missing local
+output directory prevented only the first QPA copy, so the same finalized log
+was reassembled and verified offline without rerunning the console.
+
+Finally, the public-ABI capability probe artifact
+`1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55`
+strictly observed `fragmentStoresAndAtomics=1` in run
+`20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e`. It reported 12 of 62
+target values and 50 blockers; the DXVK matrix counts 10/62 requirements ready
+because every ready row still needs API, implementation, CTS and native
+execution evidence, not merely a true query bit.
+
 ## Multiview native acceptance
 
 On 2026-09-16 the original 48 multiview leaves (masks, rectangular clears,
@@ -1899,11 +1937,13 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is 7/62 satisfied and 55 blockers. Core
-`robustBufferAccess`, the three multiview requirements and the three indirect
-and indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
-`fullDrawIndexUint32`, see [their acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16))
-have all four axes.
+The current checked result is **10/62 satisfied and 52 blockers**. Core
+`robustBufferAccess`, the three multiview requirements, the three indirect and
+indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
+`fullDrawIndexUint32`), the clip/cull pair and
+`fragmentStoresAndAtomics` have all four axes. See
+[their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16)
+and [the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20).
 The multiview probe uses explicitly tagged equivalent KHR queries, not the
 unimplemented Vulkan 1.2 aggregate structs. The API 1.3.204 floor remains
 blocked. See [multiview native acceptance](#multiview-native-acceptance) for the
