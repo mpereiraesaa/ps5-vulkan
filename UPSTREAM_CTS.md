@@ -1154,6 +1154,52 @@ registers the modules the applicable leaves live in.
   resolver (`src/graphics_program.h:96-97`), so the group's other eight leaves
   fail at pipeline creation and are recorded as such.
 
+* `draw.renderpass.depth_clamp` (the module's depth-clamp factory under the
+  same render-pass group parameters): its `d32_sfloat*` leaves are the only
+  upstream oracles this profile can run for `depthBiasClamp`, and a second,
+  independent oracle for `depthClamp`. They read the depth attachment back over
+  `VK_IMAGE_ASPECT_DEPTH_BIT` (`vktDrawDepthClampTests.cpp:554`), which this
+  tranche implemented; see below.
+
+### The two capabilities this tranche added for its own oracles
+
+Both are prerequisites of T05's features rather than features of their own, and
+neither is advertised as anything:
+
+* **`gl_FragCoord` as a fragment input.** The interface policy in
+  `src/spirv_graphics_interface.c` accepted no fragment built-in except
+  `ViewIndex`, so a pair whose fragment stage reads the position was refused
+  before the compiler saw it - which is exactly why the `clip_volume.depth_clamp`
+  leaves failed at `vkCreateGraphicsPipelines` (two `rc=-8` runtime-graphics
+  cache entries in the 2026-09-20 run). The built-in is core Vulkan, needs no
+  feature and needs no export from the pre-raster stage: the hardware launches
+  the pixel wave with the position VGPRs when `SPI_PS_INPUT_ENA` asks for them,
+  and the pinned compiler publishes that register with the rest of the pixel
+  context. `tests/test_runtime_graphics_compiler.c` reads the published value
+  back: `0x2` for a fragment stage that does not read the position, and
+  `POS_Z_FLOAT_ENA` set for one that reads `gl_FragCoord.z`. The policy accepts
+  it only as a fragment `Input` pointing at a four-component 32-bit float
+  vector.
+
+* **The DEPTH-aspect `D32_SFLOAT` readback.** `src/depth_layout.h` used to state
+  that the GFX10 `64KB_Z_X` pixel addressing "is not supplied", which is what
+  blocked every `draw.renderpass.depth_clamp` leaf. `src/depth_detile.c` now
+  carries that equation, taken from the gfx10 swizzle table AMD publishes and
+  Mesa vendors (MIT), assembled and evaluated the way `addrlib` does. The row
+  is not guessed: the **same table's colour rows at 16 pipes reproduce, bit for
+  bit over every coordinate in a tile, all three colour equations this driver
+  already measured on hardware** through ps5-opengl's coordinate-ramp receipts,
+  so the configuration is identified rather than assumed, and the depth row of
+  that configuration follows. `tests/test_depth_detile.c` pins the derivation,
+  that the map is a bijection of the tile onto the 64 KiB block, and that it
+  differs from the colour swizzle. Around it: `D32_SFLOAT` gains the
+  transfer-source capability and the two attachment usage combinations that go
+  with it, `src/vk_image.h` gains the depth readback image role,
+  `src/vk_transfer.c` gains the recording gate for the whole-surface DEPTH-aspect
+  copy, and `src/vk_command.c` gains the attachment-to-transfer-source barrier.
+  A standalone `D32` transfer image is still refused: the transfer source exists
+  only as the readback of a depth attachment.
+
 Leaf names in these families are composed at run time (a prefix plus a loop
 index, a topology enum lowercased without its prefix, a format name plus a
 suffix), so `tools/check_upstream_selection.py` carries one bounded recognizer
@@ -1171,7 +1217,7 @@ against is gone (`tests/test_upstream_selection.py`).
 | `depthClamp` | `clipping.clip_volume.depth_clamp.{triangle_list,triangle_strip}` | `t05-measurement-pending` | applicable, unmeasured |
 | `depthClamp` | `clipping.clip_volume.depth_clamp.{point_list,line_list,line_strip}` | `plain-point-line-pipeline-refused` | Fail at creation (profile rule, not a T05 gap) |
 | `depthClamp` | `clipping.clip_volume.depth_clamp.*_with_adjacency`, `.triangle_fan` | `primitive-topology-refused` | Fail at creation (resolver, not a T05 gap) |
-| `depthClamp`, `depthBiasClamp` | `draw.renderpass.depth_clamp.d32_sfloat{,_clamp_input_*,_depth_bias_clamp_input_*,_clamp_four_viewports}` | `depth-aspect-readback-gap` | blocked: `readDepth` over `VK_IMAGE_ASPECT_DEPTH_BIT` (`vktDrawDepthClampTests.cpp:554-555`); every copy path in `src/vk_image_transfer.c` validates `VK_IMAGE_ASPECT_COLOR_BIT` and `src/depth_layout.h:9-10` states the 64KB_Z_X pixel addressing is not supplied |
+| `depthClamp`, `depthBiasClamp` | `draw.renderpass.depth_clamp.d32_sfloat{,_clamp_input_*,_depth_bias_clamp_input_*,_clamp_four_viewports}` | `t05-measurement-pending` | applicable, unmeasured. These were blocked by the missing DEPTH-aspect readback and are the only upstream oracles this profile can run for `depthBiasClamp` |
 | `depthBiasClamp` | `dynamic_state.monolithic.rs_state.depth_bias_clamp` | `depth-stencil-format-gap` | NotSupported: needs `D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT` as attachment (`vktDynamicStateRSTests.cpp:133-150`); the profile offers only `D32_SFLOAT` (`src/texture_format.c:183`) |
 
 Families examined and found not applicable, recorded so they are not
@@ -1202,11 +1248,12 @@ accepted upstream leaf, and the DXVK profile matrix marks a row ready only with
 * `multiViewport` and `depthClamp`: promotable after one measurement window
   reports Pass on the 25 `t05-measurement-pending` leaves; the driver side of
   both is already measured by the consumer witnesses.
-* `depthBiasClamp`: **no applicable upstream leaf exists on this profile
-  today.** The nearest are the two `draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_*`
-  leaves, which need a DEPTH-aspect image-to-buffer copy for `D32_SFLOAT`, and
-  `rs_state.depth_bias_clamp`, which needs a depth-stencil attachment format.
-  Either is a capability outside this tranche's requirements; until one lands
-  or the policy is changed deliberately, the feature stays unadvertised with
-  its consumer-witness evidence recorded, and the profile matrix keeps its row
-  as a blocker.
+* `depthBiasClamp`: its two
+  `draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_*` leaves are
+  applicable now that the DEPTH-aspect readback exists, and they are the only
+  upstream oracles this profile can run for the feature. They are
+  `t05-measurement-pending` until their run is green.
+  `dynamic_state.monolithic.rs_state.depth_bias_clamp` stays out for a
+  different reason: it needs a stencil-bearing attachment format
+  (`D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT`), which is a separate capability
+  this tranche did not add.

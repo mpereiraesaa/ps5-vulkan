@@ -111,6 +111,27 @@ static inline VkBool32 ps5vk_input_attachment_readback_image(VkImage image)
         image->info.usage == exact && !image->info.flags;
 }
 
+/* The depth surface an upstream case renders into and then reads back: a
+ * single-sample, single-layer D32 attachment that also declares the transfer
+ * source role, and optionally the whole-subresource clear destination. Kept
+ * to exactly that shape because it is the only one whose SW_64K_Z_X pixel
+ * addressing is implemented (src/depth_detile.c). */
+static inline VkBool32 ps5vk_depth_readback_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    return image->info.format == VK_FORMAT_D32_SFLOAT &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        (image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) &&
+        (image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+        !(image->info.usage &
+          ~(VkImageUsageFlags)(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                               VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+}
+
 static inline VkBool32 ps5vk_colour_readback_image(VkImage image)
 {
     return ps5vk_colour_transfer_image(image) ||

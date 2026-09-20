@@ -2239,12 +2239,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 0 usage 0x20: features 0x8200 implies supported=True, query answered supported=True",
+      "detail": "tiling 0 usage 0x20: features 0xc200 implies supported=True, query answered supported=True",
       "expected_supported": true,
       "format": 126,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 33280,
+      "reported_features": 49664,
       "reported_supported": true,
       "tiling": 0,
       "usage": 32,
@@ -2455,12 +2455,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 0 usage 0x4: features 0x8200 implies supported=False, query answered supported=False",
+      "detail": "tiling 0 usage 0x4: features 0xc200 implies supported=False, query answered supported=False",
       "expected_supported": false,
       "format": 126,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 33280,
+      "reported_features": 49664,
       "reported_supported": false,
       "tiling": 0,
       "usage": 4,
@@ -2479,12 +2479,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 0 usage 0x10: features 0x8200 implies supported=False, query answered supported=False",
+      "detail": "tiling 0 usage 0x10: features 0xc200 implies supported=False, query answered supported=False",
       "expected_supported": false,
       "format": 126,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 33280,
+      "reported_features": 49664,
       "reported_supported": false,
       "tiling": 0,
       "usage": 16,
@@ -2503,12 +2503,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 0 usage 0x20: features 0x8200 implies supported=True, query answered supported=True",
+      "detail": "tiling 0 usage 0x20: features 0xc200 implies supported=True, query answered supported=True",
       "expected_supported": true,
       "format": 126,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 33280,
+      "reported_features": 49664,
       "reported_supported": true,
       "tiling": 0,
       "usage": 32,
@@ -2527,12 +2527,12 @@
       "verdict": "satisfied"
     },
     {
-      "detail": "tiling 0 usage 0x8: features 0x8200 implies supported=False, query answered supported=False",
+      "detail": "tiling 0 usage 0x8: features 0xc200 implies supported=False, query answered supported=False",
       "expected_supported": false,
       "format": 126,
       "kind": "format-query-consistency",
       "profile": "graphics",
-      "reported_features": 33280,
+      "reported_features": 49664,
       "reported_supported": false,
       "tiling": 0,
       "usage": 8,

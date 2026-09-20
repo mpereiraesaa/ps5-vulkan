@@ -11,7 +11,8 @@ enum { MODEL_VERTEX=0, MODEL_TESS_CTRL=1, MODEL_TESS_EVAL=2, MODEL_GEOMETRY=3,
 enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
        BUILTIN_CULL_DISTANCE=4, BUILTIN_VERTEX_INDEX=42, BUILTIN_INSTANCE_INDEX=43,
        BUILTIN_BASE_VERTEX=4424, BUILTIN_BASE_INSTANCE=4425, BUILTIN_DRAW_INDEX=4426,
-       BUILTIN_VIEW_INDEX=4440, BUILTIN_VIEWPORT_INDEX=10 };
+       BUILTIN_VIEW_INDEX=4440, BUILTIN_VIEWPORT_INDEX=10,
+       BUILTIN_FRAG_COORD=15 };
 /* The tessellation built-ins the two stages exchange with the tessellator, and
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
@@ -483,6 +484,30 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                         &out->clip_distances:&out->cull_distances);
                 if(*total)goto done; /* one declaration per built-in per stage */
                 *total=length;
+                continue;
+            }
+            /* gl_FragCoord: the fragment's window position. Core Vulkan, so
+             * no feature gates it, and unlike every varying it needs no export
+             * from the pre-raster stage - the hardware launches the pixel wave
+             * with the position VGPRs and the pinned compiler asks for them
+             * through SPI_PS_INPUT_ENA, which it publishes with the rest of
+             * the pixel context registers. Nothing else in the pipeline has to
+             * change, so this is an interface rule only.
+             *
+             * It is accepted in the one shape the built-in has: a fragment
+             * Input pointing at a four-component 32-bit float vector, never a
+             * patch and never at a location. Refusing it is what kept the only
+             * applicable depthClamp leaves out of reach - the fragment shader
+             * of dEQP-VK.clipping.clip_volume.depth_clamp.* colours with
+             * gl_FragCoord.z, and the pair was refused at pipeline creation
+             * (measured as two rc=-8 runtime-graphics cache entries in the
+             * 2026-09-20 run, eboot 749756aa). */
+            if(d->builtin==BUILTIN_FRAG_COORD) {
+                if(model!=MODEL_FRAGMENT || d->storage!=1u || d->patch ||
+                   d->location!=~0u || type->op!=23 || type->count!=4 ||
+                   !type->type || type->type>=bound)goto done;
+                const struct id_info *component=&ids[type->type];
+                if(component->op!=22 || component->count!=32)goto done;
                 continue;
             }
             /* Any other built-in a tessellation stage declares is outside this

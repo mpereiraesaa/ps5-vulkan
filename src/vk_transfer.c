@@ -169,6 +169,40 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
         op->copy_layout=layout;op->copy_region=regions[0];
         return;
     }
+    /* The depth readback: the same whole-surface shape as the colour one, over
+     * the DEPTH aspect of a D32 attachment that declares the transfer source
+     * role. It reaches the graphics backend like the colour readback does,
+     * because the bytes are tiled and only the GPU's completion makes them
+     * readable; the detile itself is SW_64K_Z_X (src/depth_detile.c). The
+     * pinned dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat* family reads its
+     * depth attachment back exactly this way (vktDrawDepthClampTests.cpp:554). */
+    if(ps5vk_depth_readback_image(image)) {
+        const VkBufferImageCopy *dr=&regions[0];
+        void *dsrc,*ddst;VkDeviceSize dsrc_bytes,ddst_bytes;
+        const uint64_t dpixels=(uint64_t)image->info.extent.width*image->info.extent.height;
+        if(!d->graphics_enabled ||
+           !ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
+           dr->bufferOffset ||
+           (dr->bufferRowLength && dr->bufferRowLength!=image->info.extent.width) ||
+           (dr->bufferImageHeight && dr->bufferImageHeight!=image->info.extent.height) ||
+           dr->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT ||
+           dr->imageSubresource.mipLevel || dr->imageSubresource.baseArrayLayer ||
+           dr->imageSubresource.layerCount!=1 ||
+           dr->imageOffset.x || dr->imageOffset.y || dr->imageOffset.z ||
+           dr->imageExtent.width!=image->info.extent.width ||
+           dr->imageExtent.height!=image->info.extent.height || dr->imageExtent.depth!=1 ||
+           !dpixels || dpixels>UINT64_MAX/4 ||
+           ps5vk_image_span(d,image,&dsrc,&dsrc_bytes)!=VK_SUCCESS ||
+           ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&ddst,&ddst_bytes)!=VK_SUCCESS ||
+           ddst_bytes<dpixels*4 ||
+           overlaps((uintptr_t)dsrc,dsrc_bytes,(uintptr_t)ddst,dpixels*4)) {invalid(c);return;}
+        struct ps5vk_operation *dop=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
+            PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
+        if(!dop)return;
+        dop->copy_destination=destination;dop->copy_image=image;
+        dop->copy_layout=layout;dop->copy_region=*dr;
+        return;
+    }
     const int array_color=ps5vk_array_color_image(image);
     if(!d->graphics_enabled || !ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
         image->info.format!=VK_FORMAT_R8G8B8A8_UNORM || image->info.mipLevels!=1 ||

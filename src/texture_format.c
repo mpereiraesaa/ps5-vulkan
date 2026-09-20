@@ -175,12 +175,13 @@ static const struct ps5vk_texture_format formats[] = {
     /* --- roles without a sampled-image encoding --------------------------- */
     /* VideoOut target and vertex input; deliberately not sampled. */
     BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_VERTEX),
-    /* 64KB_Z_X depth target. TRANSFER_DST is the whole-subresource clear only:
+    /* 64KB_Z_X depth target. TRANSFER_DST is the whole-subresource clear:
      * vkCmdClearDepthStencilImage writes one uniform 32-bit word over the
-     * entire surface, which is tiling-invariant and needs no pixel equations.
-     * No pixel addressing exists for a copy or a partial write, so no
-     * TRANSFER_SRC, no sampled role and no blit role is claimed. */
-    BUFFER(VK_FORMAT_D32_SFLOAT, CAP_DEPTH | CAP_DST),
+     * entire surface, which is tiling-invariant. TRANSFER_SRC is the whole
+     * surface readback, which does need pixel addressing and now has it -
+     * src/depth_detile.c carries the SW_64K_Z_X equation. No sampled role and
+     * no blit role is claimed: neither has an implemented path. */
+    BUFFER(VK_FORMAT_D32_SFLOAT, CAP_DEPTH | CAP_DST | CAP_SRC),
     /* Three-component rows are vertex-only: GFX1013 has no 96-bit image
      * data format, so no sampled encoding is claimed for them. */
     BUFFER(VK_FORMAT_R32G32B32_SFLOAT, CAP_VERTEX),
@@ -330,11 +331,29 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
         return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_TRANSFER_DST) && usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT)
         return VK_TRUE;
+    /* The standalone transfer roles. A depth format is excluded: its transfer
+     * source exists only as the readback of a depth ATTACHMENT (the rule
+     * further down), and a D32 image that is nothing but a transfer surface
+     * has no path here - it would be neither the tiled depth attachment the
+     * Z_X equation describes nor a padded linear one. */
     if ((w & PS5VK_FORMAT_CAP_TRANSFER_SRC) &&
+        !(w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) &&
         (usage == VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
          usage == (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
         return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT) && usage == attachment) return VK_TRUE;
+    /* Depth attachment plus its readback, and plus the whole-subresource
+     * clear the same upstream cases perform. The pinned depth_clamp family
+     * creates its depth target as DEPTH_STENCIL_ATTACHMENT | TRANSFER_SRC and
+     * reads it back over the DEPTH aspect, so the combination has to exist
+     * for the image to be creatable; it is granted only to a row that carries
+     * both the depth-attachment and the transfer-source capability, which is
+     * the one D32_SFLOAT shape whose Z_X pixel addressing is implemented. */
+    if ((w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) &&
+        (w & PS5VK_FORMAT_CAP_TRANSFER_SRC) &&
+        (usage == (depth | VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+         usage == (depth | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                   VK_IMAGE_USAGE_TRANSFER_DST_BIT))) return VK_TRUE;
     /* Colour attachment plus the readback role plus a transfer destination.
      * The pinned upstream draw tests create their colour target exactly this
      * way (COLOR_ATTACHMENT | TRANSFER_SRC | TRANSFER_DST), so the combination

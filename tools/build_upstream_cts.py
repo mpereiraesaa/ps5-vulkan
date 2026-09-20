@@ -924,6 +924,11 @@ def main(argv=None):
         # the same base class; its multi-scissor leaves route through an
         # instanced geometry stage and are a second multiViewport oracle.
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp",
+        # Depth-clamp module: the upstream oracles for depthClamp and
+        # depthBiasClamp. They read the depth attachment back over the DEPTH
+        # aspect, which this tranche implemented; its helpers (create-info,
+        # image and buffer object utilities) are already compiled above.
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBaseClass.cpp",
         # The base class builds its buffers, images and render pass through the
         # module's own create-info and object helpers.

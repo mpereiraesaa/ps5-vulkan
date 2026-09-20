@@ -6,7 +6,8 @@ struct ps5vk_depth_layout {
     uint64_t bytes, alignment;
     uint32_t swizzle_mode;
 };
-/* GFX10 64KB_Z_X, 2D D32, one mip/layer/sample, no HTILE. Footprint does
- * not require pipe XOR topology; pixel addressing DOES and is not supplied. */
+/* GFX10 64KB_Z_X, 2D D32, one mip/layer/sample, no HTILE. This header is the
+ * footprint only, which does not require the pipe XOR topology. The pixel
+ * addressing that does is in src/depth_detile.c. */
 int ps5vk_depth_layout(uint32_t width, uint32_t height, struct ps5vk_depth_layout *out);
 #endif
