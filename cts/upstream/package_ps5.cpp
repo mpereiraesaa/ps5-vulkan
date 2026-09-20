@@ -22,6 +22,12 @@
 #include "vktMultiViewTests.hpp"
 #include "vktClippingTests.hpp"
 #include "vktGeometryTests.hpp"
+#include "vktTessellationWindingTests.hpp"
+#include "vktTessellationShaderInputOutputTests.hpp"
+#include "vktTessellationMiscDrawTests.hpp"
+#include "vktTessellationPrimitiveDiscardTests.hpp"
+#include "vktTessellationGeometryPassthroughTests.hpp"
+#include "vktTessellationCommonEdgeTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -205,6 +211,22 @@ void FocusedVkTestPackage::init(void)
     // compiles are acceptance cases in cts/upstream/manifest.json and every other
     // leaf stays a diagnostic there with the gate that refuses it.
     addChild(vkt::geometry::createTests(m_testCtx, "geometry"));
+
+    // Original upstream bodies, shaders and image oracle. Registration alone
+    // is not execution or acceptance; the canonical case filter and feature
+    // negotiation remain unchanged until native contracts are demonstrated.
+    {
+        de::MovePtr<tcu::TestCaseGroup> tessGroup(new tcu::TestCaseGroup(m_testCtx, "tessellation"));
+        tessGroup->addChild(vkt::tessellation::createWindingTests(m_testCtx));
+        tessGroup->addChild(vkt::tessellation::createCommonEdgeTests(m_testCtx));
+        tessGroup->addChild(vkt::tessellation::createShaderInputOutputTests(m_testCtx));
+        tessGroup->addChild(vkt::tessellation::createMiscDrawTests(m_testCtx));
+        tessGroup->addChild(vkt::tessellation::createPrimitiveDiscardTests(m_testCtx));
+        de::MovePtr<tcu::TestCaseGroup> interaction(new tcu::TestCaseGroup(m_testCtx, "geometry_interaction"));
+        interaction->addChild(vkt::tessellation::createGeometryPassthroughTests(m_testCtx));
+        tessGroup->addChild(interaction.release());
+        addChild(tessGroup.release());
+    }
 
     // compute.basic group
     {
