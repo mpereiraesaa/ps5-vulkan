@@ -197,6 +197,18 @@ static void recording_and_invalidation(void)
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,
         0,0,NULL,1,&bb,0,NULL);
     assert(vkEndCommandBuffer(c)==VK_SUCCESS && c->operations[0].buffer_barrier.buffer==buffer);
+    /* Fragment stores use the same core shader-write access bit as compute.
+     * The focused CTS records this exact SSBO-to-host dependency after its
+     * render pass; accepting compute but rejecting fragment made the valid
+     * void command poison the buffer and surface only at EndCommandBuffer. */
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,
+        0,0,NULL,1,&bb,0,NULL);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==2);
+    assert(c->operations[0].src_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+    assert(c->operations[0].src_access==VK_ACCESS_SHADER_WRITE_BIT);
+    assert(vkEndCommandBuffer(c)==VK_SUCCESS);
     c->state=PS5VK_PENDING;
     vkDestroyBuffer(&d,buffer,NULL); assert(d.buffers==buffer);
     c->state=PS5VK_EXECUTABLE;
