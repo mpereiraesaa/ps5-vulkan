@@ -264,6 +264,17 @@ static void check_fragment_distance_read(void)
     assert(!ps5vk_runtime_graphics_distance_reads_described(&pre,&mutated,2,0));
     mutated=ps;mutated.input_semantics[0]=0x0000000fu;          /* pixel stopped naming it */
     assert(!ps5vk_runtime_graphics_distance_reads_described(&pre,&mutated,2,0));
+    /* FS declares only cull; its packed slots follow the producer's three
+     * clips, not a nonexistent consumer clip prefix. */
+    pre=(PsbcShaderMetadata){.clip_distance_mask=7,.cull_distance_mask=0x78,
+        .output_semantic_count=2,.output_semantics={0x130,0x231}};
+    ps=(PsbcShaderMetadata){.ps_cull_distance_reads=4,.input_semantic_count=2,
+        .input_semantics={0x30,0x31}};
+    assert(ps5vk_runtime_graphics_distance_reads_described(&pre,&ps,0,4));
+    mutated=pre;mutated.cull_distance_mask=0x38; /* fourth cull component absent */
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&mutated,&ps,0,4));
+    mutated=pre;mutated.output_semantic_count=1;
+    assert(!ps5vk_runtime_graphics_distance_reads_described(&mutated,&ps,0,4));
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
@@ -467,17 +478,21 @@ static void check_geometry_stage_descriptor_visibility(void)
     assert(p->vertex.metadata.descriptor_set_valid[0]);
     assert(p->arguments.vertex_descriptor_valid[0]);
     ps5vk_runtime_graphics_free(NULL,out);
-    /* The same layout on a vertex+fragment pipeline: refused, because nothing
-     * would execute the geometry-stage binding. */
+    /* A shared layout may keep a binding for an absent geometry stage.
+     * Neither remaining stage reads it or receives its descriptor table. */
     struct ps5vk_graphics_key without_geometry=key;
     without_geometry.geometry=(struct ps5vk_graphics_module_key){0};
     without_geometry.feature_mask=0;
-    assert(!ps5vk_runtime_graphics_supported(&without_geometry));
+    assert(ps5vk_runtime_graphics_supported(&without_geometry));
     out=(void *)1;
-    assert(ps5vk_runtime_graphics_compile(NULL,&without_geometry,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_runtime_graphics_compile(NULL,&without_geometry,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(!p->arguments.vertex_descriptor_valid[0]);
+    assert(!p->arguments.fragment_descriptor_valid[0]);
+    ps5vk_runtime_graphics_free(NULL,out);
     free((void *)key.vertex.words);free((void *)key.geometry.words);
     free((void *)key.fragment.words);
-    puts("Geometry descriptors: a geometry-stage binding is carried by the merged program and refused without one");
+    puts("Geometry descriptors: merged-stage access is carried; unused absent-stage bindings need no table");
 }
 
 /* The tessellation pair: compiled through the hull and domain programs.
@@ -488,12 +503,10 @@ static void check_geometry_stage_descriptor_visibility(void)
  * program behind the control half's machine code) and publishes the evaluation
  * half as a loadable NGG package, so the adapter compiles the whole pipeline:
  * the hull and domain halves carry their own metadata, and the feature the
- * logical device enabled is checked against the compiled evidence. The runtime
- * loader gate keeps refusing both halves - the hull launch state the driver
- * owns is unwritten - and the cached lease has no payload representation for
- * the pair yet, so nothing can reach the hardware from this slice. The same
- * modules without the pair do compile, which is what makes the tessellation
- * path specific. */
+ * logical device enabled is checked against the compiled evidence. This host
+ * test also exercises the pointer-free cache payload, independent stage maps
+ * and retained leases. It does not establish native GPU execution; that needs
+ * the separately identified own-shader and upstream CTS hardware runs. */
 static void check_tessellation_stage(void)
 {
     struct ps5vk_graphics_key key={
@@ -508,6 +521,69 @@ static void check_tessellation_stage(void)
     assert(ps5vk_graphics_has_tessellation(&key));
     assert(ps5vk_graphics_tessellation_key_valid(&key));
     assert(ps5vk_spirv_graphics_interface(&key));
+    struct ps5vk_graphics_key five=key;
+    five.geometry=read_module("build/runtime-graphics/geometry_probe.geom.spv");
+    five.feature_mask|=PS5VK_FEATURE_GEOMETRY_SHADER;
+    assert(ps5vk_spirv_graphics_interface(&five));
+    assert(ps5vk_runtime_graphics_supported(&five));
+    const void *unsupported_five=(void *)(uintptr_t)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&five,&unsupported_five)==
+        VK_SUCCESS && unsupported_five);
+    const struct ps5vk_runtime_graphics_program *five_program=unsupported_five;
+    assert(five_program->hull.machine_code && five_program->domain.machine_code &&
+        five_program->domain.metadata.merged_es_source_stage==PSBC_STAGE_TESS_EVAL);
+    ps5vk_runtime_graphics_free(NULL,unsupported_five);
+    struct ps5vk_compilation_cache *five_cache=ps5vk_compilation_cache_create(8,16u*1024u*1024u);
+    assert(five_cache);
+    const void *five_cold=NULL,*five_warm=NULL,*without_geometry=NULL;
+    assert(ps5vk_runtime_graphics_cached_acquire(five_cache,&five,&five_cold)==VK_SUCCESS);
+    assert(ps5vk_runtime_graphics_cached_acquire(five_cache,&five,&five_warm)==VK_SUCCESS);
+    assert(ps5vk_runtime_graphics_cached_acquire(five_cache,&key,&without_geometry)==VK_SUCCESS);
+    const struct ps5vk_runtime_graphics_program *cold_five=five_cold,*warm_five=five_warm,
+        *plain_tess=without_geometry;
+    assert(cold_five->domain.machine_code==warm_five->domain.machine_code);
+    assert(cold_five->domain.machine_code!=plain_tess->domain.machine_code);
+    assert(warm_five->domain.metadata.merged_es_source_stage==PSBC_STAGE_TESS_EVAL);
+    assert(warm_five->arguments.ring_table_valid);
+    struct ps5vk_cache_stats five_stats;
+    ps5vk_compilation_cache_get_stats(five_cache,&five_stats);
+    assert(five_stats.compiles==2 && five_stats.hits==1);
+    ps5vk_runtime_graphics_cached_release(five_cache,five_cold);
+    assert(warm_five->domain.machine_code_size);
+    ps5vk_runtime_graphics_cached_release(five_cache,five_warm);
+    ps5vk_runtime_graphics_cached_release(five_cache,without_geometry);
+    ps5vk_compilation_cache_destroy(five_cache);
+    PsbcCompileOptions merged_options={.target=PSBC_TARGET_PS5,
+        .stage=PSBC_STAGE_GEOMETRY,.entrypoint="main",.optimise=true,.ngg=true,
+        .address32_hi=2,.patch_control_points=3,.rasterization_samples=1};
+    PsbcShaderOutput merged_output={0};
+    const PsbcResult merged_result=psbc_compile_tess_geometry_pipeline(
+        key.tess_control.words,key.tess_control.word_count*4,
+        key.tess_eval.words,key.tess_eval.word_count*4,
+        five.geometry.words,five.geometry.word_count*4,&merged_options,&merged_output);
+    fprintf(stderr,"TES_GS compiler result=%d bytes=%zu\n",merged_result,merged_output.machine_code_size);
+    assert(merged_result==PSBC_RESULT_OK && merged_output.machine_code_size);
+    assert(merged_output.metadata.ps5_ring_table_valid);
+    assert(merged_output.metadata.merged_geometry &&
+        merged_output.metadata.merged_es_source_stage==PSBC_STAGE_TESS_EVAL);
+    /* Pinned R_028B54 ES_EN occupies bits3..4; ES_STAGE_DS is1. */
+    assert(((merged_output.metadata.linkage_stages_en.value>>3)&3u)==1u);
+    assert(merged_output.metadata.ps5_ring_table_user_data_dword+2<=
+        merged_output.metadata.user_sgpr_count);
+    assert(merged_output.metadata.user_data_window_base>0);
+    assert(!merged_output.metadata.vertex_buffer_table_valid);
+    assert(!(merged_output.metadata.unresolved_fields&PSBC_UNRESOLVED_TESS_PIPELINE));
+    PsbcShaderMetadata unused_fragment={0};
+    assert(!ps5vk_runtime_graphics_feature_use_ok(&merged_output.metadata,
+        &unused_fragment,PS5VK_FEATURE_GEOMETRY_SHADER));
+    assert(!ps5vk_runtime_graphics_feature_use_ok(&merged_output.metadata,
+        &unused_fragment,PS5VK_FEATURE_TESSELLATION_SHADER));
+    assert(ps5vk_runtime_graphics_feature_use_ok(&merged_output.metadata,
+        &unused_fragment,PS5VK_FEATURE_GEOMETRY_SHADER|PS5VK_FEATURE_TESSELLATION_SHADER));
+    struct ps5vk_runtime_shader unfinished_header;
+    assert(ps5vk_runtime_shader_build(&unfinished_header,&merged_output)==0);
+    psbc_free_output(&merged_output);
+    free((void *)five.geometry.words);
     /* The whole pipeline compiles: hull, domain and fragment. */
     assert(ps5vk_runtime_graphics_supported(&key));
     const void *out=NULL;
@@ -545,23 +621,68 @@ static void check_tessellation_stage(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&disabled,&out)==
         VK_ERROR_FEATURE_NOT_PRESENT && !out);
 
-    /* The cached acquire path cannot store the pair, so it serves the SAME
-     * adapter's compile UNCACHED: one lease per acquire, the release retiring
-     * the compiled program. The value verdict is identical to the uncached
-     * adapter's. */
+    struct ps5vk_compilation_cache *tess_cache=ps5vk_compilation_cache_create(8,4*1024*1024);
+    assert(tess_cache);
+    const void *cold=NULL,*warm=NULL;
+    assert(ps5vk_runtime_graphics_cached_acquire(tess_cache,&key,&cold)==VK_SUCCESS);
+    assert(ps5vk_runtime_graphics_cached_acquire(tess_cache,&key,&warm)==VK_SUCCESS);
+    const struct ps5vk_runtime_graphics_program *cp=cold,*wp=warm;
+    assert(cp->hull.machine_code==wp->hull.machine_code &&
+           cp->domain.machine_code==wp->domain.machine_code &&
+           cp->fragment.machine_code==wp->fragment.machine_code);
+    assert(!cp->vertex.machine_code && cp->patch_control_points==3 && cp->tess_output_points==3);
+    struct ps5vk_cache_stats tess_stats;
+    ps5vk_compilation_cache_get_stats(tess_cache,&tess_stats);
+    assert(tess_stats.hits==1 && tess_stats.compiles==1 && tess_stats.current_entries==1);
+    /* A truncated payload must be rejected without leaking the hit reference. */
+    struct ps5vk_cache_entry *cached_entry=tess_cache->lru_head;
+    const size_t saved_payload_bytes=cached_entry->payload_bytes;
+    const int saved_refs=cached_entry->refcount;
+    cached_entry->payload_bytes=1;
     out=(void *)1;
-    assert(ps5vk_runtime_graphics_cached_acquire(NULL,&key,&out)==VK_SUCCESS && out);
-    ps5vk_runtime_graphics_cached_release(NULL,out);
+    assert(ps5vk_runtime_graphics_cached_acquire(tess_cache,&key,&out)==VK_ERROR_UNKNOWN && !out);
+    assert(cached_entry->refcount==saved_refs);
+    cached_entry->payload_bytes=saved_payload_bytes;
+    /* Each individual stage map changes identity even if its ID is unused. */
+    for(unsigned stage=0;stage<3;++stage) {
+        struct ps5vk_graphics_key changed=key;
+        struct ps5vk_graphics_module_key *m=stage==0?&changed.vertex:
+            stage==1?&changed.tess_control:&changed.tess_eval;
+        m->specialization_count=1;
+        m->specializations[0]=(struct ps5vk_graphics_specialization){.constant_id=37,.size=4};
+        out=NULL;
+        assert(ps5vk_runtime_graphics_cached_acquire(tess_cache,&changed,&out)==VK_SUCCESS);
+        ps5vk_runtime_graphics_cached_release(tess_cache,out);
+    }
+    ps5vk_compilation_cache_get_stats(tess_cache,&tess_stats);
+    assert(tess_stats.compiles==4 && tess_stats.current_entries==4 && tess_stats.hits==2);
+    const uint32_t code_word=*(const uint32_t *)cp->hull.machine_code;
+    ps5vk_compilation_cache_destroy(tess_cache);
+    assert(*(const uint32_t *)cp->hull.machine_code==code_word);
+    ps5vk_runtime_graphics_cached_release(NULL,cold);
+    assert(*(const uint32_t *)wp->hull.machine_code==code_word);
+    ps5vk_runtime_graphics_cached_release(NULL,warm);
+    /* Preserve the existing cache contract: over-budget insertion fails
+     * closed without keeping an unaccounted fallback allocation. */
+    tess_cache=ps5vk_compilation_cache_create(1,1);
+    assert(tess_cache);
+    out=NULL;
+    assert(ps5vk_runtime_graphics_cached_acquire(tess_cache,&key,&out)==VK_ERROR_OUT_OF_HOST_MEMORY && !out);
+    ps5vk_compilation_cache_get_stats(tess_cache,&tess_stats);
+    assert(!tess_stats.current_entries && !tess_stats.current_bytes);
+    ps5vk_compilation_cache_destroy(tess_cache);
 
-    /* The patch control points the pipeline states must be the control stage's
-     * output vertex count, so a state that disagrees is refused as a malformed
-     * pair rather than compiled against the wrong patch. */
+    /* Input assembly and TCS output sizes are independent and must survive
+     * compilation separately for the native launch registers. */
     struct ps5vk_graphics_key wrong=key;
     wrong.patch_control_points=4;
-    assert(!ps5vk_spirv_graphics_interface(&wrong));
-    assert(!ps5vk_runtime_graphics_supported(&wrong));
+    assert(ps5vk_spirv_graphics_interface(&wrong));
+    assert(ps5vk_runtime_graphics_supported(&wrong));
     out=(void *)1;
-    assert(ps5vk_runtime_graphics_compile(NULL,&wrong,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_runtime_graphics_compile(NULL,&wrong,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *asymmetric=out;
+    assert(asymmetric->patch_control_points==4 && asymmetric->tess_output_points==3);
+    ps5vk_runtime_graphics_free(NULL,out);
 
     /* Half a pair is refused even before the stages are read. */
     struct ps5vk_graphics_key half=key;
@@ -582,6 +703,65 @@ static void check_tessellation_stage(void)
     out=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&plain,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);
+
+    /* Unused specialization IDs are legal, independently on every source.
+     * Actual same-ID resource-selection semantics are checked by the PSBC
+     * tess_resource_metadata fixture, not inferred from this acceptance. */
+    struct ps5vk_graphics_key specialized=key;
+    struct ps5vk_graphics_module_key *spec_stages[]={
+        &specialized.vertex,&specialized.tess_control,&specialized.tess_eval};
+    for(unsigned s=0;s<3;++s) {
+        spec_stages[s]->specialization_count=1;
+        spec_stages[s]->specializations[0]=(struct ps5vk_graphics_specialization){
+            .constant_id=37,.size=4};
+        memcpy(spec_stages[s]->specializations[0].data,&s,4);
+    }
+    out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&specialized,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    specialized.tess_control.specialization_count=65;
+    out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&specialized,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+
+    /* Each source retains its own entrypoint through both merged and link-only
+     * compiles. Rename only the four-byte SPIR-V entry string, preserving IDs
+     * and executable instructions; all names deliberately differ. */
+    key.geometry=read_module("build/runtime-graphics/geometry_probe.geom.spv");
+    const char *entries[]={"vert","hull","eval","frag","geom"};
+    struct ps5vk_graphics_module_key *entry_stages[]={
+        &key.vertex,&key.tess_control,&key.tess_eval,&key.fragment,&key.geometry};
+    for(unsigned s=0;s<5;++s) {
+        uint32_t *words=(uint32_t *)entry_stages[s]->words;
+        unsigned renamed=0;
+        for(size_t at=5;at<entry_stages[s]->word_count;at+=words[at]>>16) {
+            if((words[at]&65535u)==15u) {
+                assert((words[at]>>16)>=5 && !memcmp(words+at+3,"main",5));
+                memcpy(words+at+3,entries[s],4);++renamed;
+            }
+        }
+        assert(renamed==1);entry_stages[s]->entry=entries[s];
+    }
+    key.feature_mask|=PS5VK_FEATURE_GEOMETRY_SHADER;
+    out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    for(unsigned s=0;s<5;++s) {
+        entry_stages[s]->entry="none";out=(void *)(uintptr_t)1;
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
+        entry_stages[s]->entry=entries[s];
+    }
+    /* Preserve the standalone domain path and its missing-entry regressions. */
+    free((void *)key.geometry.words);
+    key.geometry=(struct ps5vk_graphics_module_key){0};
+    key.feature_mask&=~PS5VK_FEATURE_GEOMETRY_SHADER;
+    out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    for(unsigned s=0;s<4;++s) {
+        entry_stages[s]->entry="none";out=(void *)(uintptr_t)1;
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
+        entry_stages[s]->entry=entries[s];
+    }
 
     free((void *)key.vertex.words);free((void *)key.tess_control.words);
     free((void *)key.tess_eval.words);free((void *)key.fragment.words);
@@ -901,8 +1081,34 @@ static void check_descriptor_options(void)
     }
     ps5vk_runtime_graphics_free(NULL,compiled);
     sets[3].binding[7].stages=VK_SHADER_STAGE_COMPUTE_BIT;
-    assert(!ps5vk_runtime_graphics_supported(&key));
+    /* Layout screening is not access validation: an absent stage may retain
+     * a binding, but this VS actually reads it and compilation must refuse. */
+    assert(ps5vk_runtime_graphics_supported(&key));
+    compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)!=VK_SUCCESS);
+    assert(!compiled);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
+    struct ps5vk_set_signature unused_set={0};
+    unused_set.count=1;
+    unused_set.binding[0]=(struct ps5vk_binding){.first=0,.count=1,
+        .stages=VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT};
+    unused_set.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)unused_set.binding[b].first=1;
+    struct ps5vk_graphics_key unused={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .descriptor_set_count=1,.descriptor_sets=&unused_set};
+    assert(ps5vk_runtime_graphics_supported(&unused));
+    compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&unused,&compiled)==VK_SUCCESS);
+    const struct ps5vk_runtime_graphics_program *no_access=compiled;
+    assert(!no_access->arguments.vertex_descriptor_valid[0]);
+    assert(!no_access->arguments.fragment_descriptor_valid[0]);
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    free((void *)unused.vertex.words);free((void *)unused.fragment.words);
     puts("Descriptor compiler: four sets / 96 array elements, fragment and shared-stage PSBC contracts");
 }
 static void check_interfaces(struct ps5vk_graphics_key *key)
@@ -1552,6 +1758,23 @@ int main(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
     key.descriptor_set_count=0;key.blend_enable=1;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
+    /* The native TES/GS upstream overlap oracle needs this exact additive
+     * shape without an experimental build flag. Keep other shapes refused. */
+    struct ps5vk_graphics_key additive=key;
+    additive.src_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
+    additive.dst_color_blend_factor=VK_BLEND_FACTOR_ONE;
+    additive.color_blend_op=VK_BLEND_OP_ADD;
+    additive.src_alpha_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
+    additive.dst_alpha_blend_factor=VK_BLEND_FACTOR_ONE;
+    additive.alpha_blend_op=VK_BLEND_OP_ADD;
+    assert(ps5vk_runtime_graphics_supported(&additive));
+    assert(ps5vk_runtime_graphics_compile(NULL,&additive,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);out=NULL;
+    additive.color_blend_op=VK_BLEND_OP_SUBTRACT;
+    assert(!ps5vk_runtime_graphics_supported(&additive));
+    additive.color_blend_op=VK_BLEND_OP_ADD;
+    additive.dst_alpha_blend_factor=VK_BLEND_FACTOR_ZERO;
+    assert(!ps5vk_runtime_graphics_supported(&additive));
     key.blend_enable=0;
     /* Topology selects the primitive the composite pipeline links, so the key
      * carries it and the compiler is asked for the matching value. Every

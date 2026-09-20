@@ -23,10 +23,12 @@ struct ps5vk_runtime_graphics_program {
     PsbcShaderOutput domain_legacy;
     struct ps5vk_runtime_draw_abi arguments_legacy;
     uint32_t domain_legacy_valid;
-    /* The pipeline's input patch control points, the tessellation launch
-     * state's input/output control-point counts. Zero without the pair. */
+    /* Independent input assembly and validated TCS OutputVertices counts.
+     * Both zero without the tessellation pair. */
     uint32_t patch_control_points;
+    uint32_t tess_output_points;
     struct ps5vk_runtime_draw_abi arguments;
+    struct ps5vk_runtime_draw_abi hull_arguments;
     /* The GFX1013 primitive this pair was compiled for, resolved from the key's
      * topology. The native create path links the pair with a primitive the
      * caller supplies, and refuses any value that is not this one, so a
