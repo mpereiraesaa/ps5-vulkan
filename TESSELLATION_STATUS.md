@@ -19,9 +19,9 @@ below must not be relabelled as default-profile runs.
 A standalone consumer of staged public SDK headers also verifies that the
 default build reports tessellationShader and the eight intended limits
 (64, 32, 128, 128, 120, 4096, 128, 128), with strict artifact verification and
-clean closure. This verifies query delivery separately from the execution
-witnesses; it is not validation of normal shipping-profile advertisement or
-DXVK compatibility.
+clean closure. This verifies default native runtime-graphics profile
+advertisement separately from the execution witnesses. It does not establish
+DXVK compatibility or a published release.
 
 Additional native witnesses pass all nine domain/spacing patch-discard cases,
 stage execution modes distributed between TCS and TES, combined indexed and
