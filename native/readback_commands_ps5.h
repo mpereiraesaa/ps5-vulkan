@@ -7,6 +7,33 @@
 
 struct ps5vk_readback_plan { VkImage image; VkBuffer buffer; VkDeviceSize layer_stride; };
 
+struct ps5vk_readback_partition {
+    unsigned prefix_count;
+    unsigned readback_first;
+    unsigned readback_count;
+};
+
+/* A render-pass postlude may order unrelated shader writes before the fixed
+ * image readback sequence.  Locate that sequence by its single image-to-buffer
+ * copy, whose immediately preceding operation must be its image barrier.  The
+ * strict readback validator below still owns the complete four-operation
+ * suffix; this function only partitions the immutable command record and
+ * refuses ambiguous or trailing shapes. */
+static inline VkResult ps5vk_readback_partition(
+    const struct ps5vk_operation *ops,unsigned count,
+    struct ps5vk_readback_partition *out)
+{
+    if(!ops || !count || !out)return VK_ERROR_FEATURE_NOT_PRESENT;
+    unsigned copy=count,copies=0;
+    for(unsigned i=0;i<count;++i)
+        if(ops[i].type==PS5VK_COPY_IMAGE_BUFFER){copy=i;++copies;}
+    if(copies!=1 || !copy || count-copy!=3)return VK_ERROR_FEATURE_NOT_PRESENT;
+    const unsigned first=copy-1;
+    if(ops[first].type!=PS5VK_IMAGE_BARRIER)return VK_ERROR_FEATURE_NOT_PRESENT;
+    *out=(struct ps5vk_readback_partition){first,first,4};
+    return VK_SUCCESS;
+}
+
 /* The same bounded full-color readback may follow a render pass or be a
  * separate submission. This only validates and stages the layout: the caller
  * must flush CB/DB caches and observe its exact GPU serial before detiling or
