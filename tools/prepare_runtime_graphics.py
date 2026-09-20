@@ -25,6 +25,7 @@ def main():
     # regression is (opengnm-psbc Makefile's view-index rule). Every other
     # module keeps the default Vulkan 1.0 target this driver has always used.
     module_flags = {"view_index": ("--target-env", "vulkan1.1"),
+                    "fragment_store_control": ("-DCONTROL=1",),
                     "tess_joint_envelope_control": ("-DWITH_PATCH_ENVELOPE=1",),
                     "tess_joint_envelope_vertex": ("-DWITH_PATCH_ENVELOPE=1",),
                     "tess_joint_envelope_evaluation": ("-DWITH_PATCH_ENVELOPE=1",),
@@ -67,6 +68,10 @@ def main():
         ("experiments/graphics/runtime_vertex_bindings_probe.vert", "runtime_vertex_bindings_probe.vert.spv", "vertex_bindings"),
         ("experiments/graphics/runtime_triangle.vert", "runtime_triangle.vert.spv", "vertex"),
         ("experiments/graphics/runtime_triangle.frag", "runtime_triangle.frag.spv", "fragment"),
+        ("experiments/graphics/runtime_fragment_store.frag",
+         "runtime_fragment_store_control.frag.spv", "fragment_store_control"),
+        ("experiments/graphics/runtime_fragment_store.frag",
+         "runtime_fragment_store.frag.spv", "fragment_store_atomic"),
         ("experiments/graphics/runtime_view_index.vert", "runtime_view_index.vert.spv", "view_index"),
         ("experiments/graphics/runtime_view_index_instance.vert", "runtime_view_index_instance.vert.spv", "view_index_instance"),
         ("experiments/graphics/runtime_vertex_sint.vert", "runtime_vertex_sint.vert.spv", "vertex_sint"),
