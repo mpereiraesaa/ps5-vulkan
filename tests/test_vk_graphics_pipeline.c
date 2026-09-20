@@ -80,6 +80,57 @@ int main(void)
     /* A pipeline is created for ONE subpass and carries that identity, which
      * is what vkCmdDraw later checks the recording subpass against. */
     assert(!p->subpass);
+    {
+        /* The rasterization state's pNext chain. The pinned upstream
+         * rasterization module chains VkPipelineRasterizationLineStateCreateInfoEXT
+         * unconditionally - sType set even without VK_EXT_line_rasterization,
+         * which this device does not expose - and the exact form it supplies
+         * asks only for the default rectangular mode with no stipple, which is
+         * what this driver already does. That one form is accepted; every other
+         * chain and every other value stays refused, because accepting a
+         * structure that asks for different rasterization would change the
+         * output this profile claims to produce. */
+        const unsigned saved_created = created, saved_released = released;
+        const unsigned saved_acquired = acquired, saved_compiled = compiled_released;
+        VkPipelineRasterizationLineStateCreateInfoEXT line={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT,
+            .pNext=NULL,
+            .lineRasterizationMode=VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT,
+            .stippledLineEnable=VK_FALSE};
+        VkPipelineRasterizationStateCreateInfo chained=r;
+        chained.pNext=&line;
+        VkGraphicsPipelineCreateInfo with_chain=info;
+        with_chain.pRasterizationState=&chained;
+        VkPipeline chained_pipeline=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==VK_SUCCESS &&
+            chained_pipeline && chained_pipeline->graphics);
+        vkDestroyPipeline(&d,chained_pipeline,NULL);
+        line.stippledLineEnable=VK_TRUE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !chained_pipeline);
+        line.stippledLineEnable=VK_FALSE;
+        line.lineRasterizationMode=VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !chained_pipeline);
+        line.lineRasterizationMode=VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
+        VkPipelineRasterizationProvokingVertexStateCreateInfoEXT provoking={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT, .pNext=NULL};
+        line.pNext=&provoking;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !chained_pipeline);
+        line.pNext=NULL;
+        VkPipelineRasterizationProvokingVertexStateCreateInfoEXT unknown={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT, .pNext=NULL};
+        VkPipelineRasterizationStateCreateInfo other_chain=r;
+        other_chain.pNext=&unknown;
+        with_chain.pRasterizationState=&other_chain;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&with_chain,NULL,&chained_pipeline)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !chained_pipeline);
+        created=saved_created;
+        released=saved_released;
+        acquired=saved_acquired;
+        compiled_released=saved_compiled;
+    }
     viewport.width=1; assert(p->viewport.width==1920);
     {
         /* The counters below are pinned by later assertions, so this block
@@ -116,25 +167,159 @@ int main(void)
     }
     VkDynamicState dynamic_values[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
     {
-        /* The pinned upstream draw pipeline enables depth bias with every
-         * factor and the clamp at zero; that no-op form is accepted, and a
-         * non-zero bias stays refused rather than being dropped silently. */
+        /* Depth bias is real state: the enable and both factors are carried
+         * on the pipeline. A non-zero clamp needs depthBiasClamp ENABLED on
+         * the logical device; the factors are never subject to a finiteness
+         * rule, and a disabled bias stores zero factors whatever was passed. */
         const unsigned saved_created=created,saved_released=released;
         const unsigned saved_acquired=acquired,saved_compiled=compiled_released;
         VkPipeline biased=NULL;
         r.depthBiasEnable=VK_TRUE;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.depth_bias_enable && !biased->dynamic_depth_bias &&
+            biased->raster.depth_bias_constant==0.0f && biased->raster.depth_bias_slope==0.0f &&
+            biased->raster.depth_bias_clamp==0.0f);
         vkDestroyPipeline(&d,biased,NULL);
-        r.depthBiasConstantFactor=0.25f;
+        r.depthBiasConstantFactor=0.25f;r.depthBiasSlopeFactor=-1.0f;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.depth_bias_enable && biased->raster.depth_bias_constant==0.25f &&
+            biased->raster.depth_bias_slope==-1.0f && biased->raster.depth_bias_clamp==0.0f);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* Clamp without the feature: refused, no backend object created. */
+        r.depthBiasClamp=0.5f;
+        const unsigned before=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before);
+        /* Clamp with the feature enabled on the device: carried as given. */
+        d.enabled_features|=PS5VK_FEATURE_DEPTH_BIAS_CLAMP;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.depth_bias_clamp==0.5f && biased->raster.depth_bias_constant==0.25f);
+        vkDestroyPipeline(&d,biased,NULL);
+        d.enabled_features&=~PS5VK_FEATURE_DEPTH_BIAS_CLAMP;
+        /* Disabled bias ignores every factor, the clamp included. */
+        r.depthBiasEnable=VK_FALSE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(!biased->raster.depth_bias_enable && biased->raster.depth_bias_constant==0.0f &&
+            biased->raster.depth_bias_slope==0.0f && biased->raster.depth_bias_clamp==0.0f);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* depthClampEnable: refused without depthClamp enabled on the device
+         * (no backend object), carried as static raster state with it. */
+        r.depthClampEnable=VK_TRUE;
+        const unsigned before_clamp=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before_clamp);
+        d.enabled_features|=PS5VK_FEATURE_DEPTH_CLAMP;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.depth_clamp && !biased->raster.depth_bias_enable);
+        vkDestroyPipeline(&d,biased,NULL);
+        d.enabled_features&=~PS5VK_FEATURE_DEPTH_CLAMP;
+        r.depthClampEnable=VK_FALSE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(!biased->raster.depth_clamp);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* polygonMode: LINE and POINT need fillModeNonSolid enabled on the
+         * device, FILL_RECTANGLE_NV is refused with or without it, FILL is
+         * always accepted; the mode is carried as static raster state. */
+        r.polygonMode=VK_POLYGON_MODE_LINE;
+        const unsigned before_poly=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before_poly);
+        r.polygonMode=VK_POLYGON_MODE_POINT;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before_poly);
+        d.enabled_features|=PS5VK_FEATURE_FILL_MODE_NON_SOLID;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.polygon_mode==VK_POLYGON_MODE_POINT);
+        vkDestroyPipeline(&d,biased,NULL);
+        r.polygonMode=VK_POLYGON_MODE_LINE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.polygon_mode==VK_POLYGON_MODE_LINE);
+        vkDestroyPipeline(&d,biased,NULL);
+        r.polygonMode=VK_POLYGON_MODE_FILL_RECTANGLE_NV;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
             VK_ERROR_FEATURE_NOT_PRESENT && !biased);
-        r.depthBiasConstantFactor=0.0f;r.depthBiasSlopeFactor=1.0f;
+        /* wideLines is not advertised: a non-solid pipeline still needs 1.0. */
+        r.polygonMode=VK_POLYGON_MODE_LINE;r.lineWidth=2.0f;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
             VK_ERROR_FEATURE_NOT_PRESENT && !biased);
-        r.depthBiasSlopeFactor=0.0f;r.depthBiasClamp=0.5f;
+        r.lineWidth=1.0f;
+        d.enabled_features&=~PS5VK_FEATURE_FILL_MODE_NON_SOLID;
+        r.polygonMode=VK_POLYGON_MODE_FILL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->raster.polygon_mode==VK_POLYGON_MODE_FILL);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* Viewport arrays: counts must match and stay in 1..16; more than
+         * one needs multiViewport enabled; every static element is validated
+         * and all of them are stored, in order. */
+        VkViewport many_viewports[PS5VK_MAX_VIEWPORTS+1]; VkRect2D many_scissors[PS5VK_MAX_VIEWPORTS+1];
+        for(unsigned i=0;i<=PS5VK_MAX_VIEWPORTS;++i) {
+            many_viewports[i]=(VkViewport){(float)i,0,64,32,0,1};
+            many_scissors[i]=(VkRect2D){{(int32_t)i,0},{64,32}};
+        }
+        vp.pViewports=many_viewports;vp.pScissors=many_scissors;
+        vp.viewportCount=2;vp.scissorCount=2;
+        const unsigned before_vp=created;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased && created==before_vp);
+        d.enabled_features|=PS5VK_FEATURE_MULTI_VIEWPORT;
+        vp.scissorCount=3;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
             VK_ERROR_FEATURE_NOT_PRESENT && !biased);
-        r.depthBiasClamp=0.0f;r.depthBiasEnable=VK_FALSE;
+        vp.viewportCount=vp.scissorCount=0;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        vp.viewportCount=vp.scissorCount=PS5VK_MAX_VIEWPORTS+1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        vp.viewportCount=vp.scissorCount=PS5VK_MAX_VIEWPORTS;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->viewport_count==PS5VK_MAX_VIEWPORTS && biased->viewport.x==0 &&
+            biased->viewports[15].x==15 && biased->scissors[15].offset.x==15 &&
+            biased->viewports[7].width==64 && biased->scissors[7].extent.height==32);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* A bad element in the LAST slot fails creation before anything is kept. */
+        many_viewports[15].width=0;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_ERROR_UNKNOWN && !biased);
+        many_viewports[15].width=64;many_scissors[15].offset.y=-1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_ERROR_UNKNOWN && !biased);
+        many_scissors[15].offset.y=0;
+        /* Dynamic arrays keep the count static and skip element validation. */
+        VkDynamicState array_dynamic[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
+        VkPipelineDynamicStateCreateInfo array_state={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount=2,.pDynamicStates=array_dynamic};
+        info.pDynamicState=&array_state;vp.pViewports=NULL;vp.pScissors=NULL;vp.viewportCount=vp.scissorCount=4;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->viewport_count==4 && biased->dynamic_viewport && biased->dynamic_scissor);
+        vkDestroyPipeline(&d,biased,NULL);
+        info.pDynamicState=NULL;
+        d.enabled_features&=~PS5VK_FEATURE_MULTI_VIEWPORT;
+        vp.pViewports=&viewport;vp.pScissors=&scissor;vp.viewportCount=vp.scissorCount=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->viewport_count==1);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* Dynamic depth bias: the enable stays static, the factors are not
+         * read from the create info (a non-zero clamp here is ignored too),
+         * and VK_DYNAMIC_STATE_DEPTH_BIAS is accepted next to the other two. */
+        VkDynamicState bias_dynamic[]={VK_DYNAMIC_STATE_DEPTH_BIAS,VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR};
+        VkPipelineDynamicStateCreateInfo bias_state={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount=1,.pDynamicStates=bias_dynamic};
+        info.pDynamicState=&bias_state;r.depthBiasEnable=VK_TRUE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->dynamic_depth_bias && biased->raster.depth_bias_enable &&
+            biased->raster.depth_bias_clamp==0.0f && biased->raster.depth_bias_constant==0.0f &&
+            !biased->dynamic_viewport && !biased->dynamic_scissor);
+        vkDestroyPipeline(&d,biased,NULL);
+        bias_state.dynamicStateCount=3;vp.pViewports=NULL;vp.pScissors=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_SUCCESS);
+        assert(biased->dynamic_depth_bias && biased->dynamic_viewport && biased->dynamic_scissor);
+        vkDestroyPipeline(&d,biased,NULL);
+        /* A repeated dynamic state is still refused. */
+        bias_dynamic[2]=VK_DYNAMIC_STATE_DEPTH_BIAS;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&biased)==VK_ERROR_FEATURE_NOT_PRESENT && !biased);
+        vp.pViewports=&viewport;vp.pScissors=&scissor;info.pDynamicState=NULL;
+        r.depthBiasClamp=0.0f;r.depthBiasConstantFactor=0.0f;r.depthBiasSlopeFactor=0.0f;
+        r.depthBiasEnable=VK_FALSE;
         created=saved_created;released=saved_released;
         acquired=saved_acquired;compiled_released=saved_compiled;
     }
@@ -146,7 +331,7 @@ int main(void)
     assert(dynamic_pipeline->dynamic_viewport && dynamic_pipeline->dynamic_scissor);
     vkDestroyPipeline(&d,dynamic_pipeline,NULL);
     const VkDynamicState unsupported_dynamic[]={
-        VK_DYNAMIC_STATE_LINE_WIDTH,VK_DYNAMIC_STATE_DEPTH_BIAS,
+        VK_DYNAMIC_STATE_LINE_WIDTH,
         VK_DYNAMIC_STATE_BLEND_CONSTANTS,VK_DYNAMIC_STATE_DEPTH_BOUNDS,
         VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
         VK_DYNAMIC_STATE_STENCIL_REFERENCE};

@@ -4372,6 +4372,13 @@ int main(void)
             props.maxExtent.width,props.maxExtent.depth,props.maxArrayLayers);
     }
     VkPhysicalDeviceProperties device_props;vkGetPhysicalDeviceProperties(physical,&device_props);
+    /* maxViewports is bound to the multiViewport report: the Vulkan floor of
+     * PS5VK_MULTI_VIEWPORT_COUNT when the feature is reported, exactly one
+     * otherwise. A report of one without the feature is the shipping state;
+     * either value with the other feature state is a profile inconsistency. */
+    VkPhysicalDeviceFeatures device_features;vkGetPhysicalDeviceFeatures(physical,&device_features);
+    const uint32_t expected_viewports=device_features.multiViewport?
+        (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT:1u;
     if(device_props.limits.maxImageDimension1D<PS5VK_MAX_IMAGE_1D ||
        device_props.limits.maxImageDimension2D<1920 ||
        device_props.limits.maxImageDimension3D<PS5VK_MAX_IMAGE_3D ||
@@ -4379,7 +4386,7 @@ int main(void)
        device_props.limits.maxImageArrayLayers<PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
        !ps5vk_graphics_vertex_bindings_available(&device_props.limits,
            PS5VK_GRAPHICS_SCISSOR_PROBE==13?16u:1u) ||
-       device_props.limits.maxViewports!=1 || device_props.limits.maxColorAttachments!=1 ||
+       device_props.limits.maxViewports!=expected_viewports || device_props.limits.maxColorAttachments!=1 ||
        /* Floors, not equalities. The sampled-descriptor limits were promoted to
         * the witnessed 16 per stage and 96 per set; pinning this gate to the
         * old single-descriptor profile made the graphics payload fail closed at

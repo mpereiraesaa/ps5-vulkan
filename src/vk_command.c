@@ -63,7 +63,7 @@ static void clear(VkCommandBuffer c)
     c->render_pass_inherited = VK_FALSE;
     c->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
     c->subpass = 0;
-    c->viewport_valid = c->scissor_valid = VK_FALSE;
+    c->viewport_valid = c->scissor_valid = 0;
     c->line_width = 1.0f;
     c->min_depth_bounds = 0.0f;
     c->max_depth_bounds = 1.0f;
@@ -471,19 +471,36 @@ static int valid_scissor(const VkRect2D *s)
         (uint64_t)(uint32_t)s->offset.x + s->extent.width <= UINT32_MAX &&
         (uint64_t)(uint32_t)s->offset.y + s->extent.height <= UINT32_MAX;
 }
+/* Core viewport/scissor array rules shared by both setters: first + count is
+ * between 1 and the array capacity, and without multiViewport ENABLED on the
+ * logical device first is 0 and count is 1. Every element is validated before
+ * any is stored, so a rejected call leaves the previous state whole. */
+static int viewport_range(VkCommandBuffer c, uint32_t first, uint32_t count)
+{
+    if (!count || first > PS5VK_MAX_VIEWPORTS - count) return 0;
+    if ((first || count != 1) &&
+        !(c->pool->device->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)) return 0;
+    return 1;
+}
 VKAPI_ATTR void VKAPI_CALL vkCmdSetViewport(VkCommandBuffer c, uint32_t first,
     uint32_t count, const VkViewport *viewports)
 {
-    if (!c || c->state != PS5VK_RECORDING || first || count != 1 ||
-        !valid_viewport(viewports)) { invalid(c); return; }
-    c->viewport = viewports[0]; c->viewport_valid = VK_TRUE;
+    if (!c || c->state != PS5VK_RECORDING || !viewport_range(c, first, count) ||
+        !viewports) { invalid(c); return; }
+    for (uint32_t i = 0; i < count; ++i)
+        if (!valid_viewport(&viewports[i])) { invalid(c); return; }
+    for (uint32_t i = 0; i < count; ++i) c->viewports[first + i] = viewports[i];
+    c->viewport_valid |= ((1u << count) - 1u) << first;
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdSetScissor(VkCommandBuffer c, uint32_t first,
     uint32_t count, const VkRect2D *scissors)
 {
-    if (!c || c->state != PS5VK_RECORDING || first || count != 1 ||
-        !valid_scissor(scissors)) { invalid(c); return; }
-    c->scissor = scissors[0]; c->scissor_valid = VK_TRUE;
+    if (!c || c->state != PS5VK_RECORDING || !viewport_range(c, first, count) ||
+        !scissors) { invalid(c); return; }
+    for (uint32_t i = 0; i < count; ++i)
+        if (!valid_scissor(&scissors[i])) { invalid(c); return; }
+    for (uint32_t i = 0; i < count; ++i) c->scissors[first + i] = scissors[i];
+    c->scissor_valid |= ((1u << count) - 1u) << first;
 }
 static int recording(VkCommandBuffer c)
 {
@@ -502,10 +519,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBias(VkCommandBuffer c, float constant,
     float clamp, float slope)
 {
     if (!recording(c)) return;
-    /* depthBiasClamp is not advertised, so its valid value is exactly zero.
-     * Vulkan places no finiteness restriction on the other two factors; retain
-     * their float bit patterns without inventing a narrower API contract. */
-    if (clamp != 0.0f) {
+    /* A non-zero clamp is legal only when depthBiasClamp is ENABLED on this
+     * logical device (the physical mask is not consulted: an application that
+     * did not ask for the feature keeps the rules of a device without it).
+     * Vulkan places no finiteness restriction on any of the three factors;
+     * retain their float bit patterns without inventing a narrower contract. */
+    if (clamp != 0.0f &&
+        !(c->pool->device->enabled_features & PS5VK_FEATURE_DEPTH_BIAS_CLAMP)) {
         invalid(c); return;
     }
     c->depth_bias_constant=constant;c->depth_bias_clamp=clamp;c->depth_bias_slope=slope;
@@ -888,11 +908,28 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if (!c || c->state != PS5VK_RECORDING || !c->render_pass || !c->graphics_pipeline ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkPipeline p = c->graphics_pipeline;
+    /* The pipeline's viewport_count decides how many indices the draw needs.
+     * Dynamic arrays must have every one of those indices set; indices at or
+     * above the count are neither required nor copied. */
+    const uint32_t viewport_count = p->viewport_count;
+    if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) { invalid(c); return; }
+    const uint32_t needed = ((1u << viewport_count) - 1u);
     const VkViewport *viewport = p->dynamic_viewport ?
-        (c->viewport_valid ? &c->viewport : NULL) : &p->viewport;
+        ((c->viewport_valid & needed) == needed ? c->viewports : NULL) : p->viewports;
     const VkRect2D *scissor = p->dynamic_scissor ?
-        (c->scissor_valid ? &c->scissor : NULL) : &p->scissor;
+        ((c->scissor_valid & needed) == needed ? c->scissors : NULL) : p->scissors;
     if (!viewport || !scissor) { invalid(c); return; }
+    /* Resolve the rasterization snapshot now, by value. Dynamic depth-bias
+     * factors are required only when the bias is enabled: Vulkan ignores them
+     * otherwise, so an unset dynamic state does not invalidate a draw whose
+     * pipeline has the bias disabled. */
+    struct ps5vk_raster_state raster=p->raster;
+    if(p->dynamic_depth_bias && raster.depth_bias_enable) {
+        if(!(c->dynamic_state_valid & PS5VK_DYNAMIC_DEPTH_BIAS)) {invalid(c);return;}
+        raster.depth_bias_constant=c->depth_bias_constant;
+        raster.depth_bias_clamp=c->depth_bias_clamp;
+        raster.depth_bias_slope=c->depth_bias_slope;
+    }
     if(p->push_constant_size && (!c->push_constants_valid ||
         memcmp(p->push_constant_stages,c->push_constant_stages,
                sizeof(c->push_constant_stages)))) {invalid(c);return;}
@@ -920,7 +957,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     if(!op)return;
     op->pipeline=p;op->render_pass=pass;op->framebuffer=c->framebuffer;
     op->subpass=c->subpass;
-    op->viewport=*viewport;op->scissor=*scissor;op->vertex_count=vertices;
+    op->viewport_count=viewport_count;
+    memcpy(op->viewports,viewport,viewport_count*sizeof(*viewport));
+    memcpy(op->scissors,scissor,viewport_count*sizeof(*scissor));
+    op->raster=raster;op->vertex_count=vertices;
     op->instance_count=instances;op->first_vertex=first_vertex;op->first_instance=first_instance;
     memcpy(op->vertices,c->vertices,sizeof(c->vertices));
     op->push_constant_size=p->push_constant_size;

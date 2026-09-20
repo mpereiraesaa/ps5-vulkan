@@ -350,6 +350,15 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * conformance selection, not this adapter. */
     if(ps5vk_graphics_has_geometry(key)) {
         if(!module_supported(&key->geometry,3))return ps5vk_reject(key,6);
+        /* A geometry stage that writes gl_ViewportIndex selects among the
+         * viewport banks the pipeline programs, and this profile programs one
+         * bank unless the logical device enabled multiViewport. Accepting the
+         * declaration while the feature is off would run a draw whose routing
+         * silently collapses to viewport zero, so it is refused here on the
+         * enabled mask - the same mask, and the same place, every cached pair is
+         * re-checked against on acquisition. */
+        if(ps5vk_spirv_stage_viewport_index(&key->geometry) &&
+           !(key->feature_mask & PS5VK_FEATURE_MULTI_VIEWPORT))return ps5vk_reject(key,14);
     }
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return ps5vk_reject(key,7);

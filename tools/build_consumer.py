@@ -39,6 +39,42 @@ INDIRECT_CASES = (
 )
 INDIRECT_EXTENT = 256
 INDIRECT_MAX_COMMANDS = 65535
+# The rasterization-state witness cases (DXVK262-T05), in the order the
+# consumer runs them; tools/verify_consumer_resource_abi.py pins the same list.
+RASTER_CASES = (
+    "bias_disabled_coplanar",
+    "bias_constant_negative",
+    "bias_constant_positive",
+    "bias_dynamic_constant_negative",
+    "bias_disabled_tilted",
+    "bias_slope_negative",
+    "bias_slope_negative_clamp_negative",
+    "bias_slope_negative_clamp_positive",
+    "bias_slope_positive",
+    "bias_slope_positive_clamp_positive",
+    "bias_dynamic_slope_clamp_negative",
+    "bias_dynamic_two_draws",
+    "clamp_disabled_control",
+    "clamp_enabled",
+    "clamp_enabled_w2",
+    "clamp_disabled_narrow_probe",
+    "clamp_enabled_narrow_probe",
+    "clamp_enabled_reversed_probe",
+    "clamp_disabled_near_probe",
+    "clamp_enabled_near_probe",
+    "polygon_fill",
+    "polygon_line",
+    "polygon_point",
+    "polygon_line_cull_front",
+    "polygon_point_cull_back_front",
+    "polygon_line_cull_back",
+    "polygon_line_coplanar_unbiased",
+    "polygon_line_coplanar_biased",
+    "viewport_static_bank0_of_two",
+    "viewport_dynamic_partial_updates",
+    "viewport_static_scissor_bank0_of_two",
+)
+RASTER_EXTENT = 64
 sys.path.insert(0, str(ROOT / "tools"))
 from lab import lab_root  # noqa: E402
 
@@ -360,6 +396,49 @@ def main():
             ).hexdigest(),
             "compute_shader_sha256": hashlib.sha256(
                 draw_parameter_shader_header.with_name("indirect_arguments.comp.spv").read_bytes()
+            ).hexdigest(),
+            "fragment_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_suffix(".frag.spv").read_bytes()
+            ).hexdigest(),
+        },
+        # DXVK262-T05 witness: depth bias with negative/positive/zero clamps,
+        # depth clamp against clipping, LINE/POINT polygon modes and the
+        # viewport/scissor arrays' bank zero, judged from the linear staging
+        # readback of a 64 x 64 frame with a D32 depth attachment. Runs only
+        # where the device reports the four features.
+        "raster_state": {
+            "api": "Vulkan 1.0 core features",
+            "features": ["depthBiasClamp", "depthClamp", "fillModeNonSolid",
+                         "multiViewport"],
+            # True when the staged SDK was built with PS5VK_RASTER_DIAGNOSTIC=1,
+            # i.e. the features were reported by the measurement gate rather
+            # than by the shipping platform mask. A receipt from such a build
+            # is measurement evidence, never a shipping-profile claim.
+            "diagnostic_features": os.environ.get("PS5VK_RASTER_DIAGNOSTIC", "0") == "1",
+            "cases": list(RASTER_CASES),
+            "extent": RASTER_EXTENT,
+            "vertex_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_name("raster_witness.vert.spv").read_bytes()
+            ).hexdigest(),
+            "fragment_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_suffix(".frag.spv").read_bytes()
+            ).hexdigest(),
+        },
+        # DXVK262-T05 end-to-end multiViewport witness: a geometry stage routes
+        # primitive i to viewport i across a 4 x 4 tile grid of sixteen
+        # viewports. Runs only where geometryShader and multiViewport are both
+        # reported (core Vulkan lets only a geometry stage select a viewport).
+        "raster_viewport_index": {
+            "api": "Vulkan 1.0 core features",
+            "features": ["geometryShader", "multiViewport"],
+            "cases": ["viewport_index_routing"],
+            "extent": RASTER_EXTENT,
+            "tiles": 16,
+            "vertex_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_name("raster_witness.vert.spv").read_bytes()
+            ).hexdigest(),
+            "geometry_shader_sha256": hashlib.sha256(
+                draw_parameter_shader_header.with_name("raster_viewport_index.geom.spv").read_bytes()
             ).hexdigest(),
             "fragment_shader_sha256": hashlib.sha256(
                 draw_parameter_shader_header.with_suffix(".frag.spv").read_bytes()

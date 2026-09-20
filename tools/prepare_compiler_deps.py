@@ -12,13 +12,15 @@ DEPS = [
         "name": "opengnm-psbc",
         "dest": ROOT / "third_party/psbc-reference",
         "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
-        # Metadata21 candidate: linked-stage resource/entrypoint identity,
+        # Metadata21 compiler contract: linked-stage resource/entrypoint identity,
         # TES-fed geometry, merged LS/HS argument delivery, packed fragment
         # distances and precise push-constant member ranges. The cache ABI
         # and native loader must agree with this exact dependency.
-        # Published in opengnm-psbc PR22 (depends on PR21 and the preceding
-        # tessellation compiler series); review is pending, not merged main.
-        "pin": "7e00345f04982b51eacbad63a0412f3c8b4b90a9",
+        # Published through opengnm-psbc PRs 22, 17 and 18. This combined
+        # compiler main retains the T04 linked tessellation contract and adds
+        # T05's geometry viewport-index export plus the packed fragment-distance
+        # register fix. The cache ABI and native loader must agree with it.
+        "pin": "be4d04301ca2c00810c96debb4935890113ec3b7",
     },
     {
         "name": "opengnm",

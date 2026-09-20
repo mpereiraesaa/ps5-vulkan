@@ -244,12 +244,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * The runtime graphics cache and the interface policy are what refuse a
      * geometry pipeline on any build without this bit. */
     platform->supported_features |= PS5VK_FEATURE_GEOMETRY_SHADER;
-    /* Private measurement build for DXVK262-T05 (requested by agent_t05):
-     * report the four raster/viewport features so its consumer witness can
-     * negotiate them and measure them before anything is advertised. Default
-     * off, like the optional-stage diagnostic, and never set in the shipping
-     * build; the bits are declared in src/vk_internal.h and nothing else in
-     * this file sets them. */
+    /* Private measurement build for DXVK262-T05 (tools/build_sdk.py honours
+     * PS5VK_RASTER_DIAGNOSTIC=1): report the four rasterization/viewport
+     * features so the consumer witness can negotiate them through the public
+     * API and measure them on hardware. Default off, like the optional-stage
+     * diagnostic, and never set in the shipping build; the bits are declared
+     * in src/vk_internal.h and nothing else in this file sets them. The
+     * shipping promotion is a separate, evidence-backed change. */
 #if defined(PS5VK_RASTER_DIAGNOSTIC) && PS5VK_RASTER_DIAGNOSTIC
     platform->supported_features |= PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
                                     PS5VK_FEATURE_DEPTH_CLAMP |

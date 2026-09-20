@@ -60,10 +60,22 @@ static const struct core_feature_bit {
      * are reported at the Vulkan floor in src/graphics_limits.h. */
     {offsetof(VkPhysicalDeviceFeatures, geometryShader),
      PS5VK_FEATURE_GEOMETRY_SHADER},
-    /* Negotiation plumbing, not a capability promotion: the normal native
-     * platform still leaves this bit clear until tessellation is validated. */
+    /* Tessellation negotiation and reporting follow the validated T04 native
+     * platform bit. */
     {offsetof(VkPhysicalDeviceFeatures, tessellationShader),
      PS5VK_FEATURE_TESSELLATION_SHADER},
+    /* Rasterization/viewport state (DXVK262-T05). The pipeline and command
+     * frontends gate the corresponding create-info and setter values on the
+     * ENABLED mask, and native/draw_state_ps5.c programs the state; a platform
+     * sets a bit only once that path was measured on it. */
+    {offsetof(VkPhysicalDeviceFeatures, depthBiasClamp),
+     PS5VK_FEATURE_DEPTH_BIAS_CLAMP},
+    {offsetof(VkPhysicalDeviceFeatures, depthClamp),
+     PS5VK_FEATURE_DEPTH_CLAMP},
+    {offsetof(VkPhysicalDeviceFeatures, fillModeNonSolid),
+     PS5VK_FEATURE_FILL_MODE_NON_SOLID},
+    {offsetof(VkPhysicalDeviceFeatures, multiViewport),
+     PS5VK_FEATURE_MULTI_VIEWPORT},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,

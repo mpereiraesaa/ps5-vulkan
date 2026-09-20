@@ -148,8 +148,8 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
     const unsigned index_width =
         (op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_DRAW_INDEXED_INDIRECT) ?
         (op->indices.type == VK_INDEX_TYPE_UINT16 ? 2u : 4u) : 0u;
-    rc = ps5vk_native_draw_state(op->pipeline, &op->viewport, &op->scissor,
-        &color, has_depth ? &depth : NULL, area,
+    rc = ps5vk_native_draw_state(op->pipeline, op->viewports, op->scissors, op->viewport_count,
+        &op->raster, &color, has_depth ? &depth : NULL, area,
         fb->width, fb->height, index_width, &plan);
     if (rc != VK_SUCCESS) return rc;
     struct ps5vk_descriptor_table_layout tables;

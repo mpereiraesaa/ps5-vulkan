@@ -3,6 +3,7 @@
 
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
+#include "graphics_limits.h"
 
 /* Legacy private diagnostic override, OFF unless a probe asks for it.
  * It changes no public query. Normal builds use the platform capability and
@@ -86,13 +87,19 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_TESSELLATION_SHADER = 1u << 11,
     /* Rasterization and viewport state (DXVK262-T05), which start after the
      * optional-stage tranche so the two integrations union without renumbering.
-     * The bits are declared here because the platform mask that may set them
-     * lives in this repository's native platform; no shipping profile sets any
-     * of them yet, and the private diagnostic guard below is what lets the T05
-     * witness negotiate them before anything is advertised. */
+     * Each bit is set by a platform only when the native path behind it
+     * programs the state and was measured; the logical device carries the bits
+     * the application enabled and the pipeline/command frontends consult
+     * THOSE. No shipping profile sets any of them yet, and the private
+     * diagnostic guard in the native platform is what lets the T05 witness
+     * negotiate them before anything is advertised. */
+    /* depthBiasClamp: a non-zero clamp in static or dynamic depth bias. */
     PS5VK_FEATURE_DEPTH_BIAS_CLAMP = 1u << 12,
+    /* depthClamp: depthClampEnable replaces near/far clipping by clamping. */
     PS5VK_FEATURE_DEPTH_CLAMP = 1u << 13,
+    /* fillModeNonSolid: VK_POLYGON_MODE_LINE and VK_POLYGON_MODE_POINT. */
     PS5VK_FEATURE_FILL_MODE_NON_SOLID = 1u << 14,
+    /* multiViewport: viewport/scissor arrays up to maxViewports. */
     PS5VK_FEATURE_MULTI_VIEWPORT = 1u << 15,
 };
 
@@ -105,6 +112,16 @@ static inline uint32_t ps5vk_platform_max_draw_indirect_count(uint32_t supported
 {
     return (supported_features & PS5VK_FEATURE_MULTI_DRAW_INDIRECT) ?
         (uint32_t)PS5VK_MULTI_DRAW_INDIRECT_COUNT : 1u;
+}
+
+/* The maxViewports a platform mask commits to: the pinned core table requires
+ * 16 once multiViewport is supported and allows exactly 1 otherwise. One helper
+ * decides it so the physical limit, the pipeline's array capacity and the
+ * setters' range checks cannot disagree (DXVK262-T05). */
+static inline uint32_t ps5vk_platform_max_viewports(uint32_t supported_features)
+{
+    return (supported_features & PS5VK_FEATURE_MULTI_VIEWPORT) ?
+        (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT : 1u;
 }
 
 /* The measured multiview floors: six views rendered into six ordered array

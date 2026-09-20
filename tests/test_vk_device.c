@@ -211,6 +211,25 @@ static void lifecycle(void)
         ps5vk_device_profile_init(&multi_profile, &multi_memory, VK_TRUE, VK_TRUE,
             PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE|PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32);
         assert(multi_profile.limits.maxDrawIndirectCount==1);
+        /* maxViewports follows multiViewport the same way: the Vulkan floor
+         * of 16 with the bit, exactly 1 without it, and the pipeline's array
+         * capacity is the same constant. */
+        assert(ps5vk_platform_max_viewports(0)==1 &&
+               ps5vk_platform_max_viewports(PS5VK_FEATURE_MULTI_VIEWPORT)==16 &&
+               ps5vk_platform_max_viewports(PS5VK_FEATURE_MULTI_VIEWPORT|PS5VK_FEATURE_DEPTH_CLAMP)==16 &&
+               ps5vk_platform_max_viewports(PS5VK_FEATURE_DEPTH_CLAMP)==1 &&
+               PS5VK_MULTI_VIEWPORT_COUNT==16);
+        /* ...and the shared profile initializer reports that limit from the
+         * same mask that reports the feature, so a platform can never say
+         * multiViewport with maxViewports 1 (measured run 20260917T200309802Z). */
+        assert(pl->maxViewports==1 && compute_profile.limits.maxViewports==1);
+        ps5vk_device_profile_init(&multi_profile, &multi_memory, VK_TRUE, VK_TRUE,
+            PS5VK_FEATURE_MULTI_VIEWPORT|PS5VK_FEATURE_DEPTH_CLAMP|PS5VK_FEATURE_MULTI_DRAW_INDIRECT);
+        assert(multi_profile.limits.maxViewports==PS5VK_MULTI_VIEWPORT_COUNT &&
+               multi_profile.limits.maxDrawIndirectCount==65535);
+        ps5vk_device_profile_init(&multi_profile, &multi_memory, VK_TRUE, VK_TRUE,
+            PS5VK_FEATURE_DEPTH_BIAS_CLAMP|PS5VK_FEATURE_DEPTH_CLAMP|PS5VK_FEATURE_FILL_MODE_NON_SOLID);
+        assert(multi_profile.limits.maxViewports==1);
         assert(compute_memory.memoryHeaps[0].size==PS5VK_PROFILE_COMPUTE_HEAP_BYTES);
         const VkDeviceSize max_allocation = PS5VK_PROFILE_GRAPHICS_HEAP_BYTES;
         const VkQueueFlags queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
@@ -1117,6 +1136,71 @@ static void negative(void)
         assert(vkCreateDevice(p,&chained,NULL,&d)==VK_SUCCESS && d);
         assert(d->enabled_features == (PS5VK_FEATURE_ROBUST_BUFFER_ACCESS | t03[0].bit |
                                        t03[1].bit | t03[2].bit));
+        vkDestroyDevice(d, NULL);
+        p->platform.supported_features = saved;
+        memset(&features, 0, sizeof(features));
+        features.robustBufferAccess = VK_TRUE;
+    }
+    /* The four DXVK262-T05 core features go through the same table: each is
+     * reported and enabled only behind its own platform bit; without the bit
+     * the member is false and refused; the full T05 mask enables all four at
+     * once and records exactly those bits. The host platform sets none of
+     * them, so the default report stays false for all four. */
+    {
+        const struct { size_t offset; uint32_t bit; } t05[4] = {
+            {offsetof(VkPhysicalDeviceFeatures, depthBiasClamp), PS5VK_FEATURE_DEPTH_BIAS_CLAMP},
+            {offsetof(VkPhysicalDeviceFeatures, depthClamp), PS5VK_FEATURE_DEPTH_CLAMP},
+            {offsetof(VkPhysicalDeviceFeatures, fillModeNonSolid), PS5VK_FEATURE_FILL_MODE_NON_SOLID},
+            {offsetof(VkPhysicalDeviceFeatures, multiViewport), PS5VK_FEATURE_MULTI_VIEWPORT},
+        };
+        const uint32_t saved = p->platform.supported_features;
+        const VkBool32 yes = VK_TRUE;
+        VkPhysicalDeviceFeatures reported;
+        vkGetPhysicalDeviceFeatures(p, &reported);
+        assert(!reported.depthBiasClamp && !reported.depthClamp &&
+               !reported.fillModeNonSolid && !reported.multiViewport);
+        uint32_t all_bits = 0;
+        for (unsigned n = 0; n < 4; ++n) {
+            all_bits |= t05[n].bit;
+            /* Requested without the bit: refused before a device opens. */
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t05[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            /* With exactly this bit: reported alone among the four, enabled
+             * alone, and the other three still refused. */
+            p->platform.supported_features = saved | t05[n].bit;
+            vkGetPhysicalDeviceFeatures(p, &reported);
+            for (unsigned other = 0; other < 4; ++other) {
+                VkBool32 value;
+                memcpy(&value, (unsigned char *)&reported + t05[other].offset, sizeof(value));
+                assert(value == (other == n ? VK_TRUE : VK_FALSE));
+                if (other == n) continue;
+                memset(&features, 0, sizeof(features));
+                memcpy((unsigned char *)&features + t05[other].offset, &yes, sizeof(yes));
+                d=(VkDevice)(uintptr_t)1;
+                assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            }
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t05[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == t05[n].bit);
+            vkDestroyDevice(d, NULL);
+            p->platform.supported_features = saved;
+        }
+        /* The whole T05 mask through VkPhysicalDeviceFeatures2, as the pinned
+         * CTS enables every reported feature: all four bits recorded. */
+        p->platform.supported_features = saved | all_bits;
+        VkPhysicalDeviceFeatures2 all = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        vkGetPhysicalDeviceFeatures2KHR(p, &all);
+        assert(all.features.depthBiasClamp && all.features.depthClamp &&
+               all.features.fillModeNonSolid && all.features.multiViewport);
+        VkDeviceCreateInfo chained = info;
+        chained.pEnabledFeatures = NULL; chained.pNext = &all;
+        d=(VkDevice)(uintptr_t)1;
+        assert(vkCreateDevice(p,&chained,NULL,&d)==VK_SUCCESS && d);
+        assert(d->enabled_features == (PS5VK_FEATURE_ROBUST_BUFFER_ACCESS | all_bits));
         vkDestroyDevice(d, NULL);
         p->platform.supported_features = saved;
         memset(&features, 0, sizeof(features));

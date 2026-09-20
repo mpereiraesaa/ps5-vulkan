@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build and package genuine upstream VK-GL-CTS for native PS5 execution."""
+import argparse
 import concurrent.futures
 import hashlib
 import json
@@ -53,6 +54,12 @@ DATASET_SHADER_SOURCES = (
     "vulkan/draw/VertexFetchInstancedFirstInstance.vert",
     "vulkan/draw/VertexFetch.frag",
     "vulkan/draw/NegateData.comp",
+)
+# Upstream amber scripts the packaged cases parse from the same archive:
+# cts_amber::createAmberTestCase reads "vulkan/amber/<category>/<file>" at run
+# time, so the script has to sit beside eboot.bin like the shader sources.
+DATASET_AMBER_SCRIPTS = (
+    "vulkan/amber/rasterization/line_continuity/polygon-mode-lines.amber",
 )
 
 def sha256_file(path: Path) -> str:
@@ -341,7 +348,19 @@ def compile_worker(task):
     except Exception as e:
         return src.name, False, str(e)
 
-def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Build and package the upstream VK-GL-CTS payload for the PS5 title.")
+    parser.add_argument(
+        "--manifest", type=Path, default=SELECTION_MANIFEST,
+        help="selection manifest to package (default: the frozen acceptance selection; "
+             "a measurement manifest from tools/make_measurement_manifest.py is recorded "
+             "as such in the build manifest and in the receipt)")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk_env = os.environ.get("PS5_PAYLOAD_SDK")
@@ -363,7 +382,15 @@ def main():
     spirv_tools_root = cts_root / "external/spirv-tools/src"
     spirv_headers_root = cts_root / "external/spirv-headers/src"
 
-    selection_manifest = json.loads(SELECTION_MANIFEST.read_text())
+    selection_manifest_path = args.manifest.resolve()
+    selection_manifest = json.loads(selection_manifest_path.read_text())
+    measurement = selection_manifest.get("measurement")
+    if measurement:
+        # Not the frozen acceptance selection: say so at the top of the log, so
+        # the run that follows is never mistaken for an acceptance run.
+        print(f"[build_upstream_cts] MEASUREMENT selection from {selection_manifest_path}: "
+              f"{measurement.get('moved')} leaves moved from {measurement.get('categories')}; "
+              f"frozen selection {str(measurement.get('base_selection_hash'))[:16]}...")
     cts_pin = selection_manifest["cts_pin"]
     cts_state = verify_cts_checkout(cts_root, cts_pin["commit"], cts_pin.get("tag"))
     check_external_pins(selection_manifest.get("external_pins", {}), {
@@ -819,6 +846,31 @@ def main():
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/multiview/vktMultiViewRenderPassUtil.cpp",
+        # Original rasterization module: the only upstream family that exercises
+        # LINE and POINT polygon rasterization on a colour attachment, which is
+        # what fillModeNonSolid needs an oracle for. Its own factory is
+        # registered in package_ps5.cpp and its own support checks and oracles
+        # are untouched; cases.txt selects only the culling leaves this profile
+        # can run. All six translation units of the module are needed because
+        # createTests() calls the sub-factories they define.
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationProvokingVertexTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationDepthBiasControlTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationFragShaderSideEffectsTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktRasterizationOrderAttachmentAccessTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/rasterization/vktShaderTileImageTests.cpp",
+        # Original fragment-operations module, registered whole under its own
+        # name in package_ps5.cpp because its scissor.multi_viewport family is
+        # the upstream oracle for multiViewport (a geometry stage routing one
+        # primitive per viewport through gl_ViewportIndex). createTests() calls
+        # the four sub-factories, so all six translation units are compiled;
+        # cases.txt selects only the multi_viewport leaves.
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsScissorMultiViewportTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsEarlyFragmentTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsOcclusionQueryTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/fragment_ops/vktFragmentOperationsTransientAttachmentTests.cpp",
         # Original user-defined clip/cull distance module. The package registers
         # the module's own factory; none of its leaves is selected for strict
         # acceptance, because the feature flag that gates the whole family also
@@ -868,6 +920,10 @@ def main():
         # Indirect-draw module: original upstream multi-command, firstInstance
         # and instanced bodies over the same base class and image oracle.
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp",
+        # Scissor module: original upstream static/dynamic scissor bodies over
+        # the same base class; its multi-scissor leaves route through an
+        # instanced geometry stage and are a second multiViewport oracle.
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBaseClass.cpp",
         # The base class builds its buffers, images and render pass through the
         # module's own create-info and object helpers.
@@ -1079,11 +1135,12 @@ def main():
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
 
     # The packaged CTS reads its data archive from /app0 (the title directory),
-    # so the selected cases that load upstream shader sources need those files
-    # beside eboot.bin. Only the draw modules' sources are staged (the
-    # registered factories load them by name even for unselected leaves); the
-    # rest of the selection builds its shaders in code.
-    for relative in DATASET_SHADER_SOURCES:
+    # so the selected cases that load upstream shader sources or amber scripts
+    # need those files beside eboot.bin. Only the draw modules' sources and the
+    # one amber script the selection names are staged (the registered factories
+    # load them by name even for unselected leaves); the rest of the selection
+    # builds its shaders in code.
+    for relative in DATASET_SHADER_SOURCES + DATASET_AMBER_SCRIPTS:
         source = cts_root / "external/vulkancts/data" / relative
         if not source.is_file():
             raise SystemExit(f"missing upstream CTS data source {source}")
@@ -1141,6 +1198,13 @@ def main():
         },
         "selection_hash": selection_hash,
         "selected_cases": manifest_cases,
+        # Which manifest the case list came from. The frozen acceptance
+        # selection is the default; a measurement manifest carries its own
+        # derivation record and is copied here so the receipt can tell them apart.
+        "selection_manifest": (str(selection_manifest_path.relative_to(ROOT))
+                               if selection_manifest_path.is_relative_to(ROOT)
+                               else str(selection_manifest_path)),
+        "measurement": measurement,
         "eboot_sha256": sha256_file(eboot_bin),
         "map_file": str(map_file.relative_to(ROOT)),
         "total_objects_linked": len(all_objects),
