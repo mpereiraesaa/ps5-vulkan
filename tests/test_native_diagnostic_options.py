@@ -23,6 +23,24 @@ class NativeDiagnosticOptions(unittest.TestCase):
             self.assertNotIn("PS5VK_T06_DIAGNOSTIC", public.read_text(),
                              f"{public} must not expose a measurement switch")
 
+    def test_fragment_store_probe_is_bounded_and_private(self):
+        self.rejected({"PS5VK_FRAGMENT_STORE_PROBE": "2"},
+                      "must be 0 or 1")
+        self.rejected({"PS5VK_FRAGMENT_STORE_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_FRAGMENT_STORE_PROBE": "1",
+                       "PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1",
+                       "PS5VK_GRAPHICS_WITNESSES": "1"},
+                      "bounded standalone scene")
+        builder = (ROOT / "tools/build_native.py").read_text()
+        source = (ROOT / "native/fragment_store_probe.c").read_text()
+        self.assertIn('os.environ["PS5VK_T06_DIAGNOSTIC"] = fragment_store_probe',
+                      builder)
+        self.assertIn("control_counter=%u candidate_counter=%u", source)
+        self.assertIn("control_and_candidate_same_submit", builder)
+
     def test_binding_diagnostic_uses_tested_workload_capacity_gate(self):
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("ps5vk_graphics_vertex_bindings_available(&device_props.limits,", source)
