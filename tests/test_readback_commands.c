@@ -33,6 +33,28 @@ int main(void)
         {.type=PS5VK_BARRIER,.src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,.dst_stage=VK_PIPELINE_STAGE_HOST_BIT}
     };
     struct ps5vk_layout_state layouts={0};struct ps5vk_readback_plan plan={0};
+    struct ps5vk_readback_partition partition={0};
+    assert(ps5vk_readback_partition(ops,4,&partition)==VK_SUCCESS);
+    assert(!partition.prefix_count && !partition.readback_first && partition.readback_count==4);
+    struct ps5vk_operation mixed[6]={
+        {.type=PS5VK_BARRIER,.src_stage=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+         .dst_stage=VK_PIPELINE_STAGE_HOST_BIT,.src_access=VK_ACCESS_SHADER_WRITE_BIT,
+         .dst_access=VK_ACCESS_HOST_READ_BIT,
+         .buffer_barrier={.buffer=buffer,.size=VK_WHOLE_SIZE}},
+        {.type=PS5VK_BARRIER,.src_stage=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+         .dst_stage=VK_PIPELINE_STAGE_HOST_BIT},
+        ops[0],ops[1],ops[2],ops[3]
+    };
+    partition=(struct ps5vk_readback_partition){0};
+    assert(ps5vk_readback_partition(mixed,6,&partition)==VK_SUCCESS);
+    assert(partition.prefix_count==2 && partition.readback_first==2 && partition.readback_count==4);
+    const struct ps5vk_operation saved_copy=mixed[3];
+    mixed[3].type=PS5VK_BARRIER;
+    assert(ps5vk_readback_partition(mixed,6,&partition)==VK_ERROR_FEATURE_NOT_PRESENT);
+    mixed[3]=saved_copy;mixed[0].type=PS5VK_COPY_IMAGE_BUFFER;
+    assert(ps5vk_readback_partition(mixed,6,&partition)==VK_ERROR_FEATURE_NOT_PRESENT);
+    mixed[0].type=PS5VK_BARRIER;
+    assert(ps5vk_readback_partition(mixed,5,&partition)==VK_ERROR_FEATURE_NOT_PRESENT);
     memset(destination,0xa5,sizeof(destination));
     for(unsigned standalone=0;standalone<2;++standalone) {
         for(unsigned all=0;all<2;++all) {

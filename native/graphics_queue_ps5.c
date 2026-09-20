@@ -829,17 +829,26 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     phase="postlude";
     BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u);
     if(last+1<range_end) {
+        const struct ps5vk_operation *postlude=cb->operations+last+1;
+        const unsigned postlude_count=range_end-last-1;
         unsigned readback=0;
-        for(unsigned k=last+1;k<range_end;++k)
-            readback|=cb->operations[k].type==PS5VK_COPY_IMAGE_BUFFER;
+        for(unsigned k=0;k<postlude_count;++k)
+            readback|=postlude[k].type==PS5VK_COPY_IMAGE_BUFFER;
         if(readback) {
+            struct ps5vk_readback_partition partition={0};
             struct ps5vk_readback_plan plan={0};
-            rc=ps5vk_readback_commands(d,cb->operations+last+1,range_end-last-1,j->color,&j->layouts,&plan);
+            rc=ps5vk_readback_partition(postlude,postlude_count,&partition);
+            if(rc==VK_SUCCESS && partition.prefix_count)
+                rc=ps5vk_upload_commands(d,postlude,partition.prefix_count,j->color,
+                    &j->layouts,&cursor,end,cache);
+            if(rc==VK_SUCCESS)
+                rc=ps5vk_readback_commands(d,postlude+partition.readback_first,
+                    partition.readback_count,j->color,&j->layouts,&plan);
             if(rc!=VK_SUCCESS)goto fail;
             j->readback_image=plan.image;j->readback_buffer=plan.buffer;
             j->readback_stride=plan.layer_stride;
         } else {
-            rc=ps5vk_upload_commands(d,cb->operations+last+1,range_end-last-1,j->color,
+            rc=ps5vk_upload_commands(d,postlude,postlude_count,j->color,
                 &j->layouts,&cursor,end,cache);
             if(rc!=VK_SUCCESS)goto fail;
         }
