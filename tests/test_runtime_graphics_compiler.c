@@ -143,7 +143,30 @@ static void check_dual_source_exports(void)
     assert(spi_format==UINT32_C(0x44));
     assert(shader_mask==UINT32_C(0xff));
     assert(found_format && found_mask);
+    assert(ps5vk_runtime_fragment_export(&compiled.metadata)==
+        PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL);
+    {
+        PsbcShaderMetadata malformed=compiled.metadata;
+        for(unsigned i=0;i<malformed.context_register_count;++i)
+            if(malformed.context_registers[i].offset==
+               PS5VK_TEST_CB_SHADER_MASK_OFFSET)
+                malformed.context_registers[i].value=15u;
+        assert(ps5vk_runtime_fragment_export(&malformed)<0);
+    }
     psbc_free_output(&compiled);
+
+    const void *runtime=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
+    assert(((const struct ps5vk_runtime_graphics_program *)runtime)->dual_source_export==1u);
+    ps5vk_runtime_graphics_free(NULL,runtime);
+    struct ps5vk_compilation_cache *cache=
+        ps5vk_compilation_cache_create(2,4u*1024u*1024u);
+    assert(cache);
+    runtime=NULL;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&runtime)==VK_SUCCESS && runtime);
+    assert(((const struct ps5vk_runtime_graphics_program *)runtime)->dual_source_export==1u);
+    ps5vk_runtime_graphics_cached_release(cache,runtime);
+    ps5vk_compilation_cache_destroy(cache);
 
     free((void *)key.fragment.words);
     key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
@@ -163,7 +186,13 @@ static void check_dual_source_exports(void)
     assert(spi_format==UINT32_C(4));
     assert(shader_mask==UINT32_C(15));
     assert(found_format && found_mask);
+    assert(ps5vk_runtime_fragment_export(&compiled.metadata)==
+        PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE);
     psbc_free_output(&compiled);
+    runtime=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
+    assert(!((const struct ps5vk_runtime_graphics_program *)runtime)->dual_source_export);
+    ps5vk_runtime_graphics_free(NULL,runtime);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 

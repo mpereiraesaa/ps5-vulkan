@@ -25,6 +25,23 @@ static const PsbcRegisterWrite *find(const PsbcRegisterWrite *r, uint32_t n, uns
     return NULL;
 }
 
+int ps5vk_runtime_fragment_export(const PsbcShaderMetadata *m)
+{
+    if(!m || m->source_stage!=PSBC_STAGE_FRAGMENT ||
+       m->hardware_stage!=PSBC_HW_STAGE_PIXEL)return -1;
+    const PsbcRegisterWrite *format=find(m->context_registers,
+        m->context_register_count,0x1c5u);
+    const PsbcRegisterWrite *mask=find(m->context_registers,
+        m->context_register_count,0x08fu);
+    if(!format || !mask)return -1;
+    if(!format->value && !mask->value)return PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE;
+    if((format->value==4u || format->value==9u) && mask->value==15u)
+        return PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE;
+    if(format->value==0x44u && mask->value==0xffu)
+        return PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL;
+    return -1;
+}
+
 static unsigned count_bits(uint32_t value)
 {
     unsigned bits=0;
@@ -383,14 +400,14 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if (fs && (m->linkage_valid || m->ngg_lds_layout_valid)) return -3;
     if(fs) {
         const PsbcRegisterWrite *z=find(m->context_registers,m->context_register_count,0x1c4);
-        const PsbcRegisterWrite *mask=find(m->context_registers,m->context_register_count,0x8f);
         /* A fragment shader may legally export no colour. Glslang produces
          * that exact form when every colour write is unreachable after
          * OpKill, while a storage-buffer side effect before the kill remains.
-         * PSBC describes it with CB_SHADER_MASK=0; the ordinary single-target
-         * profile is 0xf. Accept exactly those two measured/defined shapes,
-         * not arbitrary masks or additional render targets. */
-        if(!z || z->value || !mask || (mask->value!=0 && mask->value!=15))return -3;
+         * PSBC describes it with 0/0; the ordinary target is 4/0xf or 9/0xf,
+         * and the two sources of MRT0 are exactly 0x44/0xff. Require each pair
+         * atomically so neither a torn package nor an arbitrary extra MRT mask
+         * can ride on dual-source support. */
+        if(!z || z->value || ps5vk_runtime_fragment_export(m)<0)return -3;
     }
     memset(d,0,sizeof(*d));
     d->header.file_header=0x34333231; d->header.version=24;

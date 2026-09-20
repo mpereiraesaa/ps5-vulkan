@@ -664,6 +664,11 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     options.fragment_clip_distance_count=producer_clip_count;
     result=psbc_compile_shader(key->fragment.words,key->fragment.word_count*4u,&options,&p->fragment);
     if(result!=PSBC_RESULT_OK)goto failed;
+    {
+        const int fragment_export=ps5vk_runtime_fragment_export(&p->fragment.metadata);
+        if(fragment_export<0)goto failed;
+        p->dual_source_export=fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL;
+    }
     /* Compile FS first so its actual metadata can prove PrimitiveID is unused. */
     if(p->fragment.metadata.input_semantic_count>PSBC_MAX_SEMANTICS)goto failed;
     for(unsigned i=0;i<p->fragment.metadata.input_semantic_count;++i)

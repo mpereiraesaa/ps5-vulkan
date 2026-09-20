@@ -274,6 +274,12 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     lease->program.fragment.metadata=payload->fragment;
     lease->program.fragment.machine_code=(char *)(payload+1)+payload->vertex_bytes;
     lease->program.fragment.machine_code_size=(size_t)payload->fragment_bytes;
+    {
+        const int fragment_export=ps5vk_runtime_fragment_export(&payload->fragment);
+        if(fragment_export<0){free(lease);goto failed;}
+        lease->program.dual_source_export=
+            fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL;
+    }
     struct ps5vk_runtime_shader header;
     if(tess) {
         struct ps5vk_runtime_graphics_program *p=&lease->program;
