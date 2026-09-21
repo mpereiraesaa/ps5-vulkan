@@ -313,6 +313,21 @@ static int ps5vk_reject(const struct ps5vk_graphics_key *key,unsigned site){
     return 0;
 }
 
+static int blend_factor_uses_src1(VkBlendFactor factor)
+{
+    return factor==VK_BLEND_FACTOR_SRC1_COLOR ||
+        factor==VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR ||
+        factor==VK_BLEND_FACTOR_SRC1_ALPHA ||
+        factor==VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
+}
+static int blend_state_uses_src1(const struct ps5vk_graphics_key *key)
+{
+    return key->blend_enable &&
+        (blend_factor_uses_src1(key->src_color_blend_factor) ||
+         blend_factor_uses_src1(key->dst_color_blend_factor) ||
+         blend_factor_uses_src1(key->src_alpha_blend_factor) ||
+         blend_factor_uses_src1(key->dst_alpha_blend_factor));
+}
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key->blend_enable)return 1;
@@ -326,6 +341,19 @@ static int blend_profile_supported(const struct ps5vk_graphics_key *key)
         key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO &&
         key->alpha_blend_op==VK_BLEND_OP_ADD;
 #endif
+    /* Bounded dual-source witness profile.  Accepting SRC1 requires the
+     * logical-device feature here as well as at the Vulkan front end; the
+     * post-compile check below independently requires the exact 0x44/0xff
+     * secondary-export metadata.  Other dual-source equations stay closed
+     * until they receive their own execution evidence. */
+    if(blend_state_uses_src1(key))
+        return (key->feature_mask & PS5VK_FEATURE_DUAL_SRC_BLEND) &&
+            key->src_color_blend_factor==VK_BLEND_FACTOR_SRC1_COLOR &&
+            key->dst_color_blend_factor==VK_BLEND_FACTOR_ZERO &&
+            key->color_blend_op==VK_BLEND_OP_ADD &&
+            key->src_alpha_blend_factor==VK_BLEND_FACTOR_ONE &&
+            key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO &&
+            key->alpha_blend_op==VK_BLEND_OP_ADD;
     /* The fractional-alpha overlap witness measured this additive shape.
      * The integrated TES/GS upstream cases require it on the normal path too.
      * Other blend factors/operations remain unsupported. */
@@ -668,6 +696,10 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
         const int fragment_export=ps5vk_runtime_fragment_export(&p->fragment.metadata);
         if(fragment_export<0)goto failed;
         p->dual_source_export=fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL;
+        /* A SRC1 equation consumes the secondary export.  Device enablement
+         * alone cannot manufacture it: ordinary and torn fragment packages
+         * must fail before a native pair can be allocated. */
+        if(blend_state_uses_src1(key) && !p->dual_source_export)goto failed;
     }
     /* Compile FS first so its actual metadata can prove PrimitiveID is unused. */
     if(p->fragment.metadata.input_semantic_count>PSBC_MAX_SEMANTICS)goto failed;

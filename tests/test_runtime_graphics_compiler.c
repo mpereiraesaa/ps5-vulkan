@@ -159,6 +159,24 @@ static void check_dual_source_exports(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
     assert(((const struct ps5vk_runtime_graphics_program *)runtime)->dual_source_export==1u);
     ps5vk_runtime_graphics_free(NULL,runtime);
+    /* The secondary export is only compiler evidence until a SRC1 equation
+     * consumes it.  That equation needs the logical-device feature and is
+     * deliberately bounded to the native witness shape. */
+    key.src_color_blend_factor=VK_BLEND_FACTOR_SRC1_COLOR;
+    key.dst_color_blend_factor=VK_BLEND_FACTOR_ZERO;
+    key.color_blend_op=VK_BLEND_OP_ADD;
+    key.src_alpha_blend_factor=VK_BLEND_FACTOR_ONE;
+    key.dst_alpha_blend_factor=VK_BLEND_FACTOR_ZERO;
+    key.alpha_blend_op=VK_BLEND_OP_ADD;
+    runtime=NULL;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
+    key.feature_mask|=PS5VK_FEATURE_DUAL_SRC_BLEND;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
+    assert(((const struct ps5vk_runtime_graphics_program *)runtime)->dual_source_export==1u);
+    ps5vk_runtime_graphics_free(NULL,runtime);
     struct ps5vk_compilation_cache *cache=
         ps5vk_compilation_cache_create(2,4u*1024u*1024u);
     assert(cache);
@@ -190,6 +208,15 @@ static void check_dual_source_exports(void)
         PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE);
     psbc_free_output(&compiled);
     runtime=NULL;
+    /* Enabling dualSrcBlend does not let an ordinary single-export fragment
+     * shader satisfy a SRC1 equation. */
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
+    key.src_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
+    key.dst_color_blend_factor=VK_BLEND_FACTOR_ONE;
+    key.src_alpha_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
+    key.dst_alpha_blend_factor=VK_BLEND_FACTOR_ONE;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
     assert(!((const struct ps5vk_runtime_graphics_program *)runtime)->dual_source_export);
     ps5vk_runtime_graphics_free(NULL,runtime);
