@@ -70,6 +70,8 @@ def main():
         ("experiments/graphics/runtime_triangle.frag", "runtime_triangle.frag.spv", "fragment"),
         ("experiments/graphics/runtime_dual_source.frag",
          "runtime_dual_source.frag.spv", "dual_source_fragment"),
+        ("experiments/graphics/runtime_two_mrt.frag",
+         "runtime_two_mrt.frag.spv", "two_mrt_fragment"),
         ("experiments/graphics/runtime_fragment_store.frag",
          "runtime_fragment_store_control.frag.spv", "fragment_store_control"),
         ("experiments/graphics/runtime_fragment_store.frag",

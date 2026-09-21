@@ -702,7 +702,33 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     {
         const int fragment_export=ps5vk_runtime_fragment_export(&p->fragment.metadata);
         if(fragment_export<0)goto failed;
-        p->dual_source_export=fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL;
+        unsigned primary_mask=0;
+        int secondary=0;
+        if(!ps5vk_spirv_fragment_outputs(&key->fragment,&primary_mask,&secondary))
+            goto failed;
+        p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE;
+        p->dual_source_export=0;
+        if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) {
+            /* The pinned compiler publishes 0x44/0xff for both shapes. The
+             * interface decides which one this is; a package whose registers
+             * and interface disagree is torn and fails. */
+            if(secondary && primary_mask==1u) {
+                p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL;
+                p->dual_source_export=1u;
+            } else if(primary_mask==3u && !secondary) {
+                /* Two MRTs, proven against the pinned compiler: the export is
+                 * real, but this profile renders one colour attachment, so the
+                 * pipeline stays refused until the slice that can render a
+                 * second target lands. Refusing here is what keeps the second
+                 * export from being dropped silently. */
+                p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT;
+                goto failed;
+            } else goto failed;
+        } else if(secondary || primary_mask!=1u) {
+            /* A secondary or a second location without its register pair is a
+             * torn package. */
+            goto failed;
+        }
         /* A SRC1 equation consumes the secondary export.  Device enablement
          * alone cannot manufacture it: ordinary and torn fragment packages
          * must fail before a native pair can be allocated. */

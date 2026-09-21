@@ -663,6 +663,21 @@ int ps5vk_spirv_stage_distance_reads(const struct ps5vk_graphics_module_key *mod
     return 1;
 }
 
+int ps5vk_spirv_fragment_outputs(const struct ps5vk_graphics_module_key *module,
+                                 unsigned *primary_mask,int *secondary)
+{
+    struct interface stage={0};
+    if(primary_mask)*primary_mask=0;
+    if(secondary)*secondary=0;
+    if(!reflect(module,MODEL_FRAGMENT,&stage))return 0;
+    unsigned mask=0;
+    for(unsigned location=0;location<LOCATIONS;++location)
+        if(stage.outputs[location].components)mask|=(1u<<location);
+    if(primary_mask)*primary_mask=mask;
+    if(secondary)*secondary=stage.secondary_outputs[0].components?1:0;
+    return 1;
+}
+
 unsigned ps5vk_spirv_tess_output_points(const struct ps5vk_graphics_module_key *module)
 {
     struct interface stage={0};
@@ -779,7 +794,17 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * vertex input actually reads, so an unused declaration is dropped
          * rather than fetched against a table nothing names. */
         if(vs.inputs[i].components && matched!=1)return 0;
-        if(i && (fs.outputs[i].components || fs.secondary_outputs[i].components))return 0;
+        /* The fragment stage's primary outputs are bounded to the two MRT
+         * locations the pinned compiler's export contract can describe: a
+         * whole-location float32 vec4 at Location 0 (required above) and, for
+         * the two-MRT shape, the same thing at Location 1. Nothing else is a
+         * colour export this profile can classify, and the runtime refuses the
+         * two-output pipeline while it serves one colour attachment. */
+        if(i>1 && (fs.outputs[i].components || fs.secondary_outputs[i].components))return 0;
+        if(i==1 && fs.outputs[i].components &&
+           (fs.outputs[i].components!=4 ||
+            fs.outputs[i].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT))return 0;
+        if(i && fs.secondary_outputs[i].components)return 0;
         if(fs.inputs[i].components &&
            (fs.inputs[i].components!=previous->outputs[i].components ||
             fs.inputs[i].numeric!=previous->outputs[i].numeric))return 0;

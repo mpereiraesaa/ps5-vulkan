@@ -18,6 +18,18 @@ enum ps5vk_runtime_fragment_export {
     PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE=1,
     PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL=2
 };
+/* The 0x44/0xff register pair is shared: the pinned compiler publishes it both
+ * for one MRT with two sources (dual source) and for two MRTs. The registers
+ * alone cannot tell them apart - measured with the pinned PSBC: a fragment
+ * module with Location 0 and Location 1 and spi_shader_col_format 0x44 emits
+ * the same 0x1c5/0x08f pair as the dual-source module - so the classification
+ * the runtime trusts is the interface's, and the registers only prove the
+ * export exists. This enum names the interface-decided shape. */
+enum ps5vk_runtime_fragment_export_shape {
+    PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE=0,
+    PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL=1,
+    PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT=2
+};
 /* Classify the exact compiler-produced fragment export register pair. Returns
  * -1 for a torn/unknown pair. This is metadata validation, not device feature
  * authorization: a DUAL result still cannot reach SRC1 blend state until the
