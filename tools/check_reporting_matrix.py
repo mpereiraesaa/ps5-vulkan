@@ -56,11 +56,11 @@ DUMP_BINARY = ROOT / "build/tests/dump_device_reporting"
 FEATURE_GATES = {
     "imageCubeArray": ("src/vk_memory.c", "info->imageType != VK_IMAGE_TYPE_2D",
                        "only 2D images are created"),
-    "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount != 1",
+    "independentBlend": ("src/color_attachment_contract.h", "PS5VK_MAX_COLOR_ATTACHMENTS = 1",
                          "one color attachment per pipeline"),
     "sampleRateShading": ("src/vk_graphics_pipeline.c", "m->sampleShadingEnable",
                           "sample shading state is rejected"),
-    "logicOp": ("src/vk_graphics_pipeline.c", "b->logicOpEnable",
+    "logicOp": ("src/color_attachment_contract.c", "state->logicOpEnable",
                 "logicOpEnable is rejected"),
     "depthClamp": ("src/vk_graphics_pipeline.c", "r->depthClampEnable",
                    "depthClampEnable is rejected"),
