@@ -502,14 +502,18 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     for(unsigned i=0;i<4;++i)
         result.cx[result.cx_count++]=(ps5_agc_register){0x105+i,blend[0].constants[i]};
     if(runtime) {
-        uint32_t spi_format=UINT32_MAX,shader_mask=UINT32_MAX,conversion[3];
+        uint32_t spi_format=UINT32_MAX,shader_mask=UINT32_MAX;
+        uint32_t per_target[PS5VK_MAX_COLOR_ATTACHMENTS][3],conversion[3];
         for(unsigned i=0;i<fs->header.num_cx_registers;++i) {
             if(fs->context[i].offset==0x1c5)spi_format=fs->context[i].value;
             if(fs->context[i].offset==0x08f)shader_mask=fs->context[i].value;
         }
-        if(!ps5vk_color_export_state(p->color_format[0],spi_format,shader_mask,
-            p->color_blend[0].blendEnable,dual_source,conversion))
-            return VK_ERROR_FEATURE_NOT_PRESENT;
+        for(uint32_t attachment=0;attachment<color_count;++attachment)
+            if(!ps5vk_color_export_state(p->color_format[attachment],spi_format,
+                shader_mask,p->color_blend[attachment].blendEnable,dual_source,
+                per_target[attachment]))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        ps5vk_color_export_compose(per_target,color_count,conversion);
         if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
         /* Emit for unblended draws too: a previous FP16 blended draw must not
          * leave its downconversion active for the 32-bit export path. */

@@ -724,6 +724,15 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
              * slot to deliver the value through, so a multiview subpass runs on
              * the metadata ABI or it does not run. */
             if(!p->pair->runtime_arguments.enabled){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=21;goto fail;}
+            /* The whole view expansion below rewrites ONE colour target's
+             * layer-addressed words. A subpass that names more than one colour
+             * attachment would need the same expansion per attachment, which is
+             * not served, so it is refused here rather than expanded for the
+             * first target only. */
+            {
+                const struct ps5vk_subpass *viewed=ps5vk_render_pass_subpass(pass,subpass_index);
+                if(!viewed || viewed->color_count!=1u){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=22;goto fail;}
+            }
             uint32_t view_indices[PS5VK_MAX_VIEW_MASK_VIEWS],view_count=0;
             rc=ps5vk_native_view_expand(view_mask,view_indices,PS5VK_MAX_VIEW_MASK_VIEWS,&view_count);
             if(rc!=VK_SUCCESS)goto fail;
