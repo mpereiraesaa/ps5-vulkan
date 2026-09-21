@@ -28,8 +28,10 @@ static int input_layout(VkImageLayout value)
 /* One subpass description against this profile: up to two colour references
  * (none at all is the depth-only shape), an optional D32 depth reference that
  * may not alias any of them, and the input references this model can describe.
- * Resolve attachments are still refused because they are unimplemented, and a
- * non-empty preserve list is outside the bounded profile. */
+ * A resolve reference is accepted as a role of its own - it names the
+ * single-sample attachment that receives the resolved result of the colour
+ * reference it follows - and a non-empty preserve list is outside the bounded
+ * profile. */
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
     struct ps5vk_subpass *out, uint32_t *input_count)
 {
@@ -50,8 +52,7 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
          * has to name a valid array. pResolveAttachments is different: a
          * non-null pointer IS the request. */
         (s->inputAttachmentCount && !s->pInputAttachments) ||
-        s->inputAttachmentCount > PS5VK_MAX_INPUT_ATTACHMENTS ||
-        s->pResolveAttachments)
+        s->inputAttachmentCount > PS5VK_MAX_INPUT_ATTACHMENTS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Every attachment of this profile is used by every subpass, so nothing
      * can be preserved-but-unused and a non-empty list has no legal form. */
@@ -99,6 +100,38 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
         out->depth.layout != VK_IMAGE_LAYOUT_GENERAL &&
         out->depth.layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         return VK_ERROR_UNKNOWN;
+    /* pResolveAttachments, when present, carries exactly one entry per colour
+     * reference: entry i resolves colour reference i, and an entry may be
+     * VK_ATTACHMENT_UNUSED. A real entry must name an attachment of this pass,
+     * must use a layout a colour target may use, and may not be any colour or
+     * depth reference of the same subpass - one surface cannot be both what
+     * the subpass renders into and what receives the resolved result. */
+    for (uint32_t i = 0; i < s->colorAttachmentCount; ++i)
+        out->resolve[i] = (VkAttachmentReference){
+            VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED};
+    out->resolve_count = 0;
+    if (s->pResolveAttachments) {
+        /* Vulkan requires one resolve entry per colour reference, so the count
+         * is the colour count: the entries themselves may be UNUSED. */
+        out->resolve_count = s->colorAttachmentCount;
+        for (uint32_t i = 0; i < s->colorAttachmentCount; ++i) {
+            const VkAttachmentReference *reference = &s->pResolveAttachments[i];
+            if (reference->attachment == VK_ATTACHMENT_UNUSED) continue;
+            if (reference->attachment >= attachments ||
+                (reference->layout != VK_IMAGE_LAYOUT_GENERAL &&
+                 reference->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) ||
+                reference->attachment == s->pColorAttachments[i].attachment)
+                return VK_ERROR_UNKNOWN;
+            for (uint32_t c = 0; c < s->colorAttachmentCount; ++c)
+                if (s->pColorAttachments[c].attachment == reference->attachment)
+                    return VK_ERROR_UNKNOWN;
+            if (out->depth.attachment == reference->attachment) return VK_ERROR_UNKNOWN;
+            for (uint32_t earlier = 0; earlier < i; ++earlier)
+                if (s->pResolveAttachments[earlier].attachment == reference->attachment)
+                    return VK_ERROR_UNKNOWN;
+            out->resolve[i] = *reference;
+        }
+    }
     return VK_SUCCESS;
 }
 
@@ -181,16 +214,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     for (uint32_t i = 1; i < info->subpassCount; ++i)
         if (colors[i].color_count != colors[0].color_count ||
             colors[i].color[0].attachment != colors[0].color[0].attachment ||
+            colors[i].resolve_count != colors[0].resolve_count ||
+            colors[i].resolve[0].attachment != colors[0].resolve[0].attachment ||
             depths[i].attachment != depths[0].attachment)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Every attachment must be reachable through a subpass reference: an
      * attachment this profile never uses has no role to play. An input
      * reference is a use, which is the whole point of the shape: a later
-     * subpass reading an earlier attachment names it there and nowhere else. */
+     * subpass reading an earlier attachment names it there and nowhere else.
+     * A resolve target is a use too: it is named by the reference that resolves
+     * into it. */
     for (uint32_t i = 0; i < info->attachmentCount; ++i) {
         VkBool32 reachable = depths[0].attachment == i;
         for (uint32_t c = 0; c < colors[0].color_count && !reachable; ++c)
             reachable = colors[0].color[c].attachment == i;
+        for (uint32_t c = 0; c < colors[0].color_count && !reachable; ++c)
+            reachable = colors[0].resolve[c].attachment == i;
         for (uint32_t s = 0; s < info->subpassCount && !reachable; ++s)
             for (uint32_t r = 0; r < input_counts[s]; ++r)
                 if (info->pSubpasses[s].pInputAttachments[r].attachment == i) {
@@ -200,24 +239,48 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
         if (!reachable) return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     VkSampleCountFlagBits attachment_samples = VK_SAMPLE_COUNT_1_BIT;
+    int attachment_samples_known = 0;
     for (uint32_t i = 0; i < info->attachmentCount; ++i) {
         const VkAttachmentDescription *a = &info->pAttachments[i];
         /* The roles are shared, so subpass 0 decides which attachment is the
          * depth one for the whole pass. */
         int is_depth = depths[0].attachment == i;
+        /* A resolve target is the attachment a colour reference resolves into.
+         * It is a role of its own, not an attachment the subpass renders into:
+         * Vulkan gives it the colour attachment's format and exactly one
+         * sample, so it is exempt from the shared sample count the rendered
+         * attachments must agree on. */
+        uint32_t resolve_of = VK_ATTACHMENT_UNUSED;
+        for (uint32_t s = 0; s < info->subpassCount && resolve_of == VK_ATTACHMENT_UNUSED; ++s)
+            for (uint32_t c = 0; c < colors[s].resolve_count; ++c)
+                if (colors[s].resolve[c].attachment == i) {
+                    resolve_of = colors[s].color[c].attachment;
+                    break;
+                }
+        const int is_resolve = resolve_of != VK_ATTACHMENT_UNUSED;
         /* The sample counts this device serves (DXVK262-T06). The colour role
          * takes the counts the platform mask reports - 1x alone until a
          * multisample path was measured, and then the envelope in
          * src/sample_rate_contract.h - while the depth role stays 1x: no
-         * multisampled depth target exists on this path yet. Every attachment
-         * of a pass has to agree on the count, because a framebuffer's
+         * multisampled depth target exists on this path yet, and a resolve
+         * target is single-sample by definition. Every attachment the subpass
+         * RENDERS INTO has to agree on the count, because a framebuffer's
          * attachments are required to share one, and passing a count the
          * device does not serve is refused where the caller can see it rather
          * than accepted and failed later. */
         const VkSampleCountFlags served = is_depth ? VK_SAMPLE_COUNT_1_BIT :
             ps5vk_platform_sample_counts(d->platform_features);
-        if (!i) attachment_samples = a->samples;
-        if (a->flags || !(served & a->samples) || a->samples != attachment_samples ||
+        VkBool32 sample_count_ok = VK_TRUE;
+        if (is_resolve) {
+            sample_count_ok = a->samples == VK_SAMPLE_COUNT_1_BIT ? VK_TRUE : VK_FALSE;
+        } else if (!attachment_samples_known) {
+            attachment_samples = a->samples; attachment_samples_known = 1;
+        } else if (a->samples != attachment_samples) {
+            sample_count_ok = VK_FALSE;
+        }
+        if (is_depth && is_resolve) sample_count_ok = VK_FALSE;
+        if (a->flags || !(served & a->samples) || !sample_count_ok ||
+            (is_resolve && a->format != info->pAttachments[resolve_of].format) ||
             (is_depth ? a->format != VK_FORMAT_D32_SFLOAT :
              !ps5vk_color_target_format_supported(a->format)))
             return VK_ERROR_FEATURE_NOT_PRESENT;

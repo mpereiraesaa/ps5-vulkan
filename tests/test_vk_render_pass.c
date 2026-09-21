@@ -1,5 +1,6 @@
 #include "vk_render_pass.h"
 #include "attachment_ops.h"
+#include "vk_framebuffer.h"
 #include <assert.h>
 #include <stdio.h>
 /* DXVK262-T02 slice B: VkRenderPassMultiviewCreateInfo is parsed, validated
@@ -204,6 +205,114 @@ static void multiview_model(struct VkDevice_T *d)
 /* The bounded multiple-subpass profile: the object model, its owned arrays and
  * the exact shapes it refuses. Nothing here executes - submitting a pass with
  * more than one subpass stays fail-closed until the execution slice. */
+/* A resolve reference is a role of its own (DXVK262-T06). The shape the pinned
+ * multisample family builds - a multisampled colour target plus the
+ * single-sample attachment that receives its resolved result - is accepted by
+ * the object model; the native executor refuses to run it until the resolve
+ * itself exists. Every malformed reference stays refused here. */
+static void resolve_attachments(struct VkDevice_T *d)
+{
+    VkAttachmentDescription attachments[2] = {
+        {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_4_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT,
+         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+    VkAttachmentReference color = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference resolve = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpass = {.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount=1, .pColorAttachments=&color, .pResolveAttachments=&resolve};
+    VkRenderPassCreateInfo info = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount=2, .pAttachments=attachments,
+        .subpassCount=1, .pSubpasses=&subpass};
+    VkRenderPass pass = VK_NULL_HANDLE;
+
+    /* The counts only exist on a platform that serves them, exactly as for a
+     * multisampled colour attachment without a resolve target. */
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
+    d->platform_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS && pass);
+    /* Both roles are owned: the resolve reference sits beside the colour one
+     * and is not the colour attachment itself. */
+    assert(ps5vk_render_pass_subpass(pass, 0)->resolve[0].attachment == 1 &&
+           ps5vk_render_pass_subpass(pass, 0)->color[0].attachment == 0 &&
+           ps5vk_subpass_uses_resolve(ps5vk_render_pass_subpass(pass, 0)));
+
+    /* The framebuffer carries the role too: a framebuffer whose resolve slot
+     * names another attachment is not compatible with this pass, and one that
+     * leaves it unused is not either. */
+    {
+        struct VkFramebuffer_T framebuffer = {.device=d, .attachment_count=2,
+            .formats={VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM},
+            .samples={VK_SAMPLE_COUNT_4_BIT, VK_SAMPLE_COUNT_1_BIT},
+            .color_attachments={0}, .color_count=1,
+            .resolve_count=1, .resolve_attachments={1},
+            .depth_attachment=VK_ATTACHMENT_UNUSED};
+        assert(ps5vk_framebuffer_compatible(&framebuffer, pass));
+        /* A framebuffer that declares no resolve array is not compatible with
+         * a pass that does. */
+        framebuffer.resolve_count = 0;
+        assert(!ps5vk_framebuffer_compatible(&framebuffer, pass));
+        framebuffer.resolve_count = 1;
+        framebuffer.resolve_attachments[0] = VK_ATTACHMENT_UNUSED;
+        assert(!ps5vk_framebuffer_compatible(&framebuffer, pass));
+        framebuffer.resolve_attachments[0] = 1;
+        framebuffer.samples[1] = VK_SAMPLE_COUNT_4_BIT;
+        assert(!ps5vk_framebuffer_compatible(&framebuffer, pass));
+        framebuffer.samples[1] = VK_SAMPLE_COUNT_1_BIT;
+        framebuffer.formats[1] = VK_FORMAT_R8G8B8A8_UNORM;
+        assert(!ps5vk_framebuffer_compatible(&framebuffer, pass));
+    }
+    vkDestroyRenderPass(d, pass, NULL);
+
+    /* A resolve target is single-sample by definition. */
+    attachments[1].samples = VK_SAMPLE_COUNT_4_BIT;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
+    attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    /* Its format is the colour attachment's. */
+    attachments[1].format = VK_FORMAT_R8G8B8A8_UNORM;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
+    attachments[1].format = VK_FORMAT_B8G8R8A8_UNORM;
+    /* A layout a colour target may not use. */
+    resolve.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
+    resolve.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    /* One surface cannot be both what the subpass renders into and what
+     * receives the resolved result. */
+    resolve.attachment = 0;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
+    /* ... nor a depth reference. Within this profile's two-attachment bound
+     * that means a pass cannot carry a resolve target and a depth role at the
+     * same time, which is exactly the refusal below. */
+    VkAttachmentReference depth = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription with_depth = subpass;
+    with_depth.pDepthStencilAttachment = &depth;
+    info.pSubpasses = &with_depth;
+    resolve.attachment = 1;
+    attachments[1].format = VK_FORMAT_D32_SFLOAT;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
+    attachments[1].format = VK_FORMAT_B8G8R8A8_UNORM;
+    info.pSubpasses = &subpass;
+    /* An attachment no reference names has no role, and a resolve reference to
+     * one is out of range. */
+    resolve.attachment = 2;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
+    resolve.attachment = 1;
+    /* Every subpass names the same resolve reference, like every other role. */
+    VkSubpassDescription two[2] = {subpass, subpass};
+    info.subpassCount = 2; info.pSubpasses = two;
+    VkAttachmentReference none = {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED};
+    two[1].pResolveAttachments = &none;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
+    two[1].pResolveAttachments = &resolve;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS && pass);
+    vkDestroyRenderPass(d, pass, NULL);
+    d->platform_features &= ~(uint32_t)PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+}
+
 static void multiple_subpasses(struct VkDevice_T *d)
 {
     VkAttachmentDescription attachments[2] = {
@@ -294,13 +403,6 @@ static void multiple_subpasses(struct VkDevice_T *d)
     info.subpassCount = 0;
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     info.subpassCount = 2; info.pSubpasses = subpasses;
-
-    /* a requested resolve attachment is refused rather than ignored: input
-     * references are part of the object model now, resolve is not. */
-    VkAttachmentReference extra = {0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    subpasses[1].pResolveAttachments = &extra;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
-    subpasses[1].pResolveAttachments = NULL;
 
     /* an attachment no subpass references */
     VkAttachmentReference only_color = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
@@ -696,6 +798,7 @@ int main(void)
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     assert(!d.graphics_objects);
     multiple_subpasses(&d);
+    resolve_attachments(&d);
     multiview_model(&d);
     input_attachments(&d);
     six_view_subpass_chain(&d);

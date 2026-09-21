@@ -84,6 +84,20 @@ struct ps5vk_subpass {
     VkAttachmentReference color[PS5VK_MAX_COLOR_ATTACHMENTS];
     uint32_t color_count;
     VkAttachmentReference depth;
+    /* The resolve target of each colour reference, in the same order, or
+     * VK_ATTACHMENT_UNUSED when the subpass declares none. A resolve target is
+     * a role of its own: the subpass does not render into it, it receives the
+     * sample-resolved result of the colour attachment it follows, and Vulkan
+     * requires it to be a single-sample attachment of that colour attachment's
+     * format (DXVK262-T06).
+     *
+     * resolve_count is the number of entries DECLARED: zero when the subpass
+     * supplied no pResolveAttachments, and the colour count when it did (Vulkan
+     * requires those counts to match). Declaring is therefore what the count
+     * says, and a zero-initialized subpass means "no resolve target" instead of
+     * silently naming attachment 0. */
+    uint32_t resolve_count;
+    VkAttachmentReference resolve[PS5VK_MAX_COLOR_ATTACHMENTS];
     /* Where this subpass's input references start in the pass's one owned
      * array, and how many of them there are. An index rather than a pointer
      * keeps every element in the object's single allocation at 32-bit
@@ -127,5 +141,18 @@ static inline const VkAttachmentReference *ps5vk_render_pass_inputs(
     VkRenderPass pass, uint32_t index)
 {
     return &pass->inputs[pass->subpasses[index].input_first];
+}
+
+/* True when any colour reference of this subpass resolves into another
+ * attachment. The object model accepts the shape - the render pass,
+ * framebuffer and pipeline frontends all describe it - while the native path
+ * cannot resolve yet, so its executor refuses a pass this returns true for.
+ * One helper decides it so the executor cannot drift from the model. */
+static inline int ps5vk_subpass_uses_resolve(const struct ps5vk_subpass *subpass)
+{
+    if (!subpass) return 0;
+    for (uint32_t c = 0; c < subpass->resolve_count; ++c)
+        if (subpass->resolve[c].attachment != VK_ATTACHMENT_UNUSED) return 1;
+    return 0;
 }
 #endif

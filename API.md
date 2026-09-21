@@ -182,11 +182,15 @@ and nothing else) on a platform that serves the counts, its storage is one
 sample plane per sample, and the target states log2 of the count in
 CB_COLOR0_ATTRIB's NUM_SAMPLES/NUM_FRAGMENTS fields, which the pinned
 register table and the field positions in `src/sample_rate_contract.h` are
-checked against. The native clear, draw, resolve and the multisampled input
-attachment a per-sample read needs are the remaining work, so the native
-attachment plan still refuses a pass that names a multisampled attachment:
-nothing here should be read as multisample rendering being usable by an
-application today.
+checked against. A render pass may also name the single-sample attachment that
+receives a colour attachment's resolved result: the resolve role is parsed,
+owned and validated by the render pass and framebuffer front ends, and it is
+the shape the pinned multisample family builds, but the native queue refuses to
+execute a pass that names one until the resolve itself exists. The native
+clear, draw, resolve and the multisampled input attachment a per-sample read
+needs are the remaining work, so the native attachment plan still refuses a
+pass that names a multisampled attachment: nothing here should be read as
+multisample rendering being usable by an application today.
 
 ## Images and sampling
 

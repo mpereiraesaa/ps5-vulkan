@@ -205,6 +205,12 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(!pass->subpass_count || pass->subpass_count>PS5VK_MAX_SUBPASSES)return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(pass,0);
     int depth=subpass->depth.attachment!=VK_ATTACHMENT_UNUSED;
+    /* A resolve target is described by the object model and refused by the
+     * queue: this path renders into the colour attachments and would return no
+     * resolved result at all, so running the pass would silently break the
+     * promise the resolve role makes (DXVK262-T06). The positional test below
+     * would refuse the same pass by arithmetic; this check says why. */
+    if(ps5vk_subpass_uses_resolve(subpass))return VK_ERROR_FEATURE_NOT_PRESENT;
     const uint32_t color_count=subpass->color_count;
     /* The roles are positional in this profile: a subpass names its colour
      * attachments first, in order, and the optional depth attachment after

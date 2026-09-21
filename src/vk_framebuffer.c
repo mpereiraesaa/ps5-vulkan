@@ -15,7 +15,9 @@ static uint32_t attachment_view_count(VkRenderPass pass, uint32_t attachment)
     for (uint32_t s = 0; s < multiview->subpass_count; ++s) {
         const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, s);
         if (subpass->color[0].attachment != attachment &&
-            subpass->depth.attachment != attachment) continue;
+            subpass->depth.attachment != attachment &&
+            !(subpass->resolve_count && subpass->resolve[0].attachment == attachment))
+            continue;
         const uint32_t mask = multiview->view_masks[s];
         /* A view mask is 32 bits wide, so a view index is a bit position. */
         for (uint32_t bit = 0; bit < 32u; ++bit)
@@ -74,8 +76,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
     {
         const struct ps5vk_subpass *first = ps5vk_render_pass_subpass(pass, 0);
         fb->color_count = first->color_count;
-        for (uint32_t c = 0; c < first->color_count; ++c)
+        fb->resolve_count = first->resolve_count;
+        for (uint32_t c = 0; c < first->color_count; ++c) {
             fb->color_attachments[c] = first->color[c].attachment;
+            /* The resolve role travels with the colour role it resolves. */
+            fb->resolve_attachments[c] = first->resolve[c].attachment;
+        }
     }
     fb->depth_attachment = ps5vk_render_pass_subpass(pass, 0)->depth.attachment;
     for (uint32_t i = 0; i < fb->attachment_count; ++i) {

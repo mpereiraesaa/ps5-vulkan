@@ -16,6 +16,13 @@ struct VkFramebuffer_T {
      * colour-attachment contract; every consumer reads index 0 while the bound is
      * one. */
     uint32_t color_attachments[PS5VK_MAX_COLOR_ATTACHMENTS], color_count;
+    /* The resolve role of each colour role, in the same order, or
+     * VK_ATTACHMENT_UNUSED when the pass declares a resolve array with an
+     * unused entry. resolve_count is the number of entries the pass DECLARED,
+     * so a framebuffer built by hand with no resolve role keeps the zero value
+     * and cannot accidentally name attachment 0 (DXVK262-T06). */
+    uint32_t resolve_count;
+    uint32_t resolve_attachments[PS5VK_MAX_COLOR_ATTACHMENTS];
     uint32_t depth_attachment;
 };
 /* One ROLE of a framebuffer against the render-pass reference that names it.
@@ -58,8 +65,11 @@ static inline VkBool32 ps5vk_framebuffer_compatible(VkFramebuffer fb, VkRenderPa
     for (uint32_t i = 0; i < pass->subpass_count; ++i) {
         const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, i);
         if (fb->color_count != subpass->color_count) return VK_FALSE;
+        if (fb->resolve_count != subpass->resolve_count) return VK_FALSE;
         for (uint32_t c = 0; c < subpass->color_count; ++c)
-            if (!role_compatible(fb, fb->color_attachments[c], pass, &subpass->color[c]))
+            if (!role_compatible(fb, fb->color_attachments[c], pass, &subpass->color[c]) ||
+                (c < subpass->resolve_count &&
+                 !role_compatible(fb, fb->resolve_attachments[c], pass, &subpass->resolve[c])))
                 return VK_FALSE;
         if (!role_compatible(fb, fb->depth_attachment, pass, &subpass->depth))
             return VK_FALSE;

@@ -346,10 +346,17 @@ VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b)
         const struct ps5vk_subpass *left = ps5vk_render_pass_subpass(a, i);
         const struct ps5vk_subpass *right = ps5vk_render_pass_subpass(b, i);
         /* Two render passes are compatible only when their subpasses agree on
-         * every colour reference they carry and on the depth one. */
+         * every colour reference they carry, on the resolve target each colour
+         * reference names, and on the depth one. */
         if (left->color_count != right->color_count) return VK_FALSE;
         for (uint32_t c = 0; c < left->color_count; ++c)
             if (!reference_compatible(a, &left->color[c], b, &right->color[c]))
+                return VK_FALSE;
+        /* A resolve array is part of the subpass's shape: one pass declaring
+         * one and the other not is a different subpass, not a compatible one. */
+        if (left->resolve_count != right->resolve_count) return VK_FALSE;
+        for (uint32_t c = 0; c < left->resolve_count; ++c)
+            if (!reference_compatible(a, &left->resolve[c], b, &right->resolve[c]))
                 return VK_FALSE;
         if (!reference_compatible(a, &left->depth, b, &right->depth)) return VK_FALSE;
     }
@@ -723,10 +730,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
     /* Every colour role the subpass names must be the one the framebuffer
      * carries, in order, and the depth role after them. A subpass that names
      * no colour role at all - the DEPTH-ONLY shape - has an empty list on both
-     * sides, so the loop below simply does not run. */
+     * sides, so the loop below simply does not run. A resolve role is part of
+     * the executing framebuffer contract too: when the subpass declares one,
+     * the framebuffer has to carry it at the same index (DXVK262-T06). */
     const struct ps5vk_subpass *first=ps5vk_render_pass_subpass(pass, 0);
     if (fb->attachment_count != pass->attachment_count ||
         fb->color_count != first->color_count ||
+        fb->resolve_count != first->resolve_count ||
+        (fb->resolve_count && fb->resolve_attachments[0] != first->resolve[0].attachment) ||
         fb->depth_attachment != first->depth.attachment ||
         area.offset.x < 0 || area.offset.y < 0 ||
         !area.extent.width || !area.extent.height || (uint32_t)area.offset.x > fb->width ||
