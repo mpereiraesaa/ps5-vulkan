@@ -260,6 +260,19 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                     PS5VK_FEATURE_DEPTH_CLAMP |
                                     PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                                     PS5VK_FEATURE_MULTI_VIEWPORT;
+    /* Private measurement build for DXVK262-T06 sampleRateShading
+     * (PS5VK_SAMPLE_RATE_DIAGNOSTIC=1, honoured by tools/build_sdk.py and
+     * tools/build_native.py). The bit is what a witness payload and the focused CTS
+     * selection negotiate through the public API: it reports the feature and
+     * the 2x/4x framebuffer sample limits, and the pipeline, render pass and
+     * attachment frontends then accept the multisample state they describe.
+     * Off by default and never set in the shipping build, so the console keeps
+     * reporting false and refusing the request until the promotion change
+     * carries its own hardware evidence. The bits are declared in
+     * src/vk_internal.h and nothing else in this file sets this one. */
+#if defined(PS5VK_SAMPLE_RATE_DIAGNOSTIC) && PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    platform->supported_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+#endif
     /* DXVK262-T06 fragment storage side effects.  The public-SDK witness
      * distinguishes a zero-write control from exactly 4096 fragment writes,
      * preserves 30 guard words and completes its fence.  The two unchanged

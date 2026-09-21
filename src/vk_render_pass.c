@@ -199,12 +199,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
                 }
         if (!reachable) return VK_ERROR_FEATURE_NOT_PRESENT;
     }
+    VkSampleCountFlagBits attachment_samples = VK_SAMPLE_COUNT_1_BIT;
     for (uint32_t i = 0; i < info->attachmentCount; ++i) {
         const VkAttachmentDescription *a = &info->pAttachments[i];
         /* The roles are shared, so subpass 0 decides which attachment is the
          * depth one for the whole pass. */
         int is_depth = depths[0].attachment == i;
-        if (a->flags || a->samples != VK_SAMPLE_COUNT_1_BIT ||
+        /* The sample counts this device serves (DXVK262-T06). The colour role
+         * takes the counts the platform mask reports - 1x alone until a
+         * multisample path was measured, and then the envelope in
+         * src/sample_rate_contract.h - while the depth role stays 1x: no
+         * multisampled depth target exists on this path yet. Every attachment
+         * of a pass has to agree on the count, because a framebuffer's
+         * attachments are required to share one, and passing a count the
+         * device does not serve is refused where the caller can see it rather
+         * than accepted and failed later. */
+        const VkSampleCountFlags served = is_depth ? VK_SAMPLE_COUNT_1_BIT :
+            ps5vk_platform_sample_counts(d->platform_features);
+        if (!i) attachment_samples = a->samples;
+        if (a->flags || !(served & a->samples) || a->samples != attachment_samples ||
             (is_depth ? a->format != VK_FORMAT_D32_SFLOAT :
              !ps5vk_color_target_format_supported(a->format)))
             return VK_ERROR_FEATURE_NOT_PRESENT;

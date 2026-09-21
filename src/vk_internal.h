@@ -4,6 +4,7 @@
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
 #include "graphics_limits.h"
+#include "sample_rate_contract.h"
 
 /* Legacy private diagnostic override, OFF unless a probe asks for it.
  * It changes no public query. Normal builds use the platform capability and
@@ -135,6 +136,20 @@ static inline uint32_t ps5vk_platform_max_viewports(uint32_t supported_features)
         (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT : 1u;
 }
 
+/* The sample counts a platform commits to: the envelope in
+ * src/sample_rate_contract.h once the platform carries
+ * PS5VK_FEATURE_SAMPLE_RATE_SHADING, and the single-sample baseline otherwise.
+ * One helper decides it so the reported framebuffer sample limits, the render
+ * pass and framebuffer object model, the graphics pipeline's multisample state
+ * and the native attachment plan cannot disagree (DXVK262-T06). A device that
+ * never measured a multisample path therefore keeps every one of them at 1x. */
+static inline VkSampleCountFlags ps5vk_platform_sample_counts(
+    uint32_t supported_features)
+{
+    return (supported_features & PS5VK_FEATURE_SAMPLE_RATE_SHADING) ?
+        ps5vk_sample_count_mask() : VK_SAMPLE_COUNT_1_BIT;
+}
+
 /* The measured multiview floors: six views rendered into six ordered array
  * layers, and one instance at firstInstance 0x07ffffff (2^27-1). Both are
  * measured floors, also used as the conservative public KHR property values. */
@@ -228,6 +243,13 @@ struct VkDevice_T {
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
+    /* The capability mask the platform reported when this device was created.
+     * State that is not a Vulkan feature the application enables - the sample
+     * counts a framebuffer may use, for one - is gated on this mask, so the
+     * object frontends and the physical limits are derived from one source
+     * (DXVK262-T06). A hand-built device leaves it zero, which is the
+     * single-sample baseline. */
+    uint32_t platform_features;
     struct VkDeviceMemory_T *memories;
     struct VkBuffer_T *buffers;
     struct VkBufferView_T *buffer_views;

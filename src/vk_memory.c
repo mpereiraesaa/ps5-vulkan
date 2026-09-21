@@ -366,6 +366,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
         (info->flags && info->flags != VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
         (info->imageType != VK_IMAGE_TYPE_1D && info->imageType != VK_IMAGE_TYPE_2D &&
          info->imageType != VK_IMAGE_TYPE_3D) ||
+        /* Multisampled storage is not backed yet: the colour-target builder,
+         * its per-sample allocation and the resolve that reads it are the
+         * remaining half of the sampleRateShading contract, so an image whose
+         * sample count is not one stays refused here even on a device whose
+         * render pass and pipeline accept the state (DXVK262-T06). */
         !info->arrayLayers || info->samples != VK_SAMPLE_COUNT_1_BIT ||
         info->sharingMode != VK_SHARING_MODE_EXCLUSIVE ||
         info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED) return VK_ERROR_FEATURE_NOT_PRESENT;

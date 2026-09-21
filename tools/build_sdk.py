@@ -247,6 +247,16 @@ def main():
         # and viewport features are advertised by the shipping platform on
         # physical-console evidence, so there is no diagnostic build that
         # reports them ahead of it.
+        # Private measurement build (DXVK262-T06 sampleRateShading): report the
+        # multisample capability so a witness payload and the focused CTS
+        # selection can negotiate it through the public API before any shipping
+        # platform advertises it. Off by default, and never set in the shipping
+        # build; the promotion is a separate, evidence-backed change.
+        sample_rate_diagnostic = os.environ.get("PS5VK_SAMPLE_RATE_DIAGNOSTIC", "0")
+        if sample_rate_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC must be 0 or 1")
+        if sample_rate_diagnostic == "1":
+            native_cflags.append("-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:

@@ -56,7 +56,20 @@ static inline void ps5vk_device_profile_init(VkPhysicalDeviceProperties *propert
         .host_coherent = VK_FALSE,
     };
     ps5vk_physical_profile_init(properties, memory, &info);
-    if (graphics_submit) ps5vk_graphics_limits(&properties->limits);
+    if (graphics_submit) {
+        ps5vk_graphics_limits(&properties->limits);
+        /* The framebuffer sample counts follow the platform mask, exactly as
+         * maxViewports does. src/graphics_limits.h writes the single-sample
+         * baseline every frontend honours; a platform that carries
+         * PS5VK_FEATURE_SAMPLE_RATE_SHADING reports the envelope from
+         * src/sample_rate_contract.h instead, and the render pass, framebuffer
+         * and pipeline frontends accept a count only when it is in this set.
+         * The sampled-image counts stay at one sample: this profile samples no
+         * multisampled image on any path, so a larger value would claim an MSAA
+         * fetch nothing measured. */
+        properties->limits.framebufferColorSampleCounts =
+            ps5vk_platform_sample_counts(supported_features);
+    }
     properties->limits.maxDrawIndirectCount =
         ps5vk_platform_max_draw_indirect_count(supported_features);
     properties->limits.maxViewports =

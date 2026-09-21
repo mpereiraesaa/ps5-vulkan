@@ -42,7 +42,11 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
         /* One count word, then three words (format, write mask, blend enable)
          * plus six equation words per attachment, then the four constants. */
         BLEND_WORDS=1+PS5VK_MAX_COLOR_ATTACHMENTS*9+4,
-        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS+TESS_WORDS+BLEND_WORDS };
+        /* The multisample state the compiled pixel program depends on
+         * (DXVK262-T06): the sample-shading flag, the minSampleShading fraction
+         * the pixel iteration count is derived from, and the sample mask. */
+        SAMPLE_WORDS=3,
+        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS+TESS_WORDS+BLEND_WORDS+SAMPLE_WORDS };
     const int has_geometry=ps5vk_graphics_has_geometry(key);
     const int has_tessellation=ps5vk_graphics_tessellation_key_valid(key);
     size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count+
@@ -166,6 +170,14 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     if(any_blend) {
         memcpy(words+at,key->blend_constants,sizeof(key->blend_constants));at+=4;
     } else at+=4;
+    /* Sample shading is part of the program identity: a pair compiled for one
+     * iteration count must never satisfy a pipeline that asked for another, and
+     * the mask the draw carries travels with it. The fraction is serialized by
+     * bit pattern so two pipelines that differ only there never alias. */
+    words[at++]=key->sample_shading_enable?1u:0u;
+    { uint32_t min_bits; memcpy(&min_bits,&key->min_sample_shading,sizeof(min_bits));
+      words[at++]=min_bits; }
+    words[at++]=key->sample_mask;
     if(at!=HEADER_WORDS){free(words);return NULL;}
     memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
     memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
@@ -184,7 +196,7 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     /* The key stream changed shape with the tessellation pair, so the name that
      * identifies the layout moves with it: a cache populated by the earlier
      * layout must never be read as if it had this one. */
-    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v8",
+    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v9",
             VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|
             (has_geometry?VK_SHADER_STAGE_GEOMETRY_BIT:0)|
             (has_tessellation?(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|

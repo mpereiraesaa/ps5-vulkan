@@ -11,6 +11,7 @@ static unsigned expect_dual_blend_state;
 /* 1 = independentBlend enabled on the device, 2 = not enabled: the second
  * colour attachment's blend state is then element zero's, by specification. */
 static unsigned expect_two_targets;
+static unsigned expect_multisample_state;
 static uint32_t reported_set_mask;
 static VkResult usage_result;
 static VkResult used_sets(VkDevice d,const void *state,uint32_t *mask)
@@ -67,6 +68,15 @@ static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const
         assert(key->dst_alpha_blend_factor[0]==VK_BLEND_FACTOR_ZERO);
         assert(key->alpha_blend_op[0]==VK_BLEND_OP_ADD);
     }
+    if(expect_multisample_state) {
+        /* The accepted multisample state reaches the compiler unchanged: the
+         * count the attachment has, the flag the application set, the fraction
+         * it asked for, and the canonical "every sample covered" mask. */
+        assert(key->samples==VK_SAMPLE_COUNT_4_BIT);
+        assert(key->sample_shading_enable==VK_TRUE);
+        assert(key->min_sample_shading==1.0f);
+        assert(key->sample_mask==0u);
+    }
     if(expect_five_stages) {
         assert(key->tess_control.word_count==10 && key->tess_eval.word_count==10 &&
                key->geometry.word_count==10 && key->patch_control_points==3);
@@ -91,7 +101,10 @@ int main(void)
         assert(vkCreateShaderModule(&d,&mi,NULL,&modules[i])==VK_SUCCESS);
     }
     struct VkPipelineLayout_T layout={.device=&d};
-    VkAttachmentDescription pass_attachments[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM}};
+    /* The attachment's sample count is what the pipeline's multisample state
+     * has to agree with, so the fixture describes a valid 1x pass. */
+    VkAttachmentDescription pass_attachments[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass pass_subpasses[1]={
         {.color={{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},.color_count=1,
          .depth={VK_ATTACHMENT_UNUSED,0}}};
@@ -470,6 +483,81 @@ int main(void)
         color=(VkPipelineColorBlendAttachmentState){.colorWriteMask=15};
         for(unsigned i=0;i<4;++i) b.blendConstants[i]=0;
         acquired=saved_a;compiled_released=saved_c;
+        created=saved_created;released=saved_released;
+    }
+    {
+        /* DXVK262-T06 multisample contract. The counts a pipeline may use come
+         * from the platform mask and not from a GPU name, so a device that
+         * never carried the bit serves 1x alone; per-sample shading needs the
+         * feature the application enabled on THIS logical device; and the
+         * pipeline's count has to be the one its subpass attachment carries,
+         * because a mismatch would draw with a state no attachment has. Every
+         * refusal happens before the compiler or the backend is reached. */
+        const unsigned saved_created=created,saved_released=released;
+        const unsigned saved_acquired=acquired,saved_compiled=compiled_released;
+        const VkPipelineMultisampleStateCreateInfo saved_multisample=m;
+        VkAttachmentDescription four[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_4_BIT}};
+        VkAttachmentDescription two[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_2_BIT}};
+        struct ps5vk_subpass multisample_subpass[1]={
+            {.color={{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},.color_count=1,
+             .depth={VK_ATTACHMENT_UNUSED,0}}};
+        struct VkRenderPass_T four_pass={.device=&d,.attachment_count=1,.subpass_count=1,
+            .attachments=four,.subpasses=multisample_subpass};
+        struct VkRenderPass_T two_pass={.device=&d,.attachment_count=1,.subpass_count=1,
+            .attachments=two,.subpasses=multisample_subpass};
+        VkGraphicsPipelineCreateInfo multi=info;
+        VkPipeline multisample=NULL;
+        multi.renderPass=&four_pass;
+        m.rasterizationSamples=VK_SAMPLE_COUNT_4_BIT;
+        m.sampleShadingEnable=VK_TRUE;
+        m.minSampleShading=1.0f;
+        /* No platform bit: the device serves 1x, so the pipeline is refused
+         * before acquisition just as it was before this slice. */
+        const unsigned before_multisample=acquired;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        /* With the platform serving the count but the application never
+         * enabling sampleRateShading, per-sample shading is still refused. */
+        d.platform_features|=PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        /* A count the attachment does not have is refused even when both the
+         * platform and the device carry the feature. */
+        d.enabled_features|=PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        multi.renderPass=&two_pass;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        /* A count outside the envelope this profile is built for, and a
+         * minSampleShading fraction outside [0,1], are equally closed. */
+        multi.renderPass=&four_pass;
+        m.rasterizationSamples=VK_SAMPLE_COUNT_8_BIT;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        m.rasterizationSamples=VK_SAMPLE_COUNT_4_BIT;
+        m.minSampleShading=1.5f;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        m.minSampleShading=1.0f;
+        /* A mask that switches off a sample this target HAS is refused rather
+         * than silently delivered as full coverage; a mask carrying only
+         * further bits - samples a 4x target does not have - and the count's
+         * own mask are the accepted shapes. */
+        VkSampleMask partial=0x5u, wide=0xffffffffu;
+        m.pSampleMask=&partial;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        m.pSampleMask=&wide;
+        expect_multisample_state=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_SUCCESS && multisample && acquired==before_multisample+1);
+        expect_multisample_state=0;
+        vkDestroyPipeline(&d,multisample,NULL);
+        m=(VkPipelineMultisampleStateCreateInfo)saved_multisample;
+        d.enabled_features&=~PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        d.platform_features&=~PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        acquired=saved_acquired;compiled_released=saved_compiled;
         created=saved_created;released=saved_released;
     }
     {

@@ -598,6 +598,51 @@ int main(void)
         /* Nothing was created on the fixture device itself, so the object
          * counters the rest of this test checks are untouched. */
     }
+    /* DXVK262-T06 multisample contract. A device whose platform never carried
+     * the sample-rate bit serves 1x alone, so a 4x colour attachment stays
+     * refused; a platform that carries it serves the 1x/2x/4x envelope, and
+     * then every attachment of the pass still has to agree on the count, and
+     * no multisampled depth target exists on this path. */
+    {
+        VkAttachmentDescription only_color = attachments[0];
+        only_color.samples = VK_SAMPLE_COUNT_4_BIT;
+        only_color.format = VK_FORMAT_B8G8R8A8_UNORM;
+        VkSubpassDescription no_depth = sub; no_depth.pDepthStencilAttachment=NULL;
+        VkRenderPassCreateInfo no_depth_info = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .attachmentCount=1, .pAttachments=&only_color,
+            .subpassCount=1, .pSubpasses=&no_depth};
+        VkRenderPass multisample = VK_NULL_HANDLE;
+        assert(vkCreateRenderPass(&d, &no_depth_info, NULL, &multisample) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !multisample);
+        struct VkDevice_T sampled = d;
+        sampled.platform_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        assert(vkCreateRenderPass(&sampled, &no_depth_info, NULL, &multisample) == VK_SUCCESS &&
+               multisample && multisample->attachments[0].samples == VK_SAMPLE_COUNT_4_BIT);
+        vkDestroyRenderPass(&sampled, multisample, NULL);
+        /* 8x is outside the envelope this profile is built for. */
+        only_color.samples = VK_SAMPLE_COUNT_8_BIT;
+        assert(vkCreateRenderPass(&sampled, &no_depth_info, NULL, &multisample) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !multisample);
+        /* A pass whose colour and depth attachments disagree on the count
+         * cannot be backed by one framebuffer, so it is refused: here the
+         * colour attachment is 4x and the depth attachment stays 1x. */
+        VkAttachmentDescription mixed[2] = {attachments[0], attachments[1]};
+        mixed[0].samples = VK_SAMPLE_COUNT_4_BIT;
+        VkRenderPassCreateInfo mixed_info = info;
+        mixed_info.pAttachments = mixed;
+        assert(vkCreateRenderPass(&sampled, &mixed_info, NULL, &multisample) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !multisample);
+        /* And a multisampled depth attachment stays unserved even then. */
+        VkAttachmentDescription sampled_depth[2] = {attachments[0], attachments[1]};
+        sampled_depth[0].samples = VK_SAMPLE_COUNT_4_BIT;
+        sampled_depth[1].samples = VK_SAMPLE_COUNT_4_BIT;
+        VkRenderPassCreateInfo sampled_both = info;
+        sampled_both.pAttachments = sampled_depth;
+        assert(vkCreateRenderPass(&sampled, &sampled_both, NULL, &multisample) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !multisample);
+    }
+    /* The created pass owns its own copy of what it validated: mutating the
+     * fixture afterwards changes nothing about the pass. */
     attachments[0].format=VK_FORMAT_UNDEFINED; color.attachment=1;
     assert(pass->attachments[0].format == VK_FORMAT_B8G8R8A8_UNORM &&
            ps5vk_render_pass_subpass(pass, 0)->color[0].attachment == 0 &&

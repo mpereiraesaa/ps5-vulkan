@@ -207,6 +207,27 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
 
+    def test_sample_rate_diagnostic_is_graphics_only(self):
+        """The sampleRateShading measurement build is a private diagnostic.
+
+        It exists so a witness payload and the focused CTS selection can
+        negotiate a multisample path the shipping console platform does not
+        advertise yet, so it is meaningless without the graphics profile API and
+        cannot carry an unknown value. The console mask stays clear otherwise;
+        the promotion is a separate, evidence-backed change."""
+        self.rejected({"PS5VK_SAMPLE_RATE_DIAGNOSTIC": "1"},
+                      "requires the graphics profile API")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_SAMPLE_RATE_DIAGNOSTIC": "2"},
+                      "must be 0 or 1")
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("PS5VK_FEATURE_SAMPLE_RATE_SHADING", platform)
+        self.assertIn("PS5VK_SAMPLE_RATE_DIAGNOSTIC", platform)
+        # The switch only decides whether the private measurement build sets the
+        # internal bit; no public query is answered from the define itself.
+        self.assertNotIn("PS5VK_FEATURE_SAMPLE_RATE_SHADING",
+                         (ROOT / "tools/build_native.py").read_text())
+
     def test_promoted_dual_source_has_no_measurement_switch(self):
         """dualSrcBlend is advertised by the shipping platform now.
 

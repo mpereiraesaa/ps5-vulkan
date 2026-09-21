@@ -30,6 +30,46 @@ static VkResult refuse(unsigned site)
     return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
+/* The multisample state this profile executes (DXVK262-T06).
+ *
+ * The counts come from the platform's own mask, so a build that never measured
+ * a multisample path stays exactly as closed as it was: 1x only. The pipeline's
+ * count must also be the one the subpass it draws in uses, because a mismatch
+ * would render with a state no attachment has (VUID-VkGraphicsPipelineCreateInfo-
+ * subpass-00757).
+ *
+ * Per-sample shading additionally needs sampleRateShading enabled on the
+ * logical device: turning one fragment invocation into one per sample is the
+ * capability that feature names, and a device whose application never enabled
+ * it must not deliver the state anyway. minSampleShading is the fraction of
+ * samples the implementation may shade at, so it is bounded to [0,1] while
+ * sample shading is on and canonicalized to zero when it is off, where Vulkan
+ * leaves it ignored.
+ *
+ * pSampleMask may only ask for what this path delivers: every sample of the
+ * pipeline's count covered. An absent mask means exactly that (Vulkan defines
+ * the absent mask as all bits set), and a mask may carry further bits - those
+ * name samples this count does not have, so they are ignored. Masking off a
+ * sample the target DOES have would need per-pixel mask registers, which
+ * nothing on this path writes, so that shape is refused rather than silently
+ * delivered as full coverage. */
+static int multisample_state(VkDevice d, const VkPipelineMultisampleStateCreateInfo *m,
+                             VkSampleCountFlagBits attachment_samples, int has_attachment)
+{
+    const VkSampleCountFlags supported =
+        ps5vk_platform_sample_counts(d->platform_features);
+    if (!(supported & m->rasterizationSamples)) return 0;
+    if (has_attachment && m->rasterizationSamples != attachment_samples) return 0;
+    if (m->sampleShadingEnable) {
+        if (!(d->enabled_features & PS5VK_FEATURE_SAMPLE_RATE_SHADING)) return 0;
+        if (!finite_float(m->minSampleShading) ||
+            m->minSampleShading < 0.0f || m->minSampleShading > 1.0f) return 0;
+    }
+    const VkSampleMask used = ps5vk_sample_count_full_mask(m->rasterizationSamples);
+    if (m->pSampleMask && (m->pSampleMask[0] & used) != used)
+        return 0;
+    return 1;
+}
 /* The rasterization state's pNext chain. This profile implements no optional
  * rasterization structure, and every state that would change behaviour is
  * refused, but the pinned upstream rasterization module chains one
@@ -224,6 +264,17 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         ia->topology != VK_PRIMITIVE_TOPOLOGY_LINE_STRIP &&
         ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP)
         return refuse(14);
+    /* The multisample state is judged against the subpass this pipeline draws
+     * in: its colour attachment names the sample count the pipeline has to
+     * agree with. The COUNT decides whether there is one - a depth-only subpass
+     * declares none, and its reference array is not read - and a subpass with
+     * no colour attachment leaves the count bounded only by the platform's own
+     * mask. */
+    const struct ps5vk_subpass *multisample_subpass =
+        ps5vk_render_pass_subpass(in->renderPass, in->subpass);
+    const uint32_t multisample_attachment = multisample_subpass->color[0].attachment;
+    const int multisample_has_attachment = multisample_subpass->color_count &&
+        multisample_attachment != VK_ATTACHMENT_UNUSED;
     if (v->pNext || v->flags ||
         /* primitiveRestartEnable is accepted above for the two strip
          * topologies it can act on, and refused there for every other
@@ -250,9 +301,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          ((r->polygonMode != VK_POLYGON_MODE_LINE && r->polygonMode != VK_POLYGON_MODE_POINT) ||
           !(d->enabled_features & PS5VK_FEATURE_FILL_MODE_NON_SOLID))) ||
         r->lineWidth != 1.0f ||
-        m->pNext || m->flags || m->rasterizationSamples != VK_SAMPLE_COUNT_1_BIT ||
-        m->sampleShadingEnable || m->alphaToCoverageEnable || m->alphaToOneEnable ||
-        (m->pSampleMask && !(m->pSampleMask[0] & 1)) ||
+        m->pNext || m->flags || m->alphaToCoverageEnable || m->alphaToOneEnable ||
+        !multisample_state(d, m, multisample_has_attachment ?
+                in->renderPass->attachments[multisample_attachment].samples :
+                VK_SAMPLE_COUNT_1_BIT, multisample_has_attachment) ||
         /* Viewport arrays: the two counts must match and lie in
          * 1..PS5VK_MAX_VIEWPORTS; more than one needs multiViewport ENABLED
          * on this logical device. The count is static in this profile (no
@@ -312,6 +364,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         .feature_mask=d->enabled_features,
         .topology=ia->topology,
         .samples=m->rasterizationSamples,
+        /* Sample shading is carried exactly as the accepted state reads it:
+         * the flag, the fraction (zero while the flag is off, where Vulkan
+         * ignores it) and the mask. Zero is the canonical "every implemented
+         * sample is covered" state, which is what an absent pSampleMask means
+         * and what every mask shape this contract accepts also means, so a
+         * pipeline that spells its mask out shares one program with a pipeline
+         * that leaves it absent. */
+        .sample_shading_enable=m->sampleShadingEnable?VK_TRUE:VK_FALSE,
+        .min_sample_shading=m->sampleShadingEnable?m->minSampleShading:0.0f,
+        .sample_mask=0u,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
         .vertex_bindings=v->pVertexBindingDescriptions,.vertex_attributes=v->pVertexAttributeDescriptions,
         .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets,
