@@ -17,13 +17,30 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
     const struct ps5vk_operation *ops,unsigned count,VkImage color,
     struct ps5vk_layout_state *layouts,struct ps5vk_readback_plan *out)
 {
-    if(!d || !ops || count!=4 || !layouts || !out ||
-       ops[0].type!=PS5VK_IMAGE_BARRIER || ops[1].type!=PS5VK_COPY_IMAGE_BUFFER ||
-       ops[2].type!=PS5VK_BARRIER || ops[3].type!=PS5VK_BARRIER)
+    /* Two recorded shapes. The colour readback transitions its attachment
+     * itself, so it is four operations: the image barrier, the copy, the host
+     * barrier and the aggregate. A DEPTH readback is submitted on its own,
+     * AFTER the render submission already moved the surface to
+     * TRANSFER_SRC_OPTIMAL, so it records only the copy and the host barrier
+     * (vktDrawImageObjectUtil.cpp Image::readUsingBuffer, whose leading
+     * transition is skipped for any layout but UNDEFINED). Its host barrier
+     * still records the buffer entry AND the aggregate the recorder appends
+     * for a call with no image barrier, so the unstaged shape is three
+     * operations, not two. Nothing else about the readback differs, so the two
+     * shapes share every check below. */
+    if(!d || !ops || !layouts || !out || (count!=4 && count!=3))
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    const VkImageMemoryBarrier *b=&ops[0].image_barrier;
-    const struct ps5vk_operation *copy=&ops[1],*host=&ops[2],*aggregate=&ops[3];
-    VkImage image=b->image;
+    const int staged=count==4;
+    if(staged ? (ops[0].type!=PS5VK_IMAGE_BARRIER || ops[1].type!=PS5VK_COPY_IMAGE_BUFFER ||
+                 ops[2].type!=PS5VK_BARRIER || ops[3].type!=PS5VK_BARRIER)
+              : (ops[0].type!=PS5VK_COPY_IMAGE_BUFFER || ops[1].type!=PS5VK_BARRIER ||
+                 ops[2].type!=PS5VK_BARRIER))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    const VkImageMemoryBarrier *b=staged?&ops[0].image_barrier:NULL;
+    const struct ps5vk_operation *copy=staged?&ops[1]:&ops[0];
+    const struct ps5vk_operation *host=staged?&ops[2]:&ops[1];
+    const struct ps5vk_operation *aggregate=staged?&ops[3]:&ops[2];
+    VkImage image=staged?b->image:copy->copy_image;
     /* The same four-operation readback over a DEPTH attachment. Its aspect,
      * its attachment layout and the stage that wrote it are depth's, and the
      * recorder already admits exactly this shape for a D32 image that declares
@@ -31,8 +48,14 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
      * readback - the copy, the host barrier and the aggregate - is identical,
      * so only the parts that name colour are switched here. */
     const int depth_source=ps5vk_depth_readback_image(image);
+    /* The unstaged shape belongs to a surface the previous submission already
+     * handed to its readback, which the pinned helper does for both aspects:
+     * a depth attachment, and a colour attachment that also declares a
+     * transfer destination and was cleared through it. */
+    if(!staged && !depth_source && !ps5vk_colour_transfer_image(image))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if(!image || image->device!=d || (color && image!=color) ||
-       (depth_source ?
+       (!staged ? 0 : depth_source ?
         (b->oldLayout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
          b->srcAccessMask!=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT ||
          !(ops[0].src_stage & (VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
@@ -48,16 +71,17 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
          b->srcAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
          (ops[0].src_stage!=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
           ops[0].src_stage!=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT))) ||
-       b->newLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
-       b->dstAccessMask!=VK_ACCESS_TRANSFER_READ_BIT ||
-       ops[0].dst_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
+       (staged && (b->newLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+                   b->dstAccessMask!=VK_ACCESS_TRANSFER_READ_BIT ||
+                   ops[0].dst_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT)) ||
        copy->copy_image!=image || copy->copy_layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
        !copy->copy_destination || host->buffer_barrier.buffer!=copy->copy_destination ||
        host->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT || host->dst_stage!=VK_PIPELINE_STAGE_HOST_BIT ||
        host->src_access!=VK_ACCESS_TRANSFER_WRITE_BIT || host->dst_access!=VK_ACCESS_HOST_READ_BIT ||
-       aggregate->buffer_barrier.buffer || aggregate->src_access || aggregate->dst_access ||
-       aggregate->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
-       aggregate->dst_stage!=VK_PIPELINE_STAGE_HOST_BIT)
+       (aggregate->buffer_barrier.buffer || aggregate->src_access ||
+        aggregate->dst_access ||
+        aggregate->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
+        aggregate->dst_stage!=VK_PIPELINE_STAGE_HOST_BIT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const VkBufferImageCopy *r=&copy->copy_region;
     const VkImageCreateInfo *i=&image->info;
@@ -83,7 +107,12 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
        (host->buffer_barrier.size!=VK_WHOLE_SIZE && host->buffer_barrier.size<pixels*4))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     void *source,*destination;VkDeviceSize source_bytes,destination_bytes;
-    size_t tiled=ps5vk_color_64k_rx_surface_size(4,i->extent.width,i->extent.height);
+    /* The tiled footprint follows the surface's own addressing: 64KB_Z_X for a
+     * depth surface, 64KB_R_X for a colour one. Sizing a depth surface with the
+     * colour equation would compare its bytes against the wrong footprint. */
+    size_t tiled=depth_source?
+        ps5vk_depth_64k_zx_surface_size(i->extent.width,i->extent.height):
+        ps5vk_color_64k_rx_surface_size(4,i->extent.width,i->extent.height);
     if(tiled==SIZE_MAX ||
        ps5vk_image_span(d,image,&source,&source_bytes)!=VK_SUCCESS ||
        ps5vk_buffer_span(d,copy->copy_destination,0,VK_WHOLE_SIZE,&destination,&destination_bytes)!=VK_SUCCESS ||
@@ -96,8 +125,12 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
        (i->arrayLayers>1 && stride%131072u))return VK_ERROR_FEATURE_NOT_PRESENT;
     uintptr_t src=(uintptr_t)source,dst=(uintptr_t)destination;
     if(src<dst ? source_bytes>dst-src : pixels*4>src-dst)return VK_ERROR_FEATURE_NOT_PRESENT;
-    VkResult rc=ps5vk_layout_transition(layouts,image,b->oldLayout,b->newLayout);
-    if(rc!=VK_SUCCESS)return rc;
+    /* The unstaged shape carries no transition of its own: the surface is
+     * already where the copy needs it, so there is nothing to stage. */
+    if(staged) {
+        VkResult rc=ps5vk_layout_transition(layouts,image,b->oldLayout,b->newLayout);
+        if(rc!=VK_SUCCESS)return rc;
+    }
     *out=(struct ps5vk_readback_plan){image,copy->copy_destination,stride};
     return VK_SUCCESS;
 }

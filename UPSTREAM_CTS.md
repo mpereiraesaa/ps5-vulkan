@@ -1096,14 +1096,17 @@ was taken there too. None of those optional-stage runs is part of this selection
 and no feature is advertised by them.
 Vulkan conformance claim.
 
-## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18, eligibility completed 2026-09-19)
+## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18, eligibility completed 2026-09-19, PROMOTED 2026-09-21)
 
 The four T05 requirements are implemented and measured through the public ABI
 (the consumer's raster and viewport witnesses in
 [VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses)),
-and **nothing is advertised yet**: the frozen acceptance selection is unchanged
-at 304 cases, and every T05 leaf below is a diagnostic in
-`cts/upstream/manifest.json`. What changed since the first measurement is the
+and they are **now advertised by the shipping profile**: see
+[Promoted (2026-09-21)](#promoted-2026-09-21) below for the acceptance run and
+the capability probe that back it. The frozen acceptance selection carries 362
+cases, 58 of them these leaves. The paragraphs that follow describe the
+eligibility pass as it stood before that promotion, when every T05 leaf was
+still a diagnostic and the selection was 304. What changed since the first measurement is the
 inventory: the pinned checkout `a0270c1897597e6c77679870e10415398a13001c` was
 read for every source and amber script that names one of the four features,
 not only for the `draw.renderpass.depth_clamp` family, and the package now
@@ -1284,6 +1287,42 @@ The 13 failures are three distinct gaps, each measured rather than inferred:
    `Engine::Create` compiled down to `return nullptr`. With the macro defined
    the engine is created, the script's shaders compile and the leaf produces a
    genuine `Fail`. What that failure is about has not been diagnosed here.
+
+### Promoted (2026-09-21)
+
+The four DXVK262-T05 requirements are advertised by the shipping profile. The
+58 leaves the measurement window proved are now acceptance cases, the frozen
+selection is **362**, and the shipping build - no measurement switch, the
+features reported by `native/platform_ps5.c` itself - passes **362/362 Pass,
+zero Fail, zero NotSupported**, with no missing, unexpected or duplicate
+results, strict artifact and QPA identity, and the title closed and confirmed
+stopped (run `20260921T165514411Z_PPSA99994_upstream-cts_0x15ea42202ec6c`,
+deployed SELF `449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa`,
+selection SHA-256
+`26862d1a5eb9ca93121797e1e9649b45ad753c319e3ee75624bbec3f0d995cba`, reassembled
+report SHA-256
+`ccfd626cac68cba95a6322408257c17c789fba4972274c4cc425b5c5283a66e7`).
+
+The public-ABI capability probe was re-run against the promoted profile and
+reports **15 of the 62 requirements satisfied** with 47 blockers, up from 11
+(run `20260921T163032548Z_PPSA99994_ps5vk_0x15d4b1d4b89b8`, artifact
+`6c49df2e42461249b9bbfd65530d17381428bdb5f1bdeb1d1b895b7aa68d28c5`), so the
+device itself reports the four features through the public query route. The
+DXVK matrix counts **13/62 ready, 49 blockers**.
+
+Per requirement: `depthClamp` all eight applicable leaves, `depthBiasClamp` its
+only two, `multiViewport` all twenty-two, `fillModeNonSolid` all twenty-eight it
+can run. Its twenty-ninth, `rasterization.line_continuity.polygon-mode-lines`,
+stays a documented diagnostic under `host-coherent-memory-gap`: Amber's backend
+allocates its host-accessible buffer demanding
+`HOST_VISIBLE|HOST_COHERENT` with force_flags
+(`amber/src/vulkan/transfer_image.cc:165-171`), this profile advertises one
+memory type without `HOST_COHERENT` and deliberately reports non-coherent
+memory, so the leaf fails with `Vulkan::Find Proper Memory Fail` before any
+rasterization happens. That is a memory-coherence question, not a
+`fillModeNonSolid` defect, and advertising the bit would be a false claim.
+
+This is focused validation of the four requirements, not Vulkan conformance.
 
 ### What promotion needs
 

@@ -122,6 +122,32 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                                                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT|
                                                            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT)) &&
                  op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                /* The same clear-through-transfer pair the recorder accepts for
+                 * a colour attachment that also declares a transfer
+                 * destination. The executor has to agree with that record or
+                 * the submission refuses what recording let through. */
+                (ps5vk_colour_transfer_image(b->image) &&
+                 ((b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+                   b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                   !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                   op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                  (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                   b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                   b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                   b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT &&
+                   op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT))) ||
+                /* The rendered colour surface handed to its readback. When the
+                 * copy shares the submission this is part of the four-operation
+                 * readback shape; when the readback is submitted separately the
+                 * transition is all this range carries, and the executor has to
+                 * agree with the record either way. */
+                (ps5vk_colour_readback_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                 b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                 b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
+                 op->src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+                 op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
                 ((!color || b->image==color) && ps5vk_color_discard_barrier(b)) ||
                 ((!color || b->image==color) && ps5vk_color_readback_reuse_barrier(b)) ||
                 ps5vk_array_color_barrier(b)))

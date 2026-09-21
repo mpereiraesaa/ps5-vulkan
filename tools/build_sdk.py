@@ -229,16 +229,10 @@ def main():
             *(["-DPS5VK_TESS_OFFCHIP_BIND=1"]
               if os.environ.get("PS5VK_TESS_OFFCHIP_BIND") == "1" else []),
         ]
-        # Private measurement build (DXVK262-T05): report and enable the four
-        # rasterization/viewport features so the consumer witness can
-        # negotiate them before a shipping platform advertises them. Off by
-        # default; a staged SDK built with it is a diagnostic artifact and the
-        # consumer manifest records it as such.
-        raster_diagnostic = os.environ.get("PS5VK_RASTER_DIAGNOSTIC", "0")
-        if raster_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_RASTER_DIAGNOSTIC must be 0 or 1")
-        if raster_diagnostic == "1":
-            native_cflags.append("-DPS5VK_RASTER_DIAGNOSTIC=1")
+        # The DXVK262-T05 measurement switch is gone: the four rasterization
+        # and viewport features are advertised by the shipping platform on
+        # physical-console evidence, so there is no diagnostic build that
+        # reports them ahead of it.
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:
