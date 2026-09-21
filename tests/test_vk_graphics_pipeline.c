@@ -20,24 +20,24 @@ static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const
 {
     assert(context==&acquired && key->vertex.word_count==10 && key->fragment.word_count==10);
     if(expect_blend_state) {
-        assert(key->blend_enable==VK_TRUE);
-        assert(key->src_color_blend_factor==VK_BLEND_FACTOR_SRC_ALPHA);
-        assert(key->dst_color_blend_factor==VK_BLEND_FACTOR_ONE);
-        assert(key->color_blend_op==VK_BLEND_OP_ADD);
-        assert(key->src_alpha_blend_factor==VK_BLEND_FACTOR_CONSTANT_ALPHA);
-        assert(key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
-        assert(key->alpha_blend_op==VK_BLEND_OP_REVERSE_SUBTRACT);
+        assert(key->blend_enable[0]==VK_TRUE);
+        assert(key->src_color_blend_factor[0]==VK_BLEND_FACTOR_SRC_ALPHA);
+        assert(key->dst_color_blend_factor[0]==VK_BLEND_FACTOR_ONE);
+        assert(key->color_blend_op[0]==VK_BLEND_OP_ADD);
+        assert(key->src_alpha_blend_factor[0]==VK_BLEND_FACTOR_CONSTANT_ALPHA);
+        assert(key->dst_alpha_blend_factor[0]==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+        assert(key->alpha_blend_op[0]==VK_BLEND_OP_REVERSE_SUBTRACT);
         for(unsigned i=0;i<4;++i) assert(key->blend_constants[i]==(float)i/4.0f);
     }
     if(expect_dual_blend_state) {
-        assert(key->blend_enable==VK_TRUE);
+        assert(key->blend_enable[0]==VK_TRUE);
         assert(key->feature_mask&PS5VK_FEATURE_DUAL_SRC_BLEND);
-        assert(key->src_color_blend_factor==VK_BLEND_FACTOR_SRC1_COLOR);
-        assert(key->dst_color_blend_factor==VK_BLEND_FACTOR_ZERO);
-        assert(key->color_blend_op==VK_BLEND_OP_ADD);
-        assert(key->src_alpha_blend_factor==VK_BLEND_FACTOR_ONE);
-        assert(key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO);
-        assert(key->alpha_blend_op==VK_BLEND_OP_ADD);
+        assert(key->src_color_blend_factor[0]==VK_BLEND_FACTOR_SRC1_COLOR);
+        assert(key->dst_color_blend_factor[0]==VK_BLEND_FACTOR_ZERO);
+        assert(key->color_blend_op[0]==VK_BLEND_OP_ADD);
+        assert(key->src_alpha_blend_factor[0]==VK_BLEND_FACTOR_ONE);
+        assert(key->dst_alpha_blend_factor[0]==VK_BLEND_FACTOR_ZERO);
+        assert(key->alpha_blend_op[0]==VK_BLEND_OP_ADD);
     }
     if(expect_five_stages) {
         assert(key->tess_control.word_count==10 && key->tess_eval.word_count==10 &&
@@ -53,8 +53,8 @@ int main(void)
     uint32_t vs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,0,1,0x6e69616d,0};
     uint32_t fs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,4,1,0x6e69616d,0};
     struct ps5vk_graphics_program program={.key={.vertex={.words=vs,.word_count=10,.entry="main"},.fragment={.words=fs,.word_count=10,.entry="main"},
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15},.backend_data=vs};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}},.backend_data=vs};
     struct ps5vk_graphics_library library={&program,1};
     struct VkDevice_T d={.graphics_enabled=1,.graphics_library=&library,.graphics_create=backend,.graphics_release=release};
     VkShaderModule modules[2];
@@ -162,7 +162,7 @@ int main(void)
         second.renderPass=&two; second.subpass=1;
         VkPipeline later;
         assert(vkCreateGraphicsPipelines(&d,0,1,&second,NULL,&later)==VK_SUCCESS);
-        assert(later->subpass==1 && later->color_format==VK_FORMAT_B8G8R8A8_UNORM);
+        assert(later->subpass==1 && later->color_format[0]==VK_FORMAT_B8G8R8A8_UNORM);
         vkDestroyPipeline(&d,later,NULL);
         /* A subpass the pass does not have is refused rather than clamped. */
         second.subpass=2;
@@ -409,12 +409,12 @@ int main(void)
         for(unsigned i=0;i<4;++i) b.blendConstants[i]=(float)i/4.0f;
         expect_blend_state=1;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
-        assert(runtime->color_blend.blendEnable==VK_TRUE &&
-            runtime->color_blend.srcColorBlendFactor==VK_BLEND_FACTOR_SRC_ALPHA &&
-            runtime->color_blend.dstColorBlendFactor==VK_BLEND_FACTOR_ONE &&
-            runtime->color_blend.srcAlphaBlendFactor==VK_BLEND_FACTOR_CONSTANT_ALPHA &&
-            runtime->color_blend.dstAlphaBlendFactor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
-            runtime->color_blend.alphaBlendOp==VK_BLEND_OP_REVERSE_SUBTRACT);
+        assert(runtime->color_blend[0].blendEnable==VK_TRUE &&
+            runtime->color_blend[0].srcColorBlendFactor==VK_BLEND_FACTOR_SRC_ALPHA &&
+            runtime->color_blend[0].dstColorBlendFactor==VK_BLEND_FACTOR_ONE &&
+            runtime->color_blend[0].srcAlphaBlendFactor==VK_BLEND_FACTOR_CONSTANT_ALPHA &&
+            runtime->color_blend[0].dstAlphaBlendFactor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
+            runtime->color_blend[0].alphaBlendOp==VK_BLEND_OP_REVERSE_SUBTRACT);
         for(unsigned i=0;i<4;++i) assert(runtime->blend_constants[i]==(float)i/4.0f);
         vkDestroyPipeline(&d,runtime,NULL);
         expect_blend_state=0;
@@ -434,8 +434,8 @@ int main(void)
         d.enabled_features|=PS5VK_FEATURE_DUAL_SRC_BLEND;
         expect_dual_blend_state=1;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
-        assert(runtime->color_blend.srcColorBlendFactor==VK_BLEND_FACTOR_SRC1_COLOR &&
-            runtime->color_blend.dstColorBlendFactor==VK_BLEND_FACTOR_ZERO);
+        assert(runtime->color_blend[0].srcColorBlendFactor==VK_BLEND_FACTOR_SRC1_COLOR &&
+            runtime->color_blend[0].dstColorBlendFactor==VK_BLEND_FACTOR_ZERO);
         vkDestroyPipeline(&d,runtime,NULL);
         expect_dual_blend_state=0;
         d.enabled_features&=~PS5VK_FEATURE_DUAL_SRC_BLEND;

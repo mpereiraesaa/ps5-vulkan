@@ -69,8 +69,8 @@ static uint32_t compiled_ps_input_ena(const char *fragment_path)
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module(fragment_path),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     assert(ps5vk_spirv_graphics_interface(&key));
     assert(ps5vk_runtime_graphics_supported(&key));
     const void *pair=NULL;
@@ -100,8 +100,8 @@ static void check_fragment_position(void)
     struct ps5vk_graphics_key invalid_key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=invalid,.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     assert(!ps5vk_spirv_graphics_interface(&invalid_key));
     free((void *)invalid_key.vertex.words);free((void *)invalid_key.fragment.words);
 }
@@ -117,15 +117,15 @@ static void check_dual_source_exports(void)
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/dual_source.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
-        .blend_enable=VK_TRUE,
-        .src_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA,
-        .dst_color_blend_factor=VK_BLEND_FACTOR_ONE,
-        .color_blend_op=VK_BLEND_OP_ADD,
-        .src_alpha_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA,
-        .dst_alpha_blend_factor=VK_BLEND_FACTOR_ONE,
-        .alpha_blend_op=VK_BLEND_OP_ADD};
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
+        .blend_enable[0]=VK_TRUE,
+        .src_color_blend_factor[0]=VK_BLEND_FACTOR_SRC_ALPHA,
+        .dst_color_blend_factor[0]=VK_BLEND_FACTOR_ONE,
+        .color_blend_op[0]=VK_BLEND_OP_ADD,
+        .src_alpha_blend_factor[0]=VK_BLEND_FACTOR_SRC_ALPHA,
+        .dst_alpha_blend_factor[0]=VK_BLEND_FACTOR_ONE,
+        .alpha_blend_op[0]=VK_BLEND_OP_ADD};
     assert(ps5vk_spirv_graphics_interface(&key));
     PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
         .entrypoint="main",.optimise=true,.address32_hi=2,
@@ -166,12 +166,12 @@ static void check_dual_source_exports(void)
     /* The secondary export is only compiler evidence until a SRC1 equation
      * consumes it.  That equation needs the logical-device feature and is
      * deliberately bounded to the native witness shape. */
-    key.src_color_blend_factor=VK_BLEND_FACTOR_SRC1_COLOR;
-    key.dst_color_blend_factor=VK_BLEND_FACTOR_ZERO;
-    key.color_blend_op=VK_BLEND_OP_ADD;
-    key.src_alpha_blend_factor=VK_BLEND_FACTOR_ONE;
-    key.dst_alpha_blend_factor=VK_BLEND_FACTOR_ZERO;
-    key.alpha_blend_op=VK_BLEND_OP_ADD;
+    key.src_color_blend_factor[0]=VK_BLEND_FACTOR_SRC1_COLOR;
+    key.dst_color_blend_factor[0]=VK_BLEND_FACTOR_ZERO;
+    key.color_blend_op[0]=VK_BLEND_OP_ADD;
+    key.src_alpha_blend_factor[0]=VK_BLEND_FACTOR_ONE;
+    key.dst_alpha_blend_factor[0]=VK_BLEND_FACTOR_ZERO;
+    key.alpha_blend_op[0]=VK_BLEND_OP_ADD;
     runtime=NULL;
     assert(!ps5vk_runtime_graphics_supported(&key));
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==
@@ -217,10 +217,10 @@ static void check_dual_source_exports(void)
     assert(ps5vk_runtime_graphics_supported(&key));
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==
         VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
-    key.src_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
-    key.dst_color_blend_factor=VK_BLEND_FACTOR_ONE;
-    key.src_alpha_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
-    key.dst_alpha_blend_factor=VK_BLEND_FACTOR_ONE;
+    key.src_color_blend_factor[0]=VK_BLEND_FACTOR_SRC_ALPHA;
+    key.dst_color_blend_factor[0]=VK_BLEND_FACTOR_ONE;
+    key.src_alpha_blend_factor[0]=VK_BLEND_FACTOR_SRC_ALPHA;
+    key.dst_alpha_blend_factor[0]=VK_BLEND_FACTOR_ONE;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
     assert(!((const struct ps5vk_runtime_graphics_program *)runtime)->dual_source_export);
     ps5vk_runtime_graphics_free(NULL,runtime);
@@ -239,17 +239,17 @@ static void check_dual_source_blend_contract(void)
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/dual_source.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
-        .blend_enable=VK_TRUE,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
+        .blend_enable[0]=VK_TRUE,
         /* The upstream dual-source family draws random factor/operation
          * combinations on both channels; any encodable pair must be accepted. */
-        .src_color_blend_factor=VK_BLEND_FACTOR_DST_COLOR,
-        .dst_color_blend_factor=VK_BLEND_FACTOR_SRC1_ALPHA,
-        .color_blend_op=VK_BLEND_OP_SUBTRACT,
-        .src_alpha_blend_factor=VK_BLEND_FACTOR_CONSTANT_COLOR,
-        .dst_alpha_blend_factor=VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,
-        .alpha_blend_op=VK_BLEND_OP_MAX};
+        .src_color_blend_factor[0]=VK_BLEND_FACTOR_DST_COLOR,
+        .dst_color_blend_factor[0]=VK_BLEND_FACTOR_SRC1_ALPHA,
+        .color_blend_op[0]=VK_BLEND_OP_SUBTRACT,
+        .src_alpha_blend_factor[0]=VK_BLEND_FACTOR_CONSTANT_COLOR,
+        .dst_alpha_blend_factor[0]=VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,
+        .alpha_blend_op[0]=VK_BLEND_OP_MAX};
     const void *runtime=NULL;
     /* The equation alone never authorizes the draw: the device feature is the
      * first door and it is still shut without the enabled bit. */
@@ -271,12 +271,12 @@ static void check_dual_source_blend_contract(void)
         VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
     /* A non-source1 equation takes the same widened contract on the plain
      * path, which is what the mixed quads of a dual-source leaf need. */
-    key.src_color_blend_factor=VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
-    key.dst_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
-    key.color_blend_op=VK_BLEND_OP_REVERSE_SUBTRACT;
-    key.src_alpha_blend_factor=VK_BLEND_FACTOR_DST_ALPHA;
-    key.dst_alpha_blend_factor=VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
-    key.alpha_blend_op=VK_BLEND_OP_MIN;
+    key.src_color_blend_factor[0]=VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+    key.dst_color_blend_factor[0]=VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+    key.color_blend_op[0]=VK_BLEND_OP_REVERSE_SUBTRACT;
+    key.src_alpha_blend_factor[0]=VK_BLEND_FACTOR_DST_ALPHA;
+    key.dst_alpha_blend_factor[0]=VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+    key.alpha_blend_op[0]=VK_BLEND_OP_MIN;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
     assert(!((const struct ps5vk_runtime_graphics_program *)runtime)->dual_source_export);
     ps5vk_runtime_graphics_free(NULL,runtime);
@@ -294,8 +294,8 @@ static void check_two_mrt_exports(void)
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/two_mrt.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_R8G8B8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     assert(ps5vk_spirv_graphics_interface(&key));
     unsigned primary_mask=0; int secondary=0;
     assert(ps5vk_spirv_fragment_outputs(&key.fragment,&primary_mask,&secondary));
@@ -346,8 +346,8 @@ static void check_clip_cull_distances(void)
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/clip_distance.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE};
     assert(ps5vk_spirv_graphics_interface(&key));
     const void *out=NULL;
@@ -440,8 +440,8 @@ static void check_clip_cull_distances(void)
         struct ps5vk_graphics_key probe={
             .vertex=read_module("build/runtime-graphics/clip_cull_probe.vert.spv"),
             .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
-            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
             .feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE|PS5VK_FEATURE_SHADER_CULL_DISTANCE};
         probe.vertex.specialization_count=1;
         probe.vertex.specializations[0]=(struct ps5vk_graphics_specialization){
@@ -495,8 +495,8 @@ static void check_fragment_distance_read(void)
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/clip_distance.vert.spv"),
         .fragment=read_module("build/runtime-graphics/clip_distance_read.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .feature_mask=PS5VK_FEATURE_SHADER_CLIP_DISTANCE};
     unsigned clip=~0u,cull=~0u;
     assert(ps5vk_spirv_stage_distance_reads(&key.fragment,&clip,&cull));
@@ -576,8 +576,8 @@ static void check_geometry_stage(void)
         .vertex=read_module("build/runtime-graphics/geometry_probe.vert.spv"),
         .geometry=read_module("build/runtime-graphics/geometry_probe.geom.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
     const int32_t passthrough=0;
     key.geometry.specialization_count=1;
@@ -704,8 +704,8 @@ static void check_viewport_index_routing(void)
         .vertex=read_module("build/runtime-graphics/raster_witness.vert.spv"),
         .geometry=read_module("build/runtime-graphics/raster_viewport_index.geom.spv"),
         .fragment=read_module("build/runtime-graphics/vertex_format.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .vertex_binding_count=1,.vertex_bindings=&binding,
         .vertex_attribute_count=2,.vertex_attributes=attributes,
         .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
@@ -760,8 +760,8 @@ static void check_geometry_output_components(void)
         .geometry=read_module("build/runtime-graphics/geometry_components.geom.spv"),
         .fragment=read_module("build/runtime-graphics/geometry_output_components.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
     assert(ps5vk_spirv_graphics_interface(&key));
     const void *out=(void *)1;
@@ -810,8 +810,8 @@ static void check_geometry_stage_descriptor_visibility(void)
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
         .descriptor_set_count=1,.descriptor_sets=sets,
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
     assert(ps5vk_spirv_graphics_interface(&key));
     assert(ps5vk_runtime_graphics_supported(&key));
@@ -862,8 +862,8 @@ static void check_tessellation_stage(void)
         .tess_eval=read_module("build/runtime-graphics/tess.tese.spv"),
         .fragment=read_module("build/runtime-graphics/tess.frag.spv"),
         .patch_control_points=3,
-        .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .feature_mask=PS5VK_FEATURE_TESSELLATION_SHADER};
     assert(ps5vk_graphics_has_tessellation(&key));
     assert(ps5vk_graphics_tessellation_key_valid(&key));
@@ -1120,8 +1120,8 @@ static void check_view_index_builtin(void)
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/view_index.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     /* The vertex stage reads the built-in and NO vertex attribute, so the
      * interface must accept it with an empty input map. */
     assert(ps5vk_spirv_graphics_interface(&key));
@@ -1239,8 +1239,8 @@ static void check_sparse_layout_static_use(void)
         .descriptor_set_count=PS5VK_MAX_SETS,.descriptor_sets=sets,
         .vertex_binding_count=1,.vertex_attribute_count=2,
         .vertex_bindings=&binding,.vertex_attributes=attributes,
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     const void *out=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     const struct ps5vk_runtime_graphics_program *p=out;
@@ -1305,8 +1305,8 @@ static void check_descriptor_options(void)
     struct ps5vk_graphics_key base={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     const void *compiled=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&base,&compiled)==VK_SUCCESS);
     const struct ps5vk_runtime_graphics_program *program=compiled;
@@ -1349,8 +1349,8 @@ static void check_descriptor_options(void)
     }
     key.vertex=read_module("build/runtime-graphics/triangle.vert.spv");
     key.fragment=read_module("build/runtime-graphics/descriptor_arrays.frag.spv");
-    key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;key.color_format=VK_FORMAT_B8G8R8A8_UNORM;
-    key.samples=VK_SAMPLE_COUNT_1_BIT;key.color_write_mask=15;
+    key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;key.color_format[0]=VK_FORMAT_B8G8R8A8_UNORM;
+    key.samples=VK_SAMPLE_COUNT_1_BIT;key.color_write_mask[0]=15;
     struct ps5vk_compilation_cache *cache=ps5vk_compilation_cache_create(4,1024*1024);
     assert(cache);
     const void *cold,*warm;
@@ -1445,8 +1445,8 @@ static void check_descriptor_options(void)
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .descriptor_set_count=1,.descriptor_sets=&unused_set};
     assert(ps5vk_runtime_graphics_supported(&unused));
     compiled=NULL;
@@ -1498,8 +1498,8 @@ static void check_flat_interfaces(void)
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/flat.vert.spv"),
         .fragment=read_module("build/runtime-graphics/flat.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     assert(ps5vk_spirv_graphics_interface(&key));
     const void *compiled=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
@@ -1609,8 +1609,8 @@ static void check_input_attachment_descriptors(void)
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/input_attachment.frag.spv"),
         .descriptor_set_count=2,.descriptor_sets=sets,
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     assert(ps5vk_runtime_graphics_supported(&key));
     /* The options carry the canonical table, not a packed rewrite of it: the
      * combined pair keeps its 48 bytes and the resource-only role is exactly
@@ -1757,8 +1757,8 @@ static void check_input_attachment_probe_pipelines(void)
         .fragment=read_module("build/runtime-graphics/input_attachment_pattern.frag.spv"),
         .descriptor_set_count=1,.descriptor_sets=&set,
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_R8G8B8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     const void *compiled=NULL;
     assert(ps5vk_runtime_graphics_supported(&key));
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
@@ -1794,8 +1794,8 @@ static void check_fragment_store_atomic_contract(void)
         .fragment=read_module("build/runtime-graphics/fragment_store.frag.spv"),
         .descriptor_set_count=1,.descriptor_sets=&set,
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     const void *compiled=NULL;
 
     /* The descriptor profile can represent the resource, but shader side
@@ -1908,8 +1908,8 @@ int main(void)
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     const void *out=NULL;
     check_interfaces(&key);
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
@@ -1985,10 +1985,10 @@ int main(void)
     assert(stats.compiles==3 && stats.current_entries==3);
     /* Blending is part of the served contract now, so an unblended pipeline
      * switching to the all-zero factors is a different program, not a refusal. */
-    key.blend_enable=1;
+    key.blend_enable[0]=1;
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_cached_release(cache,out);
-    key.blend_enable=0;
+    key.blend_enable[0]=0;
     ps5vk_compilation_cache_get_stats(cache,&stats);
     assert(stats.compiles==4u && stats.hits==1);
     ps5vk_compilation_cache_destroy(cache);
@@ -1999,8 +1999,8 @@ int main(void)
     struct ps5vk_graphics_key parameters={
         .vertex=read_module("build/runtime-graphics/parameters.vert.spv"),
         .fragment=read_module("build/runtime-graphics/parameters.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,.push_constant_size=16};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},.push_constant_size=16};
     for(unsigned i=0;i<4;++i)parameters.push_constant_stages[i]=
         VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
     float vertex_scale=0.75f,fragment_intensity=0.5f;
@@ -2027,8 +2027,8 @@ int main(void)
         .vertex=read_module("build/runtime-graphics/vertex_input.vert.spv"),
         .fragment=read_module("build/runtime-graphics/vertex_input.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_R8G8B8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .vertex_binding_count=1,.vertex_attribute_count=1,
         .vertex_bindings=&binding,.vertex_attributes=&attribute};
     assert(ps5vk_spirv_graphics_interface(&vertex_input));
@@ -2136,8 +2136,8 @@ int main(void)
             .vertex=read_module(integer_modules[kind]),
             .fragment=read_module("build/runtime-graphics/vertex_input.frag.spv"),
             .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            .color_format=VK_FORMAT_R8G8B8A8_UNORM,
-            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+            .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
             .vertex_binding_count=1,.vertex_attribute_count=1,
             .vertex_bindings=&binding,.vertex_attributes=&attribute};
         binding.inputRate=VK_VERTEX_INPUT_RATE_VERTEX;
@@ -2156,8 +2156,8 @@ int main(void)
         .vertex=read_module("build/runtime-graphics/vertex_unorm.vert.spv"),
         .fragment=read_module("build/runtime-graphics/vertex_input.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_R8G8B8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .vertex_binding_count=1,.vertex_attribute_count=1,
         .vertex_bindings=&binding,.vertex_attributes=&attribute};
     binding.stride=4;
@@ -2187,8 +2187,8 @@ int main(void)
         struct ps5vk_graphics_key probe_input={
             .vertex=probe_modules[module],.fragment=probe_fragment,
             .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            .color_format=VK_FORMAT_R8G8B8A8_UNORM,
-            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+            .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
             .vertex_binding_count=1,.vertex_attribute_count=1,
             .vertex_bindings=&binding,.vertex_attributes=&attribute};
         assert(ps5vk_spirv_graphics_interface(&probe_input));
@@ -2217,27 +2217,27 @@ int main(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
     key.fragment.entry="main";key.descriptor_set_count=1;key.descriptor_sets=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
-    key.descriptor_set_count=0;key.blend_enable=1;
+    key.descriptor_set_count=0;key.blend_enable[0]=1;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);out=NULL;
     /* The native TES/GS upstream overlap oracle needs this exact additive
      * shape without an experimental build flag. Keep other shapes refused. */
     struct ps5vk_graphics_key additive=key;
-    additive.src_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
-    additive.dst_color_blend_factor=VK_BLEND_FACTOR_ONE;
-    additive.color_blend_op=VK_BLEND_OP_ADD;
-    additive.src_alpha_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
-    additive.dst_alpha_blend_factor=VK_BLEND_FACTOR_ONE;
-    additive.alpha_blend_op=VK_BLEND_OP_ADD;
+    additive.src_color_blend_factor[0]=VK_BLEND_FACTOR_SRC_ALPHA;
+    additive.dst_color_blend_factor[0]=VK_BLEND_FACTOR_ONE;
+    additive.color_blend_op[0]=VK_BLEND_OP_ADD;
+    additive.src_alpha_blend_factor[0]=VK_BLEND_FACTOR_SRC_ALPHA;
+    additive.dst_alpha_blend_factor[0]=VK_BLEND_FACTOR_ONE;
+    additive.alpha_blend_op[0]=VK_BLEND_OP_ADD;
     assert(ps5vk_runtime_graphics_supported(&additive));
     assert(ps5vk_runtime_graphics_compile(NULL,&additive,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);out=NULL;
-    additive.color_blend_op=VK_BLEND_OP_SUBTRACT;
+    additive.color_blend_op[0]=VK_BLEND_OP_SUBTRACT;
     assert(ps5vk_runtime_graphics_supported(&additive));
-    additive.color_blend_op=VK_BLEND_OP_ADD;
-    additive.dst_alpha_blend_factor=VK_BLEND_FACTOR_ZERO;
+    additive.color_blend_op[0]=VK_BLEND_OP_ADD;
+    additive.dst_alpha_blend_factor[0]=VK_BLEND_FACTOR_ZERO;
     assert(ps5vk_runtime_graphics_supported(&additive));
-    key.blend_enable=0;
+    key.blend_enable[0]=0;
     /* Topology selects the primitive the composite pipeline links, so the key
      * carries it and the compiler is asked for the matching value. Every
      * accepted topology compiles; everything else stays fail-closed, before the

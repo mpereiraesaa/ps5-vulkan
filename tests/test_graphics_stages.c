@@ -156,8 +156,8 @@ static struct ps5vk_graphics_key staged_key(struct ps5vk_graphics_module_key ver
 {
     return (struct ps5vk_graphics_key){.vertex=vertex,.fragment=fragment,
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
 }
 
 int main(void)

@@ -953,10 +953,15 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, c->subpass);
     VkFormat depth = subpass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
         pass->attachments[subpass->depth.attachment].format;
-    if (p->color_format != pass->attachments[subpass->color[0].attachment].format ||
+    if (p->color_attachment_count != subpass->color_count ||
         p->depth_format != depth) {
         invalid(c); return;
     }
+    for (uint32_t attachment = 0; attachment < subpass->color_count; ++attachment)
+        if (p->color_format[attachment] !=
+            pass->attachments[subpass->color[attachment].attachment].format) {
+            invalid(c); return;
+        }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_DRAW,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
     if(!op)return;

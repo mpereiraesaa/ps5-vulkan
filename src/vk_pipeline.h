@@ -2,6 +2,7 @@
 #define PS5VK_PIPELINE_H
 #include "vk_descriptor.h"
 #include "graphics_limits.h"
+#include "color_attachment_contract.h"
 
 struct ps5vk_program_descriptor {
     uint32_t set, binding, element, table_dword;
@@ -113,8 +114,13 @@ struct VkPipeline_T {
     VkBool32 primitive_restart;
     VkBool32 depth_test, depth_write;
     VkCompareOp depth_compare;
-    VkFormat color_format, depth_format;
-    VkPipelineColorBlendAttachmentState color_blend;
+    /* Per-attachment colour state, the subpass's count in
+     * color_attachment_count; consumers read element 0 while the profile
+     * serves one colour attachment. */
+    uint32_t color_attachment_count;
+    VkFormat color_format[PS5VK_MAX_COLOR_ATTACHMENTS], depth_format;
+    VkColorComponentFlags color_write_mask[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkPipelineColorBlendAttachmentState color_blend[PS5VK_MAX_COLOR_ATTACHMENTS];
     float blend_constants[4];
     uint32_t vertex_binding_count, vertex_attribute_count;
     union {

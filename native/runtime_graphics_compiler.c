@@ -305,8 +305,8 @@ static int ps5vk_reject(const struct ps5vk_graphics_key *key,unsigned site){
         key->vertex_attribute_count>0u?key->vertex_attributes[0].location:0u,
         key->vertex_attribute_count>1u?(unsigned)key->vertex_attributes[1].format:0u,
         key->vertex_attribute_count>1u?key->vertex_attributes[1].location:0u,
-        (unsigned)key->color_format,(unsigned)key->samples,(unsigned)key->color_write_mask,
-        (unsigned)key->blend_enable,key->descriptor_set_count,key->push_constant_size,
+        (unsigned)key->color_format[0],(unsigned)key->samples,(unsigned)key->color_write_mask[0],
+        (unsigned)key->blend_enable[0],key->descriptor_set_count,key->push_constant_size,
         (unsigned)ps5vk_graphics_has_geometry(key),
         (unsigned)ps5vk_graphics_has_tessellation(key),key->feature_mask);
 #else
@@ -324,11 +324,14 @@ static int blend_factor_uses_src1(VkBlendFactor factor)
 }
 static int blend_state_uses_src1(const struct ps5vk_graphics_key *key)
 {
-    return key->blend_enable &&
-        (blend_factor_uses_src1(key->src_color_blend_factor) ||
-         blend_factor_uses_src1(key->dst_color_blend_factor) ||
-         blend_factor_uses_src1(key->src_alpha_blend_factor) ||
-         blend_factor_uses_src1(key->dst_alpha_blend_factor));
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment)
+        if (key->blend_enable[attachment] &&
+            (blend_factor_uses_src1(key->src_color_blend_factor[attachment]) ||
+             blend_factor_uses_src1(key->dst_color_blend_factor[attachment]) ||
+             blend_factor_uses_src1(key->src_alpha_blend_factor[attachment]) ||
+             blend_factor_uses_src1(key->dst_alpha_blend_factor[attachment])))
+            return 1;
+    return 0;
 }
 /* The GFX1013 CB_BLEND0_CONTROL contract encodes the whole Vulkan 1.0 blend
  * space: native/blend_ps5.h ps5vk_blend_factor names all nineteen factors and
@@ -348,30 +351,56 @@ static int blend_state_uses_src1(const struct ps5vk_graphics_key *key)
  * stream. */
 static int color_write_mask_supported(const struct ps5vk_graphics_key *key)
 {
-    if (key->color_format == VK_FORMAT_R8G8B8A8_UNORM)
-        return key->color_write_mask != 0 && key->color_write_mask <= 0xfu;
-    return key->color_write_mask == 15;
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment) {
+        if (key->color_format[attachment] == VK_FORMAT_R8G8B8A8_UNORM) {
+            if (!key->color_write_mask[attachment] || key->color_write_mask[attachment] > 0xfu)
+                return 0;
+            continue;
+        }
+        if (key->color_write_mask[attachment] != 15) return 0;
+    }
+    return 1;
 }
+static int blend_profile_supported_one(const struct ps5vk_graphics_key *);
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)
 {
-    if(!key->blend_enable)return 1;
+    /* Every attachment's own equation must be one the register contract can
+     * encode; a disabled attachment contributes nothing. */
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment) {
+        struct ps5vk_graphics_key one = *key;
+        one.blend_enable[0] = key->blend_enable[attachment];
+        one.src_color_blend_factor[0] = key->src_color_blend_factor[attachment];
+        one.dst_color_blend_factor[0] = key->dst_color_blend_factor[attachment];
+        one.color_blend_op[0] = key->color_blend_op[attachment];
+        one.src_alpha_blend_factor[0] = key->src_alpha_blend_factor[attachment];
+        one.dst_alpha_blend_factor[0] = key->dst_alpha_blend_factor[attachment];
+        one.alpha_blend_op[0] = key->alpha_blend_op[attachment];
+        one.color_format[0] = key->color_format[attachment];
+        one.color_write_mask[0] = key->color_write_mask[attachment];
+        if (!blend_profile_supported_one(&one)) return 0;
+    }
+    return 1;
+}
+static int blend_profile_supported_one(const struct ps5vk_graphics_key *key)
+{
+    if(!key->blend_enable[0])return 1;
 #if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE && defined(PS5VK_TESS_VARIANT) && (PS5VK_TESS_VARIANT==20 || PS5VK_TESS_VARIANT==21)
     const VkBlendFactor source=PS5VK_TESS_VARIANT==21?VK_BLEND_FACTOR_CONSTANT_ALPHA:VK_BLEND_FACTOR_SRC_ALPHA;
-    return key->blend_enable==VK_TRUE &&
-        key->src_color_blend_factor==source &&
-        key->dst_color_blend_factor==VK_BLEND_FACTOR_ZERO &&
-        key->color_blend_op==VK_BLEND_OP_ADD &&
-        key->src_alpha_blend_factor==source &&
-        key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO &&
-        key->alpha_blend_op==VK_BLEND_OP_ADD;
+    return key->blend_enable[0]==VK_TRUE &&
+        key->src_color_blend_factor[0]==source &&
+        key->dst_color_blend_factor[0]==VK_BLEND_FACTOR_ZERO &&
+        key->color_blend_op[0]==VK_BLEND_OP_ADD &&
+        key->src_alpha_blend_factor[0]==source &&
+        key->dst_alpha_blend_factor[0]==VK_BLEND_FACTOR_ZERO &&
+        key->alpha_blend_op[0]==VK_BLEND_OP_ADD;
 #endif
     uint32_t s,d,fn,sa,da,fna;
     if(blend_state_uses_src1(key) &&
        !(key->feature_mask & PS5VK_FEATURE_DUAL_SRC_BLEND))return 0;
-    return ps5vk_blend_equation(key->color_blend_op,key->src_color_blend_factor,
-               key->dst_color_blend_factor,&s,&d,&fn) &&
-           ps5vk_blend_equation(key->alpha_blend_op,key->src_alpha_blend_factor,
-               key->dst_alpha_blend_factor,&sa,&da,&fna);
+    return ps5vk_blend_equation(key->color_blend_op[0],key->src_color_blend_factor[0],
+               key->dst_color_blend_factor[0],&s,&d,&fn) &&
+           ps5vk_blend_equation(key->alpha_blend_op[0],key->src_alpha_blend_factor[0],
+               key->dst_alpha_blend_factor[0],&sa,&da,&fna);
 }
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
@@ -392,8 +421,8 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,5);
         uint32_t patch_type=0;
         if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
-        if(key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
-           key->color_format!=VK_FORMAT_R8G8B8A8_UNORM)return ps5vk_reject(key,7);
+        if(key->color_format[0]!=VK_FORMAT_B8G8R8A8_UNORM &&
+           key->color_format[0]!=VK_FORMAT_R8G8B8A8_UNORM)return ps5vk_reject(key,7);
         if(key->samples!=VK_SAMPLE_COUNT_1_BIT || !color_write_mask_supported(key) ||
            !blend_profile_supported(key))return ps5vk_reject(key,8);
         if(!descriptor_profile_supported(key))return ps5vk_reject(key,9);
@@ -459,8 +488,8 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
          * measures, and a plain point/line pipeline stays fail-closed. */
     if(!ps5vk_graphics_has_geometry(key) && ps5vk_agc_primitive_needs_geometry(primitive_type))
         return ps5vk_reject(key,22);
-    if((key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
-        key->color_format!=VK_FORMAT_R8G8B8A8_UNORM) ||
+    if((key->color_format[0]!=VK_FORMAT_B8G8R8A8_UNORM &&
+        key->color_format[0]!=VK_FORMAT_R8G8B8A8_UNORM) ||
        key->samples!=VK_SAMPLE_COUNT_1_BIT || !color_write_mask_supported(key) ||
        !blend_profile_supported(key))return ps5vk_reject(key,23);
     /* Binding counts/pointers were checked above. Keep every remaining
@@ -679,9 +708,10 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
      * while this profile serves one target. */
     {
         unsigned char blending[PS5VK_MAX_COLOR_ATTACHMENTS]={0};
-        blending[0]=key->blend_enable?1u:0u;
+        for(uint32_t attachment=0;attachment<key->color_attachment_count;++attachment)
+            blending[attachment]=key->blend_enable[attachment]?1u:0u;
         options.spi_shader_col_format=
-            ps5vk_color_export_format_option(blending,PS5VK_MAX_COLOR_ATTACHMENTS);
+            ps5vk_color_export_format_option(blending,key->color_attachment_count);
         options.color_is_int8=0;
     }
     /* A patch-list draw feeds the patch assembler the pinned gfx103 register

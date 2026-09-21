@@ -39,7 +39,9 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
          * and the patch control point count the control stage's output vertices
          * and the evaluation stage's input arrays are derived from. */
         TESS_WORDS=1+1+1+16+16+1+1+64*4*2+1+1,
-        BLEND_WORDS=11,
+        /* One count word, then three words (format, write mask, blend enable)
+         * plus six equation words per attachment, then the four constants. */
+        BLEND_WORDS=1+PS5VK_MAX_COLOR_ATTACHMENTS*9+4,
         HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS+TESS_WORDS+BLEND_WORDS };
     const int has_geometry=ps5vk_graphics_has_geometry(key);
     const int has_tessellation=ps5vk_graphics_tessellation_key_valid(key);
@@ -52,8 +54,8 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     words[13]=PSBC_SHADER_METADATA_VERSION;
     words[1]=(uint32_t)key->vertex.word_count;
     words[2]=(uint32_t)key->fragment.word_count;
-    words[3]=key->topology;words[4]=key->color_format;
-    words[5]=key->samples;words[6]=key->color_write_mask;
+    words[3]=key->topology;words[4]=(uint32_t)key->color_format[0];
+    words[5]=key->samples;words[6]=(uint32_t)key->color_write_mask[0];
     words[7]=2; /* address32_hi */
     words[8]=1; /* optimise */
     words[9]=1; /* vertex NGG */
@@ -141,16 +143,29 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     }
     words[at++]=has_tessellation?key->patch_control_points:0u;
     words[at++]=0u; /* reserved, so the region stays a fixed size */
-    words[at++]=key->blend_enable?1u:0u;
-    if(key->blend_enable) {
-        words[at++]=key->src_color_blend_factor;
-        words[at++]=key->dst_color_blend_factor;
-        words[at++]=key->color_blend_op;
-        words[at++]=key->src_alpha_blend_factor;
-        words[at++]=key->dst_alpha_blend_factor;
-        words[at++]=key->alpha_blend_op;
+    /* The per-attachment colour state, in attachment order and padded to the
+     * same width whether or not an attachment blends: a pipeline whose second
+     * attachment differs must never reuse the first one's program. */
+    int any_blend=0;
+    words[at++]=key->color_attachment_count;
+    for(uint32_t attachment=0;attachment<PS5VK_MAX_COLOR_ATTACHMENTS;++attachment) {
+        const int live=attachment<key->color_attachment_count;
+        words[at++]=live?(uint32_t)key->color_format[attachment]:0u;
+        words[at++]=live?(uint32_t)key->color_write_mask[attachment]:0u;
+        words[at++]=live&&key->blend_enable[attachment]?1u:0u;
+        if(live&&key->blend_enable[attachment]) {
+            any_blend=1;
+            words[at++]=key->src_color_blend_factor[attachment];
+            words[at++]=key->dst_color_blend_factor[attachment];
+            words[at++]=key->color_blend_op[attachment];
+            words[at++]=key->src_alpha_blend_factor[attachment];
+            words[at++]=key->dst_alpha_blend_factor[attachment];
+            words[at++]=key->alpha_blend_op[attachment];
+        } else at+=6; /* calloc canonicalizes ignored disabled state. */
+    }
+    if(any_blend) {
         memcpy(words+at,key->blend_constants,sizeof(key->blend_constants));at+=4;
-    } else at+=10; /* calloc canonicalizes ignored disabled state. */
+    } else at+=4;
     if(at!=HEADER_WORDS){free(words);return NULL;}
     memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
     memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);

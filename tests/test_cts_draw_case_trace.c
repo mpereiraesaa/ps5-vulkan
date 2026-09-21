@@ -111,10 +111,10 @@ static VkResult compile_program(void *context, const struct ps5vk_graphics_key *
 {
     assert(context == &compiled && key && out);
     assert(key->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
-    assert(key->color_format == VK_FORMAT_R8G8B8A8_UNORM);
+    assert(key->color_format[0] == VK_FORMAT_R8G8B8A8_UNORM);
     assert(key->samples == VK_SAMPLE_COUNT_1_BIT);
-    assert(key->color_write_mask == 0xfu);
-    assert(key->blend_enable == VK_FALSE);
+    assert(key->color_write_mask[0] == 0xfu);
+    assert(key->blend_enable[0] == VK_FALSE);
     assert(key->descriptor_set_count == 0u && key->push_constant_size == 0u);
     assert(key->vertex_binding_count == 1u && key->vertex_attribute_count == 3u);
     assert(memcmp(key->vertex_bindings, &pinned_binding, sizeof(pinned_binding)) == 0);

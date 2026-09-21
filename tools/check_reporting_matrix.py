@@ -56,7 +56,10 @@ DUMP_BINARY = ROOT / "build/tests/dump_device_reporting"
 FEATURE_GATES = {
     "imageCubeArray": ("src/vk_memory.c", "info->imageType != VK_IMAGE_TYPE_2D",
                        "only 2D images are created"),
-    "independentBlend": ("src/color_attachment_contract.h", "PS5VK_MAX_COLOR_ATTACHMENTS = 1",
+    # The ABI can describe two colour attachments now; what the profile SERVES
+    # is still one, and the boundary is the runtime adapter refusing a
+    # two-target program (plus the advertised limit of 1).
+    "independentBlend": ("native/runtime_graphics_compiler.c", "PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT",
                          "one color attachment per pipeline"),
     "sampleRateShading": ("src/vk_graphics_pipeline.c", "m->sampleShadingEnable",
                           "sample shading state is rejected"),

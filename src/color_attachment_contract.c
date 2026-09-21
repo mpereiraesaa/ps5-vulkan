@@ -14,7 +14,12 @@ const uint32_t ps5vk_color_attachment_offsets[2][PS5VK_COLOR_TARGET_REGISTERS] =
 
 int ps5vk_color_attachment_count_supported(uint32_t count)
 {
-    return count == (uint32_t)PS5VK_MAX_COLOR_ATTACHMENTS;
+    /* A count this ABI can describe. What the profile SERVES is narrower while
+     * the native path can render one target: the advertised limit is 1 and the
+     * runtime adapter refuses a two-target program, so a pass or pipeline that
+     * names this many attachments is described here and then fails closed at
+     * the pipeline's own gate. */
+    return count >= 1 && count <= (uint32_t)PS5VK_MAX_COLOR_ATTACHMENTS;
 }
 
 /* The two codes the pinned compiler uses for an RGBA8 target. */
