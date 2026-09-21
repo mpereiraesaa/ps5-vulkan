@@ -132,9 +132,19 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
     if (fb->color_attachments[0] >= fb->attachment_count || fb->attachment_count > 2 ||
         (fb->depth_attachment != VK_ATTACHMENT_UNUSED && fb->depth_attachment >= fb->attachment_count))
         return VK_ERROR_UNKNOWN;
-    struct ps5vk_target_registers color, depth;
-    VkResult rc = ps5vk_native_target(d, fb->attachments[fb->color_attachments[0]], defaults, &color);
-    if (rc != VK_SUCCESS) return rc;
+    /* One prepared target per colour attachment the framebuffer carries: the
+     * draw state programmes attachment zero's block and appends the others. */
+    if (!fb->color_count || fb->color_count > PS5VK_MAX_COLOR_ATTACHMENTS)
+        return VK_ERROR_UNKNOWN;
+    struct ps5vk_target_registers colors[PS5VK_MAX_COLOR_ATTACHMENTS], depth;
+    VkResult rc = VK_SUCCESS;
+    for (uint32_t attachment = 0; attachment < fb->color_count; ++attachment) {
+        if (fb->color_attachments[attachment] >= fb->attachment_count)
+            return VK_ERROR_UNKNOWN;
+        rc = ps5vk_native_target(d, fb->attachments[fb->color_attachments[attachment]],
+                                 defaults, &colors[attachment]);
+        if (rc != VK_SUCCESS) return rc;
+    }
     int has_depth = fb->depth_attachment != VK_ATTACHMENT_UNUSED;
     if (has_depth) {
         rc = ps5vk_native_target(d, fb->attachments[fb->depth_attachment], NULL, &depth);
@@ -149,7 +159,7 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         (op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_DRAW_INDEXED_INDIRECT) ?
         (op->indices.type == VK_INDEX_TYPE_UINT16 ? 2u : 4u) : 0u;
     rc = ps5vk_native_draw_state(op->pipeline, op->viewports, op->scissors, op->viewport_count,
-        &op->raster, &color, has_depth ? &depth : NULL, area,
+        &op->raster, colors, fb->color_count, has_depth ? &depth : NULL, area,
         fb->width, fb->height, index_width, &plan);
     if (rc != VK_SUCCESS) return rc;
     struct ps5vk_descriptor_table_layout tables;

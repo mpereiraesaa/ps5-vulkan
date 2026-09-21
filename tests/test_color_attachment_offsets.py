@@ -79,10 +79,14 @@ class ColorAttachmentOffsets(unittest.TestCase):
         expected = [offsets[name.replace("CB_COLOR0", "CB_COLOR1")] for name in TARGET0]
         self.assertEqual(expected, table_from_contract()[1])
 
-    def test_blend_control_offsets_are_consecutive(self):
+    def test_per_target_offsets_are_consecutive(self):
+        """CB_BLENDn_CONTROL and SX_MRTn_BLEND_OPT are the AGC offsets the draw
+        state appends per attachment."""
         offsets = self.offsets()
         self.assertEqual([0x1e0, 0x1e1],
                          [offsets["CB_BLEND0_CONTROL"], offsets["CB_BLEND1_CONTROL"]])
+        self.assertEqual([0x1d8, 0x1d9],
+                         [offsets["SX_MRT0_BLEND_OPT"], offsets["SX_MRT1_BLEND_OPT"]])
 
     def test_target_zero_offsets_still_match_the_builder_they_describe(self):
         """The block the native builder writes must stay the one the table names."""

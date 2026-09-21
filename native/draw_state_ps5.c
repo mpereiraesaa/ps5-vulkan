@@ -58,14 +58,14 @@ static void polygon_offset(const struct ps5vk_raster_state *raster, int depth_d3
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     const VkRect2D *scissor_state, uint32_t viewport_count,
     const struct ps5vk_raster_state *raster,
-    const struct ps5vk_target_registers *color,
+    const struct ps5vk_target_registers *colors, uint32_t color_count,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
     uint32_t width, uint32_t height, unsigned index_width, struct ps5vk_draw_state *out)
 {
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
     if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) return VK_ERROR_UNKNOWN;
-    if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state || !color || color->count != 16 ||
+    if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state || !colors || colors[0].count != 16 ||
         !width || !height || width > 16384 || height > 16384 ||
         (p->color_format[0] != VK_FORMAT_B8G8R8A8_UNORM &&
          p->color_format[0] != VK_FORMAT_R8G8B8A8_UNORM) ||
@@ -100,8 +100,13 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     ps5_agc_register viewport[PS5VK_VIEWPORT_REGISTERS];
     VkResult rc = ps5vk_native_viewport(viewport_state, scissor_state, area, viewport);
     if (rc != VK_SUCCESS) return rc;
+    /* The prepared colour targets, one per attachment the subpass names. The
+     * count is the pipeline's own, so a draw can never programme a target the
+     * pipeline was not created for. */
+    if (!colors || !color_count || color_count > PS5VK_MAX_COLOR_ATTACHMENTS ||
+        color_count != p->color_attachment_count) return VK_ERROR_UNKNOWN;
     struct ps5_pipeline_registers base;
-    if (ps5_pipeline_build(&base, color->registers, &pair->cx, &pair->uc,
+    if (ps5_pipeline_build(&base, colors[0].registers, &pair->cx, &pair->uc,
         runtime?vs->context:pair->gs.cx, runtime?fs->context:pair->ps.cx,
         runtime?vs->shader:pair->gs.sh,runtime?fs->shader:pair->ps.sh,width,height)) return VK_ERROR_UNKNOWN;
     for (unsigned j = 0; j < PS5VK_VIEWPORT_REGISTERS; ++j) {
@@ -469,16 +474,33 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     /* Last fixed-state writes win over inherited/linked defaults. Explicitly
      * disable blending on subsequent non-blended draws, rather than retaining
      * the previous pipeline's state. Runtime acceptance is gated separately. */
-    struct ps5vk_blend_words blend;
+    struct ps5vk_blend_words blend[PS5VK_MAX_COLOR_ATTACHMENTS];
     const VkBool32 dual_source=runtime && pair->dual_source_export?
         VK_TRUE:VK_FALSE;
-    if(!ps5vk_blend_encode(&p->color_blend[0],p->blend_constants,dual_source,&blend))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
-    if(result.cx_count+6u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
-    result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend.control};
-    result.cx[result.cx_count++]=(ps5_agc_register){0x1d8,blend.optimization};
+    for(uint32_t attachment=0;attachment<color_count;++attachment)
+        if(!ps5vk_blend_encode(&p->color_blend[attachment],p->blend_constants,
+                               dual_source,&blend[attachment]))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Attachment zero's colour block came from ps5_pipeline_build; every other
+     * attachment is appended as its own CB_COLORn block with its own blend con
+     * control and optimisation, whose offsets are the next dwords. */
+    if(result.cx_count+6u+
+       (color_count>1u?(PS5VK_COLOR_TARGET_REGISTERS+2u)*(color_count-1u):0u)
+       >PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
+    for(uint32_t attachment=1;attachment<color_count;++attachment) {
+        for(unsigned i=0;i<PS5VK_COLOR_TARGET_REGISTERS;++i)
+            result.cx[result.cx_count++]=(ps5_agc_register){
+                ps5vk_color_attachment_offsets[attachment][i],
+                colors[attachment].registers[i].value};
+        result.cx[result.cx_count++]=(ps5_agc_register){
+            PS5VK_AGC_CB_BLEND_CONTROL(attachment),blend[attachment].control};
+        result.cx[result.cx_count++]=(ps5_agc_register){
+            PS5VK_AGC_SX_MRT_BLEND_OPT(attachment),blend[attachment].optimization};
+    }
+    result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend[0].control};
+    result.cx[result.cx_count++]=(ps5_agc_register){0x1d8,blend[0].optimization};
     for(unsigned i=0;i<4;++i)
-        result.cx[result.cx_count++]=(ps5_agc_register){0x105+i,blend.constants[i]};
+        result.cx[result.cx_count++]=(ps5_agc_register){0x105+i,blend[0].constants[i]};
     if(runtime) {
         uint32_t spi_format=UINT32_MAX,shader_mask=UINT32_MAX,conversion[3];
         for(unsigned i=0;i<fs->header.num_cx_registers;++i) {
