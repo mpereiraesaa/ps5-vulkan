@@ -11,6 +11,7 @@
 #include "targets_ps5.h"
 #include "input_attachment_probe.h"
 #include "fragment_store_probe.h"
+#include "dual_source_probe.h"
 #include "input_attachment_gate.h"
 #include "multiview_witness.h"
 #include "clip_cull_witness.h"
@@ -84,6 +85,9 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #endif
 #ifndef PS5VK_FRAGMENT_STORE_PROBE
 #define PS5VK_FRAGMENT_STORE_PROBE 0
+#endif
+#ifndef PS5VK_DUAL_SOURCE_PROBE
+#define PS5VK_DUAL_SOURCE_PROBE 0
 #endif
 #ifndef PS5VK_CLIP_CULL_PROBE
 #define PS5VK_CLIP_CULL_PROBE 0
@@ -4420,13 +4424,21 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
-#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE
     VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
     requested_features.drawIndirectFirstInstance=VK_TRUE;
 #endif
 #if PS5VK_FRAGMENT_STORE_PROBE
     requested_features.fragmentStoresAndAtomics=VK_TRUE;
+#endif
+#if PS5VK_DUAL_SOURCE_PROBE
+    /* The witness exists to execute the SRC1 equation, so it must enable the
+     * capability on the logical device.  The front end still refuses the
+     * equation on a build whose platform does not report the feature, which is
+     * the fail-closed evidence for every build that is not the measurement
+     * one. */
+    requested_features.dualSrcBlend=VK_TRUE;
 #endif
     di.pEnabledFeatures=&requested_features;
 #endif
@@ -4480,6 +4492,23 @@ int main(void)
         .atomic_fragment = ps5vk_runtime_fragment_store_atomic,
         .atomic_fragment_words = sizeof(ps5vk_runtime_fragment_store_atomic) / 4};
     CHECK(ps5vk_fragment_store_probe(device, &fragment_store_modules));
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_DUAL_SOURCE_PROBE
+    /* The witness is the whole run: one fragment module that exports both
+     * sources of attachment zero, drawn once with blending disabled and once
+     * with the accepted SRC1 equation, each judged on its own readback before
+     * anything is reported. */
+    const struct ps5vk_dual_source_probe_modules dual_source_modules = {
+        .vertex = ps5vk_runtime_vertex,
+        .vertex_words = sizeof(ps5vk_runtime_vertex) / 4,
+        .dual_fragment = ps5vk_runtime_dual_source_fragment,
+        .dual_fragment_words = sizeof(ps5vk_runtime_dual_source_fragment) / 4};
+    CHECK(ps5vk_dual_source_probe(device, &dual_source_modules));
     vkDestroyDevice(device,NULL);
     vkDestroyInstance(instance,NULL);
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");

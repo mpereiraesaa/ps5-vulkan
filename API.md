@@ -155,6 +155,12 @@ and opens the runtime blend space to every factor and operation the register
 file encodes, so the upstream `blend.dual_source` leaves can be executed and
 measured. The shipping profile still accepts only the shape a native witness
 measured, because no upstream dual-source leaf is reachable under that bound.
+The witness that measures it is `tools/run_dual_source.py`: it draws the
+packaged two-output fragment module twice, once with blending disabled and once
+with the accepted equation, copies the colour target back through the transfer
+path and judges both reads on exact bytes, so a blender that ignored the
+secondary export could not pass. It runs only on the measurement build, and the
+manifest records that build.
 
 ## Images and sampling
 

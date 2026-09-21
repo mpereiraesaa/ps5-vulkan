@@ -183,6 +183,38 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_DUAL_SOURCE_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
 
+    def test_dual_source_witness_is_bounded_and_measurable(self):
+        """The blend witness is a standalone scene and needs the measurement
+        build, because a shipping platform would refuse the SRC1 pipeline and
+        the run would only re-prove the gate."""
+        self.rejected({"PS5VK_DUAL_SOURCE_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_DUAL_SOURCE_PROBE": "2"},
+                      "must be 0 or 1")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused", "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1", "PS5VK_DUAL_SOURCE_PROBE": "1"},
+                      "requires the PS5VK_DUAL_SOURCE_DIAGNOSTIC measurement build")
+
+    def test_dual_source_witness_oracle_and_artifact_are_pinned(self):
+        probe = (ROOT / "native/dual_source_probe.c").read_text()
+        for pinned in ("PS5VK_DUAL_SOURCE_READBACK",
+                       "VK_BLEND_FACTOR_SRC1_COLOR",
+                       "PROBE_BLEND_R = 51", "observed[0][3] == 255"):
+            self.assertIn(pinned, probe)
+        self.assertIn("ps5vk_dual_source_probe",
+                      (ROOT / "native/graphics_main.c").read_text())
+        builder = (ROOT / "tools/build_native.py").read_text()
+        self.assertIn("dual_source_probe=1", builder)
+        self.assertIn("dual_source_witness", builder)
+        verifier = (ROOT / "tools/verify_dual_source.py").read_text()
+        self.assertIn('"candidate_equation"', verifier)
+        self.assertIn("candidate == wanted_candidate", verifier)
+        self.assertTrue((ROOT / "tools/run_dual_source.py").is_file())
+        for public in (ROOT / "include").rglob("*.h"):
+            self.assertNotIn("PS5VK_DUAL_SOURCE_PROBE", public.read_text(),
+                             f"{public} must not expose the witness switch")
+
     def test_dual_source_measurement_gate_stays_private(self):
         """dualSrcBlend is reported only by the dual-source measurement build.
 
