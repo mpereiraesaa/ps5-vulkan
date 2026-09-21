@@ -972,6 +972,21 @@ def main(argv=None):
         # group and cases.txt selects the leaves, exactly as for the other
         # upstream groups.
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineBlendTests.cpp",
+        # Genuine upstream multisample factory, including the min_sample_shading
+        # family the sampleRateShading row is measured with. The package
+        # registers the factory under the monolithic construction group, and the
+        # factory itself composes four further upstream modules (the sampled and
+        # storage image, standard-sample-position, shader-fragment-mask, and
+        # multisampled-render-to-single-sampled groups), so all of them have to
+        # be compiled or the factory links against factories that do not exist.
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleImageTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleShaderFragmentMaskTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampledRenderToSingleSampledTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleResolveRenderAreaTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleSampleLocationsExtTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleMixedAttachmentSamplesTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineSampleLocationsUtil.cpp",
         # VK_KHR_8bit_storage / VK_KHR_16bit_storage focused groups. The build
         # generates registration-pruned copies from the pinned modules; selected
         # shader bodies, support checks and oracles remain upstream. Registering

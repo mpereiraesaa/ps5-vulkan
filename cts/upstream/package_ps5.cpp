@@ -15,6 +15,7 @@
 #include "vktPipelinePushConstantTests.hpp"
 #include "vktPipelineCacheTests.hpp"
 #include "vktPipelineBlendTests.hpp"
+#include "vktPipelineMultisampleTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
@@ -328,6 +329,25 @@ void FocusedVkTestPackage::init(void)
                 new tcu::TestCaseGroup(m_testCtx, "monolithic"));
             monolithicGroup->addChild(vkt::pipeline::createBlendTests(
                 m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+            /* pipeline.monolithic.multisample: the upstream multisample factory
+             * under the same construction-type group. The sampleRateShading
+             * selection lives in this family (every min_sample_shading leaf
+             * gates on DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING), and the
+             * dual-source window proved what happens without the registration:
+             * dEQP silently drops a selected leaf whose factory was never
+             * registered, and the run reports fewer cases than cases.txt holds.
+             * Registering the group only makes the leaves addressable - cases.txt
+             * remains the execution filter, so a leaf that is not selected still
+             * does not run. */
+            monolithicGroup->addChild(vkt::pipeline::createMultisampleTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC,
+                /* useFragmentShadingRate: the factory names its group
+                 * "multisample" when this is false and
+                 * "multisample_with_fragment_shading_rate" when it is true. The
+                 * pinned listing's leaves are pipeline.monolithic.multisample.*,
+                 * so registering the false form is what makes the selected
+                 * names addressable. */
+                false));
             pipelineGroup->addChild(monolithicGroup.release());
         }
         addChild(pipelineGroup.release());

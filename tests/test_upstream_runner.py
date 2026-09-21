@@ -689,6 +689,40 @@ class TestUpstreamRunner(unittest.TestCase):
                      "vktBindingShaderAccessTests.cpp"):
             self.assertIn(name, build, f"{name} is not compiled into the payload")
 
+    def test_multisample_factory_is_registered_and_compiled(self):
+        """The sampleRateShading family must be addressable before it is selected.
+
+        The dual-source window measured what a missing registration costs: dEQP
+        reported 306 cases while cases.txt held 404, because a selected leaf whose
+        factory was never registered is silently dropped. Every leaf of the
+        multisample family gates on DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING, so
+        the factory that the sample-rate selection will name has to be registered
+        under the same monolithic construction group the pinned listing names its
+        leaves with - and the modules the factory itself composes have to be
+        compiled, or it links against factories that do not exist. This test pins
+        the registration and the compilation; the selection itself is the next
+        slice and lives in the manifest."""
+        package = (REPO_ROOT / "cts/upstream/package_ps5.cpp").read_text(encoding="utf-8")
+        build = (REPO_ROOT / "tools/build_upstream_cts.py").read_text(encoding="utf-8")
+        self.assertIn('#include "vktPipelineMultisampleTests.hpp"', package)
+        self.assertIn("createMultisampleTests", package)
+        for name in ("vktPipelineMultisampleTests.cpp",
+                     "vktPipelineMultisampleImageTests.cpp",
+                     "vktPipelineMultisampleShaderFragmentMaskTests.cpp",
+                     "vktPipelineMultisampledRenderToSingleSampledTests.cpp",
+                     "vktPipelineMultisampleResolveRenderAreaTests.cpp",
+                     "vktPipelineMultisampleSampleLocationsExtTests.cpp",
+                     "vktPipelineMultisampleMixedAttachmentSamplesTests.cpp",
+                     "vktPipelineSampleLocationsUtil.cpp"):
+            self.assertIn(name, build, f"{name} is not compiled into the payload")
+        # The factory is added to the monolithic group, which is what makes a
+        # leaf's path read pipeline.monolithic.multisample... in cases.txt.
+        monolithic = package.index("createBlendTests")
+        multisample = package.index("createMultisampleTests")
+        self.assertLess(monolithic, multisample)
+        self.assertIn("PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC",
+                      package[monolithic:multisample])
+
     def test_buffer_transfer_selection_and_diagnostics_are_explicit(self):
         manifest = json.loads(MANIFEST_PATH.read_text())
         accepted = {case["path"] for case in manifest["cases"]}
