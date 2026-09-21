@@ -72,30 +72,33 @@ class UpstreamSelectionTests(unittest.TestCase):
         # instead of being claimed as coverage.
         geometry = [c for c in manifest["cases"]
                     if "geometryShader" in " ".join(c.get("features_required", []))]
-        # 34 diagnostics plus the 28 rasterization culling leaves that are the
-        # oracle for fillModeNonSolid (they run and pass with the feature
-        # advertised and move to acceptance in the change that advertises it),
-        # plus the 40 T05 entries of the complete eligibility pass: 25 applicable
-        # leaves held as t05-measurement-pending until one console window
-        # (2 clip_volume.depth_clamp triangles, 16 fragment_ops multi_viewport,
-        # 6 draw.renderpass.scissor multi-scissor, 1 line_continuity amber) and
-        # 15 same-family leaves that document a refusal or a capability gap.
-        self.assertEqual((304, 102, 48),
+        # 362 acceptance cases: the 304 the tranches before T05 left, plus the
+        # 58 T05 leaves measured and promoted on 2026-09-21 (28 rasterization
+        # culling, 16 fragment_ops multi_viewport, 6 draw.renderpass.scissor,
+        # 2 clip_volume.depth_clamp, 6 draw.renderpass.depth_clamp). The 44
+        # diagnostics that remain document refusals and capability gaps, and
+        # nothing is left pending a measurement window.
+        self.assertEqual((362, 44, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
-        self.assertEqual(31, len(pending))
-        self.assertTrue(all(d["expected_status"] == "Pass" for d in pending))
-        self.assertEqual(
-            {"dEQP-VK.clipping.clip_volume.depth_clamp",
-             "dEQP-VK.fragment_ops.scissor.multi_viewport",
-             "dEQP-VK.draw.renderpass.scissor",
-             "dEQP-VK.draw.renderpass.depth_clamp",
-             "dEQP-VK.rasterization.line_continuity"},
-            {d["path"].rsplit(".", 1)[0] for d in pending})
+        self.assertEqual([], pending)
+        # The one T05 leaf that stayed out is not a feature defect: Amber
+        # demands host-coherent memory this profile does not advertise.
+        amber = [d for d in manifest["diagnostics"]
+                 if d["category"] == "host-coherent-memory-gap"]
+        self.assertEqual(1, len(amber))
+        self.assertEqual("Fail", amber[0]["expected_status"])
+        self.assertEqual("dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
+                         amber[0]["path"])
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
-        self.assertEqual(29, len(geometry))
-        self.assertEqual(29, len({c["path"] for c in geometry}))
+        # 29 from the geometry tranche itself, plus the 23 T05 leaves promoted on
+        # 2026-09-21 that drive gl_ViewportIndex from a geometry stage: the 16
+        # fragment_ops multi_viewport scissors, the 6 draw.renderpass.scissor
+        # leaves and the four-viewport depth-clamp one. They require the feature
+        # as genuinely as the geometry family does.
+        self.assertEqual(52, len(geometry))
+        self.assertEqual(52, len({c["path"] for c in geometry}))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in geometry))
         # The four strip-topology leaves that were blocked on primitive restart
         # are acceptance now: the profile carries the state and programs the cut.
