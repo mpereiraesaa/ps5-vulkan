@@ -38,6 +38,20 @@ extern const uint32_t ps5vk_color_target_offsets[2][PS5VK_COLOR_TARGET_REGISTERS
 /* CB_BLEND0_CONTROL is 0x1e0; target n's control is the next dword. */
 #define PS5VK_AGC_CB_BLEND_CONTROL(n) (0x1e0u + (n))
 
+/* SPI_SHADER_COL_FORMAT is one nibble per colour target, target i in bits
+ * [4i, 4i+3], and the code the pinned compiler writes for one RGBA8 target is
+ * Mesa ac_choose_spi_color_formats' pair: FP16_ABGR (4) when that target
+ * blends, 32_ABGR (9) when it does not. Measured against the pinned PSBC with
+ * a single-output module: option 0 -> 0x9, option 4 -> 0x4, option 9 -> 0x9;
+ * and with a two-output module: option 0x99 -> 0x99 with CB_SHADER_MASK 0xff,
+ * option 0x4 -> 0x4 with mask 0xf (the second export dropped). The option is
+ * therefore a property of the subpass's colour attachments, not of the
+ * pipeline as a whole, and the second target's code rides in the second
+ * nibble. */
+uint32_t ps5vk_color_export_format_code(int blending);
+uint32_t ps5vk_color_export_format_option(const unsigned char *blend_enable,
+                                          uint32_t count);
+
 /* A pipeline that declares a count the profile cannot render, or an operation
  * the backend does not programme, is refused where the application can see it
  * rather than accepted and failed later. */

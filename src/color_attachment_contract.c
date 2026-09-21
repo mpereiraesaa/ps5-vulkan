@@ -17,6 +17,25 @@ int ps5vk_color_attachment_count_supported(uint32_t count)
     return count == (uint32_t)PS5VK_MAX_COLOR_ATTACHMENTS;
 }
 
+/* The two codes the pinned compiler uses for an RGBA8 target. */
+enum { PS5VK_SPI_FORMAT_BLEND = 4u, PS5VK_SPI_FORMAT_PLAIN = 9u };
+
+uint32_t ps5vk_color_export_format_code(int blending)
+{
+    return blending ? PS5VK_SPI_FORMAT_BLEND : PS5VK_SPI_FORMAT_PLAIN;
+}
+
+uint32_t ps5vk_color_export_format_option(const unsigned char *blend_enable,
+                                          uint32_t count)
+{
+    uint32_t option = 0;
+    if (!blend_enable || count > PS5VK_MAX_COLOR_ATTACHMENTS) return 0;
+    for (uint32_t attachment = 0; attachment < count; ++attachment)
+        option |= ps5vk_color_export_format_code(blend_enable[attachment])
+                  << (4u * attachment);
+    return option;
+}
+
 static int blend_factor_uses_src1(VkBlendFactor factor)
 {
     return factor == VK_BLEND_FACTOR_SRC1_COLOR ||
