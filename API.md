@@ -176,9 +176,17 @@ accepts `rasterizationSamples` from that same set together with
 the logical device, with `minSampleShading` bounded to `[0,1]` and
 `pSampleMask` restricted to the count's own full mask. The compiled program
 identity and the compile cache both carry the flag, the fraction and the
-canonical mask. The multisampled native target, its resolve and the applicable
-upstream CTS leaves are the remaining work: nothing here should be read as
-multisample rendering being usable by an application today.
+canonical mask. A multisampled colour image and its target now exist as well:
+the image shares the one multisampled role (2D, one mip, the colour attachment
+and nothing else) on a platform that serves the counts, its storage is one
+sample plane per sample, and the target states log2 of the count in
+CB_COLOR0_ATTRIB's NUM_SAMPLES/NUM_FRAGMENTS fields, which the pinned
+register table and the field positions in `src/sample_rate_contract.h` are
+checked against. The native clear, draw, resolve and the multisampled input
+attachment a per-sample read needs are the remaining work, so the native
+attachment plan still refuses a pass that names a multisampled attachment:
+nothing here should be read as multisample rendering being usable by an
+application today.
 
 ## Images and sampling
 

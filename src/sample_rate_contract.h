@@ -65,4 +65,27 @@ static inline VkSampleMask ps5vk_sample_count_full_mask(VkSampleCountFlagBits sa
     return count ? (VkSampleMask)((UINT32_C(1) << count) - 1u) : 0u;
 }
 
+/* CB_COLOR0_ATTRIB (AGC context offset 0x31d) carries the target's sample
+ * geometry as two log2 fields: NUM_SAMPLES in bits [12,14] and NUM_FRAGMENTS
+ * in bits [15,16] (pinned gfx103 register table; tests/
+ * test_sample_count_registers.py recomputes both from it). The pinned Mesa
+ * colour-descriptor builder writes
+ * S_028C74_NUM_SAMPLES(util_logbase2(state->num_samples)) and the same for
+ * NUM_FRAGMENTS from the number of STORAGE samples, so a single-sample target
+ * leaves both zero - which is what the shared colour-target builder emits
+ * today, and what this helper reproduces for 1x. This profile serves no EQAA,
+ * so the number of stored and of exposed samples is the same and both fields
+ * carry log2 of the one count. */
+enum {
+    PS5VK_COLOR_ATTRIB_NUM_SAMPLES_SHIFT = 12,
+    PS5VK_COLOR_ATTRIB_NUM_FRAGMENTS_SHIFT = 15
+};
+#define PS5VK_COLOR_ATTRIB_SAMPLE_FIELDS_MASK UINT32_C(0x0001f000)
+static inline uint32_t ps5vk_color_attrib_sample_fields(VkSampleCountFlagBits samples)
+{
+    const uint32_t log2 = ps5vk_sample_count_log2(samples);
+    return (log2 << PS5VK_COLOR_ATTRIB_NUM_SAMPLES_SHIFT) |
+           (log2 << PS5VK_COLOR_ATTRIB_NUM_FRAGMENTS_SHIFT);
+}
+
 #endif

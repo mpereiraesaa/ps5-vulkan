@@ -362,16 +362,24 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
      * initial layout stays refused instead of being stored as tiled and read
      * back as if it were linear. */
     const int linear_staging = ps5vk_linear_staging_descriptor(info);
+    /* The sample counts this device's platform serves (DXVK262-T06). 1x is
+     * always accepted; a multisampled count is accepted only for the one role
+     * that has a multisampled target - a 2D one-mip colour-attachment image in
+     * one of the profile's colour formats, whose only role is that attachment.
+     * The backing requirements apply the same bound, so a shape this predicate
+     * let through cannot be refused later for its size. */
+    int samples_supported = info->samples == VK_SAMPLE_COUNT_1_BIT;
+    if (!samples_supported &&
+        (info->usage == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+        (info->format == VK_FORMAT_B8G8R8A8_UNORM || info->format == VK_FORMAT_R8G8B8A8_UNORM) &&
+        info->imageType == VK_IMAGE_TYPE_2D && info->mipLevels == 1 &&
+        (ps5vk_platform_sample_counts(d->platform_features) & info->samples))
+        samples_supported = 1;
     if (info->pNext ||
         (info->flags && info->flags != VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
         (info->imageType != VK_IMAGE_TYPE_1D && info->imageType != VK_IMAGE_TYPE_2D &&
          info->imageType != VK_IMAGE_TYPE_3D) ||
-        /* Multisampled storage is not backed yet: the colour-target builder,
-         * its per-sample allocation and the resolve that reads it are the
-         * remaining half of the sampleRateShading contract, so an image whose
-         * sample count is not one stays refused here even on a device whose
-         * render pass and pipeline accept the state (DXVK262-T06). */
-        !info->arrayLayers || info->samples != VK_SAMPLE_COUNT_1_BIT ||
+        !info->arrayLayers || !samples_supported ||
         info->sharingMode != VK_SHARING_MODE_EXCLUSIVE ||
         info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED) return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Only the one linear descriptor above is backed; any other linear request

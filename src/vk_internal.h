@@ -44,6 +44,13 @@ VkResult ps5vk_native_image_requirements(VkDevice, const VkImageCreateInfo *, Vk
  * reproduces the single-layer requirements exactly. */
 VkResult ps5vk_native_layered_storage(VkFormat, uint32_t width, uint32_t height,
     uint64_t layers, VkDeviceSize *stride, VkDeviceSize *alignment, VkDeviceSize *bytes);
+/* The same per-layer footprint with the surface's own sample count: a
+ * multisampled colour surface stores one sample plane per sample, so the
+ * layer's bytes scale with the count before the same alignment (DXVK262-T06,
+ * native/image_ps5.c). 1x reproduces ps5vk_native_layered_storage exactly. */
+VkResult ps5vk_native_layered_storage_samples(VkFormat, uint32_t width, uint32_t height,
+    uint64_t layers, VkSampleCountFlagBits samples, VkDeviceSize *stride,
+    VkDeviceSize *alignment, VkDeviceSize *bytes);
 struct ps5vk_native_memory_budget { uint64_t limit, used; };
 void ps5vk_native_queue_configure(VkDevice device);
 struct ps5vk_compiled_program;

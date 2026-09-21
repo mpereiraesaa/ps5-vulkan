@@ -35,6 +35,41 @@ int main(void)
     assert(vkCreateImage(&d, &info, NULL, &image) == VK_SUCCESS && calls == 2);
     VkMemoryRequirements req; vkGetImageMemoryRequirements(&d, image, &req);
     assert(req.size == 4096 && req.alignment == 256);
+    /* DXVK262-T06: a multisampled colour attachment exists only on a device
+     * whose platform serves the counts, and only for that one role. The
+     * backend's requirements are never reached for a refused shape, so the
+     * platform gate is what decides before any allocation question is asked. */
+    {
+        VkImageCreateInfo sampled = info;
+        sampled.samples = VK_SAMPLE_COUNT_4_BIT;
+        VkImage sampled_image;
+        const int before = calls;
+        assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before);
+        d.platform_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) == VK_SUCCESS &&
+               sampled_image && calls == before + 1);
+        vkDestroyImage(&d, sampled_image, NULL);
+        /* Every other role stays single-sample: a sampled multisampled image
+         * and a multisampled depth surface are both refused. */
+        sampled.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 1);
+        sampled.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        sampled.format = VK_FORMAT_D32_SFLOAT;
+        assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 1);
+        /* 8x is outside the envelope the platform may serve at all. */
+        sampled.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        sampled.format = info.format;
+        sampled.samples = VK_SAMPLE_COUNT_8_BIT;
+        assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 1);
+        d.platform_features &= ~(uint32_t)PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        /* The one accepted creation above reached the backend; the counters the
+         * rest of this test pins are restored to what they were before it. */
+        calls = before;
+    }
     VkSubresourceLayout layout = {.rowPitch = 1234, .size = 5678};
     VkImageSubresource img_sub = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
     vkGetImageSubresourceLayout(&d, image, &img_sub, &layout);

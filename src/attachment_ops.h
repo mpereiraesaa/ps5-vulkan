@@ -15,21 +15,15 @@ struct ps5vk_attachment_plan {
  * object creation: it describes semantics the AGC queue can execute without
  * silently weakening LOAD, CLEAR, or final-layout ownership.
  *
- * The sample counts are the ones this contract carries (DXVK262-T06): the
- * colour role takes the 1x/2x/4x envelope in src/sample_rate_contract.h and the
- * depth role stays 1x, exactly as the render pass and pipeline frontends
- * accept them. The render pass has already refused a count the device's
- * platform does not serve, so this bound is the compile-time envelope: the
- * native target builder is what turns the colour count into CB_COLOR0_ATTRIB's
- * NUM_SAMPLES/NUM_FRAGMENTS, and a count no target can describe is refused
- * here rather than drawn at the wrong rate. */
-static inline int ps5vk_attachment_samples_supported(VkSampleCountFlagBits samples,
-                                                     VkBool32 depth)
-{
-    return depth ? samples == VK_SAMPLE_COUNT_1_BIT :
-        (ps5vk_sample_count_mask() & samples) != 0;
-}
-
+ * That separation is why the sample count stays at 1x here while the render
+ * pass, framebuffer, image and pipeline object model accept the 1x/2x/4x
+ * envelope of src/sample_rate_contract.h (DXVK262-T06): an object model says
+ * what a shape IS, and this plan says what the native queue can EXECUTE. A
+ * multisampled attachment's clear, draw and resolve do not exist yet - the
+ * colour target now carries the sample count and is sized for it, but the
+ * executor still clears and draws one sample - so a pass that names one is
+ * refused at begin rather than cleared with single-sample arithmetic. The
+ * sample-count-aware plan belongs to the slice that implements those three. */
 static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
     VkFormat format, VkImageLayout reference, VkBool32 depth,
     struct ps5vk_attachment_plan *out)
@@ -37,8 +31,7 @@ static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
     const VkImageLayout attachment = depth ?
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL :
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    if (!a || !out || a->format != format ||
-        !ps5vk_attachment_samples_supported(a->samples, depth) ||
+    if (!a || !out || a->format != format || a->samples != VK_SAMPLE_COUNT_1_BIT ||
         (depth ? format != VK_FORMAT_D32_SFLOAT :
          !ps5vk_color_target_format_supported(format)) ||
         (reference != attachment && reference != VK_IMAGE_LAYOUT_GENERAL) ||
