@@ -14,6 +14,7 @@
 #include "vktComputeIndirectComputeDispatchTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
 #include "vktPipelineCacheTests.hpp"
+#include "vktPipelineBlendTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
@@ -289,6 +290,18 @@ void FocusedVkTestPackage::init(void)
         // cases stay unselected while the D16_UNORM prerequisite is missing.
         pipelineGroup->addChild(vkt::pipeline::createCacheTests(
             m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+        /* pipeline.monolithic.blend: the upstream blend factory under the
+         * construction-type group the pinned listing names its leaves with.
+         * The dual-source family inside it is the oracle for dualSrcBlend;
+         * registering the group only makes those leaves addressable, and
+         * cases.txt remains the execution filter. */
+        {
+            de::MovePtr<tcu::TestCaseGroup> monolithicGroup(
+                new tcu::TestCaseGroup(m_testCtx, "monolithic"));
+            monolithicGroup->addChild(vkt::pipeline::createBlendTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+            pipelineGroup->addChild(monolithicGroup.release());
+        }
         addChild(pipelineGroup.release());
     }
 

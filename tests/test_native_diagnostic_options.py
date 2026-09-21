@@ -232,10 +232,14 @@ class NativeDiagnosticOptions(unittest.TestCase):
             check=True)
         for expected in ("PS5VK_RUNTIME_GRAPHICS=1", "PS5VK_SHELL_CLOSE=1",
                          "PS5VK_GLSLANG=glslang-test", "PS5VK_GRAPHICS_DRAW=1",
-                         "PS5VK_GRAPHICS_PRESENT=1",
                          "PS5VK_DUAL_SOURCE_DIAGNOSTIC=1",
-                         "PS5VK_DUAL_SOURCE_PROBE=1"):
+                         "PS5VK_DUAL_SOURCE_PROBE=1", "PS5VK_USE_SDK=1"):
             self.assertIn(expected, witness.stdout)
+        # The witness is an offscreen scene: presenting would move the artifact
+        # manifest to the presentation stage, which the strict verifier refuses.
+        self.assertNotIn("PS5VK_GRAPHICS_PRESENT=1", witness.stdout)
+        verifier = (ROOT / "tools/verify_dual_source.py").read_text()
+        self.assertIn('"graphics-api-offscreen-draw"', verifier)
         cts = subprocess.run(
             ["make", "-n", "upstream-cts-dual-source"], cwd=ROOT,
             capture_output=True, text=True, check=True)
