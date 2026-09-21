@@ -57,7 +57,8 @@ struct ps5vk_draw_state {
 VkResult ps5vk_native_draw_state(VkPipeline, const VkViewport *viewports,
     const VkRect2D *scissors, uint32_t viewport_count,
     const struct ps5vk_raster_state *raster,
-    const struct ps5vk_target_registers *color, const struct ps5vk_target_registers *depth,
+    const struct ps5vk_target_registers *colors, uint32_t color_count,
+    const struct ps5vk_target_registers *depth,
     const VkRect2D *area,
     uint32_t width, uint32_t height, unsigned index_width,
     struct ps5vk_draw_state *);

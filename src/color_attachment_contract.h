@@ -42,8 +42,11 @@ enum { PS5VK_MAX_COLOR_ATTACHMENTS = 2 };
 enum { PS5VK_COLOR_TARGET_REGISTERS = 16 };
 extern const uint32_t ps5vk_color_attachment_offsets[2][PS5VK_COLOR_TARGET_REGISTERS];
 
-/* CB_BLEND0_CONTROL is 0x1e0; target n's control is the next dword. */
+/* CB_BLEND0_CONTROL is 0x1e0 and SX_MRT0_BLEND_OPT 0x1d8; target n's control
+ * and optimisation are the next dwords, both derived from the pinned table and
+ * pinned by tests/test_color_attachment_offsets.py. */
 #define PS5VK_AGC_CB_BLEND_CONTROL(n) (0x1e0u + (n))
+#define PS5VK_AGC_SX_MRT_BLEND_OPT(n) (0x1d8u + (n))
 
 /* SPI_SHADER_COL_FORMAT is one nibble per colour target, target i in bits
  * [4i, 4i+3], and the code the pinned compiler writes for one RGBA8 target is

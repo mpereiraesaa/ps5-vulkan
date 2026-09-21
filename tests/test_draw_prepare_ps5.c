@@ -73,7 +73,7 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView v, const ps5_agc_register d
 { (void)defaults; assert(v->device == d); ++targets; out->count = 16; return target_rc; }
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport,
     const VkRect2D *scissor, uint32_t viewport_count, const struct ps5vk_raster_state *raster,
-    const struct ps5vk_target_registers *color,
+    const struct ps5vk_target_registers *colors, uint32_t color_count,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
     uint32_t width, uint32_t height, unsigned index_width, struct ps5vk_draw_state *out)
 {
@@ -84,7 +84,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport,
     assert(p && viewport_count == 2 && viewport[0].width == 4 && viewport[1].width == 2 &&
         scissor[0].extent.width == 4 && scissor[1].extent.width == 2 && raster &&
         raster->depth_bias_enable && raster->depth_bias_slope == 2.0f && index_width == 0 &&
-        color->count == 16 && !depth && area->extent.width == 4 && width == 4 && height == 4);
+        color_count == 1 && colors && colors[0].count == 16 && !depth && area->extent.width == 4 && width == 4 && height == 4);
     *out = (struct ps5vk_draw_state){.cx_count = 87, .modifier = 5,
         .runtime=runtime,.hull_runtime=hull_runtime}; return VK_SUCCESS;
 }
