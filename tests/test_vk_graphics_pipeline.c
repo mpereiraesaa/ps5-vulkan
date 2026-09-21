@@ -65,7 +65,8 @@ int main(void)
     struct VkPipelineLayout_T layout={.device=&d};
     VkAttachmentDescription pass_attachments[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM}};
     struct ps5vk_subpass pass_subpasses[1]={
-        {.color={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},.depth={VK_ATTACHMENT_UNUSED,0}}};
+        {.color={{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},.color_count=1,
+         .depth={VK_ATTACHMENT_UNUSED,0}}};
     struct VkRenderPass_T pass={.device=&d,.attachment_count=1,.subpass_count=1,
         .attachments=pass_attachments,.subpasses=pass_subpasses};
     VkPipelineShaderStageCreateInfo stages[2]={

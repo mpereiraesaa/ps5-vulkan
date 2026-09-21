@@ -342,8 +342,13 @@ VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b)
     for (uint32_t i = 0; i < a->subpass_count; ++i) {
         const struct ps5vk_subpass *left = ps5vk_render_pass_subpass(a, i);
         const struct ps5vk_subpass *right = ps5vk_render_pass_subpass(b, i);
-        if (!reference_compatible(a, &left->color, b, &right->color) ||
-            !reference_compatible(a, &left->depth, b, &right->depth)) return VK_FALSE;
+        /* Two render passes are compatible only when their subpasses agree on
+         * every colour reference they carry and on the depth one. */
+        if (left->color_count != right->color_count) return VK_FALSE;
+        for (uint32_t c = 0; c < left->color_count; ++c)
+            if (!reference_compatible(a, &left->color[c], b, &right->color[c]))
+                return VK_FALSE;
+        if (!reference_compatible(a, &left->depth, b, &right->depth)) return VK_FALSE;
     }
     return VK_TRUE;
 }
@@ -714,7 +719,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;
     if (fb->attachment_count != pass->attachment_count ||
-        fb->color_attachment != ps5vk_render_pass_subpass(pass, 0)->color.attachment ||
+        fb->color_attachment != ps5vk_render_pass_subpass(pass, 0)->color[0].attachment ||
         fb->depth_attachment != ps5vk_render_pass_subpass(pass, 0)->depth.attachment ||
         area.offset.x < 0 || area.offset.y < 0 ||
         !area.extent.width || !area.extent.height || (uint32_t)area.offset.x > fb->width ||
@@ -948,7 +953,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, c->subpass);
     VkFormat depth = subpass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
         pass->attachments[subpass->depth.attachment].format;
-    if (p->color_format != pass->attachments[subpass->color.attachment].format ||
+    if (p->color_format != pass->attachments[subpass->color[0].attachment].format ||
         p->depth_format != depth) {
         invalid(c); return;
     }

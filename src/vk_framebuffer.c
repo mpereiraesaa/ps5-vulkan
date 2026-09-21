@@ -13,7 +13,7 @@ static uint32_t attachment_view_count(VkRenderPass pass, uint32_t attachment)
     uint32_t views = 0;
     for (uint32_t s = 0; s < multiview->subpass_count; ++s) {
         const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, s);
-        if (subpass->color.attachment != attachment &&
+        if (subpass->color[0].attachment != attachment &&
             subpass->depth.attachment != attachment) continue;
         const uint32_t mask = multiview->view_masks[s];
         /* A view mask is 32 bits wide, so a view index is a bit position. */
@@ -70,7 +70,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
     fb->width = info->width; fb->height = info->height; fb->attachment_count = info->attachmentCount;
     /* The roles are the same in every subpass of this profile, so the first
      * one names them for the framebuffer. */
-    fb->color_attachment = ps5vk_render_pass_subpass(pass, 0)->color.attachment;
+    fb->color_attachment = ps5vk_render_pass_subpass(pass, 0)->color[0].attachment;
     fb->depth_attachment = ps5vk_render_pass_subpass(pass, 0)->depth.attachment;
     for (uint32_t i = 0; i < fb->attachment_count; ++i) {
         fb->attachments[i] = info->pAttachments[i]; ++fb->attachments[i]->framebuffers;

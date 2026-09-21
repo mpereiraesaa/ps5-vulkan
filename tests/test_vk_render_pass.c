@@ -243,7 +243,7 @@ static void multiple_subpasses(struct VkDevice_T *d)
     attachments[0].format = VK_FORMAT_UNDEFINED;
     for (uint32_t i = 0; i < 2; ++i) {
         const struct ps5vk_subpass *s = ps5vk_render_pass_subpass(pass, i);
-        assert(!s->color.attachment && s->depth.attachment == 1);
+        assert(!s->color[0].attachment && s->color_count == 1 && s->depth.attachment == 1);
     }
     assert(pass->attachments[0].format == VK_FORMAT_B8G8R8A8_UNORM &&
            !pass->dependencies[0].srcSubpass && pass->dependencies[0].dstSubpass == 1);
@@ -554,7 +554,7 @@ int main(void)
     }
     attachments[0].format=VK_FORMAT_UNDEFINED; color.attachment=1;
     assert(pass->attachments[0].format == VK_FORMAT_B8G8R8A8_UNORM &&
-           ps5vk_render_pass_subpass(pass, 0)->color.attachment == 0 &&
+           ps5vk_render_pass_subpass(pass, 0)->color[0].attachment == 0 &&
            pass->subpass_count == 1);
     pass->pending=1; vkDestroyRenderPass(&d, pass, NULL);
     assert(d.graphics_objects == 1 && d.lifetime_errors == 1);

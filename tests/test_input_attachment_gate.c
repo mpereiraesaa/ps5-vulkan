@@ -85,7 +85,8 @@ static void fixture_init(struct gate_fixture *f)
         .format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_GENERAL, .finalLayout = VK_IMAGE_LAYOUT_GENERAL};
-    f->subpasses[0].color = (VkAttachmentReference){0, VK_IMAGE_LAYOUT_GENERAL};
+    f->subpasses[0].color[0] = (VkAttachmentReference){0, VK_IMAGE_LAYOUT_GENERAL};
+    f->subpasses[0].color_count = 1;
     f->subpasses[0].depth = (VkAttachmentReference){VK_ATTACHMENT_UNUSED,
         VK_IMAGE_LAYOUT_UNDEFINED};
     f->subpasses[1] = f->subpasses[0];

@@ -206,13 +206,13 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     int depth=subpass->depth.attachment!=VK_ATTACHMENT_UNUSED;
     VkFormat color_format=begin->framebuffer->attachments[0]->image->info.format;
     if(pass->attachment_count!=(depth?2u:1u) ||
-        (depth && subpass->depth.attachment!=1) || subpass->color.attachment!=0 ||
+        (depth && subpass->depth.attachment!=1) || subpass->color[0].attachment!=0 ||
         (color_format!=VK_FORMAT_B8G8R8A8_UNORM && color_format!=VK_FORMAT_R8G8B8A8_UNORM))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     for(uint32_t index=1;index<pass->subpass_count;++index) {
         const struct ps5vk_subpass *next=ps5vk_render_pass_subpass(pass,index);
-        if(next->color.attachment!=subpass->color.attachment ||
-           next->color.layout!=subpass->color.layout ||
+        if(next->color[0].attachment!=subpass->color[0].attachment ||
+           next->color[0].layout!=subpass->color[0].layout ||
            next->depth.attachment!=subpass->depth.attachment ||
            next->depth.layout!=subpass->depth.layout)
             return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -244,7 +244,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
     struct ps5vk_attachment_plan color_plan={0},depth_plan={0};
     if(ps5vk_attachment_plan(&pass->attachments[0],color_format,
-        subpass->color.layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
+        subpass->color[0].layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t clear_word=0;
     if(color_plan.clear) {
         VkImage image=begin->framebuffer->attachments[0]->image;
@@ -418,7 +418,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=2;goto fail;
             }
             VkImageView view=recorded->framebuffer->attachments[
-                ps5vk_render_pass_subpass(pass,subpass_index)->color.attachment];
+                ps5vk_render_pass_subpass(pass,subpass_index)->color[0].attachment];
             void *address;VkDeviceSize bytes,stride;
             rc=ps5vk_image_span(d,view->image,&address,&bytes);
             if(rc!=VK_SUCCESS)goto fail;

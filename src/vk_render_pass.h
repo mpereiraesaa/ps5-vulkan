@@ -1,6 +1,7 @@
 #ifndef PS5VK_RENDER_PASS_H
 #define PS5VK_RENDER_PASS_H
 #include "vk_internal.h"
+#include "color_attachment_contract.h"
 
 /* Bounded multiple-subpass profile. The shape is owned data - never retained
  * create-info pointers - and a graphics-capable backend must be enabled before
@@ -74,7 +75,13 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
  * subpass pair - stays stored-only and fails closed, and no shader or
  * reporting surface claims more than that one measured read. */
 struct ps5vk_subpass {
-    VkAttachmentReference color, depth;
+    /* The subpass's colour references, in attachment order. The count is the
+     * subpass's own, bounded by the colour-attachment contract; every consumer
+     * reads color[0] while that bound is one, and the shape is what the second
+     * target will need. */
+    VkAttachmentReference color[PS5VK_MAX_COLOR_ATTACHMENTS];
+    uint32_t color_count;
+    VkAttachmentReference depth;
     /* Where this subpass's input references start in the pass's one owned
      * array, and how many of them there are. An index rather than a pointer
      * keeps every element in the object's single allocation at 32-bit

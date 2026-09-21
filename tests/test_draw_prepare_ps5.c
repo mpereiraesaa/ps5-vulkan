@@ -96,7 +96,7 @@ int main(void)
     struct VkImageView_T v = {.device = &d};
     struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1,
         .attachments = {&v}, .depth_attachment = VK_ATTACHMENT_UNUSED};
-    struct ps5vk_subpass pass_subpasses[1] = {{.color = {.attachment = 0},
+    struct ps5vk_subpass pass_subpasses[1] = {{.color[0] = {.attachment = 0}, .color_count = 1,
         .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .subpass_count = 1,
         .subpasses = pass_subpasses};

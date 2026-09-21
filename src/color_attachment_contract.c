@@ -5,7 +5,7 @@
 /* Target 0 is the block ps5-agc-gears ps5_color_target.c builds; target 1 is
  * the same registers one MRT further (see the header). Both are recomputed
  * from the pinned register table by tests/test_color_attachment_offsets.py. */
-const uint32_t ps5vk_color_target_offsets[2][PS5VK_COLOR_TARGET_REGISTERS] = {
+const uint32_t ps5vk_color_attachment_offsets[2][PS5VK_COLOR_TARGET_REGISTERS] = {
     {0x318, 0x31b, 0x31c, 0x31d, 0x31e, 0x31f, 0x321, 0x323,
      0x324, 0x325, 0x390, 0x398, 0x3a0, 0x3a8, 0x3b0, 0x3b8},
     {0x327, 0x32a, 0x32b, 0x32c, 0x32d, 0x32e, 0x330, 0x332,

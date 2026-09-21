@@ -49,7 +49,7 @@ static void operation_reservation_contract(void)
     source[0]=0;
     assert(((const uint32_t *)owned->owned_payload)[0]==0x11223344u);
 
-    struct ps5vk_subpass scope_subpasses[1]={{.color={.attachment=0},
+    struct ps5vk_subpass scope_subpasses[1]={{.color[0]={.attachment=0},.color_count=1,
         .depth={.attachment=VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass={.device=&d,.subpass_count=1,.subpasses=scope_subpasses};
     c->render_pass=&pass;
@@ -550,7 +550,7 @@ static void graphics_recording(void)
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR}};
     struct ps5vk_subpass pass_subpasses[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = pass_attachments, .subpasses = pass_subpasses};
     struct VkFramebuffer_T fb = {.device = &d, .width = 100, .height = 100, .attachment_count = 1,

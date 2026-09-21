@@ -33,7 +33,7 @@ enum { PS5VK_MAX_COLOR_ATTACHMENTS = 1 };
  * and their FMASK/CLEAR/DCC entries move by one dword each, while the EXT and
  * ATTRIB2/3 entries move by one dword from a different base. */
 enum { PS5VK_COLOR_TARGET_REGISTERS = 16 };
-extern const uint32_t ps5vk_color_target_offsets[2][PS5VK_COLOR_TARGET_REGISTERS];
+extern const uint32_t ps5vk_color_attachment_offsets[2][PS5VK_COLOR_TARGET_REGISTERS];
 
 /* CB_BLEND0_CONTROL is 0x1e0; target n's control is the next dword. */
 #define PS5VK_AGC_CB_BLEND_CONTROL(n) (0x1e0u + (n))
