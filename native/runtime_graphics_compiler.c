@@ -336,6 +336,21 @@ static int blend_state_uses_src1(const struct ps5vk_graphics_key *key)
  * the bounded shapes below are the ones a native witness measured - so the
  * measurement build is the one allowed to execute an arbitrary upstream blend
  * leaf. */
+/* Colour write mask. The shipping profile programmes the all-channel write the
+ * witnesses measured. The measurement build also serves the partial masks the
+ * upstream blend family paints with (R&G, G&B, B&A), but only for
+ * VK_FORMAT_R8G8B8A8_UNORM, whose channel order is the shader's and therefore
+ * the one CB_TARGET_MASK names directly; a BGRA target keeps the bounded mask
+ * because its export applies a channel swap the mask cannot express. The mask
+ * is carried in the pipeline's render-target block, not in the draw stream. */
+static int color_write_mask_supported(const struct ps5vk_graphics_key *key)
+{
+#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
+    if (key->color_format == VK_FORMAT_R8G8B8A8_UNORM)
+        return key->color_write_mask != 0 && key->color_write_mask <= 0xfu;
+#endif
+    return key->color_write_mask == 15;
+}
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key->blend_enable)return 1;
@@ -410,7 +425,7 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
         if(key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
            key->color_format!=VK_FORMAT_R8G8B8A8_UNORM)return ps5vk_reject(key,7);
-        if(key->samples!=VK_SAMPLE_COUNT_1_BIT || key->color_write_mask!=15 ||
+        if(key->samples!=VK_SAMPLE_COUNT_1_BIT || !color_write_mask_supported(key) ||
            !blend_profile_supported(key))return ps5vk_reject(key,8);
         if(!descriptor_profile_supported(key))return ps5vk_reject(key,9);
         return 1;
@@ -475,18 +490,9 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
          * measures, and a plain point/line pipeline stays fail-closed. */
     if(!ps5vk_graphics_has_geometry(key) && ps5vk_agc_primitive_needs_geometry(primitive_type))
         return ps5vk_reject(key,22);
-    /* A partial colour write mask stays refused. The upstream blend family
-     * paints each quad through CB_TARGET_MASK (context offset 0x08e), and
-     * accepting those masks without a proven programming point is not enough:
-     * a measurement build that emitted 0x08e from the per-draw stream
-     * completed 101 of the 404-case selection and then stalled the queue,
-     * where the same selection had run end to end minutes earlier. Programme
-     * the mask where the hardware expects it (the pipeline's render-target
-     * state, as ps5_pipeline.c does) and widen this condition in the same
-     * change that witnesses it. */
     if((key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
         key->color_format!=VK_FORMAT_R8G8B8A8_UNORM) ||
-       key->samples!=VK_SAMPLE_COUNT_1_BIT || key->color_write_mask!=15 ||
+       key->samples!=VK_SAMPLE_COUNT_1_BIT || !color_write_mask_supported(key) ||
        !blend_profile_supported(key))return ps5vk_reject(key,23);
     /* Binding counts/pointers were checked above. Keep every remaining
      * refusal observable, including the non-tessellated CTS reference path. */

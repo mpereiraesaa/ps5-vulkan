@@ -112,6 +112,21 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         }
         if (replaced != 1) return VK_ERROR_UNKNOWN;
     }
+    /* CB_TARGET_MASK (context offset 0x08e) is the render-target register that
+     * names the colour channels target zero writes; ps5_pipeline_build places
+     * it in the RT/viewport block with all four channels enabled. Carry the
+     * pipeline's own mask, in that block and never in the per-draw stream - a
+     * draw-stream write of this register stalled the queue when it was tried.
+     * The shipping profile only ever reaches here with the all-channel mask
+     * the witnesses measured; a partial mask needs the compiler to accept it
+     * first. */
+    {
+        unsigned carried = 0;
+        for (unsigned k = 16; k < 31; ++k) if (base.cx[k].offset == 0x08e) {
+            base.cx[k].value = p->color_blend.colorWriteMask & 0xfu; ++carried;
+        }
+        if (carried != 1) return VK_ERROR_UNKNOWN;
+    }
     struct ps5vk_draw_state result = {0};
     memcpy(result.cx, base.cx, sizeof(base.cx)); result.cx_count = PS5_PIPELINE_CX_REGISTERS;
     if(runtime) {
