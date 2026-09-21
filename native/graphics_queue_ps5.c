@@ -204,16 +204,31 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(!pass->subpass_count || pass->subpass_count>PS5VK_MAX_SUBPASSES)return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(pass,0);
     int depth=subpass->depth.attachment!=VK_ATTACHMENT_UNUSED;
-    VkFormat color_format=begin->framebuffer->attachments[0]->image->info.format;
-    if(pass->attachment_count!=(depth?2u:1u) ||
-        (depth && subpass->depth.attachment!=1) || subpass->color[0].attachment!=0 ||
-        (color_format!=VK_FORMAT_B8G8R8A8_UNORM && color_format!=VK_FORMAT_R8G8B8A8_UNORM))
+    const uint32_t color_count=subpass->color_count;
+    /* The roles are positional in this profile: a subpass names its colour
+     * attachments first, in order, and the optional depth attachment after
+     * them. Every colour target must be a format this profile renders into. */
+    if(!color_count || color_count>PS5VK_MAX_COLOR_ATTACHMENTS ||
+       pass->attachment_count!=color_count+(depth?1u:0u))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkFormat color_format[PS5VK_MAX_COLOR_ATTACHMENTS];
+    for(uint32_t c=0;c<color_count;++c) {
+        color_format[c]=begin->framebuffer->attachments[c]->image->info.format;
+        if(subpass->color[c].attachment!=c ||
+           (color_format[c]!=VK_FORMAT_B8G8R8A8_UNORM &&
+            color_format[c]!=VK_FORMAT_R8G8B8A8_UNORM))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    if(depth && subpass->depth.attachment!=color_count)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     for(uint32_t index=1;index<pass->subpass_count;++index) {
         const struct ps5vk_subpass *next=ps5vk_render_pass_subpass(pass,index);
-        if(next->color[0].attachment!=subpass->color[0].attachment ||
-           next->color[0].layout!=subpass->color[0].layout ||
-           next->depth.attachment!=subpass->depth.attachment ||
+        if(next->color_count!=color_count) return VK_ERROR_FEATURE_NOT_PRESENT;
+        for(uint32_t c=0;c<color_count;++c)
+            if(next->color[c].attachment!=subpass->color[c].attachment ||
+               next->color[c].layout!=subpass->color[c].layout)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(next->depth.attachment!=subpass->depth.attachment ||
            next->depth.layout!=subpass->depth.layout)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
@@ -242,31 +257,38 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         for(uint32_t k=0;k<multiview->dependency_count;++k)
             if(multiview->view_offsets[k])return VK_ERROR_FEATURE_NOT_PRESENT;
     }
-    struct ps5vk_attachment_plan color_plan={0},depth_plan={0};
-    if(ps5vk_attachment_plan(&pass->attachments[0],color_format,
-        subpass->color[0].layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
+    struct ps5vk_attachment_plan color_plan[PS5VK_MAX_COLOR_ATTACHMENTS]={{0}},depth_plan={0};
     uint32_t clear_word=0;
-    if(color_plan.clear) {
-        VkImage image=begin->framebuffer->attachments[0]->image;
-        int clear_ok=color_format==VK_FORMAT_B8G8R8A8_UNORM ?
-            ps5vk_color_clear_bgra8(begin->clears[0].color.float32,&clear_word) :
-            ps5vk_color_clear_rgba8(begin->clears[0].color.float32,&clear_word);
-        if(image->info.format!=color_format || begin->clear_count<1 || !clear_ok ||
+    for(uint32_t c=0;c<color_count;++c) {
+        if(ps5vk_attachment_plan(&pass->attachments[c],color_format[c],
+            subpass->color[c].layout,VK_FALSE,&color_plan[c])!=VK_SUCCESS)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(!color_plan[c].clear) continue;
+        /* The ordered clear before the pass is one whole-surface DMA fill, and
+         * this executor serves it for attachment zero only. A second target
+         * that asks to be cleared needs its own prepared fill, which is part of
+         * the slice that serves a second target at all. */
+        if(c) return VK_ERROR_FEATURE_NOT_PRESENT;
+        VkImage image=begin->framebuffer->attachments[c]->image;
+        int clear_ok=color_format[c]==VK_FORMAT_B8G8R8A8_UNORM ?
+            ps5vk_color_clear_bgra8(begin->clears[c].color.float32,&clear_word) :
+            ps5vk_color_clear_rgba8(begin->clears[c].color.float32,&clear_word);
+        if(image->info.format!=color_format[c] || begin->clear_count<=c || !clear_ok ||
            begin->render_area.offset.x || begin->render_area.offset.y ||
            begin->render_area.extent.width!=image->info.extent.width ||
            begin->render_area.extent.height!=image->info.extent.height)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     if(depth) {
-        const VkAttachmentDescription *a=&pass->attachments[1];
-        VkImage image=begin->framebuffer->attachments[1]->image;
+        const VkAttachmentDescription *a=&pass->attachments[color_count];
+        VkImage image=begin->framebuffer->attachments[color_count]->image;
         if(ps5vk_attachment_plan(a,VK_FORMAT_D32_SFLOAT,subpass->depth.layout,
             VK_TRUE,&depth_plan)!=VK_SUCCESS ||
             image->info.extent.width!=begin->framebuffer->width ||
             image->info.extent.height!=begin->framebuffer->height)return VK_ERROR_FEATURE_NOT_PRESENT;
         if(depth_plan.clear) {
-            float clear=begin->clears[1].depthStencil.depth;
-            if(begin->clear_count<2 || !(clear>=0 && clear<=1) ||
+            float clear=begin->clears[color_count].depthStencil.depth;
+            if(begin->clear_count<=color_count || !(clear>=0 && clear<=1) ||
                 begin->render_area.offset.x || begin->render_area.offset.y ||
                 begin->render_area.extent.width!=begin->framebuffer->width ||
                 begin->render_area.extent.height!=begin->framebuffer->height)
@@ -376,7 +398,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
     ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT];
     if(ps5_color_select_runtime_defaults(defaults,sceAgcGetRegisterDefaults())) {rc=VK_ERROR_INITIALIZATION_FAILED;goto fail;}
-    if(color_plan.clear) {
+    if(color_plan[0].clear) {
         void *address;VkDeviceSize bytes;
         rc=ps5vk_image_span(d,j->color,&address,&bytes);
         if(rc!=VK_SUCCESS)goto fail;
