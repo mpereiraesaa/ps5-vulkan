@@ -11,7 +11,9 @@
  * creation so an unsupported shape is refused where the caller can see it
  * rather than accepted and failed later. */
 enum { PS5VK_MAX_SUBPASSES = 8 };
-enum { PS5VK_MAX_ATTACHMENTS = 2 };
+/* One attachment per colour role the subpass names, plus the optional depth
+ * one: a two-target pass with depth needs three. */
+enum { PS5VK_MAX_ATTACHMENTS = PS5VK_MAX_COLOR_ATTACHMENTS + 1 };
 enum { PS5VK_MAX_DEPENDENCIES = 16 };
 enum { PS5VK_MAX_CORRELATION_MASKS = 4 };
 enum { PS5VK_MAX_INPUT_ATTACHMENTS = 4 };

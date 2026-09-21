@@ -129,7 +129,8 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         !op->framebuffer || op->framebuffer->device != d || !op->render_pass || op->render_pass->device != d ||
         !d->memory.allocate || !d->memory.release || !d->memory.flush) return VK_ERROR_UNKNOWN;
     VkFramebuffer fb = op->framebuffer;
-    if (fb->color_attachments[0] >= fb->attachment_count || fb->attachment_count > 2 ||
+    if (fb->color_attachments[0] >= fb->attachment_count ||
+        fb->attachment_count > PS5VK_MAX_ATTACHMENTS ||
         (fb->depth_attachment != VK_ATTACHMENT_UNUSED && fb->depth_attachment >= fb->attachment_count))
         return VK_ERROR_UNKNOWN;
     /* One prepared target per colour attachment the framebuffer carries: the
