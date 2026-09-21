@@ -498,6 +498,7 @@ check-upstream-cts:
 	./build/tests/test_qpa_sink
 	$(PYTHON) tools/check_upstream_selection.py
 	$(PYTHON) -m unittest tests.test_upstream_runner tests.test_upstream_run_orchestrator -v
+	$(PYTHON) -m unittest tests.test_color_attachment_offsets -v
 upstream-cts:
 	$(PYTHON) tools/build_upstream_cts.py
 # One native acceptance run against the console. Both values are lab-specific,

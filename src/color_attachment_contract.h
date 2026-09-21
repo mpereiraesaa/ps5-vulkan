@@ -18,6 +18,26 @@
  * dual source adds a second *source* to attachment zero, not a second target. */
 enum { PS5VK_MAX_COLOR_ATTACHMENTS = 1 };
 
+/* AGC context-register offsets for the colour targets.
+ *
+ * The native path programmes one CB_COLORn block plus its blend control, and
+ * the AGC offset of any context register is (raw - 0x28000) / 4 in the pinned
+ * gfx103 register table. That rule reproduces every offset this driver already
+ * writes: CB_COLOR0_BASE -> 0x318, CB_COLOR0_INFO -> 0x31c, CB_TARGET_MASK ->
+ * 0x08e and CB_BLEND0_CONTROL -> 0x1e0. The second target's block is therefore
+ * derivable rather than guessed, and tests/test_color_attachment_offsets.py
+ * recomputes both lists from the pinned table, so a stale or mistyped entry
+ * fails instead of programming the wrong register.
+ *
+ * The CB_COLOR1 block is NOT CB_COLOR0 shifted: BASE/VIEW/INFO/ATTRIB/DCC/CMASK
+ * and their FMASK/CLEAR/DCC entries move by one dword each, while the EXT and
+ * ATTRIB2/3 entries move by one dword from a different base. */
+enum { PS5VK_COLOR_TARGET_REGISTERS = 16 };
+extern const uint32_t ps5vk_color_target_offsets[2][PS5VK_COLOR_TARGET_REGISTERS];
+
+/* CB_BLEND0_CONTROL is 0x1e0; target n's control is the next dword. */
+#define PS5VK_AGC_CB_BLEND_CONTROL(n) (0x1e0u + (n))
+
 /* A pipeline that declares a count the profile cannot render, or an operation
  * the backend does not programme, is refused where the application can see it
  * rather than accepted and failed later. */
