@@ -1096,14 +1096,17 @@ was taken there too. None of those optional-stage runs is part of this selection
 and no feature is advertised by them.
 Vulkan conformance claim.
 
-## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18, eligibility completed 2026-09-19)
+## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18, eligibility completed 2026-09-19, PROMOTED 2026-09-21)
 
 The four T05 requirements are implemented and measured through the public ABI
 (the consumer's raster and viewport witnesses in
 [VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses)),
-and **nothing is advertised yet**: the frozen acceptance selection is unchanged
-at 304 cases, and every T05 leaf below is a diagnostic in
-`cts/upstream/manifest.json`. What changed since the first measurement is the
+and they are **now advertised by the shipping profile**: see
+[Promoted (2026-09-21)](#promoted-2026-09-21) below for the acceptance run and
+the capability probe that back it. The frozen acceptance selection carries 362
+cases, 58 of them these leaves. The paragraphs that follow describe the
+eligibility pass as it stood before that promotion, when every T05 leaf was
+still a diagnostic and the selection was 304. What changed since the first measurement is the
 inventory: the pinned checkout `a0270c1897597e6c77679870e10415398a13001c` was
 read for every source and amber script that names one of the four features,
 not only for the `draw.renderpass.depth_clamp` family, and the package now
