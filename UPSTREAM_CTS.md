@@ -213,6 +213,7 @@ acceptance run of the frozen selection:
 ```sh
 python3 tools/make_measurement_manifest.py \
   --category rasterization-culling --category t05-measurement-pending \
+  --category t06-dual-source-pending \
   -o build/measurement/manifest.json
 python3 tools/build_upstream_cts.py --manifest build/measurement/manifest.json
 python3 tools/run_upstream_cts.py --host <console> --runs-dir <runs> \
@@ -221,6 +222,18 @@ python3 tools/run_upstream_cts.py --host <console> --runs-dir <runs> \
 
 Promotion still edits the frozen manifest in its own change; the measurement
 receipt is the evidence that change cites.
+
+The `t06-dual-source-pending` category is the same shape for `dualSrcBlend`. It
+holds the 98 leaves of the pinned `pipeline.monolithic.blend.dual_source`
+family that use `VK_FORMAT_R8G8B8A8_UNORM`, the one colour format this driver
+creates. None of them is reachable under the shipping blend bound: the profile
+accepts a single witnessed equation, and each leaf draws four quads whose blend
+states come from the randomised factor and operation tables, so the family also
+needs arbitrary equations on the non-source1 path. Measuring them therefore
+means running a build that reports the `dualSrcBlend` feature and opens the
+runtime blend space to the whole GFX1013 `CB_BLEND0_CONTROL` contract
+(`PS5VK_DUAL_SOURCE_DIAGNOSTIC=1`). The leaves stay diagnostics, and the profile
+row stays a blocker, until such a run reports Pass.
 
 ## Host checks versus hardware evidence
 
