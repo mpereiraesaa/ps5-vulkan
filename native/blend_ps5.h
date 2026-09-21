@@ -44,6 +44,24 @@ static inline int ps5vk_color_export_state(VkFormat format,uint32_t spi_format,
     if(spi_format==9 && !blending) {words[0]=1;return 1;}
     return 0;
 }
+/* The three SX words are GLOBAL registers whose fields are per-MRT, so a
+ * second target's conversion is encoded into the same words rather than
+ * written as new ones. Each target's words are computed above as if it were
+ * MRT0; the pinned gfx103 field layout places them at four bits per MRT for
+ * SX_PS_DOWNCONVERT (MRTn at bits [4n, 4n+3]) and SX_BLEND_OPT_EPSILON, and
+ * two bits per MRT for SX_BLEND_OPT_CONTROL (MRTn at bits 4n and 4n+1). One
+ * target reproduces exactly the values this profile has always emitted. */
+static inline void ps5vk_color_export_compose(const uint32_t per_target[][3],
+    uint32_t count,uint32_t words[3])
+{
+    if(!words)return;
+    words[0]=words[1]=words[2]=0;
+    for(uint32_t target=0;target<count;++target) {
+        words[0]|=(per_target[target][0]&0xfu)<<(4u*target);
+        words[1]|=(per_target[target][1]&0xfu)<<(4u*target);
+        words[2]|=(per_target[target][2]&0x3u)<<(4u*target);
+    }
+}
 static inline int ps5vk_blend_factor(VkBlendFactor f,uint32_t *out)
 {
     switch(f) {

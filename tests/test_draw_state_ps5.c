@@ -1,4 +1,5 @@
 #include "draw_state_ps5.h"
+#include "blend_ps5.h"
 #include <assert.h>
 #include <math.h>
 #include <string.h>
@@ -23,6 +24,19 @@ static void check_polygon_offset(const struct ps5vk_draw_state *out, unsigned at
 }
 int main(void)
 {
+    /* The three SX words are GLOBAL registers with per-MRT fields, so a second
+     * target's conversion is composed into the same words: each target's state
+     * lands in its own field, and one target reproduces the values the profile
+     * has always emitted. */
+    {
+        const uint32_t per_target[PS5VK_MAX_COLOR_ATTACHMENTS][3] = {{5, 6, 0}, {5, 6, 0}};
+        uint32_t words[3];
+        ps5vk_color_export_compose(per_target, 1, words);
+        assert(words[0] == 5u && words[1] == 6u && words[2] == 0u);
+        ps5vk_color_export_compose(per_target, PS5VK_MAX_COLOR_ATTACHMENTS, words);
+        assert(words[0] == 0x55u && words[1] == 0x66u && words[2] == 0u);
+    }
+
     /* Register-only fixture. No native shader objects or GPU execution. */
     struct VkDevice_T device = {0};
     struct ps5vk_graphics_pair pair = {.ready = 1, .vertex_quantization=0x2d};
