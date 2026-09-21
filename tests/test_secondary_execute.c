@@ -411,7 +411,7 @@ int main(void)
     VkAttachmentDescription bgra_attachment[1] = {
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass colour_only[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = bgra_attachment, .subpasses = colour_only};
     /* A DIFFERENT object with the same shape: compatibility is defined by
@@ -544,7 +544,7 @@ int main(void)
         {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT},
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass shifted_subpasses[1] = {
-        {.color = {.attachment = 1}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 1}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T shifted = {.device = &d, .attachment_count = 2, .subpass_count = 1,
         .attachments = shifted_attachments, .subpasses = shifted_subpasses};
     assert(ps5vk_render_pass_compatible(&shifted, &pass));
@@ -556,7 +556,7 @@ int main(void)
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}};
     struct ps5vk_subpass reloaded_subpasses[1] = {
-        {.color = {.attachment = 0, .layout = VK_IMAGE_LAYOUT_GENERAL},
+        {.color[0] = {.attachment = 0, .layout = VK_IMAGE_LAYOUT_GENERAL}, .color_count = 1,
          .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T reloaded = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = reloaded_attachment, .subpasses = reloaded_subpasses};
@@ -572,7 +572,7 @@ int main(void)
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT},
         {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass depth_subpasses[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = 1}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = 1}}};
     struct VkRenderPass_T with_depth = {.device = &d, .attachment_count = 2, .subpass_count = 1,
         .attachments = depth_attachments, .subpasses = depth_subpasses};
     assert(!ps5vk_render_pass_compatible(&foreign, &pass));

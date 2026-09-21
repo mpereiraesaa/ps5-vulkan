@@ -403,10 +403,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearAttachments(VkCommandBuffer c,
         return;
     }
     const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(c->render_pass,c->subpass);
-    if(!subpass || !c->framebuffer || subpass->color.attachment>=c->framebuffer->attachment_count) {
+    if(!subpass || !c->framebuffer || subpass->color[0].attachment>=c->framebuffer->attachment_count) {
         ps5vk_command_invalidate(c);return;
     }
-    VkImageView view=c->framebuffer->attachments[subpass->color.attachment];
+    VkImageView view=c->framebuffer->attachments[subpass->color[0].attachment];
     uint32_t word;
     if(!view || !view->image || !(view->image->info.format==VK_FORMAT_B8G8R8A8_UNORM?
         ps5vk_color_clear_bgra8(attachments[0].clearValue.color.float32,&word):

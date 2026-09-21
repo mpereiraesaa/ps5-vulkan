@@ -52,7 +52,7 @@ static inline VkBool32 ps5vk_framebuffer_compatible(VkFramebuffer fb, VkRenderPa
      * can only carry one of each. */
     for (uint32_t i = 0; i < pass->subpass_count; ++i) {
         const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, i);
-        if (!role_compatible(fb, fb->color_attachment, pass, &subpass->color) ||
+        if (!role_compatible(fb, fb->color_attachment, pass, &subpass->color[0]) ||
             !role_compatible(fb, fb->depth_attachment, pass, &subpass->depth))
             return VK_FALSE;
     }

@@ -105,8 +105,8 @@ static inline VkBool32 ps5vk_clear_attachment_valid(const struct ps5vk_operation
        op->subpass>=op->render_pass->subpass_count ||
        op->render_pass_contents!=VK_SUBPASS_CONTENTS_INLINE)return VK_FALSE;
     const struct ps5vk_subpass *s=ps5vk_render_pass_subpass(op->render_pass,op->subpass);
-    if(!s || s->color.attachment>=op->framebuffer->attachment_count)return VK_FALSE;
-    VkImageView view=op->framebuffer->attachments[s->color.attachment];
+    if(!s || s->color[0].attachment>=op->framebuffer->attachment_count)return VK_FALSE;
+    VkImageView view=op->framebuffer->attachments[s->color[0].attachment];
     if(!view || !view->image || view->image!=op->image_destination ||
        view->range.baseMipLevel || view->range.levelCount!=1 ||
        !view->range.layerCount || view->range.layerCount>32 ||

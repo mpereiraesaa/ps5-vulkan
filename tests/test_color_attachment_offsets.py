@@ -49,7 +49,7 @@ def register_offsets():
 
 def table_from_contract():
     text = CONTRACT.read_text()
-    block = re.search(r"ps5vk_color_target_offsets\[2\]\[[^]]*\] = \{(.*?)\n\};",
+    block = re.search(r"ps5vk_color_attachment_offsets\[2\]\[[^]]*\] = \{(.*?)\n\};",
                       text, re.DOTALL)
     if not block:
         raise AssertionError("colour-target offset table not found")

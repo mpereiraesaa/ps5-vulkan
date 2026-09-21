@@ -404,7 +404,7 @@ int main(void)
     VkAttachmentDescription pass_attachments[1] = {
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass pass_subpasses[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = pass_attachments, .subpasses = pass_subpasses};
     struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1,

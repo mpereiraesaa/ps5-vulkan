@@ -31,7 +31,7 @@ static int input_layout(VkImageLayout value)
  * because they are unimplemented, and a non-empty preserve list is outside the
  * bounded profile. */
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
-    VkAttachmentReference *color, VkAttachmentReference *depth, uint32_t *input_count)
+    struct ps5vk_subpass *out, uint32_t *input_count)
 {
     if (s->flags || s->pipelineBindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS ||
         /* The colour-attachment bound lives in one place: a subpass may only
@@ -60,17 +60,34 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
             return VK_ERROR_UNKNOWN;
     }
     *input_count = s->inputAttachmentCount;
-    *color = s->pColorAttachments[0];
-    depth->attachment = VK_ATTACHMENT_UNUSED;
-    depth->layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (s->pDepthStencilAttachment) *depth = *s->pDepthStencilAttachment;
-    if (color->attachment >= attachments ||
-        (color->layout != VK_IMAGE_LAYOUT_GENERAL &&
-         color->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) ||
-        (depth->attachment != VK_ATTACHMENT_UNUSED &&
-         (depth->attachment >= attachments || depth->attachment == color->attachment ||
-          (depth->layout != VK_IMAGE_LAYOUT_GENERAL &&
-           depth->layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))))
+    out->color_count = s->colorAttachmentCount;
+    for (uint32_t i = 0; i < s->colorAttachmentCount; ++i) {
+        const VkAttachmentReference *reference = &s->pColorAttachments[i];
+        /* A colour reference must name an attachment of this pass and a layout
+         * a colour attachment may use. Two references to the same attachment
+         * are legal Vulkan but not a shape this profile can render - one
+         * surface cannot be two targets - so they are refused here rather than
+         * accepted and failed later. */
+        if (reference->attachment >= attachments ||
+            (reference->layout != VK_IMAGE_LAYOUT_GENERAL &&
+             reference->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL))
+            return VK_ERROR_UNKNOWN;
+        for (uint32_t earlier = 0; earlier < i; ++earlier)
+            if (s->pColorAttachments[earlier].attachment == reference->attachment)
+                return VK_ERROR_UNKNOWN;
+        out->color[i] = *reference;
+    }
+    out->depth.attachment = VK_ATTACHMENT_UNUSED;
+    out->depth.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (s->pDepthStencilAttachment) out->depth = *s->pDepthStencilAttachment;
+    for (uint32_t i = 0; i < s->colorAttachmentCount; ++i)
+        if (out->depth.attachment != VK_ATTACHMENT_UNUSED &&
+            (out->depth.attachment >= attachments ||
+             out->depth.attachment == out->color[i].attachment))
+            return VK_ERROR_UNKNOWN;
+    if (out->depth.attachment != VK_ATTACHMENT_UNUSED &&
+        out->depth.layout != VK_IMAGE_LAYOUT_GENERAL &&
+        out->depth.layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         return VK_ERROR_UNKNOWN;
     return VK_SUCCESS;
 }
@@ -135,12 +152,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
         info->dependencyCount > PS5VK_MAX_DEPENDENCIES ||
         (info->dependencyCount && !info->pDependencies))
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    VkAttachmentReference colors[PS5VK_MAX_SUBPASSES], depths[PS5VK_MAX_SUBPASSES];
+    struct ps5vk_subpass colors[PS5VK_MAX_SUBPASSES];
+    VkAttachmentReference depths[PS5VK_MAX_SUBPASSES];
     uint32_t input_counts[PS5VK_MAX_SUBPASSES];
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
         VkResult rc = subpass_valid(&info->pSubpasses[i], info->attachmentCount,
-                                    &colors[i], &depths[i], &input_counts[i]);
+                                    &colors[i], &input_counts[i]);
         if (rc != VK_SUCCESS) return rc;
+        depths[i] = colors[i].depth;
     }
     /* EVERY SUBPASS MUST NAME THE SAME ATTACHMENTS. A framebuffer in this
      * driver carries one colour role and one depth role, derived from the
@@ -150,7 +169,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
      * being advertised and then failing later. Layouts may still differ per
      * subpass; only the attachment each role names is fixed. */
     for (uint32_t i = 1; i < info->subpassCount; ++i)
-        if (colors[i].attachment != colors[0].attachment ||
+        if (colors[i].color_count != colors[0].color_count ||
+            colors[i].color[0].attachment != colors[0].color[0].attachment ||
             depths[i].attachment != depths[0].attachment)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Every attachment must be reachable through a subpass reference: an
@@ -158,7 +178,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
      * reference is a use, which is the whole point of the shape: a later
      * subpass reading an earlier attachment names it there and nowhere else. */
     for (uint32_t i = 0; i < info->attachmentCount; ++i) {
-        VkBool32 reachable = colors[0].attachment == i || depths[0].attachment == i;
+        VkBool32 reachable = depths[0].attachment == i;
+        for (uint32_t c = 0; c < colors[0].color_count && !reachable; ++c)
+            reachable = colors[0].color[c].attachment == i;
         for (uint32_t s = 0; s < info->subpassCount && !reachable; ++s)
             for (uint32_t r = 0; r < input_counts[s]; ++r)
                 if (info->pSubpasses[s].pInputAttachments[r].attachment == i) {
@@ -263,7 +285,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
      * its structs afterwards cannot change this pass. */
     uint32_t input_total = 0;
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
-        subpasses[i].color = colors[i];
+        /* The validated subpass is copied whole: its colour-reference array,
+         * the count that bounds it and the depth reference. */
+        subpasses[i] = colors[i];
         subpasses[i].depth = depths[i];
         subpasses[i].input_first = input_total;
         subpasses[i].input_count = input_counts[i];
