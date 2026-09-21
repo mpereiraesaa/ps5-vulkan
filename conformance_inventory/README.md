@@ -329,10 +329,13 @@ four evidence axes:
 4. exact native evidence.
 
 A row is satisfied only when all four axes are positive. Unknown or absent
-evidence is a blocker. The checked matrix currently records 7/62 satisfied
-(`robustBufferAccess`, three multiview requirements and the three indirect and
+evidence is a blocker. The checked matrix currently records 10/62 satisfied
+(`robustBufferAccess`, three multiview requirements, the three indirect and
 indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
-`fullDrawIndexUint32`) and 55 blockers.
+`fullDrawIndexUint32`, the `shaderClipDistance`/`shaderCullDistance` pair and
+`fragmentStoresAndAtomics`) and 52 blockers. `geometryShader` and
+`tessellationShader` are positive on the API, implementation and CTS axes but
+their native axis is `reported-not-executed`, so both remain blockers.
 Multiview values use the explicitly recorded equivalent KHR route; aggregate
 query structures and the API 1.3 floor remain unadvertised. This is not a
 DXVK compatibility or Vulkan conformance statement.
