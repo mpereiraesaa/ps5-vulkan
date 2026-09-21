@@ -78,7 +78,8 @@ static void fixture_init(struct gate_fixture *f)
     f->framebuffer.width = f->framebuffer.height = 64;
     f->framebuffer.attachment_count = 1;
     f->framebuffer.attachments[0] = &f->attachment_view;
-    f->framebuffer.color_attachment = 0;
+    f->framebuffer.color_attachments[0] = 0;
+    f->framebuffer.color_count = 1;
     f->framebuffer.depth_attachment = VK_ATTACHMENT_UNUSED;
 
     f->attachments[0] = (VkAttachmentDescription){

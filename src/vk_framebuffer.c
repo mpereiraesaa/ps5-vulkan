@@ -1,4 +1,5 @@
 #include "vk_framebuffer.h"
+#include "color_attachment_contract.h"
 #include <string.h>
 
 /* The array layers an attachment view has to carry for a pass that uses view
@@ -70,7 +71,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
     fb->width = info->width; fb->height = info->height; fb->attachment_count = info->attachmentCount;
     /* The roles are the same in every subpass of this profile, so the first
      * one names them for the framebuffer. */
-    fb->color_attachment = ps5vk_render_pass_subpass(pass, 0)->color[0].attachment;
+    {
+        const struct ps5vk_subpass *first = ps5vk_render_pass_subpass(pass, 0);
+        fb->color_count = first->color_count;
+        for (uint32_t c = 0; c < first->color_count; ++c)
+            fb->color_attachments[c] = first->color[c].attachment;
+    }
     fb->depth_attachment = ps5vk_render_pass_subpass(pass, 0)->depth.attachment;
     for (uint32_t i = 0; i < fb->attachment_count; ++i) {
         fb->attachments[i] = info->pAttachments[i]; ++fb->attachments[i]->framebuffers;

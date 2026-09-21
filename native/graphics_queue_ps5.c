@@ -708,7 +708,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             VkFramebuffer fb=op->framebuffer;
             /* The target the draw was prepared with is layer zero of the same
              * builder, so the emission can carry only what a layer moves. */
-            rc=ps5vk_native_layer_target(d,fb->attachments[fb->color_attachment],0u,
+            rc=ps5vk_native_layer_target(d,fb->attachments[fb->color_attachments[0]],0u,
                 defaults,&view_prepared_color);
             if(rc!=VK_SUCCESS)goto fail;
             if(depth) {
@@ -717,7 +717,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 if(rc!=VK_SUCCESS)goto fail;
             }
             for(uint32_t v=0;v<view_count;++v) {
-                rc=ps5vk_native_view_layer_target(d,fb->attachments[fb->color_attachment],
+                rc=ps5vk_native_view_layer_target(d,fb->attachments[fb->color_attachments[0]],
                     view_indices[v],defaults,&view_color[v]);
                 if(rc!=VK_SUCCESS)goto fail;
                 if(depth) {

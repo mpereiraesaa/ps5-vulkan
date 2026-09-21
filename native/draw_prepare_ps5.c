@@ -129,11 +129,11 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         !op->framebuffer || op->framebuffer->device != d || !op->render_pass || op->render_pass->device != d ||
         !d->memory.allocate || !d->memory.release || !d->memory.flush) return VK_ERROR_UNKNOWN;
     VkFramebuffer fb = op->framebuffer;
-    if (fb->color_attachment >= fb->attachment_count || fb->attachment_count > 2 ||
+    if (fb->color_attachments[0] >= fb->attachment_count || fb->attachment_count > 2 ||
         (fb->depth_attachment != VK_ATTACHMENT_UNUSED && fb->depth_attachment >= fb->attachment_count))
         return VK_ERROR_UNKNOWN;
     struct ps5vk_target_registers color, depth;
-    VkResult rc = ps5vk_native_target(d, fb->attachments[fb->color_attachment], defaults, &color);
+    VkResult rc = ps5vk_native_target(d, fb->attachments[fb->color_attachments[0]], defaults, &color);
     if (rc != VK_SUCCESS) return rc;
     int has_depth = fb->depth_attachment != VK_ATTACHMENT_UNUSED;
     if (has_depth) {

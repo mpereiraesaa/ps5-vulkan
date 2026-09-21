@@ -428,7 +428,7 @@ int main(void)
     struct VkRenderPass_T foreign = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = rgba_attachment, .subpasses = foreign_subpasses};
     struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4,
-        .attachment_count = 1, .attachments = {&view},
+        .attachment_count = 1, .color_attachments = {0}, .color_count = 1, .attachments = {&view},
         .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkFramebuffer_T other_fb = fb;
@@ -641,7 +641,8 @@ int main(void)
         struct VkFramebuffer_T wrong_samples = fb;
         wrong_samples.samples[0] = VK_SAMPLE_COUNT_4_BIT;
         struct VkFramebuffer_T no_colour = fb;
-        no_colour.color_attachment = VK_ATTACHMENT_UNUSED;
+        no_colour.color_attachments[0] = VK_ATTACHMENT_UNUSED;
+        no_colour.color_count = 1;
         VkFramebuffer refused[3] = {&wrong_format, &wrong_samples, &no_colour};
         for (unsigned n = 0; n < 3; ++n) {
             VkCommandBufferInheritanceInfo mismatched = continues;

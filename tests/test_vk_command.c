@@ -380,7 +380,7 @@ static void subpass_transitions(void)
     assert(vkCreateFramebuffer(&d, &fbi, NULL, &fb) == VK_SUCCESS);
     assert(ps5vk_framebuffer_compatible(fb, two) &&
            ps5vk_framebuffer_compatible(fb, one) &&
-           !fb->color_attachment && fb->depth_attachment == VK_ATTACHMENT_UNUSED);
+           !fb->color_attachments[0] && fb->depth_attachment == VK_ATTACHMENT_UNUSED);
 
     /* One pipeline per subpass. Creation is exercised publicly in
      * tests/test_vk_graphics_pipeline.c; here the identity is what matters. */
@@ -553,7 +553,7 @@ static void graphics_recording(void)
         {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = pass_attachments, .subpasses = pass_subpasses};
-    struct VkFramebuffer_T fb = {.device = &d, .width = 100, .height = 100, .attachment_count = 1,
+    struct VkFramebuffer_T fb = {.device = &d, .width = 100, .height = 100, .attachment_count = 1, .color_attachments = {0}, .color_count = 1,
         .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T pipeline = {.device = &d, .graphics = VK_TRUE,

@@ -719,7 +719,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;
     if (fb->attachment_count != pass->attachment_count ||
-        fb->color_attachment != ps5vk_render_pass_subpass(pass, 0)->color[0].attachment ||
+        fb->color_attachments[0] != ps5vk_render_pass_subpass(pass, 0)->color[0].attachment ||
         fb->depth_attachment != ps5vk_render_pass_subpass(pass, 0)->depth.attachment ||
         area.offset.x < 0 || area.offset.y < 0 ||
         !area.extent.width || !area.extent.height || (uint32_t)area.offset.x > fb->width ||
