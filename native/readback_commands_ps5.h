@@ -3,6 +3,8 @@
 #include "vk_command.h"
 #include "image_layout_state.h"
 #include "color_detile.h"
+#include "depth_detile.h"
+#include "vk_image.h"
 #include "vk_image_transfer.h"
 
 struct ps5vk_readback_plan { VkImage image; VkBuffer buffer; VkDeviceSize layer_stride; };
@@ -22,14 +24,32 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
     const VkImageMemoryBarrier *b=&ops[0].image_barrier;
     const struct ps5vk_operation *copy=&ops[1],*host=&ops[2],*aggregate=&ops[3];
     VkImage image=b->image;
+    /* The same four-operation readback over a DEPTH attachment. Its aspect,
+     * its attachment layout and the stage that wrote it are depth's, and the
+     * recorder already admits exactly this shape for a D32 image that declares
+     * the transfer-source role (src/vk_transfer.c). Everything else about the
+     * readback - the copy, the host barrier and the aggregate - is identical,
+     * so only the parts that name colour are switched here. */
+    const int depth_source=ps5vk_depth_readback_image(image);
     if(!image || image->device!=d || (color && image!=color) ||
-       (b->oldLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-        !(ps5vk_array_color_image(image) && b->oldLayout==VK_IMAGE_LAYOUT_GENERAL)) ||
+       (depth_source ?
+        (b->oldLayout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+         b->srcAccessMask!=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT ||
+         !(ops[0].src_stage & (VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT|
+                                                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT|
+                                                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)) ||
+         (ops[0].src_stage & ~(VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT|
+                                                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT|
+                                                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT))) :
+        ((b->oldLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+          !(ps5vk_array_color_image(image) && b->oldLayout==VK_IMAGE_LAYOUT_GENERAL)) ||
+         b->srcAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
+         (ops[0].src_stage!=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+          ops[0].src_stage!=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT))) ||
        b->newLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
-       b->srcAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
        b->dstAccessMask!=VK_ACCESS_TRANSFER_READ_BIT ||
-       (ops[0].src_stage!=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
-        ops[0].src_stage!=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) ||
        ops[0].dst_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
        copy->copy_image!=image || copy->copy_layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
        !copy->copy_destination || host->buffer_barrier.buffer!=copy->copy_destination ||
@@ -41,16 +61,21 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const VkBufferImageCopy *r=&copy->copy_region;
     const VkImageCreateInfo *i=&image->info;
-    const VkImageUsageFlags required=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    const VkImageUsageFlags required=(depth_source?
+        (VkImageUsageFlags)VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT:
+        (VkImageUsageFlags)VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     uint64_t plane=(uint64_t)i->extent.width*i->extent.height;
     if(!i->arrayLayers || plane>SIZE_MAX/4/i->arrayLayers)return VK_ERROR_FEATURE_NOT_PRESENT;
     uint64_t pixels=plane*i->arrayLayers;
-    if(i->format!=VK_FORMAT_R8G8B8A8_UNORM || i->samples!=VK_SAMPLE_COUNT_1_BIT ||
+    if(i->format!=(depth_source?VK_FORMAT_D32_SFLOAT:VK_FORMAT_R8G8B8A8_UNORM) ||
+       i->samples!=VK_SAMPLE_COUNT_1_BIT ||
        i->mipLevels!=1 || (i->arrayLayers!=1 && !ps5vk_array_color_image(image)) || i->extent.depth!=1 ||
        (i->usage&required)!=required || !pixels || pixels>SIZE_MAX/4 ||
        r->bufferOffset || (r->bufferRowLength && r->bufferRowLength!=i->extent.width) ||
        (r->bufferImageHeight && r->bufferImageHeight!=i->extent.height) ||
-       r->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
+       r->imageSubresource.aspectMask!=(depth_source?
+           (VkImageAspectFlags)VK_IMAGE_ASPECT_DEPTH_BIT:
+           (VkImageAspectFlags)VK_IMAGE_ASPECT_COLOR_BIT) ||
        r->imageSubresource.mipLevel || r->imageSubresource.baseArrayLayer ||
        r->imageSubresource.layerCount!=i->arrayLayers || r->imageOffset.x || r->imageOffset.y || r->imageOffset.z ||
        r->imageExtent.width!=i->extent.width || r->imageExtent.height!=i->extent.height ||
@@ -88,6 +113,12 @@ static inline int ps5vk_readback_detile(VkImage image, size_t stride,
        stride>source_bytes/image->info.arrayLayers)return -1;
     const size_t plane=(size_t)image->info.extent.width*image->info.extent.height*4;
     if(!plane || plane>destination_bytes/image->info.arrayLayers)return -1;
+    /* A depth surface is addressed by the 64KB_Z_X equation, not the colour
+     * RX one, and it is always a single layer in this profile. */
+    if(ps5vk_depth_readback_image(image))
+        return image->info.arrayLayers==1u &&
+            !ps5vk_depth_64k_zx_detile(destination,plane,source,stride,
+                image->info.extent.width,image->info.extent.height) ? 0 : -1;
     for(uint32_t layer=0;layer<image->info.arrayLayers;++layer)
         if(ps5vk_rgba8_64k_rx_detile((unsigned char *)destination+layer*plane,plane,
             (const unsigned char *)source+layer*stride,stride,

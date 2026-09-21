@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: mpereiraesaa/ps5-agc-gears
-          ref: 8f035b73fab6713f015b46010c22330cf1579311
+          ref: 1ae1f9182abd2770c131b97419034fb85173c2dc
           path: homebrew_ps5/projects/ps5-agc-gears
 
       - name: Check out pinned telemetry support
@@ -62,7 +62,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: mpereiraesaa/ps5-agc-gears
-          ref: 8f035b73fab6713f015b46010c22330cf1579311
+          ref: 1ae1f9182abd2770c131b97419034fb85173c2dc
           path: homebrew_ps5/projects/ps5-agc-gears
 
       - name: Install host-test dependencies

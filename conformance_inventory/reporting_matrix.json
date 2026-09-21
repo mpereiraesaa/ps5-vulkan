@@ -598,7 +598,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "one color attachment per pipeline (src/vk_graphics_pipeline.c)",
+      "detail": "at most one color attachment per pipeline (src/vk_graphics_pipeline.c)",
       "feature": "independentBlend",
       "kind": "feature",
       "profile": "graphics",
@@ -1485,7 +1485,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "one color attachment per pipeline (src/vk_graphics_pipeline.c)",
+      "detail": "at most one color attachment per pipeline (src/vk_graphics_pipeline.c)",
       "feature": "independentBlend",
       "kind": "feature",
       "profile": "compute",

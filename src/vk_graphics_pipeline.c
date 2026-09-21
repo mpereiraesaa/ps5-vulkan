@@ -160,13 +160,19 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     const VkPipelineMultisampleStateCreateInfo *m=in->pMultisampleState;
     const VkPipelineViewportStateCreateInfo *vp=in->pViewportState;
     const VkPipelineColorBlendStateCreateInfo *b=in->pColorBlendState;
-    if (!v || !ia || !r || !m || !vp || !b) return VK_ERROR_UNKNOWN;
+    /* The colour blend state is optional for the same reason the
+     * depth-stencil state is: a pipeline for a DEPTH-ONLY subpass has no
+     * colour attachment to blend into, and the pinned upstream depth clamp
+     * module leaves pColorBlendState NULL there. The subpass decides which
+     * of the two must be present; that check is below, where the subpass is
+     * resolved. */
+    if (!v || !ia || !r || !m || !vp) return VK_ERROR_UNKNOWN;
     if (v->sType != VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO ||
         ia->sType != VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO ||
         r->sType != VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO ||
         m->sType != VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO ||
         vp->sType != VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO ||
-        b->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO) return VK_ERROR_UNKNOWN;
+        (b && b->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO)) return VK_ERROR_UNKNOWN;
     if (v->vertexBindingDescriptionCount>16 || v->vertexAttributeDescriptionCount>32 ||
         (v->vertexBindingDescriptionCount && !v->pVertexBindingDescriptions) ||
         (v->vertexAttributeDescriptionCount && !v->pVertexAttributeDescriptions))return refuse(8);
@@ -253,10 +259,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         vp->pNext || vp->flags || !vp->viewportCount || vp->viewportCount > PS5VK_MAX_VIEWPORTS ||
         vp->scissorCount != vp->viewportCount ||
         (vp->viewportCount > 1 && !(d->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)) ||
-        b->pNext || b->flags || b->logicOpEnable || b->attachmentCount != 1)
+        (b && (b->pNext || b->flags || b->logicOpEnable || b->attachmentCount > 1)))
         return refuse(15);
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
-        !b->pAttachments) return VK_ERROR_UNKNOWN;
+        (b && b->attachmentCount && !b->pAttachments)) return VK_ERROR_UNKNOWN;
     /* Every static element is validated before any is stored. */
     for (uint32_t i = 0; i < vp->viewportCount; ++i) {
         const VkViewport *viewport=&vp->pViewports[i]; const VkRect2D *scissor=&vp->pScissors[i];
@@ -278,6 +284,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * first one: the identity is what a draw is later checked against. */
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, in->subpass);
     if (subpass->depth.attachment != VK_ATTACHMENT_UNUSED && !depth) return VK_ERROR_UNKNOWN;
+    /* A colour subpass needs exactly one blend attachment; a depth-only one
+     * must not describe a colour attachment it does not have. */
+    const int has_colour = subpass->color.attachment != VK_ATTACHMENT_UNUSED;
+    const VkPipelineColorBlendAttachmentState *blend =
+        (b && b->attachmentCount) ? &b->pAttachments[0] : NULL;
+    if (has_colour ? !blend : (blend != NULL)) return refuse(19);
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
         depth->pNext || depth->flags || depth->depthBoundsTestEnable || depth->stencilTestEnable ||
         depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
@@ -296,9 +308,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             (struct ps5vk_graphics_module_key){0},
         .patch_control_points=tcs?in->pTessellationState->patchControlPoints:0,
         .feature_mask=d->enabled_features,
-        .topology=ia->topology, .color_format=pass->attachments[subpass->color.attachment].format,
-        .samples=m->rasterizationSamples, .color_write_mask=b->pAttachments[0].colorWriteMask,
-        .blend_enable=b->pAttachments[0].blendEnable,
+        .topology=ia->topology,
+        .color_format=has_colour ? pass->attachments[subpass->color.attachment].format :
+            VK_FORMAT_UNDEFINED,
+        .samples=m->rasterizationSamples,
+        .color_write_mask=blend ? blend->colorWriteMask : 0u,
+        .blend_enable=blend ? blend->blendEnable : VK_FALSE,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
         .vertex_bindings=v->pVertexBindingDescriptions,.vertex_attributes=v->pVertexAttributeDescriptions,
         .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets,
@@ -306,7 +321,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     memcpy(key.push_constant_stages,in->layout->push_constant_stages,
            sizeof(key.push_constant_stages));
     if(key.blend_enable) {
-        const VkPipelineColorBlendAttachmentState *a=&b->pAttachments[0];
+        const VkPipelineColorBlendAttachmentState *a=blend;
         key.src_color_blend_factor=a->srcColorBlendFactor;
         key.dst_color_blend_factor=a->dstColorBlendFactor;
         key.color_blend_op=a->colorBlendOp;
@@ -391,7 +406,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
            sizeof(p->push_constant_stages));
     p->cull_mode=r->cullMode; p->front_face=r->frontFace; p->color_format=key.color_format;
     p->primitive_restart=ia->primitiveRestartEnable;
-    p->color_blend=*b->pAttachments;
+    p->color_blend=blend ? *blend : (VkPipelineColorBlendAttachmentState){0};
     memcpy(p->blend_constants,key.blend_constants,sizeof(p->blend_constants));
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
     if(key.vertex_binding_count)memcpy(p->vertex_bindings,key.vertex_bindings,
