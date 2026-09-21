@@ -86,9 +86,11 @@ static void check_depth_only_target(void)
     key.color_write_mask=15;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     key.color_write_mask=0;
+    free((void *)key.fragment.words);
     key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
     assert(!ps5vk_spirv_graphics_interface(&key));
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
 static void check_clip_cull_distances(void)
