@@ -143,24 +143,20 @@ rather than by the driver.
 Nothing here should be read as these features being usable by an application
 today.
 
-The DXVK262-T06 dual-source blend path is in the same position. The exact
-GFX1013 `CB_BLEND0_CONTROL` encodings for the four SRC1 factors, the compiler
-proof that a two-output fragment shader packages as `0x44`/`0xff`, and the
-front-end and compiler gates that refuse SRC1 unless the logical device enabled
-the feature *and* the selected fragment module carries the proven secondary
-export are all published. `dualSrcBlend` is nevertheless **not advertised**: no
-shipping platform mask sets its bit, so the profile row stays a blocker. A
-private measurement build (`PS5VK_DUAL_SOURCE_DIAGNOSTIC=1`) reports the feature
-and opens the runtime blend space to every factor and operation the register
-file encodes, so the upstream `blend.dual_source` leaves can be executed and
-measured. The shipping profile still accepts only the shape a native witness
-measured, because no upstream dual-source leaf is reachable under that bound.
-The witness that measures it is `tools/run_dual_source.py`: it draws the
-packaged two-output fragment module twice, once with blending disabled and once
-with the accepted equation, copies the colour target back through the transfer
-path and judges both reads on exact bytes, so a blender that ignored the
-secondary export could not pass. It runs only on the measurement build, and the
-manifest records that build.
+DXVK262-T06 finished at the other end: `dualSrcBlend` **is advertised** by the
+shipping platform. The path is the one described above - exact `SRC1` register
+encodings, the compiler's `0x44`/`0xff` two-output proof, and the front-end and
+compiler gates that still refuse a `SRC1` equation unless the logical device
+enabled the feature *and* the selected fragment module carries the proven
+secondary export - plus the rest of what the upstream oracle needed: the whole
+GFX1013 `CB_BLEND0_CONTROL` blend space instead of the single witnessed shape,
+partial colour write masks (carried in the pipeline's render-target block, not
+the draw stream) for `VK_FORMAT_R8G8B8A8_UNORM`, and `COLOR_ATTACHMENT_BLEND` on
+the two colour formats the profile can blend into. The witness is
+`tools/run_dual_source.py`: it draws the packaged two-output fragment module
+twice, once with blending disabled and once with the accepted equation, copies
+the colour target back through the transfer path and judges both reads on exact
+bytes, so a blender that ignored the secondary export could not pass.
 
 ## Images and sampling
 

@@ -8,16 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The shipping profile bounds blending to the shapes a native witness measured;
- * the measurement build (PS5VK_DUAL_SOURCE_DIAGNOSTIC=1) opens the whole
- * GFX1013 register contract instead.  Every assertion that pins the bound is
- * written as ``!PS5VK_TEST_BLEND_BOUNDED`` so the two builds of this same test
- * each state their own contract. */
-#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
-#define PS5VK_TEST_BLEND_BOUNDED 0
-#else
-#define PS5VK_TEST_BLEND_BOUNDED 1
-#endif
+/* dualSrcBlend is promoted: the profile serves the whole GFX1013 blend
+ * contract, not the single witnessed shape, and the assertions below state the
+ * promoted contract. */
 
 static struct ps5vk_graphics_module_key read_module(const char *path)
 {
@@ -234,13 +227,13 @@ static void check_dual_source_exports(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
-#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
-/* Measurement build.  The shipping profile bounds blending to the shapes a
- * native witness measured, so an upstream blend leaf cannot run at all.  This
- * build opens the whole GFX1013 register contract instead.  The two doors that
- * guard dual source stay shut: a SRC1 equation still needs the feature enabled
- * on this logical device and the compiler-proven secondary export. */
-static void check_dual_source_measurement_contract(void)
+/* The promoted contract.  The whole GFX1013 register contract is served - the
+ * 98 applicable upstream blend.dual_source leaves drew every factor and
+ * operation pair the family generates and passed in one 404-case run - and the
+ * two doors that guard dual source stay shut: a SRC1 equation still needs the
+ * feature enabled on this logical device and the compiler-proven secondary
+ * export. */
+static void check_dual_source_blend_contract(void)
 {
     struct ps5vk_graphics_key key={
         .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
@@ -289,7 +282,6 @@ static void check_dual_source_measurement_contract(void)
     ps5vk_runtime_graphics_free(NULL,runtime);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
-#endif
 
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
@@ -1863,9 +1855,7 @@ int main(void)
     check_fragment_distance_read();
     check_fragment_position();
     check_dual_source_exports();
-#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
-    check_dual_source_measurement_contract();
-#endif
+    check_dual_source_blend_contract();
     check_geometry_stage();
     check_viewport_index_routing();
     check_geometry_output_components();
@@ -1949,16 +1939,14 @@ int main(void)
     }
     ps5vk_compilation_cache_get_stats(cache,&stats);
     assert(stats.compiles==3 && stats.current_entries==3);
+    /* Blending is part of the served contract now, so an unblended pipeline
+     * switching to the all-zero factors is a different program, not a refusal. */
     key.blend_enable=1;
-    if(PS5VK_TEST_BLEND_BOUNDED)
-        assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&out)!=VK_SUCCESS && !out);
-    else {
-        assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&out)==VK_SUCCESS && out);
-        ps5vk_runtime_graphics_cached_release(cache,out);
-    }
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_cached_release(cache,out);
     key.blend_enable=0;
     ps5vk_compilation_cache_get_stats(cache,&stats);
-    assert(stats.compiles==(PS5VK_TEST_BLEND_BOUNDED?3u:4u) && stats.hits==1);
+    assert(stats.compiles==4u && stats.hits==1);
     ps5vk_compilation_cache_destroy(cache);
     /* View remains valid until its detached lease is released. */
     assert(p->vertex.machine_code_size && p->arguments.lds_slot==1);
@@ -2186,12 +2174,8 @@ int main(void)
     key.fragment.entry="main";key.descriptor_set_count=1;key.descriptor_sets=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
     key.descriptor_set_count=0;key.blend_enable=1;
-    if(PS5VK_TEST_BLEND_BOUNDED)
-        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
-    else {
-        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
-        ps5vk_runtime_graphics_free(NULL,out);out=NULL;
-    }
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);out=NULL;
     /* The native TES/GS upstream overlap oracle needs this exact additive
      * shape without an experimental build flag. Keep other shapes refused. */
     struct ps5vk_graphics_key additive=key;
@@ -2205,10 +2189,10 @@ int main(void)
     assert(ps5vk_runtime_graphics_compile(NULL,&additive,&out)==VK_SUCCESS && out);
     ps5vk_runtime_graphics_free(NULL,out);out=NULL;
     additive.color_blend_op=VK_BLEND_OP_SUBTRACT;
-    assert(!!ps5vk_runtime_graphics_supported(&additive)==!PS5VK_TEST_BLEND_BOUNDED);
+    assert(ps5vk_runtime_graphics_supported(&additive));
     additive.color_blend_op=VK_BLEND_OP_ADD;
     additive.dst_alpha_blend_factor=VK_BLEND_FACTOR_ZERO;
-    assert(!!ps5vk_runtime_graphics_supported(&additive)==!PS5VK_TEST_BLEND_BOUNDED);
+    assert(ps5vk_runtime_graphics_supported(&additive));
     key.blend_enable=0;
     /* Topology selects the primitive the composite pipeline links, so the key
      * carries it and the compiler is asked for the matching value. Every

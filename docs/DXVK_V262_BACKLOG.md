@@ -21,7 +21,7 @@ candidate run (those 99 stay outside the frozen acceptance selection;
 implementation and CTS axes but still `reported-not-executed` natively, so
 both remain blockers); and `fragmentStoresAndAtomics` (T06) is satisfied with
 its two `frag_side_effects` leaves inside the 306/306 canonical selection.
-The live matrix is 10/62 ready with 52 blockers. The ordered table preserves
+The live matrix is 11/62 ready with 51 blockers. The ordered table preserves
 the original tranche membership.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level

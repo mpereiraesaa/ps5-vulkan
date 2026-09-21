@@ -92,8 +92,15 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                          * now part of the shipping graphics
                                          * profile after the native readback
                                          * and focused upstream oracles both
-                                         * passed on the integrated build. */
-                                        PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
+                                        * passed on the integrated build. */
+                                        PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
+                                        /* dual-source blending joined the
+                                         * shipping graphics profile on
+                                         * 2026-09-21: the native witness and
+                                         * all 98 applicable upstream
+                                         * dual_source leaves passed on the
+                                         * promoted candidate. */
+                                        PS5VK_FEATURE_DUAL_SRC_BLEND;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

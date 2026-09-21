@@ -23,6 +23,7 @@
 #define CAP_LINEAR PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR
 #define CAP_COLOR PS5VK_FORMAT_CAP_COLOR_ATTACHMENT
 #define CAP_COLOR_READBACK PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK
+#define CAP_BLEND PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND
 #define CAP_DEPTH PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT
 #define CAP_VERTEX PS5VK_FORMAT_CAP_VERTEX_BUFFER
 #define CAP_UTEXEL PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER
@@ -71,7 +72,8 @@ static const struct ps5vk_texture_format formats[] = {
      * back; the readback pair is a separate capability from the bare
      * attachment usage. */
     SAMPLED(VK_FORMAT_R8G8B8A8_UNORM, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
-            CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK | CAP_UTEXEL, 0),
+            CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK | CAP_UTEXEL,
+            CAP_BLEND),
     SAMPLED(VK_FORMAT_R8G8B8A8_SNORM, 4, UINT32_C(0x03900000), 4, 5, 6, 7,
             CAP_LINEAR | CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R8G8B8A8_SRGB, 4, UINT32_C(0x08200000), 4, 5, 6, 7,
@@ -272,18 +274,15 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         if (w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
-        /* DXVK262-T06 measurement build: the only colour formats this profile
-         * can blend into are the two ps5vk_color_export_state accepts, and the
-         * upstream blend factory gates every leaf on this bit before it runs
-         * (isSupportedBlendFormat). Reporting it here is what lets the
-         * dual-source family be measured at all; the shipping build keeps the
-         * cap clear until the promotion change carries the evidence. */
-#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
+        /* DXVK262-T06: the upstream blend factory gates every leaf on this bit
+         * (isSupportedBlendFormat), and the dual-source family it serves draws
+         * into VK_FORMAT_R8G8B8A8_UNORM - all 98 applicable leaves passed once
+         * it was reported. Only that format widens: it is the one the witness
+         * and the leaves measured, and the one whose channel order the partial
+         * write masks name directly. */
         if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT) &&
-            (format == VK_FORMAT_R8G8B8A8_UNORM ||
-             format == VK_FORMAT_B8G8R8A8_UNORM))
+            format == VK_FORMAT_R8G8B8A8_UNORM)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
-#endif
         if (w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
         if (w & PS5VK_FORMAT_CAP_STORAGE_IMAGE)

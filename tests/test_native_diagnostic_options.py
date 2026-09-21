@@ -176,25 +176,36 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
 
-    def test_dual_source_measurement_gate_is_graphics_only(self):
-        self.rejected({"PS5VK_DUAL_SOURCE_DIAGNOSTIC": "1"},
-                      "requires the graphics profile API")
-        self.rejected({"PS5VK_GRAPHICS_API": "unused",
-                       "PS5VK_DUAL_SOURCE_DIAGNOSTIC": "2"},
-                      "must be 0 or 1")
+    def test_promoted_dual_source_has_no_measurement_switch(self):
+        """dualSrcBlend is advertised by the shipping platform now.
 
-    def test_dual_source_witness_is_bounded_and_measurable(self):
-        """The blend witness is a standalone scene and needs the measurement
-        build, because a shipping platform would refuse the SRC1 pipeline and
-        the run would only re-prove the gate."""
+        The capability bit, the widened blend space, the partial write masks
+        and the format blend cap all ship; the measurement switch that used to
+        gate them is retired, exactly as the fragment-storage one was, so
+        nothing can re-enable a diagnostic build of an advertised feature.
+        """
+        for source in ("native/platform_ps5.c", "native/runtime_graphics_compiler.c",
+                       "src/texture_format.c", "tools/build_sdk.py",
+                       "tools/build_native.py", "tools/build_upstream_cts.py",
+                       "Makefile"):
+            self.assertNotIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC",
+                             (ROOT / source).read_text(),
+                             f"{source} must not restore the retired switch")
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("platform->supported_features |= PS5VK_FEATURE_DUAL_SRC_BLEND;",
+                      platform)
+        for public in (ROOT / "include").rglob("*.h"):
+            self.assertNotIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC", public.read_text(),
+                             f"{public} must not expose the retired gate")
+
+    def test_dual_source_witness_is_bounded_and_runnable(self):
+        """The blend witness is a standalone scene; it runs on the shipping
+        build now that the feature is advertised."""
         self.rejected({"PS5VK_DUAL_SOURCE_PROBE": "1"},
                       "requires graphics API, runtime graphics and draw")
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
                        "PS5VK_DUAL_SOURCE_PROBE": "2"},
                       "must be 0 or 1")
-        self.rejected({"PS5VK_GRAPHICS_API": "unused", "PS5VK_RUNTIME_GRAPHICS": "1",
-                       "PS5VK_GRAPHICS_DRAW": "1", "PS5VK_DUAL_SOURCE_PROBE": "1"},
-                      "requires the PS5VK_DUAL_SOURCE_DIAGNOSTIC measurement build")
 
     def test_dual_source_witness_oracle_and_artifact_are_pinned(self):
         probe = (ROOT / "native/dual_source_probe.c").read_text()
@@ -222,17 +233,17 @@ class NativeDiagnosticOptions(unittest.TestCase):
             self.assertNotIn("PS5VK_DUAL_SOURCE_PROBE", public.read_text(),
                              f"{public} must not expose the witness switch")
 
-    def test_dual_source_measurement_recipes_carry_the_gate(self):
-        """The console window is one recipe per payload, and both recipes must
-        select the measurement build: the witness scene and the CTS selection
-        both depend on the feature being reported."""
+    def test_dual_source_witness_recipe_links_the_sdk(self):
+        """The witness recipe must link the SDK: the direct build does not
+        define the runtime compiler, so the graphics feature block is not
+        compiled and vkCreateDevice refuses the feature before the witness
+        ever runs."""
         witness = subprocess.run(
             ["make", "-n", "native-dual-source", "GRAPHICS_CONTROL=fixture",
              "GLSLANG=glslang-test"], cwd=ROOT, capture_output=True, text=True,
             check=True)
         for expected in ("PS5VK_RUNTIME_GRAPHICS=1", "PS5VK_SHELL_CLOSE=1",
                          "PS5VK_GLSLANG=glslang-test", "PS5VK_GRAPHICS_DRAW=1",
-                         "PS5VK_DUAL_SOURCE_DIAGNOSTIC=1",
                          "PS5VK_DUAL_SOURCE_PROBE=1", "PS5VK_USE_SDK=1"):
             self.assertIn(expected, witness.stdout)
         # The witness is an offscreen scene: presenting would move the artifact
@@ -240,40 +251,6 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertNotIn("PS5VK_GRAPHICS_PRESENT=1", witness.stdout)
         verifier = (ROOT / "tools/verify_dual_source.py").read_text()
         self.assertIn('"graphics-api-offscreen-draw"', verifier)
-        cts = subprocess.run(
-            ["make", "-n", "upstream-cts-dual-source"], cwd=ROOT,
-            capture_output=True, text=True, check=True)
-        self.assertIn("tools/make_measurement_manifest.py --category "
-                      "t06-dual-source-pending", cts.stdout)
-        self.assertIn("--manifest build/measurement/t06-dual-source.json",
-                      cts.stdout)
-        self.assertIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC=1", cts.stdout)
-
-    def test_dual_source_measurement_gate_stays_private(self):
-        """dualSrcBlend is reported only by the dual-source measurement build.
-
-        The capability bit, the blend space it opens and the define that
-        selects them are all build-private: no public header names the gate,
-        the platform sets the bit exactly once and only inside the guarded
-        block, and the SDK build validates the switch before passing it on.
-        """
-        for public in (ROOT / "include").rglob("*.h"):
-            self.assertNotIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC", public.read_text(),
-                             f"{public} must not expose the measurement gate")
-        platform = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertEqual(platform.count("PS5VK_FEATURE_DUAL_SRC_BLEND"), 1)
-        guarded = platform.index("#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && "
-                                 "PS5VK_DUAL_SOURCE_DIAGNOSTIC")
-        self.assertLess(guarded, platform.index("PS5VK_FEATURE_DUAL_SRC_BLEND",
-                                                guarded))
-        compiler = (ROOT / "native/runtime_graphics_compiler.c").read_text()
-        self.assertIn("#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && "
-                      "PS5VK_DUAL_SOURCE_DIAGNOSTIC", compiler)
-        builder = (ROOT / "tools/build_sdk.py").read_text()
-        self.assertIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC must be 0 or 1", builder)
-        self.assertIn('"-DPS5VK_DUAL_SOURCE_DIAGNOSTIC=1"', builder)
-        cts_builder = (ROOT / "tools/build_upstream_cts.py").read_text()
-        self.assertIn('"PS5VK_DUAL_SOURCE_DIAGNOSTIC"', cts_builder)
 
     def test_multiview_instance_probe_needs_the_view_witness(self):
         """The instance witness is the six-view scene with one instance at the

@@ -265,16 +265,17 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * evidence boundary: builds without this exact path still report false
      * and vkCreateDevice rejects a request for the feature. */
     platform->supported_features |= PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
-    /* Private measurement build for DXVK262-T06 dual-source blending
-     * (tools/build_sdk.py honours PS5VK_DUAL_SOURCE_DIAGNOSTIC=1): report the
-     * dualSrcBlend feature so the upstream blend.dual_source leaves can be
-     * executed through the public API and measured on hardware. Default off,
-     * like the rasterisation diagnostic above, and never set in the shipping
-     * build; the bit stays in the feature table but nothing else in this file
-     * sets it. Promotion is a separate, evidence-backed change. */
-#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
+    /* DXVK262-T06 dual-source blending, promoted on 2026-09-21. The public-SDK
+     * witness renders the packaged two-output fragment module twice - blending
+     * disabled against the accepted SRC1 equation - and judges both reads on
+     * exact bytes (control 64,128,191,255 inside one LSB, candidate
+     * 51,51,38,255 exactly) with the two required to differ, so a blender that
+     * ignored the secondary export cannot pass. The 98 applicable upstream
+     * blend.dual_source leaves then passed in one 404-case run together with
+     * the 306-case acceptance selection. This bit is the evidence boundary:
+     * the front end and the compiler still refuse a SRC1 equation without it,
+     * and without the proven secondary export. */
     platform->supported_features |= PS5VK_FEATURE_DUAL_SRC_BLEND;
-#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

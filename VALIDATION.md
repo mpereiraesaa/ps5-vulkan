@@ -1908,8 +1908,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 138 mandatory format-feature cells satisfied
-with 524 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 139 mandatory format-feature cells satisfied
+with 523 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -1943,11 +1943,11 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **10/62 satisfied and 52 blockers**. Core
+The current checked result is **11/62 satisfied and 51 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
-`fullDrawIndexUint32`), the clip/cull pair and
-`fragmentStoresAndAtomics` have all four axes. See
+`fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics` and
+`dualSrcBlend` have all four axes. See
 [their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16)
 and [the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20).
 The multiview probe uses explicitly tagged equivalent KHR queries, not the
@@ -2833,3 +2833,49 @@ for it (see UPSTREAM_CTS.md), and the six raster oracle mismatches below are
 unresolved. The consumer's own verifier now stops the run on the first of them
 (`raster oracle for clamp_disabled_narrow_probe`), which is why the repeat run
 ended there rather than at the geometry pipeline.
+
+## Dual-source blend promotion (2026-09-21)
+
+First hardware execution of the DXVK262-T06 dual-source blend witnesses, one
+bounded console window, two deploys from `codex/t06-final`. The run is the
+evidence `dualSrcBlend` is advertised on: the shipping platform mask now sets
+the feature bit, the runtime serves the whole GFX1013 blend contract instead of
+the single witnessed shape, partial colour write masks are carried in the
+pipeline render-target block for `VK_FORMAT_R8G8B8A8_UNORM`, and that format
+reports `COLOR_ATTACHMENT_BLEND`.
+
+| | Native witness | CTS measurement |
+|---|---|---|
+| package | `dist-graphics-api/PPSA99994` | `dist-upstream-cts/PPSA99994` |
+| eboot sha256 | `027a43032361f818e4caf314f55557727eff6bb812a44c2a757fcc4e26779d7b` | `aa1cfae7eaf6570f4bf6618d89f7cad1b532907a6a3c2a26691b66fae9aaa870` |
+| run | `20260921T131810348Z_PPSA99994_ps5vk_0x152cbc5ead555` | `20260921T142735727Z_PPSA99994_upstream-cts_0x156959662c9a2` |
+| log sha256 | `fa82a55bab8bd419e360ecaec5a3276a49d2eacf6aac89f07eca438c76883db1` | `59673109cd1b1c3829a96ec90c3c5c0c55ef0113ca773230993b2009820bfa23` |
+
+**Native witness.** `PS5VK_DUAL_SOURCE_READBACK extent=64x64 draws=2 pixel=2080
+control=4080bfff candidate=333326ff expected_control=4080bfff
+expected_candidate=333326ff tolerance=1 distinct=1 fence=success
+strict_verified=1`: the control is the module's primary export with blending
+disabled, the candidate is `primary.rgb * secondary.rgb` with the equation's
+ONE, and the two are required to differ, so a blender that ignored the secondary
+export could not pass. Clean lifecycle, title closed, artifact identity checked
+against the packaged manifest.
+
+**CTS measurement.** The 404-case selection - the frozen 306-case acceptance set
+plus the 98 applicable `blend.dual_source` leaves - reports **404 Pass, zero
+Fail, zero NotSupported**, strict identity and lifecycle verified
+(`cts_verified`). Two defects were found and fixed by this window: the package
+had to compile `vktPipelineBlendTests.cpp` and register the blend factory under
+the monolithic construction group (before that dEQP silently dropped the 98
+unregistered paths and the run reported 306 cases while `/app0/cases.txt` held
+404), and the partial write masks had to be carried in the pipeline's
+render-target block - writing `CB_TARGET_MASK` from the per-draw context stream
+stalled the queue after 101 of 404 cases, which is why that attempt left only a
+comment behind.
+
+**Canonical acceptance on the promoted candidate.** The shipping payload - no measurement switch - built from the merged promotion, eboot sha256 `0bbd6679da721eac7f750b7bbea5041bac974ac8f42a9a94ff5a755caff0b3a7`, ran the frozen 404-case selection in `20260921T160602225Z_PPSA99994_upstream-cts_0x15bf4c85ab360` (log sha256 `30a0a14af266cc4d65943644eaa2c9ca9afe349e4f8c7ebbb7cad22627f57922`) and reported **404 Pass, zero Fail, zero NotSupported**, strict identity and lifecycle verified. The public-ABI capability probe was re-measured on the same promotion: eboot sha256 `c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04`, run `20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad`, strictly verified with `dualSrcBlend=1` and **13 of 62** profile requirements then satisfied.
+
+**What this does not establish.** The window covers `VK_FORMAT_R8G8B8A8_UNORM`
+only: `B8G8R8A8_UNORM` keeps the all-channel write mask and reports no blend
+feature, because a BGRA target's export applies a channel swap the mask cannot
+express and no leaf measured it. `independentBlend` and `sampleRateShading`
+remain blockers with no implementation.

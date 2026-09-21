@@ -236,16 +236,6 @@ def main():
             raise SystemExit("PS5VK_RASTER_DIAGNOSTIC must be 0 or 1")
         if raster_diagnostic == "1":
             native_cflags.append("-DPS5VK_RASTER_DIAGNOSTIC=1")
-        # Private measurement build (DXVK262-T06): report the dualSrcBlend
-        # feature and open the runtime blend space to the whole GFX1013
-        # contract, so the upstream blend.dual_source leaves can be executed
-        # and measured before any shipping platform advertises them. Off by
-        # default, exactly like the rasterisation diagnostic above.
-        dual_source_diagnostic = os.environ.get("PS5VK_DUAL_SOURCE_DIAGNOSTIC", "0")
-        if dual_source_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_DUAL_SOURCE_DIAGNOSTIC must be 0 or 1")
-        if dual_source_diagnostic == "1":
-            native_cflags.append("-DPS5VK_DUAL_SOURCE_DIAGNOSTIC=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:
