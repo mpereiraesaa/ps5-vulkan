@@ -377,6 +377,8 @@ check:
 	./build/tests/test_clip_cull_witness
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/geometry_witness.c tests/test_geometry_witness.c -o build/tests/test_geometry_witness
 	./build/tests/test_geometry_witness
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/dual_source_oracle.c tests/test_dual_source_oracle.c -o build/tests/test_dual_source_oracle
+	./build/tests/test_dual_source_oracle
 	$(PYTHON) tools/build_sdk.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host

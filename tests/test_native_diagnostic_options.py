@@ -200,8 +200,15 @@ class NativeDiagnosticOptions(unittest.TestCase):
         probe = (ROOT / "native/dual_source_probe.c").read_text()
         for pinned in ("PS5VK_DUAL_SOURCE_READBACK",
                        "VK_BLEND_FACTOR_SRC1_COLOR",
-                       "PROBE_BLEND_R = 51", "observed[0][3] == 255"):
+                       "ps5vk_dual_source_verdict(observed[0], observed[1])"):
             self.assertIn(pinned, probe)
+        # The verdict is the same pure predicate the host regressions exercise.
+        oracle = (ROOT / "src/dual_source_oracle.h").read_text()
+        self.assertIn("PS5VK_DUAL_SOURCE_BLEND_R = 51", oracle)
+        self.assertIn("PS5VK_DUAL_SOURCE_MIN_DELTA", oracle)
+        self.assertTrue((ROOT / "tests/test_dual_source_oracle.c").is_file())
+        self.assertIn("tests/test_dual_source_oracle.c",
+                      (ROOT / "Makefile").read_text())
         self.assertIn("ps5vk_dual_source_probe",
                       (ROOT / "native/graphics_main.c").read_text())
         builder = (ROOT / "tools/build_native.py").read_text()
