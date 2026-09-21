@@ -410,12 +410,12 @@ test-tessellation-compiler: build/libpsbc.host.a graphics-stage-shaders
 .PHONY: test-runtime-graphics-compiler
 test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c src/color_attachment_contract.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
 	./build/tests/test_runtime_graphics_compiler
 .PHONY: test-runtime-graphics-native
 test-runtime-graphics-native:
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c native/tess_shared_storage.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/color_attachment_contract.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c native/tess_shared_storage.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
 	./build/tests/test_runtime_graphics_native
 test-runtime-header:
 	mkdir -p build/tests

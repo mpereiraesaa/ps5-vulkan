@@ -33,6 +33,23 @@ int main(void)
     state.pAttachments = &attachment;
     assert(!ps5vk_color_blend_state_shape_supported(NULL));
 
+    /* SPI_SHADER_COL_FORMAT is one nibble per target: FP16_ABGR when the
+     * target blends, 32_ABGR when it does not. The pinned compiler reproduces
+     * both codes (measured: option 0 -> 0x9, option 4 -> 0x4 for a
+     * single-output module), and a second target's code rides in the second
+     * nibble. */
+    assert(ps5vk_color_export_format_code(1) == 4u);
+    assert(ps5vk_color_export_format_code(0) == 9u);
+    {
+        const unsigned char plain[PS5VK_MAX_COLOR_ATTACHMENTS] = {0};
+        const unsigned char blended[PS5VK_MAX_COLOR_ATTACHMENTS] = {1};
+        assert(ps5vk_color_export_format_option(plain, PS5VK_MAX_COLOR_ATTACHMENTS) == 0x9u);
+        assert(ps5vk_color_export_format_option(blended, PS5VK_MAX_COLOR_ATTACHMENTS) == 0x4u);
+        /* A count the profile does not serve composes nothing. */
+        assert(ps5vk_color_export_format_option(blended, 2) == 0u);
+        assert(ps5vk_color_export_format_option(NULL, PS5VK_MAX_COLOR_ATTACHMENTS) == 0u);
+    }
+
     /* SRC1 is the dual-source factor set: it consumes the secondary export and
      * so needs both the enabled feature and the proven export, which the caller
      * checks. Blending disabled never consumes it. */

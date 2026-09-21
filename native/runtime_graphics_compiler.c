@@ -13,6 +13,7 @@
 #include "descriptor_table_layout.h"
 #include "graphics_descriptor_profile.h"
 #include "blend_ps5.h"
+#include "color_attachment_contract.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -670,10 +671,17 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
         .entrypoint=key->fragment.entry,.optimise=true,.address32_hi=2,
         .primitive_type=0,.rasterization_samples=1};
     /* Mesa ac_choose_spi_color_formats: RGBA8 UNORM blending uses FP16_ABGR,
-     * paired with matching SX conversion at draw time. Keep the established
-     * unblended 32_ABGR path; blend state is already part of the cache key. */
-    if(key->blend_enable) {
-        options.spi_shader_col_format=4;
+     * paired with matching SX conversion at draw time; unblended keeps 32_ABGR.
+     * The option is one nibble per colour attachment, so it is derived from the
+     * attachment's own blend state rather than from the pipeline as a whole:
+     * the pinned compiler drops a second export whose nibble is not declared
+     * (measured), which is what makes the derivation the honest form even
+     * while this profile serves one target. */
+    {
+        unsigned char blending[PS5VK_MAX_COLOR_ATTACHMENTS]={0};
+        blending[0]=key->blend_enable?1u:0u;
+        options.spi_shader_col_format=
+            ps5vk_color_export_format_option(blending,PS5VK_MAX_COLOR_ATTACHMENTS);
         options.color_is_int8=0;
     }
     /* A patch-list draw feeds the patch assembler the pinned gfx103 register
