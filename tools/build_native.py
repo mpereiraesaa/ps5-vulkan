@@ -181,6 +181,25 @@ def main():
             continuous == "1" or observe_scene != "0" or scene_split == "1" or
             layer_probe == "1"):
         raise SystemExit("PS5VK_FRAGMENT_STORE_PROBE is a bounded standalone scene")
+    dual_source_probe = os.environ.get("PS5VK_DUAL_SOURCE_PROBE", "0")
+    if dual_source_probe not in ("0", "1"):
+        raise SystemExit("PS5VK_DUAL_SOURCE_PROBE must be 0 or 1")
+    if dual_source_probe == "1" and (not graphics_api or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_DUAL_SOURCE_PROBE requires graphics API, runtime graphics and draw")
+    if dual_source_probe == "1" and (multiview_view_probe == "1" or
+            input_attachment_probe == "1" or fragment_store_probe == "1" or
+            clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1" or
+            scissor_probe != "0" or witnesses != "0" or
+            continuous == "1" or observe_scene != "0" or scene_split == "1" or
+            layer_probe == "1"):
+        raise SystemExit("PS5VK_DUAL_SOURCE_PROBE is a bounded standalone scene")
+    # The witness executes an SRC1 equation, so the build must be the one that
+    # reports the feature; a shipping platform would refuse the pipeline and the
+    # run would prove only that the gate works.
+    if dual_source_probe == "1" and os.environ.get("PS5VK_DUAL_SOURCE_DIAGNOSTIC") != "1":
+        raise SystemExit("PS5VK_DUAL_SOURCE_PROBE requires the PS5VK_DUAL_SOURCE_DIAGNOSTIC measurement build")
     if clip_cull_probe == "1" and (not graphics_api or
             os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
             os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
@@ -398,6 +417,13 @@ def main():
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
             common += ["-DPS5VK_FRAGMENT_STORE_PROBE=" + fragment_store_probe]
+            common += ["-DPS5VK_DUAL_SOURCE_PROBE=" + dual_source_probe]
+            # The measurement gate is a property of the whole payload: the
+            # platform mask and the runtime blend space are compiled from the
+            # same decision, so the harness cannot report a capability its own
+            # runtime refuses.
+            if os.environ.get("PS5VK_DUAL_SOURCE_DIAGNOSTIC") == "1":
+                common += ["-DPS5VK_DUAL_SOURCE_DIAGNOSTIC=1"]
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
             common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
@@ -700,6 +726,7 @@ def main():
                 ROOT / "native/input_attachment_oracle.c",
                 ROOT / "native/input_attachment_probe.c",
                 ROOT / "native/fragment_store_probe.c",
+                ROOT / "native/dual_source_probe.c",
                 ROOT / "native/command_arena_ps5.c", ROOT / "native/draw_batch_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
                 ROOT / "src/triangle_readback.c", ROOT / "src/texture_descriptor.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_dma.c", ROOT / "src/image_layout_state.c",
@@ -727,6 +754,7 @@ def main():
         application_sources = {"graphics_main", "compute_main", "scene_geometry",
                                "scene_region", "sampled_format_probe", "integer_sampled_probe", "vertex_format_probe",
                                "triangle_readback", "fragment_store_probe"}
+        application_sources.add("dual_source_probe")
         sources = [item for item in sources if item[0] in application_sources]
     source_names = [name for name, _, _ in sources]
     if len(source_names) != len(set(source_names)):
@@ -870,6 +898,12 @@ def main():
                                 sample_count=1, fragment_store_probe=1,
                                 fragment_store_extent=64,
                                 t06_diagnostic_features=True)
+            if dual_source_probe == "1":
+                manifest.update(scene=None,
+                                geometry_fixture="dual-source-blend",
+                                sample_count=1, dual_source_probe=1,
+                                dual_source_extent=64,
+                                dual_source_measurement=True)
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
                                 compute_regression="compute-before-and-after-graphics")
@@ -929,6 +963,17 @@ def main():
                 "strict_readback": True}
             runtime_inputs = (("vertex", "runtime_input_attachment.vert"),
                               ("atomic", "runtime_fragment_store.frag"))
+        if dual_source_probe == "1":
+            manifest["graphics_shader_source"] = "owned-runtime-dual-source"
+            manifest["dual_source_witness"] = {
+                "extent": [64, 64], "draws": 2,
+                "control_equation": "blend-disabled",
+                "candidate_equation": "color=SRC1_COLORxZERO+ADD,alpha=ONExZERO+ADD",
+                "expected_control_rgba": [64, 128, 191, 255],
+                "expected_candidate_rgba": [51, 51, 38, 255],
+                "tolerance_lsb": 1, "strict_readback": True}
+            runtime_inputs = (("vertex", "runtime_triangle.vert"),
+                              ("dual", "runtime_dual_source.frag"))
         if scissor_probe == "13":
             manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
             manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"
