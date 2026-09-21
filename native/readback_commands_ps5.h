@@ -48,9 +48,12 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
      * readback - the copy, the host barrier and the aggregate - is identical,
      * so only the parts that name colour are switched here. */
     const int depth_source=ps5vk_depth_readback_image(image);
-    /* The unstaged shape exists only for a depth surface the previous
-     * submission already handed to its readback. */
-    if(!staged && !depth_source)return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* The unstaged shape belongs to a surface the previous submission already
+     * handed to its readback, which the pinned helper does for both aspects:
+     * a depth attachment, and a colour attachment that also declares a
+     * transfer destination and was cleared through it. */
+    if(!staged && !depth_source && !ps5vk_colour_transfer_image(image))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if(!image || image->device!=d || (color && image!=color) ||
        (!staged ? 0 : depth_source ?
         (b->oldLayout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||

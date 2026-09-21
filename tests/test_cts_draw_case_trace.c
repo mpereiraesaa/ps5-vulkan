@@ -603,6 +603,87 @@ int main(void)
     assert(ps5vk_rgba8_64k_rx_offset(pinned_x[1], pinned_y[1], WIDTH) !=
            (size_t)pinned_y[1] * staging_layout.rowPitch + (size_t)pinned_x[1] * 4u);
 
+    /* The pinned scissor case's own sequence over this same colour target:
+     * clear it through the transfer destination outside the pass, then read
+     * the rendered result back from it. Each call is asserted separately so a
+     * refusal names the command that produced it. */
+    {
+        VkBufferCreateInfo host_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = (VkDeviceSize)WIDTH * HEIGHT * 4u,
+            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT};
+        VkBuffer host_buffer = VK_NULL_HANDLE;
+        assert(vkCreateBuffer(device, &host_info, NULL, &host_buffer) == VK_SUCCESS);
+        VkMemoryRequirements need; vkGetBufferMemoryRequirements(device, host_buffer, &need);
+        VkMemoryAllocateInfo host_alloc = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = need.size, .memoryTypeIndex = 0};
+        VkDeviceMemory host_memory = VK_NULL_HANDLE;
+        assert(vkAllocateMemory(device, &host_alloc, NULL, &host_memory) == VK_SUCCESS);
+        assert(vkBindBufferMemory(device, host_buffer, host_memory, 0) == VK_SUCCESS);
+
+        VkImageMemoryBarrier acquire = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .image = target,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        VkImageMemoryBarrier to_attachment = acquire;
+        to_attachment.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        to_attachment.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        to_attachment.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        to_attachment.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        VkClearColorValue clear_colour = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}};
+        VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkCommandBuffer cleared = begin();
+        vkCmdPipelineBarrier(cleared, VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &acquire);
+        assert(cleared->state == PS5VK_RECORDING);
+        vkCmdClearColorImage(cleared, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             &clear_colour, 1, &whole);
+        assert(cleared->state == PS5VK_RECORDING);
+        vkCmdPipelineBarrier(cleared, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &to_attachment);
+        assert(cleared->state == PS5VK_RECORDING);
+        assert(vkEndCommandBuffer(cleared) == VK_SUCCESS);
+
+        /* The postlude transition and the separately submitted readback. */
+        VkImageMemoryBarrier to_source = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .image = target,
+            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        VkCommandBuffer handed = begin();
+        vkCmdPipelineBarrier(handed, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_source);
+        assert(handed->state == PS5VK_RECORDING);
+        assert(vkEndCommandBuffer(handed) == VK_SUCCESS);
+
+        VkBufferImageCopy to_host = {.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+            .imageExtent = {WIDTH, HEIGHT, 1}};
+        VkBufferMemoryBarrier host_read = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = host_buffer, .size = VK_WHOLE_SIZE};
+        VkCommandBuffer fetched = begin();
+        vkCmdCopyImageToBuffer(fetched, target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               host_buffer, 1, &to_host);
+        assert(fetched->state == PS5VK_RECORDING);
+        vkCmdPipelineBarrier(fetched, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 1, &host_read, 0, NULL);
+        assert(fetched->state == PS5VK_RECORDING);
+        assert(vkEndCommandBuffer(fetched) == VK_SUCCESS);
+
+        vkDestroyBuffer(device, host_buffer, NULL);
+        vkFreeMemory(device, host_memory, NULL);
+    }
+
     /* Negatives: only the measured shapes may be recorded. Each call must leave
      * the command buffer invalid instead of appending work. */
     VkDeviceMemory pure_transfer_memory = VK_NULL_HANDLE;

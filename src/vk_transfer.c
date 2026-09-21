@@ -209,8 +209,16 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
         (!array_color && image->info.arrayLayers!=1) || image->info.extent.depth!=1 ||
         (image->info.usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT))!=
             (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
-        (!array_color && (image->info.usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|
-                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))) {invalid(c);return;}
+        /* A transfer destination does not stop a colour attachment being read
+         * back: the pinned upstream draw helper clears such a target outside
+         * the render pass and then reads the rendered result from the same
+         * image (vkImageUtil.cpp clearColorImage, Image::read). Sampled and
+         * depth-stencil roles stay out, and the transfer destination is
+         * admitted only for the colour-attachment shape that declares it. */
+        (!array_color && (image->info.usage&(VK_IMAGE_USAGE_SAMPLED_BIT|
+                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) ||
+        (!array_color && (image->info.usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+         !ps5vk_colour_transfer_image(image))) {invalid(c);return;}
     const VkBufferImageCopy *r=&regions[0];
     const uint64_t plane=(uint64_t)image->info.extent.width*image->info.extent.height;
     if(!image->info.arrayLayers || plane>UINT64_MAX/4/image->info.arrayLayers){invalid(c);return;}

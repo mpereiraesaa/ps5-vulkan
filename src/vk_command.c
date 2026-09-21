@@ -1073,6 +1073,7 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
         VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
+        VK_ACCESS_SHADER_WRITE_BIT |
         VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
@@ -1087,7 +1088,14 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         !(stages & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & (VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
-    if((access & VK_ACCESS_SHADER_READ_BIT) &&
+    /* A shader write is ordered by the same stages a shader read is. The
+     * pinned upstream clear helper names SHADER_WRITE as the destination
+     * access of its post-clear transition, against the fragment stage
+     * (vkImageUtil.cpp clearColorImage, the tcu::Vec4 overload), and the
+     * compute scope cannot carry it because the fragment stage is not a
+     * compute stage. The bit selects which writes become visible; it does not
+     * authorize a shader to write anything. */
+    if((access & (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & VK_ACCESS_INDIRECT_COMMAND_READ_BIT) &&
@@ -1223,7 +1231,22 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
           (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
            b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
            b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
-           b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT)));
+           b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT))) ||
+        /* Clear through the transfer destination, then render into the same
+         * image. The pinned upstream helper clears a colour target outside the
+         * render pass and records exactly these two transitions around its
+         * vkCmdClearColorImage: the image is acquired as a transfer
+         * destination from UNDEFINED, and handed to the colour attachment
+         * stage afterwards with the helper's own destination access, which is
+         * SHADER_WRITE for the tcu::Vec4 overload the draw module calls. Both
+         * are accepted exactly as the helper writes them. */
+        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+         b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT);
     /* The linear staging image the pinned draw module reads back through gets
      * exactly the two transitions that module records
      * (vktDrawImageObjectUtil.cpp:415-443): UNDEFINED to GENERAL for the
