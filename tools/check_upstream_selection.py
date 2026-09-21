@@ -130,6 +130,51 @@ def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
             for capability in capabilities for type_name in type_names}
 
 
+def _dual_source_blend_leaf_names(text: str, leaf: str) -> set[str]:
+    """Leaves of the pipeline module's dual-source blend family.
+
+    `getBlendStateSetName` joins one fixed-length sequence of blend-state names
+    with "-", and `getBlendStateName` composes each of those from four derived
+    tables: the short factor spellings and the blend-operation names, both read
+    from the initializer in this file, around the color/alpha layout the
+    function prints. The combination space is far too large to enumerate, so
+    membership is checked structurally against exactly those tables and against
+    the registration that produces the family. Bounded to the exact
+    construction shapes in this one pinned module: a rewritten factory stops
+    matching instead of yielding invented names.
+    """
+    factor_match = re.search(
+        r"const char \*shortBlendFactorNames\[\]\s*=\s*\{(.*?)\n\s*\};",
+        text, re.DOTALL)
+    op_match = re.search(r"blendOpNames\[\]\s*=\s*\{(.*?)\n\s*\};",
+                         text, re.DOTALL)
+    if not (factor_match and op_match):
+        return set()
+    factors = re.findall(r'"([a-z0-9]+)"', factor_match.group(1))
+    ops = re.findall(r'"([a-z]+)"', op_match.group(1))
+    # Both tables are pinned: nineteen factor spellings and the five blend
+    # operations in their declared order.
+    if len(factors) != 19 or ops != ["add", "sub", "rsub", "min", "max"]:
+        return set()
+    if not re.search(r'name\s*<<\s*"-"\s*;', text):
+        return set()
+    if not re.search(r"blendStateTests->addChild\(new DualSourceBlendTest\(testCtx, "
+                     r"getBlendStateSetName\(", text):
+        return set()
+
+    def alternatives(tokens: list[str]) -> str:
+        return "|".join(sorted(map(re.escape, tokens), key=len, reverse=True))
+
+    factor = alternatives(factors)
+    operation = alternatives(ops)
+    state = re.compile(f"color_({factor})_({factor})_({operation})_"
+                       f"alpha_({factor})_({factor})_({operation})")
+    parts = leaf.split("-")
+    if len(parts) != 4 or not all(state.fullmatch(part) for part in parts):
+        return set()
+    return {leaf}
+
+
 def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]:
     """Leaves of the rasterization module's culling family.
 
@@ -1395,6 +1440,13 @@ def main() -> int:
         # to that factory's exact construction expressions and to this module.
         if (source_path.name == "vktRasterizationTests.cpp" and
                 leaf in _rasterization_culling_leaf_names(text, function_text)):
+            continue
+        # The dual-source blend family composes its leaf names from the short
+        # factor spellings and the blend-operation table inside the cited
+        # factory. Bounded to that module's exact initializer and joining
+        # expressions.
+        if (source_path.name == "vktPipelineBlendTests.cpp" and
+                leaf in _dual_source_blend_leaf_names(text, leaf)):
             continue
         # The fragment_ops multi-viewport family, the clipping clip_volume groups
         # and the draw depth_clamp family compose their names from a prefix or a
