@@ -475,6 +475,15 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
          * measures, and a plain point/line pipeline stays fail-closed. */
     if(!ps5vk_graphics_has_geometry(key) && ps5vk_agc_primitive_needs_geometry(primitive_type))
         return ps5vk_reject(key,22);
+    /* A partial colour write mask stays refused. The upstream blend family
+     * paints each quad through CB_TARGET_MASK (context offset 0x08e), and
+     * accepting those masks without a proven programming point is not enough:
+     * a measurement build that emitted 0x08e from the per-draw stream
+     * completed 101 of the 404-case selection and then stalled the queue,
+     * where the same selection had run end to end minutes earlier. Programme
+     * the mask where the hardware expects it (the pipeline's render-target
+     * state, as ps5_pipeline.c does) and widen this condition in the same
+     * change that witnesses it. */
     if((key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
         key->color_format!=VK_FORMAT_R8G8B8A8_UNORM) ||
        key->samples!=VK_SAMPLE_COUNT_1_BIT || key->color_write_mask!=15 ||
