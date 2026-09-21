@@ -32,6 +32,10 @@ struct ps5vk_runtime_graphics_program {
     /* Derived from the exact fragment metadata pair 0x44/0xff. It is compiler
      * evidence only; feature enablement and SRC1 use are separate gates. */
     uint32_t dual_source_export;
+    /* The shape that pair describes, decided by the fragment interface because
+     * the registers alone cannot tell dual source from two MRTs:
+     * PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE, _DUAL or _TWO_MRT. */
+    uint32_t fragment_shape;
     /* The GFX1013 primitive this pair was compiled for, resolved from the key's
      * topology. The native create path links the pair with a primitive the
      * caller supplies, and refuses any value that is not this one, so a

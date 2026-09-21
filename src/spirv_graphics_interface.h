@@ -24,6 +24,18 @@ unsigned ps5vk_spirv_tess_pair_output_points(const struct ps5vk_graphics_key *);
 int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_key *,
                                             unsigned *clip_distances,
                                             unsigned *cull_distances);
+/* The fragment module's primary Output locations as a bitmask (bit N set when
+ * the module declares a whole-location float32 output at Location N), and
+ * whether it declares the dual-source secondary output (Location 0, Index 1).
+ *
+ * This is the fact the export registers cannot carry: the pinned compiler
+ * publishes the same 0x44/0xff pair for one MRT with two sources and for two
+ * MRTs, so the runtime classifies the shape from this declaration and uses the
+ * registers only as proof that the export exists. Returns 0 for a module this
+ * profile cannot reflect. */
+int ps5vk_spirv_fragment_outputs(const struct ps5vk_graphics_module_key *,
+                                 unsigned *primary_mask,int *secondary);
+
 /* The same widths as PIXEL INPUTS: the declared component count of the
  * gl_ClipDistance (3) and gl_CullDistance (4) arrays a fragment module reads
  * from its predecessor, or zero for a built-in it does not declare. A read is

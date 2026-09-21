@@ -283,6 +283,49 @@ static void check_dual_source_blend_contract(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+/* A fragment module that declares two primary Output locations is the two-MRT
+ * shape. The pinned compiler publishes the SAME 0x44/0xff pair it publishes for
+ * dual source, so the registers alone cannot classify it and the interface
+ * must; and this profile renders one colour attachment, so the pipeline stays
+ * refused instead of silently dropping the second export. */
+static void check_two_mrt_exports(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/two_mrt.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_R8G8B8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    unsigned primary_mask=0; int secondary=0;
+    assert(ps5vk_spirv_fragment_outputs(&key.fragment,&primary_mask,&secondary));
+    assert(primary_mask==3u && !secondary);
+    PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
+        .entrypoint="main",.optimise=true,.address32_hi=2,.rasterization_samples=1,
+        /* Two targets, both the profile's colour format. */
+        .spi_shader_col_format=0x44};
+    PsbcShaderOutput compiled={0};
+    assert(psbc_compile_shader(key.fragment.words,key.fragment.word_count*4u,
+        &options,&compiled)==PSBC_RESULT_OK);
+    uint32_t spi_format=0,shader_mask=0;
+    for(unsigned i=0;i<compiled.metadata.context_register_count;++i) {
+        const PsbcRegisterWrite *reg=&compiled.metadata.context_registers[i];
+        if(reg->offset==PS5VK_TEST_SPI_SHADER_COL_FORMAT_OFFSET)spi_format=reg->value;
+        if(reg->offset==PS5VK_TEST_CB_SHADER_MASK_OFFSET)shader_mask=reg->value;
+    }
+    assert(spi_format==UINT32_C(0x44) && shader_mask==UINT32_C(0xff));
+    /* The register classification cannot tell this from dual source; the
+     * interface does, and the adapter refuses the pipeline while the profile
+     * serves one colour attachment. */
+    assert(ps5vk_runtime_fragment_export(&compiled.metadata)==
+        PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL);
+    psbc_free_output(&compiled);
+    const void *runtime=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)!=
+        VK_SUCCESS && !runtime);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
 /* Clip and cull distances leave the pre-raster stage through the packed
@@ -1856,6 +1899,7 @@ int main(void)
     check_fragment_position();
     check_dual_source_exports();
     check_dual_source_blend_contract();
+    check_two_mrt_exports();
     check_geometry_stage();
     check_viewport_index_routing();
     check_geometry_output_components();
