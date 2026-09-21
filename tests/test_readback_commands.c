@@ -128,4 +128,49 @@ int main(void)
         assert(ps5vk_readback_commands(&device,ops,4,NULL,&layouts,&plan)!=VK_SUCCESS);
         assert(!layouts.count && !plan.image);
     }
+    source_size=65536;destination_size=64*64*4;
+    ops[1].copy_region.bufferImageHeight=0;
+    ops[1].copy_region.imageSubresource.layerCount=1;
+
+    /* The DEPTH readback is submitted on its own, after the render submission
+     * already moved the surface to TRANSFER_SRC_OPTIMAL, so it records only the
+     * copy and the host barrier: two operations, no transition to stage. */
+    {
+        struct VkImage_T depth={.device=&device,.layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .info={.format=VK_FORMAT_D32_SFLOAT,.imageType=VK_IMAGE_TYPE_2D,.samples=VK_SAMPLE_COUNT_1_BIT,
+            .extent={64,64,1},.mipLevels=1,.arrayLayers=1,.tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                   VK_IMAGE_USAGE_TRANSFER_DST_BIT}};
+        assert(ps5vk_depth_readback_image(&depth));
+        /* The pinned depth clamp module reads a 256x256 D32 surface, whose
+         * 64KB_Z_X footprint is four 64 KiB tiles. */
+        depth.info.extent=(VkExtent3D){256,256,1};
+        source_size=262144;destination_size=256*256*4;
+        struct ps5vk_operation pair[3]={
+            {.type=PS5VK_COPY_IMAGE_BUFFER,.copy_image=&depth,.copy_destination=buffer,
+             .copy_layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,.copy_region={
+             .imageSubresource={VK_IMAGE_ASPECT_DEPTH_BIT,0,0,1},.imageExtent={256,256,1}}},
+            {.type=PS5VK_BARRIER,.src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+             .dst_stage=VK_PIPELINE_STAGE_HOST_BIT,.src_access=VK_ACCESS_TRANSFER_WRITE_BIT,
+             .dst_access=VK_ACCESS_HOST_READ_BIT,
+             .buffer_barrier={.buffer=buffer,.size=VK_WHOLE_SIZE}},
+            /* The recorder appends an aggregate for a barrier call that names
+             * no image, so the submission carries three operations. */
+            {.type=PS5VK_BARRIER,.src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+             .dst_stage=VK_PIPELINE_STAGE_HOST_BIT}};
+        layouts=(struct ps5vk_layout_state){0};plan=(struct ps5vk_readback_plan){0};
+        assert(ps5vk_readback_commands(&device,pair,3,NULL,&layouts,&plan)==VK_SUCCESS);
+        assert(plan.image==&depth && plan.buffer==buffer);
+        /* Nothing was staged: the surface was already where the copy needs it. */
+        assert(!layouts.count);
+
+        /* The two-operation shape exists only for a depth source, and only
+         * with the depth aspect. */
+        plan=(struct ps5vk_readback_plan){0};
+        pair[0].copy_image=&image;
+        assert(ps5vk_readback_commands(&device,pair,3,NULL,&layouts,&plan)!=VK_SUCCESS && !plan.image);
+        pair[0].copy_image=&depth;
+        pair[0].copy_region.imageSubresource.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+        assert(ps5vk_readback_commands(&device,pair,3,NULL,&layouts,&plan)!=VK_SUCCESS && !plan.image);
+    }
 }
