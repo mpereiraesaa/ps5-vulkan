@@ -520,8 +520,12 @@ static void lifecycle(void)
         if(formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
             optimal_bits=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         else if(formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
+            /* DXVK262-T06: the blend bit joins the advertised role, because
+             * the upstream blend family gates every leaf on it and all 98
+             * applicable leaves passed with it reported. */
             optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
         else if(formats[n]==VK_FORMAT_D32_SFLOAT)
             /* TRANSFER_DST is the whole-subresource depth clear, which is the
              * only transfer role 64KB_Z_X has; there is no TRANSFER_SRC. */
@@ -622,7 +626,8 @@ static void lifecycle(void)
         }
         if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
             expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
         else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
             expected_optimal=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         assert(fp.optimalTilingFeatures==expected_optimal);

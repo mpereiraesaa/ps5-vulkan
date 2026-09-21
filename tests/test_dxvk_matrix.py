@@ -77,8 +77,8 @@ class DxvkMatrixTests(unittest.TestCase):
         # Three multiview rows, the three T03 draw rows, the clip/cull pair and
         # the independently witnessed fragment-storage feature advance; API
         # 1.3 remains a separate blocker.
-        self.assertEqual(10, document["summary"]["satisfied"])
-        self.assertEqual(52, document["summary"]["blocker"])
+        self.assertEqual(11, document["summary"]["satisfied"])
+        self.assertEqual(51, document["summary"]["blocker"])
 
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
@@ -87,11 +87,12 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(10, document["summary"]["satisfied"])
-        self.assertEqual(52, document["summary"]["blocker"])
+        self.assertEqual(11, document["summary"]["satisfied"])
+        self.assertEqual(51, document["summary"]["blocker"])
         self.assertEqual(
             [
                          "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+                         "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
                          "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
                          "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
                          "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
@@ -144,8 +145,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(10, document["summary"]["satisfied"])
-                self.assertEqual(52, document["summary"]["blocker"])
+                self.assertEqual(11, document["summary"]["satisfied"])
+                self.assertEqual(51, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 

@@ -2,14 +2,15 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55",
+    "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
     "device_api": "1.0.0",
     "device_extensions": 5,
     "requirements": 62,
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
-      "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+      "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
       "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+      "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
       "feature:VkPhysicalDeviceFeatures:geometryShader",
       "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
@@ -22,8 +23,8 @@
     ],
     "runs": [
       {
-        "id": "20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e",
-        "log_sha256": "e8f3b82d06ec392e60b89ecd948f43cf201f001daf0c1a901620763abdabb138"
+        "id": "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad",
+        "log_sha256": "8c4577c6782b50203b0eea9174bdcda5ca01854d677de60c10b1ba107f3a13d5"
       }
     ],
     "transport": "ps5log/1",
@@ -36,84 +37,87 @@
         "maxMultiviewInstanceIndex": "134217727"
       }
     ],
-    "source_matrix_sha256": "9df8043ba28d50f0187cea32a49f0d4262c55183ba14471baa839dc09b4aecbe",
-    "satisfied": 12,
-    "blockers": 50
+    "source_matrix_sha256": "f3365af79eaa520e8cc79cf8842d9d0ce7e2df92d0c553f13ad29854a6444397",
+    "satisfied": 13,
+    "blockers": 49
   },
-  "historical_capability_probes": [{
-    "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
-    "device_api": "1.0.0",
-    "device_extensions": 5,
-    "requirements": 62,
-    "satisfied_ids": [
-      "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
-      "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
-      "feature:VkPhysicalDeviceFeatures:geometryShader",
-      "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
-      "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
-      "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
-      "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
-      "feature:VkPhysicalDeviceVulkan11Features:multiview",
-      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
-      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
-    ],
-    "runs": [
-      {
-        "id": "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305",
-        "log_sha256": "944e1d9e5d712c20228748e537ea50453abac933dc0ca5dd540ca2fa6463e18e"
-      }
-    ],
-    "transport": "ps5log/1",
-    "verifier": "tools/verify_dxvk_probe.py",
-    "query_routes": [
-      {
-        "route": "VK_KHR_multiview",
-        "multiview": "1",
-        "maxMultiviewViewCount": "6",
-        "maxMultiviewInstanceIndex": "134217727"
-      }
-    ],
-    "source_matrix_sha256": "10da3d8a500250bd6197d4502dfa26419b45f6fcf8ab612bd10ed5b6e780ce4b",
-    "satisfied": 10,
-    "blockers": 52
-  }, {
-    "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
-    "device_api": "1.0.0",
-    "device_extensions": 5,
-    "requirements": 62,
-    "satisfied_ids": [
-      "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
-      "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
-      "feature:VkPhysicalDeviceFeatures:geometryShader",
-      "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
-      "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
-      "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
-      "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
-      "feature:VkPhysicalDeviceFeatures:tessellationShader",
-      "feature:VkPhysicalDeviceVulkan11Features:multiview",
-      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
-      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
-    ],
-    "runs": [
-      {
-        "id": "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2",
-        "log_sha256": "02d9105b99a6039b63fb43885d871fc47916d5aa738b1bfe8439644f9a796f15"
-      }
-    ],
-    "transport": "ps5log/1",
-    "verifier": "tools/verify_dxvk_probe.py",
-    "query_routes": [
-      {
-        "route": "VK_KHR_multiview",
-        "multiview": "1",
-        "maxMultiviewViewCount": "6",
-        "maxMultiviewInstanceIndex": "134217727"
-      }
-    ],
-    "source_matrix_sha256": "49f7fbf9719e1b70f22b09bce2bef58d856045daf16c86d2e354c81df0ba53df",
-    "satisfied": 11,
-    "blockers": 51
-  }],
+  "historical_capability_probes": [
+    {
+      "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
+      "device_api": "1.0.0",
+      "device_extensions": 5,
+      "requirements": 62,
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305",
+          "log_sha256": "944e1d9e5d712c20228748e537ea50453abac933dc0ca5dd540ca2fa6463e18e"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "10da3d8a500250bd6197d4502dfa26419b45f6fcf8ab612bd10ed5b6e780ce4b",
+      "satisfied": 10,
+      "blockers": 52
+    },
+    {
+      "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+      "device_api": "1.0.0",
+      "device_extensions": 5,
+      "requirements": 62,
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2",
+          "log_sha256": "02d9105b99a6039b63fb43885d871fc47916d5aa738b1bfe8439644f9a796f15"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "49f7fbf9719e1b70f22b09bce2bef58d856045daf16c86d2e354c81df0ba53df",
+      "satisfied": 11,
+      "blockers": 51
+    }
+  ],
   "requirements": {
     "feature:VkPhysicalDeviceVulkan11Features:multiview": {
       "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
@@ -815,6 +819,127 @@
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "note": "The probe reports geometryShader=1; it executes capability queries, not geometry draws."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:dualSrcBlend": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mcc_max_alpha_1mca_ca_min-color_1mca_sa_rsub_alpha_s1a_dc_add-color_1mca_1mcc_min_alpha_1msa_1ms1a_add-color_s1c_da_max_alpha_dc_1msc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mdc_min_alpha_ca_1ms1a_min-color_o_s1a_add_alpha_s1a_ca_add-color_sas_1mca_add_alpha_1msc_sa_sub-color_sc_1msc_max_alpha_1msc_sas_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mdc_rsub_alpha_da_1ms1c_add-color_cc_ca_add_alpha_da_sas_max-color_z_1mcc_min_alpha_o_z_min-color_ca_s1c_add_alpha_1msc_s1a_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1msc_sub_alpha_s1c_s1a_sub-color_cc_cc_max_alpha_sc_1msc_add-color_z_sas_sub_alpha_cc_sc_sub-color_z_1msa_min_alpha_z_dc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_ca_max_alpha_sa_cc_add-color_o_cc_min_alpha_1mda_1ms1c_max-color_z_1msa_max_alpha_1mda_da_rsub-color_sc_1mca_add_alpha_sc_1mca_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_cc_max_alpha_sas_cc_add-color_dc_1ms1a_rsub_alpha_sa_1mca_sub-color_1msc_cc_rsub_alpha_cc_o_sub-color_s1c_1msa_rsub_alpha_1mda_ca_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_da_min_alpha_1ms1c_1mda_sub-color_dc_s1a_add_alpha_ca_sas_min-color_da_1mca_rsub_alpha_da_ca_min-color_o_cc_rsub_alpha_1mca_sc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_s1c_rsub_alpha_1mca_o_rsub-color_1msc_s1a_rsub_alpha_da_cc_max-color_o_1msc_sub_alpha_sas_da_max-color_z_o_min_alpha_cc_dc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_cc_rsub_alpha_1mdc_s1a_add-color_1msa_1msa_sub_alpha_1ms1a_ca_min-color_z_s1c_rsub_alpha_s1c_ca_sub-color_1ms1c_s1c_min_alpha_1mcc_1mdc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_da_sub_alpha_s1a_z_sub-color_sas_da_max_alpha_z_1mcc_add-color_sas_da_rsub_alpha_sc_1ms1c_min-color_da_1mdc_sub_alpha_1ms1c_1msa_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_s1c_max_alpha_da_sc_add-color_dc_1mcc_sub_alpha_s1a_o_sub-color_1ms1a_da_sub_alpha_cc_da_max-color_1msa_s1a_max_alpha_ca_s1a_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1mdc_rsub_alpha_sc_da_max-color_sa_sc_rsub_alpha_sc_1ms1a_sub-color_1ms1a_sc_add_alpha_1ms1a_o_add-color_1mca_1ms1a_max_alpha_sa_1mca_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1mdc_sub_alpha_s1a_1ms1c_rsub-color_1mca_o_rsub_alpha_1mca_ca_min-color_ca_s1c_add_alpha_dc_1ms1c_sub-color_ca_1ms1a_min_alpha_sc_sc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1ms1a_add_alpha_1mcc_1mca_max-color_sc_dc_sub_alpha_1msc_1ms1a_max-color_1ms1a_sa_max_alpha_da_1ms1c_add-color_1ms1a_dc_max_alpha_1ms1c_s1c_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1msa_max_alpha_1mca_z_sub-color_da_1msc_rsub_alpha_1mda_1ms1c_add-color_1msa_1mdc_max_alpha_da_sas_min-color_cc_dc_sub_alpha_1mda_sas_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_da_sub_alpha_sc_ca_add-color_1msa_z_min_alpha_1mca_1mcc_min-color_o_sa_add_alpha_1mda_dc_rsub-color_sc_1mcc_min_alpha_s1a_z_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_s1a_min_alpha_1msa_sc_sub-color_1msa_o_rsub_alpha_da_z_add-color_1msc_s1c_rsub_alpha_1mda_s1a_max-color_s1c_cc_add_alpha_sas_ca_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_sa_sub_alpha_1ms1c_1mdc_sub-color_o_1mca_add_alpha_cc_cc_add-color_s1a_cc_sub_alpha_ca_cc_min-color_cc_sas_min_alpha_sa_z_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_sc_rsub_alpha_s1c_o_max-color_da_ca_add_alpha_z_1msc_add-color_1mca_1ms1a_add_alpha_o_1mda_max-color_1ms1a_1msc_rsub_alpha_dc_sas_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_z_add_alpha_sas_1mca_min-color_cc_s1c_add_alpha_sc_o_sub-color_z_1mda_min_alpha_1mda_s1a_sub-color_s1c_sc_min_alpha_o_o_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mdc_1mda_rsub_alpha_1mca_1mcc_min-color_dc_o_rsub_alpha_sa_z_add-color_1msc_da_max_alpha_1mca_1mca_sub-color_sa_1ms1a_sub_alpha_1msa_sc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_ca_add_alpha_1msa_cc_max-color_s1c_z_sub_alpha_sa_sc_add-color_da_da_max_alpha_s1c_cc_rsub-color_da_s1a_max_alpha_da_o_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_cc_max_alpha_1msa_1mca_sub-color_o_1mdc_max_alpha_1mda_1ms1c_rsub-color_sas_da_max_alpha_1msa_1msc_add-color_sc_1msc_add_alpha_sas_1ms1a_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_o_rsub_alpha_o_sas_max-color_z_1msa_min_alpha_dc_sc_rsub-color_sc_1mda_add_alpha_1ms1c_cc_max-color_s1a_1ms1c_max_alpha_1mca_o_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_o_sub_alpha_sc_z_min-color_da_o_add_alpha_1msc_sa_min-color_1mdc_1mda_sub_alpha_sas_1mdc_max-color_1mdc_1msa_max_alpha_o_1msc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_sa_add_alpha_o_1ms1a_max-color_sa_1ms1c_add_alpha_s1a_s1c_max-color_sc_1mdc_add_alpha_1ms1a_1mdc_sub-color_da_sa_sub_alpha_1mcc_sc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_sa_max_alpha_sas_sas_min-color_1ms1c_1msa_sub_alpha_1msc_o_add-color_sa_sa_rsub_alpha_cc_cc_add-color_da_da_add_alpha_s1c_da_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_z_sub_alpha_1mdc_s1a_min-color_1mda_1mcc_max_alpha_1msc_o_max-color_1ms1a_1mcc_min_alpha_1mcc_s1c_max-color_1mcc_1ms1a_add_alpha_sa_1mca_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_1mda_add_alpha_cc_1mca_min-color_da_o_sub_alpha_da_1mda_max-color_z_1mcc_sub_alpha_sc_cc_sub-color_1mca_1ms1a_max_alpha_cc_dc_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_1ms1c_max_alpha_1mdc_z_sub-color_sc_z_max_alpha_1ms1c_sas_sub-color_1msc_1msc_min_alpha_s1a_ca_min-color_1msc_1msc_add_alpha_ca_da_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_s1c_min_alpha_1ms1c_cc_add-color_sas_sas_max_alpha_1mca_dc_min-color_1msc_1ms1c_min_alpha_dc_1mdc_add-color_1mdc_s1a_rsub_alpha_o_1mda_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_sa_rsub_alpha_1mda_s1c_sub-color_o_ca_min_alpha_sa_da_add-color_sa_da_min_alpha_s1c_s1c_max-color_z_s1a_max_alpha_1msa_cc_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mca_add_alpha_da_dc_min-color_1msa_cc_rsub_alpha_1msa_1mcc_max-color_dc_dc_add_alpha_dc_dc_min-color_1mda_1ms1a_add_alpha_sc_sa_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mca_add_alpha_dc_1ms1c_max-color_1msc_sc_sub_alpha_sa_s1c_rsub-color_o_1mcc_rsub_alpha_1mdc_s1c_rsub-color_ca_1mcc_sub_alpha_sas_1mca_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mda_max_alpha_1ms1c_o_rsub-color_1mda_s1a_rsub_alpha_1mca_sas_add-color_s1c_1mca_add_alpha_cc_ca_max-color_s1c_1mcc_max_alpha_s1a_o_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mdc_max_alpha_s1a_ca_max-color_1mda_cc_min_alpha_sas_dc_sub-color_1ms1a_sc_sub_alpha_z_dc_max-color_sc_dc_sub_alpha_s1c_o_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1a_add_alpha_1mdc_1msa_sub-color_dc_1ms1c_rsub_alpha_z_1mdc_sub-color_ca_1ms1c_min_alpha_sas_ca_rsub-color_1ms1c_s1c_add_alpha_z_1mda_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1a_sub_alpha_1mda_1mda_sub-color_1ms1a_ca_min_alpha_o_s1a_max-color_s1c_da_add_alpha_1ms1a_ca_max-color_sc_sa_add_alpha_z_o_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1c_sub_alpha_da_z_min-color_sa_cc_max_alpha_sc_sa_min-color_o_s1c_sub_alpha_1msa_sa_add-color_sa_1mda_rsub_alpha_cc_sc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_sas_sub_alpha_s1a_1mda_add-color_sa_1mcc_min_alpha_cc_1mcc_sub-color_dc_1ms1a_sub_alpha_1mca_z_max-color_1msc_1msa_max_alpha_sc_s1c_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_max_alpha_da_1mda_sub-color_dc_ca_max_alpha_1msc_1msa_add-color_1mdc_1ms1a_min_alpha_1mda_1mda_min-color_1ms1c_1msc_max_alpha_1mca_1msc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_sub_alpha_1msa_1mca_sub-color_1msc_da_max_alpha_o_da_add-color_s1c_s1a_max_alpha_dc_1ms1a_sub-color_s1a_z_sub_alpha_1msa_1msc_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_sub_alpha_1msa_1mdc_sub-color_1mda_sas_add_alpha_o_ca_add-color_sa_1mdc_sub_alpha_o_1mca_rsub-color_s1c_1msa_rsub_alpha_1msa_1mca_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1msa_add_alpha_dc_1ms1a_add-color_da_cc_rsub_alpha_1ms1a_s1a_max-color_sas_z_min_alpha_1mca_da_add-color_1msc_ca_min_alpha_1mdc_sc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1msa_max_alpha_s1a_1mda_sub-color_s1a_sc_add_alpha_dc_1mca_max-color_sas_s1a_add_alpha_1msa_sas_min-color_1ms1c_1msc_sub_alpha_sc_sas_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_ca_rsub_alpha_1msa_s1c_rsub-color_dc_1ms1a_min_alpha_1ms1a_cc_rsub-color_ca_ca_add_alpha_s1c_sc_add-color_o_1ms1c_sub_alpha_z_1mda_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mca_add_alpha_o_1ms1a_sub-color_1mcc_1msc_max_alpha_1mdc_sas_sub-color_ca_1mdc_min_alpha_z_1mdc_max-color_1ms1c_1mdc_min_alpha_dc_o_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mcc_max_alpha_z_o_add-color_sa_s1a_max_alpha_1msa_dc_min-color_sc_cc_add_alpha_dc_1msa_sub-color_1ms1a_o_max_alpha_1ms1a_sc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mcc_sub_alpha_z_1mca_sub-color_sa_da_min_alpha_s1c_ca_add-color_1ms1a_sa_max_alpha_1ms1a_cc_sub-color_dc_ca_add_alpha_cc_1ms1a_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mdc_add_alpha_sc_1mda_add-color_sc_1mca_rsub_alpha_z_1mdc_max-color_sa_1mca_sub_alpha_sc_s1c_max-color_sas_s1a_min_alpha_da_1ms1c_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1msc_rsub_alpha_sc_1mdc_sub-color_1ms1c_sas_sub_alpha_s1c_sas_max-color_dc_sa_sub_alpha_sa_1msa_add-color_s1c_sc_add_alpha_z_o_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1msc_sub_alpha_z_1mcc_min-color_1msc_1ms1c_add_alpha_1mda_1mdc_sub-color_ca_sas_rsub_alpha_cc_1ms1c_max-color_1ms1c_1ms1c_rsub_alpha_da_s1a_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_ca_sub_alpha_1ms1c_da_add-color_ca_dc_sub_alpha_s1c_sc_add-color_sc_sa_min_alpha_1ms1c_1mda_min-color_1ms1c_dc_rsub_alpha_1msc_1msc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_sa_sub_alpha_z_dc_rsub-color_s1a_1mdc_sub_alpha_1msc_1mdc_min-color_1mcc_ca_sub_alpha_ca_z_min-color_1mdc_s1c_min_alpha_s1c_1mdc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_1ms1a_rsub_alpha_da_s1a_max-color_o_sc_max_alpha_1mcc_1msc_sub-color_1msc_1mcc_max_alpha_s1c_1mca_sub-color_ca_1mcc_max_alpha_s1a_dc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_ca_max_alpha_da_1mdc_rsub-color_sa_1msc_sub_alpha_sc_1mca_sub-color_1ms1c_s1c_add_alpha_s1c_dc_rsub-color_da_1mda_add_alpha_s1c_1msa_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_o_add_alpha_1msa_1mca_sub-color_cc_1msc_min_alpha_1msa_s1a_add-color_1mca_sc_min_alpha_1msc_1ms1c_add-color_1ms1c_1mcc_add_alpha_1mdc_o_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_z_rsub_alpha_s1a_s1a_rsub-color_s1c_1msa_rsub_alpha_1mda_sc_add-color_cc_1mcc_min_alpha_sas_da_add-color_1mcc_1msc_sub_alpha_da_z_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_1mca_min_alpha_1msa_1msc_sub-color_s1a_1msc_rsub_alpha_dc_dc_max-color_sa_1mda_sub_alpha_z_da_max-color_dc_sc_max_alpha_dc_1ms1c_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_1msa_sub_alpha_1mca_da_rsub-color_z_cc_add_alpha_sa_dc_add-color_s1a_1ms1a_rsub_alpha_1mca_s1c_min-color_1mdc_z_min_alpha_sc_1mcc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_ca_rsub_alpha_dc_s1a_rsub-color_cc_da_min_alpha_ca_1ms1a_max-color_1msc_1mdc_max_alpha_cc_sa_rsub-color_da_o_sub_alpha_z_dc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_1mdc_rsub_alpha_1mca_1mcc_rsub-color_1mcc_1ms1a_add_alpha_1msa_1ms1c_rsub-color_1msa_1mda_max_alpha_1msc_sa_min-color_1ms1a_sc_max_alpha_1mca_cc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_1msc_max_alpha_1ms1a_1mca_add-color_1mdc_s1c_min_alpha_ca_dc_sub-color_1mdc_s1c_sub_alpha_z_sc_min-color_ca_1mca_rsub_alpha_s1a_1ms1a_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_ca_add_alpha_z_1msa_sub-color_z_1mcc_add_alpha_1mcc_1mca_sub-color_1msa_da_rsub_alpha_cc_1ms1a_add-color_cc_1mcc_sub_alpha_1mda_1ms1c_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_add_alpha_o_s1c_add-color_1mdc_1mcc_min_alpha_1ms1a_1mcc_sub-color_sas_1msa_sub_alpha_1ms1c_1mda_add-color_1msa_o_add_alpha_dc_sc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_min_alpha_da_sc_max-color_1mda_s1a_add_alpha_da_1mda_rsub-color_dc_s1a_rsub_alpha_da_1mcc_rsub-color_cc_dc_min_alpha_1msa_sas_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_min_alpha_sas_o_min-color_o_1msa_add_alpha_1mdc_s1a_max-color_1ms1a_1msc_add_alpha_cc_1mcc_max-color_1msa_cc_max_alpha_sas_da_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_sa_max_alpha_da_ca_add-color_z_1ms1c_add_alpha_sc_sas_rsub-color_1mdc_cc_min_alpha_dc_ca_min-color_1ms1a_1msc_max_alpha_1msa_ca_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_sas_rsub_alpha_1msc_1mcc_rsub-color_z_s1a_sub_alpha_da_s1c_add-color_1mda_sc_add_alpha_z_z_rsub-color_1ms1a_sc_sub_alpha_sa_1msa_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1mda_max_alpha_s1c_1msa_rsub-color_ca_1ms1a_add_alpha_1mda_1msc_min-color_z_s1a_add_alpha_1mdc_1mcc_add-color_s1c_1mda_add_alpha_1ms1a_o_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1ms1a_rsub_alpha_sc_dc_rsub-color_1msa_dc_sub_alpha_sc_z_min-color_da_z_add_alpha_1mdc_ca_max-color_1mcc_s1c_rsub_alpha_1ms1a_dc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1ms1c_add_alpha_1mcc_1mda_sub-color_ca_1ms1a_max_alpha_1ms1c_s1c_min-color_da_sc_sub_alpha_sc_1mcc_min-color_1mda_dc_max_alpha_ca_s1c_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_cc_rsub_alpha_1msc_1mcc_min-color_sc_1mdc_add_alpha_da_ca_min-color_1mcc_1mda_max_alpha_1ms1c_s1a_min-color_s1c_cc_sub_alpha_ca_1mda_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_da_min_alpha_1msa_1msa_min-color_da_s1a_rsub_alpha_1msc_z_add-color_ca_sc_sub_alpha_cc_s1a_max-color_1mca_1mcc_add_alpha_1msa_s1c_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_s1a_sub_alpha_sc_1msa_rsub-color_sc_1mcc_add_alpha_s1a_1ms1c_rsub-color_1mdc_ca_rsub_alpha_1mda_1ms1c_rsub-color_1ms1a_1msc_min_alpha_o_sas_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_s1c_rsub_alpha_sa_sas_max-color_z_1msa_min_alpha_sas_s1c_rsub-color_1mdc_1msa_rsub_alpha_sc_s1a_min-color_1mdc_sa_min_alpha_1mca_1mcc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_1mda_add_alpha_s1c_ca_add-color_1mca_z_max_alpha_dc_1mcc_max-color_sa_dc_max_alpha_1ms1c_o_sub-color_1mcc_1msc_rsub_alpha_da_1mcc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_1msa_rsub_alpha_ca_z_rsub-color_1ms1c_s1a_max_alpha_z_1msc_add-color_1mda_1mcc_add_alpha_1msc_1mda_max-color_1ms1c_o_max_alpha_s1a_1msc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_sa_min_alpha_1msc_dc_min-color_1mdc_1mca_sub_alpha_s1a_1msc_max-color_sas_ca_max_alpha_1ms1c_sas_sub-color_1msc_sas_max_alpha_1mcc_da_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_sc_rsub_alpha_1msc_1ms1a_max-color_1ms1c_1mda_rsub_alpha_z_1mcc_max-color_z_sas_sub_alpha_1ms1c_s1c_sub-color_1mdc_s1c_min_alpha_sa_1mdc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_1mdc_add_alpha_cc_1ms1c_sub-color_1msa_z_max_alpha_da_1mda_rsub-color_1msa_1msc_rsub_alpha_1mcc_o_min-color_1ms1c_cc_add_alpha_dc_da_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_1mdc_rsub_alpha_1mda_cc_sub-color_1msc_z_max_alpha_o_s1c_sub-color_1ms1a_1msc_sub_alpha_ca_sa_sub-color_ca_ca_max_alpha_cc_s1a_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_cc_add_alpha_sc_sc_add-color_dc_da_max_alpha_dc_s1a_max-color_sa_1mca_sub_alpha_1mca_1ms1c_add-color_1msa_1msa_rsub_alpha_1mda_1mcc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_cc_rsub_alpha_o_1msa_max-color_1ms1c_dc_sub_alpha_1msa_o_min-color_sc_cc_min_alpha_sc_1msc_min-color_1msc_sa_rsub_alpha_o_z_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_1mdc_rsub_alpha_s1a_z_sub-color_1msc_sc_min_alpha_s1a_sc_sub-color_sas_z_max_alpha_1msc_da_min-color_s1c_dc_rsub_alpha_o_1mcc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_1ms1c_sub_alpha_1mda_cc_add-color_da_cc_rsub_alpha_z_1ms1a_add-color_s1c_1mcc_max_alpha_1mca_s1a_rsub-color_cc_dc_max_alpha_1mcc_s1a_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_s1a_add_alpha_sas_1ms1a_max-color_1msa_sas_rsub_alpha_s1a_1mca_sub-color_1mcc_1ms1a_add_alpha_sc_s1a_min-color_ca_1ms1c_max_alpha_1mca_1mcc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_s1c_add_alpha_1mca_1mca_sub-color_1mdc_sc_max_alpha_1msa_s1c_rsub-color_1msa_1mdc_max_alpha_1mca_1mdc_max-color_s1c_ca_min_alpha_1ms1c_1msc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_z_max_alpha_1mcc_1msc_min-color_1msa_1msc_min_alpha_ca_s1a_add-color_1mda_1msc_max_alpha_dc_s1a_rsub-color_s1c_s1c_add_alpha_s1c_z_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_1mca_max_alpha_1ms1c_1mdc_sub-color_ca_1mda_sub_alpha_ca_o_rsub-color_cc_dc_add_alpha_ca_1msa_min-color_1ms1c_1mcc_max_alpha_sas_1mdc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_1ms1c_rsub_alpha_1msc_s1a_rsub-color_1ms1a_1msc_max_alpha_1mda_sc_sub-color_1msa_dc_min_alpha_1msa_1mca_add-color_da_1mcc_rsub_alpha_1ms1c_sa_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_sa_min_alpha_cc_sc_rsub-color_1mcc_1ms1a_add_alpha_sa_da_rsub-color_1mda_sa_min_alpha_s1a_dc_sub-color_sa_z_min_alpha_sc_1mcc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_sc_add_alpha_cc_cc_add-color_1ms1c_ca_sub_alpha_1msa_1mda_max-color_da_1mdc_sub_alpha_1mdc_1mda_rsub-color_1msa_1msa_min_alpha_1mca_1ms1c_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_1mcc_sub_alpha_1mdc_sa_sub-color_s1a_s1a_rsub_alpha_cc_z_add-color_s1c_s1a_rsub_alpha_dc_1mca_add-color_1mdc_1ms1c_max_alpha_s1a_dc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_1msa_rsub_alpha_1msc_z_add-color_s1c_1ms1c_min_alpha_s1a_dc_max-color_1ms1a_o_max_alpha_1mca_dc_rsub-color_sc_dc_min_alpha_sas_1ms1a_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_s1c_min_alpha_1mcc_s1c_rsub-color_ca_1mca_add_alpha_cc_1ms1a_min-color_ca_1ms1c_rsub_alpha_sa_sas_min-color_1ms1c_s1a_add_alpha_1mda_1ms1a_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_sa_rsub_alpha_o_1ms1a_sub-color_1ms1c_1ms1c_min_alpha_sa_s1a_max-color_sa_cc_sub_alpha_sc_1mdc_min-color_o_1mca_add_alpha_da_ca_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_sc_add_alpha_1ms1c_sa_min-color_dc_1mca_add_alpha_z_1mca_max-color_1ms1c_sa_max_alpha_1mcc_sc_sub-color_s1c_1mda_add_alpha_s1c_1mda_add"
+        ],
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#dual-source-blend-promotion-2026-09-21"
+        ],
+        "note": "All 98 applicable upstream blend.dual_source leaves are acceptance cases now and passed twice on hardware: once in the 404-case measurement run on the gated candidate and again in the canonical acceptance run 20260921T160602225Z_PPSA99994_upstream-cts_0x15bf4c85ab360 on the promoted shipping payload 0bbd6679da721eac7f750b7bbea5041bac974ac8f42a9a94ff5a755caff0b3a7 (log sha256 30a0a14af266cc4d65943644eaa2c9ca9afe349e4f8c7ebbb7cad22627f57922), which reports 404 Pass, zero Fail, zero NotSupported with strict artifact and lifecycle identity and a clean title closure. The leaves exercised every factor and operation pair the family generates."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260921T131810348Z_PPSA99994_ps5vk_0x152cbc5ead555"
+        ],
+        "artifact_sha256": "027a43032361f818e4caf314f55557727eff6bb812a44c2a757fcc4e26779d7b",
+        "refs": [
+          "VALIDATION.md#dual-source-blend-promotion-2026-09-21"
+        ],
+        "note": "Deterministic public-path blend witness: control RGBA 64,128,191,255 inside one LSB of the primary export with blending disabled, candidate 51,51,38,255 exactly for color=SRC1_COLOR*ZERO+ADD and alpha=ONE*ZERO+ADD, the two required to differ, fence success, strict_verified=1 and a clean lifecycle. The separate public-ABI probe reports dualSrcBlend=1 on the promotion candidate."
       }
     }
   }

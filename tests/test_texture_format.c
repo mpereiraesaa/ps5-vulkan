@@ -437,12 +437,16 @@ int main(void)
     /* --- published properties for the advertised rows --------------------- */
     VkFormatProperties properties;
     ps5vk_texture_format_properties(VK_FORMAT_R8G8B8A8_UNORM, &properties);
+    /* DXVK262-T06: the blend bit is part of the advertised role now. The
+     * upstream blend factory gates every leaf on it, and all 98 applicable
+     * blend.dual_source leaves passed once it was reported. */
     assert(properties.optimalTilingFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
          VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
          VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
-         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT));
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT));
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
                                VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));

@@ -331,24 +331,24 @@ static int blend_state_uses_src1(const struct ps5vk_graphics_key *key)
 }
 /* The GFX1013 CB_BLEND0_CONTROL contract encodes the whole Vulkan 1.0 blend
  * space: native/blend_ps5.h ps5vk_blend_factor names all nineteen factors and
- * ps5vk_blend_equation names ZERO/ONE/ADD-style in-register conversion for all
- * five operations. The shipping profile does not accept that whole space yet -
- * the bounded shapes below are the ones a native witness measured - so the
- * measurement build is the one allowed to execute an arbitrary upstream blend
- * leaf. */
-/* Colour write mask. The shipping profile programmes the all-channel write the
- * witnesses measured. The measurement build also serves the partial masks the
- * upstream blend family paints with (R&G, G&B, B&A), but only for
+ * ps5vk_blend_equation names the in-register conversion for all five
+ * operations. The profile serves that whole space now. The 98 applicable
+ * upstream blend.dual_source leaves drew every factor and operation pair the
+ * family generates and passed in one run; the native witness pinned the
+ * acceptance rule for the SRC1 shape, so a SRC1 equation still needs the
+ * logical-device feature and the compiler-proven secondary export before it is
+ * served. */
+/* Colour write mask. The upstream blend family paints each quad with a partial
+ * mask (R&G, G&B, B&A) through CB_TARGET_MASK, and the profile serves those for
  * VK_FORMAT_R8G8B8A8_UNORM, whose channel order is the shader's and therefore
- * the one CB_TARGET_MASK names directly; a BGRA target keeps the bounded mask
- * because its export applies a channel swap the mask cannot express. The mask
- * is carried in the pipeline's render-target block, not in the draw stream. */
+ * the one CB_TARGET_MASK names directly. A BGRA target keeps the all-channel
+ * mask because its export applies a channel swap the mask cannot express. The
+ * mask is carried in the pipeline's render-target block, never the draw
+ * stream. */
 static int color_write_mask_supported(const struct ps5vk_graphics_key *key)
 {
-#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
     if (key->color_format == VK_FORMAT_R8G8B8A8_UNORM)
         return key->color_write_mask != 0 && key->color_write_mask <= 0xfu;
-#endif
     return key->color_write_mask == 15;
 }
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)
@@ -364,13 +364,6 @@ static int blend_profile_supported(const struct ps5vk_graphics_key *key)
         key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO &&
         key->alpha_blend_op==VK_BLEND_OP_ADD;
 #endif
-#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
-    /* Private measurement build (tools/build_sdk.py honours
-     * PS5VK_DUAL_SOURCE_DIAGNOSTIC=1): accept the whole register contract so
-     * the upstream blend families can be executed and measured. A SRC1
-     * equation still needs the feature enabled on this logical device and the
-     * proven secondary export, so widening here changes what a measurement
-     * build may run, never what a shipping build advertises. */
     uint32_t s,d,fn,sa,da,fna;
     if(blend_state_uses_src1(key) &&
        !(key->feature_mask & PS5VK_FEATURE_DUAL_SRC_BLEND))return 0;
@@ -378,31 +371,6 @@ static int blend_profile_supported(const struct ps5vk_graphics_key *key)
                key->dst_color_blend_factor,&s,&d,&fn) &&
            ps5vk_blend_equation(key->alpha_blend_op,key->src_alpha_blend_factor,
                key->dst_alpha_blend_factor,&sa,&da,&fna);
-#else
-    /* Bounded dual-source witness profile.  Accepting SRC1 requires the
-     * logical-device feature here as well as at the Vulkan front end; the
-     * post-compile check below independently requires the exact 0x44/0xff
-     * secondary-export metadata.  Other dual-source equations stay closed
-     * until they receive their own execution evidence. */
-    if(blend_state_uses_src1(key))
-        return (key->feature_mask & PS5VK_FEATURE_DUAL_SRC_BLEND) &&
-            key->src_color_blend_factor==VK_BLEND_FACTOR_SRC1_COLOR &&
-            key->dst_color_blend_factor==VK_BLEND_FACTOR_ZERO &&
-            key->color_blend_op==VK_BLEND_OP_ADD &&
-            key->src_alpha_blend_factor==VK_BLEND_FACTOR_ONE &&
-            key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO &&
-            key->alpha_blend_op==VK_BLEND_OP_ADD;
-    /* The fractional-alpha overlap witness measured this additive shape.
-     * The integrated TES/GS upstream cases require it on the normal path too.
-     * Other blend factors/operations remain unsupported. */
-    return key->blend_enable==VK_TRUE &&
-        key->src_color_blend_factor==VK_BLEND_FACTOR_SRC_ALPHA &&
-        key->dst_color_blend_factor==VK_BLEND_FACTOR_ONE &&
-        key->color_blend_op==VK_BLEND_OP_ADD &&
-        key->src_alpha_blend_factor==VK_BLEND_FACTOR_SRC_ALPHA &&
-        key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ONE &&
-        key->alpha_blend_op==VK_BLEND_OP_ADD;
-#endif
 }
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {

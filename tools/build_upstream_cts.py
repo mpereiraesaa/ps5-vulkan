@@ -36,11 +36,6 @@ def tessellation_build_profile(environment):
             "PS5VK_TESS_END_VS_FLUSH",
             "PS5VK_TESS_HULL_TRACE",
             "PS5VK_TESS_OFFCHIP_BIND",
-            # DXVK262-T06 dual-source measurement gate: a receipt that ran a
-            # blend.dual_source leaf through a build with the feature and the
-            # widened blend space must record it and never present itself as a
-            # shipping-capability run.
-            "PS5VK_DUAL_SOURCE_DIAGNOSTIC",
             "PS5VK_RASTER_DIAGNOSTIC",
         )
     }

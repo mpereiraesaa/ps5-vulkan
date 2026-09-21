@@ -8,11 +8,11 @@
   "console_used_by_this_task": true,
   "summary": {
     "mandatory_cells_in_scope": 287,
-    "satisfied_by_this_task": 22,
+    "satisfied_by_this_task": 23,
     "direct_texel_matrix_cells_in_scope": 10,
     "ready_pending_physical_validation": 0,
-    "blocked_without_backend": 265,
-    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated eight A8B8G8R8 sampled entries. The direct uniform-texel matrix of 2026-09-15 validates 41 formats across all owned format families and moves ten additional cells in this original two-table scope. The remaining 265 baseline cells require backend work; the count is not CTS coverage or conformance."
+    "blocked_without_backend": 264,
+    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated eight A8B8G8R8 sampled entries. The direct uniform-texel matrix of 2026-09-15 validates 41 formats across all owned format families and moves ten additional cells in this original two-table scope. The remaining 264 baseline cells require backend work; the count is not CTS coverage or conformance."
   },
   "qualification": {
     "status": "validated",
@@ -54,6 +54,13 @@
           "18cf44694da9a1a52bb69027ed39e26e878bc6156b6facadacebfc968789238c",
           "58b85c385daef9b95ece359faad8e43406c027791c1d41fe01634f9c4a8f930a"
         ]
+      },
+      "t06-dual-source-blend": {
+        "self_sha256": "aa1cfae7eaf6570f4bf6618d89f7cad1b532907a6a3c2a26691b66fae9aaa870",
+        "log_sha256": [
+          "fa82a55bab8bd419e360ecaec5a3276a49d2eacf6aac89f07eca438c76883db1",
+          "59673109cd1b1c3829a96ec90c3c5c0c55ef0113ca773230993b2009820bfa23"
+        ]
       }
     }
   },
@@ -73,18 +80,54 @@
     ],
     "case_count": 41,
     "components_per_case": 4,
-    "element_bytes": [1, 2, 4, 8, 16],
+    "element_bytes": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
     "formats": [
-      "VK_FORMAT_R8_UNORM", "VK_FORMAT_R8_SNORM", "VK_FORMAT_R8G8_UNORM", "VK_FORMAT_R8G8_SNORM",
-      "VK_FORMAT_R8G8B8A8_UNORM", "VK_FORMAT_R8G8B8A8_SNORM", "VK_FORMAT_A8B8G8R8_UNORM_PACK32", "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
-      "VK_FORMAT_B10G11R11_UFLOAT_PACK32", "VK_FORMAT_R16_UNORM", "VK_FORMAT_R16_SNORM", "VK_FORMAT_R16_SFLOAT",
-      "VK_FORMAT_R16G16_UNORM", "VK_FORMAT_R16G16_SNORM", "VK_FORMAT_R16G16_SFLOAT", "VK_FORMAT_R16G16B16A16_UNORM",
-      "VK_FORMAT_R16G16B16A16_SNORM", "VK_FORMAT_R16G16B16A16_SFLOAT", "VK_FORMAT_R32_SFLOAT", "VK_FORMAT_R32G32_SFLOAT",
-      "VK_FORMAT_R32G32B32A32_SFLOAT", "VK_FORMAT_R8_UINT", "VK_FORMAT_R8_SINT", "VK_FORMAT_R8G8_UINT",
-      "VK_FORMAT_R8G8_SINT", "VK_FORMAT_R8G8B8A8_UINT", "VK_FORMAT_R8G8B8A8_SINT", "VK_FORMAT_A8B8G8R8_UINT_PACK32",
-      "VK_FORMAT_A8B8G8R8_SINT_PACK32", "VK_FORMAT_R16_UINT", "VK_FORMAT_R16_SINT", "VK_FORMAT_R16G16_UINT",
-      "VK_FORMAT_R16G16_SINT", "VK_FORMAT_R16G16B16A16_UINT", "VK_FORMAT_R16G16B16A16_SINT", "VK_FORMAT_R32_UINT",
-      "VK_FORMAT_R32_SINT", "VK_FORMAT_R32G32_UINT", "VK_FORMAT_R32G32_SINT", "VK_FORMAT_R32G32B32A32_UINT",
+      "VK_FORMAT_R8_UNORM",
+      "VK_FORMAT_R8_SNORM",
+      "VK_FORMAT_R8G8_UNORM",
+      "VK_FORMAT_R8G8_SNORM",
+      "VK_FORMAT_R8G8B8A8_UNORM",
+      "VK_FORMAT_R8G8B8A8_SNORM",
+      "VK_FORMAT_A8B8G8R8_UNORM_PACK32",
+      "VK_FORMAT_A8B8G8R8_SNORM_PACK32",
+      "VK_FORMAT_B10G11R11_UFLOAT_PACK32",
+      "VK_FORMAT_R16_UNORM",
+      "VK_FORMAT_R16_SNORM",
+      "VK_FORMAT_R16_SFLOAT",
+      "VK_FORMAT_R16G16_UNORM",
+      "VK_FORMAT_R16G16_SNORM",
+      "VK_FORMAT_R16G16_SFLOAT",
+      "VK_FORMAT_R16G16B16A16_UNORM",
+      "VK_FORMAT_R16G16B16A16_SNORM",
+      "VK_FORMAT_R16G16B16A16_SFLOAT",
+      "VK_FORMAT_R32_SFLOAT",
+      "VK_FORMAT_R32G32_SFLOAT",
+      "VK_FORMAT_R32G32B32A32_SFLOAT",
+      "VK_FORMAT_R8_UINT",
+      "VK_FORMAT_R8_SINT",
+      "VK_FORMAT_R8G8_UINT",
+      "VK_FORMAT_R8G8_SINT",
+      "VK_FORMAT_R8G8B8A8_UINT",
+      "VK_FORMAT_R8G8B8A8_SINT",
+      "VK_FORMAT_A8B8G8R8_UINT_PACK32",
+      "VK_FORMAT_A8B8G8R8_SINT_PACK32",
+      "VK_FORMAT_R16_UINT",
+      "VK_FORMAT_R16_SINT",
+      "VK_FORMAT_R16G16_UINT",
+      "VK_FORMAT_R16G16_SINT",
+      "VK_FORMAT_R16G16B16A16_UINT",
+      "VK_FORMAT_R16G16B16A16_SINT",
+      "VK_FORMAT_R32_UINT",
+      "VK_FORMAT_R32_SINT",
+      "VK_FORMAT_R32G32_UINT",
+      "VK_FORMAT_R32G32_SINT",
+      "VK_FORMAT_R32G32B32A32_UINT",
       "VK_FORMAT_R32G32B32A32_SINT"
     ]
   },
@@ -298,6 +341,24 @@
       "minimal_gpu_operation": "Compositional qualification: the direct VK_FORMAT_R8G8B8A8_UNORM samplerBuffer texelFetch witness establishes the shared four-component buffer path, while the existing SINT sampled-image witness establishes this row's GFX10 conversion and typed shader interface.",
       "expected_result": "The shared buffer path returns four independent components in order and the independently witnessed SINT encoding supplies the row-specific conversion/interface; this payload did not fetch SINT directly.",
       "host_test_limit": "Host tests prove that buffer and image descriptors use the same row-owned GFX10 format value, completion word, 4-byte element stride and NUM_RECORDS arithmetic. The evidence is compositional, not a direct SINT samplerBuffer run."
+    },
+    {
+      "format": "VK_FORMAT_R8G8B8A8_UNORM",
+      "feature": "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT",
+      "evidence_group": "t06-dual-source-blend",
+      "capability": "PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND",
+      "enablement": "COLOR_ATTACHMENT_BLEND in the witnessed mask for VK_FORMAT_R8G8B8A8_UNORM, and the platform reports dualSrcBlend",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "fragment",
+      "minimal_gpu_operation": "Create a 64x64 R8G8B8A8_UNORM colour target with COLOR_ATTACHMENT|TRANSFER_SRC|TRANSFER_DST, render the packaged two-output fragment module twice - once with blending disabled and once with color=SRC1_COLOR*ZERO+ADD and alpha=ONE*ZERO+ADD - then copy the tiled target into a linear staging image in GENERAL and read the pixel at the triangle centre.",
+      "expected_result": "control RGBA 64,128,191,255 (within one LSB: the primary channels are not exactly representable in UNORM8) and candidate RGBA 51,51,38,255 exactly, with the two required to differ",
+      "host_test_limit": "Host tests prove the register encodings, the 0x44/0xff export pair, the oracle and the fail-closed gates; only the blend unit produces the blended bytes.",
+      "run_ids": [
+        "20260921T142735727Z_PPSA99994_upstream-cts_0x156959662c9a2",
+        "20260921T131810348Z_PPSA99994_ps5vk_0x152cbc5ead555"
+      ],
+      "artifact_sha256": "aa1cfae7eaf6570f4bf6618d89f7cad1b532907a6a3c2a26691b66fae9aaa870"
     }
   ],
   "blocker_classification": [
@@ -330,7 +391,7 @@
       "profiles": [
         "graphics"
       ],
-      "cells": 23,
+      "cells": 22,
       "detail": "Only B8G8R8A8_UNORM and R8G8B8A8_UNORM have a render-target encoding and a clear/draw/readback route; the native graphics compiler additionally requires colorWriteMask 15 with blendEnable false, so no blend bit is publishable either."
     },
     {

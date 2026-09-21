@@ -59,6 +59,11 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxColorAttachments=1;
     limits->maxFragmentOutputAttachments=1;
     limits->maxFragmentCombinedOutputResources=1;
+    /* DXVK262-T06: the secondary source of attachment zero is the one extra
+     * fragment output the promoted dualSrcBlend path consumes, and no more;
+     * the value is only meaningful on a platform that advertises the feature,
+     * which is the shipping graphics profile since 2026-09-21. */
+    limits->maxFragmentDualSrcAttachments=1;
     /* The sampled descriptor limits are the qualified minima from the shared
      * constants above, not independent report literals: one set carries the
      * whole descriptor table the runtime draw ABI addresses, and the stage

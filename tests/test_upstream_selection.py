@@ -82,11 +82,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # 15 same-family leaves that document a refusal or a capability gap,
         # The two T06 fragment side-effect leaves are now acceptance after the
         # exact native witness and the canonical 306/306 hardware run.
-        # The 98 dual-source blend leaves of the one colour format this driver
-        # creates raise the diagnostic count: they are the applicable oracle
-        # for dualSrcBlend, held pending because the shipping blend profile
-        # refuses every equation the family draws.
-        self.assertEqual((306, 200, 48),
+        # The 98 dual-source blend leaves are acceptance now: they passed in
+        # the 404-case run on the promoted candidate, so the frozen selection
+        # is 404 acceptance and 102 diagnostics.
+        self.assertEqual((404, 102, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
@@ -98,13 +97,15 @@ class UpstreamSelectionTests(unittest.TestCase):
              "dEQP-VK.draw.renderpass.scissor",
              "dEQP-VK.rasterization.line_continuity"},
             {d["path"].rsplit(".", 1)[0] for d in pending})
-        dual_source = [d for d in manifest["diagnostics"]
-                       if d["category"] == "t06-dual-source-pending"]
+        # dualSrcBlend was promoted on 2026-09-21: its 98 applicable leaves
+        # moved from the pending diagnostics into acceptance.
+        dual_source = [c for c in manifest["cases"]
+                       if c["category"] == "dual-source-blend"]
         self.assertEqual(98, len(dual_source))
-        self.assertTrue(all(d["expected_status"] == "Pass" for d in dual_source))
+        self.assertTrue(all(c["expected_status"] == "Pass" for c in dual_source))
         self.assertEqual(
             {"dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states"},
-            {d["path"].rsplit(".", 1)[0] for d in dual_source})
+            {c["path"].rsplit(".", 1)[0] for c in dual_source})
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
         self.assertEqual(29, len(geometry))
         self.assertEqual(29, len({c["path"] for c in geometry}))
