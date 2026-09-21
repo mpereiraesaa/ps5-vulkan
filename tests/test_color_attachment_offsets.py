@@ -59,18 +59,28 @@ def table_from_contract():
 
 
 class ColorAttachmentOffsets(unittest.TestCase):
+    def offsets(self):
+        """The pinned register table, or a skip where it is not vendored.
+
+        third_party is not part of this repository's history, so a checkout
+        without the pinned PSBC sources cannot recompute anything; the same
+        rule the upstream-selection check follows."""
+        if not REGISTERS.is_file():
+            self.skipTest("pinned gfx103 register table not present")
+        return register_offsets()
+
     def test_target_zero_matches_the_pinned_table(self):
-        offsets = register_offsets()
+        offsets = self.offsets()
         expected = [offsets[name] for name in TARGET0]
         self.assertEqual(expected, table_from_contract()[0])
 
     def test_target_one_matches_the_pinned_table(self):
-        offsets = register_offsets()
+        offsets = self.offsets()
         expected = [offsets[name.replace("CB_COLOR0", "CB_COLOR1")] for name in TARGET0]
         self.assertEqual(expected, table_from_contract()[1])
 
     def test_blend_control_offsets_are_consecutive(self):
-        offsets = register_offsets()
+        offsets = self.offsets()
         self.assertEqual([0x1e0, 0x1e1],
                          [offsets["CB_BLEND0_CONTROL"], offsets["CB_BLEND1_CONTROL"]])
 
