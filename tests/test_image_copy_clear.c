@@ -935,7 +935,7 @@ int main(void)
     struct VkFramebuffer_T active_fb = {.device = device, .width = WIDTH, .height = HEIGHT,
         .attachment_count = 1, .attachments = {&active_view},
         .formats = {VK_FORMAT_R8G8B8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
-        .color_attachment = 0, .depth_attachment = VK_ATTACHMENT_UNUSED};
+        .color_attachments = {0}, .color_count = 1, .depth_attachment = VK_ATTACHMENT_UNUSED};
     VkRenderPassBeginInfo rp = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = &active_pass, .framebuffer = &active_fb,
         .renderArea = {.extent = {WIDTH, HEIGHT}}};

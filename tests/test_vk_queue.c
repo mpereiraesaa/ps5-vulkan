@@ -407,7 +407,7 @@ int main(void)
         {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = pass_attachments, .subpasses = pass_subpasses};
-    struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1,
+    struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1, .color_attachments = {0}, .color_count = 1,
         .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T pipeline = {.device = &d, .graphics = VK_TRUE, .viewport_count = 1, .graphics_state = &f,

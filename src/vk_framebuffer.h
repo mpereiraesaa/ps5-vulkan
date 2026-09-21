@@ -11,7 +11,12 @@ struct VkFramebuffer_T {
     VkImageView attachments[2];
     VkFormat formats[2];
     VkSampleCountFlagBits samples[2];
-    uint32_t color_attachment, depth_attachment;
+    /* The colour roles this framebuffer carries, in the order the subpass names
+     * them, and the depth role. The count is the pass's own, bounded by the
+     * colour-attachment contract; every consumer reads index 0 while the bound is
+     * one. */
+    uint32_t color_attachments[PS5VK_MAX_COLOR_ATTACHMENTS], color_count;
+    uint32_t depth_attachment;
 };
 /* One ROLE of a framebuffer against the render-pass reference that names it.
  * Both unused is compatible; otherwise both must be used and the attachment
@@ -52,8 +57,11 @@ static inline VkBool32 ps5vk_framebuffer_compatible(VkFramebuffer fb, VkRenderPa
      * can only carry one of each. */
     for (uint32_t i = 0; i < pass->subpass_count; ++i) {
         const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, i);
-        if (!role_compatible(fb, fb->color_attachment, pass, &subpass->color[0]) ||
-            !role_compatible(fb, fb->depth_attachment, pass, &subpass->depth))
+        if (fb->color_count != subpass->color_count) return VK_FALSE;
+        for (uint32_t c = 0; c < subpass->color_count; ++c)
+            if (!role_compatible(fb, fb->color_attachments[c], pass, &subpass->color[c]))
+                return VK_FALSE;
+        if (!role_compatible(fb, fb->depth_attachment, pass, &subpass->depth))
             return VK_FALSE;
     }
     return VK_TRUE;

@@ -94,7 +94,7 @@ int main(void)
      * own tests. These callbacks do not build GPU commands. */
     struct VkDevice_T d = {.memory = {NULL, allocate, release, flush, flush}};
     struct VkImageView_T v = {.device = &d};
-    struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1,
+    struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1, .color_attachments = {0}, .color_count = 1,
         .attachments = {&v}, .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct ps5vk_subpass pass_subpasses[1] = {{.color[0] = {.attachment = 0}, .color_count = 1,
         .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};

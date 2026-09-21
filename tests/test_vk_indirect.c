@@ -84,7 +84,7 @@ int main(void)
     struct VkRenderPass_T pass={.device=&d,.attachment_count=1,.subpass_count=1,
         .attachments=pass_attachments,.subpasses=pass_subpasses};
     struct VkFramebuffer_T framebuffer={.device=&d,.attachment_count=1,
-        .color_attachment=0,.depth_attachment=VK_ATTACHMENT_UNUSED};
+        .color_attachments={0},.color_count=1,.depth_attachment=VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T graphics={.device=&d,.graphics=VK_TRUE,
         .graphics_state=(void *)1,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
         .depth_format=VK_FORMAT_UNDEFINED,
@@ -188,7 +188,7 @@ int main(void)
     struct VkRenderPass_T multi_pass={.device=&m,.attachment_count=1,.subpass_count=1,
         .attachments=multi_attachments,.subpasses=multi_subpasses};
     struct VkFramebuffer_T multi_framebuffer={.device=&m,.attachment_count=1,
-        .color_attachment=0,.depth_attachment=VK_ATTACHMENT_UNUSED};
+        .color_attachments={0},.color_count=1,.depth_attachment=VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T multi_graphics={.device=&m,.graphics=VK_TRUE,
         .graphics_state=(void *)1,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
         .depth_format=VK_FORMAT_UNDEFINED,
