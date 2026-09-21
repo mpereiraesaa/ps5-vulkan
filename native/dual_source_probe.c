@@ -1,32 +1,12 @@
 /* Copyright (C) 2026 Manuel Pereira
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include "dual_source_probe.h"
+#include "dual_source_oracle.h"
 #include "ps5log.h"
-#include <string.h>
 
 enum { PROBE_EDGE = 64, PROBE_BYTES = PROBE_EDGE * PROBE_EDGE * 4u };
 /* The centre of the triangle the owned runtime vertex module draws. */
 enum { PROBE_PIXEL = (PROBE_EDGE / 2) * PROBE_EDGE + PROBE_EDGE / 2 };
-
-/* experiments/graphics/runtime_dual_source.frag exports the two sources of
- * attachment zero: primary (0.25,0.50,0.75,1.0) at Location 0 Index 0 and
- * secondary (0.80,0.40,0.20,0.50) at Location 0 Index 1.  With blending
- * disabled the target receives the primary.  With
- * color = SRC1_COLOR x src + ZERO x dst and alpha = ONE x src + ZERO x dst it
- * receives primary.rgb * secondary.rgb with the primary alpha, and neither read
- * depends on the clear colour, so the two draws differ only in blend state.
- * The products are exactly representable in UNORM8 (0.20 -> 51, 0.15 -> 38);
- * the primary channels are not (0.25/0.50/0.75 -> 63.75/127.5/191.25), so the
- * control is judged inside one LSB and the candidate on its exact bytes. */
-enum { PROBE_PRIMARY_R = 64, PROBE_PRIMARY_G = 128, PROBE_PRIMARY_B = 191,
-       PROBE_BLEND_R = 51, PROBE_BLEND_G = 51, PROBE_BLEND_B = 38,
-       PROBE_TOLERANCE = 1 };
-
-static int within(unsigned observed, unsigned expected)
-{
-    return observed + PROBE_TOLERANCE >= expected &&
-        observed <= expected + PROBE_TOLERANCE;
-}
 
 VkResult ps5vk_dual_source_probe(VkDevice device,
     const struct ps5vk_dual_source_probe_modules *modules)
@@ -214,19 +194,14 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
             observed[i][channel] = mapped[PROBE_PIXEL * 4u + channel];
     }
 
-    const int control_ok = within(observed[0][0], PROBE_PRIMARY_R) &&
-        within(observed[0][1], PROBE_PRIMARY_G) &&
-        within(observed[0][2], PROBE_PRIMARY_B) && observed[0][3] == 255;
-    const int candidate_ok = within(observed[1][0], PROBE_BLEND_R) &&
-        within(observed[1][1], PROBE_BLEND_G) &&
-        within(observed[1][2], PROBE_BLEND_B) && observed[1][3] == 255;
-    /* The delta is the actual claim: the blender consumed the secondary export
-     * of the fragment module instead of rendering the primary twice. */
-    const int distinct = observed[0][1] > observed[1][1] + 2 * PROBE_TOLERANCE ||
-        observed[1][1] > observed[0][1] + 2 * PROBE_TOLERANCE ||
-        observed[0][2] > observed[1][2] + 2 * PROBE_TOLERANCE ||
-        observed[1][2] > observed[0][2] + 2 * PROBE_TOLERANCE;
-    const int verified = control_ok && candidate_ok && distinct;
+    /* The verdict is the same pure predicate the host regressions exercise, so
+     * the artifact cannot report a decision the tests do not describe. */
+    const int verified = ps5vk_dual_source_verdict(observed[0], observed[1]);
+    const int distinct = verified &&
+        (observed[0][1] > observed[1][1] + 2 * PS5VK_DUAL_SOURCE_TOLERANCE ||
+         observed[1][1] > observed[0][1] + 2 * PS5VK_DUAL_SOURCE_TOLERANCE ||
+         observed[0][2] > observed[1][2] + 2 * PS5VK_DUAL_SOURCE_TOLERANCE ||
+         observed[1][2] > observed[0][2] + 2 * PS5VK_DUAL_SOURCE_TOLERANCE);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_DUAL_SOURCE_READBACK extent=%ux%u draws=2 pixel=%u "
         "control=%02x%02x%02x%02x candidate=%02x%02x%02x%02x "
@@ -235,9 +210,11 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
         PROBE_EDGE, PROBE_EDGE, (unsigned)PROBE_PIXEL,
         observed[0][0], observed[0][1], observed[0][2], observed[0][3],
         observed[1][0], observed[1][1], observed[1][2], observed[1][3],
-        PROBE_PRIMARY_R, PROBE_PRIMARY_G, PROBE_PRIMARY_B, 255,
-        PROBE_BLEND_R, PROBE_BLEND_G, PROBE_BLEND_B, 255,
-        PROBE_TOLERANCE, distinct, verified);
+        PS5VK_DUAL_SOURCE_CONTROL_R, PS5VK_DUAL_SOURCE_CONTROL_G,
+        PS5VK_DUAL_SOURCE_CONTROL_B, PS5VK_DUAL_SOURCE_CONTROL_A,
+        PS5VK_DUAL_SOURCE_BLEND_R, PS5VK_DUAL_SOURCE_BLEND_G,
+        PS5VK_DUAL_SOURCE_BLEND_B, PS5VK_DUAL_SOURCE_BLEND_A,
+        PS5VK_DUAL_SOURCE_TOLERANCE, distinct, verified);
     if (!verified) goto cleanup;
     rc = VK_SUCCESS;
 
