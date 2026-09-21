@@ -143,6 +143,19 @@ rather than by the driver.
 Nothing here should be read as these features being usable by an application
 today.
 
+The DXVK262-T06 dual-source blend path is in the same position. The exact
+GFX1013 `CB_BLEND0_CONTROL` encodings for the four SRC1 factors, the compiler
+proof that a two-output fragment shader packages as `0x44`/`0xff`, and the
+front-end and compiler gates that refuse SRC1 unless the logical device enabled
+the feature *and* the selected fragment module carries the proven secondary
+export are all published. `dualSrcBlend` is nevertheless **not advertised**: no
+shipping platform mask sets its bit, so the profile row stays a blocker. A
+private measurement build (`PS5VK_DUAL_SOURCE_DIAGNOSTIC=1`) reports the feature
+and opens the runtime blend space to every factor and operation the register
+file encodes, so the upstream `blend.dual_source` leaves can be executed and
+measured. The shipping profile still accepts only the shape a native witness
+measured, because no upstream dual-source leaf is reachable under that bound.
+
 ## Images and sampling
 
 The GFX1013 texture-format table records exact descriptor encodings, Vulkan

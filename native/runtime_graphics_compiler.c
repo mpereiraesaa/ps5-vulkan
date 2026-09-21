@@ -12,6 +12,7 @@
 #include "spirv_graphics_interface.h"
 #include "descriptor_table_layout.h"
 #include "graphics_descriptor_profile.h"
+#include "blend_ps5.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -328,6 +329,13 @@ static int blend_state_uses_src1(const struct ps5vk_graphics_key *key)
          blend_factor_uses_src1(key->src_alpha_blend_factor) ||
          blend_factor_uses_src1(key->dst_alpha_blend_factor));
 }
+/* The GFX1013 CB_BLEND0_CONTROL contract encodes the whole Vulkan 1.0 blend
+ * space: native/blend_ps5.h ps5vk_blend_factor names all nineteen factors and
+ * ps5vk_blend_equation names ZERO/ONE/ADD-style in-register conversion for all
+ * five operations. The shipping profile does not accept that whole space yet -
+ * the bounded shapes below are the ones a native witness measured - so the
+ * measurement build is the one allowed to execute an arbitrary upstream blend
+ * leaf. */
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key->blend_enable)return 1;
@@ -341,6 +349,21 @@ static int blend_profile_supported(const struct ps5vk_graphics_key *key)
         key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO &&
         key->alpha_blend_op==VK_BLEND_OP_ADD;
 #endif
+#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
+    /* Private measurement build (tools/build_sdk.py honours
+     * PS5VK_DUAL_SOURCE_DIAGNOSTIC=1): accept the whole register contract so
+     * the upstream blend families can be executed and measured. A SRC1
+     * equation still needs the feature enabled on this logical device and the
+     * proven secondary export, so widening here changes what a measurement
+     * build may run, never what a shipping build advertises. */
+    uint32_t s,d,fn,sa,da,fna;
+    if(blend_state_uses_src1(key) &&
+       !(key->feature_mask & PS5VK_FEATURE_DUAL_SRC_BLEND))return 0;
+    return ps5vk_blend_equation(key->color_blend_op,key->src_color_blend_factor,
+               key->dst_color_blend_factor,&s,&d,&fn) &&
+           ps5vk_blend_equation(key->alpha_blend_op,key->src_alpha_blend_factor,
+               key->dst_alpha_blend_factor,&sa,&da,&fna);
+#else
     /* Bounded dual-source witness profile.  Accepting SRC1 requires the
      * logical-device feature here as well as at the Vulkan front end; the
      * post-compile check below independently requires the exact 0x44/0xff
@@ -364,6 +387,7 @@ static int blend_profile_supported(const struct ps5vk_graphics_key *key)
         key->src_alpha_blend_factor==VK_BLEND_FACTOR_SRC_ALPHA &&
         key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ONE &&
         key->alpha_blend_op==VK_BLEND_OP_ADD;
+#endif
 }
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {

@@ -265,6 +265,16 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * evidence boundary: builds without this exact path still report false
      * and vkCreateDevice rejects a request for the feature. */
     platform->supported_features |= PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
+    /* Private measurement build for DXVK262-T06 dual-source blending
+     * (tools/build_sdk.py honours PS5VK_DUAL_SOURCE_DIAGNOSTIC=1): report the
+     * dualSrcBlend feature so the upstream blend.dual_source leaves can be
+     * executed through the public API and measured on hardware. Default off,
+     * like the rasterisation diagnostic above, and never set in the shipping
+     * build; the bit stays in the feature table but nothing else in this file
+     * sets it. Promotion is a separate, evidence-backed change. */
+#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
+    platform->supported_features |= PS5VK_FEATURE_DUAL_SRC_BLEND;
+#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
