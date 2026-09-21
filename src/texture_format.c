@@ -272,6 +272,18 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         if (w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+        /* DXVK262-T06 measurement build: the only colour formats this profile
+         * can blend into are the two ps5vk_color_export_state accepts, and the
+         * upstream blend factory gates every leaf on this bit before it runs
+         * (isSupportedBlendFormat). Reporting it here is what lets the
+         * dual-source family be measured at all; the shipping build keeps the
+         * cap clear until the promotion change carries the evidence. */
+#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && PS5VK_DUAL_SOURCE_DIAGNOSTIC
+        if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT) &&
+            (format == VK_FORMAT_R8G8B8A8_UNORM ||
+             format == VK_FORMAT_B8G8R8A8_UNORM))
+            properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+#endif
         if (w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
         if (w & PS5VK_FORMAT_CAP_STORAGE_IMAGE)

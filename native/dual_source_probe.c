@@ -3,10 +3,12 @@
 #include "dual_source_probe.h"
 #include "dual_source_oracle.h"
 #include "ps5log.h"
+#include <string.h>
 
 enum { PROBE_EDGE = 64, PROBE_BYTES = PROBE_EDGE * PROBE_EDGE * 4u };
 /* The centre of the triangle the owned runtime vertex module draws. */
 enum { PROBE_PIXEL = (PROBE_EDGE / 2) * PROBE_EDGE + PROBE_EDGE / 2 };
+#define PROBE_GUARD UINT32_C(0x6d6d6d6d)
 
 VkResult ps5vk_dual_source_probe(VkDevice device,
     const struct ps5vk_dual_source_probe_modules *modules)
@@ -20,9 +22,11 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkShaderModule shaders[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkPipeline pipelines[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    VkBuffer staging = VK_NULL_HANDLE;
+    VkImage staging = VK_NULL_HANDLE;
     VkDeviceMemory staging_memory = VK_NULL_HANDLE;
-    uint8_t *mapped = NULL;
+    unsigned char *staging_bytes = NULL;
+    VkMemoryRequirements staging_requirements = {0};
+    VkDeviceSize staging_allocation_bytes = 0;
     VkCommandPool command_pool = VK_NULL_HANDLE;
     VkCommandBuffer command = VK_NULL_HANDLE;
     VkFence fence = VK_NULL_HANDLE;
@@ -39,7 +43,11 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
         .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
         .extent = {PROBE_EDGE, PROBE_EDGE, 1}, .mipLevels = 1, .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        /* The exact role the pinned linear readback accepts: a colour
+         * attachment that is also a transfer source and destination. */
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
     TRY(vkCreateImage(device, &image_info, NULL, &image));
@@ -55,16 +63,18 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
     TRY(vkCreateImageView(device, &view_info, NULL, &view));
 
-    /* The readback is a transfer of the rendered target, so the pass leaves it
-     * in the layout that copy reads. */
+    /* The readback is a transfer of the rendered target, and the attachment
+     * plan this profile can serve leaves the target in GENERAL; the copy below
+     * therefore reads it in that layout, exactly like the input-attachment
+     * witness. */
     VkAttachmentDescription attachment = {.format = VK_FORMAT_R8G8B8A8_UNORM,
         .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
-    VkAttachmentReference color = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        .finalLayout = VK_IMAGE_LAYOUT_GENERAL};
+    VkAttachmentReference color = {0, VK_IMAGE_LAYOUT_GENERAL};
     VkSubpassDescription subpass = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = 1, .pColorAttachments = &color};
     VkRenderPassCreateInfo pass_info = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -76,17 +86,31 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
         .width = PROBE_EDGE, .height = PROBE_EDGE, .layers = 1};
     TRY(vkCreateFramebuffer(device, &framebuffer_info, NULL, &framebuffer));
 
-    VkBufferCreateInfo buffer_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = PROBE_BYTES, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT};
-    TRY(vkCreateBuffer(device, &buffer_info, NULL, &staging));
-    VkMemoryRequirements buffer_requirements;
-    vkGetBufferMemoryRequirements(device, staging, &buffer_requirements);
-    allocation.allocationSize = buffer_requirements.size;
+    /* The pinned readback path is a copy from the tiled colour attachment into
+     * a linear staging image, both in GENERAL. A buffer destination is not a
+     * shape this profile serves, so the witness uses exactly the pair it does. */
+    VkImageCreateInfo staging_info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {PROBE_EDGE, PROBE_EDGE, 1}, .mipLevels = 1, .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_LINEAR,
+        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    TRY(vkCreateImage(device, &staging_info, NULL, &staging));
+    vkGetImageMemoryRequirements(device, staging, &staging_requirements);
+    if (staging_requirements.size > UINT64_MAX - 4096u) goto cleanup;
+    staging_allocation_bytes = staging_requirements.size + 4096u;
+    allocation.allocationSize = staging_allocation_bytes;
     TRY(vkAllocateMemory(device, &allocation, NULL, &staging_memory));
-    TRY(vkBindBufferMemory(device, staging, staging_memory, 0));
-    TRY(vkMapMemory(device, staging_memory, 0, VK_WHOLE_SIZE, 0, (void **)&mapped));
+    TRY(vkBindImageMemory(device, staging, staging_memory, 0));
+    TRY(vkMapMemory(device, staging_memory, 0, VK_WHOLE_SIZE, 0,
+                    (void **)&staging_bytes));
+    for (VkDeviceSize offset = 0; offset + 4 <= staging_allocation_bytes; offset += 4)
+        memcpy(staging_bytes + offset, &(uint32_t){PROBE_GUARD}, 4);
     VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-        .memory = staging_memory, .offset = 0, .size = VK_WHOLE_SIZE};
+        .memory = staging_memory, .offset = 0, .size = staging_allocation_bytes};
+    TRY(vkFlushMappedMemoryRanges(device, 1, &range));
+    VkImageSubresourceRange staging_range = {
+        VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &pipeline_layout));
@@ -162,14 +186,27 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
     TRY(vkCreateFence(device, &fence_info, NULL, &fence));
     VkQueue queue = VK_NULL_HANDLE;
     vkGetDeviceQueue(device, 0, 0, &queue);
-    VkBufferImageCopy region = {
-        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-        .imageExtent = {PROBE_EDGE, PROBE_EDGE, 1}};
+    VkImageCopy region = {
+        .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .extent = {PROBE_EDGE, PROBE_EDGE, 1}};
+    VkImageMemoryBarrier staging_in = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = staging, .subresourceRange = staging_range};
 
     for (unsigned i = 0; i < 2; ++i) {
         VkCommandBufferBeginInfo begin = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         TRY(vkBeginCommandBuffer(command, &begin));
+        staging_in.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        staging_in.srcAccessMask = 0;
+        staging_in.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &staging_in);
         /* A clear colour the blend never reads (dst factor is ZERO), so the
          * two reads can only differ through the blend state. */
         VkClearValue clear = {.color = {.float32 = {0.125f, 0.25f, 0.5f, 0.25f}}};
@@ -181,8 +218,15 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
         vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[i]);
         vkCmdDraw(command, 3, 1, 0, 0);
         vkCmdEndRenderPass(command);
-        vkCmdCopyImageToBuffer(command, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               staging, 1, &region);
+        vkCmdCopyImage(command, image, VK_IMAGE_LAYOUT_GENERAL, staging,
+                       VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+        VkImageMemoryBarrier staging_out = staging_in;
+        staging_out.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        staging_out.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        staging_out.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        staging_out.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 0, NULL, 1, &staging_out);
         TRY(vkEndCommandBuffer(command));
         VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .commandBufferCount = 1, .pCommandBuffers = &command};
@@ -190,8 +234,18 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
         TRY(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
         TRY(vkResetFences(device, 1, &fence));
         TRY(vkInvalidateMappedMemoryRanges(device, 1, &range));
-        for (unsigned channel = 0; channel < 4; ++channel)
-            observed[i][channel] = mapped[PROBE_PIXEL * 4u + channel];
+        VkImageSubresource subresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+        VkSubresourceLayout linear = {0};
+        vkGetImageSubresourceLayout(device, staging, &subresource, &linear);
+        if (!linear.rowPitch || linear.rowPitch < PROBE_EDGE * 4u ||
+            linear.size > staging_requirements.size) goto cleanup;
+        const VkDeviceSize pixel_offset = linear.offset +
+            (VkDeviceSize)(PROBE_PIXEL / PROBE_EDGE) * linear.rowPitch +
+            (VkDeviceSize)(PROBE_PIXEL % PROBE_EDGE) * 4u;
+        memcpy(observed[i], staging_bytes + pixel_offset, 4u);
+        /* Re-arm the canary for the second draw. */
+        for (VkDeviceSize offset = 0; offset + 4 <= staging_allocation_bytes; offset += 4)
+            memcpy(staging_bytes + offset, &(uint32_t){PROBE_GUARD}, 4);
     }
 
     /* The verdict is the same pure predicate the host regressions exercise, so
@@ -220,7 +274,7 @@ VkResult ps5vk_dual_source_probe(VkDevice device,
 
 cleanup:
     if (device) (void)vkDeviceWaitIdle(device);
-    if (mapped) vkUnmapMemory(device, staging_memory);
+    if (staging_bytes) vkUnmapMemory(device, staging_memory);
     if (fence) vkDestroyFence(device, fence, NULL);
     if (command_pool) vkDestroyCommandPool(device, command_pool, NULL);
     for (unsigned i = 0; i < 2; ++i)
@@ -232,7 +286,7 @@ cleanup:
     if (pass) vkDestroyRenderPass(device, pass, NULL);
     if (view) vkDestroyImageView(device, view, NULL);
     if (image) vkDestroyImage(device, image, NULL);
-    if (staging) vkDestroyBuffer(device, staging, NULL);
+    if (staging) vkDestroyImage(device, staging, NULL);
     if (image_memory) vkFreeMemory(device, image_memory, NULL);
     if (staging_memory) vkFreeMemory(device, staging_memory, NULL);
 #undef TRY

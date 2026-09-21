@@ -944,6 +944,11 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineVertexUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineReferenceRenderer.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMakeUtil.cpp",
+        # Genuine upstream blend factory, including the dual-source family.
+        # The package registers the family under the monolithic construction
+        # group and cases.txt selects the leaves, exactly as for the other
+        # upstream groups.
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineBlendTests.cpp",
         # VK_KHR_8bit_storage / VK_KHR_16bit_storage focused groups. The build
         # generates registration-pruned copies from the pinned modules; selected
         # shader bodies, support checks and oracles remain upstream. Registering
