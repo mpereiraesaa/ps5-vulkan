@@ -54,6 +54,43 @@ static PsbcRegisterWrite *context_register(PsbcShaderMetadata *m,unsigned offset
     return NULL;
 }
 
+/* A DEPTH-ONLY pipeline: no colour attachment, so the key carries an undefined
+ * colour format, writes no channel, and the fragment stage exports nothing.
+ * Everything else is the ordinary triangle pair. */
+static void check_depth_only_target(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/depth_only.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_UNDEFINED,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=0};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *program=out;
+    /* The pixel program really exports nothing: SPI_SHADER_COL_FORMAT and
+     * CB_SHADER_MASK both read zero, which is the NONE export class. */
+    PsbcShaderMetadata *m=(PsbcShaderMetadata *)&program->fragment.metadata;
+    const PsbcRegisterWrite *format=context_register(m,0x1c5);
+    const PsbcRegisterWrite *mask=context_register(m,0x08f);
+    assert(format && !format->value);
+    assert(mask && !mask->value);
+    ps5vk_runtime_graphics_free(NULL,out);
+
+    /* The three colour facts travel together. A colour format with no write
+     * mask, or a write mask with no format, is not a depth-only pass and stays
+     * refused; and an exporting fragment shader has nowhere to export. */
+    out=NULL;
+    key.color_write_mask=15;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    key.color_write_mask=0;
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+}
+
 static void check_clip_cull_distances(void)
 {
     struct ps5vk_graphics_key key={
@@ -1582,6 +1619,7 @@ int main(void)
     check_sparse_layout_static_use();
     check_view_index_builtin();
     check_clip_cull_distances();
+    check_depth_only_target();
     check_fragment_distance_read();
     check_fragment_position();
     check_geometry_stage();

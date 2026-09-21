@@ -948,8 +948,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, c->subpass);
     VkFormat depth = subpass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
         pass->attachments[subpass->depth.attachment].format;
-    if (p->color_format != pass->attachments[subpass->color.attachment].format ||
-        p->depth_format != depth) {
+    /* A depth-only subpass has no colour attachment, and its pipeline records
+     * VK_FORMAT_UNDEFINED for the colour format, so the two still have to
+     * agree exactly. */
+    VkFormat colour = subpass->color.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
+        pass->attachments[subpass->color.attachment].format;
+    if (p->color_format != colour || p->depth_format != depth) {
         invalid(c); return;
     }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_DRAW,
@@ -1059,6 +1063,11 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+        /* ALL_GRAPHICS is the whole graphics pipeline, so it contains every
+         * graphics stage named above, including both fragment-test stages.
+         * The pinned upstream depth clamp module hands its cleared depth
+         * target to the draw with this mask. */
+        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     const VkAccessFlags supported=VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
         VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
@@ -1089,6 +1098,7 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+                    VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     /* MEMORY_READ/WRITE select every read/write access available in the stage
      * mask and are valid with any non-empty supported stage mask. */
@@ -1167,11 +1177,18 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
         (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
          !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        /* Handing the cleared surface to the draw. The destination access is
+         * whatever depth-stencil access the caller declared: the pinned
+         * upstream depth clamp module names the write alone, an earlier
+         * measured case named both. Requiring the pair would be inventing a
+         * requirement; the write itself is not optional, so a read-only
+         * destination, an empty one, or a foreign access is still refused. */
         (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
          b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
-         b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
-                                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT));
+         (b->dstAccessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
+         !(b->dstAccessMask & ~(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                               VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)));
     if(readback)return
         ps5vk_color_discard_barrier(b) ||
         ps5vk_color_readback_reuse_barrier(b) ||

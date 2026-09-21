@@ -56,8 +56,12 @@ DUMP_BINARY = ROOT / "build/tests/dump_device_reporting"
 FEATURE_GATES = {
     "imageCubeArray": ("src/vk_memory.c", "info->imageType != VK_IMAGE_TYPE_2D",
                        "only 2D images are created"),
-    "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount != 1",
-                         "one color attachment per pipeline"),
+    # A depth-only subpass has no colour attachment at all, so the gate is no
+    # longer "exactly one": it is "never more than one". Either way a pipeline
+    # can never describe per-attachment blending, which is what independentBlend
+    # would mean.
+    "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount > 1",
+                         "at most one color attachment per pipeline"),
     "sampleRateShading": ("src/vk_graphics_pipeline.c", "m->sampleShadingEnable",
                           "sample shading state is rejected"),
     "logicOp": ("src/vk_graphics_pipeline.c", "b->logicOpEnable",

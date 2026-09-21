@@ -264,4 +264,45 @@ int main(void)
     assert(ps5vk_native_draw_state(&restart_pipeline,viewports,scissors,2,&raster,&color,&depth,&area,
         640,480,2,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x103)==0xffffu && last_cx(&out,0x2a4)==38u);
+
+    /* DEPTH-ONLY: no colour target at all. The pipeline records an undefined
+     * colour format and the state builds against a depth target alone. */
+    {
+        /* Its own pair: a depth-only pixel program exports nothing, so
+         * SPI_SHADER_COL_FORMAT (0x1c5) reads zero rather than the colour
+         * export the pair above carries. */
+        struct ps5vk_graphics_pair depth_pair = pair;
+        depth_pair.runtime_fragment.context[0] = (ps5_agc_register){0x1c5, 0};
+        struct ps5vk_native_graphics_pipeline depth_native = native;
+        depth_native.pair = &depth_pair;
+        struct VkPipeline_T depth_only = p;
+        depth_only.graphics_state = &depth_native;
+        depth_only.color_format = VK_FORMAT_UNDEFINED;
+        depth_only.depth_format = VK_FORMAT_D32_SFLOAT;
+        depth_only.color_blend = (VkPipelineColorBlendAttachmentState){0};
+        struct ps5vk_draw_state only;
+        assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
+            &raster,NULL,&depth,&area,640,480,0,&only)==VK_SUCCESS);
+        /* The colour block is still emitted, and every one of its registers
+         * reads zero: CB_COLOR0_INFO.FORMAT (0x31c) is COLOR_INVALID, and
+         * CB_TARGET_MASK (0x08e) writes no channel. */
+        for (unsigned i = 0; i < 16; ++i) {
+            assert(only.cx[i].offset == offsets[i]);
+            assert(only.cx[i].value == 0u);
+        }
+        assert(last_cx(&only,0x08e)==0u);
+
+        /* The two facts travel together in both directions. */
+        struct ps5vk_draw_state rejected;
+        assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
+            &raster,&color,&depth,&area,640,480,0,&rejected)==VK_ERROR_FEATURE_NOT_PRESENT);
+        struct VkPipeline_T coloured = p;
+        coloured.graphics_state = &depth_native;
+        coloured.depth_format = VK_FORMAT_D32_SFLOAT;
+        assert(ps5vk_native_draw_state(&coloured,&coloured.viewport,&coloured.scissor,1,
+            &raster,NULL,&depth,&area,640,480,0,&rejected)==VK_ERROR_FEATURE_NOT_PRESENT);
+        /* A depth-only draw still needs a depth target. */
+        assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
+            &raster,NULL,NULL,&area,640,480,0,&rejected)==VK_ERROR_FEATURE_NOT_PRESENT);
+    }
 }

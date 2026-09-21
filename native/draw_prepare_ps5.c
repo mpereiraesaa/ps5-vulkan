@@ -129,12 +129,17 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         !op->framebuffer || op->framebuffer->device != d || !op->render_pass || op->render_pass->device != d ||
         !d->memory.allocate || !d->memory.release || !d->memory.flush) return VK_ERROR_UNKNOWN;
     VkFramebuffer fb = op->framebuffer;
-    if (fb->color_attachment >= fb->attachment_count || fb->attachment_count > 2 ||
+    int has_color = fb->color_attachment != VK_ATTACHMENT_UNUSED;
+    if ((has_color && fb->color_attachment >= fb->attachment_count) ||
+        fb->attachment_count > 2 ||
         (fb->depth_attachment != VK_ATTACHMENT_UNUSED && fb->depth_attachment >= fb->attachment_count))
         return VK_ERROR_UNKNOWN;
     struct ps5vk_target_registers color, depth;
-    VkResult rc = ps5vk_native_target(d, fb->attachments[fb->color_attachment], defaults, &color);
-    if (rc != VK_SUCCESS) return rc;
+    VkResult rc;
+    if (has_color) {
+        rc = ps5vk_native_target(d, fb->attachments[fb->color_attachment], defaults, &color);
+        if (rc != VK_SUCCESS) return rc;
+    }
     int has_depth = fb->depth_attachment != VK_ATTACHMENT_UNUSED;
     if (has_depth) {
         rc = ps5vk_native_target(d, fb->attachments[fb->depth_attachment], NULL, &depth);
@@ -149,7 +154,7 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         (op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_DRAW_INDEXED_INDIRECT) ?
         (op->indices.type == VK_INDEX_TYPE_UINT16 ? 2u : 4u) : 0u;
     rc = ps5vk_native_draw_state(op->pipeline, op->viewports, op->scissors, op->viewport_count,
-        &op->raster, &color, has_depth ? &depth : NULL, area,
+        &op->raster, has_color ? &color : NULL, has_depth ? &depth : NULL, area,
         fb->width, fb->height, index_width, &plan);
     if (rc != VK_SUCCESS) return rc;
     struct ps5vk_descriptor_table_layout tables;

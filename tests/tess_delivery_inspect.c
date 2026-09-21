@@ -23,7 +23,12 @@ int main(int argc,char **argv) {
             .tess_control={.words=h,.word_count=hn/4,.entry="main"},
             .tess_eval={.words=e,.word_count=en/4,.entry="main"},
             .fragment={.words=f,.word_count=fn/4,.entry="main"},
-            .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.patch_control_points=patch_points};
+            .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.patch_control_points=patch_points,
+            /* A colour subpass: this harness's fragment stage writes a colour,
+             * so the key has to name the attachment it writes into. An unset
+             * format now means a depth-only pass, whose fragment stage exports
+             * nothing. */
+            .color_format=VK_FORMAT_B8G8R8A8_UNORM,.color_write_mask=15};
         VkVertexInputBindingDescription binding={0,8,VK_VERTEX_INPUT_RATE_VERTEX};
         VkVertexInputAttributeDescription attribute={0,0,VK_FORMAT_R32G32_SFLOAT,0};
         if(getenv("TESS_VERTEX_INPUT")) {

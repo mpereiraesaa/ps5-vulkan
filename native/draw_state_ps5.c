@@ -65,10 +65,16 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
     if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) return VK_ERROR_UNKNOWN;
-    if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state || !color || color->count != 16 ||
+    /* A NULL colour target is a DEPTH-ONLY pass. The pipeline built for such a
+     * subpass records VK_FORMAT_UNDEFINED, so the two always agree: a colour
+     * target with an undefined format, or a missing one with a real format,
+     * are both refused here. */
+    if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state ||
+        (color && color->count != 16) ||
         !width || !height || width > 16384 || height > 16384 ||
-        (p->color_format != VK_FORMAT_B8G8R8A8_UNORM &&
-         p->color_format != VK_FORMAT_R8G8B8A8_UNORM) ||
+        (color ? (p->color_format != VK_FORMAT_B8G8R8A8_UNORM &&
+                  p->color_format != VK_FORMAT_R8G8B8A8_UNORM)
+               : (p->color_format != VK_FORMAT_UNDEFINED || !depth)) ||
         (p->cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
@@ -99,7 +105,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     VkResult rc = ps5vk_native_viewport(viewport_state, scissor_state, area, viewport);
     if (rc != VK_SUCCESS) return rc;
     struct ps5_pipeline_registers base;
-    if (ps5_pipeline_build(&base, color->registers, &pair->cx, &pair->uc,
+    if (ps5_pipeline_build(&base, color ? color->registers : NULL, &pair->cx, &pair->uc,
         runtime?vs->context:pair->gs.cx, runtime?fs->context:pair->ps.cx,
         runtime?vs->shader:pair->gs.sh,runtime?fs->shader:pair->ps.sh,width,height)) return VK_ERROR_UNKNOWN;
     for (unsigned j = 0; j < PS5VK_VIEWPORT_REGISTERS; ++j) {

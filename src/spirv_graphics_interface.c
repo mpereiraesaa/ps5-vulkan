@@ -736,8 +736,18 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
         if(!input_vertices || !input_mode || gs.input_primitive!=input_mode ||
            (gs.input_vertices && gs.input_vertices!=input_vertices))return 0;
     }
-    if(fs.outputs[0].components!=4 ||
-       fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
+    /* What the fragment stage must export is decided by the attachment it
+     * would export into. A colour subpass wants the one four-component float
+     * output at location 0 this profile writes. A DEPTH-ONLY subpass has no
+     * colour attachment, so the stage must declare no output at all: the
+     * pinned upstream depth clamp module ships an empty fragment shader there,
+     * and its program exports nothing (SPI_SHADER_COL_FORMAT zero). Requiring
+     * an export that has nowhere to go, or accepting one that does, would both
+     * be wrong, so the two cases are exclusive. */
+    if(key->color_format==VK_FORMAT_UNDEFINED) {
+        if(fs.outputs[0].components)return 0;
+    } else if(fs.outputs[0].components!=4 ||
+              fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
     /* The stage the fragment stage reads is the last pre-raster stage that runs
      * before it, and the stage a geometry stage reads is the one before that. */
     const struct interface *previous=has_geometry?&gs:(has_tessellation?&tes:&vs);

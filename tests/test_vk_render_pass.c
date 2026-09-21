@@ -525,6 +525,51 @@ int main(void)
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
     d.graphics_enabled=1;
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_SUCCESS);
+    /* A DEPTH-ONLY pass: one depth attachment, colorAttachmentCount 0. This is
+     * the shape the pinned upstream depth clamp module builds, and the pass
+     * has to own it, because a framebuffer and a pipeline are derived from
+     * what the subpass names. A pass that names neither role has no target at
+     * all and stays refused. */
+    {
+        VkAttachmentDescription only_depth = attachments[1];
+        only_depth.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        only_depth.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        VkAttachmentReference depth_zero = {0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+        VkSubpassDescription depth_sub = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .colorAttachmentCount = 0, .pColorAttachments = NULL,
+            .pDepthStencilAttachment = &depth_zero};
+        VkRenderPassCreateInfo depth_info = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .attachmentCount = 1, .pAttachments = &only_depth,
+            .subpassCount = 1, .pSubpasses = &depth_sub};
+        VkRenderPass depth_pass = VK_NULL_HANDLE;
+        assert(vkCreateRenderPass(&d, &depth_info, NULL, &depth_pass) == VK_SUCCESS);
+        const struct ps5vk_subpass *s = ps5vk_render_pass_subpass(depth_pass, 0);
+        assert(s->color.attachment == VK_ATTACHMENT_UNUSED);
+        assert(s->depth.attachment == 0);
+        vkDestroyRenderPass(&d, depth_pass, NULL);
+
+        /* Neither role named: nothing to render into. */
+        VkSubpassDescription empty = depth_sub;
+        empty.pDepthStencilAttachment = NULL;
+        VkRenderPassCreateInfo empty_info = depth_info;
+        empty_info.pSubpasses = &empty;
+        VkRenderPass none = VK_NULL_HANDLE;
+        assert(vkCreateRenderPass(&d, &empty_info, NULL, &none) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !none);
+
+        /* Two colour attachments is still outside the profile. */
+        VkAttachmentReference pair[2] = {
+            {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+            {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+        VkSubpassDescription two = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .colorAttachmentCount = 2, .pColorAttachments = pair};
+        VkRenderPassCreateInfo two_info = info;
+        two_info.pSubpasses = &two;
+        VkRenderPass rejected = VK_NULL_HANDLE;
+        assert(vkCreateRenderPass(&d, &two_info, NULL, &rejected) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !rejected);
+    }
+
     /* T02-E1b shipping gate: a real view mask is accepted only on a device that
      * ENABLED the feature. The extension being reachable is not enough - the
      * same device without the enabled feature refuses the mask - and the
