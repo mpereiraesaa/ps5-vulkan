@@ -176,6 +176,39 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
 
+    def test_dual_source_measurement_gate_is_graphics_only(self):
+        self.rejected({"PS5VK_DUAL_SOURCE_DIAGNOSTIC": "1"},
+                      "requires the graphics profile API")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_DUAL_SOURCE_DIAGNOSTIC": "2"},
+                      "must be 0 or 1")
+
+    def test_dual_source_measurement_gate_stays_private(self):
+        """dualSrcBlend is reported only by the dual-source measurement build.
+
+        The capability bit, the blend space it opens and the define that
+        selects them are all build-private: no public header names the gate,
+        the platform sets the bit exactly once and only inside the guarded
+        block, and the SDK build validates the switch before passing it on.
+        """
+        for public in (ROOT / "include").rglob("*.h"):
+            self.assertNotIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC", public.read_text(),
+                             f"{public} must not expose the measurement gate")
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertEqual(platform.count("PS5VK_FEATURE_DUAL_SRC_BLEND"), 1)
+        guarded = platform.index("#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && "
+                                 "PS5VK_DUAL_SOURCE_DIAGNOSTIC")
+        self.assertLess(guarded, platform.index("PS5VK_FEATURE_DUAL_SRC_BLEND",
+                                                guarded))
+        compiler = (ROOT / "native/runtime_graphics_compiler.c").read_text()
+        self.assertIn("#if defined(PS5VK_DUAL_SOURCE_DIAGNOSTIC) && "
+                      "PS5VK_DUAL_SOURCE_DIAGNOSTIC", compiler)
+        builder = (ROOT / "tools/build_sdk.py").read_text()
+        self.assertIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC must be 0 or 1", builder)
+        self.assertIn('"-DPS5VK_DUAL_SOURCE_DIAGNOSTIC=1"', builder)
+        cts_builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn('"PS5VK_DUAL_SOURCE_DIAGNOSTIC"', cts_builder)
+
     def test_multiview_instance_probe_needs_the_view_witness(self):
         """The instance witness is the six-view scene with one instance at the
         pinned first instance, so it cannot be selected on its own."""

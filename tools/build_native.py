@@ -79,6 +79,13 @@ def main():
     multiview_diagnostic = os.environ.get("PS5VK_MULTIVIEW_DIAGNOSTIC", "0")
     if multiview_diagnostic not in ("0", "1") or (multiview_diagnostic == "1" and not graphics_api):
         raise SystemExit("PS5VK_MULTIVIEW_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
+    # DXVK262-T06 dual-source measurement gate. Like the multiview diagnostic,
+    # it exists to execute a capability the shipping platform does not report
+    # yet, so it is meaningless without the graphics profile API and is never
+    # a shipping default.
+    dual_source_diagnostic = os.environ.get("PS5VK_DUAL_SOURCE_DIAGNOSTIC", "0")
+    if dual_source_diagnostic not in ("0", "1") or (dual_source_diagnostic == "1" and not graphics_api):
+        raise SystemExit("PS5VK_DUAL_SOURCE_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
     clip_cull_probe = os.environ.get("PS5VK_CLIP_CULL_PROBE", "0")
     if clip_cull_probe not in ("0", "1") or (clip_cull_probe == "1" and not graphics_api):
         raise SystemExit("PS5VK_CLIP_CULL_PROBE requires the graphics profile API and must be 0 or 1")
@@ -386,6 +393,7 @@ def main():
             common += ["-DPS5VK_GRAPHICS_SCENE_SPLIT=" + scene_split]
             common += ["-DPS5VK_LAYER_PROBE=" + layer_probe]
             common += ["-DPS5VK_MULTIVIEW_DIAGNOSTIC=" + multiview_diagnostic]
+            common += ["-DPS5VK_DUAL_SOURCE_DIAGNOSTIC=" + dual_source_diagnostic]
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
