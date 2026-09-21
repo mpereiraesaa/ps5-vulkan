@@ -182,8 +182,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
      * else may name a linear destination, and a partial region is refused
      * because only the full surface has a proven readback mapping. */
     if (ps5vk_linear_staging_image(destination)) {
+        /* The source may name GENERAL, which the draw module's own readback
+         * uses, or TRANSFER_SRC_OPTIMAL, which is the layout a colour target
+         * is handed to its readback in and which the pinned scissor case
+         * passes (vktDrawScissorTests.cpp readSurface). Both mean the same
+         * thing for this copy; every other layout stays refused. */
         if (!ps5vk_colour_readback_image(source) ||
-            source_layout != VK_IMAGE_LAYOUT_GENERAL ||
+            (source_layout != VK_IMAGE_LAYOUT_GENERAL &&
+             source_layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) ||
             destination_layout != VK_IMAGE_LAYOUT_GENERAL ||
             source == destination ||
             ps5vk_image_span(d, source, &source_address, &source_bytes) != VK_SUCCESS ||
@@ -614,7 +620,12 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
             !ps5vk_colour_readback_image(op->image_source) ||
             !ps5vk_linear_staging_image(op->image_destination) ||
             op->image_source == op->image_destination ||
-            op->image_source_layout != VK_IMAGE_LAYOUT_GENERAL ||
+            /* The source names GENERAL or TRANSFER_SRC_OPTIMAL, exactly as the
+             * recorder accepts; the linear staging destination is always
+             * GENERAL. Submission re-validates the same rule the record was
+             * admitted under, so neither can accept what the other refuses. */
+            (op->image_source_layout != VK_IMAGE_LAYOUT_GENERAL &&
+             op->image_source_layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) ||
             op->image_destination_layout != VK_IMAGE_LAYOUT_GENERAL ||
             op->image_source->info.extent.width != op->image_destination->info.extent.width ||
             op->image_source->info.extent.height != op->image_destination->info.extent.height ||

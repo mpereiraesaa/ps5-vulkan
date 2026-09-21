@@ -188,6 +188,32 @@ the deployed executable hash from its own package and reports them, and the
 verifier requires them to match the locally built package. A stale deployment
 therefore fails verification instead of being attributed to the current build.
 
+### Measurement selections
+
+Some diagnostics are leaves whose upstream oracle is expected to pass once a
+feature is advertised on a measurement build (`PS5VK_RASTER_DIAGNOSTIC=1`), and
+measuring them must not edit the frozen manifest by hand.
+`tools/make_measurement_manifest.py` derives a separate manifest that moves the
+diagnostics of the named categories into `cases` and records the derivation
+(base manifest, frozen selection hash, categories, count); only `Pass`-expected
+diagnostics may move. `tools/build_upstream_cts.py --manifest <file>` packages
+that selection and copies the record into the build manifest, and
+`tools/run_upstream_cts.py --manifest <file>` verifies against it and copies
+the record into the receipt, so a measurement receipt can never be read as an
+acceptance run of the frozen selection:
+
+```sh
+python3 tools/make_measurement_manifest.py \
+  --category rasterization-culling --category t05-measurement-pending \
+  -o build/measurement/manifest.json
+python3 tools/build_upstream_cts.py --manifest build/measurement/manifest.json
+python3 tools/run_upstream_cts.py --host <console> --runs-dir <runs> \
+  --manifest build/measurement/manifest.json --out-json <receipt>
+```
+
+Promotion still edits the frozen manifest in its own change; the measurement
+receipt is the evidence that change cites.
+
 ## Host checks versus hardware evidence
 
 `make check-upstream-cts` runs entirely on the host and needs no console. It
@@ -1069,3 +1095,261 @@ was taken in the same console window, on its own payload; the geometry witness
 was taken there too. None of those optional-stage runs is part of this selection,
 and no feature is advertised by them.
 Vulkan conformance claim.
+
+## Rasterization and viewport state (DXVK262-T05, first hardware measurement 2026-09-18, eligibility completed 2026-09-19, PROMOTED 2026-09-21)
+
+The four T05 requirements are implemented and measured through the public ABI
+(the consumer's raster and viewport witnesses in
+[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses)),
+and they are **now advertised by the shipping profile**: see
+[Promoted (2026-09-21)](#promoted-2026-09-21) below for the acceptance run and
+the capability probe that back it. The frozen acceptance selection carries 362
+cases, 58 of them these leaves. The paragraphs that follow describe the
+eligibility pass as it stood before that promotion, when every T05 leaf was
+still a diagnostic and the selection was 304. What changed since the first measurement is the
+inventory: the pinned checkout `a0270c1897597e6c77679870e10415398a13001c` was
+read for every source and amber script that names one of the four features,
+not only for the `draw.renderpass.depth_clamp` family, and the package now
+registers the modules the applicable leaves live in.
+
+### Registered for T05
+
+* `rasterization` (whole module, registered unmodified): the only family that
+  exercises LINE and POINT polygon rasterization on a colour attachment. Its
+  28 `culling` leaves ran with `fillModeNonSolid` on the measurement mask and
+  passed 28/28 (run `20260918T141136767Z`, payload eboot `d9875f9c...`); they
+  found and fixed two driver defects on the way (the unconditional
+  `VkPipelineRasterizationLineStateCreateInfoEXT` chain in `pNext`, and the
+  vertex descriptor window for a structure-of-arrays attribute layout). Its
+  `line_continuity.polygon-mode-lines` leaf is the second `fillModeNonSolid`
+  oracle: an amber script (`data/vulkan/amber/rasterization/line_continuity/`,
+  `DEVICE_FEATURE fillModeNonSolid`) that draws triangles in LINE mode and
+  verifies continuity with a compute pass. `tools/build_upstream_cts.py` stages
+  that script beside `eboot.bin` (`DATASET_AMBER_SCRIPTS`); it is the first
+  amber-backed leaf of this profile, so a failure inside the amber engine path
+  is a packaging diagnostic, not a driver verdict.
+* `fragment_ops` (whole module, registered unmodified): its
+  `scissor.multi_viewport.scissor_1..16` family is the upstream oracle for
+  `multiViewport` - `checkSupport` requires `geometryShader`, `multiViewport`
+  and `maxViewports >= 16`, and the geometry stage writes
+  `gl_ViewportIndex = gl_PrimitiveIDIn` for one full-screen quad per viewport
+  (`vktFragmentOperationsScissorMultiViewportTests.cpp:199-260,433-448`). This
+  is the routing shape the consumer's 16-tile geometry witness measured.
+* `draw.renderpass.scissor` (the module's scissor factory under the same
+  render-pass group parameters as the other draw families): six of its leaves
+  (`two_static_scissors_one_quad`, `16_static_scissors`,
+  `dynamic_scissor_updates_between_draws`, `dynamic_scissor_out_of_order_updates`,
+  `16_dynamic_scissors`, `dynamic_scissor_mix`) require `geometryShader` and
+  `multiViewport` and route through an instanced geometry stage
+  (`layout(invocations = N)`, `gl_ViewportIndex = gl_InvocationID`,
+  `vktDrawScissorTests.cpp:346-406`), so they cover the static and dynamic
+  scissor banks and per-index updates the multi_viewport family does not. The
+  other sixteen scissor leaves have no feature gate and are not selected.
+* `clipping` was already registered for the user-defined distance families;
+  its `clip_volume.depth_clamp` group is the upstream oracle for `depthClamp`:
+  `testPrimitivesDepthClamp` (`vktClippingTests.cpp:565-660`) requires the
+  feature, draws primitives that cross the near and far planes with clamp off
+  and on, and counts coloured pixels. It has **no depth attachment**
+  (`util/vktDrawUtil.hpp:50`), so the depth readback this driver lacks is not
+  involved. Only `triangle_list` and `triangle_strip` are runnable here: this
+  profile resolves point and line topologies only as geometry input
+  (`src/vk_graphics_pipeline.c:181-185`) and refuses fans and adjacency at the
+  resolver (`src/graphics_program.h:96-97`), so the group's other eight leaves
+  fail at pipeline creation and are recorded as such.
+
+* `draw.renderpass.depth_clamp` (the module's depth-clamp factory under the
+  same render-pass group parameters): its `d32_sfloat*` leaves are the only
+  upstream oracles this profile can run for `depthBiasClamp`, and a second,
+  independent oracle for `depthClamp`. They read the depth attachment back over
+  `VK_IMAGE_ASPECT_DEPTH_BIT` (`vktDrawDepthClampTests.cpp:554`), which this
+  tranche implemented; see below.
+
+### The two capabilities this tranche added for its own oracles
+
+Both are prerequisites of T05's features rather than features of their own, and
+neither is advertised as anything:
+
+* **`gl_FragCoord` as a fragment input.** The interface policy in
+  `src/spirv_graphics_interface.c` accepted no fragment built-in except
+  `ViewIndex`, so a pair whose fragment stage reads the position was refused
+  before the compiler saw it - which is exactly why the `clip_volume.depth_clamp`
+  leaves failed at `vkCreateGraphicsPipelines` (two `rc=-8` runtime-graphics
+  cache entries in the 2026-09-20 run). The built-in is core Vulkan, needs no
+  feature and needs no export from the pre-raster stage: the hardware launches
+  the pixel wave with the position VGPRs when `SPI_PS_INPUT_ENA` asks for them,
+  and the pinned compiler publishes that register with the rest of the pixel
+  context. `tests/test_runtime_graphics_compiler.c` reads the published value
+  back: `0x2` for a fragment stage that does not read the position, and
+  `POS_Z_FLOAT_ENA` set for one that reads `gl_FragCoord.z`. The policy accepts
+  it only as a fragment `Input` pointing at a four-component 32-bit float
+  vector.
+
+* **The DEPTH-aspect `D32_SFLOAT` readback.** `src/depth_layout.h` used to state
+  that the GFX10 `64KB_Z_X` pixel addressing "is not supplied", which is what
+  blocked every `draw.renderpass.depth_clamp` leaf. `src/depth_detile.c` now
+  carries that equation, taken from the gfx10 swizzle table AMD publishes and
+  Mesa vendors (MIT), assembled and evaluated the way `addrlib` does. The row
+  is not guessed: the **same table's colour rows at 16 pipes reproduce, bit for
+  bit over every coordinate in a tile, all three colour equations this driver
+  already measured on hardware** through ps5-opengl's coordinate-ramp receipts,
+  so the configuration is identified rather than assumed, and the depth row of
+  that configuration follows. `tests/test_depth_detile.c` pins the derivation,
+  that the map is a bijection of the tile onto the 64 KiB block, and that it
+  differs from the colour swizzle. Around it: `D32_SFLOAT` gains the
+  transfer-source capability and the two attachment usage combinations that go
+  with it, `src/vk_image.h` gains the depth readback image role,
+  `src/vk_transfer.c` gains the recording gate for the whole-surface DEPTH-aspect
+  copy, and `src/vk_command.c` gains the attachment-to-transfer-source barrier.
+  A standalone `D32` transfer image is still refused: the transfer source exists
+  only as the readback of a depth attachment.
+
+Leaf names in these families are composed at run time (a prefix plus a loop
+index, a topology enum lowercased without its prefix, a format name plus a
+suffix), so `tools/check_upstream_selection.py` carries one bounded recognizer
+per construction and derives nothing when the construction it was written
+against is gone (`tests/test_upstream_selection.py`).
+
+### The T05 diagnostics, by requirement
+
+| Requirement | Leaves | Category | Status |
+|---|---|---|---|
+| `fillModeNonSolid` | `rasterization.culling.*` (28, 16 of them `_line`/`_point`) | `rasterization-culling` | measured 28/28 Pass, held until the shipping bit lands |
+| `fillModeNonSolid` | `rasterization.line_continuity.polygon-mode-lines` | `t05-measurement-pending` | **measured Fail** (2026-09-21): the amber engine now exists and the leaf produces a real verdict instead of an infrastructure error |
+| `multiViewport` | `fragment_ops.scissor.multi_viewport.scissor_1..16` | `t05-measurement-pending` | **measured 16/16 Pass** (2026-09-21) |
+| `multiViewport` | `draw.renderpass.scissor.{six multi-scissor leaves}` | `t05-measurement-pending` | **measured 0/6**, refused at `vkEndCommandBuffer` (clear-through-transfer, below) |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.{triangle_list,triangle_strip}` | `t05-measurement-pending` | **measured 2/2 Pass** (2026-09-21) |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.{point_list,line_list,line_strip}` | `plain-point-line-pipeline-refused` | Fail at creation (profile rule, not a T05 gap) |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.*_with_adjacency`, `.triangle_fan` | `primitive-topology-refused` | Fail at creation (resolver, not a T05 gap) |
+| `depthClamp`, `depthBiasClamp` | `draw.renderpass.depth_clamp.d32_sfloat{,_clamp_input_*,_depth_bias_clamp_input_*,_clamp_four_viewports}` | `t05-measurement-pending` | **measured 0/6**, refused at `vkCreateRenderPass` (depth-only pass, below). These are the only upstream oracles this profile can run for `depthBiasClamp` |
+| `depthBiasClamp` | `dynamic_state.monolithic.rs_state.depth_bias_clamp` | `depth-stencil-format-gap` | NotSupported: needs `D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT` as attachment (`vktDynamicStateRSTests.cpp:133-150`); the profile offers only `D32_SFLOAT` (`src/texture_format.c:183`) |
+
+Families examined and found not applicable, recorded so they are not
+re-derived: `draw.renderpass.inverted_depth_ranges.*` (D16_UNORM attachment and
+DEPTH-aspect readback), `draw.depth_bias.*` (D16_UNORM scripts),
+`rs_state.nonzero_depth_bias_clamp` (D16_UNORM), `rasterization.depth_bias.d32_sfloat*`
+(samples the depth image; `D32_SFLOAT` has no sampled role), `glsl.builtin_var.fragdepth.*`
+(DEPTH-aspect readback), `amber.depth.*_clamp` (`VK_EXT_depth_clamp_zero_one`),
+`pipeline.*.depth_range_unrestricted.*` (`VK_EXT_depth_range_unrestricted`),
+`clipping.clip_volume.depth_clip.*` (`VK_EXT_depth_clip_enable`),
+`rasterization.*polygon_as_points*` and `polygon_as_large_points.*`
+(`VK_KHR_maintenance5`), `draw.renderpass.shader_viewport_index.*`
+(`VK_EXT_shader_viewport_index_layer`), `tessellation.misc_draw.*`
+(tessellation tranche). In roughly eighty other files `depthBiasClamp` is only
+a create-info field set to zero, not a gate.
+
+### The measurement window (2026-09-21)
+
+The 31 `t05-measurement-pending` leaves ran on hardware for the first time,
+beside the 28 `rasterization-culling` diagnostics and all 304 acceptance cases,
+from a measurement selection derived by `tools/make_measurement_manifest.py`
+(selection SHA-256 `d783bd029eaf87622f2a2bbe25fb57d62ac23d33f6aeca894eeb662599746485`,
+frozen base `89279ef2bc7022af...`, 59 leaves moved). The payload was built with
+`PS5VK_RASTER_DIAGNOSTIC=1`, so the four features are advertised; it is a
+measurement build and **nothing is advertised in the shipping profile**.
+
+Result: **350/363 Pass, 13 Fail, zero NotSupported, zero missing, unexpected or
+duplicate cases** (run `20260921T092316262Z_PPSA99994_upstream-cts_0x145fa484491d4`,
+deployed SELF `2d68af617759e3131eeafd9aeeb1b303692892dfe5d73524a1c18468b5bb6b6b`
+read back exactly through FTP before launch, reassembled report SHA-256
+`ea0144690f4527c3393aa09b3b15e63cda5c6a9338313f6cb206d4b68b5cb17a`, title closed
+and confirmed stopped). The 304 acceptance cases are unchanged. Of the 59 moved
+leaves, 46 pass: all 28 culling, all 16 `fragment_ops.scissor.multi_viewport`
+and both `clipping.clip_volume.depth_clamp` leaves.
+
+The 13 failures are three distinct gaps, each measured rather than inferred:
+
+1. **Six `draw.renderpass.scissor.*`: clear through the transfer destination.**
+   The pinned helper clears the colour target outside the render pass
+   (`vkImageUtil.cpp` `clearColorImage`), recording UNDEFINED to
+   `TRANSFER_DST_OPTIMAL` and then `TRANSFER_DST_OPTIMAL` to
+   `COLOR_ATTACHMENT_OPTIMAL` around a `vkCmdClearColorImage`. This profile
+   accepts neither transition for a colour attachment, so the helper's command
+   buffer is invalidated and its `vkEndCommandBuffer` returns
+   `VK_ERROR_UNKNOWN`. **Accepting the two barriers is not the fix.** It was
+   tried and measured: with the transitions admitted the six cases reach the
+   GPU and hang it, and the device loss cascades over 170 later cases
+   (run `20260921T091...`, 186 Pass / 170 DeviceLost). The clear path fills
+   padded linear memory, while this target is `TILING_OPTIMAL`; the refusal is
+   currently the honest behaviour and the real work is an execution path, not
+   a validation rule.
+2. **Six `draw.renderpass.depth_clamp.*`: depth-only render passes.**
+   The test builds a pass with one depth attachment and
+   `colorAttachmentCount = 0` (`vktDrawDepthClampTests.cpp:388`).
+   `subpass_valid` in `src/vk_render_pass.c` requires exactly one colour
+   attachment, so `vkCreateRenderPass` returns `VK_ERROR_FEATURE_NOT_PRESENT`.
+   A depth-only pass needs a framebuffer with no colour role and a draw path
+   that exports no colour; it is a capability this tranche has not added.
+3. **One `rasterization.line_continuity.polygon-mode-lines`: a real oracle
+   failure.** Before this change every amber leaf died as
+   `InternalError: Failed to create engine`, because the payload compiled
+   Amber's Vulkan backend but never defined `AMBER_ENGINE_VULKAN`, which
+   upstream CMake sets from `Vulkan_FOUND` (`CMakeLists.txt:153`), so
+   `Engine::Create` compiled down to `return nullptr`. With the macro defined
+   the engine is created, the script's shaders compile and the leaf produces a
+   genuine `Fail`. What that failure is about has not been diagnosed here.
+
+### Promoted (2026-09-21)
+
+The four DXVK262-T05 requirements are advertised by the shipping profile. The
+58 leaves the measurement window proved are now acceptance cases, the frozen
+selection is **362**, and the shipping build - no measurement switch, the
+features reported by `native/platform_ps5.c` itself - passes **362/362 Pass,
+zero Fail, zero NotSupported**, with no missing, unexpected or duplicate
+results, strict artifact and QPA identity, and the title closed and confirmed
+stopped (run `20260921T165514411Z_PPSA99994_upstream-cts_0x15ea42202ec6c`,
+deployed SELF `449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa`,
+selection SHA-256
+`26862d1a5eb9ca93121797e1e9649b45ad753c319e3ee75624bbec3f0d995cba`, reassembled
+report SHA-256
+`ccfd626cac68cba95a6322408257c17c789fba4972274c4cc425b5c5283a66e7`).
+
+The public-ABI capability probe was re-run against the promoted profile and
+reports **15 of the 62 requirements satisfied** with 47 blockers, up from 11
+(run `20260921T163032548Z_PPSA99994_ps5vk_0x15d4b1d4b89b8`, artifact
+`6c49df2e42461249b9bbfd65530d17381428bdb5f1bdeb1d1b895b7aa68d28c5`), so the
+device itself reports the four features through the public query route. The
+DXVK matrix counts **13/62 ready, 49 blockers**.
+
+Per requirement: `depthClamp` all eight applicable leaves, `depthBiasClamp` its
+only two, `multiViewport` all twenty-two, `fillModeNonSolid` all twenty-eight it
+can run. Its twenty-ninth, `rasterization.line_continuity.polygon-mode-lines`,
+stays a documented diagnostic under `host-coherent-memory-gap`: Amber's backend
+allocates its host-accessible buffer demanding
+`HOST_VISIBLE|HOST_COHERENT` with force_flags
+(`amber/src/vulkan/transfer_image.cc:165-171`), this profile advertises one
+memory type without `HOST_COHERENT` and deliberately reports non-coherent
+memory, so the leaf fails with `Vulkan::Find Proper Memory Fail` before any
+rasterization happens. That is a memory-coherence question, not a
+`fillModeNonSolid` defect, and advertising the bit would be a false claim.
+
+This is focused validation of the four requirements, not Vulkan conformance.
+
+### What promotion needs
+
+The reporting matrix (`tools/check_reporting_matrix.py`, `ADVERTISED_FEATURES`)
+requires each true feature bit to cite its code path **and** at least one
+accepted upstream leaf, and the DXVK profile matrix marks a row ready only with
+`cts-pass`. Against that rule:
+
+Against the 2026-09-21 measurement, no T05 requirement is promotable yet:
+
+* `fillModeNonSolid`: 28 of its 29 leaves pass. The remaining
+  `rasterization.line_continuity.polygon-mode-lines` now runs for real and
+  fails its own oracle, so the feature has a measured defect rather than an
+  unmeasured leaf.
+* `multiViewport`: 16 of 22 leaves pass. The six `draw.renderpass.scissor`
+  leaves need the clear-through-transfer execution path, which is proven to
+  hang the GPU if the barriers are merely admitted.
+* `depthClamp`: 2 of 8 applicable leaves pass. The six
+  `draw.renderpass.depth_clamp` leaves need depth-only render passes.
+* `depthBiasClamp`: **no** upstream leaf passes. Its only two applicable
+  oracles are inside those six depth-only-pass cases, so the feature is
+  blocked behind the same capability.
+  `dynamic_state.monolithic.rs_state.depth_bias_clamp` stays out for a
+  different reason: it needs a stencil-bearing attachment format
+  (`D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT`), which is a separate capability
+  this tranche did not add.
+  `dynamic_state.monolithic.rs_state.depth_bias_clamp` stays out for a
+  different reason: it needs a stencil-bearing attachment format
+  (`D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT`), which is a separate capability
+  this tranche did not add.

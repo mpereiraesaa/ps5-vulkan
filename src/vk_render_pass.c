@@ -32,8 +32,14 @@ static int input_layout(VkImageLayout value)
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
     VkAttachmentReference *color, VkAttachmentReference *depth, uint32_t *input_count)
 {
+    /* A subpass names one colour attachment, or none at all. Zero is how
+     * Vulkan expresses a DEPTH-ONLY pass, which the pinned upstream depth
+     * clamp module builds (vktDrawDepthClampTests.cpp: colorAttachmentCount 0
+     * with a depth-stencil reference). Vulkan ignores pColorAttachments when
+     * the count is zero, so the pointer says nothing there. */
     if (s->flags || s->pipelineBindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS ||
-        s->colorAttachmentCount != 1 || !s->pColorAttachments ||
+        s->colorAttachmentCount > 1 ||
+        (s->colorAttachmentCount && !s->pColorAttachments) ||
         /* Vulkan IGNORES pInputAttachments when the count is zero, so the
          * pointer says nothing there; a nonzero count is a real request that
          * has to name a valid array. pResolveAttachments is different: a
@@ -55,13 +61,21 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
             return VK_ERROR_UNKNOWN;
     }
     *input_count = s->inputAttachmentCount;
-    *color = s->pColorAttachments[0];
+    color->attachment = VK_ATTACHMENT_UNUSED;
+    color->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (s->colorAttachmentCount) *color = s->pColorAttachments[0];
     depth->attachment = VK_ATTACHMENT_UNUSED;
     depth->layout = VK_IMAGE_LAYOUT_UNDEFINED;
     if (s->pDepthStencilAttachment) *depth = *s->pDepthStencilAttachment;
-    if (color->attachment >= attachments ||
-        (color->layout != VK_IMAGE_LAYOUT_GENERAL &&
-         color->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) ||
+    /* Something must be rendered into. A subpass that names neither a colour
+     * nor a depth attachment has no target at all. */
+    if (color->attachment == VK_ATTACHMENT_UNUSED &&
+        depth->attachment == VK_ATTACHMENT_UNUSED)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if ((color->attachment != VK_ATTACHMENT_UNUSED &&
+         (color->attachment >= attachments ||
+          (color->layout != VK_IMAGE_LAYOUT_GENERAL &&
+           color->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL))) ||
         (depth->attachment != VK_ATTACHMENT_UNUSED &&
          (depth->attachment >= attachments || depth->attachment == color->attachment ||
           (depth->layout != VK_IMAGE_LAYOUT_GENERAL &&

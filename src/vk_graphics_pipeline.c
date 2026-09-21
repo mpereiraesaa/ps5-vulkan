@@ -29,18 +29,47 @@ static VkResult refuse(unsigned site)
     return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
-static int dynamic_states(const VkPipelineDynamicStateCreateInfo *info,
-                          VkBool32 *viewport, VkBool32 *scissor)
+/* The rasterization state's pNext chain. This profile implements no optional
+ * rasterization structure, and every state that would change behaviour is
+ * refused, but the pinned upstream rasterization module chains one
+ * VkPipelineRasterizationLineStateCreateInfoEXT unconditionally - it sets the
+ * sType even when VK_EXT_line_rasterization is not enabled, which is the case
+ * on this device - so refusing every pNext fails a module this profile
+ * otherwise implements, at pipeline creation
+ * (measured: dEQP-VK.rasterization.culling.* -> vk.createGraphicsPipelines
+ * VK_ERROR_FEATURE_NOT_PRESENT in the 2026-09-18 acceptance run).
+ *
+ * The one structure is therefore accepted only in the exact form that asks for
+ * what this driver already does: the default rectangular rasterization mode and
+ * no stipple. Everything else stays refused: any other sType, a non-default
+ * line rasterization mode, an enabled stipple, or a second structure in the
+ * chain. */
+static int rasterization_pnext_supported(const void *pnext)
 {
-    *viewport=*scissor=VK_FALSE;
+    if(!pnext)return 1;
+    const VkBaseInStructure *base_=pnext;
+    if(base_->sType!=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT)return 0;
+    const VkPipelineRasterizationLineStateCreateInfoEXT *line=(const void *)base_;
+    if(line->pNext)return 0;
+    return line->lineRasterizationMode==VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT &&
+        !line->stippledLineEnable;
+}
+/* The core dynamic states this profile executes: viewport, scissor and depth
+ * bias. Every other VkDynamicState stays refused, so a pipeline can never be
+ * created with a dynamic state that no draw would honour. */
+static int dynamic_states(const VkPipelineDynamicStateCreateInfo *info,
+                          VkBool32 *viewport, VkBool32 *scissor, VkBool32 *depth_bias)
+{
+    *viewport=*scissor=*depth_bias=VK_FALSE;
     if(!info)return 1;
     if(info->sType!=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO ||
-       info->pNext || info->flags || info->dynamicStateCount>2 ||
+       info->pNext || info->flags || info->dynamicStateCount>3 ||
        (info->dynamicStateCount && !info->pDynamicStates))return 0;
     for(uint32_t i=0;i<info->dynamicStateCount;++i) {
         VkBool32 *flag;
         if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_VIEWPORT)flag=viewport;
         else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_SCISSOR)flag=scissor;
+        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_DEPTH_BIAS)flag=depth_bias;
         else return 0;
         if(*flag)return 0;
         *flag=VK_TRUE;
@@ -91,8 +120,8 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         (in->stageCount < 2 || in->stageCount > 5) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return refuse(2);
-    VkBool32 dynamic_viewport,dynamic_scissor;
-    if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor))
+    VkBool32 dynamic_viewport,dynamic_scissor,dynamic_depth_bias;
+    if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor,&dynamic_depth_bias))
         return refuse(3);
     const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL, *gs=NULL,
         *tcs=NULL, *tes=NULL;
@@ -131,13 +160,19 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     const VkPipelineMultisampleStateCreateInfo *m=in->pMultisampleState;
     const VkPipelineViewportStateCreateInfo *vp=in->pViewportState;
     const VkPipelineColorBlendStateCreateInfo *b=in->pColorBlendState;
-    if (!v || !ia || !r || !m || !vp || !b) return VK_ERROR_UNKNOWN;
+    /* The colour blend state is optional for the same reason the
+     * depth-stencil state is: a pipeline for a DEPTH-ONLY subpass has no
+     * colour attachment to blend into, and the pinned upstream depth clamp
+     * module leaves pColorBlendState NULL there. The subpass decides which
+     * of the two must be present; that check is below, where the subpass is
+     * resolved. */
+    if (!v || !ia || !r || !m || !vp) return VK_ERROR_UNKNOWN;
     if (v->sType != VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO ||
         ia->sType != VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO ||
         r->sType != VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO ||
         m->sType != VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO ||
         vp->sType != VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO ||
-        b->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO) return VK_ERROR_UNKNOWN;
+        (b && b->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO)) return VK_ERROR_UNKNOWN;
     if (v->vertexBindingDescriptionCount>16 || v->vertexAttributeDescriptionCount>32 ||
         (v->vertexBindingDescriptionCount && !v->pVertexBindingDescriptions) ||
         (v->vertexAttributeDescriptionCount && !v->pVertexAttributeDescriptions))return refuse(8);
@@ -189,35 +224,58 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP)
         return refuse(14);
     if (v->pNext || v->flags ||
+        /* primitiveRestartEnable is accepted above for the two strip
+         * topologies it can act on, and refused there for every other
+         * topology, so it is not part of this blanket refusal. */
         ia->pNext || ia->flags ||
-        r->pNext || r->flags || r->depthClampEnable || r->rasterizerDiscardEnable ||
-        /* Depth bias is accepted only in its no-op form: the pinned upstream
-         * draw pipeline enables it with every factor and the clamp at zero,
-         * where the enable bit cannot change a fragment's depth. A non-zero
-         * bias stays refused rather than being silently dropped. Vulkan
-         * ignores the factors when the enable bit is clear, so only the
-         * enabled form is checked. */
-        (r->depthBiasEnable && (r->depthBiasConstantFactor != 0.0f ||
-                                r->depthBiasSlopeFactor != 0.0f ||
-                                r->depthBiasClamp != 0.0f)) ||
-        r->polygonMode != VK_POLYGON_MODE_FILL || r->lineWidth != 1.0f ||
+        !rasterization_pnext_supported(r->pNext) || r->flags || r->rasterizerDiscardEnable ||
+        /* depthClampEnable needs depthClamp ENABLED on this logical device;
+         * the state itself executes (native PA_CL_CLIP_CNTL ZCLIP_*_DISABLE
+         * with the viewport depth range as the clamp interval). */
+        (r->depthClampEnable && !(d->enabled_features & PS5VK_FEATURE_DEPTH_CLAMP)) ||
+        /* Depth bias executes: the constant and slope factors are programmed
+         * as the polygon offset the draw runs with. Vulkan ignores all three
+         * factors while depthBiasEnable is false and while the state is
+         * dynamic, so they are checked only in the static enabled form, and
+         * the only check is the feature rule: a non-zero clamp needs
+         * depthBiasClamp ENABLED on this logical device. No finiteness rule
+         * is invented; the factors keep their float bit patterns. */
+        (r->depthBiasEnable && !dynamic_depth_bias && r->depthBiasClamp != 0.0f &&
+         !(d->enabled_features & PS5VK_FEATURE_DEPTH_BIAS_CLAMP)) ||
+        /* LINE and POINT polygon modes need fillModeNonSolid ENABLED; every
+         * other value (FILL_RECTANGLE_NV) stays refused. wideLines is not
+         * advertised, so the static line width is exactly 1.0. */
+        (r->polygonMode != VK_POLYGON_MODE_FILL &&
+         ((r->polygonMode != VK_POLYGON_MODE_LINE && r->polygonMode != VK_POLYGON_MODE_POINT) ||
+          !(d->enabled_features & PS5VK_FEATURE_FILL_MODE_NON_SOLID))) ||
+        r->lineWidth != 1.0f ||
         m->pNext || m->flags || m->rasterizationSamples != VK_SAMPLE_COUNT_1_BIT ||
         m->sampleShadingEnable || m->alphaToCoverageEnable || m->alphaToOneEnable ||
         (m->pSampleMask && !(m->pSampleMask[0] & 1)) ||
-        vp->pNext || vp->flags || vp->viewportCount != 1 || vp->scissorCount != 1 ||
-        b->pNext || b->flags || b->logicOpEnable || b->attachmentCount != 1)
+        /* Viewport arrays: the two counts must match and lie in
+         * 1..PS5VK_MAX_VIEWPORTS; more than one needs multiViewport ENABLED
+         * on this logical device. The count is static in this profile (no
+         * *_WITH_COUNT dynamic state), so a zero count is malformed. */
+        vp->pNext || vp->flags || !vp->viewportCount || vp->viewportCount > PS5VK_MAX_VIEWPORTS ||
+        vp->scissorCount != vp->viewportCount ||
+        (vp->viewportCount > 1 && !(d->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)) ||
+        (b && (b->pNext || b->flags || b->logicOpEnable || b->attachmentCount > 1)))
         return refuse(15);
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
-        !b->pAttachments) return VK_ERROR_UNKNOWN;
-    const VkViewport *viewport=vp->pViewports; const VkRect2D *scissor=vp->pScissors;
-    if ((!dynamic_viewport && (!finite_float(viewport->x) || !finite_float(viewport->y) ||
-        !finite_float(viewport->width) || !finite_float(viewport->height) ||
-        !(viewport->width > 0) || !(viewport->height > 0) ||
-        !(viewport->minDepth >= 0 && viewport->minDepth <= 1) ||
-        !(viewport->maxDepth >= 0 && viewport->maxDepth <= 1))) ||
-        (!dynamic_scissor && (scissor->offset.x < 0 || scissor->offset.y < 0 ||
-        !scissor->extent.width || !scissor->extent.height)) ||
-        r->cullMode & ~VK_CULL_MODE_FRONT_AND_BACK ||
+        (b && b->attachmentCount && !b->pAttachments)) return VK_ERROR_UNKNOWN;
+    /* Every static element is validated before any is stored. */
+    for (uint32_t i = 0; i < vp->viewportCount; ++i) {
+        const VkViewport *viewport=&vp->pViewports[i]; const VkRect2D *scissor=&vp->pScissors[i];
+        if ((!dynamic_viewport && (!finite_float(viewport->x) || !finite_float(viewport->y) ||
+            !finite_float(viewport->width) || !finite_float(viewport->height) ||
+            !(viewport->width > 0) || !(viewport->height > 0) ||
+            !(viewport->minDepth >= 0 && viewport->minDepth <= 1) ||
+            !(viewport->maxDepth >= 0 && viewport->maxDepth <= 1))) ||
+            (!dynamic_scissor && (scissor->offset.x < 0 || scissor->offset.y < 0 ||
+            !scissor->extent.width || !scissor->extent.height)))
+            return VK_ERROR_UNKNOWN;
+    }
+    if (r->cullMode & ~VK_CULL_MODE_FRONT_AND_BACK ||
         (r->frontFace != VK_FRONT_FACE_CLOCKWISE && r->frontFace != VK_FRONT_FACE_COUNTER_CLOCKWISE))
         return VK_ERROR_UNKNOWN;
     const VkPipelineDepthStencilStateCreateInfo *depth=in->pDepthStencilState;
@@ -226,6 +284,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * first one: the identity is what a draw is later checked against. */
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, in->subpass);
     if (subpass->depth.attachment != VK_ATTACHMENT_UNUSED && !depth) return VK_ERROR_UNKNOWN;
+    /* A colour subpass needs exactly one blend attachment; a depth-only one
+     * must not describe a colour attachment it does not have. */
+    const int has_colour = subpass->color.attachment != VK_ATTACHMENT_UNUSED;
+    const VkPipelineColorBlendAttachmentState *blend =
+        (b && b->attachmentCount) ? &b->pAttachments[0] : NULL;
+    if (has_colour ? !blend : (blend != NULL)) return refuse(19);
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
         depth->pNext || depth->flags || depth->depthBoundsTestEnable || depth->stencilTestEnable ||
         depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
@@ -244,9 +308,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             (struct ps5vk_graphics_module_key){0},
         .patch_control_points=tcs?in->pTessellationState->patchControlPoints:0,
         .feature_mask=d->enabled_features,
-        .topology=ia->topology, .color_format=pass->attachments[subpass->color.attachment].format,
-        .samples=m->rasterizationSamples, .color_write_mask=b->pAttachments[0].colorWriteMask,
-        .blend_enable=b->pAttachments[0].blendEnable,
+        .topology=ia->topology,
+        .color_format=has_colour ? pass->attachments[subpass->color.attachment].format :
+            VK_FORMAT_UNDEFINED,
+        .samples=m->rasterizationSamples,
+        .color_write_mask=blend ? blend->colorWriteMask : 0u,
+        .blend_enable=blend ? blend->blendEnable : VK_FALSE,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
         .vertex_bindings=v->pVertexBindingDescriptions,.vertex_attributes=v->pVertexAttributeDescriptions,
         .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets,
@@ -254,7 +321,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     memcpy(key.push_constant_stages,in->layout->push_constant_stages,
            sizeof(key.push_constant_stages));
     if(key.blend_enable) {
-        const VkPipelineColorBlendAttachmentState *a=&b->pAttachments[0];
+        const VkPipelineColorBlendAttachmentState *a=blend;
         key.src_color_blend_factor=a->srcColorBlendFactor;
         key.dst_color_blend_factor=a->dstColorBlendFactor;
         key.color_blend_op=a->colorBlendOp;
@@ -319,14 +386,27 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if(p->set_count)memcpy(p->sets,in->layout->sets,p->set_count*sizeof(*p->sets));
     p->graphics_release=d->graphics_release;
     p->dynamic_viewport=dynamic_viewport;p->dynamic_scissor=dynamic_scissor;
-    if(!dynamic_viewport)p->viewport=*viewport;
-    if(!dynamic_scissor)p->scissor=*scissor;
+    p->viewport_count=vp->viewportCount;
+    if(!dynamic_viewport)memcpy(p->viewports,vp->pViewports,vp->viewportCount*sizeof(*p->viewports));
+    if(!dynamic_scissor)memcpy(p->scissors,vp->pScissors,vp->viewportCount*sizeof(*p->scissors));
+    /* The enable is always static in this profile; the factors are static
+     * only when VK_DYNAMIC_STATE_DEPTH_BIAS was not declared, and a disabled
+     * bias keeps zero factors so a snapshot never carries ignored values. */
+    p->dynamic_depth_bias=dynamic_depth_bias;
+    p->raster.depth_clamp=r->depthClampEnable?VK_TRUE:VK_FALSE;
+    p->raster.polygon_mode=r->polygonMode;
+    p->raster.depth_bias_enable=r->depthBiasEnable?VK_TRUE:VK_FALSE;
+    if(r->depthBiasEnable && !dynamic_depth_bias) {
+        p->raster.depth_bias_constant=r->depthBiasConstantFactor;
+        p->raster.depth_bias_clamp=r->depthBiasClamp;
+        p->raster.depth_bias_slope=r->depthBiasSlopeFactor;
+    }
     p->push_constant_size=in->layout->push_constant_size;
     memcpy(p->push_constant_stages,in->layout->push_constant_stages,
            sizeof(p->push_constant_stages));
     p->cull_mode=r->cullMode; p->front_face=r->frontFace; p->color_format=key.color_format;
     p->primitive_restart=ia->primitiveRestartEnable;
-    p->color_blend=*b->pAttachments;
+    p->color_blend=blend ? *blend : (VkPipelineColorBlendAttachmentState){0};
     memcpy(p->blend_constants,key.blend_constants,sizeof(p->blend_constants));
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
     if(key.vertex_binding_count)memcpy(p->vertex_bindings,key.vertex_bindings,

@@ -197,7 +197,7 @@ The current graphics format matrix remains deliberately bounded:
 | scalar, two-component and four-component `R8`, `R16`, `R32` UINT/SINT families (18 formats) | typed sampled image and transfer destination, nearest only |
 | `A8B8G8R8_UNORM_PACK32`, `A8B8G8R8_SNORM_PACK32`, `A8B8G8R8_SRGB_PACK32` | optimal sampled image, linear filtering and transfer destination |
 | `A8B8G8R8_UINT_PACK32`, `A8B8G8R8_SINT_PACK32` | typed sampled image and transfer destination, nearest only |
-| `D32_SFLOAT` | optimal depth attachment (the `DEPTH_STENCIL_ATTACHMENT` feature bit, depth aspect only) plus transfer destination, which exists solely for the whole-subresource one-sample depth-only clear |
+| `D32_SFLOAT` | optimal depth attachment (the `DEPTH_STENCIL_ATTACHMENT` feature bit, depth aspect only), plus transfer destination, which exists solely for the whole-subresource one-sample depth-only clear, plus transfer source for the whole-surface depth readback, whose SW_64K_Z_X pixel addressing is implemented in `src/depth_detile.c` |
 | `R32_SFLOAT` | vertex buffer and uniform texel buffer; the texel-buffer role has host-only evidence |
 | `R32_SINT`, `R32_UINT` | uniform texel buffer; UINT has native evidence, SINT is host-only |
 | `R8G8B8A8_UNORM`, `R8G8B8A8_SNORM`, `R8G8B8A8_UINT`, `R8G8B8A8_SINT` | uniform texel buffer with four-component identity completion; UNORM is directly covered by the two-run `texelFetch` witness in VALIDATION.md, while the other three compose that shared buffer path with their independently validated format conversion/interface evidence |

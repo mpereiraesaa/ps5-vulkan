@@ -11,7 +11,8 @@ enum { MODEL_VERTEX=0, MODEL_TESS_CTRL=1, MODEL_TESS_EVAL=2, MODEL_GEOMETRY=3,
 enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
        BUILTIN_CULL_DISTANCE=4, BUILTIN_VERTEX_INDEX=42, BUILTIN_INSTANCE_INDEX=43,
        BUILTIN_BASE_VERTEX=4424, BUILTIN_BASE_INSTANCE=4425, BUILTIN_DRAW_INDEX=4426,
-       BUILTIN_VIEW_INDEX=4440, BUILTIN_FRAG_COORD=15 };
+       BUILTIN_VIEW_INDEX=4440, BUILTIN_VIEWPORT_INDEX=10,
+       BUILTIN_FRAG_COORD=15 };
 /* The tessellation built-ins the two stages exchange with the tessellator, and
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
@@ -49,6 +50,13 @@ struct interface {
     /* Declared gl_ClipDistance/gl_CullDistance array lengths, in components.
      * They start at zero and are set at most once per stage. */
     unsigned clip_distances, cull_distances;
+    /* The geometry stage's gl_ViewportIndex export. It is not a varying: it is
+     * a 32-bit integer scalar with no location that selects one of the viewport
+     * banks the pipeline programs, and core Vulkan lets ONLY a geometry stage
+     * write it. Set at most once per stage, like the distance arrays; whether
+     * the pipeline may use it at all is the multiViewport negotiation, which
+     * the adapter decides on the logical device's enabled mask. */
+    unsigned viewport_index;
     /* The same two arrays as PIXEL INPUTS: a fragment stage reads what the
      * last pre-raster stage exported. The rasterizer delivers those components
      * exactly like a varying, from the same packed position registers, so a
@@ -414,14 +422,20 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                    type->count!=32)goto done;
                 continue;
             }
-            /* FragCoord is supplied by the rasterizer to the fragment stage,
-             * not linked as a varying.  Admit only its exact Vulkan shape:
-             * an undecorated float32 vec4 Input variable. */
-            if(d->builtin==BUILTIN_FRAG_COORD) {
-                if(model!=MODEL_FRAGMENT || d->location!=~0u || d->storage!=1u ||
-                   d->patch || type->op!=23 || type->count!=4 || !type->type ||
-                   type->type>=bound || ids[type->type].op!=22 ||
-                   ids[type->type].count!=32)goto done;
+            /* gl_ViewportIndex: the geometry stage's per-primitive selection of
+             * one of the viewport banks. Core Vulkan lets only a geometry stage
+             * write it, it is a 32-bit integer scalar rather than a varying, and
+             * the hardware acts on it through the viewport-index vector the
+             * compiler publishes for the merged pair. What this function decides
+             * is only that the DECLARATION is one this profile can describe; the
+             * capability gate on the enabled multiViewport bit lives in the
+             * adapter, because a pipeline that writes an index while the profile
+             * programs a single bank would silently route everything to viewport
+             * zero. */
+            if(model==MODEL_GEOMETRY && d->builtin==BUILTIN_VIEWPORT_INDEX) {
+                if(d->location!=~0u || d->storage!=3 || d->patch ||
+                   type->op!=21 || type->count!=32 || out->viewport_index)goto done;
+                out->viewport_index=1;
                 continue;
             }
             if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) &&
@@ -470,6 +484,30 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                         &out->clip_distances:&out->cull_distances);
                 if(*total)goto done; /* one declaration per built-in per stage */
                 *total=length;
+                continue;
+            }
+            /* gl_FragCoord: the fragment's window position. Core Vulkan, so
+             * no feature gates it, and unlike every varying it needs no export
+             * from the pre-raster stage - the hardware launches the pixel wave
+             * with the position VGPRs and the pinned compiler asks for them
+             * through SPI_PS_INPUT_ENA, which it publishes with the rest of
+             * the pixel context registers. Nothing else in the pipeline has to
+             * change, so this is an interface rule only.
+             *
+             * It is accepted in the one shape the built-in has: a fragment
+             * Input pointing at a four-component 32-bit float vector, never a
+             * patch and never at a location. Refusing it is what kept the only
+             * applicable depthClamp leaves out of reach - the fragment shader
+             * of dEQP-VK.clipping.clip_volume.depth_clamp.* colours with
+             * gl_FragCoord.z, and the pair was refused at pipeline creation
+             * (measured as two rc=-8 runtime-graphics cache entries in the
+             * 2026-09-20 run, eboot 749756aa). */
+            if(d->builtin==BUILTIN_FRAG_COORD) {
+                if(model!=MODEL_FRAGMENT || d->storage!=1u || d->patch ||
+                   d->location!=~0u || type->op!=23 || type->count!=4 ||
+                   !type->type || type->type>=bound)goto done;
+                const struct id_info *component=&ids[type->type];
+                if(component->op!=22 || component->count!=32)goto done;
                 continue;
             }
             /* Any other built-in a tessellation stage declares is outside this
@@ -698,8 +736,18 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
         if(!input_vertices || !input_mode || gs.input_primitive!=input_mode ||
            (gs.input_vertices && gs.input_vertices!=input_vertices))return 0;
     }
-    if(fs.outputs[0].components!=4 ||
-       fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
+    /* What the fragment stage must export is decided by the attachment it
+     * would export into. A colour subpass wants the one four-component float
+     * output at location 0 this profile writes. A DEPTH-ONLY subpass has no
+     * colour attachment, so the stage must declare no output at all: the
+     * pinned upstream depth clamp module ships an empty fragment shader there,
+     * and its program exports nothing (SPI_SHADER_COL_FORMAT zero). Requiring
+     * an export that has nowhere to go, or accepting one that does, would both
+     * be wrong, so the two cases are exclusive. */
+    if(key->color_format==VK_FORMAT_UNDEFINED) {
+        if(fs.outputs[0].components)return 0;
+    } else if(fs.outputs[0].components!=4 ||
+              fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
     /* The stage the fragment stage reads is the last pre-raster stage that runs
      * before it, and the stage a geometry stage reads is the one before that. */
     const struct interface *previous=has_geometry?&gs:(has_tessellation?&tes:&vs);
@@ -770,4 +818,11 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
         }
     }
     return 1;
+}
+
+int ps5vk_spirv_stage_viewport_index(const struct ps5vk_graphics_module_key *module)
+{
+    struct interface stage={0};
+    if(!reflect(module,MODEL_GEOMETRY,&stage))return 0;
+    return (int)stage.viewport_index;
 }

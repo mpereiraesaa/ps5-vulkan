@@ -1214,6 +1214,80 @@ int main(void)
         vkFreeMemory(device, layered_memory, NULL);
     }
 
+    /* A colour attachment that is also a transfer source AND a transfer
+     * destination is still a readback target. The readback role in
+     * src/vk_command.c is written for an image that is only a colour
+     * attachment and a transfer source, so it excludes TRANSFER_DST; an
+     * upstream case that clears or uploads through the same image and then
+     * reads it back declares all three, fell through to the initialise-only
+     * rule of the colour-transfer role and had its command buffer invalidated
+     * at the readback transition. Measured as
+     * dEQP-VK.draw.renderpass.scissor.* failing with vkEndCommandBuffer ->
+     * VK_ERROR_UNKNOWN (2026-09-20 measurement run, eboot 749756aa). */
+    {
+        VkImage readback = make_image(VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT, NULL);
+        assert(ps5vk_colour_transfer_image(readback));
+        const VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkImageMemoryBarrier to_source = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = readback, .subresourceRange = whole};
+
+        readback->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkCommandBuffer command = begin();
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_source);
+        assert(command->state == PS5VK_RECORDING);
+        assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+
+        /* and the return to rendering the same role already accepted. */
+        VkImageMemoryBarrier back_to_colour = to_source;
+        back_to_colour.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        back_to_colour.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        back_to_colour.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        back_to_colour.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        readback->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        command = begin();
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &back_to_colour);
+        assert(command->state == PS5VK_RECORDING);
+        assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+
+        /* The widening is exact, not a layout wildcard: the same image and the
+         * same pair of layouts with any other access scope stays refused. The
+         * colour attachment that is only a transfer destination cannot widen
+         * anything either, because the backend refuses that usage combination
+         * at vkCreateImage (src/texture_format.c: each role contributes an
+         * exact combination). */
+        VkImageMemoryBarrier wrong_access = to_source;
+        wrong_access.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        readback->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        command = begin();
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &wrong_access);
+        assert(command->state == PS5VK_INVALID);
+        assert(vkEndCommandBuffer(command) == VK_ERROR_UNKNOWN);
+
+        VkImageCreateInfo no_source_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {WIDTH, HEIGHT, 1},
+            .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+        VkImage no_source = VK_NULL_HANDLE;
+        assert(vkCreateImage(device, &no_source_info, NULL, &no_source) != VK_SUCCESS);
+
+        vkDestroyImage(device, readback, NULL);
+    }
+
     vkDestroyBuffer(device, alias_buffer, NULL);
     vkDestroyImage(device, alias_destination, NULL);
     vkDestroyImage(device, alias_source, NULL);

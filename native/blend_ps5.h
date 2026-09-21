@@ -20,8 +20,15 @@ static inline int ps5vk_color_export_state(VkFormat format,uint32_t spi_format,
 {
     if(!words)return 0;
     words[0]=words[1]=words[2]=0;
-    if((format!=VK_FORMAT_R8G8B8A8_UNORM && format!=VK_FORMAT_B8G8R8A8_UNORM) ||
-       (blending!=VK_FALSE && blending!=VK_TRUE))return 0;
+    if(blending!=VK_FALSE && blending!=VK_TRUE)return 0;
+    /* A DEPTH-ONLY pass has no colour target and its fragment program exports
+     * nothing, so SPI_SHADER_COL_FORMAT is zero. There is nothing to convert:
+     * the three downconversion words stay zero, which is also what a colour
+     * draw must leave behind when it stops exporting. The two conditions are
+     * checked together, so an exporting program without a target, or a target
+     * without an export, is still refused. */
+    if(format==VK_FORMAT_UNDEFINED)return !spi_format && !blending;
+    if(format!=VK_FORMAT_R8G8B8A8_UNORM && format!=VK_FORMAT_B8G8R8A8_UNORM)return 0;
     if(spi_format==4) {words[0]=5;words[1]=6;return 1;}
     if(spi_format==9 && !blending) {words[0]=1;return 1;}
     return 0;

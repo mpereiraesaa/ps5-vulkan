@@ -72,11 +72,33 @@ class UpstreamSelectionTests(unittest.TestCase):
         # instead of being claimed as coverage.
         geometry = [c for c in manifest["cases"]
                     if "geometryShader" in " ".join(c.get("features_required", []))]
-        self.assertEqual((304, 34, 48),
+        # 362 acceptance cases: the 304 the tranches before T05 left, plus the
+        # 58 T05 leaves measured and promoted on 2026-09-21 (28 rasterization
+        # culling, 16 fragment_ops multi_viewport, 6 draw.renderpass.scissor,
+        # 2 clip_volume.depth_clamp, 6 draw.renderpass.depth_clamp). The 44
+        # diagnostics that remain document refusals and capability gaps, and
+        # nothing is left pending a measurement window.
+        self.assertEqual((362, 44, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
+        pending = [d for d in manifest["diagnostics"]
+                   if d["category"] == "t05-measurement-pending"]
+        self.assertEqual([], pending)
+        # The one T05 leaf that stayed out is not a feature defect: Amber
+        # demands host-coherent memory this profile does not advertise.
+        amber = [d for d in manifest["diagnostics"]
+                 if d["category"] == "host-coherent-memory-gap"]
+        self.assertEqual(1, len(amber))
+        self.assertEqual("Fail", amber[0]["expected_status"])
+        self.assertEqual("dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
+                         amber[0]["path"])
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
-        self.assertEqual(29, len(geometry))
-        self.assertEqual(29, len({c["path"] for c in geometry}))
+        # 29 from the geometry tranche itself, plus the 23 T05 leaves promoted on
+        # 2026-09-21 that drive gl_ViewportIndex from a geometry stage: the 16
+        # fragment_ops multi_viewport scissors, the 6 draw.renderpass.scissor
+        # leaves and the four-viewport depth-clamp one. They require the feature
+        # as genuinely as the geometry family does.
+        self.assertEqual(52, len(geometry))
+        self.assertEqual(52, len({c["path"] for c in geometry}))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in geometry))
         # The four strip-topology leaves that were blocked on primitive restart
         # are acceptance now: the profile carries the state and programs the cut.
@@ -172,6 +194,86 @@ class UpstreamSelectionTests(unittest.TestCase):
             entry["resource_contract"] = contract
         manifest["cases"].append(entry)
         return self._gate_exit_code_for_manifest(manifest)
+
+    def test_t05_recognizers_are_bound_to_their_constructions(self):
+        """The three T05 name recognizers derive exactly the pinned factories'
+        leaves and nothing when the construction they were written against is
+        gone."""
+        fo = (UPSTREAM / "external/vulkancts/modules/vulkan/fragment_ops/"
+              "vktFragmentOperationsScissorMultiViewportTests.cpp").read_text()
+        names = self.gate._fragment_ops_multi_viewport_leaf_names(fo)
+        self.assertEqual({f"scissor_{n}" for n in range(1, 17)}, names)
+        self.assertEqual(set(), self.gate._fragment_ops_multi_viewport_leaf_names(
+            fo.replace("MIN_MAX_VIEWPORTS = 16", "MIN_MAX_VIEWPORTS = 64")))
+        self.assertEqual(set(), self.gate._fragment_ops_multi_viewport_leaf_names(
+            fo.replace('"scissor_" + de::toString(numViewports)', '"vp_" + name')))
+
+        clip = (UPSTREAM / "external/vulkancts/modules/vulkan/clipping/"
+                "vktClippingTests.cpp").read_text()
+        util = (UPSTREAM / self.gate.DRAW_UTIL_SOURCE).read_text()
+        names = self.gate._clip_volume_topology_leaf_names(clip, util)
+        self.assertEqual({"point_list", "line_list", "line_list_with_adjacency", "line_strip",
+                          "line_strip_with_adjacency", "triangle_list",
+                          "triangle_list_with_adjacency", "triangle_strip",
+                          "triangle_strip_with_adjacency", "triangle_fan"}, names)
+        self.assertEqual(set(), self.gate._clip_volume_topology_leaf_names(clip, ""))
+        self.assertEqual(set(), self.gate._clip_volume_topology_leaf_names(
+            clip.replace("getPrimitiveTopologyShortName(cases[caseNdx])", "name(caseNdx)"), util))
+
+        depth = (UPSTREAM / "external/vulkancts/modules/vulkan/draw/"
+                 "vktDrawDepthClampTests.cpp").read_text()
+        names = self.gate._draw_depth_clamp_leaf_names(depth)
+        self.assertIn("d32_sfloat", names)
+        self.assertIn("d32_sfloat_depth_bias_clamp_input_negative", names)
+        self.assertIn("d32_sfloat_clamp_four_viewports", names)
+        self.assertNotIn("d32_sfloat_bogus", names)
+        self.assertEqual(6 * 8, len(names))
+        self.assertEqual(set(), self.gate._draw_depth_clamp_leaf_names(
+            depth.replace("formatCaseName + params.testNameSuffix", "name")))
+
+    def test_amber_backend_is_compiled_in_not_just_compiled(self):
+        """Amber picks its backend with a compile-time macro, not by linking.
+
+        The payload compiles src/vulkan/*.cc, but engine.cc only constructs
+        EngineVulkan under #if AMBER_ENGINE_VULKAN, which upstream CMake sets
+        from Vulkan_FOUND. Without the macro Engine::Create returns nullptr and
+        every amber leaf dies as InternalError "Failed to create engine"
+        before a single Vulkan call, which is what the 2026-09-21 measurement
+        recorded for rasterization.line_continuity.polygon-mode-lines.
+        """
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn("src/vulkan/engine_vulkan.cc", builder)
+        # Both flag sets compile amber sources, so both must carry the macro.
+        self.assertEqual(2, builder.count('"-DAMBER_ENGINE_VULKAN=1"'))
+        self.assertEqual(2, builder.count('"-DAMBER_ENGINE_DAWN=0"'))
+
+    def test_t05_modules_are_registered_where_their_diagnostics_point(self):
+        """The fragment_ops and draw scissor factories the pending leaves need
+        are compiled and registered, the amber script they parse is staged, and
+        the families that are only documented as gaps are not registered."""
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn('vkt::FragmentOperations::createTests(m_testCtx, "fragment_ops")', package)
+        self.assertIn("vkt::Draw::createScissorTests(", package)
+        # The depth-clamp oracles became reachable when the depth readback was
+        # implemented, so their module is registered too.
+        self.assertIn("vkt::Draw::createDepthClampTests(", package)
+        self.assertIn("vktDrawDepthClampTests.cpp", builder)
+        # rs_state stays out: its depth_bias_clamp leaf needs a stencil-bearing
+        # attachment format this profile does not offer, which is a different
+        # capability from the depth readback.
+        self.assertNotIn("DynamicStateRSTests", package)
+        for unit in ("vktFragmentOperationsTests.cpp",
+                     "vktFragmentOperationsScissorTests.cpp",
+                     "vktFragmentOperationsScissorMultiViewportTests.cpp",
+                     "vktFragmentOperationsEarlyFragmentTests.cpp",
+                     "vktFragmentOperationsOcclusionQueryTests.cpp",
+                     "vktFragmentOperationsTransientAttachmentTests.cpp",
+                     "vktDrawScissorTests.cpp"):
+            self.assertIn(unit, builder)
+        self.assertIn("vulkan/amber/rasterization/line_continuity/polygon-mode-lines.amber", builder)
+        self.assertTrue((UPSTREAM / "external/vulkancts/data/vulkan/amber/rasterization/"
+                         "line_continuity/polygon-mode-lines.amber").is_file())
 
     def test_device_capabilities_come_from_the_device_sources(self):
         self.assertEqual([], self.capability_failures)

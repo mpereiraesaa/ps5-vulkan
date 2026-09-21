@@ -204,10 +204,20 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     if(!pass->subpass_count || pass->subpass_count>PS5VK_MAX_SUBPASSES)return VK_ERROR_FEATURE_NOT_PRESENT;
     const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(pass,0);
     int depth=subpass->depth.attachment!=VK_ATTACHMENT_UNUSED;
-    VkFormat color_format=begin->framebuffer->attachments[0]->image->info.format;
-    if(pass->attachment_count!=(depth?2u:1u) ||
-        (depth && subpass->depth.attachment!=1) || subpass->color.attachment!=0 ||
-        (color_format!=VK_FORMAT_B8G8R8A8_UNORM && color_format!=VK_FORMAT_R8G8B8A8_UNORM))
+    /* A pass carries a colour attachment, a depth one, or both. A DEPTH-ONLY
+     * pass has no colour role at all, so its single attachment IS the depth
+     * one and the colour half of this executor does nothing. The attachments
+     * keep their fixed order: colour first when present, depth after it. */
+    const int colour=subpass->color.attachment!=VK_ATTACHMENT_UNUSED;
+    const uint32_t depth_index=colour?1u:0u;
+    if(pass->attachment_count!=(uint32_t)(colour+depth) ||
+        (depth && subpass->depth.attachment!=depth_index) ||
+        (colour && subpass->color.attachment!=0u))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkFormat color_format=colour?
+        begin->framebuffer->attachments[0]->image->info.format:VK_FORMAT_UNDEFINED;
+    if(colour && color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
+        color_format!=VK_FORMAT_R8G8B8A8_UNORM)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     for(uint32_t index=1;index<pass->subpass_count;++index) {
         const struct ps5vk_subpass *next=ps5vk_render_pass_subpass(pass,index);
@@ -243,7 +253,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(multiview->view_offsets[k])return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     struct ps5vk_attachment_plan color_plan={0},depth_plan={0};
-    if(ps5vk_attachment_plan(&pass->attachments[0],color_format,
+    if(colour && ps5vk_attachment_plan(&pass->attachments[0],color_format,
         subpass->color.layout,VK_FALSE,&color_plan)!=VK_SUCCESS)return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t clear_word=0;
     if(color_plan.clear) {
@@ -258,15 +268,15 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     if(depth) {
-        const VkAttachmentDescription *a=&pass->attachments[1];
-        VkImage image=begin->framebuffer->attachments[1]->image;
+        const VkAttachmentDescription *a=&pass->attachments[depth_index];
+        VkImage image=begin->framebuffer->attachments[depth_index]->image;
         if(ps5vk_attachment_plan(a,VK_FORMAT_D32_SFLOAT,subpass->depth.layout,
             VK_TRUE,&depth_plan)!=VK_SUCCESS ||
             image->info.extent.width!=begin->framebuffer->width ||
             image->info.extent.height!=begin->framebuffer->height)return VK_ERROR_FEATURE_NOT_PRESENT;
         if(depth_plan.clear) {
-            float clear=begin->clears[1].depthStencil.depth;
-            if(begin->clear_count<2 || !(clear>=0 && clear<=1) ||
+            float clear=begin->clears[depth_index].depthStencil.depth;
+            if(begin->clear_count<depth_index+1u || !(clear>=0 && clear<=1) ||
                 begin->render_area.offset.x || begin->render_area.offset.y ||
                 begin->render_area.extent.width!=begin->framebuffer->width ||
                 begin->render_area.extent.height!=begin->framebuffer->height)
@@ -331,7 +341,11 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * on the immutable record this backend is handed. */
     if(next_buffer!=s->count || !body_count)return VK_ERROR_FEATURE_NOT_PRESENT;
     struct graphics_job *j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
-    j->serial=s->serial; j->color=begin->framebuffer->attachments[0]->image;
+    j->serial=s->serial;
+    /* The image the prelude and postlude act on. A depth-only pass has no
+     * colour image, and the helpers below already treat a missing one as
+     * "no colour work in this range" rather than as an error. */
+    j->color=colour?begin->framebuffer->attachments[0]->image:NULL;
     phase="command-arena";
     VkResult rc=ps5vk_draw_batch_open(&j->chain,j->serial);
     if(rc==VK_ERROR_DEVICE_LOST)retain("command-create");
@@ -366,12 +380,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     /* Record the scoped render-pass transitions transactionally. Resource
      * state becomes committed only after the exact GPU completion label. */
     phase="attachment-layout";
-    rc=ps5vk_layout_transition(&j->layouts,j->color,
-        pass->attachments[0].initialLayout,pass->attachments[0].finalLayout);
-    if(rc!=VK_SUCCESS)goto fail;
+    if(colour) {
+        rc=ps5vk_layout_transition(&j->layouts,j->color,
+            pass->attachments[0].initialLayout,pass->attachments[0].finalLayout);
+        if(rc!=VK_SUCCESS)goto fail;
+    }
     if(depth) {
-        rc=ps5vk_layout_transition(&j->layouts,begin->framebuffer->attachments[1]->image,
-            pass->attachments[1].initialLayout,pass->attachments[1].finalLayout);
+        rc=ps5vk_layout_transition(&j->layouts,begin->framebuffer->attachments[depth_index]->image,
+            pass->attachments[depth_index].initialLayout,pass->attachments[depth_index].finalLayout);
         if(rc!=VK_SUCCESS)goto fail;
     }
     ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT];

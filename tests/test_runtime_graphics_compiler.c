@@ -39,67 +39,6 @@ static int patch_builtin(struct ps5vk_graphics_module_key *m, uint32_t from, uin
     return 0;
 }
 
-#define PS5VK_TEST_PS_INPUT_ENA_OFFSET  ((uint16_t)((0x0286CCu - 0x00028000u) / 4u))
-#define PS5VK_TEST_PS_INPUT_ADDR_OFFSET ((uint16_t)((0x0286D0u - 0x00028000u) / 4u))
-#define PS5VK_TEST_POS_Z_FLOAT_ENA      (1u << 10)
-#define PS5VK_TEST_POS_XYZW_FLOAT_ENA   (0xfu << 8)
-#define PS5VK_TEST_LAUNCH_VGPR_ENA      (0xffu)
-
-static uint32_t published_context_register(const void *pair, uint16_t offset, int *found)
-{
-    const struct ps5vk_runtime_graphics_program *program=pair;
-    *found=0;
-    for(unsigned i=0;i<program->fragment.metadata.context_register_count;++i)
-        if(program->fragment.metadata.context_registers[i].offset==offset) {
-            *found=1;
-            return program->fragment.metadata.context_registers[i].value;
-        }
-    return 0;
-}
-
-static uint32_t compiled_ps_input_ena(const char *fragment_path)
-{
-    struct ps5vk_graphics_key key={
-        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
-        .fragment=read_module(fragment_path),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
-    assert(ps5vk_spirv_graphics_interface(&key));
-    assert(ps5vk_runtime_graphics_supported(&key));
-    const void *pair=NULL;
-    assert(ps5vk_runtime_graphics_compile(NULL,&key,&pair)==VK_SUCCESS && pair);
-    int found_ena=0,found_addr=0;
-    const uint32_t ena=published_context_register(pair,PS5VK_TEST_PS_INPUT_ENA_OFFSET,&found_ena);
-    const uint32_t addr=published_context_register(pair,PS5VK_TEST_PS_INPUT_ADDR_OFFSET,&found_addr);
-    assert(found_ena && found_addr && (ena&addr)==ena);
-    ps5vk_runtime_graphics_free(NULL,pair);
-    free((void *)key.vertex.words);free((void *)key.fragment.words);
-    return ena;
-}
-
-static void check_fragment_position(void)
-{
-    const uint32_t plain=compiled_ps_input_ena("build/runtime-graphics/triangle.frag.spv");
-    assert(!(plain&PS5VK_TEST_POS_XYZW_FLOAT_ENA));
-    assert(plain&PS5VK_TEST_LAUNCH_VGPR_ENA);
-    const uint32_t position=compiled_ps_input_ena("build/runtime-graphics/frag_coord.frag.spv");
-    assert(position&PS5VK_TEST_POS_Z_FLOAT_ENA);
-    assert(position&PS5VK_TEST_LAUNCH_VGPR_ENA);
-    assert(position!=plain);
-
-    struct ps5vk_graphics_module_key invalid=
-        read_module("build/runtime-graphics/frag_coord.frag.spv");
-    assert(patch_builtin(&invalid,15u,UINT32_C(0x7ffffff0)));
-    struct ps5vk_graphics_key invalid_key={
-        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
-        .fragment=invalid,.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
-    assert(!ps5vk_spirv_graphics_interface(&invalid_key));
-    free((void *)invalid_key.vertex.words);free((void *)invalid_key.fragment.words);
-}
-
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
 /* Clip and cull distances leave the pre-raster stage through the packed
@@ -113,6 +52,45 @@ static PsbcRegisterWrite *context_register(PsbcShaderMetadata *m,unsigned offset
     for(unsigned i=0;i<m->context_register_count;++i)
         if(m->context_registers[i].offset==offset)return &m->context_registers[i];
     return NULL;
+}
+
+/* A DEPTH-ONLY pipeline: no colour attachment, so the key carries an undefined
+ * colour format, writes no channel, and the fragment stage exports nothing.
+ * Everything else is the ordinary triangle pair. */
+static void check_depth_only_target(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/depth_only.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format=VK_FORMAT_UNDEFINED,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=0};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *program=out;
+    /* The pixel program really exports nothing: SPI_SHADER_COL_FORMAT and
+     * CB_SHADER_MASK both read zero, which is the NONE export class. */
+    PsbcShaderMetadata *m=(PsbcShaderMetadata *)&program->fragment.metadata;
+    const PsbcRegisterWrite *format=context_register(m,0x1c5);
+    const PsbcRegisterWrite *mask=context_register(m,0x08f);
+    assert(format && !format->value);
+    assert(mask && !mask->value);
+    ps5vk_runtime_graphics_free(NULL,out);
+
+    /* The three colour facts travel together. A colour format with no write
+     * mask, or a write mask with no format, is not a depth-only pass and stays
+     * refused; and an exporting fragment shader has nowhere to export. */
+    out=NULL;
+    key.color_write_mask=15;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    key.color_write_mask=0;
+    free((void *)key.fragment.words);
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
 static void check_clip_cull_distances(void)
@@ -264,6 +242,86 @@ static int patch_array_length(struct ps5vk_graphics_module_key *m,uint32_t from,
  * checks the description against the real compiled metadata, the refusal in the
  * shipping profile, and the description predicate's own negatives.
  */
+/* gl_FragCoord: the fragment position, and what the hardware has to be asked
+ * for so the pixel stage receives it.
+ *
+ * The built-in needs no export from the pre-raster stage and no feature. The
+ * pixel wave is launched with the position VGPRs when SPI_PS_INPUT_ENA asks
+ * for them, and the pinned compiler publishes that register with the rest of
+ * the pixel context, so the whole delivery is decided at compile time. This
+ * check reads the published register rather than trusting that, and pins the
+ * difference against the same pipeline whose fragment stage does not read the
+ * built-in.
+ *
+ * The profile refused the declaration outright until this slice, which is why
+ * the only applicable depthClamp leaves could not run: the fragment shader of
+ * dEQP-VK.clipping.clip_volume.depth_clamp.* colours with gl_FragCoord.z and
+ * the pair was refused at pipeline creation (two rc=-8 runtime-graphics cache
+ * entries in the 2026-09-20 measurement run, eboot 749756aa). */
+#define PS5VK_TEST_PS_INPUT_ENA_OFFSET  ((uint16_t)((0x0286CCu - 0x00028000u) / 4u))
+#define PS5VK_TEST_PS_INPUT_ADDR_OFFSET ((uint16_t)((0x0286D0u - 0x00028000u) / 4u))
+#define PS5VK_TEST_POS_Z_FLOAT_ENA      (1u << 10)   /* gfx10 SPI_PS_INPUT_ENA */
+#define PS5VK_TEST_POS_XYZW_FLOAT_ENA   (0xfu << 8)
+/* The launch-VGPR half of the register: PERSP_* (0xf) and LINEAR_* (0x70),
+ * which radv tests as 0x7f, plus LINE_STIPPLE_TEX (bit 7), which it tests
+ * separately; the hardware needs at least one of the eight. */
+#define PS5VK_TEST_LAUNCH_VGPR_ENA      (0xffu)
+
+static uint32_t published_context_register(const void *pair, uint16_t offset, int *found)
+{
+    const struct ps5vk_runtime_graphics_program *p=pair;
+    *found=0;
+    for(unsigned i=0;i<p->fragment.metadata.context_register_count;++i)
+        if(p->fragment.metadata.context_registers[i].offset==offset) {
+            *found=1;
+            return p->fragment.metadata.context_registers[i].value;
+        }
+    return 0;
+}
+
+static uint32_t compiled_ps_input_ena(const char *fragment_path)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module(fragment_path),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *pair=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&pair)==VK_SUCCESS && pair);
+    int found_ena=0,found_addr=0;
+    const uint32_t ena=published_context_register(pair,PS5VK_TEST_PS_INPUT_ENA_OFFSET,&found_ena);
+    const uint32_t addr=published_context_register(pair,PS5VK_TEST_PS_INPUT_ADDR_OFFSET,&found_addr);
+    assert(found_ena && found_addr);
+    /* Every VGPR the stage is initialised with must also be addressable. */
+    assert((ena & addr)==ena);
+    ps5vk_runtime_graphics_free(NULL,pair);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    return ena;
+}
+
+static void check_fragment_position(void)
+{
+    /* The same pipeline whose fragment stage reads nothing: no position VGPR
+     * is requested, and the stage is launched with one interpolation mode
+     * because the hardware needs at least one initialised VGPR. */
+    const uint32_t plain=compiled_ps_input_ena("build/runtime-graphics/triangle.frag.spv");
+    assert(!(plain & PS5VK_TEST_POS_XYZW_FLOAT_ENA));
+    assert(plain & PS5VK_TEST_LAUNCH_VGPR_ENA);
+
+    /* Reading gl_FragCoord.z asks for the Z position VGPR. The fixture
+     * interpolates nothing, so the compiler picks LINE_STIPPLE_TEX as the
+     * cheapest mandatory enable (radv_shader.c:3971-3984, "LINE_STIPPLE_TEX
+     * uses the least number of initialized VGPRs"), which is why the
+     * interpolation half of the register moves rather than staying at
+     * PERSP_CENTER. */
+    const uint32_t position=compiled_ps_input_ena("build/runtime-graphics/frag_coord.frag.spv");
+    assert(position & PS5VK_TEST_POS_Z_FLOAT_ENA);
+    assert(position & PS5VK_TEST_LAUNCH_VGPR_ENA);
+    assert(position!=plain);
+}
+
 static void check_fragment_distance_read(void)
 {
     struct ps5vk_graphics_key key={
@@ -456,6 +514,66 @@ static void check_geometry_stage(void)
     free((void *)key.vertex.words);free((void *)key.geometry.words);
     free((void *)key.fragment.words);
     puts("Geometry stage: vertex/geometry/fragment link described, merged package packaged for the point, line and triangle families");
+}
+
+/* multiViewport end to end. A geometry stage selects which of the pipeline's
+ * viewport banks it writes to by writing gl_ViewportIndex, and core Vulkan lets
+ * ONLY a geometry stage write it. The declaration is a pipeline shape this
+ * profile can describe - refusing the shape outright would be stricter than
+ * Vulkan - but it is also a capability: with a single bank programmed the index
+ * would be silently ignored and every primitive would paint viewport zero, so
+ * the adapter refuses the pipeline unless the logical device enabled
+ * multiViewport. The refusal is asserted by its own diagnostic site, not by the
+ * error code alone, so a failure for an unrelated reason cannot pass this test. */
+static void check_viewport_index_routing(void)
+{
+    VkVertexInputBindingDescription binding={.binding=0,.stride=32,
+        .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription attributes[2]={
+        {.location=0,.binding=0,.format=VK_FORMAT_R32G32B32A32_SFLOAT,.offset=0},
+        {.location=1,.binding=0,.format=VK_FORMAT_R32G32B32A32_SFLOAT,.offset=16}};
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/raster_witness.vert.spv"),
+        .geometry=read_module("build/runtime-graphics/raster_viewport_index.geom.spv"),
+        .fragment=read_module("build/runtime-graphics/vertex_format.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .vertex_binding_count=1,.vertex_bindings=&binding,
+        .vertex_attribute_count=2,.vertex_attributes=attributes,
+        .feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER};
+    /* The built-in is described where it is legal and nowhere else: the geometry
+     * module writes it, the vertex module of the same pipeline does not. */
+    assert(ps5vk_spirv_stage_viewport_index(&key.geometry));
+    assert(!ps5vk_spirv_stage_viewport_index(&key.vertex));
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    assert(ps5vk_runtime_graphics_diag_site==14);
+    /* With the capability enabled the mask-driven gate stops refusing, and that
+     * is as far as this profile can go today. MEASURED DEPENDENCY, named here
+     * rather than hidden: the adapter then refuses the pair one step later, in
+     * ps5vk_runtime_shader_build, because the pinned compiler leaves
+     * PSBC_UNRESOLVED_AGC_LINKAGE set for a merged vertex+geometry program that
+     * exports this built-in - its fill_output_semantics() accounts for the
+     * described varyings, the primitive id and the distance registers but not
+     * for the viewport-index vector it does program in PA_CL_VS_OUT_CNTL
+     * (0x01280000, USE_VTX_VIEWPORT_INDX). The control is exact: the same
+     * geometry module with only the "gl_ViewportIndex = gl_PrimitiveIDIn" line
+     * removed compiles clean through this same key, so the export - not the
+     * interface, the topology or the descriptor plan - is the discriminator.
+     * That dependency is now fixed and pinned: the compiler names the export as
+     * PSBC_SEMANTIC_VIEWPORT_INDEX (mpereiraesaa/opengnm-psbc#17, the pin in
+     * tools/prepare_compiler_deps.py), so the same key compiles. This assertion
+     * is what fails if the pin ever moves back to a compiler that does not name
+     * it. Advertising the feature stays a separate question: it also needs an
+     * applicable upstream CTS leaf, which UPSTREAM_CTS.md records as absent. */
+    key.feature_mask=PS5VK_FEATURE_GEOMETRY_SHADER|PS5VK_FEATURE_MULTI_VIEWPORT;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.geometry.words);
+    free((void *)key.fragment.words);
 }
 
 /* The output side of the component envelope. A stage may DECLARE sixty-four
@@ -1503,9 +1621,11 @@ int main(void)
     check_sparse_layout_static_use();
     check_view_index_builtin();
     check_clip_cull_distances();
+    check_depth_only_target();
     check_fragment_distance_read();
     check_fragment_position();
     check_geometry_stage();
+    check_viewport_index_routing();
     check_geometry_output_components();
     check_geometry_stage_descriptor_visibility();
     check_tessellation_stage();

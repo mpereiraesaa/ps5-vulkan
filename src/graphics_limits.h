@@ -31,7 +31,13 @@ enum {
      * implemented capacity of one set and of one stage is PS5VK_MAX_DESCRIPTORS
      * records (vk_descriptor.h), which is what the validation bounds. */
     PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS = 16,
-    PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS = 96
+    PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS = 96,
+    /* The maxViewports a platform that carries PS5VK_FEATURE_MULTI_VIEWPORT
+     * reports: the Vulkan floor for that feature, and exactly the number of
+     * viewport/scissor banks the pipeline, command-buffer and draw snapshots
+     * hold and the native encoder programs (vk_pipeline.h ties its capacity
+     * to this constant). Without the feature the report stays at one. */
+    PS5VK_MULTI_VIEWPORT_COUNT = 16
 };
 /* Diagnostic consumers ask whether their workload fits, not whether a device
  * still reports the historical ceiling. Hardware-limit policy lives below. */

@@ -84,8 +84,20 @@ struct ps5vk_operation {
      * boundary opens, or the one a pass begins or ends at. */
     uint32_t subpass;
     VkRect2D render_area;
-    VkViewport viewport;
-    VkRect2D scissor;
+    /* The viewport/scissor arrays this draw executes with, resolved at record
+     * time by value (pipeline or command-buffer arrays, index by index); the
+     * single names alias index zero. */
+    uint32_t viewport_count;
+    union {
+        VkViewport viewport;
+        VkViewport viewports[PS5VK_MAX_VIEWPORTS];
+    };
+    union {
+        VkRect2D scissor;
+        VkRect2D scissors[PS5VK_MAX_VIEWPORTS];
+    };
+    /* Rasterization state resolved at record time (vk_pipeline.h). */
+    struct ps5vk_raster_state raster;
     VkClearValue clears[2];
     uint32_t clear_count;
     uint32_t vertex_count, instance_count, first_vertex, first_instance;
@@ -159,9 +171,19 @@ struct VkCommandBuffer_T {
      * the inheritance record by a continuation secondary, and reset with the
      * rest of the recording state. */
     uint32_t subpass;
-    VkViewport viewport;
-    VkRect2D scissor;
-    VkBool32 viewport_valid, scissor_valid;
+    /* Dynamic viewport/scissor arrays. Bit i of each mask says index i was set
+     * by vkCmdSetViewport/vkCmdSetScissor since the last reset; a draw needs
+     * every index below its pipeline's viewport_count. The single names alias
+     * index zero. */
+    union {
+        VkViewport viewport;
+        VkViewport viewports[PS5VK_MAX_VIEWPORTS];
+    };
+    union {
+        VkRect2D scissor;
+        VkRect2D scissors[PS5VK_MAX_VIEWPORTS];
+    };
+    uint32_t viewport_valid, scissor_valid;
     /* Core dynamic state is retained independently of pipeline support.  A
      * value becomes executable only when pipeline creation explicitly accepts
      * the corresponding VkDynamicState; unsupported pipeline state therefore

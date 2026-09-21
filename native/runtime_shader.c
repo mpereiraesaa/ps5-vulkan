@@ -384,7 +384,16 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if(fs) {
         const PsbcRegisterWrite *z=find(m->context_registers,m->context_register_count,0x1c4);
         const PsbcRegisterWrite *mask=find(m->context_registers,m->context_register_count,0x8f);
-        if(!z || z->value || !mask || mask->value!=15)return -3;
+        const PsbcRegisterWrite *format=find(m->context_registers,m->context_register_count,0x1c5);
+        /* No pixel program in this profile exports depth, so SPI_SHADER_Z_FORMAT
+         * is always zero. The colour export is one of exactly two shapes, and
+         * CB_SHADER_MASK must agree with SPI_SHADER_COL_FORMAT in both: the one
+         * four-component target this profile writes, or nothing at all, which is
+         * what a DEPTH-ONLY pass compiles to. A mask without a format, or a
+         * format without a mask, is neither shape and stays refused. */
+        if(!z || z->value || !mask || !format)return -3;
+        if(!((mask->value==15u && format->value) ||
+             (!mask->value && !format->value)))return -3;
     }
     memset(d,0,sizeof(*d));
     d->header.file_header=0x34333231; d->header.version=24;

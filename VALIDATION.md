@@ -445,7 +445,7 @@ evidence; the selected CTS leaves alone do not test the maximum instance index.
 
 The three corresponding profile rows were satisfied by that run; the matrix
 was **4/62 ready, 58 blockers** at the time (see the indirect and indexed draw
-acceptance below for the current 7/62). This does not advertise the Vulkan 1.2 aggregate query
+acceptance below for the current 13/62). This does not advertise the Vulkan 1.2 aggregate query
 structures or raise `apiVersion` above 1.0. The equivalent KHR fields and the
 separate unmet API-1.3 requirement remain explicit. Raw QPA and transport logs
 remain private; sanitized identities are recorded here and in the manifest.
@@ -1899,7 +1899,7 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is 7/62 satisfied and 55 blockers. Core
+The current checked result is 13/62 satisfied and 49 blockers, after the DXVK262-T05 promotion of 2026-09-21. Core
 `robustBufferAccess`, the three multiview requirements and the three indirect
 and indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
 `fullDrawIndexUint32`, see [their acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16))
@@ -2708,3 +2708,126 @@ mismatches and one submitted/suspended/completed dispatch per case. Both
 streams ended with the finite consumer's complete `BYE`, and exact-title Close
 Game independently confirmed the process stopped. The qualification applies
 only to uniform texel buffers; it does not imply storage-texel-buffer support.
+
+## Rasterization and viewport promotion (2026-09-21)
+
+The four DXVK262-T05 requirements - `depthClamp`, `depthBiasClamp`,
+`fillModeNonSolid` and `multiViewport` - are advertised by the shipping profile.
+The measurement switch the earlier witnesses needed is gone; `native/platform_ps5.c`
+reports the four bits itself.
+
+The frozen acceptance selection grew from 304 to 362 cases with the 58 leaves
+these features own, and the shipping build passes all of them:
+
+- run `20260921T165514411Z_PPSA99994_upstream-cts_0x15ea42202ec6c`,
+  **362/362 Pass**, zero Fail, zero NotSupported, no missing, unexpected or
+  duplicate results, `strict_verified` and `lifecycle_ok` both true, title
+  closed and confirmed stopped.
+- deployed SELF SHA-256
+  `449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa`, read back
+  exactly through FTP before launch.
+- selection SHA-256
+  `26862d1a5eb9ca93121797e1e9649b45ad753c319e3ee75624bbec3f0d995cba`;
+  reassembled report SHA-256
+  `ccfd626cac68cba95a6322408257c17c789fba4972274c4cc425b5c5283a66e7`.
+
+The public-ABI capability probe was rebuilt against the promoted profile and
+re-run, so the device's own query route confirms the advertisement rather than
+the driver's source doing it: run
+`20260921T163032548Z_PPSA99994_ps5vk_0x15d4b1d4b89b8`, artifact
+`6c49df2e42461249b9bbfd65530d17381428bdb5f1bdeb1d1b895b7aa68d28c5`,
+**15 of the 62 profile requirements satisfied** and 47 blockers, up from 11.
+The DXVK matrix therefore reads 13/62 ready with 49 blockers.
+
+Per requirement the applicable upstream leaves are: `depthClamp` all eight,
+`depthBiasClamp` its only two, `multiViewport` all twenty-two,
+`fillModeNonSolid` all twenty-eight it can run. Its twenty-ninth,
+`rasterization.line_continuity.polygon-mode-lines`, stays a diagnostic and is
+not a defect in the feature: Amber's backend allocates its host-accessible
+buffer demanding `HOST_VISIBLE|HOST_COHERENT` with force_flags, this profile
+advertises one memory type without `HOST_COHERENT` and deliberately reports
+non-coherent memory, so the leaf fails at memory selection before any
+rasterization. Advertising that bit would be a false claim; host-coherent
+memory is a separate capability question.
+
+This is focused validation of four requirements, not Vulkan conformance, and
+release review remains pending.
+
+## Rasterization and viewport witnesses (2026-09-18)
+
+First hardware execution of the DXVK262-T05 rasterization/viewport witnesses,
+one bounded console window, two deploys of two payloads built from
+`t05-final` `ca70b5b`. Nothing is advertised by this run: it is the evidence the
+advertisement would have to rest on, and it is partial, so the platform mask is
+untouched.
+
+| | Shipping merge regression | Raster measurement |
+|---|---|---|
+| package | `consumer-shipping-ca70b5b` | `consumer-diagnostic-ca70b5b` (`PS5VK_RASTER_DIAGNOSTIC=1`) |
+| eboot sha256 | `8c6fee5f48a8e31e5a95516dab92704285bc674d1489c895551d33942f60baed` | `9a0056a564567baf9d5aa519e06b80697de2c089af95838e65c962a41286ee8c` |
+| run | `20260918T124926937Z_PPSA99994_ps5vk_0x657da0cca63c` | `20260918T125021109Z_PPSA99994_ps5vk_0x658a3dafb094` |
+
+**Shipping regression.** `strict_verified`, `lifecycle_ok`, `clean_tcp`, 63
+`PS5VK_GRAPHICS_SUBMIT`, 18 fixed-function frames, 10 indirect draw cases, 6
+draw-parameter cases, 4 sampled-graphics rounds and the depth-reject oracle. The
+reconciled draw path emits the base registers, the T05 raster block, the
+viewport banks and T04's primitive-restart pair on every draw, and the whole
+consumer table ran on it without a change. The raster witnesses reported
+`depthBiasClamp=0 depthClamp=0 fillModeNonSolid=0 multiViewport=0 maxViewports=1`
+and skipped with `reason=features_not_reported` - the required shipping
+behaviour while nothing is advertised.
+
+**Raster measurement.** The device reports
+`depthBiasClamp=1 depthClamp=1 fillModeNonSolid=1 multiViewport=1 maxViewports=16`
+under the measurement build, so the feature and its mandatory limit now come
+from the same mask and the witness runs for the first time. Of the 31 cases,
+**25 report `valid=1` and 6 do not**: `polygon_fill`,
+`polygon_line_cull_front`, `polygon_point_cull_back_cw`,
+`polygon_line_cull_back_ccw`, `clamp_disabled_narrow_probe` and
+`clamp_enabled_narrow_probe`. The 25 cover all twelve depth-bias cases, six of
+eight depth-clamp cases and seven of eight polygon-mode cases, including the
+three viewport-bank cases. The six are recorded as measured mismatches and were
+**not** reconciled by adjusting the oracle; deciding whether each is a driver
+defect or a witness-oracle defect is the next slice.
+
+Two defects of the harness itself were found while reading the transcript and
+are recorded rather than quietly fixed: `PS5VK_CONSUMER_RASTER_RESULT` prints
+`valid=0` while 25 of its own per-case lines say `valid=1`, so that summary
+counter does not accumulate; and `PS5VK_CONSUMER_RASTER_GS_*` counts a skipped
+witness as a case in `witnessed=25`.
+
+**The geometry witness first failed here and now passes.** In the run above,
+`viewport_index_routing` ended in `vkCreateGraphicsPipelines -> -8`: the pinned
+compiler left `PSBC_UNRESOLVED_AGC_LINKAGE` set for a merged vertex+geometry
+program that exports `gl_ViewportIndex` (measured `unresolved=0x7`,
+`PA_CL_VS_OUT_CNTL=0x01280000`), because RADV counts that export in
+`param_exports` while the semantic list only walked user locations.
+`ps5vk_runtime_shader_build` refuses an unresolved linkage instead of guessing a
+parameter mapping, and the control was exact - the same geometry module with
+only the `gl_ViewportIndex = gl_PrimitiveIDIn;` line removed compiled clean
+through the identical key.
+
+That gap is closed. The compiler now names the export
+(`PSBC_SEMANTIC_VIEWPORT_INDEX`, mpereiraesaa/opengnm-psbc#17, pinned in
+`tools/prepare_compiler_deps.py`), and the same window was repeated on
+`t05-final` `a888290` with eboot
+`436a5c2856eec1b67dca27f6e46475f8c3b206fc73f5b6dc0bfc566940a813a7`, run
+`20260918T133046476Z_PPSA99994_ps5vk_0x67beeedc4fef`:
+
+```
+PS5VK_CONSUMER_RASTER_GS_FEATURES geometryShader=1 multiViewport=1 maxViewports=16
+PS5VK_CONSUMER_RASTER_GS_START cases=1 extent=64 tiles=16 clear_word=ff000000
+PS5VK_CONSUMER_RASTER_GS_PIPELINE stages=3 viewports=16 created=1
+PS5VK_CONSUMER_RASTER_GS_RESULT cases=1 witnessed=1 valid=1
+PS5VK_CONSUMER_RASTER_GS_RETIRED cases=1 witnessed=1
+```
+
+So `multiViewport` now has end-to-end evidence: a geometry stage writes
+`gl_ViewportIndex`, sixteen viewport banks are programmed, and the sixteen-tile
+oracle verifies each tile holds the colour of its own input primitive rather
+than a broadcast or a permuted bank. It still stays unadvertised, for a reason
+that has nothing to do with the driver: no applicable upstream CTS leaf exists
+for it (see UPSTREAM_CTS.md), and the six raster oracle mismatches below are
+unresolved. The consumer's own verifier now stops the run on the first of them
+(`raster oracle for clamp_disabled_narrow_probe`), which is why the repeat run
+ended there rather than at the geometry pipeline.

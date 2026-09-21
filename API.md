@@ -125,6 +125,24 @@ contract without claiming dynamic blending, stencil, depth bounds or depth
 bias execution. Viewport and scissor remain the only dynamic states consumed by
 draws.
 
+The DXVK262-T05 rasterization and viewport states - `depthBiasClamp`,
+`depthClamp`, `fillModeNonSolid` and `multiViewport` - are implemented end to
+end behind a build-time measurement gate (`PS5VK_RASTER_DIAGNOSTIC`) and are
+**not advertised**: the shipping platform mask sets none of the four bits, a
+request for one is still rejected before device creation, and the profile keeps
+reporting `maxViewports` 1. They are gated rather than shipped because no
+upstream CTS leaf is applicable to them yet - the candidate families and their
+exact blocking reasons are in [UPSTREAM_CTS.md](UPSTREAM_CTS.md) - and because
+the first hardware run of their own witnesses leaves six of thirty-one raster
+cases unverified, as recorded in
+[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses).
+The shader-selected viewport path itself is now measured - a geometry stage
+routing sixteen primitives to sixteen banks through `gl_ViewportIndex` - so
+`multiViewport` is held back by the missing upstream leaf and the six cases
+rather than by the driver.
+Nothing here should be read as these features being usable by an application
+today.
+
 ## Images and sampling
 
 The GFX1013 texture-format table records exact descriptor encodings, Vulkan
@@ -137,7 +155,7 @@ readback. Each format query exposes only the operations actually established.
 | Format | Supported role |
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
-| `VK_FORMAT_D32_SFLOAT` | Depth attachment (depth aspect only) and a whole-subresource, one-sample depth-only clear target written as a transfer destination |
+| `VK_FORMAT_D32_SFLOAT` | Depth attachment (depth aspect only), a whole-subresource, one-sample depth-only clear target written as a transfer destination, and a whole-surface readback read as a transfer source over the depth aspect |
 | `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8_SNORM`, `VK_FORMAT_R8G8_UNORM`, `VK_FORMAT_R8G8_SNORM` | Sampled/upload image with nearest/linear filtering and Vulkan completion of missing components |
 | `VK_FORMAT_R8G8B8A8_UNORM` | Sampled/upload image with nearest/linear filtering and hardware-validated explicit mip LOD, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
 | `VK_FORMAT_R8G8B8A8_SNORM`, `VK_FORMAT_R8G8B8A8_SRGB` | Sampled/upload image with signed-normalized or hardware sRGB conversion and nearest/linear filtering |

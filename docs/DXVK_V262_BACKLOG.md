@@ -12,7 +12,7 @@ leaves within a 165/165 regression, and the indirect and indexed draws (T03)
 have all three requirements satisfied by core feature reports, the
 per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
 leaves within a 211/211 regression and the public-SDK indirect witness. The
-live matrix is 7/62 ready with 55 blockers. The ordered table preserves the
+The four DXVK262-T05 rasterization and viewport features were promoted on 2026-09-21: the shipping profile advertises them and the frozen acceptance selection, now 362 cases, passes 362/362 with them reported. The live matrix is 13/62 ready with 49 blockers. The ordered table preserves the
 original tranche membership.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level

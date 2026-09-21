@@ -7,6 +7,7 @@
 #include "texture_dma.h"
 #include "graphics_sync.h"
 #include "color_barrier.h"
+#include "vk_image.h"
 
 /* Shared by a render prelude and an independent transfer submission. Prepare
  * only emits commands and records tentative layouts: it never copies pixels
@@ -84,13 +85,69 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
                  ps5vk_depth_clear_image(b->image) &&
                  b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
-                 b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
-                                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
+                 /* The write is the point of the transition; the read is the
+                  * caller's to declare. The pinned upstream depth clamp module
+                  * names the write alone, an earlier measured case named both. */
+                 (b->dstAccessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
+                 !(b->dstAccessMask & ~(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) &&
                  op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                 /* The depth test runs in one or both fragment-test stages.
+                  * ALL_GRAPHICS names the whole graphics pipeline, so it
+                  * contains both, and the pinned upstream depth clamp module
+                  * hands its cleared target to the draw with exactly that. */
                  (op->dst_stage & (VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
-                                                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)) &&
+                                                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT|
+                                                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT)) &&
                  !(op->dst_stage & ~(VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
-                                                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT))) ||
+                                                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT|
+                                                           VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT))) ||
+                /* The rendered depth surface handed to its readback. A
+                 * DEPTH-ONLY pass ends with exactly this transition recorded
+                 * after the render pass, and the recorder already accepts it
+                 * for a depth image that declares the transfer-source role
+                 * (ps5vk_depth_readback_image); the executor has to agree with
+                 * that record or the submission refuses what recording let
+                 * through. The depth test writes in the fragment-test stages,
+                 * which ALL_GRAPHICS also contains. */
+                (ps5vk_depth_readback_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                 b->srcAccessMask==VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT &&
+                 b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
+                 (op->src_stage & (VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT|
+                                                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT)) &&
+                 !(op->src_stage & ~(VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT|
+                                                           VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT)) &&
+                 op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                /* The same clear-through-transfer pair the recorder accepts for
+                 * a colour attachment that also declares a transfer
+                 * destination. The executor has to agree with that record or
+                 * the submission refuses what recording let through. */
+                (ps5vk_colour_transfer_image(b->image) &&
+                 ((b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+                   b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                   !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                   op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                  (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                   b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                   b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                   b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT &&
+                   op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT))) ||
+                /* The rendered colour surface handed to its readback. When the
+                 * copy shares the submission this is part of the four-operation
+                 * readback shape; when the readback is submitted separately the
+                 * transition is all this range carries, and the executor has to
+                 * agree with the record either way. */
+                (ps5vk_colour_readback_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                 b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                 b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
+                 op->src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+                 op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
                 ((!color || b->image==color) && ps5vk_color_discard_barrier(b)) ||
                 ((!color || b->image==color) && ps5vk_color_readback_reuse_barrier(b)) ||
                 ps5vk_array_color_barrier(b)))

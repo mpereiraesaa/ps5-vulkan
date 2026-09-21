@@ -115,7 +115,18 @@ VkResult ps5vk_runtime_compile_compute_features(
                            * carries the bit is refused by nothing this adapter
                            * can act on. Measured by the tessellation slice with
                            * the guard the geometry promotion added. */
-                          PS5VK_FEATURE_TESSELLATION_SHADER))
+                          PS5VK_FEATURE_TESSELLATION_SHADER |
+                         /* The four DXVK262-T05 rasterization/viewport
+                          * features (depthBiasClamp, depthClamp,
+                          * fillModeNonSolid, multiViewport) are fixed-function
+                          * draw state programmed by native/draw_state_ps5.c;
+                          * a compute shader has no PSBC option for any of
+                          * them, and they are listed for the same reason as
+                          * every graphics bit above. */
+                          PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
+                          PS5VK_FEATURE_DEPTH_CLAMP |
+                          PS5VK_FEATURE_FILL_MODE_NON_SOLID |
+                          PS5VK_FEATURE_MULTI_VIEWPORT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);

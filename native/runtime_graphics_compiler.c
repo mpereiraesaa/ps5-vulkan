@@ -285,6 +285,15 @@ static int ps5vk_reject(const struct ps5vk_graphics_key *key,unsigned site){
     return 0;
 }
 
+/* A DEPTH-ONLY pass names no colour attachment, so the pipeline records an
+ * undefined colour format, writes no channel and cannot blend. The three
+ * travel together: any other combination is a colour target this profile does
+ * not implement, and stays refused. */
+static int depth_only_target(const struct ps5vk_graphics_key *key)
+{
+    return key->color_format==VK_FORMAT_UNDEFINED && !key->color_write_mask &&
+        !key->blend_enable;
+}
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)
 {
     if(!key->blend_enable)return 1;
@@ -328,9 +337,11 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,5);
         uint32_t patch_type=0;
         if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
-        if(key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
+        if(!depth_only_target(key) &&
+           key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
            key->color_format!=VK_FORMAT_R8G8B8A8_UNORM)return ps5vk_reject(key,7);
-        if(key->samples!=VK_SAMPLE_COUNT_1_BIT || key->color_write_mask!=15 ||
+        if(key->samples!=VK_SAMPLE_COUNT_1_BIT ||
+           (depth_only_target(key) ? 0 : key->color_write_mask!=15) ||
            !blend_profile_supported(key))return ps5vk_reject(key,8);
         if(!descriptor_profile_supported(key))return ps5vk_reject(key,9);
         return 1;
@@ -350,6 +361,15 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * conformance selection, not this adapter. */
     if(ps5vk_graphics_has_geometry(key)) {
         if(!module_supported(&key->geometry,3))return ps5vk_reject(key,6);
+        /* A geometry stage that writes gl_ViewportIndex selects among the
+         * viewport banks the pipeline programs, and this profile programs one
+         * bank unless the logical device enabled multiViewport. Accepting the
+         * declaration while the feature is off would run a draw whose routing
+         * silently collapses to viewport zero, so it is refused here on the
+         * enabled mask - the same mask, and the same place, every cached pair is
+         * re-checked against on acquisition. */
+        if(ps5vk_spirv_stage_viewport_index(&key->geometry) &&
+           !(key->feature_mask & PS5VK_FEATURE_MULTI_VIEWPORT))return ps5vk_reject(key,14);
     }
     for(unsigned i=0;i<PS5VK_MAX_PUSH_CONSTANT_DWORDS;++i)
         if(key->push_constant_stages[i]&~(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT))return ps5vk_reject(key,7);
@@ -386,9 +406,11 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
          * measures, and a plain point/line pipeline stays fail-closed. */
     if(!ps5vk_graphics_has_geometry(key) && ps5vk_agc_primitive_needs_geometry(primitive_type))
         return ps5vk_reject(key,22);
-    if((key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
-        key->color_format!=VK_FORMAT_R8G8B8A8_UNORM) ||
-       key->samples!=VK_SAMPLE_COUNT_1_BIT || key->color_write_mask!=15 ||
+    if((!depth_only_target(key) &&
+        ((key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
+          key->color_format!=VK_FORMAT_R8G8B8A8_UNORM) ||
+         key->color_write_mask!=15)) ||
+       key->samples!=VK_SAMPLE_COUNT_1_BIT ||
        !blend_profile_supported(key))return ps5vk_reject(key,23);
     /* Binding counts/pointers were checked above. Keep every remaining
      * refusal observable, including the non-tessellated CTS reference path. */
