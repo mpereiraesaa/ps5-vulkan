@@ -222,6 +222,29 @@ class NativeDiagnosticOptions(unittest.TestCase):
             self.assertNotIn("PS5VK_DUAL_SOURCE_PROBE", public.read_text(),
                              f"{public} must not expose the witness switch")
 
+    def test_dual_source_measurement_recipes_carry_the_gate(self):
+        """The console window is one recipe per payload, and both recipes must
+        select the measurement build: the witness scene and the CTS selection
+        both depend on the feature being reported."""
+        witness = subprocess.run(
+            ["make", "-n", "native-dual-source", "GRAPHICS_CONTROL=fixture",
+             "GLSLANG=glslang-test"], cwd=ROOT, capture_output=True, text=True,
+            check=True)
+        for expected in ("PS5VK_RUNTIME_GRAPHICS=1", "PS5VK_SHELL_CLOSE=1",
+                         "PS5VK_GLSLANG=glslang-test", "PS5VK_GRAPHICS_DRAW=1",
+                         "PS5VK_GRAPHICS_PRESENT=1",
+                         "PS5VK_DUAL_SOURCE_DIAGNOSTIC=1",
+                         "PS5VK_DUAL_SOURCE_PROBE=1"):
+            self.assertIn(expected, witness.stdout)
+        cts = subprocess.run(
+            ["make", "-n", "upstream-cts-dual-source"], cwd=ROOT,
+            capture_output=True, text=True, check=True)
+        self.assertIn("tools/make_measurement_manifest.py --category "
+                      "t06-dual-source-pending", cts.stdout)
+        self.assertIn("--manifest build/measurement/t06-dual-source.json",
+                      cts.stdout)
+        self.assertIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC=1", cts.stdout)
+
     def test_dual_source_measurement_gate_stays_private(self):
         """dualSrcBlend is reported only by the dual-source measurement build.
 
