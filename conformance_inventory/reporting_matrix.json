@@ -800,7 +800,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "one color attachment per pipeline (src/vk_graphics_pipeline.c)",
+      "detail": "one color attachment per pipeline (src/color_attachment_contract.h)",
       "feature": "independentBlend",
       "kind": "feature",
       "profile": "graphics",
@@ -839,7 +839,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "logicOpEnable is rejected (src/vk_graphics_pipeline.c)",
+      "detail": "logicOpEnable is rejected (src/color_attachment_contract.c)",
       "feature": "logicOp",
       "kind": "feature",
       "profile": "graphics",
@@ -1789,7 +1789,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "one color attachment per pipeline (src/vk_graphics_pipeline.c)",
+      "detail": "one color attachment per pipeline (src/color_attachment_contract.h)",
       "feature": "independentBlend",
       "kind": "feature",
       "profile": "compute",
@@ -1828,7 +1828,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "logicOpEnable is rejected (src/vk_graphics_pipeline.c)",
+      "detail": "logicOpEnable is rejected (src/color_attachment_contract.c)",
       "feature": "logicOp",
       "kind": "feature",
       "profile": "compute",

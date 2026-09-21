@@ -163,7 +163,7 @@ def main():
             "native/targets_ps5.c", "native/runtime_shader.c", "native/runtime_graphics_compiler.c",
             "native/runtime_graphics_cache.c", "native/runtime_graphics_ps5.c",
             "src/spirv_graphics_interface.c", "src/clip_cull_witness.c",
-            "src/geometry_witness.c", "src/dual_source_oracle.c")
+            "src/geometry_witness.c", "src/dual_source_oracle.c", "src/color_attachment_contract.c")
         native_sources += [(ROOT / source, []) for source in graphics_sources]
         native_sources += [(gears / "src" / source, []) for source in (
             "ps5_shader_header.c", "ps5_pipeline.c", "ps5_color_target.c", "ps5_depth_target.c")]
@@ -348,6 +348,7 @@ def main():
         # The linear staging readback copy reads the tiled colour surface
         # through the shared 64KB_R_X offset contract.
         "src/color_detile.c",
+        "src/color_attachment_contract.c",
         "src/vk_image_view.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/graphics_program.c",
         "src/vk_transfer.c", "src/texture_copy.c", "src/texture_format.c", "src/texture_layout.c", "src/color_clear.c",

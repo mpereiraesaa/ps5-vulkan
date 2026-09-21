@@ -1,4 +1,5 @@
 #include "vk_render_pass.h"
+#include "color_attachment_contract.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -33,7 +34,11 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
     VkAttachmentReference *color, VkAttachmentReference *depth, uint32_t *input_count)
 {
     if (s->flags || s->pipelineBindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS ||
-        s->colorAttachmentCount != 1 || !s->pColorAttachments ||
+        /* The colour-attachment bound lives in one place: a subpass may only
+         * reference the targets the pipeline contract and the native path can
+         * serve. */
+        !ps5vk_color_attachment_count_supported(s->colorAttachmentCount) ||
+        !s->pColorAttachments ||
         /* Vulkan IGNORES pInputAttachments when the count is zero, so the
          * pointer says nothing there; a nonzero count is a real request that
          * has to name a valid array. pResolveAttachments is different: a

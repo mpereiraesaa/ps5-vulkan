@@ -701,6 +701,7 @@ def main():
                 ROOT / "src/clip_cull_witness.c",
                 ROOT / "src/geometry_witness.c",
                 ROOT / "src/dual_source_oracle.c",
+                ROOT / "src/color_attachment_contract.c",
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
                 ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",

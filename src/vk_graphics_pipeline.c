@@ -2,6 +2,7 @@
 #include "vk_render_pass.h"
 #include "graphics_program.h"
 #include "vk_pipeline_cache.h"
+#include "color_attachment_contract.h"
 #if (defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE) || (defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG)
 #define PS5VK_PIPELINE_DIAGNOSTICS 1
 #include "ps5log.h"
@@ -29,21 +30,6 @@ static VkResult refuse(unsigned site)
     return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
-static int blend_factor_uses_src1(VkBlendFactor factor)
-{
-    return factor==VK_BLEND_FACTOR_SRC1_COLOR ||
-        factor==VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR ||
-        factor==VK_BLEND_FACTOR_SRC1_ALPHA ||
-        factor==VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
-}
-static int blend_state_uses_src1(const VkPipelineColorBlendAttachmentState *a)
-{
-    return a && a->blendEnable &&
-        (blend_factor_uses_src1(a->srcColorBlendFactor) ||
-         blend_factor_uses_src1(a->dstColorBlendFactor) ||
-         blend_factor_uses_src1(a->srcAlphaBlendFactor) ||
-         blend_factor_uses_src1(a->dstAlphaBlendFactor));
-}
 /* The rasterization state's pNext chain. This profile implements no optional
  * rasterization structure, and every state that would change behaviour is
  * refused, but the pinned upstream rasterization module chains one
@@ -268,7 +254,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         vp->pNext || vp->flags || !vp->viewportCount || vp->viewportCount > PS5VK_MAX_VIEWPORTS ||
         vp->scissorCount != vp->viewportCount ||
         (vp->viewportCount > 1 && !(d->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)) ||
-        b->pNext || b->flags || b->logicOpEnable || b->attachmentCount != 1)
+        !ps5vk_color_blend_state_shape_supported(b))
         return refuse(15);
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
         !b->pAttachments) return VK_ERROR_UNKNOWN;
@@ -277,7 +263,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * dualSrcBlend on this logical device.  The compiler separately proves
      * that the selected fragment module actually exports the secondary value;
      * the two checks prevent either state alone from authorizing a draw. */
-    if(blend_state_uses_src1(&b->pAttachments[0]) &&
+    if(ps5vk_color_attachment_uses_src1(&b->pAttachments[0]) &&
        !(d->enabled_features & PS5VK_FEATURE_DUAL_SRC_BLEND))
         return refuse(18);
     /* Every static element is validated before any is stored. */
