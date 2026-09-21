@@ -154,6 +154,9 @@ def main():
             "native/graphics_pipeline_ps5.c", "native/tess_shared_storage.c",
             "native/tess_ring_lease.c", "native/image_ps5.c",
             "src/depth_layout.c", "src/color_clear.c", "src/color_detile.c",
+            # The depth readback detiles its surface with the 64KB_Z_X
+            # equation, so the executor needs it beside the colour one.
+            "src/depth_detile.c",
             "native/draw_prepare_ps5.c", "native/draw_emit_ps5.c", "native/index_emit_ps5.c",
             "native/input_attachment_gate.c",
             "native/input_attachment_oracle.c",
@@ -346,8 +349,9 @@ def main():
         "src/vk_pipeline.c", "src/compilation_cache.c", "src/vk_pipeline_cache.c", "src/vk_command.c", "src/vk_indirect.c",
         "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
         # The linear staging readback copy reads the tiled colour surface
-        # through the shared 64KB_R_X offset contract.
-        "src/color_detile.c",
+        # through the shared 64KB_R_X offset contract, and a depth readback
+        # reads its own surface through the 64KB_Z_X one.
+        "src/color_detile.c", "src/depth_detile.c",
         "src/vk_image_view.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/graphics_program.c",
         "src/vk_transfer.c", "src/texture_copy.c", "src/texture_format.c", "src/texture_layout.c", "src/color_clear.c",
