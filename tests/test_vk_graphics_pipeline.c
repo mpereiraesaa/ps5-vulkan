@@ -7,6 +7,7 @@ static unsigned created, released;
 static unsigned acquired, compiled_released, compile_fail, backend_fail;
 static unsigned expect_five_stages;
 static unsigned expect_blend_state;
+static unsigned expect_dual_blend_state;
 static uint32_t reported_set_mask;
 static VkResult usage_result;
 static VkResult used_sets(VkDevice d,const void *state,uint32_t *mask)
@@ -27,6 +28,16 @@ static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const
         assert(key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
         assert(key->alpha_blend_op==VK_BLEND_OP_REVERSE_SUBTRACT);
         for(unsigned i=0;i<4;++i) assert(key->blend_constants[i]==(float)i/4.0f);
+    }
+    if(expect_dual_blend_state) {
+        assert(key->blend_enable==VK_TRUE);
+        assert(key->feature_mask&PS5VK_FEATURE_DUAL_SRC_BLEND);
+        assert(key->src_color_blend_factor==VK_BLEND_FACTOR_SRC1_COLOR);
+        assert(key->dst_color_blend_factor==VK_BLEND_FACTOR_ZERO);
+        assert(key->color_blend_op==VK_BLEND_OP_ADD);
+        assert(key->src_alpha_blend_factor==VK_BLEND_FACTOR_ONE);
+        assert(key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO);
+        assert(key->alpha_blend_op==VK_BLEND_OP_ADD);
     }
     if(expect_five_stages) {
         assert(key->tess_control.word_count==10 && key->tess_eval.word_count==10 &&
@@ -406,6 +417,27 @@ int main(void)
         for(unsigned i=0;i<4;++i) assert(runtime->blend_constants[i]==(float)i/4.0f);
         vkDestroyPipeline(&d,runtime,NULL);
         expect_blend_state=0;
+        /* SRC1 is rejected before acquisition unless dualSrcBlend was enabled
+         * on the logical device.  With the bit enabled, the exact equation is
+         * transmitted unchanged; compiler/export validation is covered by the
+         * real-compiler test rather than this mock backend. */
+        color.srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
+        color.dstColorBlendFactor=VK_BLEND_FACTOR_ZERO;
+        color.colorBlendOp=VK_BLEND_OP_ADD;
+        color.srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE;
+        color.dstAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;
+        color.alphaBlendOp=VK_BLEND_OP_ADD;
+        const unsigned before_dual_acquire=acquired;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !runtime && acquired==before_dual_acquire);
+        d.enabled_features|=PS5VK_FEATURE_DUAL_SRC_BLEND;
+        expect_dual_blend_state=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
+        assert(runtime->color_blend.srcColorBlendFactor==VK_BLEND_FACTOR_SRC1_COLOR &&
+            runtime->color_blend.dstColorBlendFactor==VK_BLEND_FACTOR_ZERO);
+        vkDestroyPipeline(&d,runtime,NULL);
+        expect_dual_blend_state=0;
+        d.enabled_features&=~PS5VK_FEATURE_DUAL_SRC_BLEND;
         color=(VkPipelineColorBlendAttachmentState){.colorWriteMask=15};
         for(unsigned i=0;i<4;++i) b.blendConstants[i]=0;
         acquired=saved_a;compiled_released=saved_c;
