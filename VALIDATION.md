@@ -8,6 +8,11 @@ firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013
 The default native runtime-graphics candidate passes 403/403 unchanged upstream
 CTS cases: 304 regression cases and 99 tessellation, clip/cull and resource
 cases. Strict artifact/report verification and clean application closure pass.
+The frozen acceptance selection has since grown to 306 cases with the two
+fragment `frag_side_effects` leaves (306/306, see
+[the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20));
+the 99 tessellation cases stay outside that frozen selection, so 405 distinct
+original upstream cases have passed across the two receipts, not in one run.
 Experimental tessellation flags and shader/probe bypasses are off. A separately
 built public SDK consumer verifies feature advertisement and the intended limits.
 See [tessellation status](TESSELLATION_STATUS.md) for the scope and additional
@@ -482,8 +487,9 @@ execution witnesses below remain intact and supply the dedicated boundary
 evidence; the selected CTS leaves alone do not test the maximum instance index.
 
 The three corresponding profile rows were satisfied by that run; the matrix
-was **4/62 ready, 58 blockers** at the time (see the indirect and indexed draw
-acceptance below for the current 7/62). This does not advertise the Vulkan 1.2 aggregate query
+was **4/62 ready, 58 blockers** at the time (see
+[the DXVK v2.6.2 profile section](#dxvk-262-public-abi-capability-probe) for the current
+10/62). This does not advertise the Vulkan 1.2 aggregate query
 structures or raise `apiVersion` above 1.0. The equivalent KHR fields and the
 separate unmet API-1.3 requirement remain explicit. Raw QPA and transport logs
 remain private; sanitized identities are recorded here and in the manifest.

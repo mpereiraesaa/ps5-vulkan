@@ -8,12 +8,21 @@ execute it.
 
 Current checkpoint: multiview (T02) has all three requirements satisfied by
 public KHR queries, dedicated floor witnesses and 48 passing original CTS
-leaves within a 165/165 regression, and the indirect and indexed draws (T03)
+leaves within a 165/165 regression; the indirect and indexed draws (T03)
 have all three requirements satisfied by core feature reports, the
 per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
-leaves within a 211/211 regression and the public-SDK indirect witness. The
-live matrix is 7/62 ready with 55 blockers. The ordered table preserves the
-original tranche membership.
+leaves within a 211/211 regression and the public-SDK indirect witness; the
+optional graphics stages (T04) satisfied the `shaderClipDistance` and
+`shaderCullDistance` pair with 64 promoted clip/cull leaves and 29 geometry
+leaves inside a 304/304 regression, and additionally passed 99 tessellation,
+tessellation clip/cull and TCS/TES resource cases in the 403/403 default
+candidate run (those 99 stay outside the frozen acceptance selection;
+`geometryShader` and `tessellationShader` are positive on the API,
+implementation and CTS axes but still `reported-not-executed` natively, so
+both remain blockers); and `fragmentStoresAndAtomics` (T06) is satisfied with
+its two `frag_side_effects` leaves inside the 306/306 canonical selection.
+The live matrix is 10/62 ready with 52 blockers. The ordered table preserves
+the original tranche membership.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
 11_0 baseline. Reaching 62/62 means that this profile has complete API,

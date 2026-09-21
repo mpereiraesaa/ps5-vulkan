@@ -48,11 +48,19 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 275 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 306 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
   image-copy, binding-model combined-sampler, multiview and indirect/indexed
-  draw cases, plus the 64 user-defined clip/cull distance leaves promoted below).
+  draw cases, plus the 64 user-defined clip/cull distance leaves, the 29
+  geometry leaves and the two fragment `frag_side_effects` leaves promoted
+  below: 211 + 64 + 29 + 2). The 99 tessellation, tessellation clip/cull and
+  TCS/TES resource cases (67 + 16 + 16) that passed in the 403/403 default
+  tessellation candidate run recorded in
+  [TESSELLATION_STATUS.md](TESSELLATION_STATUS.md) are validated original
+  upstream cases, but they are **not** part of this frozen acceptance
+  selection. They are counted separately (306 + 99 = 405 distinct original
+  upstream cases passed across the two receipts) and never folded into the 306.
   Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
@@ -1125,8 +1133,9 @@ Vulkan conformance claim.
 The four T05 requirements are implemented and measured through the public ABI
 (the consumer's raster and viewport witnesses in
 [VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses)),
-and **nothing is advertised yet**: the frozen acceptance selection is unchanged
-at 304 cases, and every T05 leaf below is a diagnostic in
+and **nothing is advertised yet**: the frozen acceptance selection was unchanged
+at 304 cases when T05 was measured (the T06 fragment promotion later took it to
+306), and every T05 leaf below is a diagnostic in
 `cts/upstream/manifest.json`. What changed since the first measurement is the
 inventory: the pinned checkout `a0270c1897597e6c77679870e10415398a13001c` was
 read for every source and amber script that names one of the four features,

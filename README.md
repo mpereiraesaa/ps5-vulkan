@@ -89,13 +89,17 @@ DXVK support is tracked against the immutable DXVK **v2.6.2** profile
 into a checked-in machine-readable profile and joined independently to the
 current public API, reviewed implementation, CTS and native evidence.
 
-The fail-closed matrix currently proves **7/62** requirements completely:
-`robustBufferAccess`, multiview and its two required limits, and the three
+The fail-closed matrix currently proves **10/62** requirements completely:
+`robustBufferAccess`, multiview and its two required limits, the three
 indirect/indexed draw features `drawIndirectFirstInstance`,
 `multiDrawIndirect` (with `maxDrawIndirectCount = 65535`) and
-`fullDrawIndexUint32`. Multiview is queried through its explicit KHR route;
-the other 55 requirements, including the API-version requirement, remain
-blockers. This is an implementation roadmap, not a DXVK compatibility claim.
+`fullDrawIndexUint32`, the user-defined `shaderClipDistance` and
+`shaderCullDistance` pair, and `fragmentStoresAndAtomics`. Multiview is
+queried through its explicit KHR route. `geometryShader` and
+`tessellationShader` are positive on the API, implementation and CTS axes but
+their native axis is still `reported-not-executed`, so they stay among the
+other 52 requirements that remain blockers, together with the API-version
+requirement. This is an implementation roadmap, not a DXVK compatibility claim.
 The public-SDK-only capability probe can be built with
 `python3 tools/build_consumer.py --dxvk-v262-probe`; see
 [the inventory](conformance_inventory/README.md#dxvk-262-profile) and
