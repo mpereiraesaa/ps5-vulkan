@@ -67,8 +67,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) return VK_ERROR_UNKNOWN;
     if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state || !color || color->count != 16 ||
         !width || !height || width > 16384 || height > 16384 ||
-        (p->color_format != VK_FORMAT_B8G8R8A8_UNORM &&
-         p->color_format != VK_FORMAT_R8G8B8A8_UNORM) ||
+        (p->color_format[0] != VK_FORMAT_B8G8R8A8_UNORM &&
+         p->color_format[0] != VK_FORMAT_R8G8B8A8_UNORM) ||
         (p->cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
@@ -121,9 +121,15 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * the witnesses measured; a partial mask needs the compiler to accept it
      * first. */
     {
+        /* CB_TARGET_MASK carries one nibble per target: attachment zero's
+         * write mask in bits [3:0] and, once the profile serves a second
+         * target, the next attachment's in bits [7:4]. */
+        uint32_t target_mask = 0;
+        for (uint32_t attachment = 0; attachment < p->color_attachment_count; ++attachment)
+            target_mask |= (p->color_blend[attachment].colorWriteMask & 0xfu) << (4u * attachment);
         unsigned carried = 0;
         for (unsigned k = 16; k < 31; ++k) if (base.cx[k].offset == 0x08e) {
-            base.cx[k].value = p->color_blend.colorWriteMask & 0xfu; ++carried;
+            base.cx[k].value = target_mask; ++carried;
         }
         if (carried != 1) return VK_ERROR_UNKNOWN;
     }
@@ -466,7 +472,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     struct ps5vk_blend_words blend;
     const VkBool32 dual_source=runtime && pair->dual_source_export?
         VK_TRUE:VK_FALSE;
-    if(!ps5vk_blend_encode(&p->color_blend,p->blend_constants,dual_source,&blend))
+    if(!ps5vk_blend_encode(&p->color_blend[0],p->blend_constants,dual_source,&blend))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if(result.cx_count+6u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
     result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend.control};
@@ -479,8 +485,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             if(fs->context[i].offset==0x1c5)spi_format=fs->context[i].value;
             if(fs->context[i].offset==0x08f)shader_mask=fs->context[i].value;
         }
-        if(!ps5vk_color_export_state(p->color_format,spi_format,shader_mask,
-            p->color_blend.blendEnable,dual_source,conversion))
+        if(!ps5vk_color_export_state(p->color_format[0],spi_format,shader_mask,
+            p->color_blend[0].blendEnable,dual_source,conversion))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
         /* Emit for unblended draws too: a previous FP16 blended draw must not

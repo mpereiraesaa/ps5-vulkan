@@ -105,6 +105,15 @@ static int specialization_key(const VkSpecializationInfo *info,
     return 1;
 }
 
+/* Any attachment of this colour-blend state consuming the fragment module's
+ * secondary export: a SRC1 factor needs dualSrcBlend enabled on the logical
+ * device and the compiler-proven export, whichever attachment asked for it. */
+static int color_state_uses_src1(const VkPipelineColorBlendStateCreateInfo *b)
+{
+    for (uint32_t attachment = 0; attachment < b->attachmentCount; ++attachment)
+        if (ps5vk_color_attachment_uses_src1(&b->pAttachments[attachment])) return 1;
+    return 0;
+}
 static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                        const VkAllocationCallbacks *allocator, VkPipeline *out)
 {
@@ -263,7 +272,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * dualSrcBlend on this logical device.  The compiler separately proves
      * that the selected fragment module actually exports the secondary value;
      * the two checks prevent either state alone from authorizing a draw. */
-    if(ps5vk_color_attachment_uses_src1(&b->pAttachments[0]) &&
+    if(color_state_uses_src1(b) &&
        !(d->enabled_features & PS5VK_FEATURE_DUAL_SRC_BLEND))
         return refuse(18);
     /* Every static element is validated before any is stored. */
@@ -305,25 +314,37 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             (struct ps5vk_graphics_module_key){0},
         .patch_control_points=tcs?in->pTessellationState->patchControlPoints:0,
         .feature_mask=d->enabled_features,
-        .topology=ia->topology, .color_format=pass->attachments[subpass->color[0].attachment].format,
-        .samples=m->rasterizationSamples, .color_write_mask=b->pAttachments[0].colorWriteMask,
-        .blend_enable=b->pAttachments[0].blendEnable,
+        .topology=ia->topology,
+        .samples=m->rasterizationSamples,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
         .vertex_bindings=v->pVertexBindingDescriptions,.vertex_attributes=v->pVertexAttributeDescriptions,
         .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets,
         .push_constant_size=in->layout->push_constant_size};
     memcpy(key.push_constant_stages,in->layout->push_constant_stages,
            sizeof(key.push_constant_stages));
-    if(key.blend_enable) {
-        const VkPipelineColorBlendAttachmentState *a=&b->pAttachments[0];
-        key.src_color_blend_factor=a->srcColorBlendFactor;
-        key.dst_color_blend_factor=a->dstColorBlendFactor;
-        key.color_blend_op=a->colorBlendOp;
-        key.src_alpha_blend_factor=a->srcAlphaBlendFactor;
-        key.dst_alpha_blend_factor=a->dstAlphaBlendFactor;
-        key.alpha_blend_op=a->alphaBlendOp;
-        memcpy(key.blend_constants,b->blendConstants,sizeof(key.blend_constants));
+    /* One element per colour attachment the subpass names: the format comes
+     * from the pass, the blend state from the pipeline. Vulkan requires the
+     * pipeline to describe exactly as many attachments as the subpass. */
+    if (b->attachmentCount != subpass->color_count) return refuse(15);
+    key.color_attachment_count = subpass->color_count;
+    int any_blend = 0;
+    for (uint32_t attachment = 0; attachment < subpass->color_count; ++attachment) {
+        const VkPipelineColorBlendAttachmentState *a = &b->pAttachments[attachment];
+        key.color_format[attachment] =
+            pass->attachments[subpass->color[attachment].attachment].format;
+        key.color_write_mask[attachment] = a->colorWriteMask;
+        key.blend_enable[attachment] = a->blendEnable;
+        if (!a->blendEnable) continue;
+        any_blend = 1;
+        key.src_color_blend_factor[attachment] = a->srcColorBlendFactor;
+        key.dst_color_blend_factor[attachment] = a->dstColorBlendFactor;
+        key.color_blend_op[attachment] = a->colorBlendOp;
+        key.src_alpha_blend_factor[attachment] = a->srcAlphaBlendFactor;
+        key.dst_alpha_blend_factor[attachment] = a->dstAlphaBlendFactor;
+        key.alpha_blend_op[attachment] = a->alphaBlendOp;
     }
+    if (any_blend)
+        memcpy(key.blend_constants, b->blendConstants, sizeof(key.blend_constants));
     if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
        !specialization_key(fs->pSpecializationInfo,&key.fragment) ||
        (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)) ||
@@ -398,9 +419,14 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     p->push_constant_size=in->layout->push_constant_size;
     memcpy(p->push_constant_stages,in->layout->push_constant_stages,
            sizeof(p->push_constant_stages));
-    p->cull_mode=r->cullMode; p->front_face=r->frontFace; p->color_format=key.color_format;
+    p->cull_mode=r->cullMode; p->front_face=r->frontFace;
+    p->color_attachment_count=key.color_attachment_count;
+    for(uint32_t attachment=0;attachment<key.color_attachment_count;++attachment) {
+        p->color_format[attachment]=key.color_format[attachment];
+        p->color_write_mask[attachment]=key.color_write_mask[attachment];
+    }
     p->primitive_restart=ia->primitiveRestartEnable;
-    p->color_blend=*b->pAttachments;
+    memcpy(p->color_blend,b->pAttachments,sizeof(p->color_blend));
     memcpy(p->blend_constants,key.blend_constants,sizeof(p->blend_constants));
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
     if(key.vertex_binding_count)memcpy(p->vertex_bindings,key.vertex_bindings,

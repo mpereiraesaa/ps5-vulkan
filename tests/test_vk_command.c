@@ -385,7 +385,7 @@ static void subpass_transitions(void)
     /* One pipeline per subpass. Creation is exercised publicly in
      * tests/test_vk_graphics_pipeline.c; here the identity is what matters. */
     struct VkPipeline_T first = {.device = &d, .graphics = VK_TRUE, .subpass = 0,
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM,
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1,
         .viewport_count=1, .viewport={0,0,8,8,0,1}, .scissor = {{0,0},{8,8}}};
     struct VkPipeline_T second = first; second.subpass = 1;
     VkClearValue value = {.color = {.float32 = {0, 0, 0, 1}}};
@@ -557,7 +557,7 @@ static void graphics_recording(void)
         .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T pipeline = {.device = &d, .graphics = VK_TRUE,
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM,
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1,
         .viewport_count=1, .viewport={0,0,100,100,0,1}, .scissor = {{0,0},{100,100}}};
     VkClearValue value = {.color = {.float32 = {0.25f, 0, 0, 1}}};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,

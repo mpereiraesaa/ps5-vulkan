@@ -86,7 +86,7 @@ int main(void)
     struct VkFramebuffer_T framebuffer={.device=&d,.attachment_count=1,
         .color_attachments={0},.color_count=1,.depth_attachment=VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T graphics={.device=&d,.graphics=VK_TRUE,
-        .graphics_state=(void *)1,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
+        .graphics_state=(void *)1,.color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
         .depth_format=VK_FORMAT_UNDEFINED,
         .viewport_count=1, .viewport={.width=16,.height=16,.maxDepth=1},
         .scissor={.extent={16,16}}};
@@ -190,7 +190,7 @@ int main(void)
     struct VkFramebuffer_T multi_framebuffer={.device=&m,.attachment_count=1,
         .color_attachments={0},.color_count=1,.depth_attachment=VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T multi_graphics={.device=&m,.graphics=VK_TRUE,
-        .graphics_state=(void *)1,.color_format=VK_FORMAT_R8G8B8A8_UNORM,
+        .graphics_state=(void *)1,.color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
         .depth_format=VK_FORMAT_UNDEFINED,
         .viewport_count=2, .viewports={{.width=16,.height=16,.maxDepth=1},{.x=16,.width=8,.height=8,.maxDepth=1}},
         .scissors={{.extent={16,16}},{.offset={16,0},.extent={8,8}}},

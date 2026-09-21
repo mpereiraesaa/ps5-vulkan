@@ -69,8 +69,8 @@ static struct ps5vk_graphics_key tessellation_key(void)
         .tess_eval=read_module("build/runtime-graphics/tess.tese.spv"),
         .fragment=read_module("build/runtime-graphics/tess.frag.spv"),
         .patch_control_points=3,
-        .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
 }
 
 static void free_key(struct ps5vk_graphics_key *key)

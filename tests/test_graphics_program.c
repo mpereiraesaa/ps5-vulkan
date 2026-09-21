@@ -9,37 +9,37 @@ int main(void)
         .vertex={.words=vs,.word_count=5,.entry="main"},
         .fragment={.words=fs,.word_count=5,.entry="main"},
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
-        .color_write_mask=15},.backend_data=&payload}};
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,.samples=VK_SAMPLE_COUNT_1_BIT,
+        .color_write_mask={15}},.backend_data=&payload}};
     struct ps5vk_graphics_library library={programs,1};
     struct ps5vk_graphics_key key=programs[0].key;
     const struct ps5vk_graphics_program *out;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS && out==programs);
     /* No alias between distinct enabled blend contracts; ignored disabled
      * state must not make a formerly matching library record disappear. */
-    key.src_color_blend_factor=VK_BLEND_FACTOR_SRC_ALPHA;
+    key.src_color_blend_factor[0]=VK_BLEND_FACTOR_SRC_ALPHA;
     key.blend_constants[0]=0.5f;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS);
-    key=programs[0].key;key.blend_enable=VK_TRUE;
+    key=programs[0].key;key.blend_enable[0]=VK_TRUE;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
-    programs[0].key.blend_enable=VK_TRUE;
+    programs[0].key.blend_enable[0]=VK_TRUE;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_SUCCESS);
 #define CHECK_BLEND_FIELD(field,value) do { \
     key=programs[0].key; key.field=(value); \
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out); \
 } while(0)
-    CHECK_BLEND_FIELD(src_color_blend_factor,VK_BLEND_FACTOR_SRC_ALPHA);
-    CHECK_BLEND_FIELD(dst_color_blend_factor,VK_BLEND_FACTOR_ONE);
-    CHECK_BLEND_FIELD(color_blend_op,VK_BLEND_OP_SUBTRACT);
-    CHECK_BLEND_FIELD(src_alpha_blend_factor,VK_BLEND_FACTOR_SRC_ALPHA);
-    CHECK_BLEND_FIELD(dst_alpha_blend_factor,VK_BLEND_FACTOR_ONE);
-    CHECK_BLEND_FIELD(alpha_blend_op,VK_BLEND_OP_MAX);
+    CHECK_BLEND_FIELD(src_color_blend_factor[0],VK_BLEND_FACTOR_SRC_ALPHA);
+    CHECK_BLEND_FIELD(dst_color_blend_factor[0],VK_BLEND_FACTOR_ONE);
+    CHECK_BLEND_FIELD(color_blend_op[0],VK_BLEND_OP_SUBTRACT);
+    CHECK_BLEND_FIELD(src_alpha_blend_factor[0],VK_BLEND_FACTOR_SRC_ALPHA);
+    CHECK_BLEND_FIELD(dst_alpha_blend_factor[0],VK_BLEND_FACTOR_ONE);
+    CHECK_BLEND_FIELD(alpha_blend_op[0],VK_BLEND_OP_MAX);
     for(unsigned i=0;i<4;++i) CHECK_BLEND_FIELD(blend_constants[i],0.5f);
 #undef CHECK_BLEND_FIELD
-    programs[0].key.blend_enable=VK_FALSE;key=programs[0].key;
+    programs[0].key.blend_enable[0]=VK_FALSE;key=programs[0].key;
     uint32_t changed[5]={0x07230203,4,5,7,0}; key.fragment.words=changed;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
-    key=programs[0].key; key.color_format=VK_FORMAT_R8G8B8A8_UNORM;
+    key=programs[0].key; key.color_format[0]=VK_FORMAT_R8G8B8A8_UNORM;
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT);
     key=programs[0].key; key.vertex.entry="different";
     assert(ps5vk_graphics_resolve(&library,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT);

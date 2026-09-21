@@ -1,6 +1,7 @@
 #ifndef PS5VK_GRAPHICS_PROGRAM_H
 #define PS5VK_GRAPHICS_PROGRAM_H
 #include <vulkan/vulkan_core.h>
+#include "color_attachment_contract.h"
 #include <stddef.h>
 #include "vk_descriptor.h"
 #include "graphics_stages.h"
@@ -46,16 +47,19 @@ struct ps5vk_graphics_key {
      * it and the adapter checks it on every acquisition. */
     uint32_t feature_mask;
     VkPrimitiveTopology topology;
-    VkFormat color_format;
+    /* Per-attachment colour state, attachment i in element i, bounded by the
+     * colour-attachment contract. The count is the subpass's own. Recording
+     * this contract does not imply native blend support or a second target. */
+    uint32_t color_attachment_count;
+    VkFormat color_format[PS5VK_MAX_COLOR_ATTACHMENTS];
     VkSampleCountFlagBits samples;
-    VkColorComponentFlags color_write_mask;
-    VkBool32 blend_enable;
-    /* Fixed attachment state; ignored/canonicalized to zero when disabled.
-     * Recording this contract does not imply native blend support. */
-    VkBlendFactor src_color_blend_factor, dst_color_blend_factor;
-    VkBlendOp color_blend_op;
-    VkBlendFactor src_alpha_blend_factor, dst_alpha_blend_factor;
-    VkBlendOp alpha_blend_op;
+    VkColorComponentFlags color_write_mask[PS5VK_MAX_COLOR_ATTACHMENTS];
+    /* Fixed attachment state; ignored/canonicalized to zero when disabled. */
+    VkBool32 blend_enable[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkBlendFactor src_color_blend_factor[PS5VK_MAX_COLOR_ATTACHMENTS], dst_color_blend_factor[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkBlendOp color_blend_op[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkBlendFactor src_alpha_blend_factor[PS5VK_MAX_COLOR_ATTACHMENTS], dst_alpha_blend_factor[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkBlendOp alpha_blend_op[PS5VK_MAX_COLOR_ATTACHMENTS];
     float blend_constants[4];
     uint32_t vertex_binding_count, vertex_attribute_count, descriptor_set_count;
     const VkVertexInputBindingDescription *vertex_bindings;

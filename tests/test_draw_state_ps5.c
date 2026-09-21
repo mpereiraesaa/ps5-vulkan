@@ -32,7 +32,7 @@ int main(void)
     struct ps5vk_native_graphics_pipeline native = {.device = &device, .pair = &pair};
     struct VkPipeline_T p = {.device = &device, .graphics = 1, .graphics_state = &native,
         .viewport_count=1, .viewport={0,0,640,480,0,1}, .scissor = {{0,0},{640,480}},
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM, .cull_mode = VK_CULL_MODE_BACK_BIT,
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1, .cull_mode = VK_CULL_MODE_BACK_BIT,
         .front_face = VK_FRONT_FACE_CLOCKWISE};
     /* The snapshot a draw carries: the disabled form first. */
     struct ps5vk_raster_state raster = {0};
@@ -50,21 +50,21 @@ int main(void)
     assert(out.cx[102].offset==0x103 && out.cx[102].value==0);
     assert(last_cx(&out,0x1e0)==0 && last_cx(&out,0x1d8)==0x00770077u);
     for(unsigned i=0;i<4;++i)assert(last_cx(&out,0x105+i)==0);
-    p.color_blend=(VkPipelineColorBlendAttachmentState){.blendEnable=VK_TRUE,
+    p.color_blend[0]=(VkPipelineColorBlendAttachmentState){.blendEnable=VK_TRUE,
         .srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA,.dstColorBlendFactor=VK_BLEND_FACTOR_ONE,
         .srcAlphaBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA,.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE};
     p.blend_constants[0]=0.5f;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1e0)==0x40000104u && last_cx(&out,0x105)==0x3f000000u);
-    p.color_blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
+    p.color_blend[0].srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
     pair.dual_source_export=1;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_ERROR_UNKNOWN && !out.cx_count);
     pair.dual_source_export=0;
-    p.color_blend.blendEnable=VK_FALSE;
+    p.color_blend[0].blendEnable=VK_FALSE;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1e0)==0 && last_cx(&out,0x105)==0);
-    p.color_blend=(VkPipelineColorBlendAttachmentState){0};p.blend_constants[0]=0;
+    p.color_blend[0]=(VkPipelineColorBlendAttachmentState){0};p.blend_constants[0]=0;
     assert(out.uc[3].offset==0x24b && out.uc[3].value==0);
     /* Point/line rasterization words follow the polygon offset block. */
     assert(out.cx[98].offset==0x280 && out.cx[98].value==((8u<<16)|8u));
@@ -172,7 +172,7 @@ int main(void)
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     pair.runtime_vertex.header.num_cx_registers=11;
     pair.runtime_fragment.header.num_cx_registers=9;
-    p.color_format=VK_FORMAT_R8G8B8A8_UNORM;
+    p.color_format[0]=VK_FORMAT_R8G8B8A8_UNORM;
     pair.runtime_fragment.context[0]=(ps5_agc_register){0x1c5,9};
     pair.runtime_fragment.context[1]=(ps5_agc_register){0x08f,15};
     pair.runtime_vertex.header.num_sh_registers=6;
@@ -186,7 +186,7 @@ int main(void)
     assert(out.sh_count==10 && out.sh[5].offset==0x81 && out.sh[9].offset==0xb);
     assert(out.modifier==5 && out.runtime.enabled && out.runtime.base_vertex_slot==0);
     assert(last_cx(&out,0x1d5)==1 && last_cx(&out,0x1d6)==0 && last_cx(&out,0x1d7)==0);
-    p.color_blend=(VkPipelineColorBlendAttachmentState){.blendEnable=VK_TRUE,
+    p.color_blend[0]=(VkPipelineColorBlendAttachmentState){.blendEnable=VK_TRUE,
         .srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA,.dstColorBlendFactor=VK_BLEND_FACTOR_ONE,
         .srcAlphaBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA,.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE};
     /* Reject the mismatched export; changing only blend factors is not enough. */
@@ -196,7 +196,7 @@ int main(void)
     assert(last_cx(&out,0x1d5)==5 && last_cx(&out,0x1d6)==6 && last_cx(&out,0x1d7)==0);
     /* The pair flag and exact compiler registers must agree.  Neither side on
      * its own can authorize a dual-source draw. */
-    p.color_blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
+    p.color_blend[0].srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
     pair.dual_source_export=1;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
     pair.runtime_fragment.context[0].value=0x44;
@@ -208,8 +208,8 @@ int main(void)
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
     pair.runtime_fragment.context[0].value=4;
     pair.runtime_fragment.context[1].value=15;
-    p.color_blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;
-    p.color_blend.blendEnable=VK_FALSE;
+    p.color_blend[0].srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;
+    p.color_blend[0].blendEnable=VK_FALSE;
     pair.runtime_fragment.context[0].value=9;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1e0)==0 && last_cx(&out,0x1d5)==1 && last_cx(&out,0x1d6)==0 && last_cx(&out,0x1d7)==0);
@@ -227,9 +227,9 @@ int main(void)
     pair.runtime_fragment.context[1].value=0;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
     pair.runtime_fragment.context[0].value=0;
-    p.color_blend.blendEnable=VK_TRUE;
+    p.color_blend[0].blendEnable=VK_TRUE;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
-    p.color_blend.blendEnable=VK_FALSE;
+    p.color_blend[0].blendEnable=VK_FALSE;
     pair.runtime_fragment.context[0].value=9;
     pair.runtime_fragment.context[1].value=15;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);

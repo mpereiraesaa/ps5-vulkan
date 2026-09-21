@@ -848,7 +848,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:independentBlend",
       "implementation": {
-        "detail": "one color attachment per pipeline (src/color_attachment_contract.h)",
+        "detail": "one color attachment per pipeline (native/runtime_graphics_compiler.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],

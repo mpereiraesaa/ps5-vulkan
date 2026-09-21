@@ -800,7 +800,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "one color attachment per pipeline (src/color_attachment_contract.h)",
+      "detail": "one color attachment per pipeline (native/runtime_graphics_compiler.c)",
       "feature": "independentBlend",
       "kind": "feature",
       "profile": "graphics",
@@ -1789,7 +1789,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "one color attachment per pipeline (src/color_attachment_contract.h)",
+      "detail": "one color attachment per pipeline (native/runtime_graphics_compiler.c)",
       "feature": "independentBlend",
       "kind": "feature",
       "profile": "compute",

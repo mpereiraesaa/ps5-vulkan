@@ -67,6 +67,29 @@ static int equal_vertex_layout(const struct ps5vk_graphics_key *a,const struct p
     }
     return 1;
 }
+/* The per-attachment colour state is part of the program identity: two
+ * pipelines that differ only in one attachment's format, write mask or blend
+ * equation are different programs even though they share both modules. */
+static int equal_color_state(const struct ps5vk_graphics_key *a,
+                             const struct ps5vk_graphics_key *b)
+{
+    if (a->color_attachment_count != b->color_attachment_count) return 0;
+    for (uint32_t attachment = 0; attachment < a->color_attachment_count; ++attachment) {
+        if (a->color_format[attachment] != b->color_format[attachment] ||
+            a->color_write_mask[attachment] != b->color_write_mask[attachment] ||
+            a->blend_enable[attachment] != b->blend_enable[attachment]) return 0;
+        if (!a->blend_enable[attachment]) continue;
+        if (a->src_color_blend_factor[attachment] != b->src_color_blend_factor[attachment] ||
+            a->dst_color_blend_factor[attachment] != b->dst_color_blend_factor[attachment] ||
+            a->color_blend_op[attachment] != b->color_blend_op[attachment] ||
+            a->src_alpha_blend_factor[attachment] != b->src_alpha_blend_factor[attachment] ||
+            a->dst_alpha_blend_factor[attachment] != b->dst_alpha_blend_factor[attachment] ||
+            a->alpha_blend_op[attachment] != b->alpha_blend_op[attachment] ||
+            memcmp(a->blend_constants, b->blend_constants, sizeof(a->blend_constants))) return 0;
+    }
+    return 1;
+}
+
 static int equal_module(const struct ps5vk_graphics_module_key *a,
                          const struct ps5vk_graphics_module_key *b)
 {
@@ -91,16 +114,9 @@ VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
         const struct ps5vk_graphics_program *program = &library->programs[i];
         const struct ps5vk_graphics_key *p = &program->key;
         if (!program->backend_data || !valid_sets(p) || !equal_sets(p,key) || !valid_vertex_layout(p) || !equal_vertex_layout(p,key) ||
-            p->topology != key->topology || p->color_format != key->color_format || p->samples != key->samples ||
-            p->color_write_mask != key->color_write_mask || p->blend_enable != key->blend_enable ||
-            (key->blend_enable && (
-                p->src_color_blend_factor != key->src_color_blend_factor ||
-                p->dst_color_blend_factor != key->dst_color_blend_factor ||
-                p->color_blend_op != key->color_blend_op ||
-                p->src_alpha_blend_factor != key->src_alpha_blend_factor ||
-                p->dst_alpha_blend_factor != key->dst_alpha_blend_factor ||
-                p->alpha_blend_op != key->alpha_blend_op ||
-                memcmp(p->blend_constants,key->blend_constants,sizeof(p->blend_constants)))) ||
+            p->topology != key->topology || p->samples != key->samples ||
+            p->color_attachment_count != key->color_attachment_count ||
+            !equal_color_state(p, key) ||
             p->push_constant_size!=key->push_constant_size ||
             memcmp(p->push_constant_stages,key->push_constant_stages,
                    sizeof(p->push_constant_stages)) ||
