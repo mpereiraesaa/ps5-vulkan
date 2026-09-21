@@ -548,6 +548,14 @@ def main(argv=None):
         "-I" + str(amber_root),
         "-I" + str(amber_gen),
         "-DAMBER_ENABLE_CLSPV=0", "-DAMBER_ENABLE_SHADERC=0", "-DAMBER_ENABLE_SPIRV_TOOLS=0",
+        # Amber selects its backend at compile time. Upstream CMake sets
+        # -DAMBER_ENGINE_VULKAN from Vulkan_FOUND (CMakeLists.txt:153); this
+        # build compiles src/vulkan/*.cc but never defined the macro, so
+        # Engine::Create compiled to "return nullptr" and every amber leaf
+        # died as InternalError "Failed to create engine" before a single
+        # Vulkan call (measured: dEQP-VK.rasterization.line_continuity.
+        # polygon-mode-lines, run 20260921T085930000Z). Dawn stays off.
+        "-DAMBER_ENGINE_VULKAN=1", "-DAMBER_ENGINE_DAWN=0",
         "-I" + str(logger),
         "-I" + str(gears / "include"),
         "-I" + str(ROOT / "src"),
@@ -595,6 +603,14 @@ def main(argv=None):
         "-I" + str(amber_root),
         "-I" + str(amber_gen),
         "-DAMBER_ENABLE_CLSPV=0", "-DAMBER_ENABLE_SHADERC=0", "-DAMBER_ENABLE_SPIRV_TOOLS=0",
+        # Amber selects its backend at compile time. Upstream CMake sets
+        # -DAMBER_ENGINE_VULKAN from Vulkan_FOUND (CMakeLists.txt:153); this
+        # build compiles src/vulkan/*.cc but never defined the macro, so
+        # Engine::Create compiled to "return nullptr" and every amber leaf
+        # died as InternalError "Failed to create engine" before a single
+        # Vulkan call (measured: dEQP-VK.rasterization.line_continuity.
+        # polygon-mode-lines, run 20260921T085930000Z). Dawn stays off.
+        "-DAMBER_ENGINE_VULKAN=1", "-DAMBER_ENGINE_DAWN=0",
         "-I" + str(logger),
         "-I" + str(gears / "include"),
         "-I" + str(ROOT / "src"),

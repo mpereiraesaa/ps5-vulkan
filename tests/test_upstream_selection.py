@@ -228,6 +228,22 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual(set(), self.gate._draw_depth_clamp_leaf_names(
             depth.replace("formatCaseName + params.testNameSuffix", "name")))
 
+    def test_amber_backend_is_compiled_in_not_just_compiled(self):
+        """Amber picks its backend with a compile-time macro, not by linking.
+
+        The payload compiles src/vulkan/*.cc, but engine.cc only constructs
+        EngineVulkan under #if AMBER_ENGINE_VULKAN, which upstream CMake sets
+        from Vulkan_FOUND. Without the macro Engine::Create returns nullptr and
+        every amber leaf dies as InternalError "Failed to create engine"
+        before a single Vulkan call, which is what the 2026-09-21 measurement
+        recorded for rasterization.line_continuity.polygon-mode-lines.
+        """
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn("src/vulkan/engine_vulkan.cc", builder)
+        # Both flag sets compile amber sources, so both must carry the macro.
+        self.assertEqual(2, builder.count('"-DAMBER_ENGINE_VULKAN=1"'))
+        self.assertEqual(2, builder.count('"-DAMBER_ENGINE_DAWN=0"'))
+
     def test_t05_modules_are_registered_where_their_diagnostics_point(self):
         """The fragment_ops and draw scissor factories the pending leaves need
         are compiled and registered, the amber script they parse is staged, and
