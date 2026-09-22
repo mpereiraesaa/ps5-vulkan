@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include "sample_rate_probe.h"
 #include "color_clear.h"
+#include "sample_rate_contract.h"
 #include "ps5log.h"
 #include <string.h>
 
@@ -22,6 +23,9 @@ VkResult ps5vk_sample_rate_probe(VkDevice device,
     VkCommandPool pool = VK_NULL_HANDLE;
     VkCommandBuffer command = VK_NULL_HANDLE;
     VkFence fence = VK_NULL_HANDLE;
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkShaderModule modules[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkPipeline pipeline = VK_NULL_HANDLE;
     void *mapped = NULL;
     uint32_t expected = 0, first = 0, last = 0;
     unsigned distinct = 0, words = 0, correct = 0;
@@ -143,9 +147,118 @@ VkResult ps5vk_sample_rate_probe(VkDevice device,
         (unsigned)(distinct == 1u && correct == words && expected == first));
     rc = (distinct == 1u && correct == words && first == expected) ?
         VK_SUCCESS : VK_ERROR_UNKNOWN;
+    if (rc == VK_SUCCESS) {
+        /* Phase two: the same target, drawn through a pipeline that asks for
+         * per-sample shading. The module writes gl_SampleID, so a draw the
+         * hardware iterates per sample leaves one distinct value per sample
+         * plane, while a once-per-pixel draw can only ever leave one value in
+         * the whole surface. The oracle is that difference - not the values
+         * themselves, which depend on how the hardware numbers its samples. */
+        VkPipelineLayoutCreateInfo layout_info = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        PROBE_TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
+        for (unsigned i = 0; i < 2; ++i) {
+            VkShaderModuleCreateInfo module_info = {
+                .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .codeSize = (i ? params->fragment_words : params->vertex_words) * 4u,
+                .pCode = i ? params->fragment : params->vertex};
+            PROBE_TRY(vkCreateShaderModule(device, &module_info, NULL, &modules[i]));
+        }
+        VkPipelineShaderStageCreateInfo stages[2] = {
+            {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = modules[0], .pName = "main"},
+            {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = modules[1], .pName = "main"}};
+        VkPipelineVertexInputStateCreateInfo vertex_input = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        VkPipelineInputAssemblyStateCreateInfo assembly = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        VkPipelineRasterizationStateCreateInfo raster = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_NONE,
+            .frontFace = VK_FRONT_FACE_CLOCKWISE, .lineWidth = 1.0f};
+        VkSampleMask full_mask = ps5vk_sample_count_full_mask(params->samples);
+        VkPipelineMultisampleStateCreateInfo multisample = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples = params->samples,
+            .sampleShadingEnable = VK_TRUE, .minSampleShading = 1.0f,
+            .pSampleMask = &full_mask};
+        VkViewport viewport = {0.0f, 0.0f, (float)params->extent, (float)params->extent, 0.0f, 1.0f};
+        VkRect2D scissor = {{0, 0}, {params->extent, params->extent}};
+        VkPipelineViewportStateCreateInfo viewport_state = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1, .pViewports = &viewport,
+            .scissorCount = 1, .pScissors = &scissor};
+        VkPipelineColorBlendAttachmentState blend_attachment = {.colorWriteMask = 0xfu};
+        VkPipelineColorBlendStateCreateInfo blend = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount = 1, .pAttachments = &blend_attachment};
+        VkGraphicsPipelineCreateInfo pipeline_info = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .layout = layout, .renderPass = pass, .subpass = 0, .stageCount = 2,
+            .pStages = stages, .pVertexInputState = &vertex_input,
+            .pInputAssemblyState = &assembly, .pRasterizationState = &raster,
+            .pMultisampleState = &multisample, .pViewportState = &viewport_state,
+            .pColorBlendState = &blend};
+        PROBE_TRY(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info,
+            NULL, &pipeline));
+        PROBE_TRY(vkBeginCommandBuffer(command, &begin));
+        vkCmdBeginRenderPass(command, &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        vkCmdDraw(command, 3, 1, 0, 0);
+        vkCmdEndRenderPass(command);
+        PROBE_TRY(vkEndCommandBuffer(command));
+        PROBE_TRY(vkQueueSubmit(queue, 1, &submit, fence));
+        PROBE_TRY(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
+        PROBE_TRY(vkResetFences(device, 1, &fence));
+        PROBE_TRY(vkInvalidateMappedMemoryRanges(device, 1, &range));
+        /* The shaded values are counted apart from the clear word: a
+         * multisampled surface's tiling leaves padding the clear filled and the
+         * draw never touches, so the clear is expected to survive somewhere and
+         * is not a shaded value. What the oracle requires is that the draw left
+         * exactly one distinct value per sample, each of them the value the
+         * module writes for that sample index (R = sampleID/255, alpha 1),
+         * which a once-per-pixel draw cannot produce at all. */
+        const unsigned expected_distinct = ps5vk_sample_count_number(params->samples);
+        unsigned shaded = 0, shaded_seen[PROBE_DISTINCT_LIMIT] = {0};
+        correct = 0; first = 0; last = 0;
+        unsigned covered = 0, matched = 0;
+        for (unsigned i = 0; i < words; ++i) {
+            uint32_t word;
+            memcpy(&word, (const unsigned char *)mapped + (size_t)i * 4u, sizeof(word));
+            if (!i) first = word;
+            last = word;
+            if (word == expected) continue;
+            ++covered;
+            unsigned found = 0;
+            for (unsigned k = 0; k < shaded && !found; ++k) found = shaded_seen[k] == word;
+            if (!found && shaded < PROBE_DISTINCT_LIMIT) shaded_seen[shaded++] = word;
+        }
+        for (unsigned sample = 0; sample < expected_distinct; ++sample) {
+            const uint32_t want = UINT32_C(0xff000000) | ((uint32_t)sample << 16u);
+            for (unsigned k = 0; k < shaded; ++k)
+                if (shaded_seen[k] == want) { ++matched; break; }
+        }
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_SAMPLE_RATE_SHADED extent=%ux%u samples=%u words=%u shaded_values=%u "
+            "expected_values=%u matched=%u covered_words=%u values=%08x,%08x,%08x,%08x "
+            "verdict=%u",
+            params->extent, params->extent, (unsigned)params->samples, words, shaded,
+            expected_distinct, matched, covered,
+            shaded_seen[0], shaded_seen[1], shaded_seen[2], shaded_seen[3],
+            (unsigned)(shaded == expected_distinct && matched == expected_distinct));
+        rc = (shaded == expected_distinct && matched == expected_distinct) ?
+            VK_SUCCESS : VK_ERROR_UNKNOWN;
+    }
 
 cleanup:
     if (mapped) vkUnmapMemory(device, memory);
+    if (pipeline) vkDestroyPipeline(device, pipeline, NULL);
+    for (unsigned i = 0; i < 2; ++i)
+        if (modules[i]) vkDestroyShaderModule(device, modules[i], NULL);
+    if (layout) vkDestroyPipelineLayout(device, layout, NULL);
     if (fence) vkDestroyFence(device, fence, NULL);
     if (command) vkFreeCommandBuffers(device, pool, 1, &command);
     if (pool) vkDestroyCommandPool(device, pool, NULL);

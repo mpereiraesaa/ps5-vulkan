@@ -485,6 +485,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     p->device=d; p->allocator=saved; p->custom_allocator=custom; p->graphics=VK_TRUE;
     p->subpass=in->subpass;
+    /* The multisample state the native draw state reads (DXVK262-T06): the
+     * count the accepted state carries, and the shading flag and fraction the
+     * loader turns into pixel iterations. */
+    p->samples=key.samples;
+    p->sample_shading_enable=key.sample_shading_enable;
+    p->min_sample_shading=key.min_sample_shading;
     p->set_count=in->layout->set_count;
     if(p->set_count)memcpy(p->sets,in->layout->sets,p->set_count*sizeof(*p->sets));
     p->graphics_release=d->graphics_release;

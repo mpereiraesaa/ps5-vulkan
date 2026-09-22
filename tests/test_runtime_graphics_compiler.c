@@ -94,8 +94,12 @@ static uint32_t compiled_ps_input_ena(const char *fragment_path)
 static void check_sample_rate_compilation(void)
 {
     struct ps5vk_graphics_key key={
-        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
-        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        /* The witness pair: an oversized triangle that covers the whole target
+         * and a fragment module that reads gl_SampleID, which is what makes the
+         * compiled program a per-sample one - the interface has to accept the
+         * built-in and the compiler has to accept the count together. */
+        .vertex=read_module("build/runtime-graphics/sample_id.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/sample_id.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
         .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};

@@ -15,6 +15,13 @@ struct ps5vk_sample_rate_probe_params {
     VkSampleCountFlagBits samples;
     uint32_t extent;
     float clear[4];
+    /* The modules the shaded phase draws with: a vertex module whose triangle
+     * covers the target and a fragment module whose output varies with
+     * gl_SampleID. */
+    const uint32_t *vertex;
+    size_t vertex_words;
+    const uint32_t *fragment;
+    size_t fragment_words;
 };
 
 VkResult ps5vk_sample_rate_probe(VkDevice, const struct ps5vk_sample_rate_probe_params *);

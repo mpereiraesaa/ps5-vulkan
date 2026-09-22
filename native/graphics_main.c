@@ -4541,7 +4541,11 @@ int main(void)
     {
         struct ps5vk_sample_rate_probe_params sample_rate_params = {
             .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 64u,
-            .clear = {0.25f, 0.5f, 0.75f, 1.0f}};
+            .clear = {0.25f, 0.5f, 0.75f, 1.0f},
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .fragment = ps5vk_runtime_sample_id_fragment,
+            .fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4};
         CHECK(ps5vk_sample_rate_probe(device, &sample_rate_params));
     }
     vkDestroyDevice(device,NULL);

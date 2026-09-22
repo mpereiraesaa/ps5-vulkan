@@ -15,6 +15,8 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_dual_source.frag -o build/runtime-graphics/dual_source.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_two_mrt.frag -o build/runtime-graphics/two_mrt.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_sample_id.vert -o build/runtime-graphics/sample_id.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_sample_id.frag -o build/runtime-graphics/sample_id.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.1 experiments/graphics/runtime_view_index.vert -o build/runtime-graphics/view_index.vert.spv
 	$(GLSLANG) -V -S vert -DTEST_VERTEX=1 experiments/graphics/runtime_flat.glsl -o build/runtime-graphics/flat.vert.spv
 	$(GLSLANG) -V -S frag experiments/graphics/runtime_flat.glsl -o build/runtime-graphics/flat.frag.spv
