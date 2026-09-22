@@ -3493,3 +3493,33 @@ is genuinely per-sample, and the missing piece is the sample-within-block
 addressing rather than anything about the read's execution. What it does not
 establish: that addressing, the resolve, any passing CTS leaf, the row - all
 unchanged, and nothing is advertised.
+
+## Naming the layout equation the read has to match (2026-09-22)
+
+Two facts from the lab's own sources narrow the sample-addressing question
+without another console window, and both belong next to the census.
+
+First, the tiling equation: the lab keeps a full Mesa checkout for this GPU
+(`third_party/mesa-gfx1013`), and its addrlib computes a multisampled surface's
+micro-tile block by REDUCING it by the sample count -
+`gfx10addrlib.cpp`, `GetBlk256SizeLog2(..., numSamplesLog2, ...)` with
+`blockBits -= numSamplesLog2` - so a 256-byte micro tile becomes 256/num_samples
+bytes per sample and the samples are interleaved inside the block rather than
+stacked plane by plane. That is exactly what the census measured on the
+hardware, and it is the equation a sample-indexed read has to resolve against.
+
+Second, the record this profile builds already carries the right swizzle: the
+tile field of the resource word holds `0x1b` in bits 20..24, which is
+`ADDR_SW_64KB_R_X` (27) in the lab Mesa's `addrtypes.h` - the same render-target
+swizzle a colour attachment is backed by. So the record is not obviously
+describing the wrong surface; what has not been shown yet is that the sample
+count reaches the hardware's ADDRESS equation through the fields the record
+carries (`BASE_LEVEL` 0 / `LAST_LEVEL` log2(samples) with the ARRAY MSAA type),
+which is what the next experiment has to compare against what addrlib implies
+for this exact surface.
+
+Also ruled out on the way: the `NUM_SAMPLES` fields the pinned compiler writes
+in `ac_descriptors.c` belong to `DB_Z_INFO` (depth/stencil state), not to the
+image resource descriptor, so they are not the field a colour-attachment read
+would need. The image descriptor's sample geometry really is the level-field
+encoding this profile already emits.
