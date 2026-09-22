@@ -892,6 +892,65 @@ static void check_geometry_output_components(void)
  * The same binding on a pipeline without a geometry stage is still refused,
  * because the stage projection would drop it and the draw would read a table the
  * caller never bound. */
+/* The per-sample fetch stage the pinned multisample oracle compiles
+ * (DXVK262-T06): a multisampled subpass input read whose sample index comes
+ * from the uniform block, exactly as upstream declares it. Measured with the
+ * real adapter and the pinned compiler: the interface accepts the module, the
+ * descriptor table layout carries the two bindings the stage reads - the input
+ * attachment at set 0 binding 0 and the uniform buffer at binding 1 - the
+ * compiler compiles it, and the compiled metadata names both bindings as used.
+ * An earlier hand probe of this stage refused, and that was the probe carrying
+ * no descriptor signature at all: this case is what keeps that reading from
+ * coming back as a "the compiler cannot do it" claim. */
+static void check_subpass_fetch_compilation(void)
+{
+    struct ps5vk_set_signature sets[1]={0};
+    sets[0].count=2;
+    sets[0].binding[0].count=1;sets[0].binding[0].first=0;
+    sets[0].binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sets[0].type[0]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    sets[0].binding[1].count=1;sets[0].binding[1].first=1;
+    sets[0].binding[1].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sets[0].type[1]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    /* Empty slots keep the canonical prefix, exactly as above. */
+    for(unsigned b=2;b<PS5VK_MAX_BINDINGS;++b)sets[0].binding[b].first=2;
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/runtime_subpass_fetch.frag.spv"),
+        .descriptor_set_count=1,.descriptor_sets=sets,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_4_BIT,.color_write_mask={15},
+        .feature_mask=PS5VK_FEATURE_SAMPLE_RATE_SHADING};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->fragment.machine_code_size);
+    /* Both descriptors the stage names reach the compiled program: without the
+     * input attachment the read would have no source, and without the uniform
+     * buffer it would have no sample index. */
+    assert(p->fragment.metadata.descriptor_set_valid[0]);
+    assert(p->fragment.metadata.descriptor_used_binding_mask[0]==UINT64_C(0x3));
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    /* The same module without the layout's signature is refused, which is the
+     * shape that produced the wrong reading: the refusal is the missing
+     * declaration, not the shader. */
+    struct ps5vk_graphics_key undeclared={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/runtime_subpass_fetch.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_4_BIT,.color_write_mask={15},
+        .feature_mask=PS5VK_FEATURE_SAMPLE_RATE_SHADING};
+    assert(ps5vk_spirv_graphics_interface(&undeclared));
+    const void *refused=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&undeclared,&refused)!=VK_SUCCESS && !refused);
+    free((void *)undeclared.vertex.words);free((void *)undeclared.fragment.words);
+}
+
 static void check_geometry_stage_descriptor_visibility(void)
 {
     struct ps5vk_set_signature sets[1]={0};
@@ -1999,6 +2058,7 @@ int main(void)
     check_fragment_distance_read();
     check_fragment_position();
     check_sample_rate_compilation();
+    check_subpass_fetch_compilation();
     check_dual_source_exports();
     check_dual_source_blend_contract();
     check_two_mrt_exports();

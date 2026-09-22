@@ -3132,20 +3132,31 @@ attachment-with-its-readback-pair combination exists for the one format. The
 walk now uses the oracle's format, and the reason is recorded in the code
 beside it.
 
-The same window measured the stage that follows the pass, on the host, with the
-real adapter and the pinned compiler: the oracle's per-sample fetch fragment
-stage (`subpassInputMS` plus `subpassLoad(imageMS, sampleNdx)`, compiled from
-`vktPipelineMultisampleBaseResolveAndPerSampleFetch.cpp`) is accepted by the
-SPIR-V interface and reported as supported, and then
-`ps5vk_runtime_graphics_compile` returns `VK_ERROR_FEATURE_NOT_PRESENT` with
-`pair = NULL` and no adapter refusal site, while the pinned compiler's own NIR
-front end logs `Unsupported SPIR-V capability: SpvCapabilityInputAttachment (40)`. So the fetch stage is a second gate behind the pass, and it is a
-compiler-side one.
+The same window's first host probe of the stage behind the pass looked like a
+compiler gate and was not one, so the correction is recorded here rather than
+quietly dropped. That probe handed the adapter the oracle's per-sample fetch
+module (`subpassInputMS` plus `subpassLoad(imageMS, sampleNdx)`, compiled from
+`vktPipelineMultisampleBaseResolveAndPerSampleFetch.cpp`) with **no
+pipeline-layout signature at all**: `ps5vk_runtime_graphics_compile` refused it
+with no named site while the pinned compiler logged `Unsupported SPIR-V
+capability: SpvCapabilityInputAttachment (40)`, and both facts read as "this
+stage cannot be compiled". With the layout the oracle actually uses - an input
+attachment at set 0 binding 0 and a uniform buffer at binding 1 - the same
+module measures the opposite, and `tests/test_runtime_graphics_compiler.c` now
+pins all of it: the interface accepts the module, the descriptor table layout
+accepts the signature, `psbc_compile_shader` returns OK on its own (88 bytes of
+machine code, measured directly), the adapter compile returns `VK_SUCCESS` with
+108 bytes of fragment machine code, the compiled metadata names both bindings as
+used (`descriptor_used_binding_mask[0] == 3`), and dropping the layout signature
+is what makes the compile fail. The InputAttachment line is a warning from the
+NIR front end, not a refusal. The fetch stage is therefore not a compiler-side
+gate.
 
 What this establishes: the oracle's attachment and descriptor steps run on
 hardware; the first gate after them is the render pass itself, with the
-internal attachment bound (two) the obvious candidate, and the per-sample fetch
-stage is refused by the pinned compiler rather than by this profile's adapter.
+internal attachment bound (two) the obvious candidate; and the per-sample fetch
+stage is supported by the pinned compiler and by this profile's adapter once
+the pipeline layout declares what it reads.
 What it does not establish: no leaf passes, the resolve is not executed, the
 per-sample fetch is not executed, the row stays a blocker, and nothing is
 advertised.
