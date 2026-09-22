@@ -399,11 +399,13 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
                   VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT))
         return VK_TRUE;
     /* The pinned multiview helper's attachment adds the input-attachment role
-     * to that same readback colour shape. Only a row that can already be a
-     * readback colour target has it, and only for this exact usage set, so no
-     * input-attachment support is inferred for another format, another usage
-     * combination or a row without the readback role. */
-    if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
+     * to that same readback colour shape. Only the normalized row carries that
+     * role: the integer colour target served since the independentBlend
+     * promotion is a readback target but never a multiview or input-attachment
+     * backing, so a row that only inherits the readback capability must not
+     * gain the input role by accident. The usage set stays exact. */
+    if (format == VK_FORMAT_R8G8B8A8_UNORM &&
+        (w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
         usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                   VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
                   VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;

@@ -161,13 +161,13 @@ int main(void)
             VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT};
         for (unsigned i = 0; i < sizeof(rejected)/sizeof(rejected[0]); ++i)
             assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM, rejected[i]));
-        const VkFormat other[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM};
+        /* The integer colour target served since the independentBlend promotion
+         * is a readback target, not a multiview or input-attachment backing:
+         * that shape stays the normalized row's, so UINT is refused here. */
+        const VkFormat other[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
+                                  VK_FORMAT_R8G8B8A8_UINT};
         for (unsigned i = 0; i < sizeof(other)/sizeof(other[0]); ++i)
             assert(!ps5vk_texture_format_image_usage(other[i], exact));
-        /* The integer colour target is served now that independentBlend is
-         * promoted, and the upstream leaves that require the feature create it
-         * with exactly this readback shape. */
-        assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UINT, exact));
     }
 
     assert(ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UNORM_PACK32,
