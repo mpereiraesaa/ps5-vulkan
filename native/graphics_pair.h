@@ -67,6 +67,11 @@ struct ps5vk_graphics_pair {
      * sets this.  The draw path uses it to keep SRC1 factors unreachable for
      * ordinary or torn compiled shader packages. */
     uint32_t dual_source_export;
+    /* The fragment export shape the compiler proved for this pair
+     * (ps5vk_runtime_fragment_export_shape). The draw path reads it to
+     * programme the register pair the shape needs; it is never inferred from
+     * the registers alone. */
+    uint32_t fragment_shape;
     struct ps5vk_runtime_shader runtime_vertex,runtime_fragment;
     struct ps5vk_runtime_draw_abi runtime_arguments;
     struct ps5vk_runtime_draw_abi hull_arguments;

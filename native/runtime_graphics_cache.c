@@ -297,18 +297,24 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     lease->program.fragment.machine_code_size=(size_t)payload->fragment_bytes;
     {
         const int fragment_export=ps5vk_runtime_fragment_export(&payload->fragment);
-        if(fragment_export<0 || payload->fragment_shape>PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT) {
+        if(fragment_export<0 ||
+           payload->fragment_shape>PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT) {
             free(lease);goto failed;
         }
         /* The shape and the registers must agree: an unblended single target
-         * exports the single pair (or nothing), and both multi-export shapes
-         * publish the same register class. */
+         * exports the single pair (or nothing), the two-target shapes publish
+         * the same register class as dual source does, and the shape that
+         * writes only the second target publishes the pair whose mask names
+         * that target. */
         const uint32_t shape=payload->fragment_shape;
         if((shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
             fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE &&
             fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE) ||
-           (shape!=PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
-            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL)) {
+           ((shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL ||
+             shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT) &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) ||
+           (shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND)) {
             free(lease);goto failed;
         }
         lease->program.fragment_shape=shape;

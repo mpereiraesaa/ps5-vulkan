@@ -5,6 +5,7 @@
 #include "libpsbc/psbc_compile.h"
 #include "runtime_draw_abi.h"
 #include "runtime_shader_storage.h"
+#include "runtime_fragment_shape.h"
 
 /* Separate arena for compiler output; the frozen Gears arena stays unchanged.
  * All pointers in an uncreated header are field-relative, as required by AGC.
@@ -16,19 +17,15 @@ _Static_assert(PS5VK_RUNTIME_SEMANTICS_MAX >= PSBC_MAX_SEMANTICS,"compiler seman
 enum ps5vk_runtime_fragment_export {
     PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE=0,
     PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE=1,
-    PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL=2
-};
-/* The 0x44/0xff register pair is shared: the pinned compiler publishes it both
- * for one MRT with two sources (dual source) and for two MRTs. The registers
- * alone cannot tell them apart - measured with the pinned PSBC: a fragment
- * module with Location 0 and Location 1 and spi_shader_col_format 0x44 emits
- * the same 0x1c5/0x08f pair as the dual-source module - so the classification
- * the runtime trusts is the interface's, and the registers only prove the
- * export exists. This enum names the interface-decided shape. */
-enum ps5vk_runtime_fragment_export_shape {
-    PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE=0,
-    PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL=1,
-    PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT=2
+    PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL=2,
+    /* One export, and the shader mask says it targets the SECOND colour
+     * target: the fragment stage exports Location 1 only, which is what the
+     * pinned render-pass module's attachment_write_mask leaf builds when the
+     * first target's write mask is zero. The compiler publishes that shape as
+     * SPI_SHADER_COL_FORMAT=0x9 with CB_SHADER_MASK=0xf0: the format nibbles
+     * follow the module's outputs in DECLARATION order while the mask follows
+     * the attachment each export targets (measured on the pinned PSBC). */
+    PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND=3
 };
 /* Classify the exact compiler-produced fragment export register pair. Returns
  * -1 for a torn/unknown pair. This is metadata validation, not device feature

@@ -37,6 +37,16 @@ int ps5vk_runtime_fragment_export(const PsbcShaderMetadata *m)
     if(!format->value && !mask->value)return PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE;
     if((format->value==4u || format->value==9u) && mask->value==15u)
         return PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE;
+    /* One export that targets the second colour target: the compiler put the
+     * module's only output code in nibble zero - its outputs are numbered in
+     * declaration order - while the mask names the attachment the export
+     * actually writes (measured with the pinned PSBC: a module whose only
+     * output is at Location 1 publishes 0x9/0xf0 for every option that keeps
+     * it, and 0x0/0x0 for the one that drops it). Bound to exactly that pair:
+     * a four-bit code this profile writes, the second target's four channels,
+     * and nothing in nibble one. */
+    if((format->value==4u || format->value==9u) && mask->value==0xf0u)
+        return PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND;
     /* Two exports of attachment zero's physical target: one format nibble and
      * one four-channel mask nibble each. The pinned compiler publishes
      * 0x44/0xff for the two sources of MRT0 (dual source) and the same shape

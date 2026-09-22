@@ -786,10 +786,22 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
             PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT),
         (unsigned)(ps5vk_color_target_integer_served(key->color_format[1]) ?
             PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT)};
+    /* A colour subpass wants the export that belongs to the attachment it
+     * writes: the four-component value whose numeric class follows that
+     * attachment's format. An attachment the pipeline does not write - its
+     * CB_TARGET_MASK field is zero - may legitimately have no export at all,
+     * which is what the pinned render-pass module's attachment_write_mask leaf
+     * builds when it starts at index 1: target 0's write mask is zero and the
+     * fragment stage exports Location 1 alone. Dropping the export of an
+     * attachment that IS written, or writing one whose export is absent, is the
+     * torn shape and stays refused. A DEPTH-ONLY subpass names no colour
+     * attachment, so it requires no export either. */
     if(key->color_format[0]==VK_FORMAT_UNDEFINED) {
         if(fs.outputs[0].components)return 0;
-    } else if(fs.outputs[0].components!=4 ||
-              fs.outputs[0].numeric!=colour_numeric[0])return 0;
+    } else if(fs.outputs[0].components ?
+              (fs.outputs[0].components!=4 ||
+               fs.outputs[0].numeric!=colour_numeric[0]) :
+              key->color_write_mask[0])return 0;
     if(fs.secondary_outputs[0].components &&
        (fs.secondary_outputs[0].components!=4 ||
         fs.secondary_outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT))return 0;

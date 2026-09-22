@@ -375,6 +375,56 @@ static void check_two_target_write_masks(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+/* The shape the leaf that writes ONLY the second colour target builds: its
+ * first target's write mask is zero, so the module's fragment stage declares
+ * Location 1 alone and the pinned compiler publishes SPI_SHADER_COL_FORMAT=0x9
+ * with CB_SHADER_MASK=0xf0 - the format nibble follows the module's single
+ * output (declaration order), the mask names the attachment it targets. The
+ * adapter admits it only for exactly that pipeline, and carries the shape so
+ * the draw state can programme the coherent pair for the attachment that is
+ * really written. */
+static void check_second_target_only(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/second_mrt_only.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM},
+        .color_attachment_count=2,
+        .feature_mask=PS5VK_FEATURE_INDEPENDENT_BLEND,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={0,15}};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *runtime=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
+    const struct ps5vk_runtime_graphics_program *program=runtime;
+    assert(program->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT);
+    assert(!program->dual_source_export);
+    /* The compiler's own pair for this module, and the classification of it. */
+    assert(ps5vk_runtime_fragment_export(&program->fragment.metadata)==
+        PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND);
+    ps5vk_runtime_graphics_free(NULL,runtime);
+
+    /* The shape belongs to the pipeline, not to the module: the same fragment
+     * stage on a pipeline that writes the first target is torn (that target
+     * would be written with no export), and the capability still authorises the
+     * second target's own pipeline. */
+    const void *refused=NULL;
+    key.color_write_mask[0]=15;
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&refused)!=
+        VK_SUCCESS && !refused);
+    key.color_write_mask[0]=0;
+    key.feature_mask=0;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&refused)!=
+        VK_SUCCESS && !refused);
+    key.feature_mask=PS5VK_FEATURE_INDEPENDENT_BLEND;
+    key.color_attachment_count=1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&refused)!=
+        VK_SUCCESS && !refused);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
 /* Clip and cull distances leave the pre-raster stage through the packed
@@ -1993,6 +2043,7 @@ int main(void)
     check_dual_source_blend_contract();
     check_two_mrt_exports();
     check_two_target_write_masks();
+    check_second_target_only();
     check_geometry_stage();
     check_viewport_index_routing();
     check_geometry_output_components();

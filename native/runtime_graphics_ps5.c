@@ -167,14 +167,18 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
      * flag from the registers alone would mislabel it (and the draw state keys
      * its conversion on that flag). */
     if(fragment_export<0 || input->dual_source_export>1u ||
-       input->fragment_shape>PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT ||
+       input->fragment_shape>PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT ||
        input->dual_source_export!=(uint32_t)
            (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL) ||
        (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
         fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE &&
         fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE) ||
-       (input->fragment_shape!=PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
-        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL))
+       (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) ||
+       (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) ||
+       (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if(has_tessellation && ps5vk_runtime_hull_build(&hull,&input->hull))
         {TESS_CREATE_FAIL("hull");return VK_ERROR_FEATURE_NOT_PRESENT;}
@@ -216,6 +220,7 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
     pair->runtime_arguments=arguments;
     pair->hull_arguments=input->hull_arguments;
     pair->dual_source_export=input->dual_source_export;
+    pair->fragment_shape=input->fragment_shape;
     if(ps5vk_runtime_shader_build(&pair->runtime_vertex,
            has_tessellation?&input->domain:&input->vertex) ||
        ps5vk_runtime_shader_build(&pair->runtime_fragment,&input->fragment)) {
