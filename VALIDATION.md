@@ -3,16 +3,17 @@
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
-## Current tessellation candidate (2026-09-20)
+## Merged T04 tessellation validation (2026-09-20)
 
-The default native runtime-graphics candidate passes 403/403 unchanged upstream
+The merged default native runtime-graphics build passes 403/403 unchanged upstream
 CTS cases: 304 regression cases and 99 tessellation, clip/cull and resource
 cases. Strict artifact/report verification and clean application closure pass.
 Experimental tessellation flags and shader/probe bypasses are off. A separately
 built public SDK consumer verifies feature advertisement and the intended limits.
 See [tessellation status](TESSELLATION_STATUS.md) for the scope and additional
 native witnesses. This is focused validation, not complete CTS or conformance;
-release review remains pending.
+T04 was merged to `main` in PR #158. DXVK matrix admission of the 99 passing
+tessellation leaves remains separate evidence bookkeeping.
 
 The integrated receipt identifies:
 

@@ -329,7 +329,13 @@ four evidence axes:
 4. exact native evidence.
 
 A row is satisfied only when all four axes are positive. Unknown or absent
-evidence is a blocker. The checked matrix currently records 13/62 satisfied (`robustBufferAccess`, multiview and its two required limits, the three indirect/indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and `fullDrawIndexUint32`, the user-defined `shaderClipDistance`/`shaderCullDistance` pair, and the four rasterization and viewport features `depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`) and 49 blockers.
+evidence is a blocker. T04's implementation and focused native validation are
+complete and merged (PR #158), but its `geometryShader` and
+`tessellationShader` rows remain blocked **in this matrix** until the existing
+native receipts are admitted and the 99 passing tessellation leaves are added
+to the frozen acceptance selection. Do not interpret those two evidence-ledger
+blockers as unimplemented stages. The exact current count is in
+`dxvk_v262_matrix.json`; its checked generator, not this prose, is authoritative.
 Multiview values use the explicitly recorded equivalent KHR route; aggregate
 query structures and the API 1.3 floor remain unadvertised. This is not a
 DXVK compatibility or Vulkan conformance statement.
