@@ -406,6 +406,8 @@ check:
 	./build/tests/test_color_attachment_contract
 	$(CC) -std=c11 -Wall -Wextra -Werror -Ithird_party/vulkan-headers/include -Isrc tests/test_sample_rate_contract.c -o build/tests/test_sample_rate_contract
 	./build/tests/test_sample_rate_contract
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/sample_rate_oracle.c tests/test_sample_rate_oracle.c -o build/tests/test_sample_rate_oracle
+	./build/tests/test_sample_rate_oracle
 	$(PYTHON) tools/build_sdk.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host

@@ -1025,6 +1025,18 @@ def main():
                 "tolerance_lsb": 1, "strict_readback": True}
             runtime_inputs = (("vertex", "runtime_triangle.vert"),
                               ("two_mrt", "runtime_two_mrt.frag"))
+        if sample_rate_probe == "1":
+            manifest["graphics_shader_source"] = "owned-runtime-sample-id"
+            manifest["sample_rate_probe"] = 1
+            manifest["sample_rate_measurement"] = True
+            manifest["sample_rate_witness"] = {
+                "extent": [64, 64], "samples": 4,
+                "clear_rgba": [0.25, 0.5, 0.75, 1.0],
+                "clear_word": "ff4080bf",
+                "shaded_values": ["ff000000", "ff010000", "ff020000", "ff030000"],
+                "phases": ["clear", "shaded"], "strict_readback": True}
+            runtime_inputs = (("vertex", "runtime_sample_id.vert"),
+                              ("fragment", "runtime_sample_id.frag"))
         if scissor_probe == "13":
             manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
             manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"
