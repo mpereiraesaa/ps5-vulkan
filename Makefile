@@ -64,7 +64,7 @@ GRAPHICS_PAIR_TEST = -Ithird_party/vulkan-headers/include -Inative -Isrc -I$(LAB
 .PHONY: check doctor compiler-control compiler-programs native-bootstrap vulkan-headers check-sanitize native-memory-check test-shaders
 .PHONY: compiler-pipelines
 .PHONY: native-compute native-graphics native-runtime-graphics
-.PHONY: upstream-cts check-upstream-cts
+.PHONY: upstream-cts check-upstream-cts check-upstream-cts-sink
 .PHONY: upstream-cts-run
 native-runtime-graphics:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
@@ -314,7 +314,7 @@ check:
 	# regression tests invoke the checker in process and must not skip for a
 	# fixture that this same target only planned to create later.
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tools/dump_device_reporting.c -o build/tests/dump_device_reporting
-	$(PYTHON) -m unittest discover -s tests -v
+	$(PYTHON) tools/run_python_tests.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include tests/test_submit_suspend.c -o build/tests/test_submit_suspend
 	./build/tests/test_submit_suspend
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_queue_router.c tests/test_queue_router.c -o build/tests/test_queue_router
@@ -379,7 +379,8 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host
 	$(MAKE) check-graphics-stages
-	$(MAKE) check-upstream-cts
+	$(MAKE) check-upstream-cts-sink
+	$(PYTHON) tools/check_upstream_selection.py
 	@if [ -d third_party/psbc-reference ]; then \
 		$(MAKE) test-compiler; \
 	else \
@@ -480,10 +481,14 @@ check-graphics-stages: graphics-stage-shaders
 # Genuine upstream VK-GL-CTS: cross-compile the focused native payload.
 # Host-only contract checks for the upstream CTS selection and verifier. These
 # never require the console, so CI can run them.
-check-upstream-cts:
+# check runs the Python half itself through tools/run_python_tests.py, so it
+# only needs the QPA sink test from here.
+check-upstream-cts-sink:
 	mkdir -p build/tests
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -I$(LAB_SIBLINGS)/logging_server/client cts/upstream/log_sink_ps5.cpp tests/test_qpa_sink.cpp -Wl,--wrap=fopen,--wrap=fprintf,--wrap=fputs,--wrap=fputc,--wrap=fwrite,--wrap=fseek,--wrap=fflush,--wrap=fclose -o build/tests/test_qpa_sink
 	./build/tests/test_qpa_sink
+
+check-upstream-cts: check-upstream-cts-sink
 	$(PYTHON) tools/check_upstream_selection.py
 	$(PYTHON) -m unittest tests.test_upstream_runner tests.test_upstream_run_orchestrator -v
 upstream-cts:
