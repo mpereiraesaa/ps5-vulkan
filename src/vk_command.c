@@ -723,7 +723,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
          contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
         !info->renderPass || !info->framebuffer ||
         info->renderPass->device != c->pool->device || info->framebuffer->device != c->pool->device ||
-        info->clearValueCount > 2 || (info->clearValueCount && !info->pClearValues) ||
+        /* One value per attachment the pass may name, which is the bound the
+         * begin's own pass carries: the pinned multisample oracle clears four
+         * attachments in one begin. */
+        info->clearValueCount > PS5VK_MAX_ATTACHMENTS ||
+        (info->clearValueCount && !info->pClearValues) ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;

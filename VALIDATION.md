@@ -3218,3 +3218,46 @@ recording: `vkEndCommandBuffer` rc=-13. So the object path for the oracle's
 shape now stands end to end, and the gate the row has to open next is the
 executor - the resolve, the per-sample input read and the preserve list are
 described, created and compiled, but not run.
+
+## Recording the oracle's pass, and the gate behind it (2026-09-22)
+
+Two probe defects stood between the walk and the driver, and both are recorded
+because both looked like driver gates until they were named:
+
+1. The walk declared three subpasses and recorded work in two of them, and the
+   recording refuses to end a pass before its last subpass. Announcing every
+   recorded call is what showed it: `vkCmdEndRenderPass` was announced and
+   `vkEndCommandBuffer` then refused, i.e. the pass had never been left. The
+   walk now creates one pipeline per subpass and records every one of them.
+2. The walk handed one clear value to a pass that clears four attachments, and
+   `vkCmdBeginRenderPass` requires a value for every attachment it clears - the
+   clear-value count is the caller's and the pass's, not a pair. That is the
+   first real driver limitation this walk found on the recording side:
+   `struct ps5vk_operation` stored two clear values and the begin bound the
+   count at two, while the oracle's pass carries four.
+
+This change raises both to the attachment bound the pass itself uses
+(`PS5VK_MAX_ATTACHMENTS`), so one begin can carry a value per attachment the
+pass names, and `tests/test_vk_command.c` pins both directions: the oracle's
+four-attachment pass records with four clear values (and the fourth value is
+the one the record carries), while one value short of what the pass clears
+still poisons the recording. The executor already indexes the clears per colour
+attachment and bounds them by the recorded count, so nothing else moved.
+
+Measured on the console after the change (run
+`20260922T111728603Z_PPSA99994_ps5vk_0x19ac9fd1c7523`, log SHA-256
+`20dbfad9b6b8049404c139200f41d875f7e442809a8f79b4e1c4ad553e664952`, payload
+eboot `76f1f3c653b951e76b68c80d1c303777c3b71299af434ef220b82aff80a4e44c`): the
+walk records the whole pass - `vkCmdBeginRenderPass` with four clear values,
+both draws, both subpass boundaries, the descriptor binds and
+`vkCmdEndRenderPass` - and `vkEndCommandBuffer` returns **rc=0**. The next call,
+`vkQueueSubmit`, returns **VK_ERROR_FEATURE_NOT_PRESENT (-8)**: the executor
+does not run the resolve, the per-sample input read or the preserve list yet,
+and it says so instead of executing a pass whose promise it would drop. The
+title closed cleanly (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: the oracle's pass is recordable end to end with its own
+clear set, and the gate is now the executor at submission, named by its own
+return code. What it does not establish: no leaf passes, the resolve, the
+per-sample read and the preserve list are still unexecuted, the row stays a
+blocker, and nothing is advertised.

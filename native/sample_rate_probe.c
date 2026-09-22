@@ -294,7 +294,7 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
     VkDescriptorSet set = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkShaderModule modules[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
-    VkPipeline pipelines[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkPipeline pipelines[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkBuffer ubo = VK_NULL_HANDLE;
     VkDeviceMemory ubo_memory = VK_NULL_HANDLE;
     VkCommandPool command_pool = VK_NULL_HANDLE;
@@ -530,13 +530,13 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
              .rasterizationSamples = params->samples, .pSampleMask = &mask},
             {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
              .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT}};
-        for (unsigned subpass = 0; subpass < 2; ++subpass) {
+        for (unsigned subpass = 0; subpass < 3; ++subpass) {
             const VkGraphicsPipelineCreateInfo pipeline_info = {
                 .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
                 .layout = layout, .renderPass = pass, .subpass = subpass, .stageCount = 2,
-                .pStages = stages[subpass], .pVertexInputState = &vertex_input,
+                .pStages = stages[subpass ? 1u : 0u], .pVertexInputState = &vertex_input,
                 .pInputAssemblyState = &assembly, .pRasterizationState = &raster,
-                .pMultisampleState = &multisample[subpass], .pViewportState = &viewport_state,
+                .pMultisampleState = &multisample[subpass ? 1u : 0u], .pViewportState = &viewport_state,
                 .pColorBlendState = &blend};
             ps5log_printf(PS5LOG_MARK,
                 "PS5VK_SAMPLE_RATE_SHAPE step=create_pipeline subpass=%u", subpass);
@@ -560,20 +560,38 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
         SHAPE_TRY(vkCreateFence(device, &fence_info, NULL, &fence));
         const VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         SHAPE_TRY(vkBeginCommandBuffer(command, &begin));
-        const VkClearValue clear = {.color = {.float32 = {0.25f, 0.5f, 0.75f, 1.0f}}};
+        /* One clear value per attachment, as the oracle passes: the pass
+         * clears all four, and a shorter array is a malformed begin rather
+         * than a shape the driver refuses. */
+        const uint32_t clear_count = 4;
+        VkClearValue clears[4];
+        for (uint32_t i = 0; i < clear_count; ++i)
+            clears[i] = (VkClearValue){.color = {.float32 = {0.25f, 0.5f, 0.75f, 1.0f}}};
         const VkRenderPassBeginInfo pass_begin = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = pass,
             .framebuffer = framebuffer, .renderArea = {{0, 0}, {params->extent, params->extent}},
-            .clearValueCount = 1, .pClearValues = &clear};
+            .clearValueCount = clear_count, .pClearValues = clears};
+        /* Every recorded call is announced too. Recording in this profile
+         * poisons the command buffer on a refusal and reports it at
+         * vkEndCommandBuffer, so the step that names the refusal is not the
+         * call that made it - the call that never logged its successor is. */
+        ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=record:vkCmdBeginRenderPass");
         vkCmdBeginRenderPass(command, &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
+        ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=record:vkCmdBindPipeline subpass=0");
         vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[0]);
+        ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=record:vkCmdDraw subpass=0");
         vkCmdDraw(command, 3, 1, 0, 0);
-        for (unsigned subpass = 1; subpass < 2; ++subpass) {
+        for (unsigned subpass = 1; subpass < 3; ++subpass) {
+            ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=record:vkCmdNextSubpass");
             vkCmdNextSubpass(command, VK_SUBPASS_CONTENTS_INLINE);
+            ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=record:vkCmdBindPipeline subpass=1");
             vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[subpass]);
+            ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=record:vkCmdBindDescriptorSets");
             vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &set, 0, NULL);
+            ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=record:vkCmdDraw subpass=1");
             vkCmdDraw(command, 3, 1, 0, 0);
         }
+        ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=record:vkCmdEndRenderPass");
         vkCmdEndRenderPass(command);
         SHAPE_TRY(vkEndCommandBuffer(command));
         VkQueue queue = VK_NULL_HANDLE;
@@ -600,7 +618,7 @@ cleanup:
     if (fence) SHAPE_CLEANUP(vkDestroyFence(device, fence, NULL));
     if (command) SHAPE_CLEANUP(vkFreeCommandBuffers(device, command_pool, 1, &command));
     if (command_pool) SHAPE_CLEANUP(vkDestroyCommandPool(device, command_pool, NULL));
-    for (unsigned i = 0; i < 2; ++i)
+    for (unsigned i = 0; i < 3; ++i)
         if (pipelines[i]) SHAPE_CLEANUP(vkDestroyPipeline(device, pipelines[i], NULL));
     for (unsigned i = 0; i < 3; ++i)
         if (modules[i]) SHAPE_CLEANUP(vkDestroyShaderModule(device, modules[i], NULL));
