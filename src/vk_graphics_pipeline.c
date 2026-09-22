@@ -170,13 +170,19 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     const VkPipelineMultisampleStateCreateInfo *m=in->pMultisampleState;
     const VkPipelineViewportStateCreateInfo *vp=in->pViewportState;
     const VkPipelineColorBlendStateCreateInfo *b=in->pColorBlendState;
-    if (!v || !ia || !r || !m || !vp || !b) return VK_ERROR_UNKNOWN;
+    /* The colour blend state is optional for the same reason the
+     * depth-stencil state is: a pipeline for a DEPTH-ONLY subpass has no
+     * colour attachment to blend into, and the pinned upstream depth clamp
+     * module leaves pColorBlendState NULL there. The subpass decides which
+     * of the two must be present; that check is below, where the subpass is
+     * resolved. */
+    if (!v || !ia || !r || !m || !vp) return VK_ERROR_UNKNOWN;
     if (v->sType != VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO ||
         ia->sType != VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO ||
         r->sType != VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO ||
         m->sType != VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO ||
         vp->sType != VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO ||
-        b->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO) return VK_ERROR_UNKNOWN;
+        (b && b->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO)) return VK_ERROR_UNKNOWN;
     if (v->vertexBindingDescriptionCount>16 || v->vertexAttributeDescriptionCount>32 ||
         (v->vertexBindingDescriptionCount && !v->pVertexBindingDescriptions) ||
         (v->vertexAttributeDescriptionCount && !v->pVertexAttributeDescriptions))return refuse(8);
@@ -266,7 +272,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         !ps5vk_color_blend_state_shape_supported(b))
         return refuse(15);
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
-        !b->pAttachments) return VK_ERROR_UNKNOWN;
+        (b->attachmentCount && !b->pAttachments)) return VK_ERROR_UNKNOWN;
     /* SRC1 names the fragment shader's secondary output for attachment zero.
      * Refuse it before compiler/backend work unless the application enabled
      * dualSrcBlend on this logical device.  The compiler separately proves
@@ -296,6 +302,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * first one: the identity is what a draw is later checked against. */
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, in->subpass);
     if (subpass->depth.attachment != VK_ATTACHMENT_UNUSED && !depth) return VK_ERROR_UNKNOWN;
+    /* One blend attachment per colour attachment the subpass names, and none
+     * for the DEPTH-ONLY shape. The exact agreement is checked below, where the
+     * per-attachment state is read out of the subpass and the pipeline. */
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
         depth->pNext || depth->flags || depth->depthBoundsTestEnable || depth->stencilTestEnable ||
         depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
@@ -324,7 +333,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
            sizeof(key.push_constant_stages));
     /* One element per colour attachment the subpass names: the format comes
      * from the pass, the blend state from the pipeline. Vulkan requires the
-     * pipeline to describe exactly as many attachments as the subpass. */
+     * pipeline to describe exactly as many attachments as the subpass. A
+     * subpass that names none is the DEPTH-ONLY shape: the count stays zero and
+     * every colour field keeps the value the zeroed initialiser gave it
+     * (VK_FORMAT_UNDEFINED, no write mask, no blend), which is exactly what the
+     * compiler and the native path key the depth-only case on. */
     if (b->attachmentCount != subpass->color_count) return refuse(15);
     key.color_attachment_count = subpass->color_count;
     int any_blend = 0;
@@ -426,7 +439,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         p->color_write_mask[attachment]=key.color_write_mask[attachment];
     }
     p->primitive_restart=ia->primitiveRestartEnable;
-    memcpy(p->color_blend,b->pAttachments,sizeof(p->color_blend));
+    /* The pipeline carries one blend state per colour attachment it was
+     * created for; with none (the depth-only shape) the array keeps the zeroed
+     * value the object allocation gave it. */
+    if(p->color_attachment_count)
+        memcpy(p->color_blend,b->pAttachments,
+               p->color_attachment_count*sizeof(*p->color_blend));
     memcpy(p->blend_constants,key.blend_constants,sizeof(p->blend_constants));
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
     if(key.vertex_binding_count)memcpy(p->vertex_bindings,key.vertex_bindings,

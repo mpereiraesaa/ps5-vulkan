@@ -489,7 +489,7 @@ evidence; the selected CTS leaves alone do not test the maximum instance index.
 The three corresponding profile rows were satisfied by that run; the matrix
 was **4/62 ready, 58 blockers** at the time (see
 [the DXVK v2.6.2 profile section](#dxvk-262-public-abi-capability-probe) for the current
-10/62). This does not advertise the Vulkan 1.2 aggregate query
+15/62). This does not advertise the Vulkan 1.2 aggregate query
 structures or raise `apiVersion` above 1.0. The equivalent KHR fields and the
 separate unmet API-1.3 requirement remain explicit. Raw QPA and transport logs
 remain private; sanitized identities are recorded here and in the manifest.
@@ -1943,13 +1943,16 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **11/62 satisfied and 51 blockers**. Core
+The current checked result is **15/62 satisfied and 47 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
-`fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics` and
-`dualSrcBlend` have all four axes. See
-[their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16)
-and [the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20).
+`fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,
+`dualSrcBlend` and the four rasterization and viewport features (`depthClamp`,
+`depthBiasClamp`, `fillModeNonSolid`, `multiViewport`) have all four axes. See
+[their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16),
+[the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20),
+[the dual-source promotion](#dual-source-blend-promotion-2026-09-21) and
+[the rasterization and viewport promotion](#rasterization-and-viewport-promotion-2026-09-21).
 The multiview probe uses explicitly tagged equivalent KHR queries, not the
 unimplemented Vulkan 1.2 aggregate structs. The API 1.3.204 floor remains
 blocked. See [multiview native acceptance](#multiview-native-acceptance) for the
@@ -2755,6 +2758,54 @@ streams ended with the finite consumer's complete `BYE`, and exact-title Close
 Game independently confirmed the process stopped. The qualification applies
 only to uniform texel buffers; it does not imply storage-texel-buffer support.
 
+## Rasterization and viewport promotion (2026-09-21)
+
+The four DXVK262-T05 requirements - `depthClamp`, `depthBiasClamp`,
+`fillModeNonSolid` and `multiViewport` - are advertised by the shipping profile.
+The measurement switch the earlier witnesses needed is gone; `native/platform_ps5.c`
+reports the four bits itself.
+
+The frozen acceptance selection grew from 304 to 362 cases with the 58 leaves
+these features own, and the shipping build passes all of them:
+
+- run `20260921T165514411Z_PPSA99994_upstream-cts_0x15ea42202ec6c`,
+  **362/362 Pass**, zero Fail, zero NotSupported, no missing, unexpected or
+  duplicate results, `strict_verified` and `lifecycle_ok` both true, title
+  closed and confirmed stopped.
+- deployed SELF SHA-256
+  `449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa`, read back
+  exactly through FTP before launch.
+- selection SHA-256
+  `26862d1a5eb9ca93121797e1e9649b45ad753c319e3ee75624bbec3f0d995cba`;
+  reassembled report SHA-256
+  `ccfd626cac68cba95a6322408257c17c789fba4972274c4cc425b5c5283a66e7`.
+
+The public-ABI capability probe was rebuilt against the promoted profile and
+re-run, so the device's own query route confirms the advertisement rather than
+the driver's source doing it: run
+`20260921T163032548Z_PPSA99994_ps5vk_0x15d4b1d4b89b8`, artifact
+`6c49df2e42461249b9bbfd65530d17381428bdb5f1bdeb1d1b895b7aa68d28c5`,
+**15 of the 62 profile requirements satisfied** and 47 blockers, up from 11.
+On `main` alone the DXVK matrix therefore reads 13/62 ready with 49 blockers;
+this branch also carries T06's `fragmentStoresAndAtomics` and `dualSrcBlend`
+promotions, so the merged tree reads **15/62 ready with 47 blockers** and a
+frozen acceptance selection of 462 cases (the 362 measured here plus T06's 98
+dual-source leaves and its two fragment side-effect leaves).
+
+Per requirement the applicable upstream leaves are: `depthClamp` all eight,
+`depthBiasClamp` its only two, `multiViewport` all twenty-two,
+`fillModeNonSolid` all twenty-eight it can run. Its twenty-ninth,
+`rasterization.line_continuity.polygon-mode-lines`, stays a diagnostic and is
+not a defect in the feature: Amber's backend allocates its host-accessible
+buffer demanding `HOST_VISIBLE|HOST_COHERENT` with force_flags, this profile
+advertises one memory type without `HOST_COHERENT` and deliberately reports
+non-coherent memory, so the leaf fails at memory selection before any
+rasterization. Advertising that bit would be a false claim; host-coherent
+memory is a separate capability question.
+
+This is focused validation of four requirements, not Vulkan conformance, and
+release review remains pending.
+
 ## Rasterization and viewport witnesses (2026-09-18)
 
 First hardware execution of the DXVK262-T05 rasterization/viewport witnesses,
@@ -2833,7 +2884,6 @@ for it (see UPSTREAM_CTS.md), and the six raster oracle mismatches below are
 unresolved. The consumer's own verifier now stops the run on the first of them
 (`raster oracle for clamp_disabled_narrow_probe`), which is why the repeat run
 ended there rather than at the geometry pipeline.
-
 ## Dual-source blend promotion (2026-09-21)
 
 First hardware execution of the DXVK262-T06 dual-source blend witnesses, one

@@ -13,7 +13,10 @@ int main(void)
      * fewer until the native second target lands, which the adapter enforces. */
     assert(ps5vk_color_attachment_count_supported(PS5VK_MAX_COLOR_ATTACHMENTS));
     assert(ps5vk_color_attachment_count_supported(1));
-    assert(!ps5vk_color_attachment_count_supported(0));
+    /* Zero is the DEPTH-ONLY shape, which this profile already serves: the
+     * render pass still requires a depth reference for it, so "no target at
+     * all" is refused there rather than here. */
+    assert(ps5vk_color_attachment_count_supported(0));
     assert(!ps5vk_color_attachment_count_supported(PS5VK_MAX_COLOR_ATTACHMENTS + 1));
     assert(!ps5vk_color_attachment_count_supported(8));
 

@@ -244,19 +244,22 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * The runtime graphics cache and the interface policy are what refuse a
      * geometry pipeline on any build without this bit. */
     platform->supported_features |= PS5VK_FEATURE_GEOMETRY_SHADER;
-    /* Private measurement build for DXVK262-T05 (tools/build_sdk.py honours
-     * PS5VK_RASTER_DIAGNOSTIC=1): report the four rasterization/viewport
-     * features so the consumer witness can negotiate them through the public
-     * API and measure them on hardware. Default off, like the optional-stage
-     * diagnostic, and never set in the shipping build; the bits are declared
-     * in src/vk_internal.h and nothing else in this file sets them. The
-     * shipping promotion is a separate, evidence-backed change. */
-#if defined(PS5VK_RASTER_DIAGNOSTIC) && PS5VK_RASTER_DIAGNOSTIC
+    /* DXVK262-T05, promoted 2026-09-21 on physical-console evidence. The four
+     * rasterization and viewport features are advertised by the shipping
+     * build: each executes through the public ABI (the consumer's raster and
+     * viewport witnesses) and each has its applicable upstream leaves passing
+     * in the frozen acceptance selection - depthClamp all eight, depthBiasClamp
+     * its only two, multiViewport all twenty-two, fillModeNonSolid all
+     * twenty-eight it can run. Its twenty-ninth, the amber line-continuity
+     * leaf, is not runnable on this profile for a reason that has nothing to
+     * do with the feature: Amber demands host-coherent memory this device does
+     * not advertise (cts/upstream/manifest.json, host-coherent-memory-gap).
+     * The measurement guard that carried these bits before the promotion is
+     * gone; nothing else in this file sets them. */
     platform->supported_features |= PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
                                     PS5VK_FEATURE_DEPTH_CLAMP |
                                     PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                                     PS5VK_FEATURE_MULTI_VIEWPORT;
-#endif
     /* DXVK262-T06 fragment storage side effects.  The public-SDK witness
      * distinguishes a zero-write control from exactly 4096 fragment writes,
      * preserves 30 guard words and completes its fence.  The two unchanged

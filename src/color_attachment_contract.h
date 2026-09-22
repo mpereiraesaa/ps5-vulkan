@@ -5,7 +5,7 @@
 /* Bounded per-attachment colour contract of the DXVK v2.6.2 profile.
  *
  * The native path programmes one CB_COLOR0 target, one CB_BLEND0 equation and
- * one CB_TARGET_MASK, so this profile serves exactly one colour attachment.
+ * one CB_TARGET_MASK, so this profile SERVES exactly one colour attachment.
  * That bound is what keeps `independentBlend` a blocker: the feature's whole
  * obligation is that each attachment carries its own blend state, which a
  * single attachment cannot exercise, and no native witness could show it. The
@@ -13,6 +13,10 @@
  * and can be pinned by tests; a slice that can render a second target - render
  * pass, framebuffer, pipeline key, CB_COLOR1/CB_BLEND1 and a second fragment
  * export - is the one that raises it.
+ *
+ * Zero colour attachments is a separate, already-served shape: Vulkan's
+ * DEPTH-ONLY subpass (colorAttachmentCount 0 with a depth reference), which
+ * programmes no colour target at all and needs no CB_COLOR0 block.
  *
  * `maxFragmentDualSrcAttachments` and the dual-source contract are separate:
  * dual source adds a second *source* to attachment zero, not a second target. */

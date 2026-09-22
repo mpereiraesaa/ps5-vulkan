@@ -72,31 +72,27 @@ class UpstreamSelectionTests(unittest.TestCase):
         # instead of being claimed as coverage.
         geometry = [c for c in manifest["cases"]
                     if "geometryShader" in " ".join(c.get("features_required", []))]
-        # 34 diagnostics plus the 28 rasterization culling leaves that are the
-        # oracle for fillModeNonSolid (they run and pass with the feature
-        # advertised and move to acceptance in the change that advertises it),
-        # plus the 40 T05 entries of the complete eligibility pass: 25 applicable
-        # leaves held as t05-measurement-pending until one console window
-        # (2 clip_volume.depth_clamp triangles, 16 fragment_ops multi_viewport,
-        # 6 draw.renderpass.scissor multi-scissor, 1 line_continuity amber) and
-        # 15 same-family leaves that document a refusal or a capability gap,
-        # The two T06 fragment side-effect leaves are now acceptance after the
-        # exact native witness and the canonical 306/306 hardware run.
-        # The 98 dual-source blend leaves are acceptance now: they passed in
-        # the 404-case run on the promoted candidate, so the frozen selection
-        # is 404 acceptance and 102 diagnostics.
-        self.assertEqual((404, 102, 48),
+        # The frozen selection is the union of the two lines: the 404 acceptance
+        # cases T06 carried (including the 98 dual-source leaves and the two
+        # fragment side-effect leaves) plus the 58 T05 leaves measured and
+        # promoted on 2026-09-21 (28 rasterization culling, 16 fragment_ops
+        # multi_viewport, 6 draw.renderpass.scissor, 2 clip_volume.depth_clamp,
+        # 6 draw.renderpass.depth_clamp). The 44 diagnostics that remain
+        # document refusals and capability gaps, and nothing is left pending a
+        # measurement window.
+        self.assertEqual((462, 44, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
-        self.assertEqual(25, len(pending))
-        self.assertTrue(all(d["expected_status"] == "Pass" for d in pending))
-        self.assertEqual(
-            {"dEQP-VK.clipping.clip_volume.depth_clamp",
-             "dEQP-VK.fragment_ops.scissor.multi_viewport",
-             "dEQP-VK.draw.renderpass.scissor",
-             "dEQP-VK.rasterization.line_continuity"},
-            {d["path"].rsplit(".", 1)[0] for d in pending})
+        self.assertEqual([], pending)
+        # The one T05 leaf that stayed out is not a feature defect: Amber
+        # demands host-coherent memory this profile does not advertise.
+        amber = [d for d in manifest["diagnostics"]
+                 if d["category"] == "host-coherent-memory-gap"]
+        self.assertEqual(1, len(amber))
+        self.assertEqual("Fail", amber[0]["expected_status"])
+        self.assertEqual("dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
+                         amber[0]["path"])
         # dualSrcBlend was promoted on 2026-09-21: its 98 applicable leaves
         # moved from the pending diagnostics into acceptance.
         dual_source = [c for c in manifest["cases"]
@@ -107,8 +103,13 @@ class UpstreamSelectionTests(unittest.TestCase):
             {"dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states"},
             {c["path"].rsplit(".", 1)[0] for c in dual_source})
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
-        self.assertEqual(29, len(geometry))
-        self.assertEqual(29, len({c["path"] for c in geometry}))
+        # 29 from the geometry tranche itself, plus the 23 T05 leaves promoted on
+        # 2026-09-21 that drive gl_ViewportIndex from a geometry stage: the 16
+        # fragment_ops multi_viewport scissors, the 6 draw.renderpass.scissor
+        # leaves and the four-viewport depth-clamp one. They require the feature
+        # as genuinely as the geometry family does.
+        self.assertEqual(52, len(geometry))
+        self.assertEqual(52, len({c["path"] for c in geometry}))
         self.assertTrue(all(c["expected_status"] == "Pass" for c in geometry))
         # The four strip-topology leaves that were blocked on primitive restart
         # are acceptance now: the profile carries the state and programs the cut.
@@ -241,6 +242,22 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual(set(), self.gate._draw_depth_clamp_leaf_names(
             depth.replace("formatCaseName + params.testNameSuffix", "name")))
 
+    def test_amber_backend_is_compiled_in_not_just_compiled(self):
+        """Amber picks its backend with a compile-time macro, not by linking.
+
+        The payload compiles src/vulkan/*.cc, but engine.cc only constructs
+        EngineVulkan under #if AMBER_ENGINE_VULKAN, which upstream CMake sets
+        from Vulkan_FOUND. Without the macro Engine::Create returns nullptr and
+        every amber leaf dies as InternalError "Failed to create engine"
+        before a single Vulkan call, which is what the 2026-09-21 measurement
+        recorded for rasterization.line_continuity.polygon-mode-lines.
+        """
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn("src/vulkan/engine_vulkan.cc", builder)
+        # Both flag sets compile amber sources, so both must carry the macro.
+        self.assertEqual(2, builder.count('"-DAMBER_ENGINE_VULKAN=1"'))
+        self.assertEqual(2, builder.count('"-DAMBER_ENGINE_DAWN=0"'))
+
     def test_t05_modules_are_registered_where_their_diagnostics_point(self):
         """The fragment_ops and draw scissor factories the pending leaves need
         are compiled and registered, the amber script they parse is staged, and
@@ -249,7 +266,13 @@ class UpstreamSelectionTests(unittest.TestCase):
         builder = (ROOT / "tools/build_upstream_cts.py").read_text()
         self.assertIn('vkt::FragmentOperations::createTests(m_testCtx, "fragment_ops")', package)
         self.assertIn("vkt::Draw::createScissorTests(", package)
-        self.assertNotIn("createDepthClampTests", package)
+        # The depth-clamp oracles became reachable when the depth readback was
+        # implemented, so their module is registered too.
+        self.assertIn("vkt::Draw::createDepthClampTests(", package)
+        self.assertIn("vktDrawDepthClampTests.cpp", builder)
+        # rs_state stays out: its depth_bias_clamp leaf needs a stencil-bearing
+        # attachment format this profile does not offer, which is a different
+        # capability from the depth readback.
         self.assertNotIn("DynamicStateRSTests", package)
         for unit in ("vktFragmentOperationsTests.cpp",
                      "vktFragmentOperationsScissorTests.cpp",

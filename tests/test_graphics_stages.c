@@ -297,9 +297,42 @@ int main(void)
     assert(!ps5vk_spirv_stage_distance_reads(&declares_in_fragment,NULL,NULL));
     assert(!ps5vk_spirv_graphics_interface(&reads_key));
 
+    /* gl_FragCoord. A core-Vulkan fragment built-in that needs no feature and
+     * no export from the pre-raster stage: the hardware launches the pixel
+     * stage with the position VGPRs and the compiler asks for them through
+     * SPI_PS_INPUT_ENA. The policy used to accept no fragment built-in except
+     * ViewIndex, so the only applicable depthClamp leaves
+     * (dEQP-VK.clipping.clip_volume.depth_clamp.*, whose fragment shader
+     * colours with gl_FragCoord.z) were refused at pipeline creation with
+     * VK_ERROR_FEATURE_NOT_PRESENT - measured twice as rc=-8 in the
+     * runtime-graphics cache during the 2026-09-20 run. */
+    struct ps5vk_graphics_module_key frag_coord=
+        read_module("build/runtime-graphics/frag_coord.frag.spv");
+    struct ps5vk_graphics_key frag_coord_key=staged_key(triangle,frag_coord);
+    assert(ps5vk_spirv_graphics_interface(&frag_coord_key));
+
+    /* The acceptance is bounded to the built-in's own shape: the same
+     * declaration as anything other than a fragment input is still refused. */
+    {
+        uint32_t *words=mutable_words(&frag_coord);
+        size_t patched=0;
+        for(size_t at=5;at<frag_coord.word_count;at+=words[at]>>16) {
+            uint32_t *w=words+at;
+            /* OpDecorate <id> BuiltIn FragCoord(15) -> BuiltIn PointSize(1),
+             * which no fragment stage may declare as an input. */
+            if((w[0]&65535)==71 && (w[0]>>16)==4 && w[2]==11 && w[3]==15) {
+                w[3]=1;++patched;
+            }
+        }
+        assert(patched==1);
+        struct ps5vk_graphics_key wrong=staged_key(triangle,frag_coord);
+        assert(!ps5vk_spirv_graphics_interface(&wrong));
+    }
+    free_module(&frag_coord);
+
     free_module(&plain_fragment);free_module(&triangle);free_module(&dual_source);
     free_module(&clip_module);
     free_module(&cull_module);free_module(&both_module);
-    puts("Graphics stages: clip/cull exports and pixel reads bounded, a read past the export refused, unusable modules report no counts");
+    puts("Graphics stages: clip/cull exports and pixel reads bounded, a read past the export refused, gl_FragCoord accepted as a fragment input, unusable modules report no counts");
     return 0;
 }

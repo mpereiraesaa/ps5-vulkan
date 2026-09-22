@@ -14,12 +14,14 @@ const uint32_t ps5vk_color_attachment_offsets[2][PS5VK_COLOR_TARGET_REGISTERS] =
 
 int ps5vk_color_attachment_count_supported(uint32_t count)
 {
-    /* A count this ABI can describe. What the profile SERVES is narrower while
-     * the native path can render one target: the advertised limit is 1 and the
-     * runtime adapter refuses a two-target program, so a pass or pipeline that
-     * names this many attachments is described here and then fails closed at
-     * the pipeline's own gate. */
-    return count >= 1 && count <= (uint32_t)PS5VK_MAX_COLOR_ATTACHMENTS;
+    /* A count this ABI can describe. Zero is the DEPTH-ONLY shape Vulkan
+     * expresses with colorAttachmentCount 0; the render pass still requires a
+     * depth reference for it, so "no target at all" stays refused there. What
+     * the profile SERVES is narrower while the native path can render one
+     * target: the advertised limit is 1 and the runtime adapter refuses a
+     * two-target program, so a pass or pipeline that names two attachments is
+     * described here and then fails closed at the pipeline's own gate. */
+    return count <= (uint32_t)PS5VK_MAX_COLOR_ATTACHMENTS;
 }
 
 /* The two codes the pinned compiler uses for an RGBA8 target. */
@@ -66,6 +68,7 @@ int ps5vk_color_blend_state_shape_supported(const VkPipelineColorBlendStateCreat
     if (state->logicOpEnable) return 0;
     if (!ps5vk_color_attachment_count_supported(state->attachmentCount)) return 0;
     /* Vulkan reads pAttachments[0] once the count is one, so a missing array is
-     * malformed rather than empty. */
-    return state->pAttachments != NULL;
+     * malformed rather than empty; with a count of zero the pointer is ignored
+     * and the depth-only shape is complete without it. */
+    return state->attachmentCount ? state->pAttachments != NULL : 1;
 }

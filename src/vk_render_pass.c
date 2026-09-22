@@ -25,20 +25,26 @@ static int input_layout(VkImageLayout value)
         value == VK_IMAGE_LAYOUT_GENERAL;
 }
 
-/* One subpass description against this profile: exactly one colour reference,
- * an optional D32 depth reference that may not alias it, and the input
- * references this model can describe. Resolve attachments are still refused
- * because they are unimplemented, and a non-empty preserve list is outside the
- * bounded profile. */
+/* One subpass description against this profile: up to two colour references
+ * (none at all is the depth-only shape), an optional D32 depth reference that
+ * may not alias any of them, and the input references this model can describe.
+ * Resolve attachments are still refused because they are unimplemented, and a
+ * non-empty preserve list is outside the bounded profile. */
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
     struct ps5vk_subpass *out, uint32_t *input_count)
 {
+    /* A subpass names the colour attachments this profile serves, or none at
+     * all. Zero is how
+     * Vulkan expresses a DEPTH-ONLY pass, which the pinned upstream depth
+     * clamp module builds (vktDrawDepthClampTests.cpp: colorAttachmentCount 0
+     * with a depth-stencil reference). Vulkan ignores pColorAttachments when
+     * the count is zero, so the pointer says nothing there. */
     if (s->flags || s->pipelineBindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS ||
         /* The colour-attachment bound lives in one place: a subpass may only
          * reference the targets the pipeline contract and the native path can
          * serve. */
         !ps5vk_color_attachment_count_supported(s->colorAttachmentCount) ||
-        !s->pColorAttachments ||
+        (s->colorAttachmentCount && !s->pColorAttachments) ||
         /* Vulkan IGNORES pInputAttachments when the count is zero, so the
          * pointer says nothing there; a nonzero count is a real request that
          * has to name a valid array. pResolveAttachments is different: a
@@ -80,6 +86,10 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
     out->depth.attachment = VK_ATTACHMENT_UNUSED;
     out->depth.layout = VK_IMAGE_LAYOUT_UNDEFINED;
     if (s->pDepthStencilAttachment) out->depth = *s->pDepthStencilAttachment;
+    /* Something must be rendered into. A subpass that names neither a colour
+     * nor a depth attachment has no target at all. */
+    if (!out->color_count && out->depth.attachment == VK_ATTACHMENT_UNUSED)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     for (uint32_t i = 0; i < s->colorAttachmentCount; ++i)
         if (out->depth.attachment != VK_ATTACHMENT_UNUSED &&
             (out->depth.attachment >= attachments ||

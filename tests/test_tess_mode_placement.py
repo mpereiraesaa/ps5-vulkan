@@ -22,7 +22,11 @@ int main(int argc,char **argv) {
  struct ps5vk_graphics_key k={.vertex=read_module(argv[1]),
   .tess_control=read_module(argv[2]),.tess_eval=read_module(argv[3]),
   .fragment=read_module(argv[4]),.patch_control_points=3,
-  .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
+  .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
+  /* A colour subpass: the probe's fragment stage writes a colour. An unset
+     format means a depth-only pass, whose fragment stage exports nothing. */
+  .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+  .color_write_mask={15}};
  int valid=ps5vk_spirv_graphics_interface(&k);
  assert(ps5vk_spirv_tess_pair_output_points(&k)==(valid?3u:0u));
  printf("%d\n",valid);

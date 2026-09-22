@@ -460,6 +460,65 @@ ADVERTISED_FEATURES["dualSrcBlend"] = {
     ),
 }
 
+# DXVK262-T05, promoted 2026-09-21 on physical-console evidence. Each feature
+# names the state its draw programs and the upstream leaves that exercise it,
+# all of them in the frozen acceptance selection.
+ADVERTISED_FEATURES["depthClamp"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/draw_state_ps5.c", "raster->depth_clamp"),
+        ("src/vk_graphics_pipeline.c", "r->depthClampEnable && !(d->enabled_features & PS5VK_FEATURE_DEPTH_CLAMP)"),
+    ),
+    "detail": ("the draw programs PA_CL_CLIP_CNTL ZCLIP_NEAR/FAR_DISABLE from the pipeline's "
+               "snapshot, so the viewport depth range becomes the clamp interval, and pipeline "
+               "creation refuses depthClampEnable unless the logical device enabled the feature; "
+               "all eight applicable upstream leaves pass, the six draw.renderpass ones reading "
+               "their result back through the DEPTH-aspect 64KB_Z_X readback"),
+    "cts": tuple(sorted(['dEQP-VK.clipping.clip_volume.depth_clamp.triangle_list', 'dEQP-VK.clipping.clip_volume.depth_clamp.triangle_strip', 'dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat', 'dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_four_viewports', 'dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_input_negative', 'dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_input_positive', 'dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_negative', 'dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_positive'])),
+}
+ADVERTISED_FEATURES["depthBiasClamp"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/draw_state_ps5.c", "raster->depth_bias_enable"),
+        ("src/vk_graphics_pipeline.c", "r->depthBiasClamp != 0.0f"),
+    ),
+    "detail": ("the polygon-offset block carries the clamp the draw snapshot recorded, and a "
+               "non-zero static clamp is refused unless the logical device enabled the feature; "
+               "its only two applicable upstream oracles both pass, while "
+               "dynamic_state.monolithic.rs_state.depth_bias_clamp stays out for a different "
+               "reason - it needs a stencil-bearing attachment format this profile does not offer"),
+    "cts": tuple(sorted(['dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_negative', 'dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_positive'])),
+}
+ADVERTISED_FEATURES["multiViewport"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/draw_state_ps5.c", "viewport_count"),
+        ("src/vk_graphics_pipeline.c", "vp->viewportCount > 1 && !(d->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)"),
+    ),
+    "detail": ("sixteen viewport and scissor banks are written per draw and selected by "
+               "gl_ViewportIndex from a geometry stage, and a pipeline naming more than one "
+               "viewport is refused unless the logical device enabled the feature; all "
+               "twenty-two applicable upstream leaves pass, the six draw.renderpass.scissor ones "
+               "clearing their target through the transfer destination and reading the rendered "
+               "result back from the same image"),
+    "cts": tuple(sorted(['dEQP-VK.draw.renderpass.scissor.16_dynamic_scissors', 'dEQP-VK.draw.renderpass.scissor.16_static_scissors', 'dEQP-VK.draw.renderpass.scissor.dynamic_scissor_mix', 'dEQP-VK.draw.renderpass.scissor.dynamic_scissor_out_of_order_updates', 'dEQP-VK.draw.renderpass.scissor.dynamic_scissor_updates_between_draws', 'dEQP-VK.draw.renderpass.scissor.two_static_scissors_one_quad', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_1', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_10', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_11', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_12', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_13', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_14', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_15', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_16', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_2', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_3', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_4', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_5', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_6', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_7', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_8', 'dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_9'])),
+}
+ADVERTISED_FEATURES["fillModeNonSolid"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/draw_state_ps5.c", "hardware_polygon_type"),
+        ("src/vk_graphics_pipeline.c", "!(d->enabled_features & PS5VK_FEATURE_FILL_MODE_NON_SOLID)"),
+    ),
+    "detail": ("POLYMODE_FRONT/BACK_PTYPE with DUAL_MODE and KEEP_TOGETHER_ENABLE program the "
+               "LINE and POINT polygon modes, and any other mode, or these two without the "
+               "enabled feature, are refused at pipeline creation; all twenty-eight rasterization "
+               "culling leaves pass, sixteen of them the _line and _point variants. The "
+               "twenty-ninth applicable leaf, the amber line_continuity one, is not runnable on "
+               "this profile and not a defect in this feature: Amber demands host-coherent memory "
+               "this device does not advertise"),
+    "cts": tuple(sorted(['dEQP-VK.rasterization.culling.back_triangle_strip', 'dEQP-VK.rasterization.culling.back_triangle_strip_line', 'dEQP-VK.rasterization.culling.back_triangle_strip_point', 'dEQP-VK.rasterization.culling.back_triangle_strip_reverse', 'dEQP-VK.rasterization.culling.back_triangle_strip_reverse_line', 'dEQP-VK.rasterization.culling.back_triangle_strip_reverse_point', 'dEQP-VK.rasterization.culling.back_triangles', 'dEQP-VK.rasterization.culling.back_triangles_line', 'dEQP-VK.rasterization.culling.back_triangles_point', 'dEQP-VK.rasterization.culling.back_triangles_reverse', 'dEQP-VK.rasterization.culling.back_triangles_reverse_line', 'dEQP-VK.rasterization.culling.back_triangles_reverse_point', 'dEQP-VK.rasterization.culling.both_triangle_strip', 'dEQP-VK.rasterization.culling.both_triangle_strip_reverse', 'dEQP-VK.rasterization.culling.both_triangles', 'dEQP-VK.rasterization.culling.both_triangles_reverse', 'dEQP-VK.rasterization.culling.front_triangle_strip', 'dEQP-VK.rasterization.culling.front_triangle_strip_line', 'dEQP-VK.rasterization.culling.front_triangle_strip_point', 'dEQP-VK.rasterization.culling.front_triangle_strip_reverse', 'dEQP-VK.rasterization.culling.front_triangle_strip_reverse_line', 'dEQP-VK.rasterization.culling.front_triangle_strip_reverse_point', 'dEQP-VK.rasterization.culling.front_triangles', 'dEQP-VK.rasterization.culling.front_triangles_line', 'dEQP-VK.rasterization.culling.front_triangles_point', 'dEQP-VK.rasterization.culling.front_triangles_reverse', 'dEQP-VK.rasterization.culling.front_triangles_reverse_line', 'dEQP-VK.rasterization.culling.front_triangles_reverse_point'])),
+}
+
 # Every non-advertised VkPhysicalDeviceFeatures member shares one fail-closed
 # device-negotiation gate.  Vulkan valid usage prevents an application from
 # relying on a false feature without requesting it; the driver's obligation is

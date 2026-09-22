@@ -10,7 +10,7 @@
     ],
     "native_probe": {
       "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
-      "blockers": 49,
+      "blockers": 45,
       "device_api": "1.0.0",
       "device_extensions": 5,
       "query_routes": [
@@ -28,14 +28,18 @@
           "log_sha256": "8c4577c6782b50203b0eea9174bdcda5ca01854d677de60c10b1ba107f3a13d5"
         }
       ],
-      "satisfied": 13,
+      "satisfied": 17,
       "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
         "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
         "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
         "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
         "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
         "feature:VkPhysicalDeviceFeatures:geometryShader",
         "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
         "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
         "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
         "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
@@ -204,61 +208,74 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_negative",
+          "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_positive"
+        ],
         "mapped_cases": [
           "dEQP-VK.info.device_mandatory_features"
         ],
+        "note": "Original upstream leaves in the frozen acceptance selection, passing unchanged.",
         "refs": [],
         "related_requirement_ids": [
           "VK14-CORE-005",
           "VK14-INSTANCE-008"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "implementation": {
-        "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
+        "detail": "the polygon-offset block carries the clamp the draw snapshot recorded, and a non-zero static clamp is refused unless the logical device enabled the feature; its only two applicable upstream oracles both pass, while dynamic_state.monolithic.rs_state.depth_bias_clamp stays out for a different reason - it needs a stencil-bearing attachment format this profile does not offer",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "depthBiasClamp",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa",
+        "note": "Measured on an owned PS5 in the 362/363 acceptance-shaped run of 2026-09-21 that promoted the four DXVK262-T05 features, with zero Fail among the promoted leaves, zero NotSupported, no missing, unexpected or duplicate results and no device loss.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#rasterization-and-viewport-witnesses"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260921T130803120Z_PPSA99994_upstream-cts_0x1523e64ca76d3"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_list",
+          "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_strip",
+          "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat",
+          "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_four_viewports",
+          "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_input_negative",
+          "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_clamp_input_positive",
+          "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_negative",
+          "dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_positive"
+        ],
         "mapped_cases": [
           "dEQP-VK.depth.bias_fs_clamp",
           "dEQP-VK.draw.renderpass.ahb.triangle_list",
@@ -266,6 +283,7 @@
           "dEQP-VK.image.depth_stencil_descriptor.depth_attachment_stencil_read_only_optimal.d16_unorm_s8_uint.depth_rw_stencil_att",
           "dEQP-VK.info.device_mandatory_features"
         ],
+        "note": "Original upstream leaves in the frozen acceptance selection, passing unchanged.",
         "refs": [],
         "related_requirement_ids": [
           "VK14-CORE-005",
@@ -274,31 +292,31 @@
           "VK14-PIPELINES-005",
           "VK14-PIPELINES-006"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:depthClamp",
       "implementation": {
-        "detail": "depthClampEnable is rejected (src/vk_graphics_pipeline.c)",
+        "detail": "the draw programs PA_CL_CLIP_CNTL ZCLIP_NEAR/FAR_DISABLE from the pipeline's snapshot, so the viewport depth range becomes the clamp interval, and pipeline creation refuses depthClampEnable unless the logical device enabled the feature; all eight applicable upstream leaves pass, the six draw.renderpass ones reading their result back through the DEPTH-aspect 64KB_Z_X readback",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "depthClamp",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa",
+        "note": "Measured on an owned PS5 in the 362/363 acceptance-shaped run of 2026-09-21 that promoted the four DXVK262-T05 features, with zero Fail among the promoted leaves, zero NotSupported, no missing, unexpected or duplicate results and no device loss.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#rasterization-and-viewport-witnesses"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260921T130803120Z_PPSA99994_upstream-cts_0x1523e64ca76d3"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -530,45 +548,75 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.rasterization.culling.back_triangle_strip",
+          "dEQP-VK.rasterization.culling.back_triangle_strip_line",
+          "dEQP-VK.rasterization.culling.back_triangle_strip_point",
+          "dEQP-VK.rasterization.culling.back_triangle_strip_reverse",
+          "dEQP-VK.rasterization.culling.back_triangle_strip_reverse_line",
+          "dEQP-VK.rasterization.culling.back_triangle_strip_reverse_point",
+          "dEQP-VK.rasterization.culling.back_triangles",
+          "dEQP-VK.rasterization.culling.back_triangles_line",
+          "dEQP-VK.rasterization.culling.back_triangles_point",
+          "dEQP-VK.rasterization.culling.back_triangles_reverse",
+          "dEQP-VK.rasterization.culling.back_triangles_reverse_line",
+          "dEQP-VK.rasterization.culling.back_triangles_reverse_point",
+          "dEQP-VK.rasterization.culling.both_triangle_strip",
+          "dEQP-VK.rasterization.culling.both_triangle_strip_reverse",
+          "dEQP-VK.rasterization.culling.both_triangles",
+          "dEQP-VK.rasterization.culling.both_triangles_reverse",
+          "dEQP-VK.rasterization.culling.front_triangle_strip",
+          "dEQP-VK.rasterization.culling.front_triangle_strip_line",
+          "dEQP-VK.rasterization.culling.front_triangle_strip_point",
+          "dEQP-VK.rasterization.culling.front_triangle_strip_reverse",
+          "dEQP-VK.rasterization.culling.front_triangle_strip_reverse_line",
+          "dEQP-VK.rasterization.culling.front_triangle_strip_reverse_point",
+          "dEQP-VK.rasterization.culling.front_triangles",
+          "dEQP-VK.rasterization.culling.front_triangles_line",
+          "dEQP-VK.rasterization.culling.front_triangles_point",
+          "dEQP-VK.rasterization.culling.front_triangles_reverse",
+          "dEQP-VK.rasterization.culling.front_triangles_reverse_line",
+          "dEQP-VK.rasterization.culling.front_triangles_reverse_point"
+        ],
         "mapped_cases": [],
+        "note": "Original upstream leaves in the frozen acceptance selection, passing unchanged.",
         "refs": [],
         "related_requirement_ids": [
           "VK14-CORE-010"
         ],
-        "state": "not-mapped"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
       "implementation": {
-        "detail": "only VK_POLYGON_MODE_FILL is accepted (src/vk_graphics_pipeline.c)",
+        "detail": "POLYMODE_FRONT/BACK_PTYPE with DUAL_MODE and KEEP_TOGETHER_ENABLE program the LINE and POINT polygon modes, and any other mode, or these two without the enabled feature, are refused at pipeline creation; all twenty-eight rasterization culling leaves pass, sixteen of them the _line and _point variants. The twenty-ninth applicable leaf, the amber line_continuity one, is not runnable on this profile and not a defect in this feature: Amber demands host-coherent memory this device does not advertise",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "fillModeNonSolid",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa",
+        "note": "Measured on an owned PS5 in the 362/363 acceptance-shaped run of 2026-09-21 that promoted the four DXVK262-T05 features, with zero Fail among the promoted leaves, zero NotSupported, no missing, unexpected or duplicate results and no device loss.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#rasterization-and-viewport-witnesses"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260921T130803120Z_PPSA99994_upstream-cts_0x1523e64ca76d3"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -963,43 +1011,67 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.draw.renderpass.scissor.16_dynamic_scissors",
+          "dEQP-VK.draw.renderpass.scissor.16_static_scissors",
+          "dEQP-VK.draw.renderpass.scissor.dynamic_scissor_mix",
+          "dEQP-VK.draw.renderpass.scissor.dynamic_scissor_out_of_order_updates",
+          "dEQP-VK.draw.renderpass.scissor.dynamic_scissor_updates_between_draws",
+          "dEQP-VK.draw.renderpass.scissor.two_static_scissors_one_quad",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_1",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_10",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_11",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_12",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_13",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_14",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_15",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_16",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_2",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_3",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_4",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_5",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_6",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_7",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_8",
+          "dEQP-VK.fragment_ops.scissor.multi_viewport.scissor_9"
+        ],
         "mapped_cases": [],
+        "note": "Original upstream leaves in the frozen acceptance selection, passing unchanged.",
         "refs": [],
         "related_requirement_ids": [],
-        "state": "not-mapped"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:multiViewport",
       "implementation": {
-        "detail": "one viewport is accepted (src/graphics_limits.h)",
+        "detail": "sixteen viewport and scissor banks are written per draw and selected by gl_ViewportIndex from a geometry stage, and a pipeline naming more than one viewport is refused unless the logical device enabled the feature; all twenty-two applicable upstream leaves pass, the six draw.renderpass.scissor ones clearing their target through the transfer destination and reading the rendered result back from the same image",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "multiViewport",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa",
+        "note": "Measured on an owned PS5 in the 362/363 acceptance-shaped run of 2026-09-21 that promoted the four DXVK262-T05 features, with zero Fail among the promoted leaves, zero NotSupported, no missing, unexpected or duplicate results and no device loss.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#rasterization-and-viewport-witnesses"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260921T130803120Z_PPSA99994_upstream-cts_0x1523e64ca76d3"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -3370,26 +3442,26 @@
     "tag_object": "e2373f9421f2c70583aea75c54219fbdcd67959c"
   },
   "summary": {
-    "blocker": 51,
+    "blocker": 47,
     "dimensions": {
       "api": {
-        "blocker": 49,
-        "satisfied": 13
+        "blocker": 45,
+        "satisfied": 17
       },
       "cts": {
-        "blocker": 49,
-        "satisfied": 13
+        "blocker": 45,
+        "satisfied": 17
       },
       "implementation": {
-        "blocker": 49,
-        "satisfied": 13
+        "blocker": 45,
+        "satisfied": 17
       },
       "native": {
-        "blocker": 50,
-        "satisfied": 12
+        "blocker": 46,
+        "satisfied": 16
       }
     },
     "requirements": 62,
-    "satisfied": 11
+    "satisfied": 15
   }
 }

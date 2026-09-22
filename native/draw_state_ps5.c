@@ -65,10 +65,19 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
     if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) return VK_ERROR_UNKNOWN;
-    if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state || !colors || colors[0].count != 16 ||
+    if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state ||
         !width || !height || width > 16384 || height > 16384 ||
-        (p->color_format[0] != VK_FORMAT_B8G8R8A8_UNORM &&
-         p->color_format[0] != VK_FORMAT_R8G8B8A8_UNORM) ||
+        /* The colour targets are one per attachment the pipeline was created
+         * for. A NULL list is a DEPTH-ONLY pass: the pipeline for such a
+         * subpass records no colour attachment and an undefined colour format,
+         * so the two always agree - a colour target with an undefined format,
+         * or a missing one with a real format, are both refused here. */
+        (p->color_attachment_count ?
+            (!colors || colors[0].count != 16 ||
+             (p->color_format[0] != VK_FORMAT_B8G8R8A8_UNORM &&
+              p->color_format[0] != VK_FORMAT_R8G8B8A8_UNORM)) :
+            (colors != NULL || color_count || !depth ||
+             p->color_format[0] != VK_FORMAT_UNDEFINED)) ||
         (p->cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
@@ -103,10 +112,11 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     /* The prepared colour targets, one per attachment the subpass names. The
      * count is the pipeline's own, so a draw can never programme a target the
      * pipeline was not created for. */
-    if (!colors || !color_count || color_count > PS5VK_MAX_COLOR_ATTACHMENTS ||
-        color_count != p->color_attachment_count) return VK_ERROR_UNKNOWN;
+    if (color_count > PS5VK_MAX_COLOR_ATTACHMENTS ||
+        color_count != p->color_attachment_count ||
+        (color_count && !colors)) return VK_ERROR_UNKNOWN;
     struct ps5_pipeline_registers base;
-    if (ps5_pipeline_build(&base, colors[0].registers, &pair->cx, &pair->uc,
+    if (ps5_pipeline_build(&base, colors ? colors[0].registers : NULL, &pair->cx, &pair->uc,
         runtime?vs->context:pair->gs.cx, runtime?fs->context:pair->ps.cx,
         runtime?vs->shader:pair->gs.sh,runtime?fs->shader:pair->ps.sh,width,height)) return VK_ERROR_UNKNOWN;
     for (unsigned j = 0; j < PS5VK_VIEWPORT_REGISTERS; ++j) {
@@ -481,6 +491,16 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         if(!ps5vk_blend_encode(&p->color_blend[attachment],p->blend_constants,
                                dual_source,&blend[attachment]))
             return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* A DEPTH-ONLY draw programmes no colour target at all, so the blend word
+     * pair written below is the one a colour pipeline with blending off emits:
+     * explicit zeros and the same optimisation word. Writing it unconditionally
+     * is what stops CB_BLEND0_CONTROL and SX_MRT0_BLEND_OPT from carrying the
+     * previous draw's state into a pass that has no colour output. */
+    if(!color_count) {
+        const VkPipelineColorBlendAttachmentState none={0};
+        if(!ps5vk_blend_encode(&none,p->blend_constants,dual_source,&blend[0]))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     /* Attachment zero's colour block came from ps5_pipeline_build; every other
      * attachment is appended as its own CB_COLORn block with its own blend con
      * control and optimisation, whose offsets are the next dwords. */

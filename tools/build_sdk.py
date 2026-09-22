@@ -154,6 +154,9 @@ def main():
             "native/graphics_pipeline_ps5.c", "native/tess_shared_storage.c",
             "native/tess_ring_lease.c", "native/image_ps5.c",
             "src/depth_layout.c", "src/color_clear.c", "src/color_detile.c",
+            # The depth readback detiles its surface with the 64KB_Z_X
+            # equation, so the executor needs it beside the colour one.
+            "src/depth_detile.c",
             "native/draw_prepare_ps5.c", "native/draw_emit_ps5.c", "native/index_emit_ps5.c",
             "native/input_attachment_gate.c",
             "native/input_attachment_oracle.c",
@@ -226,16 +229,10 @@ def main():
             *(["-DPS5VK_TESS_OFFCHIP_BIND=1"]
               if os.environ.get("PS5VK_TESS_OFFCHIP_BIND") == "1" else []),
         ]
-        # Private measurement build (DXVK262-T05): report and enable the four
-        # rasterization/viewport features so the consumer witness can
-        # negotiate them before a shipping platform advertises them. Off by
-        # default; a staged SDK built with it is a diagnostic artifact and the
-        # consumer manifest records it as such.
-        raster_diagnostic = os.environ.get("PS5VK_RASTER_DIAGNOSTIC", "0")
-        if raster_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_RASTER_DIAGNOSTIC must be 0 or 1")
-        if raster_diagnostic == "1":
-            native_cflags.append("-DPS5VK_RASTER_DIAGNOSTIC=1")
+        # The DXVK262-T05 measurement switch is gone: the four rasterization
+        # and viewport features are advertised by the shipping platform on
+        # physical-console evidence, so there is no diagnostic build that
+        # reports them ahead of it.
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:
@@ -347,7 +344,9 @@ def main():
         "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
         # The linear staging readback copy reads the tiled colour surface
         # through the shared 64KB_R_X offset contract.
-        "src/color_detile.c",
+        # through the shared 64KB_R_X offset contract, and a depth readback
+        # reads its own surface through the 64KB_Z_X one.
+        "src/color_detile.c", "src/depth_detile.c",
         "src/color_attachment_contract.c",
         "src/vk_image_view.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/graphics_program.c",

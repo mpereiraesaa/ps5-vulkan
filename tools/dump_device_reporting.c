@@ -100,7 +100,18 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                          * all 98 applicable upstream
                                          * dual_source leaves passed on the
                                          * promoted candidate. */
-                                        PS5VK_FEATURE_DUAL_SRC_BLEND;
+                                        PS5VK_FEATURE_DUAL_SRC_BLEND |
+                                        /* DXVK262-T05, promoted on
+                                         * physical-console evidence: the four
+                                         * rasterization and viewport features
+                                         * the console platform now advertises.
+                                         * This dump mirrors that initializer,
+                                         * so the published matrix is the
+                                         * console's. */
+                                        PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
+                                        PS5VK_FEATURE_DEPTH_CLAMP |
+                                        PS5VK_FEATURE_FILL_MODE_NON_SOLID |
+                                        PS5VK_FEATURE_MULTI_VIEWPORT;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

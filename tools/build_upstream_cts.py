@@ -549,6 +549,14 @@ def main(argv=None):
         "-I" + str(amber_root),
         "-I" + str(amber_gen),
         "-DAMBER_ENABLE_CLSPV=0", "-DAMBER_ENABLE_SHADERC=0", "-DAMBER_ENABLE_SPIRV_TOOLS=0",
+        # Amber selects its backend at compile time. Upstream CMake sets
+        # -DAMBER_ENGINE_VULKAN from Vulkan_FOUND (CMakeLists.txt:153); this
+        # build compiles src/vulkan/*.cc but never defined the macro, so
+        # Engine::Create compiled to "return nullptr" and every amber leaf
+        # died as InternalError "Failed to create engine" before a single
+        # Vulkan call (measured: dEQP-VK.rasterization.line_continuity.
+        # polygon-mode-lines, run 20260921T085930000Z). Dawn stays off.
+        "-DAMBER_ENGINE_VULKAN=1", "-DAMBER_ENGINE_DAWN=0",
         "-I" + str(logger),
         "-I" + str(gears / "include"),
         "-I" + str(ROOT / "src"),
@@ -596,6 +604,14 @@ def main(argv=None):
         "-I" + str(amber_root),
         "-I" + str(amber_gen),
         "-DAMBER_ENABLE_CLSPV=0", "-DAMBER_ENABLE_SHADERC=0", "-DAMBER_ENABLE_SPIRV_TOOLS=0",
+        # Amber selects its backend at compile time. Upstream CMake sets
+        # -DAMBER_ENGINE_VULKAN from Vulkan_FOUND (CMakeLists.txt:153); this
+        # build compiles src/vulkan/*.cc but never defined the macro, so
+        # Engine::Create compiled to "return nullptr" and every amber leaf
+        # died as InternalError "Failed to create engine" before a single
+        # Vulkan call (measured: dEQP-VK.rasterization.line_continuity.
+        # polygon-mode-lines, run 20260921T085930000Z). Dawn stays off.
+        "-DAMBER_ENGINE_VULKAN=1", "-DAMBER_ENGINE_DAWN=0",
         "-I" + str(logger),
         "-I" + str(gears / "include"),
         "-I" + str(ROOT / "src"),
@@ -925,6 +941,11 @@ def main(argv=None):
         # the same base class; its multi-scissor leaves route through an
         # instanced geometry stage and are a second multiViewport oracle.
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawScissorTests.cpp",
+        # Depth-clamp module: the upstream oracles for depthClamp and
+        # depthBiasClamp. They read the depth attachment back over the DEPTH
+        # aspect, which this tranche implemented; its helpers (create-info,
+        # image and buffer object utilities) are already compiled above.
+        cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBaseClass.cpp",
         # The base class builds its buffers, images and render pass through the
         # module's own create-info and object helpers.
