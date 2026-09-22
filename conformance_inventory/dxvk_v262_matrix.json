@@ -880,18 +880,25 @@
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1"
+        ],
         "mapped_cases": [
           "dEQP-VK.fragment_operations.early_fragment.discard_early_and_late_fragment_tests_depth",
           "dEQP-VK.info.device_mandatory_features"
         ],
-        "refs": [],
+        "note": "Both leaves in the pinned tree that REQUIRE independentBlend pass. They are the attachment_write_mask attachment_count_2 pair of the render-pass module (vktRenderPassTests.cpp:6504), which draws into two colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - with their own write masks and reads each attachment back. The promoted candidate passed the frozen 464-case acceptance run 20260922T103049552Z_PPSA99994_upstream-cts_0x1983e4b36fa05 (payload 713150da, selection 91c37ed0), and the two dedicated_allocation siblings of the same factory stay diagnostics with a measured NotSupported: they need VK_KHR_dedicated_allocation, which this profile does not advertise.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "UPSTREAM_CTS.md"
+        ],
         "related_requirement_ids": [
           "VK14-CORE-005",
           "VK14-INSTANCE-008",
           "VK14-PIPELINES-006"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:independentBlend",
@@ -905,15 +912,16 @@
       "kind": "feature",
       "name": "independentBlend",
       "native": {
-        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4",
+        "note": "Two colour targets in one pass with their own clear, their own CB_TARGET_MASK nibble and their own readback into separate buffers, and a fragment stage that exports both (start_index_0) or only the second target (start_index_1, which the driver programmes by renumbering the written attachment to hardware target zero - measured: the pinned compiler's export instruction carries no target). The private two-MRT witness (src/two_mrt_oracle.c, native/two_mrt_probe.c) and its oracle recorded one draw writing two attachments with different values before the upstream leaves were selected.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#independentblend-promotion-2026-09-22"
         ],
         "run_ids": [
-          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
+          "20260922T083110494Z_PPSA99994_upstream-cts_0x191b6cf7742e3",
+          "20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
       "verdict": "blocker"
     },
@@ -3449,16 +3457,16 @@
         "satisfied": 17
       },
       "cts": {
-        "blocker": 45,
-        "satisfied": 17
+        "blocker": 44,
+        "satisfied": 18
       },
       "implementation": {
         "blocker": 45,
         "satisfied": 17
       },
       "native": {
-        "blocker": 46,
-        "satisfied": 16
+        "blocker": 45,
+        "satisfied": 17
       }
     },
     "requirements": 62,

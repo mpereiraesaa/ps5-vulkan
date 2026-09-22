@@ -1085,6 +1085,32 @@
         ],
         "state": "native-evidence"
       }
+    },
+    "feature:VkPhysicalDeviceFeatures:independentBlend": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1"
+        ],
+        "refs": [
+          "cts/upstream/manifest.json",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "Both leaves in the pinned tree that REQUIRE independentBlend pass. They are the attachment_write_mask attachment_count_2 pair of the render-pass module (vktRenderPassTests.cpp:6504), which draws into two colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - with their own write masks and reads each attachment back. The promoted candidate passed the frozen 464-case acceptance run 20260922T103049552Z_PPSA99994_upstream-cts_0x1983e4b36fa05 (payload 713150da, selection 91c37ed0), and the two dedicated_allocation siblings of the same factory stay diagnostics with a measured NotSupported: they need VK_KHR_dedicated_allocation, which this profile does not advertise."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260922T083110494Z_PPSA99994_upstream-cts_0x191b6cf7742e3",
+          "20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1"
+        ],
+        "artifact_sha256": "a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4",
+        "refs": [
+          "VALIDATION.md#independentblend-promotion-2026-09-22"
+        ],
+        "note": "Two colour targets in one pass with their own clear, their own CB_TARGET_MASK nibble and their own readback into separate buffers, and a fragment stage that exports both (start_index_0) or only the second target (start_index_1, which the driver programmes by renumbering the written attachment to hardware target zero - measured: the pinned compiler's export instruction carries no target). The private two-MRT witness (src/two_mrt_oracle.c, native/two_mrt_probe.c) and its oracle recorded one draw writing two attachments with different values before the upstream leaves were selected."
+      }
     }
   }
 }
