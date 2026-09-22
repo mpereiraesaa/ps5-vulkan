@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include "sample_rate_probe.h"
 #include "color_clear.h"
+#include "sample_rate_diagnostic.h"
 #include "sample_rate_contract.h"
 #include "vk_image.h"
 #include "ps5log.h"
@@ -52,8 +53,16 @@ VkResult ps5vk_sample_rate_probe(VkDevice device,
     if (!device || !params || !params->extent || params->extent > 4096u ||
         (params->samples != VK_SAMPLE_COUNT_2_BIT &&
          params->samples != VK_SAMPLE_COUNT_4_BIT) ||
+        params->diagnostic_cx_count > 24u ||
         !ps5vk_color_clear_bgra8(params->clear, &expected))
         goto cleanup;
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    ps5vk_sample_rate_diagnostic_cx.count = params->diagnostic_cx_count;
+    for (unsigned i = 0; i < params->diagnostic_cx_count; ++i) {
+        ps5vk_sample_rate_diagnostic_cx.index[i] = params->diagnostic_cx_index[i];
+        ps5vk_sample_rate_diagnostic_cx.value[i] = params->diagnostic_cx_value[i];
+    }
+#endif
 
     VkImageCreateInfo image_info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_B8G8R8A8_UNORM,
@@ -250,24 +259,43 @@ VkResult ps5vk_sample_rate_probe(VkDevice device,
             for (unsigned k = 0; k < shaded && !found; ++k) found = shaded_seen[k] == word;
             if (!found && shaded < PROBE_DISTINCT_LIMIT) shaded_seen[shaded++] = word;
         }
-        for (unsigned sample = 0; sample < expected_distinct; ++sample) {
-            const uint32_t want = UINT32_C(0xff000000) | ((uint32_t)sample << 16u);
+        if (params->coordinate_oracle) {
+            /* The fragment-coordinate module writes fract(gl_FragCoord.xy) into
+             * red and green with blue zero and alpha one, so the judgement is
+             * the one the pinned oracle makes in its own terms: as many
+             * distinct values as the sample count, every one of them shaded and
+             * none of them the clear word. Which value belongs to which sample
+             * is the hardware's business - a driver that gives every sample a
+             * different position of the right shape is what is being measured. */
             for (unsigned k = 0; k < shaded; ++k)
-                if (shaded_seen[k] == want) { ++matched; break; }
+                if ((shaded_seen[k] & UINT32_C(0xff0000ff)) == UINT32_C(0xff000000))
+                    ++matched;
+        } else {
+            for (unsigned sample = 0; sample < expected_distinct; ++sample) {
+                const uint32_t want = UINT32_C(0xff000000) | ((uint32_t)sample << 16u);
+                for (unsigned k = 0; k < shaded; ++k)
+                    if (shaded_seen[k] == want) { ++matched; break; }
+            }
         }
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_SAMPLE_RATE_SHADED extent=%ux%u samples=%u words=%u shaded_values=%u "
             "expected_values=%u matched=%u covered_words=%u values=%08x,%08x,%08x,%08x "
-            "verdict=%u",
+            "oracle=%s verdict=%u",
             params->extent, params->extent, (unsigned)params->samples, words, shaded,
             expected_distinct, matched, covered,
             shaded_seen[0], shaded_seen[1], shaded_seen[2], shaded_seen[3],
+            params->coordinate_oracle ? "coordinate" : "sample-id",
             (unsigned)(shaded == expected_distinct && matched == expected_distinct));
         rc = (shaded == expected_distinct && matched == expected_distinct) ?
             VK_SUCCESS : VK_ERROR_UNKNOWN;
     }
 
 cleanup:
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    /* The override is a property of THIS probe run: a later draw must not
+     * inherit a diagnostic register. */
+    ps5vk_sample_rate_diagnostic_cx.count = 0;
+#endif
     if (mapped) vkUnmapMemory(device, memory);
     if (pipeline) vkDestroyPipeline(device, pipeline, NULL);
     for (unsigned i = 0; i < 2; ++i)

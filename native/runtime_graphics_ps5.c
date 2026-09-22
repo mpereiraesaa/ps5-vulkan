@@ -149,6 +149,26 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
      * producer the tessellator's output topology generates and overrides the
      * linked UC primitive afterwards. */
     const int has_tessellation=input->hull.machine_code!=NULL;
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    /* DIAGNOSTIC (DXVK262-T06 sample-rate line): the fragment program this
+     * create actually links, by SIZE and fingerprint. The compiler folds the
+     * fragment coordinate at compile time for a standalone compile, and the two
+     * shapes are told apart by their length: the interpolated-coordinate shape
+     * is 48 bytes for the witness module and the pixel-centre one is 44, while
+     * the pre-fold shape that read the never-written PS-state user SGPR is 104.
+     * A survey that changes pixel-stage registers is only meaningful if the
+     * shader underneath it is the one the survey claims. */
+    {
+        uint64_t fingerprint=UINT64_C(14695981039346656037);
+        const unsigned char *code=(const unsigned char *)input->fragment.machine_code;
+        for(size_t i=0;i<input->fragment.machine_code_size;++i)
+            fingerprint=(fingerprint^(uint64_t)code[i])*
+                UINT64_C(1099511628211);
+        CREATE_MARK("PS5VK_SAMPLE_RATE_FRAGMENT_CODE bytes=%u fingerprint=%016llx",
+            (unsigned)input->fragment.machine_code_size,
+            (unsigned long long)fingerprint);
+    }
+#endif
     if(has_tessellation && (!input->patch_control_points ||
        input->patch_control_points>32u || !input->tess_output_points ||
        input->tess_output_points>32u))return VK_ERROR_FEATURE_NOT_PRESENT;

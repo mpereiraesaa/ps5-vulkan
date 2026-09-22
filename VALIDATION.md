@@ -4140,3 +4140,95 @@ push-constant slots) with that bit plus `NUM_SAMPLES`, `PS_ITER_MASK`
 (`ac_get_ps_iter_mask`), `USE_QUAD_POS` and `USE_SAMPLE_MASK_IN`, so the branch
 and the hardware agree. Nothing about the rendered images above changes: they
 still show the pixel centre for every sample.
+
+## The sample positions the raster stage never had (2026-09-23)
+
+The paragraph above ends by naming the next slice as "the PS-state user SGPR
+plus `POS_FIXED_PT_ENA`". **That reading was wrong, and the measurement says
+so.** The compiler already publishes the interpolated-coordinate shape for a
+sample-shaded standalone compile, and the register that decides the answer is
+neither of the two it named. What the device was missing is on the RASTER side,
+and the pinned PAL source (`third_party/amd-pal`, `gfx9MsaaState.cpp`) names
+both halves:
+
+* `PA_SC_MODE_CNTL_0.MSAA_ENABLE` - PAL sets it whenever the stage's coverage
+  samples are more than one. This driver published the single-sample word
+  (`0x22`) for every draw, so the rasteriser had no sample locations to work
+  with.
+* the sixteen `PA_SC_AA_SAMPLE_LOCS_PIXEL_*` context words (`0x2fe..0x30d`),
+  four samples each, X in the low nibble of a byte and Y in the high one as a
+  signed offset from the pixel centre in 1/16 pixel units, all four pixels of
+  the quad sharing the pattern. They had never been written, so all sixteen read
+  zero and every sample of a pixel sat ON the pixel centre.
+
+The pixel stage's own half comes from LLPC
+(`third_party/amd-llpc/lgc/lowering/RegisterMetadataBuilder.cpp`):
+`SPI_BARYC_CNTL.POS_FLOAT_LOCATION = 2` ("calculate per-pixel floating point
+position at iterated sample number") whenever the wave iterates per sample, and
+0 otherwise. This compiler published 0.
+
+### The measurement that places it
+
+A diagnostic payload publishes those registers per draw instead of taking them
+from the compiler (`native/sample_rate_diagnostic.h`, reachable only under
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC`) and draws the `fract(gl_FragCoord.xy)` witness
+into a 4x target with per-sample shading. Payload eboot
+`bdebc7259a0bffb650e72728e7c2526e25c4f5b3253dd581b0d5f7c4b18dd7c4`, run
+`20260922T225844981Z_PPSA99994_ps5vk_0x1c10e85bc0773`, log
+`6ea767abc3ef017908d874e0dcd9e5091185393841b7a1bf5d5cad9706ea689d`, clean
+lifecycle. The census is the distinct-word count of the whole surface:
+
+```text
+default                           values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+without-msaa-enable               values=ff808000                          oracle=coordinate verdict=0
+without-sample-locations          values=ff808000                          oracle=coordinate verdict=0
+without-sample-distance           values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+without-position-location         values=ff808000                          oracle=coordinate verdict=0
+col-format-zero (control)         shaded_values=0                          oracle=coordinate verdict=0
+```
+
+`ff602000`, `ffdf6000`, `ff209f00` and `ff9fdf00` are RGBA8
+`fract(gl_FragCoord.xy)` for (0.375,0.125), (0.875,0.375), (0.125,0.625) and
+(0.625,0.875) - Vulkan's standard 4x sample locations, which is also what makes
+the 1/16-offset encoding above self-checking: the four values the hardware
+delivers are the four values the pattern asks for. `ff808000` is (0.5,0.5), the
+pixel centre, and is what every configuration produced before this fix.
+
+The three necessary elements are therefore `MSAA_ENABLE`, the sample-location
+words, and the position location; each one withdrawn collapses the census back
+to the pixel centre. Withdrawing `MAX_SAMPLE_DIST` (kept at the pattern's own
+extent, 6/16 at 4x, because PAL derives it from the pattern) does not change the
+position, and the `col-format-zero` control proves the overrides reach the
+pipeline at all. `PA_SC_MODE_CNTL_0`, the sample words and `SPI_BARYC_CNTL` are
+now published by `native/draw_state_ps5.c` for exactly this shape, only when the
+pipeline carries more than one sample, and the position location only when the
+wave really iterates per sample.
+
+### The focused selection after the fix
+
+The same 514-case measurement (the frozen acceptance selection plus the 50
+`t06-sample-rate-pending` leaves) on payload eboot
+`445c894191c4914b15119c33075af3efe9c3a3eb9e4322da6a323b0da20e500e`, run
+`20260922T230226909Z_PPSA99994_upstream-cts_0x1c142318ff862`, log
+`4706ca168f5f574f6dfb517fbecdf56dc503c754bb7106764d242594e66ebdac`, clean
+lifecycle, reports **489 Pass, 25 Fail, 0 NotSupported**. Every
+`min_sample_shading.*.primitive_triangle` leaf passes now; before the fix the
+unique-colour family failed 35 of 512 (five stable `min_sample_shading` triangle
+leaves at min 0.5, 0.75 and 1.0 at both served counts, plus the flaky `quad`
+families).
+
+What still fails, in full:
+
+* twenty leaves - `min_sample_shading.*.samples_2|samples_4.primitive_line` and
+  `...primitive_point_1px` - are the plain vertex+fragment POINT/LINE pipelines
+  this profile does not serve at all: `VK_ERROR_FEATURE_NOT_PRESENT` raised by
+  the CTS itself at `vkPipelineConstructionUtil.cpp:178`, with the driver's own
+  `PS5VK_PIPELINE_CREATE` line as the last driver record and no refusal marker.
+  That is the same scope decision the earlier runs recorded, not a
+  sample-position defect.
+* five leaves - `min_sample_shading_disabled.*.samples_4.quad` - fail inside the
+  oracle as "Invalid color" or "Did not get any covered pixel, cannot test
+  minSampleShadingDisabled". These are the `quad` family the earlier runs
+  already measured as run-to-run flaky; they are a defect of their own and would
+  fail an acceptance run whatever the score, so they are the next item, not part
+  of this fix.

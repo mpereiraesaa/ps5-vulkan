@@ -2,7 +2,15 @@
 #include "viewport_ps5.h"
 #include "blend_ps5.h"
 #include "runtime_fragment_shape.h"
+#include "sample_rate_diagnostic.h"
 #include <string.h>
+
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+/* The one definition of the diagnostic override, in the translation unit that
+ * READS it: the probe only ever sets it through this declaration, and a build
+ * that links the draw path without the probe archive still resolves. */
+struct ps5vk_sample_rate_diagnostic_cx ps5vk_sample_rate_diagnostic_cx;
+#endif
 #if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
 #include "ps5log.h"
 /* The complete register set a patch draw actually emits, logged once.
@@ -275,11 +283,11 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * than one sample so every single-sample draw emits exactly the words it
      * always did.
      *
-     * The values are the first bounded attempt, read off the pinned gfx103
-     * field layout and Mesa's own MSAA shape for this family:
      *   PA_SC_AA_CONFIG  (0x2f8) MSAA_NUM_SAMPLES[0:2] and
      *                            MSAA_EXPOSED_SAMPLES[20:22] = log2(count),
-     *                            MAX_SAMPLE_DIST[13:16] = 1
+     *                            MAX_SAMPLE_DIST[13:16] = the largest offset
+     *                            the sample pattern asks for (6/16 at 4x,
+     *                            4/16 at 2x - PAL's ComputeMaxSampleDistance)
      *   DB_EQAA          (0x201) MAX_ANCHOR_SAMPLES[0:2],
      *                            PS_ITER_SAMPLES[4:6],
      *                            MASK_EXPORT_NUM_SAMPLES[8:10] and
@@ -289,10 +297,30 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      *   PA_SC_MODE_CNTL_1 (0x293) PS_ITER_SAMPLE[16] when per-sample shading is
      *                            on, which forces the pixel wave to iterate per
      *                            sample instead of once per pixel
-     * The probe measures whether that shape makes the hardware iterate per
-     * sample, so these are the values to correct if it does not. */
+     *   PA_SC_MODE_CNTL_0 (0x292) MSAA_ENABLE[0] for a multisampled draw, set
+     *                            where that word is written below
+     *   PA_SC_AA_SAMPLE_LOCS_PIXEL_* (0x2fe..0x30d) the sample pattern itself
+     *   SPI_BARYC_CNTL   (0x1b8) POS_FLOAT_LOCATION[16:17] = 2 - the float
+     *                            position is computed AT THE ITERATED SAMPLE
+     *                            NUMBER - whenever the wave iterates per
+     *                            sample, and 0 (pixel centre) otherwise
+     *
+     * The last two are what the pinned min_sample_shading leaves need and what
+     * this profile did not have. Measured on the witness that colours each
+     * sample with fract(gl_FragCoord.xy): with the pattern and the location
+     * set, the four samples of a 4x draw receive exactly (0.375,0.125),
+     * (0.875,0.375), (0.125,0.625) and (0.625,0.875) - Vulkan's standard 4x
+     * locations - and without them every sample receives the pixel centre,
+     * (0.5,0.5), which is what made the oracle's unique-colour count
+     * unreachable. The registers and their encoding come from the pinned PAL
+     * source (gfx9MsaaState.cpp SetQuadSamplePattern and
+     * ComputeMaxSampleDistance): sixteen context words, four samples each, X in
+     * the low nibble of a byte and Y in the high one as a signed offset from
+     * the pixel centre in 1/16 pixel units, all four pixels of the quad sharing
+     * the same pattern. */
+    const uint32_t draw_sample_count = ps5vk_sample_count_number(p->samples);
     {
-        const uint32_t sample_count = ps5vk_sample_count_number(p->samples);
+        const uint32_t sample_count = draw_sample_count;
         if (sample_count > 1) {
             const uint32_t log_samples = ps5vk_sample_count_log2(p->samples);
             /* The fraction decides how many samples each fragment invocation
@@ -308,17 +336,53 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             if (!p->sample_shading_enable) iterations = 0u;
             uint32_t iterations_log = 0u;
             while ((1u << iterations_log) < iterations) ++iterations_log;
+            /* Vulkan's standard sample locations, as signed 1/16-pixel offsets
+             * from the pixel centre, packed four samples to a word: X in the
+             * low nibble of each byte and Y in the high one. */
+            uint32_t location_word = 0u, max_sample_dist = 4u;
+            if (sample_count == 4u) {
+                /* (0.375,0.125) (0.875,0.375) (0.125,0.625) (0.625,0.875) */
+                location_word = UINT32_C(0x622ae6ae);
+                max_sample_dist = 6u;
+            } else {
+                /* (0.75,0.75) (0.25,0.25); the other two samples do not exist
+                 * at this count and their nibbles stay zero. */
+                location_word = UINT32_C(0x0000cc44);
+            }
             const uint32_t aa_config = (log_samples & 0x7u) |
-                ((uint32_t)1u << 13u) | ((log_samples & 0x7u) << 20u);
+                ((max_sample_dist & 0xfu) << 13u) | ((log_samples & 0x7u) << 20u);
             const uint32_t db_eqaa = (log_samples & 0x7u) |
                 ((iterations_log & 0x7u) << 4u) |
                 ((log_samples & 0x7u) << 8u) |
                 ((log_samples & 0x7u) << 12u);
             const uint32_t mode_cntl_1 =
                 p->sample_shading_enable ? (UINT32_C(1) << 16u) : 0u;
+            if (result.cx_count + 17u > PS5VK_DRAW_CX_CAPACITY) return VK_ERROR_UNKNOWN;
             result.cx[result.cx_count++] = (ps5_agc_register){0x2f8, aa_config};
             result.cx[result.cx_count++] = (ps5_agc_register){0x201, db_eqaa};
             result.cx[result.cx_count++] = (ps5_agc_register){0x293, mode_cntl_1};
+            for (uint32_t i = 0; i < 16u; ++i)
+                result.cx[result.cx_count++] =
+                    (ps5_agc_register){(uint16_t)(0x2feu + i), location_word};
+            /* The position's location follows the iteration, not the API flag:
+             * a sample-shaded pipeline that asks for a fraction small enough to
+             * keep one invocation per pixel must keep the pixel-centre
+             * position, which is what the compiler's own coordinate shape was
+             * chosen for (native/runtime_graphics_compiler.c publishes the
+             * pipeline's sample-shading state to the standalone compile). */
+            {
+                const uint32_t baryc = iterations > 1u ?
+                    (UINT32_C(2) << 16u) :
+                    (UINT32_C(0) << 16u);
+                unsigned replaced = 0;
+                for (unsigned k = 0; k < result.cx_count; ++k)
+                    if (result.cx[k].offset == 0x1b8u) { result.cx[k].value = baryc; ++replaced; }
+                if (!replaced) {
+                    if (result.cx_count + 1u > PS5VK_DRAW_CX_CAPACITY) return VK_ERROR_UNKNOWN;
+                    result.cx[result.cx_count++] =
+                        (ps5_agc_register){0x1b8u, baryc};
+                }
+            }
         }
     }
     /* Public Mesa gfx10/RADV PA_SU_SC_MODE_CNTL: cull mode, front face,
@@ -346,11 +410,19 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * compiler's .pa_cl_vte_cntl.vtx_w0_fmt both require this bit. w=1 tests
      * cannot distinguish the two modes. */
     result.cx[result.cx_count++] = (ps5_agc_register){0x206, 0x43f};
-    /* Explicit single-sample filled-triangle state, matching RADV gfx10:
-     * VPORT_SCISSOR_ENABLE and ALTERNATE_RBS_PER_TILE; no MSAA/line stipple.
-     * Keep the generic scissor at the target bounds and apply the Vulkan
-     * scissor/render-area intersection to viewport zero. */
-    result.cx[result.cx_count++] = (ps5_agc_register){0x292, 0x22};
+    /* PA_SC_MODE_CNTL_0, matching RADV gfx10: VPORT_SCISSOR_ENABLE and
+     * ALTERNATE_RBS_PER_TILE, no line stipple. MSAA_ENABLE is added for a
+     * multisampled draw, exactly as PAL sets it whenever the stage's coverage
+     * samples are more than one (gfx9MsaaState.cpp: "coverageSamples > 1").
+     * Without it the rasteriser has no sample locations to work with, so the
+     * pattern this draw programs at 0x2fe..0x30d never applies and every
+     * sample of a pixel keeps the pixel centre - measured: a 4x draw whose
+     * fragment colours each sample with fract(gl_FragCoord.xy) left one value
+     * (0.5,0.5) in the target until this bit was set. Keep the generic scissor
+     * at the target bounds and apply the Vulkan scissor/render-area
+     * intersection to viewport zero. */
+    result.cx[result.cx_count++] = (ps5_agc_register){0x292,
+        UINT32_C(0x22) | (draw_sample_count > 1u ? UINT32_C(1) : UINT32_C(0))};
     result.cx[result.cx_count++] = viewport[8];
     result.cx[result.cx_count++] = viewport[9];
     /* Mesa gfx10 PA_CL_CLIP_CNTL: Vulkan's default 0 <= z <= w clip volume
@@ -676,6 +748,35 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             tess_dump_bank(has_tessellation?"sh":"gsh",result.sh,result.sh_count);
             tess_dump_bank(has_tessellation?"uc":"guc",result.uc,result.uc_count);
         }
+    }
+#endif
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    /* DIAGNOSTIC (DXVK262-T06 sample-rate line): publish the pixel-context
+     * words the probe asked for instead of the ones this draw computed, so one
+     * payload can ask the hardware what each state does.
+     *
+     * The override runs HERE, at the end, and it removes every earlier entry of
+     * the same register before appending its own. Both halves matter, and the
+     * first version of this survey got the second one wrong: it replaced
+     * entries in place right after the compiled context block, and the driver's
+     * own multisample words (PA_SC_MODE_CNTL_0, PA_SC_MODE_CNTL_1, DB_EQAA,
+     * PA_SC_AA_CONFIG) are appended LATER in this function, so those overrides
+     * were silently overwritten and their measurements said the register does
+     * not matter when the register had never taken the requested value. A
+     * stream that names a register twice leaves the last write in force, which
+     * is what this makes explicit rather than accidental. Empty for every
+     * ordinary draw. */
+    for(uint32_t i=0;i<ps5vk_sample_rate_diagnostic_cx.count;++i) {
+        const uint32_t index=ps5vk_sample_rate_diagnostic_cx.index[i];
+        const uint32_t value=ps5vk_sample_rate_diagnostic_cx.value[i];
+        unsigned k=0,kept=0;
+        while(k<result.cx_count) {
+            if(result.cx[k].offset==index) { k++; continue; }
+            result.cx[kept++]=result.cx[k++];
+        }
+        result.cx_count=kept;
+        if(result.cx_count+1>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
+        result.cx[result.cx_count++]=(ps5_agc_register){(uint16_t)index,value};
     }
 #endif
     *out = result; return VK_SUCCESS;
