@@ -199,6 +199,27 @@ def main():
     two_mrt_probe = os.environ.get("PS5VK_TWO_MRT_PROBE", "0")
     if two_mrt_probe not in ("0", "1"):
         raise SystemExit("PS5VK_TWO_MRT_PROBE must be 0 or 1")
+    # Private measurement scene for DXVK262-T06 sampleRateShading: it clears a
+    # multisampled colour target through the native path and reads the
+    # surface's own storage back. It is a standalone scene and only exists in
+    # the same diagnostic build whose platform carries the sample-rate bit, so
+    # no shipping payload can contain it.
+    sample_rate_probe = os.environ.get("PS5VK_SAMPLE_RATE_PROBE", "0")
+    if sample_rate_probe not in ("0", "1"):
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE must be 0 or 1")
+    if sample_rate_probe == "1" and (not graphics_api or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE requires graphics API, runtime graphics and draw")
+    if sample_rate_probe == "1" and sample_rate_diagnostic != "1":
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE requires PS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
+    if sample_rate_probe == "1" and (multiview_view_probe == "1" or
+            input_attachment_probe == "1" or fragment_store_probe == "1" or
+            dual_source_probe == "1" or two_mrt_probe == "1" or
+            clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1" or
+            scissor_probe != "0" or witnesses != "0" or continuous == "1" or
+            observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE is a bounded standalone scene")
     if two_mrt_probe == "1" and (not graphics_api or
             os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
             os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
@@ -430,6 +451,7 @@ def main():
             common += ["-DPS5VK_FRAGMENT_STORE_PROBE=" + fragment_store_probe]
             common += ["-DPS5VK_DUAL_SOURCE_PROBE=" + dual_source_probe]
             common += ["-DPS5VK_TWO_MRT_PROBE=" + two_mrt_probe]
+            common += ["-DPS5VK_SAMPLE_RATE_PROBE=" + sample_rate_probe]
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
             common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
@@ -736,6 +758,7 @@ def main():
                 ROOT / "native/fragment_store_probe.c",
                 ROOT / "native/dual_source_probe.c",
                 ROOT / "native/two_mrt_probe.c",
+                ROOT / "native/sample_rate_probe.c",
                 ROOT / "src/two_mrt_oracle.c",
                 ROOT / "native/command_arena_ps5.c", ROOT / "native/draw_batch_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
@@ -766,6 +789,7 @@ def main():
                                "triangle_readback", "fragment_store_probe"}
         application_sources.add("dual_source_probe")
         application_sources.add("two_mrt_probe")
+        application_sources.add("sample_rate_probe")
         sources = [item for item in sources if item[0] in application_sources]
     source_names = [name for name, _, _ in sources]
     if len(source_names) != len(set(source_names)):

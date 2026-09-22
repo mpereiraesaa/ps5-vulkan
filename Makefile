@@ -80,6 +80,10 @@ native-compute:
 native-dual-source:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
 	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_DUAL_SOURCE_PROBE=1 $(PYTHON) tools/build_native.py
+.PHONY: native-sample-rate
+native-sample-rate:
+	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
+	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_SAMPLE_RATE_DIAGNOSTIC=1 PS5VK_SAMPLE_RATE_PROBE=1 $(PYTHON) tools/build_native.py
 .PHONY: native-two-mrt
 native-two-mrt:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }

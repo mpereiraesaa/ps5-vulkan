@@ -273,9 +273,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * whole-surface DMA fill per target, and two attachments may legitimately
      * ask for different values. */
     uint32_t clear_word[PS5VK_MAX_COLOR_ATTACHMENTS]={0};
+    /* The counts the platform this device was created from serves, so a
+     * multisampled attachment is executable exactly on a build whose mask
+     * carries the sample-rate bit (DXVK262-T06). */
+    const VkSampleCountFlags served_samples=
+        ps5vk_platform_sample_counts(d->platform_features);
     for(uint32_t c=0;c<color_count;++c) {
         if(ps5vk_attachment_plan(&pass->attachments[c],color_format[c],
-            subpass->color[c].layout,VK_FALSE,&color_plan[c])!=VK_SUCCESS)
+            subpass->color[c].layout,VK_FALSE,served_samples,&color_plan[c])!=VK_SUCCESS)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if(!color_plan[c].clear) continue;
         VkImage image=begin->framebuffer->attachments[c]->image;
@@ -296,7 +301,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         const VkAttachmentDescription *a=&pass->attachments[color_count];
         VkImage image=begin->framebuffer->attachments[color_count]->image;
         if(ps5vk_attachment_plan(a,VK_FORMAT_D32_SFLOAT,subpass->depth.layout,
-            VK_TRUE,&depth_plan)!=VK_SUCCESS ||
+            VK_TRUE,served_samples,&depth_plan)!=VK_SUCCESS ||
             image->info.extent.width!=begin->framebuffer->width ||
             image->info.extent.height!=begin->framebuffer->height)return VK_ERROR_FEATURE_NOT_PRESENT;
         if(depth_plan.clear) {
@@ -488,6 +493,24 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(!n){rc=VK_ERROR_UNKNOWN;draw_site=4;goto fail;}cursor+=n;
             n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
             if(!n){rc=VK_ERROR_UNKNOWN;draw_site=5;goto fail;}cursor+=n;
+            /* A multisampled attachment is cleared with one whole-surface fill:
+             * the rect equation below addresses a single sample plane, while a
+             * constant fill of the whole span writes every sample of every
+             * texel whatever order the hardware stores them in - the same
+             * operation the pass's own loadOp=CLEAR performs. The validator
+             * admits this shape only when the clear IS the whole surface. */
+            if(view->image->info.samples!=VK_SAMPLE_COUNT_1_BIT) {
+                n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,bytes,
+                    recorded->clear_word);
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=6;goto fail;}cursor+=n;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_MULTISAMPLE_CLEAR_PREPARED serial=%llu samples=%u bytes=%llu word=%08x",
+                    (unsigned long long)j->serial,(unsigned)view->image->info.samples,
+                    (unsigned long long)bytes,recorded->clear_word);
+                n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=7;goto fail;}cursor+=n;
+                continue;
+            }
             VkDeviceSize offset=(VkDeviceSize)view->range.baseArrayLayer*stride;
             n=ps5vk_color_rect_clear(cursor,(size_t)(end-cursor),
                 (uintptr_t)address+offset,bytes-offset,(size_t)stride,

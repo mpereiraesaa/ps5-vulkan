@@ -760,14 +760,31 @@ int main(void)
     attachments[0].initialLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     attachments[0].finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     assert(ps5vk_attachment_plan(&attachments[0],VK_FORMAT_B8G8R8A8_UNORM,
-        color.layout,VK_FALSE,&plan)==VK_SUCCESS && plan.load && plan.store && !plan.clear);
+        color.layout,VK_FALSE,VK_SAMPLE_COUNT_1_BIT,&plan)==VK_SUCCESS &&
+        plan.load && plan.store && !plan.clear);
     attachments[0].format=VK_FORMAT_R8G8B8A8_UNORM;
     assert(ps5vk_attachment_plan(&attachments[0],VK_FORMAT_R8G8B8A8_UNORM,
-        color.layout,VK_FALSE,&plan)==VK_SUCCESS && plan.load && plan.store && !plan.clear);
+        color.layout,VK_FALSE,VK_SAMPLE_COUNT_1_BIT,&plan)==VK_SUCCESS &&
+        plan.load && plan.store && !plan.clear);
     attachments[0].format=VK_FORMAT_B8G8R8A8_UNORM;
     attachments[0].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;
     assert(ps5vk_attachment_plan(&attachments[0],VK_FORMAT_B8G8R8A8_UNORM,
-        color.layout,VK_FALSE,&plan)==VK_ERROR_FEATURE_NOT_PRESENT);
+        color.layout,VK_FALSE,VK_SAMPLE_COUNT_1_BIT,&plan)==VK_ERROR_FEATURE_NOT_PRESENT);
+    /* The plan is bounded by the mask the device's platform serves: a count it
+     * does not serve is refused, and one it does is executable - the clear is a
+     * whole-surface fill, which covers every sample of every texel. */
+    attachments[0].initialLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].samples=VK_SAMPLE_COUNT_4_BIT;
+    assert(ps5vk_attachment_plan(&attachments[0],VK_FORMAT_B8G8R8A8_UNORM,
+        color.layout,VK_FALSE,VK_SAMPLE_COUNT_1_BIT,&plan)==VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(ps5vk_attachment_plan(&attachments[0],VK_FORMAT_B8G8R8A8_UNORM,
+        color.layout,VK_FALSE,VK_SAMPLE_COUNT_4_BIT,&plan)==VK_SUCCESS && !plan.clear);
+    /* The depth role never carries more than one sample. */
+    attachments[0].samples=VK_SAMPLE_COUNT_1_BIT;
+    attachments[1].samples=VK_SAMPLE_COUNT_4_BIT;
+    assert(ps5vk_attachment_plan(&attachments[1],VK_FORMAT_D32_SFLOAT,
+        depth.layout,VK_TRUE,VK_SAMPLE_COUNT_4_BIT,&plan)==VK_ERROR_FEATURE_NOT_PRESENT);
+    attachments[1].samples=VK_SAMPLE_COUNT_1_BIT;
     attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR; attachments[1].samples=VK_SAMPLE_COUNT_4_BIT;
     assert(vkCreateRenderPass(&d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     attachments[1].samples=VK_SAMPLE_COUNT_1_BIT;

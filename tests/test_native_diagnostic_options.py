@@ -228,6 +228,32 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertNotIn("PS5VK_FEATURE_SAMPLE_RATE_SHADING",
                          (ROOT / "tools/build_native.py").read_text())
 
+    def test_sample_rate_probe_is_bounded_private_and_diagnostic_only(self):
+        """The sample-rate measurement scene cannot ship or run half-built.
+
+        It clears a multisampled colour target and reads the surface's own
+        storage back, which is only ever true in the build whose platform
+        carries the sample-rate bit; without that switch there is no count the
+        front end would accept, so the scene refuses to be built at all."""
+        self.rejected({"PS5VK_SAMPLE_RATE_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_SAMPLE_RATE_PROBE": "2"},
+                      "must be 0 or 1")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1",
+                       "PS5VK_SAMPLE_RATE_PROBE": "1"},
+                      "requires PS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
+        builder = (ROOT / "tools/build_native.py").read_text()
+        source = (ROOT / "native/sample_rate_probe.c").read_text()
+        # The measurement is bounded to one multisampled colour target whose
+        # storage is read back and judged; it is a standalone scene, so no
+        # other diagnostic may be selected with it.
+        self.assertIn("PS5VK_SAMPLE_RATE_PROBE is a bounded standalone scene", builder)
+        self.assertIn("distinct == 1u && correct == words && first == expected", source)
+        self.assertIn("PS5VK_SAMPLE_RATE_CLEAR extent=", source)
+
     def test_promoted_dual_source_has_no_measurement_switch(self):
         """dualSrcBlend is advertised by the shipping platform now.
 

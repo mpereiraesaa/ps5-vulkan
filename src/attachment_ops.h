@@ -15,23 +15,24 @@ struct ps5vk_attachment_plan {
  * object creation: it describes semantics the AGC queue can execute without
  * silently weakening LOAD, CLEAR, or final-layout ownership.
  *
- * That separation is why the sample count stays at 1x here while the render
- * pass, framebuffer, image and pipeline object model accept the 1x/2x/4x
- * envelope of src/sample_rate_contract.h (DXVK262-T06): an object model says
- * what a shape IS, and this plan says what the native queue can EXECUTE. A
- * multisampled attachment's clear, draw and resolve do not exist yet - the
- * colour target now carries the sample count and is sized for it, but the
- * executor still clears and draws one sample - so a pass that names one is
- * refused at begin rather than cleared with single-sample arithmetic. The
- * sample-count-aware plan belongs to the slice that implements those three. */
+ * That separation is why the sample count is bounded by the mask the DEVICE's
+ * platform serves rather than by a constant here (DXVK262-T06): the front end
+ * already refused a count the platform does not report, so this bound only
+ * keeps a hand-built plan from naming a count no build serves. The colour
+ * target carries the count and is sized for it, and the queue's clear is a
+ * whole-surface fill over the image's own span, which writes every sample of
+ * every covered texel whatever order the hardware stores them in. A depth
+ * attachment stays single-sample: no multisampled depth target exists on this
+ * path. */
 static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
     VkFormat format, VkImageLayout reference, VkBool32 depth,
-    struct ps5vk_attachment_plan *out)
+    VkSampleCountFlags served, struct ps5vk_attachment_plan *out)
 {
     const VkImageLayout attachment = depth ?
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL :
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    if (!a || !out || a->format != format || a->samples != VK_SAMPLE_COUNT_1_BIT ||
+    if (!a || !out || a->format != format ||
+        (depth ? a->samples != VK_SAMPLE_COUNT_1_BIT : !(served & a->samples)) ||
         (depth ? format != VK_FORMAT_D32_SFLOAT :
          !ps5vk_color_target_format_supported(format)) ||
         (reference != attachment && reference != VK_IMAGE_LAYOUT_GENERAL) ||
