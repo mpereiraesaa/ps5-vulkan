@@ -3600,3 +3600,29 @@ MAX_MIP log2). What it does not establish: the executor does not yet EMIT that
 resolve for a subpass that declares a resolve target - it still refuses such a
 pass - and no CTS leaf passes, the row stays a blocker, and nothing is
 advertised.
+
+## The driver's own resolve program (2026-09-22)
+
+A resolve cannot be produced by a probe's payload: the draw that averages the
+samples has to be emitted by the DRIVER, so its stages have to live in the
+driver. `tools/build_resolve_shaders.py` compiles one averaging fragment per
+served sample count (2x and 4x; the reads are written out rather than looped,
+because this profile's fragment interface has only been measured on
+straight-line subpass reads) plus the oversized-triangle vertex stage they pair
+with, into a header the SDK build compiles in, and `native/resolve_program.c`
+pairs each with the descriptor contract an averaging stage needs - set 0 binding
+0 is the input attachment, fragment-visible, and nothing else - before compiling
+the pair through the same runtime compiler the pipeline objects use.
+
+`tests/test_runtime_graphics_compiler.c` pins it: both served counts compile into
+a program whose fragment has machine code, whose descriptor set is valid and
+whose used-binding mask names exactly the input attachment; a count with no
+generated stage (8x, and 1x, which has no samples to average) is refused rather
+than averaged by a stage that reads the wrong samples.
+
+What this establishes: the driver can build the resolve draw's program with the
+descriptor contract the measured read used. What it does not establish: the
+executor still refuses a subpass that declares a resolve target, so the program
+is not yet emitted; that wiring - the target, the barrier and the draw at the
+subpass boundary - is the next slice. The row stays a blocker and nothing is
+advertised.

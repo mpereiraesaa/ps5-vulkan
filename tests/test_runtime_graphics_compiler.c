@@ -1,6 +1,7 @@
 #include "runtime_graphics_compiler.h"
 #include "compilation_cache.h"
 #include "spirv_graphics_interface.h"
+#include "resolve_program.h"
 #include "vertex_format_probe.h"
 #include "descriptor_table_layout.h"
 #include <assert.h>
@@ -949,6 +950,37 @@ static void check_subpass_fetch_compilation(void)
     const void *refused=(void *)1;
     assert(ps5vk_runtime_graphics_compile(NULL,&undeclared,&refused)!=VK_SUCCESS && !refused);
     free((void *)undeclared.vertex.words);free((void *)undeclared.fragment.words);
+}
+
+/* The driver's OWN resolve stages (DXVK262-T06): one averaging fragment per
+ * served sample count, paired with the oversized-triangle vertex stage and
+ * compiled through the same runtime compiler the pipeline objects use. The
+ * count the driver has no stage for stays refused rather than being resolved
+ * with a stage that reads the wrong number of samples. */
+static void check_resolve_program(void)
+{
+    for (unsigned index = 0; index < 2; ++index) {
+        const VkSampleCountFlagBits samples = index ? VK_SAMPLE_COUNT_4_BIT :
+            VK_SAMPLE_COUNT_2_BIT;
+        struct ps5vk_resolve_program program = {0};
+        assert(ps5vk_resolve_program_acquire(NULL, samples, &program) == VK_SUCCESS &&
+               program.pair);
+        const struct ps5vk_runtime_graphics_program *pair = program.pair;
+        /* The averaging stage reads the input attachment and exports one colour
+         * target: that is the whole shape a resolve draw needs. */
+        assert(pair->fragment.machine_code_size);
+        assert(pair->fragment.metadata.descriptor_set_valid[0]);
+        assert(pair->fragment.metadata.descriptor_used_binding_mask[0] == UINT64_C(0x1));
+        ps5vk_resolve_program_release(NULL, &program);
+        assert(!program.pair);
+    }
+    /* 8x has no generated stage, and a count without a stage is refused rather
+     * than averaged by a stage that reads the wrong samples. */
+    struct ps5vk_resolve_program eight = {0};
+    assert(ps5vk_resolve_program_acquire(NULL, VK_SAMPLE_COUNT_8_BIT, &eight) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !eight.pair);
+    assert(ps5vk_resolve_program_acquire(NULL, VK_SAMPLE_COUNT_1_BIT, &eight) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !eight.pair);
 }
 
 static void check_geometry_stage_descriptor_visibility(void)
@@ -2059,6 +2091,7 @@ int main(void)
     check_fragment_position();
     check_sample_rate_compilation();
     check_subpass_fetch_compilation();
+    check_resolve_program();
     check_dual_source_exports();
     check_dual_source_blend_contract();
     check_two_mrt_exports();

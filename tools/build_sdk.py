@@ -99,6 +99,10 @@ def main():
     has_native_sdk = False
     if sdk and clang_wrapper and gears.is_dir() and logger.is_dir():
         print(f"PS5 toolchain detected: building native PS5 runtime archive...")
+        # The driver's own resolve stages (DXVK262-T06): one averaging fragment
+        # per served sample count, compiled into a header this archive includes.
+        subprocess.run([sys.executable, str(ROOT / "tools/build_resolve_shaders.py"),
+            "--out", str(ROOT / "build/resolve/resolve_spirv.h")], check=True)
         native_sources = [
             (ROOT / "src/vk_alloc.c", []),
             (ROOT / "src/vk_memory.c", []),
@@ -167,7 +171,8 @@ def main():
             "native/runtime_graphics_cache.c", "native/runtime_graphics_ps5.c",
             "src/spirv_graphics_interface.c", "src/clip_cull_witness.c",
             "src/geometry_witness.c", "src/dual_source_oracle.c",
-            "src/two_mrt_oracle.c", "src/color_attachment_contract.c")
+            "src/two_mrt_oracle.c", "src/color_attachment_contract.c",
+            "native/resolve_program.c")
         native_sources += [(ROOT / source, []) for source in graphics_sources]
         native_sources += [(gears / "src" / source, []) for source in (
             "ps5_shader_header.c", "ps5_pipeline.c", "ps5_color_target.c", "ps5_depth_target.c")]
@@ -187,6 +192,7 @@ def main():
             "-I" + str(ROOT / "third_party/psbc-reference/src"),
             "-I" + str(ROOT / "third_party/psbc-reference/libpsbc"),
             "-I" + str(ROOT / "third_party/opengnm/include"),
+            "-I" + str(ROOT / "build/resolve"),
             "-DPS5VK_RUNTIME_COMPILER=1",
             "-DPS5VK_TARGET_PS5=1",
             "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
