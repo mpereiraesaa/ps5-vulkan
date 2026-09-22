@@ -159,11 +159,17 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
      * subpassLoad to an unrelated constant texel on hardware. */
     words[3]|=UINT32_C(0x01b00000);
     if(multisampled) {
-        /* BASE_LEVEL [12,15] stays zero and LAST_LEVEL [16,19] names the sample
-         * count, which is exactly how the pinned compiler describes a
-         * multisampled texture to this hardware. */
-        words[3]&=~UINT32_C(0x000ff000);
-        words[3]|=ps5vk_sample_count_log2(image->info.samples)<<16;
+        /* The resource TYPE has to say the surface is multisampled - the pinned
+         * compiler's own type tag is V_008F1C_SQ_RSRC_IMG_2D_MSAA (14) rather
+         * than the plain 2D tag (9) - and BASE_LEVEL [12,15] stays zero while
+         * LAST_LEVEL [16,19] names the sample count, which is how the same
+         * compiler describes a multisampled texture to this hardware
+         * (ac_descriptors.c, ac_build_gfx6_texture_descriptor). A record with
+         * the plain 2D tag and no sample geometry reads the surface as
+         * single-sample data - measured: every sample index returned plane
+         * zero's value. */
+        words[3]&=(uint32_t)~((UINT32_C(0xf)<<28)|UINT32_C(0x000ff000));
+        words[3]|=(UINT32_C(14)<<28)|(ps5vk_sample_count_log2(image->info.samples)<<16);
     }
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }

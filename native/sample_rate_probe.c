@@ -307,7 +307,9 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
     if (!device || !params || !params->extent || !count || count < 2u ||
         !params->vertex || !params->vertex_words ||
         !params->write_fragment || !params->write_fragment_words ||
-        !params->fetch_fragment || !params->fetch_fragment_words)
+        !params->fetch_fragment || !params->fetch_fragment_words ||
+        !params->sample_fragment || !params->sample_fragment_words ||
+        !params->fetch_const_fragment || !params->fetch_const_fragment_words)
         return VK_ERROR_INITIALIZATION_FAILED;
 
 #define SHAPE_TRY(call) do { rc = (call); if (!shape_step(#call, rc)) goto cleanup; } while (0)
@@ -395,7 +397,10 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
             .allocationSize = buffer_requirements.size, .memoryTypeIndex = 0};
         SHAPE_TRY(vkAllocateMemory(device, &buffer_allocation, NULL, &ubo_memory));
         SHAPE_TRY(vkBindBufferMemory(device, ubo, ubo_memory, 0));
-        SHAPE_TRY(vkMapMemory(device, ubo_memory, 0, 4, 0, &ubo_mapped));
+        /* The mapping covers the whole allocation: a partial mapping cannot
+         * be flushed, because the range rule requires the flush to cover a
+         * whole number of non-coherent atoms or end at the allocation. */
+        SHAPE_TRY(vkMapMemory(device, ubo_memory, 0, VK_WHOLE_SIZE, 0, &ubo_mapped));
         memset(ubo_mapped, 0, 4);
         const VkDescriptorPoolSize sizes[2] = {
             {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1}, {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}};
@@ -650,6 +655,284 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
                 rc = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &two_pipeline_info,
                     NULL, &two_pipelines[subpass]);
                 if (!shape_step("create_two_subpass_pipeline", rc) || rc != VK_SUCCESS) goto two_cleanup;
+            }
+            /* The per-sample read (DXVK262-T06): subpass 0 draws with a stage
+             * whose output varies with gl_SampleID, so each sample plane holds
+             * a value only its own sample produced, and subpass 1 reads ONE
+             * named sample of that multisampled attachment through the
+             * resource-only record and writes it to its own target. The oracle
+             * is the value: sample 1's plane is ff010000, which neither the
+             * average nor sample 0 can produce. */
+            {
+                VkRenderPass fetch_pass = VK_NULL_HANDLE;
+                VkFramebuffer fetch_fb = VK_NULL_HANDLE;
+                VkPipeline fetch_pipelines[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+                VkPipeline fetch_baked = VK_NULL_HANDLE;
+                VkDescriptorSetLayout fetch_set_layout = VK_NULL_HANDLE;
+                VkDescriptorPool fetch_pool = VK_NULL_HANDLE;
+                VkDescriptorSet fetch_set = VK_NULL_HANDLE;
+                VkPipelineLayout fetch_layout = VK_NULL_HANDLE;
+                VkShaderModule sample_module = VK_NULL_HANDLE;
+                VkShaderModule const_module = VK_NULL_HANDLE;
+                const VkAttachmentDescription fetch_attachments[2] = {
+                    {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = params->samples,
+                     .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                     .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                     .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                     .finalLayout = VK_IMAGE_LAYOUT_GENERAL},
+                    {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+                     .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                     .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                     .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                     .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+                const VkAttachmentReference fetch_color0 = {0, VK_IMAGE_LAYOUT_GENERAL};
+                const VkAttachmentReference fetch_input0 = {0, VK_IMAGE_LAYOUT_GENERAL};
+                const VkAttachmentReference fetch_color1 = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+                const VkSubpassDescription fetch_subpasses[2] = {
+                    {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+                     .colorAttachmentCount = 1, .pColorAttachments = &fetch_color0},
+                    {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+                     .inputAttachmentCount = 1, .pInputAttachments = &fetch_input0,
+                     .colorAttachmentCount = 1, .pColorAttachments = &fetch_color1}};
+                const VkSubpassDependency fetch_dependency = {
+                    .srcSubpass = 0, .dstSubpass = 1,
+                    .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                    .dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+                    .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT};
+                const VkRenderPassCreateInfo fetch_pass_info = {
+                    .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                    .attachmentCount = 2, .pAttachments = fetch_attachments,
+                    .subpassCount = 2, .pSubpasses = fetch_subpasses,
+                    .dependencyCount = 1, .pDependencies = &fetch_dependency};
+                rc = vkCreateRenderPass(device, &fetch_pass_info, NULL, &fetch_pass);
+                if (!shape_step("fetch_create_pass", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                const VkImageView fetch_views[2] = {views[0], views[2]};
+                const VkFramebufferCreateInfo fetch_fb_info = {
+                    .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = fetch_pass,
+                    .attachmentCount = 2, .pAttachments = fetch_views,
+                    .width = params->extent, .height = params->extent, .layers = 1};
+                rc = vkCreateFramebuffer(device, &fetch_fb_info, NULL, &fetch_fb);
+                if (!shape_step("fetch_create_framebuffer", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                {
+                    const VkDescriptorSetLayoutBinding fetch_bindings[2] = {
+                        {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                         .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+                        {.binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                         .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
+                    const VkDescriptorSetLayoutCreateInfo fetch_set_info = {
+                        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                        .bindingCount = 2, .pBindings = fetch_bindings};
+                    rc = vkCreateDescriptorSetLayout(device, &fetch_set_info, NULL, &fetch_set_layout);
+                    if (!shape_step("fetch_set_layout", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    const VkDescriptorPoolSize fetch_sizes[2] = {
+                        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1}, {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}};
+                    const VkDescriptorPoolCreateInfo fetch_pool_info = {
+                        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                        .maxSets = 1, .poolSizeCount = 2, .pPoolSizes = fetch_sizes};
+                    rc = vkCreateDescriptorPool(device, &fetch_pool_info, NULL, &fetch_pool);
+                    if (!shape_step("fetch_pool", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    const VkDescriptorSetAllocateInfo fetch_allocate = {
+                        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                        .descriptorPool = fetch_pool, .descriptorSetCount = 1,
+                        .pSetLayouts = &fetch_set_layout};
+                    rc = vkAllocateDescriptorSets(device, &fetch_allocate, &fetch_set);
+                    if (!shape_step("fetch_set", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    const VkDescriptorImageInfo fetch_image = {VK_NULL_HANDLE, views[0],
+                        VK_IMAGE_LAYOUT_GENERAL};
+                    const VkDescriptorBufferInfo fetch_buffer = {.buffer = ubo, .offset = 0, .range = 4};
+                    const VkWriteDescriptorSet fetch_writes[2] = {
+                        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = fetch_set,
+                         .dstBinding = 0, .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                         .pImageInfo = &fetch_image},
+                        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = fetch_set,
+                         .dstBinding = 1, .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                         .pBufferInfo = &fetch_buffer}};
+                    vkUpdateDescriptorSets(device, 2, fetch_writes, 0, NULL);
+                    const VkPipelineLayoutCreateInfo fetch_layout_info = {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                        .setLayoutCount = 1, .pSetLayouts = &fetch_set_layout};
+                    rc = vkCreatePipelineLayout(device, &fetch_layout_info, NULL, &fetch_layout);
+                    if (!shape_step("fetch_layout", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                }
+                {
+                    const VkShaderModuleCreateInfo sample_info = {
+                        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                        .codeSize = params->sample_fragment_words * 4u,
+                        .pCode = params->sample_fragment};
+                    rc = vkCreateShaderModule(device, &sample_info, NULL, &sample_module);
+                    if (!shape_step("fetch_sample_module", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    VkShaderModuleCreateInfo const_info = sample_info;
+                    const_info.codeSize = params->fetch_const_fragment_words * 4u;
+                    const_info.pCode = params->fetch_const_fragment;
+                    rc = vkCreateShaderModule(device, &const_info, NULL, &const_module);
+                    if (!shape_step("fetch_const_module", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                }
+                for (unsigned phase = 0; phase < 2; ++phase) {
+                    VkSampleMask fetch_mask = ps5vk_sample_count_full_mask(params->samples);
+                    const VkPipelineShaderStageCreateInfo fetch_stages[2] = {
+                        {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+                         VK_SHADER_STAGE_VERTEX_BIT, modules[0], "main", NULL},
+                        {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+                         VK_SHADER_STAGE_FRAGMENT_BIT, phase ? modules[2] : sample_module,
+                         "main", NULL}};
+                    /* The sweep's SECOND index uses the baked-in module, so a
+                     * uniform that never arrived cannot be mistaken for a read
+                     * that ignores the index. */
+                    const VkPipelineShaderStageCreateInfo fetch_stages_const[2] = {
+                        fetch_stages[0],
+                        {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+                         VK_SHADER_STAGE_FRAGMENT_BIT, const_module, "main", NULL}};
+                    const VkPipelineVertexInputStateCreateInfo fetch_vertex_input = {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+                    const VkPipelineInputAssemblyStateCreateInfo fetch_assembly = {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+                    const VkPipelineRasterizationStateCreateInfo fetch_raster = {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                        .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = VK_CULL_MODE_NONE,
+                        .frontFace = VK_FRONT_FACE_CLOCKWISE, .lineWidth = 1.0f};
+                    const VkPipelineMultisampleStateCreateInfo fetch_multisample = {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                        .rasterizationSamples = phase ? VK_SAMPLE_COUNT_1_BIT : params->samples,
+                        .sampleShadingEnable = phase ? VK_FALSE : VK_TRUE,
+                        .minSampleShading = phase ? 0.0f : 1.0f,
+                        .pSampleMask = phase ? NULL : &fetch_mask};
+                    const VkViewport fetch_viewport = {0.0f, 0.0f, (float)params->extent,
+                        (float)params->extent, 0.0f, 1.0f};
+                    const VkRect2D fetch_scissor = {{0, 0}, {params->extent, params->extent}};
+                    const VkPipelineViewportStateCreateInfo fetch_viewport_state = {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                        .viewportCount = 1, .pViewports = &fetch_viewport,
+                        .scissorCount = 1, .pScissors = &fetch_scissor};
+                    const VkPipelineColorBlendAttachmentState fetch_blend_attachment = {.colorWriteMask = 0xfu};
+                    const VkPipelineColorBlendStateCreateInfo fetch_blend = {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                        .attachmentCount = 1, .pAttachments = &fetch_blend_attachment};
+                    const VkGraphicsPipelineCreateInfo fetch_pipeline_info = {
+                        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                        .layout = fetch_layout, .renderPass = fetch_pass, .subpass = phase,
+                        .stageCount = 2, .pStages = fetch_stages,
+                        .pVertexInputState = &fetch_vertex_input,
+                        .pInputAssemblyState = &fetch_assembly,
+                        .pRasterizationState = &fetch_raster,
+                        .pMultisampleState = &fetch_multisample,
+                        .pViewportState = &fetch_viewport_state,
+                        .pColorBlendState = &fetch_blend};
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_SAMPLE_RATE_FETCH step=pipeline subpass=%u", phase);
+                    rc = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &fetch_pipeline_info,
+                        NULL, &fetch_pipelines[phase]);
+                    if (!shape_step("fetch_create_pipeline", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    if (phase) {
+                        VkGraphicsPipelineCreateInfo baked_info = fetch_pipeline_info;
+                        baked_info.pStages = fetch_stages_const;
+                        rc = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &baked_info,
+                            NULL, &fetch_baked);
+                        if (!shape_step("fetch_baked_pipeline", rc) || rc != VK_SUCCESS)
+                            goto fetch_cleanup;
+                    }
+                }
+                /* The uniform block names the sample the fetch stage reads, so
+                 * the phase is a SWEEP over sample indices: one submit per
+                 * index, each judged on its own readback. Two indices are
+                 * enough to tell "the index is not delivered" (every index
+                 * returns the same plane) from "the read is fixed to plane
+                 * zero" and from a working per-sample read. */
+                for (unsigned pass_index = 0; pass_index < 2; ++pass_index) {
+                    const int32_t wanted = pass_index ?
+                        (int32_t)(ps5vk_sample_count_number(params->samples) - 1u) : 0;
+                    if (!ubo_mapped) goto fetch_cleanup;
+                    memcpy(ubo_mapped, &wanted, sizeof(wanted));
+                    /* The uniform block is non-coherent host memory: the GPU
+                     * only sees it after the driver flushes the range, exactly
+                     * as the readback side invalidates before reading. */
+                    {
+                        VkMappedMemoryRange ubo_range = {
+                            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                            .memory = ubo_memory, .offset = 0, .size = VK_WHOLE_SIZE};
+                        rc = vkFlushMappedMemoryRanges(device, 1, &ubo_range);
+                        if (!shape_step("fetch_ubo_flush", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    }
+                    VkClearValue fetch_clears[2] = {
+                        {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
+                        {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}}};
+                    const VkRenderPassBeginInfo fetch_begin_info = {
+                        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = fetch_pass,
+                        .framebuffer = fetch_fb,
+                        .renderArea = {{0, 0}, {params->extent, params->extent}},
+                        .clearValueCount = 2, .pClearValues = fetch_clears};
+                    const VkCommandBufferBeginInfo fetch_begin = {
+                        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+                    rc = vkBeginCommandBuffer(command, &fetch_begin);
+                    if (!shape_step("fetch_begin_command", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    vkCmdBeginRenderPass(command, &fetch_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+                    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, fetch_pipelines[0]);
+                    vkCmdDraw(command, 3, 1, 0, 0);
+                    vkCmdNextSubpass(command, VK_SUBPASS_CONTENTS_INLINE);
+                    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pass_index ? fetch_baked : fetch_pipelines[1]);
+                    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, fetch_layout, 0,
+                        1, &fetch_set, 0, NULL);
+                    vkCmdDraw(command, 3, 1, 0, 0);
+                    vkCmdEndRenderPass(command);
+                    rc = vkEndCommandBuffer(command);
+                    if (!shape_step("fetch_end_command", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    VkQueue fetch_queue = VK_NULL_HANDLE;
+                    vkGetDeviceQueue(device, 0, 0, &fetch_queue);
+                    const VkSubmitInfo fetch_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                        .commandBufferCount = 1, .pCommandBuffers = &command};
+                    rc = vkQueueSubmit(fetch_queue, 1, &fetch_submit, fence);
+                    if (!shape_step("fetch_submit", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    rc = vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000));
+                    if (!shape_step("fetch_wait", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
+                    rc = vkResetFences(device, 1, &fence);
+                    void *fetched = NULL;
+                    VkDeviceSize fetched_bytes = 0;
+                    VkResult map_rc = ps5vk_image_span(device, images[2], &fetched, &fetched_bytes);
+                    if (!shape_step("fetch_readback_map", map_rc) || map_rc != VK_SUCCESS)
+                        goto fetch_cleanup;
+                    /* The value a plane holds is R = sampleID/255 in the first
+                     * byte of the RGBA8 word, which the witness measured for
+                     * every sample of this target. */
+                    const uint32_t wanted_word = UINT32_C(0xff000000) | ((uint32_t)wanted << 16);
+                    const uint32_t words = (uint32_t)(fetched_bytes / 4u);
+                    const uint32_t plane_words = params->extent * params->extent;
+                    uint32_t matched = 0;
+                    uint32_t seen[4] = {0};
+                    unsigned distinct = 0;
+                    for (uint32_t i = 0; i < words; ++i) {
+                        uint32_t word = 0;
+                        memcpy(&word, (const unsigned char *)fetched + (size_t)i * 4u, sizeof(word));
+                        if (word == wanted_word) ++matched;
+                        unsigned found = 0;
+                        for (unsigned k = 0; k < distinct && !found; ++k) found = seen[k] == word;
+                        if (!found && distinct < 4u) seen[distinct++] = word;
+                    }
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_SAMPLE_RATE_FETCH extent=%ux%u samples=%u sample_index=%d words=%u "
+                        "matched=%u expected=%u value=%08x seen=%08x,%08x,%08x,%08x verdict=%u",
+                        params->extent, params->extent, (unsigned)params->samples, (int)wanted, words,
+                        matched, plane_words, wanted_word,
+                        seen[0], seen[1], seen[2], seen[3],
+                        (unsigned)(matched == plane_words));
+                }
+fetch_cleanup:
+                if (sample_module) vkDestroyShaderModule(device, sample_module, NULL);
+                for (unsigned i = 0; i < 2; ++i)
+                    if (fetch_pipelines[i]) vkDestroyPipeline(device, fetch_pipelines[i], NULL);
+                if (fetch_baked) vkDestroyPipeline(device, fetch_baked, NULL);
+                if (const_module) vkDestroyShaderModule(device, const_module, NULL);
+                if (fetch_layout) vkDestroyPipelineLayout(device, fetch_layout, NULL);
+                if (fetch_pool) vkDestroyDescriptorPool(device, fetch_pool, NULL);
+                if (fetch_set_layout) vkDestroyDescriptorSetLayout(device, fetch_set_layout, NULL);
+                if (fetch_fb) vkDestroyFramebuffer(device, fetch_fb, NULL);
+                if (fetch_pass) vkDestroyRenderPass(device, fetch_pass, NULL);
             }
             {
                 const VkCommandBufferBeginInfo two_begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};

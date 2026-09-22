@@ -326,6 +326,9 @@ int main(void)
             uint32_t ms_words[8];
             assert(ps5vk_image_resource_descriptor(&d, ms_view, ms_words) == VK_SUCCESS);
             assert((ms_words[3] & UINT32_C(0x000ff000)) == (2u << 16));
+            /* The MSAA type tag, not the plain 2D one: without it the hardware
+             * reads the surface as single-sample data. */
+            assert((ms_words[3] >> 28) == 14u);
             /* The single-sample record for the same shape carries no sample
              * geometry at all, which is the difference the fields express. */
             VkImageCreateInfo single_ii = ms_ii;

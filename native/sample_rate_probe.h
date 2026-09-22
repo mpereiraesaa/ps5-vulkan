@@ -49,6 +49,15 @@ struct ps5vk_sample_rate_shape_params {
     size_t write_fragment_words;
     const uint32_t *fetch_fragment;
     size_t fetch_fragment_words;
+    /* The fragment module whose output varies with gl_SampleID, used by the
+     * per-sample fetch phase so each sample plane of the multisampled target
+     * holds a value only that sample can have produced. */
+    const uint32_t *sample_fragment;
+    size_t sample_fragment_words;
+    /* The same fetch stage with the sample index baked in, for telling "the
+     * index never reached the shader" from "the read ignores the index". */
+    const uint32_t *fetch_const_fragment;
+    size_t fetch_const_fragment_words;
 };
 
 /* Returns VK_SUCCESS when every step ran or stopped at a named refusal; the

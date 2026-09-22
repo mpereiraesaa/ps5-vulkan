@@ -3366,3 +3366,52 @@ pinned against the pinned compiler. What it does not establish: the read has
 not yet been measured on hardware, the resolve is still refused by the
 executor, no CTS leaf passes, the row stays a blocker, and nothing is
 advertised.
+
+## The per-sample read executes but does not yet select the sample (2026-09-22)
+
+The multisample resource record from the previous slice was measured on
+hardware, and the honest result is a negative one that narrows the search. The
+probe's fetch phase is now a SWEEP: subpass 0 draws per-sample values into the
+multisampled target (the gl_SampleID module the witness uses, so plane k holds
+`0xff0k0000`), and subpass 1 reads a NAMED sample of it through the
+resource-only record and writes its own single-sample target, which is then
+read back through the driver's own span.
+
+What the shape does: every object and every recording step succeeds, the pass is
+submitted and completes, and the read runs - run
+`20260922T123034336Z_PPSA99994_ps5vk_0x19ec71b787e8a`, log SHA-256
+`851d2b53213e497644a88312efff8c2fc7f22fe3374b6a4fa453fc8a1fc461ca`. What it
+returns: for sample index 0 the target holds sample 0's value, and for sample
+index 3 it holds sample 0's value again - the index does not select the plane.
+
+Three hypotheses were ruled out by measurement rather than argument:
+
+1. **The uniform block never reached the shader.** Ruled out twice: the flush
+   for the non-coherent block is now emitted (a partial mapping cannot be
+   flushed at all - the range has to cover a whole non-coherent atom or end at
+   the allocation), and the second index runs a module with the sample index
+   BAKED IN (`subpassLoad(imageMS, 3)`) which reads the same plane 0.
+2. **The compiler drops the index.** Disassembled with the pinned compiler's own
+   `PSBC_DEBUG_DISASM`: the baked module lowers to `v_mov_b32 3` into v7 and
+   then `image_load ... 2darraymsaa` with that register as the sample operand,
+   so the index is carried into the instruction.
+3. **The record needs the multisampled type tag.** The pinned header's own tag
+   for a multisampled 2D surface is `V_008F1C_SQ_RSRC_IMG_2D_MSAA` (14), not the
+   plain 2D tag (9), so the record now carries it together with BASE_LEVEL 0 and
+   LAST_LEVEL log2(samples) - and the measurement is unchanged (run
+   `20260922T123243995Z_PPSA99994_ps5vk_0x19ee54bac640d`, log SHA-256
+   `944289f6b23120b31466be1f917ffdc6c78f5904f74ecb8fb30ecae29a698e97`). The tag
+   and the level fields are therefore necessary-but-not-sufficient: the record
+   now says what the compiler says, and the hardware still reads plane 0.
+
+What remains, stated as the next question rather than as a guess: how the
+surface a colour attachment is backed by is laid out for a sample-indexed read,
+and whether the tile mode the record carries describes THAT layout. The witness
+measured the storage as one plane per sample and the clear fills all of them;
+what a sample-indexed fetch reads is a different question, and the answer is
+what the next slice has to measure.
+
+What this establishes: the read executes end to end with the index in the
+instruction, and the value always comes from plane 0. What it does not
+establish: the per-sample read, the resolve, any passing CTS leaf, the row - all
+unchanged, and nothing is advertised.
