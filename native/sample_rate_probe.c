@@ -309,7 +309,8 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
         !params->write_fragment || !params->write_fragment_words ||
         !params->fetch_fragment || !params->fetch_fragment_words ||
         !params->sample_fragment || !params->sample_fragment_words ||
-        !params->fetch_const_fragment || !params->fetch_const_fragment_words)
+        !params->fetch_const_fragment || !params->fetch_const_fragment_words ||
+        !params->resolve_fragment || !params->resolve_fragment_words)
         return VK_ERROR_INITIALIZATION_FAILED;
 
 #define SHAPE_TRY(call) do { rc = (call); if (!shape_step(#call, rc)) goto cleanup; } while (0)
@@ -938,6 +939,146 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
                  * fact that decides what a sample-indexed read should address;
                  * assuming the planes are stacked is what the last window got
                  * wrong. */
+                /* The resolve arithmetic, measured: one more submit of the same
+                 * pass whose fetch stage is replaced by a stage that reads
+                 * EVERY sample and writes their average. The oracle is that the
+                 * target holds a value NONE of the samples had - an average, not
+                 * a plane - which is what tells a resolve apart from a copy. */
+                {
+                    VkShaderModule resolve_module = VK_NULL_HANDLE;
+                    VkPipeline resolve_pipeline = VK_NULL_HANDLE;
+                    VkResult resolve_rc = vkCreateShaderModule(device,
+                        &(VkShaderModuleCreateInfo){
+                            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                            .codeSize = params->resolve_fragment_words * 4u,
+                            .pCode = params->resolve_fragment},
+                        NULL, &resolve_module);
+                    if (!shape_step("resolve_module", resolve_rc) || resolve_rc != VK_SUCCESS)
+                        goto resolve_done;
+                    {
+                        const VkPipelineShaderStageCreateInfo resolve_stages[2] = {
+                            {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+                             VK_SHADER_STAGE_VERTEX_BIT, modules[0], "main", NULL},
+                            {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+                             VK_SHADER_STAGE_FRAGMENT_BIT, resolve_module, "main", NULL}};
+                        const VkPipelineVertexInputStateCreateInfo resolve_vertex_input = {
+                            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+                        const VkPipelineInputAssemblyStateCreateInfo resolve_assembly = {
+                            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+                        const VkPipelineRasterizationStateCreateInfo resolve_raster = {
+                            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                            .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = VK_CULL_MODE_NONE,
+                            .frontFace = VK_FRONT_FACE_CLOCKWISE, .lineWidth = 1.0f};
+                        /* The resolve draw RENDERS INTO a single-sample target,
+                         * so its own rasterization is single-sample: the
+                         * multisampling it reads belongs to the attachment it
+                         * reads, and the front end refuses a pipeline whose
+                         * sample count does not match the subpass it renders
+                         * in. */
+                        const VkPipelineMultisampleStateCreateInfo resolve_multisample = {
+                            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
+                        const VkViewport resolve_viewport = {0.0f, 0.0f, (float)params->extent,
+                            (float)params->extent, 0.0f, 1.0f};
+                        const VkRect2D resolve_scissor = {{0, 0}, {params->extent, params->extent}};
+                        const VkPipelineViewportStateCreateInfo resolve_viewport_state = {
+                            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                            .viewportCount = 1, .pViewports = &resolve_viewport,
+                            .scissorCount = 1, .pScissors = &resolve_scissor};
+                        const VkPipelineColorBlendAttachmentState resolve_blend_attachment = {
+                            .colorWriteMask = 0xfu};
+                        const VkPipelineColorBlendStateCreateInfo resolve_blend = {
+                            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                            .attachmentCount = 1, .pAttachments = &resolve_blend_attachment};
+                        const VkGraphicsPipelineCreateInfo resolve_info = {
+                            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                            .layout = fetch_layout, .renderPass = fetch_pass, .subpass = 1,
+                            .stageCount = 2, .pStages = resolve_stages,
+                            .pVertexInputState = &resolve_vertex_input,
+                            .pInputAssemblyState = &resolve_assembly,
+                            .pRasterizationState = &resolve_raster,
+                            .pMultisampleState = &resolve_multisample,
+                            .pViewportState = &resolve_viewport_state,
+                            .pColorBlendState = &resolve_blend};
+                        resolve_rc = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
+                            &resolve_info, NULL, &resolve_pipeline);
+                        if (!shape_step("resolve_pipeline", resolve_rc) || resolve_rc != VK_SUCCESS)
+                            goto resolve_done;
+                    }
+                    {
+                        VkClearValue resolve_clears[2] = {
+                            {.color = {.float32 = {0.5f, 0.5f, 0.5f, 1.0f}}},
+                            {.color = {.float32 = {0.5f, 0.5f, 0.5f, 1.0f}}}};
+                        const VkRenderPassBeginInfo resolve_begin_info = {
+                            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                            .renderPass = fetch_pass, .framebuffer = fetch_fb,
+                            .renderArea = {{0, 0}, {params->extent, params->extent}},
+                            .clearValueCount = 2, .pClearValues = resolve_clears};
+                        resolve_rc = vkBeginCommandBuffer(command,
+                            &(VkCommandBufferBeginInfo){
+                                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO});
+                        if (!shape_step("resolve_begin_command", resolve_rc) || resolve_rc != VK_SUCCESS)
+                            goto resolve_done;
+                        vkCmdBeginRenderPass(command, &resolve_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+                        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, fetch_pipelines[0]);
+                        vkCmdDraw(command, 3, 1, 0, 0);
+                        vkCmdNextSubpass(command, VK_SUBPASS_CONTENTS_INLINE);
+                        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, resolve_pipeline);
+                        vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, fetch_layout,
+                            0, 1, &fetch_set, 0, NULL);
+                        vkCmdDraw(command, 3, 1, 0, 0);
+                        vkCmdEndRenderPass(command);
+                        resolve_rc = vkEndCommandBuffer(command);
+                        if (!shape_step("resolve_end_command", resolve_rc) || resolve_rc != VK_SUCCESS)
+                            goto resolve_done;
+                        VkQueue resolve_queue = VK_NULL_HANDLE;
+                        vkGetDeviceQueue(device, 0, 0, &resolve_queue);
+                        const VkSubmitInfo resolve_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                            .commandBufferCount = 1, .pCommandBuffers = &command};
+                        resolve_rc = vkQueueSubmit(resolve_queue, 1, &resolve_submit, fence);
+                        if (!shape_step("resolve_submit", resolve_rc) || resolve_rc != VK_SUCCESS)
+                            goto resolve_done;
+                        resolve_rc = vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000));
+                        if (!shape_step("resolve_wait", resolve_rc) || resolve_rc != VK_SUCCESS)
+                            goto resolve_done;
+                        resolve_rc = vkResetFences(device, 1, &fence);
+                    }
+                    {
+                        void *resolved = NULL;
+                        VkDeviceSize resolved_bytes = 0;
+                        VkResult map_rc = ps5vk_image_span(device, images[2], &resolved, &resolved_bytes);
+                        if (!shape_step("resolve_readback_map", map_rc) || map_rc != VK_SUCCESS)
+                            goto resolve_done;
+                        const uint32_t words = (uint32_t)(resolved_bytes / 4u);
+                        uint32_t seen[4] = {0};
+                        unsigned distinct = 0;
+                        for (uint32_t i = 0; i < words; ++i) {
+                            uint32_t word = 0;
+                            memcpy(&word, (const unsigned char *)resolved + (size_t)i * 4u,
+                                sizeof(word));
+                            unsigned found = 0;
+                            for (unsigned k = 0; k < distinct && !found; ++k) found = seen[k] == word;
+                            if (!found && distinct < 4u) seen[distinct++] = word;
+                        }
+                        /* The four samples held R = 0,1,2,3; the average is 1.5,
+                         * so the result is neither a sample nor the clear. */
+                        /* The samples held R = 0,1,2,3 in the FIRST byte (the
+                         * census' encoding); 1.5 rounds to either neighbour,
+                         * and what matters is that the result is neither a
+                         * sample nor the clear. */
+                        const int averaged = (seen[0] == UINT32_C(0xff000001) ||
+                                              seen[0] == UINT32_C(0xff000002));
+                        ps5log_printf(PS5LOG_MARK,
+                            "PS5VK_SAMPLE_RATE_RESOLVE extent=%ux%u samples=%u words=%u distinct=%u "
+                            "value=%08x second=%08x averaged=%d",
+                            params->extent, params->extent, (unsigned)params->samples, words,
+                            distinct, seen[0], seen[1], averaged);
+                    }
+resolve_done:
+                    if (resolve_pipeline) vkDestroyPipeline(device, resolve_pipeline, NULL);
+                    if (resolve_module) vkDestroyShaderModule(device, resolve_module, NULL);
+                }
                 {
                     void *source = NULL;
                     VkDeviceSize source_bytes = 0;

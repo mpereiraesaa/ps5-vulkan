@@ -58,6 +58,10 @@ struct ps5vk_sample_rate_shape_params {
      * index never reached the shader" from "the read ignores the index". */
     const uint32_t *fetch_const_fragment;
     size_t fetch_const_fragment_words;
+    /* The fragment stage that reads EVERY sample and writes their average: the
+     * arithmetic a resolve is made of. */
+    const uint32_t *resolve_fragment;
+    size_t resolve_fragment_words;
 };
 
 /* Returns VK_SUCCESS when every step ran or stopped at a named refusal; the

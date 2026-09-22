@@ -4566,7 +4566,9 @@ int main(void)
             .sample_fragment = ps5vk_runtime_sample_id_fragment,
             .sample_fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4,
             .fetch_const_fragment = ps5vk_runtime_subpass_fetch_const_fragment,
-            .fetch_const_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_const_fragment) / 4};
+            .fetch_const_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_const_fragment) / 4,
+            .resolve_fragment = ps5vk_runtime_subpass_resolve_fragment,
+            .resolve_fragment_words = sizeof(ps5vk_runtime_subpass_resolve_fragment) / 4};
         CHECK(ps5vk_sample_rate_shape_probe(device, &shape_params));
     }
 #endif

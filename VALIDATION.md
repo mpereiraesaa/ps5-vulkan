@@ -3563,3 +3563,40 @@ delivers an arbitrary sample on this hardware, which is the enabler the oracle's
 fetch subpass needs and the same read a resolve is built from. What it does not
 establish: the resolve itself, the CTS leaves, the row - all unchanged, and
 nothing is advertised.
+
+## The resolve arithmetic, measured (2026-09-22)
+
+With the per-sample read working, the arithmetic a resolve is made of is one
+more submit of the same pass: subpass 0 dresses every sample of the
+multisampled attachment, and subpass 1 runs a stage that reads EVERY sample and
+writes their average into its own single-sample target. Two probe defects were
+paid for on the way and both are ordinary ones: the resolve pipeline was first
+created with the multisampled state of the attachment it READS rather than the
+single-sample state of the target it renders into (the front end refuses a
+pipeline whose sample count does not match its subpass), and the oracle
+compared against the 64x64 witness's encoding instead of the 32x32 census'.
+
+Measured on the console (run `20260922T135608051Z_PPSA99994_ps5vk_0x1a37260b0a121`,
+log SHA-256 `8cdd8405708b1170e09010f1ee316967d062ecc079c90fe7be1062be31bd4425`,
+payload eboot `72470aa67baa609ef691b7f98410c951710fe0c36e2e9ea26f254286f5b6afb6`):
+
+```
+PS5VK_SAMPLE_RATE_FETCH   sample_index=0 matched=1024 expected=1024 value=ff000000 verdict=1
+PS5VK_SAMPLE_RATE_FETCH   sample_index=3 matched=1024 expected=1024 value=ff000003 verdict=1
+PS5VK_SAMPLE_RATE_RESOLVE samples=4 words=32768 distinct=2 value=ff000002 second=ff808080 averaged=1
+```
+
+The four samples hold R = 0, 1, 2 and 3; their average is 1.5, and the target
+holds R = 2 - a value NO sample had, with the pass clear in the tiled padding.
+So the resolve result is computed by reading the samples this profile can now
+address, and the value it produces is the average rather than any one plane.
+Both facts come from one run, in one pass, on the same attachment.
+
+What this establishes: the two mechanisms the oracle's pass needs - selecting a
+sample of a multisampled colour attachment, and averaging them into a
+single-sample target - are measured on hardware, with the exact fields the
+resource record has to carry (ARRAY MSAA type, BASE_LEVEL 0 / LAST_LEVEL log2,
+MAX_MIP log2). What it does not establish: the executor does not yet EMIT that
+resolve for a subpass that declares a resolve target - it still refuses such a
+pass - and no CTS leaf passes, the row stays a blocker, and nothing is
+advertised.
