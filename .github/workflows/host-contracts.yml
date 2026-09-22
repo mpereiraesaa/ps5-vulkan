@@ -31,6 +31,9 @@ jobs:
           repository: mpereiraesaa/ps5-homebrew-lab
           ref: 62c63455b561ef4ab45d2d24923bdfadbc2200ce
           path: lab-reference
+          # The lab repository is private; this read-only deploy key is
+          # scoped to it alone.
+          ssh-key: ${{ secrets.LAB_REFERENCE_SSH_KEY }}
 
       - name: Link telemetry client
         run: ln -s "$GITHUB_WORKSPACE/lab-reference/projects/logging_server" "$GITHUB_WORKSPACE/homebrew_ps5/projects/logging_server"
