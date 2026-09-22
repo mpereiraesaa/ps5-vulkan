@@ -462,7 +462,9 @@
       "dEQP-VK.synchronization.basic.fence.multi_waitall_false",
       "dEQP-VK.synchronization.basic.fence.multiple_signaled",
       "dEQP-VK.synchronization.basic.fence.one",
-      "dEQP-VK.synchronization.basic.fence.one_signaled"
+      "dEQP-VK.synchronization.basic.fence.one_signaled",
+      "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+      "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1"
     ],
     "diagnostics": [
       "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_3_extra_bytes_offset_12",
@@ -510,8 +512,6 @@
       "dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_0",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_1",
-      "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
-      "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1",
       "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test"
     ],
     "manifest": "cts/upstream/manifest.json",
