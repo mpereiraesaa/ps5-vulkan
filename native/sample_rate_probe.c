@@ -927,6 +927,57 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
                         seen[0], seen[1], seen[2], seen[3],
                         (unsigned)(matched == plane_words));
                 }
+                /* After the sweep, the SOURCE's own layout is measured: the
+                 * multisampled attachment is mapped through the driver's span
+                 * after subpass 0 dressed every sample differently, and each
+                 * sample value's word count and first/last offset are logged, now that
+                 * subpass 0 has drawn them in the last iteration.
+                 * What the hardware does with the storage it was given is the
+                 * fact that decides what a sample-indexed read should address;
+                 * assuming the planes are stacked is what the last window got
+                 * wrong. */
+                {
+                    void *source = NULL;
+                    VkDeviceSize source_bytes = 0;
+                    VkResult map_rc = ps5vk_image_span(device, images[0], &source, &source_bytes);
+                    if (!shape_step("fetch_source_map", map_rc) || map_rc != VK_SUCCESS)
+                        goto fetch_cleanup;
+                    const uint32_t words = (uint32_t)(source_bytes / 4u);
+                    /* What the multisampled attachment ACTUALLY holds after the
+                     * last sweep iteration, as a census rather than a search
+                     * for expected values: the previous form assumed the four
+                     * per-sample encodings were there, and the pass may have
+                     * shaded once per pixel instead - in which case there is no
+                     * other sample to read and "index 3 returns sample 0" says
+                     * nothing about the index at all. */
+                    uint32_t census[4] = {0}, census_hits[4] = {0};
+                    uint32_t census_first[4] = {0}, census_last[4] = {0};
+                    unsigned distinct = 0;
+                    for (uint32_t i = 0; i < words; ++i) {
+                        uint32_t word = 0;
+                        memcpy(&word, (const unsigned char *)source + (size_t)i * 4u, sizeof(word));
+                        unsigned slot = distinct;
+                        for (unsigned k = 0; k < distinct; ++k) {
+                            if (census[k] == word) { slot = k; break; }
+                        }
+                        if (slot == distinct) {
+                            if (distinct == 4u) continue;
+                            census[distinct] = word;
+                            census_first[distinct] = i;
+                            ++distinct;
+                        }
+                        ++census_hits[slot];
+                        census_last[slot] = i;
+                    }
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_SAMPLE_RATE_SOURCE extent=%ux%u samples=%u words=%u distinct=%u "
+                        "value0=%08x hits0=%u first0=%u last0=%u value1=%08x hits1=%u "
+                        "value2=%08x hits2=%u value3=%08x hits3=%u",
+                        params->extent, params->extent, (unsigned)params->samples, words, distinct,
+                        census[0], census_hits[0], census_first[0], census_last[0],
+                        census[1], census_hits[1], census[2], census_hits[2],
+                        census[3], census_hits[3]);
+                }
 fetch_cleanup:
                 if (sample_module) vkDestroyShaderModule(device, sample_module, NULL);
                 for (unsigned i = 0; i < 2; ++i)

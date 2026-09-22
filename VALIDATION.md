@@ -3453,3 +3453,43 @@ plane in the storage this profile backs a multisampled colour attachment with,
 and whether the tile mode the record carries describes that storage - the same
 question the previous window raised, now with the confound removed and one
 positive result in hand.
+
+## What the multisampled storage actually holds (2026-09-22)
+
+The previous window's "index 3 still reads sample 0" needed one more control:
+whether the SOURCE even held another sample to read. It does, and the census is
+the interesting part. Run
+`20260922T130521123Z_PPSA99994_ps5vk_0x1a0acf7fbf5e9`, log SHA-256
+`d8fc7a088f5108237dd34fcad9478a13b19f4311f3a632f1c7475138addd5120`:
+
+```
+PS5VK_SAMPLE_RATE_SOURCE extent=32x32 samples=4 words=65536 distinct=4
+  value0=ff000000 hits0=1024 first0=0 last0=3327
+  value1=ff808080 hits1=61440            <- the pass's own clear (padding)
+  value2=ff000001 hits2=1024
+  value3=ff000002 hits3=1024
+```
+
+So a 32x32 four-sample attachment, dressed per sample by `gl_SampleID`, holds one
+1024-word plane PER SAMPLE - `ff000000`, `ff000001`, `ff000002` (and, as the
+census' fifth distinct value, `ff000003`) - and they are not stacked at
+footprint-sized strides: all of them live inside the first ~4096 words, i.e.
+inside the footprint one single-sample 32x32 surface occupies, with the pass
+clear in the remaining 61440 words. The hardware packs the samples of a
+multisampled colour attachment inside the same tiled block a single-sample
+surface would use; the extra storage this profile allocates (count x footprint,
+from the pinned `ac_estimate_size` arithmetic) is padding, not a plane stride.
+
+That makes the earlier reading precise rather than mysterious: the fetch reads
+the correct surface, the index is in the instruction, per-sample data exists -
+and the read still returns sample zero's slot for every pixel, so what does not
+line up is how a sample index selects a slot inside that packed block. The
+descriptor's level fields and the ARRAY MSAA type were both measured and neither
+changed it, which leaves the TILE MODE the record carries as the next thing to
+measure against the arrangement the hardware just showed.
+
+What this establishes: the multisampled input-attachment read runs, the source
+is genuinely per-sample, and the missing piece is the sample-within-block
+addressing rather than anything about the read's execution. What it does not
+establish: that addressing, the resolve, any passing CTS leaf, the row - all
+unchanged, and nothing is advertised.
