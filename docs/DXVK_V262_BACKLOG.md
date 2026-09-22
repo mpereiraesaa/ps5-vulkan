@@ -11,7 +11,6 @@ public KHR queries, dedicated floor witnesses and 48 passing original CTS
 leaves within a 165/165 regression; the indirect and indexed draws (T03)
 have all three requirements satisfied by core feature reports, the
 per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
-<<<<<<< HEAD
 leaves within a 211/211 regression and the public-SDK indirect witness; the
 optional graphics stages (T04) satisfied the `shaderClipDistance` and
 `shaderCullDistance` pair with 64 promoted clip/cull leaves and 29 geometry
@@ -20,15 +19,14 @@ tessellation clip/cull and TCS/TES resource cases in the 403/403 default
 candidate run (those 99 stay outside the frozen acceptance selection;
 `geometryShader` and `tessellationShader` are positive on the API,
 implementation and CTS axes but still `reported-not-executed` natively, so
-both remain blockers); and `fragmentStoresAndAtomics` (T06) is satisfied with
-its two `frag_side_effects` leaves inside the 306/306 canonical selection.
-The live matrix is 11/62 ready with 51 blockers. The ordered table preserves
-the original tranche membership.
-=======
-leaves within a 211/211 regression and the public-SDK indirect witness. The
-The four DXVK262-T05 rasterization and viewport features were promoted on 2026-09-21: the shipping profile advertises them and the frozen acceptance selection, now 362 cases, passes 362/362 with them reported. The live matrix is 13/62 ready with 49 blockers. The ordered table preserves the
-original tranche membership.
->>>>>>> origin/main
+both remain blockers); the four DXVK262-T05 rasterization and viewport
+features were promoted on 2026-09-21, and the frozen acceptance selection,
+now 362 cases, passes 362/362 with them reported; and of T06,
+`fragmentStoresAndAtomics` and `dualSrcBlend` are satisfied with their four
+axes and `independentBlend` was promoted on 2026-09-22, while
+`sampleRateShading` remains a blocker on all four. The live matrix is 16/62
+ready with 46 blockers. The ordered table preserves the original tranche
+membership.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
 11_0 baseline. Reaching 62/62 means that this profile has complete API,
