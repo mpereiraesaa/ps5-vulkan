@@ -640,8 +640,12 @@ CTS_GATED_OFF_REQUIREMENT = {
 # than a claim. A violation that is not in this table fails the gate.
 KNOWN_BLOCKERS = {
     "maxImageDimension1D": "compute-only build: graphics limits are not applied to this profile",
-    "maxColorAttachments": "one color attachment per render pass",
-    "maxFragmentOutputAttachments": "one color attachment per render pass",
+    # DXVK262-T06 independentBlend describes two colour attachments through the
+    # whole ABI and programmes one CB_COLORn block per target, but the profile
+    # does not advertise the second one until a native witness writes and reads
+    # back two targets; the DXVK profile asks for four either way.
+    "maxColorAttachments": "one color attachment per render pass; a second needs the native witness",
+    "maxFragmentOutputAttachments": "one color attachment per render pass; a second needs the native witness",
     "maxFragmentCombinedOutputResources": "one color attachment plus the single sampled descriptor",
     "maxVertexInputBindings": "compute-only build: graphics limits are not applied; graphics supports 16 bindings (VERTEX_INPUT.md)",
     # The graphics profile reports the Vulkan 1.0 floors for these four; only the

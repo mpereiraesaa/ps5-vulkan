@@ -20,13 +20,15 @@
  *
  * `maxFragmentDualSrcAttachments` and the dual-source contract are separate:
  * dual source adds a second *source* to attachment zero, not a second target. */
-/* PS5VK_MAX_COLOR_ATTACHMENTS is the widest count this ABI can DESCRIBE:
- * render pass, framebuffer and pipeline key all carry that many colour roles.
- * It is not what the profile SERVES yet - the advertised
- * VkPhysicalDeviceLimits.maxColorAttachments is still 1, and the runtime
- * adapter refuses a two-target program until the slice that can render a
- * second target lands. A pass or pipeline asking for more than this is refused
- * where the application can see it. */
+/* PS5VK_MAX_COLOR_ATTACHMENTS is both the widest count this ABI can describe
+ * and what the profile serves: the render pass, the framebuffer and the
+ * pipeline key each carry that many colour roles, the native draw state
+ * programmes one CB_COLORn block, one CB_BLENDn_CONTROL and one
+ * SPI_SHADER_COL_FORMAT nibble per attachment with a per-attachment write mask
+ * in CB_TARGET_MASK, and the advertised maxColorAttachments reports the same
+ * bound. A pass or pipeline asking for more is refused where the application
+ * can see it, and a multiview subpass that names two colour targets is refused
+ * because the view expansion rewrites one target's layer-addressed words. */
 enum { PS5VK_MAX_COLOR_ATTACHMENTS = 2 };
 
 /* AGC context-register offsets for the colour targets.

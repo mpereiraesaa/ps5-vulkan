@@ -105,18 +105,6 @@ static int specialization_key(const VkSpecializationInfo *info,
     return 1;
 }
 
-/* Any attachment of this colour-blend state consuming the fragment module's
- * secondary export: a SRC1 factor needs dualSrcBlend enabled on the logical
- * device and the compiler-proven export, whichever attachment asked for it. */
-static int color_state_uses_src1(const VkPipelineColorBlendStateCreateInfo *b)
-{
-    /* Vulkan makes pColorBlendState optional: a subpass with no colour
-     * attachment may omit it entirely, and then there is no state to inspect. */
-    if (!b) return 0;
-    for (uint32_t attachment = 0; attachment < b->attachmentCount; ++attachment)
-        if (ps5vk_color_attachment_uses_src1(&b->pAttachments[attachment])) return 1;
-    return 0;
-}
 static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                        const VkAllocationCallbacks *allocator, VkPipeline *out)
 {
@@ -280,14 +268,6 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     const uint32_t blend_attachment_count = b ? b->attachmentCount : 0u;
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
         (b && b->attachmentCount && !b->pAttachments)) return VK_ERROR_UNKNOWN;
-    /* SRC1 names the fragment shader's secondary output for attachment zero.
-     * Refuse it before compiler/backend work unless the application enabled
-     * dualSrcBlend on this logical device.  The compiler separately proves
-     * that the selected fragment module actually exports the secondary value;
-     * the two checks prevent either state alone from authorizing a draw. */
-    if(color_state_uses_src1(b) &&
-       !(d->enabled_features & PS5VK_FEATURE_DUAL_SRC_BLEND))
-        return refuse(18);
     /* Every static element is validated before any is stored. */
     for (uint32_t i = 0; i < vp->viewportCount; ++i) {
         const VkViewport *viewport=&vp->pViewports[i]; const VkRect2D *scissor=&vp->pScissors[i];
@@ -348,11 +328,19 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (blend_attachment_count != subpass->color_count) return refuse(15);
     key.color_attachment_count = subpass->color_count;
     int any_blend = 0;
+    /* Vulkan's independentBlend is what makes element i of pAttachments the
+     * state of attachment i. Without it the elements past the first are not
+     * independent: the first one describes every attachment, and programming
+     * whatever the application left in the others would render with state the
+     * specification says does not apply. The write mask is different - it is
+     * per attachment either way - so only the blend fields are folded. */
+    const int independent_blend = (d->enabled_features & PS5VK_FEATURE_INDEPENDENT_BLEND) != 0;
     for (uint32_t attachment = 0; attachment < subpass->color_count; ++attachment) {
-        const VkPipelineColorBlendAttachmentState *a = &b->pAttachments[attachment];
+        const VkPipelineColorBlendAttachmentState *a =
+            &b->pAttachments[independent_blend ? attachment : 0];
         key.color_format[attachment] =
             pass->attachments[subpass->color[attachment].attachment].format;
-        key.color_write_mask[attachment] = a->colorWriteMask;
+        key.color_write_mask[attachment] = b->pAttachments[attachment].colorWriteMask;
         key.blend_enable[attachment] = a->blendEnable;
         if (!a->blendEnable) continue;
         any_blend = 1;
@@ -365,6 +353,19 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     if (any_blend)
         memcpy(key.blend_constants, b->blendConstants, sizeof(key.blend_constants));
+    /* SRC1 names the fragment shader's secondary output for attachment zero.
+     * The effective state is the key's - already folded to attachment zero's
+     * element when independentBlend is not enabled - so a SRC1 equation the
+     * application left in an element the specification ignores does not refuse
+     * the pipeline. The compiler separately proves that the selected fragment
+     * module really exports the secondary value; the two checks prevent either
+     * state alone from authorizing a draw. */
+    if(!(d->enabled_features & PS5VK_FEATURE_DUAL_SRC_BLEND)) {
+        for (uint32_t attachment = 0; attachment < key.color_attachment_count; ++attachment)
+            if (ps5vk_color_attachment_uses_src1(
+                    &b->pAttachments[independent_blend ? attachment : 0]))
+                return refuse(18);
+    }
     if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
        !specialization_key(fs->pSpecializationInfo,&key.fragment) ||
        (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)) ||

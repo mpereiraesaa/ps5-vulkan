@@ -139,7 +139,11 @@ static void lifecycle(void)
     assert(gl.maxDescriptorSetSamplers==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS &&
         gl.maxDescriptorSetSampledImages==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS);
     assert(gl.maxSamplerAllocationCount==PS5VK_MAX_SAMPLERS && PS5VK_MAX_SAMPLERS==4096);
-    assert(gl.maxFragmentOutputAttachments==1 && gl.maxFragmentCombinedOutputResources==1);
+    /* DXVK262-T06 independentBlend carries two colour attachments through the
+     * ABI and the native path, but the profile does not SERVE the second one
+     * until a native witness writes it, so the advertised bound is still one. */
+    assert(gl.maxColorAttachments==1 && gl.maxFragmentOutputAttachments==1 &&
+           gl.maxFragmentCombinedOutputResources==1);
     const VkFormat guarantee_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_D32_SFLOAT};
     const VkImageUsageFlags guarantee_usages[]={VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
     for(unsigned f=0;f<3;++f) {
@@ -150,7 +154,7 @@ static void lifecycle(void)
         assert(image_limits.maxExtent.height>=gl.maxImageDimension2D);
     }
     assert(gl.maxFramebufferWidth==16383 && gl.maxFramebufferHeight==16383);
-    assert(gl.maxFramebufferLayers==1 && gl.maxColorAttachments==1);
+    assert(gl.maxFramebufferLayers==1);
     assert(gl.framebufferColorSampleCounts==1 && gl.framebufferDepthSampleCounts==1);
     assert(gl.sampledImageColorSampleCounts==1 &&
         gl.sampledImageIntegerSampleCounts==1 && !gl.sampledImageDepthSampleCounts);

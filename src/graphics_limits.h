@@ -1,6 +1,7 @@
 #ifndef PS5VK_GRAPHICS_LIMITS_H
 #define PS5VK_GRAPHICS_LIMITS_H
 #include <vulkan/vulkan_core.h>
+#include "color_attachment_contract.h"
 /* Execution envelope derived from native viewport/target/layout/fetch code.
  * Not Vulkan minimum-limit compliance or validation at maximum dimensions.
  * Texture precision/inter-stage limits are not inferred from GPU branding. */
@@ -56,6 +57,12 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxImageDimension3D=PS5VK_MAX_IMAGE_3D;
     limits->maxImageDimensionCube=PS5VK_MAX_IMAGE_CUBE;
     limits->maxImageArrayLayers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
+    /* DXVK262-T06 independentBlend: the ABI, the render pass, the framebuffer,
+     * the pipeline key and the native per-target programming all carry two
+     * colour attachments, but the profile does not SERVE a second target until
+     * a native witness has written and read back two of them, so the advertised
+     * bound stays at one. A subpass that names no colour target at all (the
+     * DEPTH-ONLY shape) still renders. */
     limits->maxColorAttachments=1;
     limits->maxFragmentOutputAttachments=1;
     limits->maxFragmentCombinedOutputResources=1;

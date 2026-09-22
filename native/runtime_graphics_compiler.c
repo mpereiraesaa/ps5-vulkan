@@ -788,10 +788,12 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
                 p->dual_source_export=1u;
             } else if(primary_mask==3u && !secondary) {
                 /* Two MRTs, proven against the pinned compiler: the export is
-                 * real, but this profile renders one colour attachment, so the
-                 * pipeline stays refused until the slice that can render a
-                 * second target lands. Refusing here is what keeps the second
-                 * export from being dropped silently. */
+                 * real, but the profile does not serve a second target yet -
+                 * the advertised limit is one colour attachment and no draw
+                 * has written two - so the pipeline stays refused. Refusing
+                 * here is what keeps the second export from being dropped
+                 * silently; the slice that witnesses a two-target draw lifts
+                 * this together with the limit. */
                 p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT;
                 goto failed;
             } else goto failed;
