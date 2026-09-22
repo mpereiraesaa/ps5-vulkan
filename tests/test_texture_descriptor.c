@@ -335,6 +335,44 @@ int main(void)
             /* MAX_MIP carries the same sample geometry the pinned GFX9 path
              * writes for a multisampled surface. */
             assert(((ms_words[5] >> 4) & 0xf) == 2u);
+            /* The same record for the shape the pinned CTS uses to RESOLVE: an
+             * image that declares COLOR_ATTACHMENT and TRANSFER_SRC but NOT
+             * the input-attachment role (RENDER_TYPE_RESOLVE,
+             * vktPipelineMultisampleTests.cpp). A subpass resolve is
+             * implementation work rather than an application's descriptor read,
+             * so the app-facing input-attachment gate keeps requiring the role
+             * while the driver's own resolve draw may read the attachment the
+             * pass declares - measured: without this the min_sample_shading
+             * triangle leaves failed at vkQueueSubmit from the resolve
+             * emission's descriptor build. */
+            VkImageCreateInfo resolve_ii = ms_ii;
+            resolve_ii.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            VkImage resolve_image;
+            assert(vkCreateImage(&d, &resolve_ii, NULL, &resolve_image) == VK_SUCCESS);
+            VkMemoryAllocateInfo resolve_ai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize = resolve_image->requirements.size};
+            VkDeviceMemory resolve_memory;
+            assert(vkAllocateMemory(&d, &resolve_ai, NULL, &resolve_memory) == VK_SUCCESS);
+            assert(vkBindImageMemory(&d, resolve_image, resolve_memory, 0) == VK_SUCCESS);
+            VkImageViewCreateInfo resolve_vi = ms_vi;
+            resolve_vi.image = resolve_image;
+            VkImageView resolve_view;
+            assert(vkCreateImageView(&d, &resolve_vi, NULL, &resolve_view) == VK_SUCCESS);
+            uint32_t resolve_words[8];
+            assert(ps5vk_image_resource_descriptor(&d, resolve_view, resolve_words) == VK_SUCCESS);
+            assert((resolve_words[3] >> 28) == 15u);
+            /* ... and an image without the colour-attachment role stays
+             * refused: the read this record describes is a render target read. */
+            VkImageCreateInfo sampled_ii = resolve_ii;
+            sampled_ii.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+            VkImage sampled_image;
+            assert(vkCreateImage(&d, &sampled_ii, NULL, &sampled_image) ==
+                   VK_ERROR_FEATURE_NOT_PRESENT);
+            vkDestroyImageView(&d, resolve_view, NULL);
+            vkDestroyImage(&d, resolve_image, NULL);
+            vkFreeMemory(&d, resolve_memory, NULL);
             /* The single-sample record for the same shape carries no sample
              * geometry at all, which is the difference the fields express. */
             VkImageCreateInfo single_ii = ms_ii;

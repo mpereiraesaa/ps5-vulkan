@@ -143,7 +143,20 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
         (multisampled && image->info.arrayLayers!=1u) ||
         !image->info.arrayLayers ||
         image->info.arrayLayers>(uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR ||
-        !(image->info.usage&VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) ||
+        /* The INPUT_ATTACHMENT role is what an APPLICATION's descriptor read
+         * requires, and the input-attachment gate is where that shape is
+         * enforced for app-recorded sets. The driver's own resolve draw reads
+         * the multisampled colour attachment of the subpass it resolves, and a
+         * subpass resolve is implementation work rather than an app read: the
+         * pinned CTS creates exactly that image with COLOR_ATTACHMENT and
+         * TRANSFER_SRC alone (RENDER_TYPE_RESOLVE,
+         * vktPipelineMultisampleTests.cpp), so a multisampled record needs the
+         * colour-attachment role the pass itself promises instead - measured:
+         * without this, every min_sample_shading triangle leaf failed at
+         * vkQueueSubmit with VK_ERROR_FEATURE_NOT_PRESENT from the resolve
+         * emission's descriptor build. */
+        (!multisampled && !(image->info.usage&VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) ||
+        (multisampled && !(image->info.usage&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) ||
         !(view->view_type==VK_IMAGE_VIEW_TYPE_2D || view->view_type==VK_IMAGE_VIEW_TYPE_2D_ARRAY))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t words[8];

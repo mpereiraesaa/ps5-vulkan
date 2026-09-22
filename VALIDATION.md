@@ -3890,3 +3890,78 @@ What this establishes: the CTS blocker is a pinned-compiler abort on one shape
 host reproduction that needs no console. What it does not establish: the
 remaining 49 leaves have not been reached, the row stays a blocker, and nothing
 is advertised.
+
+## The compiler abort fixed, and the leaves judged at last (2026-09-22)
+
+The abort above was fixed where it lives - in the pinned compiler - and with it
+the focused selection stopped dying and started judging the leaves.
+
+The compiler is a PINNED dependency: `tools/build_sdk.py` validates its archive
+against the identity stamp `tools/build_psbc.py` writes (source commit +
+archive sha256), so a loose edit is not shippable. The fix is therefore a commit
+in the compiler's own repository:
+
+- `opengnm-psbc` branch `codex/fragment-coord-sample-shading`, commit
+  `992ba13385a77fbc49683da2124f5a9a12f09fd8`, PR
+  https://github.com/mpereiraesaa/opengnm-psbc/pull/23. It runs
+  `radv_nir_lower_opt_fs_frag_pos` unconditionally for fragment stages in
+  standalone compiles, as `radv_pipeline_graphics.c` already does, instead of
+  skipping it whenever the pipeline or the shader asks for sample shading. The
+  skip is what let the pass run later, inside `radv_postprocess_nir`, after
+  `radv_nir_shader_info_pass` had decided the stage arguments - so the shader
+  kept `load_use_float_frag_coord_xy_amd` with no `ps_state` argument, and the
+  compiler aborted on `assert(arg.used)`.
+- `build/libpsbc.ps5.a` rebuilt with that identity (`source_commit
+  992ba13385a77fbc49683da2124f5a9a12f09fd8`).
+
+Measured, run `20260922T183509764Z`, log
+`6cb7d0d655e2c20c20cc35bed9f4a7bc5901eddc817a5f7b94a4bd7d0098824d`, payload
+eboot `33b84bc0da289e726ef5c006c8fb993ecbb2b15ddc1ae0651c8c0db203b1fea5`: 512
+expected, 512 reported, **462 pass, 50 fail, 0 notSupported**, clean lifecycle.
+No case dies any more, and every sample-rate leaf is judged for the first time.
+
+Two driver-side refusals then had to agree with what recording had let through,
+both of them measured on the console in the same window:
+
+1. The prelude refused the pinned leaves' own first-use barrier
+   (`UNDEFINED -> COLOR_ATTACHMENT_OPTIMAL`, no source access, the
+   colour-attachment write as destination, `TOP_OF_PIPE -> COLOR_ATTACHMENT_OUTPUT`)
+   for the multisampled colour image and the single-sample attachments the oracle
+   reads back - `PS5VK_GRAPHICS_PREPARE_FAILED ... phase=prelude site=701`. The
+   executor performs exactly this transition itself in the pass prelude, and the
+   recorder already accepted it, so `native/upload_commands_ps5.h` now accepts it
+   for those roles (run `20260922T185428184Z`, log
+   `7f46b94674cd2233f35252e16ec969c09493f83899b2a1a95f57931fd1a58021`, payload
+   `18b0efd3dc3b7c9cc2141c370c8f9ede556d982fd7e433255c23c31f6568d1d4`: the
+   prelude refusal is gone).
+2. The driver's own resolve draw then failed building the multisampled resource
+   record, because `ps5vk_image_resource_descriptor` required the
+   INPUT_ATTACHMENT usage bit - and the pinned CTS resolves an image it creates
+   with COLOR_ATTACHMENT and TRANSFER_SRC alone (`RENDER_TYPE_RESOLVE`). A
+   subpass resolve is implementation work, not an application's descriptor read,
+   so `src/texture_descriptor.c` now requires the colour-attachment role for a
+   multisampled record while the app-facing input-attachment gate keeps its
+   strict usage rule (`tests/test_texture_descriptor.c` pins both directions).
+
+Measured, run `20260922T185644808Z`, log
+`d895f7c050562780e6572c5db46b9eb8fd2055f7fab23bec75afd110620d01d6`, payload
+eboot `3b9bc090122363b64b783625463d80a550e8fa31cfe63dbc30d2c70dbafaee33`:
+**475 pass, 37 fail**, clean lifecycle, and thirteen sample-rate leaves PASS -
+the first upstream CTS leaves this row has ever had green, including
+`min_sample_shading.min_0_0.samples_2.primitive_triangle` and its `.samples_4`
+sibling.
+
+The remaining 37 failures are named, and they are three different problems:
+
+| count | deqp result | what it means |
+| ----- | ----------- | ------------- |
+| 20 | `VK_ERROR_FEATURE_NOT_PRESENT at vkPipelineConstructionUtil.cpp:178` | plain VS+FS POINT and LINE topologies, which this profile has never served (the same limitation T05 recorded as a diagnostic) |
+| 7 | `Got less unique colors than requested through minSampleShading` | the pixel-iteration count our state asks for is not the one the oracle expects for a fractional `minSampleShading` |
+| 8 | `Did not get any covered pixel` | a rendering/coverage defect on the leaves that reach the comparison with no covered pixel |
+| 2 | `Invalid color` | a rendered value outside the expected set |
+
+What this establishes: the CTS axis is no longer blocked by the compiler, the
+payload runs all 512 cases to a clean close, and thirteen focused leaves pass.
+What it does not establish: the row is not complete - 37 leaves still fail for
+the three reasons above, the compiler fix still needs merging in its own
+repository, and nothing is advertised.
