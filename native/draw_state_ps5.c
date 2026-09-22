@@ -535,9 +535,9 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             if(fs->context[i].offset==0x08f)shader_mask=fs->context[i].value;
         }
         for(uint32_t attachment=0;attachment<color_count;++attachment)
-            if(!ps5vk_color_export_state(p->color_format[attachment],spi_format,
-                shader_mask,p->color_blend[attachment].blendEnable,dual_source,
-                per_target[attachment]))
+            if(!ps5vk_color_export_state(attachment,p->color_format[attachment],
+                spi_format,shader_mask,p->color_blend[attachment].blendEnable,
+                dual_source,per_target[attachment]))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
         ps5vk_color_export_compose(per_target,color_count,conversion);
         if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;

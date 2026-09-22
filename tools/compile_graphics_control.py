@@ -219,16 +219,19 @@ static const VkVertexInputAttributeDescription graphics_attributes[2] = {
         .vertex = {.words=graphics_vertex_spirv, .word_count=sizeof(graphics_vertex_spirv)/4, .entry="main"},
         .fragment = {.words=graphics_fragment_spirv, .word_count=sizeof(graphics_fragment_spirv)/4, .entry="main"},
         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM,
-        .samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = 15,
+        /* One colour attachment, in the per-attachment form the profile carries
+         * since the DXVK262-T06 colour-state work: the format, the blend state
+         * and the write mask are arrays indexed by attachment. */
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = {15},
     },
     .backend_data = &graphics_input,
 };
 static const struct ps5vk_graphics_library graphics_library = {&graphics_program, 1};
 '''
     if vertex_input:
-        library = library.replace('.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = 15,',
-            '.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = 15,\n'
+        library = library.replace('.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = {15},',
+            '.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = {15},\n'
             '        .vertex_binding_count=1, .vertex_attribute_count=2,\n'
             '        .vertex_bindings=&graphics_binding, .vertex_attributes=graphics_attributes,')
         manifest['header_adapter']['profile'] = 'interleaved-float-vertex-table-base-vertex-instance'
@@ -245,8 +248,8 @@ static const struct ps5vk_graphics_library graphics_library = {&graphics_program
             '};\n')
         library = library.replace('static const struct ps5vk_graphics_program graphics_program',
             signature + 'static const struct ps5vk_graphics_program graphics_program')
-        library = library.replace('.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = 15,',
-            '.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = 15,\n'
+        library = library.replace('.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = {15},',
+            '.samples = VK_SAMPLE_COUNT_1_BIT, .color_write_mask = {15},\n'
             '        .descriptor_set_count=1, .descriptor_sets=&graphics_set,')
         manifest['header_adapter']['profile']='vertex-table-fragment-combined-texture-set0-binding0'
     (out / 'graphics_library.h').write_text(library)

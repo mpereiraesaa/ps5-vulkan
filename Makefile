@@ -80,6 +80,10 @@ native-compute:
 native-dual-source:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
 	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_DUAL_SOURCE_PROBE=1 $(PYTHON) tools/build_native.py
+.PHONY: native-two-mrt
+native-two-mrt:
+	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
+	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_TWO_MRT_PROBE=1 PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC=1 $(PYTHON) tools/build_native.py
 native-graphics:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
 	PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_CONTINUOUS=1 PS5VK_GRAPHICS_PRESENT=1 PS5VK_GRAPHICS_DRAW=1 $(PYTHON) tools/build_native.py
@@ -386,6 +390,8 @@ check:
 	./build/tests/test_geometry_witness
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/dual_source_oracle.c tests/test_dual_source_oracle.c -o build/tests/test_dual_source_oracle
 	./build/tests/test_dual_source_oracle
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/two_mrt_oracle.c tests/test_two_mrt_oracle.c -o build/tests/test_two_mrt_oracle
+	./build/tests/test_two_mrt_oracle
 	$(CC) -std=c11 -Wall -Wextra -Werror -Ithird_party/vulkan-headers/include -Isrc src/color_attachment_contract.c tests/test_color_attachment_contract.c -o build/tests/test_color_attachment_contract
 	./build/tests/test_color_attachment_contract
 	$(PYTHON) tools/build_sdk.py

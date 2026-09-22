@@ -90,15 +90,7 @@ void ps5vk_command_invalidate(VkCommandBuffer c)
 {
     if (c) { ++c->pool->device->lifetime_errors; if (c->state != PS5VK_PENDING) c->state = PS5VK_INVALID; }
 }
-/* TEMPORARY EXPERIMENT (not for commit): name the refusing line in the native
- * log so the failing upstream leaf can be localised from its run. */
-#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
-#include "ps5log.h"
-#define invalid(c) do { ps5log_printf(PS5LOG_MARK,"PS5VK_RECORD_REFUSAL site=%d",__LINE__); \
-    ps5vk_command_invalidate(c); } while (0)
-#else
 #define invalid ps5vk_command_invalidate
-#endif
 
 struct ps5vk_operation *ps5vk_command_reserve_operations(VkCommandBuffer c,
     enum ps5vk_operation_type type, enum ps5vk_operation_scope scope, uint32_t count)

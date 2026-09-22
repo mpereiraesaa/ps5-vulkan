@@ -787,15 +787,18 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
                 p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL;
                 p->dual_source_export=1u;
             } else if(primary_mask==3u && !secondary) {
-                /* Two MRTs, proven against the pinned compiler: the export is
-                 * real, but the profile does not serve a second target yet -
-                 * the advertised limit is one colour attachment and no draw
-                 * has written two - so the pipeline stays refused. Refusing
-                 * here is what keeps the second export from being dropped
-                 * silently; the slice that witnesses a two-target draw lifts
-                 * this together with the limit. */
+                /* Two MRTs, proven against the pinned compiler. The pipeline
+                 * only carries this shape when the logical device enabled
+                 * independentBlend AND the subpass names exactly the two
+                 * colour attachments the export writes: the register pair and
+                 * the interface agree on the count, and the native path
+                 * programmes one CB_COLORn block per attachment. A two-output
+                 * stage on a one-target pipeline, or on a device without the
+                 * capability, is torn and stays refused - which is also what
+                 * keeps a second export from being dropped silently. */
                 p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT;
-                goto failed;
+                if(!(key->feature_mask & PS5VK_FEATURE_INDEPENDENT_BLEND) ||
+                   key->color_attachment_count!=PS5VK_MAX_COLOR_ATTACHMENTS)goto failed;
             } else goto failed;
         } else if(secondary || primary_mask!=1u) {
             /* A secondary or a second location without its register pair is a

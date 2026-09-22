@@ -66,39 +66,75 @@ int main(void) {
     uint32_t sx[3];
     const VkFormat formats[]={VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_B8G8R8A8_UNORM};
     for(unsigned i=0;i<2;++i) {
-        assert(ps5vk_color_export_state(formats[i],4,15,VK_TRUE,VK_FALSE,sx));
+        assert(ps5vk_color_export_state(0,formats[i],4,15,VK_TRUE,VK_FALSE,sx));
         assert(sx[0]==5 && sx[1]==6 && sx[2]==0);
-        assert(ps5vk_color_export_state(formats[i],9,15,VK_FALSE,VK_FALSE,sx));
+        assert(ps5vk_color_export_state(0,formats[i],9,15,VK_FALSE,VK_FALSE,sx));
         assert(sx[0]==1 && sx[1]==0 && sx[2]==0);
-        assert(!ps5vk_color_export_state(formats[i],9,15,VK_TRUE,VK_FALSE,sx));
+        assert(!ps5vk_color_export_state(0,formats[i],9,15,VK_TRUE,VK_FALSE,sx));
         assert(!sx[0] && !sx[1] && !sx[2]);
-        assert(!ps5vk_color_export_state(formats[i],0x44,15,VK_TRUE,VK_TRUE,sx));
-        assert(!ps5vk_color_export_state(formats[i],0x44,0xff,VK_TRUE,VK_FALSE,sx));
-        assert(ps5vk_color_export_state(formats[i],0x44,0xff,VK_TRUE,VK_TRUE,sx));
+        assert(!ps5vk_color_export_state(0,formats[i],0x44,15,VK_TRUE,VK_TRUE,sx));
+        /* The dual-source register pair without the dual-source flag is the
+         * two-MRT shape's own target zero: nibble zero is a blended FP16 export
+         * and nibble one belongs to the next attachment, so it converts exactly
+         * as the single-target blended case does. The adapter is what keeps a
+         * one-target pipeline from reaching here with this pair at all. */
+        assert(ps5vk_color_export_state(0,formats[i],0x44,0xff,VK_TRUE,VK_FALSE,sx));
         assert(sx[0]==5 && sx[1]==6 && sx[2]==0);
-        assert(ps5vk_color_export_state(formats[i],0x44,0xff,VK_FALSE,VK_TRUE,sx));
-        assert(ps5vk_color_export_state(formats[i],0,0,VK_FALSE,VK_FALSE,sx));
+        assert(ps5vk_color_export_state(1,formats[i],0x44,0xff,VK_TRUE,VK_FALSE,sx));
+        assert(sx[0]==5 && sx[1]==6 && sx[2]==0);
+        assert(ps5vk_color_export_state(0,formats[i],0x44,0xff,VK_TRUE,VK_TRUE,sx));
+        assert(sx[0]==5 && sx[1]==6 && sx[2]==0);
+        assert(ps5vk_color_export_state(0,formats[i],0x44,0xff,VK_FALSE,VK_TRUE,sx));
+        assert(ps5vk_color_export_state(0,formats[i],0,0,VK_FALSE,VK_FALSE,sx));
         assert(!sx[0] && !sx[1] && !sx[2]);
-        assert(!ps5vk_color_export_state(formats[i],0,15,VK_FALSE,VK_FALSE,sx));
-        assert(!ps5vk_color_export_state(formats[i],9,0,VK_FALSE,VK_FALSE,sx));
-        assert(!ps5vk_color_export_state(formats[i],0,0,VK_TRUE,VK_FALSE,sx));
+        assert(!ps5vk_color_export_state(0,formats[i],0,15,VK_FALSE,VK_FALSE,sx));
+        assert(!ps5vk_color_export_state(0,formats[i],9,0,VK_FALSE,VK_FALSE,sx));
+        assert(!ps5vk_color_export_state(0,formats[i],0,0,VK_TRUE,VK_FALSE,sx));
+    }
+    /* Two colour targets: each attachment reads its own format and mask nibble
+     * of the same two registers. Target 1 takes the second nibble, so a
+     * one-target contract can never be reused for it, and a nibble this profile
+     * does not write is refused rather than converted. */
+    {
+        const VkFormat f=VK_FORMAT_R8G8B8A8_UNORM;
+        /* Both targets plain: SPI_SHADER_COL_FORMAT 0x99, mask 0xff. */
+        assert(ps5vk_color_export_state(0,f,0x99,0xff,VK_FALSE,VK_FALSE,sx));
+        assert(sx[0]==1 && sx[1]==0 && sx[2]==0);
+        assert(ps5vk_color_export_state(1,f,0x99,0xff,VK_FALSE,VK_FALSE,sx));
+        assert(sx[0]==1 && sx[1]==0 && sx[2]==0);
+        /* Only the second target blends: 0x49, so target 1 takes the blended
+         * FP16 conversion and target 0 keeps the 32-bit one. */
+        assert(ps5vk_color_export_state(0,f,0x49,0xff,VK_FALSE,VK_FALSE,sx));
+        assert(sx[0]==1 && sx[1]==0 && sx[2]==0);
+        assert(ps5vk_color_export_state(1,f,0x49,0xff,VK_TRUE,VK_FALSE,sx));
+        assert(sx[0]==5 && sx[1]==6 && sx[2]==0);
+        /* 0x49 is nibble zero 9 and nibble one 4: the second attachment took
+         * the blended code while the first stayed plain. A nibble this profile
+         * never writes is refused on the attachment that owns it. */
+        assert(ps5vk_color_export_state(1,f,0x49,0xff,VK_FALSE,VK_FALSE,sx));
+        assert(sx[0]==5 && sx[1]==6 && sx[2]==0);
+        /* A nibble this profile does not write, a mask that does not name all
+         * four channels of that target, and a third target are refused. */
+        assert(!ps5vk_color_export_state(1,f,0x99,0x9f,VK_FALSE,VK_FALSE,sx));
+        assert(!ps5vk_color_export_state(1,f,0x39,0xff,VK_FALSE,VK_FALSE,sx));
+        assert(!ps5vk_color_export_state(2,f,0x99,0xff,VK_FALSE,VK_FALSE,sx));
     }
     /* A DEPTH-ONLY pass names no colour target at all: the pipeline records an
      * undefined colour format and the fragment program exports nothing, so the
      * three conversion words stay zero. Any half of that shape on its own - an
      * export with no target, a target without an export, a blend state, or the
      * secondary export - is refused. */
-    assert(ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,0,VK_FALSE,VK_FALSE,sx));
+    assert(ps5vk_color_export_state(0,VK_FORMAT_UNDEFINED,0,0,VK_FALSE,VK_FALSE,sx));
     assert(!sx[0] && !sx[1] && !sx[2]);
-    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,0,VK_TRUE,VK_FALSE,sx));
-    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,0,VK_FALSE,VK_TRUE,sx));
-    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,4,15,VK_FALSE,VK_FALSE,sx));
-    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,15,VK_FALSE,VK_FALSE,sx));
-    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,0,2,VK_FALSE,sx));
-    assert(!ps5vk_color_export_state(VK_FORMAT_R32_UINT,4,15,VK_TRUE,VK_FALSE,sx));
-    assert(!ps5vk_color_export_state(formats[0],4,15,2,VK_FALSE,sx));
-    assert(!ps5vk_color_export_state(formats[0],4,15,VK_TRUE,2,sx));
-    assert(!ps5vk_color_export_state(formats[0],4,15,VK_TRUE,VK_FALSE,0));
+    assert(!ps5vk_color_export_state(0,VK_FORMAT_UNDEFINED,0,0,VK_TRUE,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(0,VK_FORMAT_UNDEFINED,0,0,VK_FALSE,VK_TRUE,sx));
+    assert(!ps5vk_color_export_state(0,VK_FORMAT_UNDEFINED,4,15,VK_FALSE,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(0,VK_FORMAT_UNDEFINED,0,15,VK_FALSE,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(0,VK_FORMAT_UNDEFINED,0,0,2,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(0,VK_FORMAT_R32_UINT,4,15,VK_TRUE,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(0,formats[0],4,15,2,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(0,formats[0],4,15,VK_TRUE,2,sx));
+    assert(!ps5vk_color_export_state(0,formats[0],4,15,VK_TRUE,VK_FALSE,0));
     return 0;
 }
 '''
@@ -108,7 +144,9 @@ int main(void) {
             subprocess.run([
                 "cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
                 "-fsanitize=undefined", "-I" + str(ROOT / "native"),
+                "-I" + str(ROOT / "src"),
                 "-I" + str(ROOT / "third_party/vulkan-headers/include"),
+                str(ROOT / "src/color_attachment_contract.c"),
                 str(path / "test.c"), "-o", str(path / "test"),
             ], check=True)
             subprocess.run([str(path / "test")], check=True)

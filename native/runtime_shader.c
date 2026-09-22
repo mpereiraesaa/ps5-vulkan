@@ -37,8 +37,20 @@ int ps5vk_runtime_fragment_export(const PsbcShaderMetadata *m)
     if(!format->value && !mask->value)return PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE;
     if((format->value==4u || format->value==9u) && mask->value==15u)
         return PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE;
-    if(format->value==0x44u && mask->value==0xffu)
-        return PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL;
+    /* Two exports of attachment zero's physical target: one format nibble and
+     * one four-channel mask nibble each. The pinned compiler publishes
+     * 0x44/0xff for the two sources of MRT0 (dual source) and the same shape
+     * with the target's own code for two colour targets - 0x99/0xff when both
+     * are plain, 0x49/0xff when only the first blends - so the registers can
+     * only classify "two exports", never which of the two shapes it is. The
+     * interface chain decides that, and the adapter refuses a disagreement.
+     * Anything with a nibble this profile does not write, a mask other than the
+     * two targets' four channels, or a third target stays unclassified. */
+    if(mask->value==0xffu && !(format->value & ~0xffu)) {
+        const uint32_t low=format->value&0xfu,high=(format->value>>4)&0xfu;
+        if((low==4u || low==9u) && (high==4u || high==9u))
+            return PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL;
+    }
     return -1;
 }
 
