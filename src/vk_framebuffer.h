@@ -8,9 +8,16 @@ struct VkFramebuffer_T {
     VkBool32 custom_allocator;
     unsigned pending;
     uint32_t width, height, attachment_count;
-    VkImageView attachments[2];
-    VkFormat formats[2];
-    VkSampleCountFlagBits samples[2];
+    /* One slot per attachment the pass may name, which is the same bound the
+     * render pass enforces: the pinned multisample oracle's framebuffer carries
+     * the multisampled colour attachment, its resolve target and one
+     * single-sample target per fetched sample, and a framebuffer sized for two
+     * slots wrote past itself the moment the pass bound followed that shape.
+     * The colour and resolve ROLE lists stay bounded by the colour-attachment
+     * contract, because that is how many targets a draw may write. */
+    VkImageView attachments[PS5VK_MAX_ATTACHMENTS];
+    VkFormat formats[PS5VK_MAX_ATTACHMENTS];
+    VkSampleCountFlagBits samples[PS5VK_MAX_ATTACHMENTS];
     /* The colour roles this framebuffer carries, in the order the subpass names
      * them, and the depth role. The count is the pass's own, bounded by the
      * colour-attachment contract; every consumer reads index 0 while the bound is

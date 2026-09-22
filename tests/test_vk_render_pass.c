@@ -326,6 +326,83 @@ static void resolve_attachments(struct VkDevice_T *d)
     d->platform_features &= ~(uint32_t)PS5VK_FEATURE_SAMPLE_RATE_SHADING;
 }
 
+/* The pass the focused upstream selection actually builds (DXVK262-T06): the
+ * multisampled colour attachment, its resolve target and one single-sample
+ * target per sample the following subpasses fetch back, each of them
+ * preserving the targets its siblings render into. The attachment bound has to
+ * fit that shape rather than the colour-attachment limit - the oracle's 4x
+ * pass names six attachments and no depth at all. */
+static VkResult create_oracle_multisample_pass(struct VkDevice_T *d, uint32_t fetch,
+                                               VkRenderPass *out)
+{
+    VkAttachmentDescription attachments[2 + 6];
+    VkAttachmentReference colors[6];
+    VkAttachmentReference inputs[1];
+    VkSubpassDescription subpasses[1 + 6];
+    uint32_t preserves[6][5];
+    const VkAttachmentReference color0 = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    const VkAttachmentReference resolve0 = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    const VkAttachmentReference input0 = {0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    inputs[0] = input0;
+    for (uint32_t i = 0; i < 2 + fetch && i < 8; ++i) {
+        attachments[i] = (VkAttachmentDescription){
+            .format = VK_FORMAT_B8G8R8A8_UNORM,
+            .samples = i == 0 ? VK_SAMPLE_COUNT_4_BIT : VK_SAMPLE_COUNT_1_BIT,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    }
+    subpasses[0] = (VkSubpassDescription){
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1, .pColorAttachments = &color0,
+        .pResolveAttachments = &resolve0};
+    for (uint32_t i = 0; i < fetch && i < 6; ++i) {
+        uint32_t preserved = 0;
+        colors[i] = (VkAttachmentReference){2 + i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        for (uint32_t other = 0; other < fetch && other < 6; ++other)
+            if (other != i) preserves[i][preserved++] = 2 + other;
+        subpasses[1 + i] = (VkSubpassDescription){
+            .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .inputAttachmentCount = 1, .pInputAttachments = inputs,
+            .colorAttachmentCount = 1, .pColorAttachments = &colors[i],
+            .preserveAttachmentCount = preserved, .pPreserveAttachments = preserves[i]};
+    }
+    const VkRenderPassCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 2 + fetch, .pAttachments = attachments,
+        .subpassCount = 1 + fetch, .pSubpasses = subpasses};
+    return vkCreateRenderPass(d, &info, NULL, out);
+}
+
+static void oracle_multisample_render_pass(struct VkDevice_T *d)
+{
+    VkRenderPass pass = VK_NULL_HANDLE;
+    /* Without the served counts the multisampled attachment has no role. */
+    assert(create_oracle_multisample_pass(d, PS5VK_SAMPLE_COUNT_MAX_SERVED, &pass) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !pass);
+    d->platform_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+    assert(create_oracle_multisample_pass(d, PS5VK_SAMPLE_COUNT_MAX_SERVED, &pass) ==
+           VK_SUCCESS && pass);
+    /* The roles the oracle relies on are owned per subpass: subpass 0 renders
+     * and resolves, every fetch subpass reads the multisampled attachment and
+     * preserves the targets it does not render into. */
+    assert(ps5vk_render_pass_subpass(pass, 0)->resolve[0].attachment == 1);
+    for (uint32_t i = 0; i < PS5VK_SAMPLE_COUNT_MAX_SERVED; ++i) {
+        const struct ps5vk_subpass *s = ps5vk_render_pass_subpass(pass, 1 + i);
+        assert(s->input_count == 1 &&
+               ps5vk_render_pass_inputs(pass, 1 + i)[0].attachment == 0);
+        assert(s->color[0].attachment == 2 + i);
+        assert(s->preserve_count == PS5VK_SAMPLE_COUNT_MAX_SERVED - 1);
+        for (uint32_t k = 0; k < s->preserve_count; ++k)
+            assert(ps5vk_render_pass_preserves(pass, 1 + i)[k] != 2 + i);
+    }
+    vkDestroyRenderPass(d, pass, NULL);
+    /* The bound follows that shape: one attachment past it is refused. */
+    assert(create_oracle_multisample_pass(d, 6, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
+    assert(PS5VK_MAX_ATTACHMENTS == PS5VK_SAMPLE_COUNT_MAX_SERVED + 3);
+    d->platform_features &= ~(uint32_t)PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+}
+
 static void multiple_subpasses(struct VkDevice_T *d)
 {
     VkAttachmentDescription attachments[2] = {
@@ -887,6 +964,7 @@ int main(void)
     assert(!d.graphics_objects);
     multiple_subpasses(&d);
     resolve_attachments(&d);
+    oracle_multisample_render_pass(&d);
     multiview_model(&d);
     input_attachments(&d);
     six_view_subpass_chain(&d);

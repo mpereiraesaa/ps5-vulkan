@@ -587,26 +587,36 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
     }
 
 cleanup:
-    if (ubo_mapped) vkUnmapMemory(device, ubo_memory);
-    if (fence) vkDestroyFence(device, fence, NULL);
-    if (command) vkFreeCommandBuffers(device, command_pool, 1, &command);
-    if (command_pool) vkDestroyCommandPool(device, command_pool, NULL);
+    /* The teardown is walked too, and each call is announced BEFORE it runs so
+     * a destroy path that does not return names itself instead of hiding behind
+     * the last API that did. A refusal above leaves objects in states the
+     * destroy paths have to accept - the command buffer is still recording, for
+     * one - and that is exactly where a fail-closed defect can hide. */
+#define SHAPE_CLEANUP(call) do { \
+    ps5log_printf(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_SHAPE step=cleanup:%s", #call); \
+    (call); \
+} while (0)
+    if (ubo_mapped) SHAPE_CLEANUP(vkUnmapMemory(device, ubo_memory));
+    if (fence) SHAPE_CLEANUP(vkDestroyFence(device, fence, NULL));
+    if (command) SHAPE_CLEANUP(vkFreeCommandBuffers(device, command_pool, 1, &command));
+    if (command_pool) SHAPE_CLEANUP(vkDestroyCommandPool(device, command_pool, NULL));
     for (unsigned i = 0; i < 2; ++i)
-        if (pipelines[i]) vkDestroyPipeline(device, pipelines[i], NULL);
+        if (pipelines[i]) SHAPE_CLEANUP(vkDestroyPipeline(device, pipelines[i], NULL));
     for (unsigned i = 0; i < 3; ++i)
-        if (modules[i]) vkDestroyShaderModule(device, modules[i], NULL);
-    if (layout) vkDestroyPipelineLayout(device, layout, NULL);
-    if (pool) vkDestroyDescriptorPool(device, pool, NULL);
-    if (set_layout) vkDestroyDescriptorSetLayout(device, set_layout, NULL);
-    if (ubo) vkDestroyBuffer(device, ubo, NULL);
-    if (ubo_memory) vkFreeMemory(device, ubo_memory, NULL);
-    if (framebuffer) vkDestroyFramebuffer(device, framebuffer, NULL);
-    if (pass) vkDestroyRenderPass(device, pass, NULL);
+        if (modules[i]) SHAPE_CLEANUP(vkDestroyShaderModule(device, modules[i], NULL));
+    if (layout) SHAPE_CLEANUP(vkDestroyPipelineLayout(device, layout, NULL));
+    if (pool) SHAPE_CLEANUP(vkDestroyDescriptorPool(device, pool, NULL));
+    if (set_layout) SHAPE_CLEANUP(vkDestroyDescriptorSetLayout(device, set_layout, NULL));
+    if (ubo) SHAPE_CLEANUP(vkDestroyBuffer(device, ubo, NULL));
+    if (ubo_memory) SHAPE_CLEANUP(vkFreeMemory(device, ubo_memory, NULL));
+    if (framebuffer) SHAPE_CLEANUP(vkDestroyFramebuffer(device, framebuffer, NULL));
+    if (pass) SHAPE_CLEANUP(vkDestroyRenderPass(device, pass, NULL));
     for (unsigned i = 0; i < 4; ++i) {
-        if (views[i]) vkDestroyImageView(device, views[i], NULL);
-        if (images[i]) vkDestroyImage(device, images[i], NULL);
-        if (memories[i]) vkFreeMemory(device, memories[i], NULL);
+        if (views[i]) SHAPE_CLEANUP(vkDestroyImageView(device, views[i], NULL));
+        if (images[i]) SHAPE_CLEANUP(vkDestroyImage(device, images[i], NULL));
+        if (memories[i]) SHAPE_CLEANUP(vkFreeMemory(device, memories[i], NULL));
     }
+#undef SHAPE_CLEANUP
     return VK_SUCCESS;
 #undef SHAPE_TRY
 }

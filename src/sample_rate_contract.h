@@ -23,6 +23,13 @@ static inline VkSampleCountFlags ps5vk_sample_count_mask(void)
     return VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT;
 }
 
+/* The highest sample count this envelope carries, as a number rather than as a
+ * flag. The pinned multisample oracle renders into a multisampled colour
+ * attachment, resolves it and then names one single-sample target per sample it
+ * reads back, so the render pass's attachment bound derives from this and not
+ * from how many colour targets a caller may draw into. */
+enum { PS5VK_SAMPLE_COUNT_MAX_SERVED = 4 };
+
 /* The number of samples a flag names, or 0 when this profile does not
  * implement that count. Every consumer that has to size storage, index sample
  * data or build a mask derives the count from here instead of repeating the

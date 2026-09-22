@@ -11,9 +11,17 @@
  * creation so an unsupported shape is refused where the caller can see it
  * rather than accepted and failed later. */
 enum { PS5VK_MAX_SUBPASSES = 8 };
-/* One attachment per colour role the subpass names, plus the optional depth
- * one: a two-target pass with depth needs three. */
-enum { PS5VK_MAX_ATTACHMENTS = PS5VK_MAX_COLOR_ATTACHMENTS + 1 };
+/* One attachment per role a pass may name, which is not the same thing as one
+ * per colour target a caller may draw into. The pinned multisample oracle's
+ * pass carries the multisampled colour attachment, its single-sample resolve
+ * target and one single-sample target per sample it fetches back
+ * (external/vulkancts/modules/vulkan/pipeline/
+ * vktPipelineMultisampleTests.cpp, MSCaseBaseResolveAndPerSampleFetch), plus
+ * the optional depth attachment at the highest count this profile serves.
+ * PS5VK_MAX_COLOR_ATTACHMENTS stays the answer to "how many targets may a draw
+ * write", and the colour contract enforces it per subpass; a pass that named
+ * more colour references than that is refused there, not here. */
+enum { PS5VK_MAX_ATTACHMENTS = PS5VK_SAMPLE_COUNT_MAX_SERVED + 3 };
 enum { PS5VK_MAX_DEPENDENCIES = 16 };
 enum { PS5VK_MAX_CORRELATION_MASKS = 4 };
 enum { PS5VK_MAX_INPUT_ATTACHMENTS = 4 };

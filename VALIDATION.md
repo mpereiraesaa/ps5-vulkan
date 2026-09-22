@@ -3149,3 +3149,61 @@ stage is refused by the pinned compiler rather than by this profile's adapter.
 What it does not establish: no leaf passes, the resolve is not executed, the
 per-sample fetch is not executed, the row stays a blocker, and nothing is
 advertised.
+
+## The pass bound, and the framebuffer defect it exposed (2026-09-22)
+
+The walk named the render-pass gate, and the arithmetic behind it was one enum:
+`PS5VK_MAX_ATTACHMENTS` was `PS5VK_MAX_COLOR_ATTACHMENTS + 1`, which answers how
+many colour targets a draw may write but not how many attachments a pass may
+name. It is now `PS5VK_SAMPLE_COUNT_MAX_SERVED + 3` (seven), derived from a
+named constant in `src/sample_rate_contract.h`, because the pinned oracle's
+pass carries the multisampled colour attachment, its resolve target and one
+single-sample target per sample it fetches back, plus the optional depth
+attachment. `PS5VK_MAX_COLOR_ATTACHMENTS` still bounds what a subpass may render
+into, and `tests/test_vk_render_pass.c` now holds both directions: the oracle's
+six-attachment pass is accepted and one attachment past the bound is refused.
+
+Moving the pass bound exposed a real defect one layer down, and the walk is what
+found it. `struct VkFramebuffer_T` held its attachment slots in fixed arrays of
+two (`attachments[2]`, `formats[2]`, `samples[2]`), so a framebuffer built for
+the oracle's four attachments wrote past itself. Measured on the console with
+the bound raised but this fix not yet in place: run
+`20260922T102334060Z_PPSA99994_ps5vk_0x197d8e621b19e`, log SHA-256
+`d9d9018e2ca43405970f5dd0c268860f09ffba2d7d95685d81320eb14f5c5916`, payload
+eboot `49933aef329b1fb62de3b6f82ae8f3691309944478de973fd1a19279f6689f1c` - the
+walk reached `vkCreateRenderPass` rc=0, `vkCreateFramebuffer` rc=0,
+`create_pipeline subpass=0` rc=0, `create_pipeline subpass=1` rc=0 (the
+per-sample fetch stage compiles on the console build), `vkBeginCommandBuffer`
+rc=0, and then `vkEndCommandBuffer` returned `-13`; the payload never closed its
+log. Instrumenting the teardown named the killer: run
+`20260922T102625871Z_PPSA99994_ps5vk_0x19800e6cf4e94`, log SHA-256
+`e96e7988849fbe8a3e5caad2b4a965eb38eed8cbdf765abbb5d184a796480c94`, whose last
+record is the announcement of `vkDestroyFramebuffer` - the process died inside
+it, after every other teardown step had returned.
+
+The fix is the slots following the same bound the pass does, and the new case in
+`tests/test_vk_image.c` proves both directions: with the two-slot arrays, the
+sanitizer build reports `index 2 out of bounds for type 'VkImageView_T *[2]'` at
+`src/vk_framebuffer.c:88` and the framebuffer's fourth slot reads as garbage;
+with the fix the oracle's four-attachment framebuffer round-trips and its
+teardown is clean. The record roles are unchanged - `color_attachments` and
+`resolve_attachments` stay bounded by the colour-attachment contract, because
+that is how many targets a draw may write.
+
+What this establishes: the oracle's pass, framebuffer, pipeline layout, shader
+modules and both pipelines exist on hardware, and the framebuffer no longer
+corrupts memory for the shape the pass now admits. What it does not establish:
+no leaf passes, `vkEndCommandBuffer` still refuses the recording with `-13`
+(the executor does not run a resolve or a preserve list yet), the row stays a
+blocker, and nothing is advertised.
+
+Confirmed after the fix, one more bounded window (run
+`20260922T104105309Z_PPSA99994_ps5vk_0x198cda8a48718`, log SHA-256
+`3b8d5b8131567bff1b6590006951f0e2acf430de166137b0ff75942e50b1df67`, payload
+eboot `aa398bb707f21667f4211d932966d80674da67a642360653492bbfed2786033e`): 117
+records, every step of the walk `ok=1` except one, the teardown running to its
+end, `PS5VK_PLATFORM_CLOSE rc=0` and a clean `BYE`. The single refusal is the
+recording: `vkEndCommandBuffer` rc=-13. So the object path for the oracle's
+shape now stands end to end, and the gate the row has to open next is the
+executor - the resolve, the per-sample input read and the preserve list are
+described, created and compiled, but not run.
