@@ -211,11 +211,21 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * promise the resolve role makes (DXVK262-T06). The positional test below
      * would refuse the same pass by arithmetic; this check says why. */
     if(ps5vk_subpass_uses_resolve(subpass))return VK_ERROR_FEATURE_NOT_PRESENT;
-    /* A preserve list is a promise this queue does not keep yet: it carries no
-     * attachment contents across a subpass boundary implicitly, so a pass that
-     * preserves anything is refused rather than executed with the promise
-     * dropped (DXVK262-T06). The object model stores and validates the list. */
-    if(ps5vk_render_pass_has_preserve_list(pass))return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* A preserve list is a promise this queue CAN keep now that every subpass
+     * renders its own targets (DXVK262-T06): a preserved attachment is one the
+     * subpass does not write, the pass's load ops are applied once at its
+     * start, and the boundary between subpasses publishes the previous
+     * subpass's writes without touching anything else, so the contents a
+     * subpass preserves come out of it unchanged. The list is validated here
+     * anyway - the object model already refused a reference outside the pass -
+     * so a record that reached this backend with one is refused rather than
+     * read out of bounds. */
+    for(uint32_t s=0;s<pass->subpass_count;++s) {
+        const struct ps5vk_subpass *sp=ps5vk_render_pass_subpass(pass,s);
+        const uint32_t *list=ps5vk_render_pass_preserves(pass,s);
+        for(uint32_t k=0;k<sp->preserve_count;++k)
+            if(list[k]>=pass->attachment_count)return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     /* Every subpass may name its OWN colour attachments (DXVK262-T06). What a
      * draw renders into is its subpass's own set - the seam the draw
      * preparation takes - so the pass carries the UNION of those references,

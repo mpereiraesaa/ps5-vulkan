@@ -583,11 +583,16 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
                  .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
             const VkAttachmentReference two_color0 = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
             const VkAttachmentReference two_color1 = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+            /* The second subpass PRESERVES the first one's target: it renders
+             * elsewhere and promises to leave attachment 0 alone, which is
+             * what the oracle's fetch subpasses do for their siblings. */
+            const uint32_t two_preserve[1] = {0};
             const VkSubpassDescription two_subpasses[2] = {
                 {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
                  .colorAttachmentCount = 1, .pColorAttachments = &two_color0},
                 {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-                 .colorAttachmentCount = 1, .pColorAttachments = &two_color1}};
+                 .colorAttachmentCount = 1, .pColorAttachments = &two_color1,
+                 .preserveAttachmentCount = 1, .pPreserveAttachments = two_preserve}};
             const VkRenderPassCreateInfo two_pass_info = {
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
                 .attachmentCount = 2, .pAttachments = two_attachments,
@@ -699,13 +704,34 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
                         if (word == expected_word) ++shaded;
                     }
                     const uint32_t plane_words = params->extent * params->extent;
+                    /* The PRESERVED attachment: subpass 1 promised not to
+                     * touch attachment 0, so the colour subpass 0 drew must
+                     * still be somewhere in its span. A subpass that clobbered
+                     * it would have left the pass's own clear value there. */
+                    void *preserved = NULL;
+                    VkDeviceSize preserved_bytes = 0;
+                    VkResult preserve_rc = ps5vk_image_span(device, images[0], &preserved,
+                        &preserved_bytes);
+                    if (!shape_step("two_subpass_preserved_map", preserve_rc) ||
+                        preserve_rc != VK_SUCCESS) goto two_cleanup;
+                    const uint32_t preserved_words = (uint32_t)(preserved_bytes / 4u);
+                    uint32_t preserved_hits = 0;
+                    for (uint32_t i = 0; i < preserved_words; ++i) {
+                        uint32_t word = 0;
+                        memcpy(&word, (const unsigned char *)preserved + (size_t)i * 4u,
+                            sizeof(word));
+                        if (word == expected_word) ++preserved_hits;
+                    }
                     ps5log_printf(PS5LOG_MARK,
                         "PS5VK_SAMPLE_RATE_TARGETS extent=%ux%u samples=%u subpasses=2 "
-                        "target_words=%u shaded=%u expected=%u word=%08x verdict=%u",
+                        "target_words=%u shaded=%u expected=%u word=%08x "
+                        "preserved_words=%u preserved_hits=%u verdict=%u",
                         params->extent, params->extent, (unsigned)params->samples,
                         words, shaded, plane_words, expected_word,
-                        (unsigned)(shaded == plane_words));
-                    rc = (shaded == plane_words) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
+                        preserved_words, preserved_hits,
+                        (unsigned)(shaded == plane_words && preserved_hits > 0u));
+                    rc = (shaded == plane_words && preserved_hits > 0u) ?
+                        VK_SUCCESS : VK_ERROR_UNKNOWN;
                     if (rc != VK_SUCCESS) { goto two_cleanup; }
                 }
             }

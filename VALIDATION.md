@@ -3299,3 +3299,34 @@ render their own targets, with hardware-comparable output, which is the
 structural half of the oracle's pass. What it does not establish: the resolve,
 the per-sample input read and the preserve list are still unexecuted, no CTS
 leaf passes, the row stays a blocker, and nothing is advertised.
+
+## A subpass that preserves another subpass's target (2026-09-22)
+
+The executor refused any pass carrying a preserve list, on the grounds that it
+did not carry attachment contents across a subpass boundary. With every subpass
+rendering its own targets that promise is one this path keeps: a preserved
+attachment is one the subpass does not write, the pass's load ops are applied
+once at its start, and the boundary between subpasses publishes the previous
+subpass's writes without touching anything else. The refusal is therefore
+replaced by a bounds check on every preserve entry the pass carries - a record
+that reached this backend naming an attachment outside the pass is refused
+rather than read out of bounds - and the resolve refusal stays exactly where it
+was.
+
+Measured on the console (run `20260922T115140401Z_PPSA99994_ps5vk_0x19ca7b3ec8c32`,
+log SHA-256 `4a3a6e4db059d29225ca8ed12a5badfffa33ecdc3a8396ee484164de8ee8daef`,
+payload eboot `42d1b5c95dfb8d8048f0cb8c51223b0e2982242751e660fa6ec455caa39d5f74`):
+the two-subpass pass now has subpass 1 preserve attachment 0 - the target
+subpass 0 renders - and the readback checks both directions in one verdict:
+the second subpass's own target holds the fragment's colour across its 32x32
+plane (`shaded=1024 expected=1024`), and the PRESERVED target still holds what
+subpass 0 drew (`preserved_hits=4096` of 65536 words, which is exactly the
+32x32 plane at 4 samples). A subpass that clobbered it would have left the
+pass's own clear value there instead. The title closed cleanly
+(`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: a subpass may preserve another subpass's target and the
+executor keeps that promise on hardware, which is the shape the oracle's fetch
+subpasses use for their siblings. What it does not establish: the resolve
+target and the per-sample input read are still unexecuted, no CTS leaf passes,
+the row stays a blocker, and nothing is advertised.
