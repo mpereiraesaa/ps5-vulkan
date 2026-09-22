@@ -16,6 +16,17 @@ The preparation targets fetch exact revisions. `make compiler-deps` uses the
 public `mpereiraesaa/opengnm-psbc` GFX1013 fork plus pinned OpenGNM headers.
 The regular host suite runs offline after these dependencies are prepared.
 
+`make check` runs the Python suite through `tools/run_python_tests.py`, one
+process per `tests/test_*.py` module, as many at a time as there are CPUs
+(`PYTHON_TEST_JOBS` overrides it). Modules that build into shared trees
+(`dist-sdk`, the native consumer, `build/graphics`) share one serial lane.
+Output appears per module; failing modules print in full. To run a subset:
+
+```sh
+python3 tools/run_python_tests.py test_upstream_selection test_vk_render_pass
+python3 tools/run_python_tests.py -v -j 1        # serial, verbose
+```
+
 ## Companion repositories
 
 Native builds currently consume source-level support from `ps5-agc-gears` and

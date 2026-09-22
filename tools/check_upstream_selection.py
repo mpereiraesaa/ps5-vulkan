@@ -9,6 +9,8 @@ This is a host-side check: it never talks to the console and is safe to run in
 CI. When the pinned vk-gl-cts checkout is not present (third_party is ignored)
 the check reports that it was skipped instead of failing.
 """
+import copy
+import functools
 import json
 from pathlib import Path
 import re
@@ -64,6 +66,58 @@ SAMPLE_COUNT_FLAGS = {
 }
 
 
+# The gate re-reads the same pinned CTS modules and re-runs the same bounded
+# recognizers for every cited case, and the regression tests run the whole gate
+# dozens of times. Source reads are cached on (path, mtime, size) so an edited
+# file is always re-read; the recognizers are pure functions of their text
+# arguments, so identical text gives the identical answer. Callers receive
+# copies, never the cached objects.
+@functools.lru_cache(maxsize=None)
+def _read_cached(path: Path, mtime_ns: int, size: int) -> str:
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _read_source(path: Path) -> str:
+    stat = path.stat()
+    return _read_cached(path, stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=None)
+def _searchable_cached(integration_text: str, files: tuple) -> str:
+    tree_text = "\n".join(_read_cached(*entry) for entry in files)
+    return integration_text + "\n" + tree_text
+
+
+def _module_searchable(integration_text: str, module_root: Path) -> str:
+    files = []
+    for path in sorted(module_root.rglob("*.cpp")):
+        stat = path.stat()
+        files.append((path, stat.st_mtime_ns, stat.st_size))
+    return _searchable_cached(integration_text, tuple(files))
+
+
+@functools.lru_cache(maxsize=None)
+def _quoted_in(needle: str, haystack: str) -> bool:
+    return re.search(r'"' + re.escape(needle) + r'"', haystack) is not None
+
+
+@functools.lru_cache(maxsize=None)
+def _format_segments(text: str) -> frozenset:
+    return frozenset(token[len("VK_FORMAT_"):].lower()
+                     for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text))
+
+
+def _memoized(function):
+    cached = functools.lru_cache(maxsize=None)(function)
+
+    @functools.wraps(function)
+    def wrapper(*args):
+        return copy.deepcopy(cached(*args))
+    wrapper.cache_clear = cached.cache_clear
+    return wrapper
+
+
+@_memoized
 def _source_function_at_line(text: str, line_number: int) -> str:
     """Return the C++ function beginning at the cited source line.
 
@@ -104,6 +158,7 @@ def _source_function_at_line(text: str, line_number: int) -> str:
     return ""
 
 
+@_memoized
 def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
     """Derive leaves of the exact CAPABILITIES-name + cTypes-name form."""
     if not re.search(
@@ -303,6 +358,7 @@ def _two_attachment_write_mask_leaf_names(text: str, leaf: str) -> set[str]:
     return {leaf} if re.fullmatch(r"start_index_[01]", leaf) else set()
 
 
+@_memoized
 def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]:
     """Leaves of the rasterization module's culling family.
 
@@ -357,6 +413,7 @@ def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]
     return names
 
 
+@_memoized
 def _fragment_ops_multi_viewport_leaf_names(text: str) -> set[str]:
     """Leaf names of the fragment_ops module's scissor.multi_viewport family.
 
@@ -376,6 +433,7 @@ def _fragment_ops_multi_viewport_leaf_names(text: str) -> set[str]:
     return {f"{prefix.group(1)}{n}" for n in range(1, int(bound.group(1)) + 1)}
 
 
+@_memoized
 def _clip_volume_topology_leaf_names(text: str, util_text: str) -> set[str]:
     """Leaf names of the clipping module's clip_volume groups.
 
@@ -397,6 +455,7 @@ def _clip_volume_topology_leaf_names(text: str, util_text: str) -> set[str]:
     return {token.lower() for token in tokens}
 
 
+@_memoized
 def _draw_depth_clamp_leaf_names(text: str) -> set[str]:
     """Leaf names of the draw module's depth_clamp family.
 
@@ -419,6 +478,7 @@ def _draw_depth_clamp_leaf_names(text: str) -> set[str]:
     return {f"{fmt.lower()}{suffix}" for fmt in formats for suffix in suffixes}
 
 
+@_memoized
 def _mapping_group_segment(text: str, segment: str) -> bool:
     """Recognize numeric mapping groups generated from fixed upstream tables."""
     table = "allocationSizes"
@@ -439,6 +499,7 @@ def _mapping_group_segment(text: str, segment: str) -> bool:
     return int(value) in {int(token) for token in re.findall(r"\b\d+\b", match.group(1))}
 
 
+@_memoized
 def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dict]:
     """Derive every render-pass leaf of the pinned multiview module with its
     complete upstream prerequisites.
@@ -594,6 +655,7 @@ def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dic
     return leaves
 
 
+@_memoized
 def _clip_distance_generated_segments(text: str) -> set[str]:
     """Group segments the pinned clipping factory composes at run time.
 
@@ -612,6 +674,7 @@ def _clip_distance_generated_segments(text: str) -> set[str]:
     return {"clip_distance_dynamic_index", "clip_cull_distance_dynamic_index"}
 
 
+@_memoized
 def _geometry_adjacency_leaf_names(text: str) -> set[str]:
     """Leaf names the pinned geometry input factory composes at run time.
 
@@ -630,6 +693,7 @@ def _geometry_adjacency_leaf_names(text: str) -> set[str]:
     return {f"{match.group(1)}{n}" for n in range(int(loop.group(1)) + 1)}
 
 
+@_memoized
 def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
     """Derive the user-defined clip/cull leaf names of the pinned clipping module.
 
@@ -709,6 +773,7 @@ def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
     return {name + read_suffix for name in names}
 
 
+@_memoized
 def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
     """Derive the shader_draw_parameters leaf names of the pinned draw module.
 
@@ -750,6 +815,7 @@ def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> se
     return leaves
 
 
+@_memoized
 def _fill_update_generated_leaf_names(function_text: str) -> set[str]:
     """Derive names constructed by createFillAndUpdateBufferTests.
 
@@ -785,6 +851,7 @@ def _fill_update_generated_leaf_names(function_text: str) -> set[str]:
     return leaves
 
 
+@_memoized
 def _dynamic_state_compute_generated_segments(text: str) -> set[str]:
     """Derive brief state group names from the pinned compute factory.
 
@@ -844,6 +911,7 @@ def _attachment_write_mask_generated_segments(text: str) -> set[str]:
     return names
 
 
+@_memoized
 def _indirect_draw_generated_segments(text: str) -> set[str]:
     """Derive the draw-type group names of the pinned indirect-draw factory.
 
@@ -879,6 +947,7 @@ def _indirect_draw_generated_segments(text: str) -> set[str]:
     return segments
 
 
+@_memoized
 def _copy_and_blit_simple_image_leaf_names(function_text: str) -> set[str]:
     """Derive the image-to-image simple-test leaves of the pinned copy module.
 
@@ -1501,20 +1570,13 @@ def main() -> int:
             failures.append(f"{path}: cited source {source_ref} does not exist")
             continue
 
-        text = source_path.read_text(encoding="utf-8", errors="replace")
+        text = _read_source(source_path)
 
         # Intermediate groups may come from the integration (package_ps5.cpp) or
         # from the upstream module tree rooted at the cited file's directory.
         module_root = source_path.parent
-        tree_text = "\n".join(
-            p.read_text(encoding="utf-8", errors="replace")
-            for p in sorted(module_root.rglob("*.cpp"))
-        )
-        searchable = integration_text + "\n" + tree_text
-        generated_format_segments = {
-            token[len("VK_FORMAT_"):].lower()
-            for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text)
-        }
+        searchable = _module_searchable(integration_text, module_root)
+        generated_format_segments = _format_segments(text)
         generated_segments = (
             _dynamic_state_compute_generated_segments(text)
             if source_path.name == "vktDynamicStateComputeTests.cpp" else
@@ -1528,7 +1590,7 @@ def main() -> int:
         if source_path.name == "vktRenderPassTests.cpp":
             generated_segments |= _attachment_write_mask_generated_segments(text)
         for segment in segments[1:-1]:
-            if (not re.search(r'"' + re.escape(segment) + r'"', searchable) and
+            if (not _quoted_in(segment, searchable) and
                     segment not in generated_segments and
                     segment not in generated_format_segments and
                     not (source_path.name == "vktMemoryMappingTests.cpp" and
@@ -1599,7 +1661,7 @@ def main() -> int:
         # The leaf must be a literal name in the cited function/file, a bounded
         # table-derived name, or a number produced
         # by an instance factory whose parent group is a literal in that file.
-        if re.search(r'"' + re.escape(leaf) + r'"', text):
+        if _quoted_in(leaf, text):
             continue
         if leaf in _table_composed_leaf_names(text, function_text):
             continue
