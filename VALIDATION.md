@@ -2983,3 +2983,41 @@ tree, and `make check` is green on it.
 `independentBlend` and `sampleRateShading` remain blockers: the MRT path is
 described but not served (the advertised `maxColorAttachments` is still one)
 and the multisample contract is still empty.
+
+## independentBlend promotion (2026-09-22)
+
+The two upstream leaves that REQUIRE `independentBlend` pass on hardware, so the
+feature is advertised: `native/platform_ps5.c` reports the bit in every build,
+`src/graphics_limits.h` advertises `maxColorAttachments` 2 (and the two
+four-output fragment limits with it), and the two private measurement switches
+are retired - `VK_FORMAT_R8G8B8A8_UINT` is a served colour target now.
+
+Both leaves render two colour attachments in one pass - R8G8B8A8_UINT and
+R8G8B8A8_UNORM - clear both through the pass, draw once with a fragment stage
+that exports the two attachments' values, copy each attachment into its own
+buffer and compare the result with the upstream oracle. The second leaf writes
+only the second target; its fragment stage declares Location 1 alone and the
+pinned compiler publishes the export enable in the mask's second nibble, so the
+driver programmes the attachment it really writes as hardware target zero.
+
+Two strict measurement runs carried the integer colour target, both with the
+same payload SELF SHA-256
+`a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4` (eboot
+`a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4`):
+
+- `20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1`, log SHA-256
+  `9ae18272031fbe09877e223853d081d5cdb4740e8147ac8e522162ce7c84c34b` -
+  **464 Pass, 0 Fail, 2 NotSupported**: both
+  `dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2`
+  leaves pass, and the two `dedicated_allocation` siblings stay NotSupported
+  because `VK_KHR_dedicated_allocation` is not advertised. Title closed and
+  confirmed stopped.
+- `20260922T083110494Z_PPSA99994_upstream-cts_0x191b6cf7742e3`, log SHA-256
+  `34784cf89af8940a917cad59d5f23e328db67ad4b3dbe3c58f6f86f1a3bde8a3` - the
+  earlier run of the same pair where `start_index_0` already passed.
+
+Host tests prove the render-target word, the integer export classification, the
+renumbering the second-target-only shape needs, the readback plan and the
+fail-closed gates around them; only the hardware writes and reads the integer
+surface. This is focused validation of one requirement, not Vulkan conformance,
+and `sampleRateShading` remains a blocker on the same row set.
